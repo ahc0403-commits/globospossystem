@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../main.dart';
+import '../../widgets/error_toast.dart';
 import '../../widgets/offline_banner.dart';
 import '../admin/providers/menu_provider.dart';
 import '../auth/auth_provider.dart';
@@ -67,6 +68,22 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
   int? _selectedGuestCount;
   bool _showOrderPanel = false;
   String? _initializedRestaurantId;
+  String? _lastOrderError;
+  late final ProviderSubscription<OrderState> _orderSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _orderSub = ref.listenManual<OrderState>(orderProvider, (previous, next) {
+      final error = next.error;
+      if (error != null && error.isNotEmpty && error != _lastOrderError) {
+        _lastOrderError = error;
+        if (mounted) {
+          showErrorToast(context, error);
+        }
+      }
+    });
+  }
 
   void _ensureRestaurantLoaded(String? restaurantId) {
     if (restaurantId == null || restaurantId == _initializedRestaurantId) {
@@ -151,6 +168,12 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     );
     controller.dispose();
     return result;
+  }
+
+  @override
+  void dispose() {
+    _orderSub.close();
+    super.dispose();
   }
 
   PosTable? _resolveSelectedTable(List<PosTable> tables) {
@@ -936,17 +959,6 @@ class _CurrentOrderPanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          if (state.error != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Text(
-                state.error!,
-                style: GoogleFonts.notoSansKr(
-                  color: AppColors.statusCancelled,
-                  fontSize: 13,
-                ),
-              ),
-            ),
           Expanded(
             child: ListView(
               children: [

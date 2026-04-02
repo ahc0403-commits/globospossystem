@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../main.dart';
+import '../../widgets/error_toast.dart';
 import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
 import '../payment/payment_provider.dart';
@@ -21,6 +22,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   String? _selectedMethod;
   String? _initializedRestaurantId;
   Timer? _successTimer;
+  String? _lastError;
   late final ProviderSubscription<PaymentState> _paymentSub;
 
   @override
@@ -32,6 +34,16 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
         _successTimer = Timer(const Duration(milliseconds: 1500), () {
           ref.read(paymentProvider.notifier).resetPaymentSuccess();
         });
+        if (mounted) {
+          showSuccessToast(context, 'Payment processed successfully');
+        }
+      }
+      final error = next.error;
+      if (error != null && error.isNotEmpty && error != _lastError) {
+        _lastError = error;
+        if (mounted) {
+          showErrorToast(context, error);
+        }
       }
     });
   }
@@ -192,7 +204,6 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                 selectedMethod: _selectedMethod,
                                 isAdmin: isAdmin,
                                 isProcessing: paymentState.isProcessing,
-                                error: paymentState.error,
                                 onSelectMethod: (method) {
                                   setState(() => _selectedMethod = method);
                                 },
@@ -260,7 +271,6 @@ class _SelectedOrderView extends StatelessWidget {
     required this.selectedMethod,
     required this.isAdmin,
     required this.isProcessing,
-    required this.error,
     required this.onSelectMethod,
     required this.onProcess,
   });
@@ -269,7 +279,6 @@ class _SelectedOrderView extends StatelessWidget {
   final String? selectedMethod;
   final bool isAdmin;
   final bool isProcessing;
-  final String? error;
   final ValueChanged<String> onSelectMethod;
   final Future<void> Function() onProcess;
 
@@ -394,16 +403,6 @@ class _SelectedOrderView extends StatelessWidget {
                     );
                   }).toList(),
                 ),
-                if (error != null) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    error!,
-                    style: GoogleFonts.notoSansKr(
-                      color: AppColors.statusCancelled,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
                 const SizedBox(height: 14),
                 SizedBox(
                   width: double.infinity,

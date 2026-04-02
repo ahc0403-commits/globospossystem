@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../main.dart';
+import '../../widgets/error_toast.dart';
 import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
 import 'kitchen_provider.dart';
@@ -35,7 +36,9 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
   String? _initializedRestaurantId;
   final Set<String> _flashingOrderIds = <String>{};
   final Map<String, Timer> _flashTimers = <String, Timer>{};
+  String? _lastError;
   late final ProviderSubscription<KitchenState> _kitchenSub;
+  late final ProviderSubscription<KitchenState> _kitchenErrorSub;
 
   @override
   void initState() {
@@ -56,6 +59,16 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
       final newOrders = next.orders.where((order) => !oldIds.contains(order.orderId));
       for (final order in newOrders) {
         _triggerFlash(order.orderId);
+      }
+    });
+
+    _kitchenErrorSub = ref.listenManual<KitchenState>(kitchenProvider, (prev, next) {
+      final error = next.error;
+      if (error != null && error.isNotEmpty && error != _lastError) {
+        _lastError = error;
+        if (mounted) {
+          showErrorToast(context, error);
+        }
       }
     });
   }
@@ -99,6 +112,7 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
   void dispose() {
     _clockTimer?.cancel();
     _kitchenSub.close();
+    _kitchenErrorSub.close();
     for (final timer in _flashTimers.values) {
       timer.cancel();
     }
@@ -137,7 +151,7 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                kitchenState.error!,
+                                'Could not load kitchen orders.',
                                 style: GoogleFonts.notoSansKr(
                                   color: AppColors.statusCancelled,
                                   fontSize: 14,

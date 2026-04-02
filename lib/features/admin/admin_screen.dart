@@ -8,6 +8,7 @@ import '../auth/auth_provider.dart';
 import 'tabs/attendance_tab.dart';
 import 'tabs/menu_tab.dart';
 import 'tabs/reports_tab.dart';
+import 'tabs/settings_tab.dart';
 import 'tabs/staff_tab.dart';
 import 'tabs/tables_tab.dart';
 
@@ -27,6 +28,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     StaffTab(),
     ReportsTab(),
     AttendanceTab(),
+    SettingsTab(),
   ];
 
   @override
@@ -86,6 +88,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.access_time),
             label: 'Attendance',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'Settings',
           ),
         ],
       ),
