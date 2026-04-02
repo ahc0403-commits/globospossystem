@@ -30,14 +30,14 @@ dependencies:
   path_provider: ^2.1.5
   path: ^1.9.1
 
-  # Printer
+  # Printer (blue_thermal_printer은 Android/iOS 전용 - 하드웨어 연동 시 추가)
   esc_pos_utils_plus: ^2.0.4
-  blue_thermal_printer: ^1.1.8
 
   # Utils
   intl: ^0.20.2
   uuid: ^4.5.1
   flutter_dotenv: ^6.0.0
+  google_fonts: ^8.0.2
 
 dev_dependencies:
   flutter_test:
@@ -54,16 +54,16 @@ flutter:
   assets:
     - .env
     - assets/images/
-  fonts:
-    - family: BebasNeue
-      fonts:
-        - asset: assets/fonts/BebasNeue-Regular.ttf
-    - family: NotoSansKR
-      fonts:
-        - asset: assets/fonts/NotoSansKR-Regular.ttf
-          weight: 400
-        - asset: assets/fonts/NotoSansKR-Bold.ttf
-          weight: 700
-    - family: JetBrainsMono
-      fonts:
-        - asset: assets/fonts/JetBrainsMono-Regular.ttf
+  # fonts: 폰트 파일 추가 후 활성화
+  # - family: BebasNeue
+  #   fonts:
+  #     - asset: assets/fonts/BebasNeue-Regular.ttf
+  # - family: NotoSansKR
+  #   fonts:
+  #     - asset: assets/fonts/NotoSansKR-Regular.ttf
+  #       weight: 400
+  #     - asset: assets/fonts/NotoSansKR-Bold.ttf
+  #       weight: 700
+  # - family: JetBrainsMono
+  #   fonts:
+  #     - asset: assets/fonts/JetBrainsMono-Regular.ttf
