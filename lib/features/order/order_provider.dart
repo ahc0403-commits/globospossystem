@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../main.dart';
 import 'order_model.dart';
@@ -52,11 +53,15 @@ class OrderNotifier extends StateNotifier<OrderState> {
 
   void addToCart(CartItem item) {
     final current = [...state.cart];
-    final index = current.indexWhere((cartItem) => cartItem.menuItemId == item.menuItemId);
+    final index = current.indexWhere(
+      (cartItem) => cartItem.menuItemId == item.menuItemId,
+    );
 
     if (index >= 0) {
       final existing = current[index];
-      current[index] = existing.copyWith(quantity: existing.quantity + item.quantity);
+      current[index] = existing.copyWith(
+        quantity: existing.quantity + item.quantity,
+      );
     } else {
       current.add(item);
     }
@@ -208,6 +213,31 @@ class OrderNotifier extends StateNotifier<OrderState> {
       state = state.copyWith(error: 'Failed to submit buffet order: $error');
     } finally {
       state = state.copyWith(isSubmitting: false);
+    }
+  }
+
+  Future<void> cancelOrder(String orderId, String restaurantId) async {
+    state = state.copyWith(isSubmitting: true, clearError: true);
+    try {
+      await supabase.rpc(
+        'cancel_order',
+        params: {'p_order_id': orderId, 'p_restaurant_id': restaurantId},
+      );
+      state = state.copyWith(
+        isSubmitting: false,
+        clearActiveOrder: true,
+        cart: const [],
+        clearError: true,
+      );
+    } on PostgrestException catch (error) {
+      state = state.copyWith(
+        isSubmitting: false,
+        error: error.message == 'ORDER_NOT_CANCELLABLE'
+            ? '완료되거나 이미 취소된 주문은 취소할 수 없습니다.'
+            : '주문 취소 실패: ${error.message}',
+      );
+    } catch (error) {
+      state = state.copyWith(isSubmitting: false, error: '주문 취소 실패: $error');
     }
   }
 }

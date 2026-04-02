@@ -35,26 +35,28 @@ class RestaurantSettings {
   final double? perPersonCharge;
 }
 
-final restaurantSettingsProvider = FutureProvider.family<RestaurantSettings, String>((
-  ref,
-  restaurantId,
-) async {
-  final response = await supabase
-      .from('restaurants')
-      .select('operation_mode, per_person_charge')
-      .eq('id', restaurantId)
-      .single();
+final restaurantSettingsProvider =
+    FutureProvider.family<RestaurantSettings, String>((
+      ref,
+      restaurantId,
+    ) async {
+      final response = await supabase
+          .from('restaurants')
+          .select('operation_mode, per_person_charge')
+          .eq('id', restaurantId)
+          .single();
 
-  final mode = response['operation_mode']?.toString().toLowerCase() ?? 'standard';
-  final rawCharge = response['per_person_charge'];
-  final charge = switch (rawCharge) {
-    num value => value.toDouble(),
-    String value => double.tryParse(value),
-    _ => null,
-  };
+      final mode =
+          response['operation_mode']?.toString().toLowerCase() ?? 'standard';
+      final rawCharge = response['per_person_charge'];
+      final charge = switch (rawCharge) {
+        num value => value.toDouble(),
+        String value => double.tryParse(value),
+        _ => null,
+      };
 
-  return RestaurantSettings(operationMode: mode, perPersonCharge: charge);
-});
+      return RestaurantSettings(operationMode: mode, perPersonCharge: charge);
+    });
 
 class WaiterScreen extends ConsumerStatefulWidget {
   const WaiterScreen({super.key});
@@ -114,7 +116,9 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
       _selectedGuestCount = guestCount;
       _showOrderPanel = true;
     });
-    await ref.read(orderProvider.notifier).loadActiveOrder(table.id, restaurantId);
+    await ref
+        .read(orderProvider.notifier)
+        .loadActiveOrder(table.id, restaurantId);
   }
 
   void _onCancelOrderPanel() {
@@ -127,7 +131,9 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
   }
 
   Future<int?> _showGuestCountDialog() async {
-    final controller = TextEditingController(text: _selectedGuestCount?.toString() ?? '');
+    final controller = TextEditingController(
+      text: _selectedGuestCount?.toString() ?? '',
+    );
     final result = await showDialog<int>(
       context: context,
       builder: (context) {
@@ -170,6 +176,58 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     return result;
   }
 
+  Future<bool> _showCancelOrderDialog({required String tableNumber}) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface1,
+        title: Text(
+          '주문을 취소하시겠습니까?',
+          style: GoogleFonts.notoSansKr(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: Text(
+          'T$tableNumber 주문이 취소되고 테이블이 비워집니다.',
+          style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('돌아가기'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.statusCancelled,
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.cancel),
+            label: const Text('주문 취소'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  void _showOrderCancelledSnackBar() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '주문이 취소되었습니다',
+          style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
+        ),
+        backgroundColor: AppColors.statusOccupied,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _orderSub.close();
@@ -200,7 +258,10 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     final orderState = ref.watch(orderProvider);
     final restaurantSettings = restaurantId == null
         ? const AsyncValue<RestaurantSettings>.data(
-            RestaurantSettings(operationMode: 'standard', perPersonCharge: null),
+            RestaurantSettings(
+              operationMode: 'standard',
+              perPersonCharge: null,
+            ),
           )
         : ref.watch(restaurantSettingsProvider(restaurantId));
     final menuState = restaurantId == null
@@ -213,9 +274,11 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
 
     final selectedTable = _resolveSelectedTable(tableState.tables);
     final operationMode =
-        restaurantSettings.valueOrNull?.operationMode.toLowerCase() ?? 'standard';
+        restaurantSettings.valueOrNull?.operationMode.toLowerCase() ??
+        'standard';
     final isBuffetMode = operationMode == 'buffet' || operationMode == 'hybrid';
-    final allowSubmitWithoutCart = isBuffetMode && orderState.activeOrder == null;
+    final allowSubmitWithoutCart =
+        isBuffetMode && orderState.activeOrder == null;
 
     return Scaffold(
       backgroundColor: AppColors.surface0,
@@ -257,8 +320,34 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                                 cartItem.copyWith(quantity: 1),
                               );
                             },
-                            onDecrementCartItem: orderNotifier.decrementCartItem,
+                            onDecrementCartItem:
+                                orderNotifier.decrementCartItem,
                             onCancel: _onCancelOrderPanel,
+                            onCancelOrder: () async {
+                              final activeOrder = orderState.activeOrder;
+                              if (restaurantId == null || activeOrder == null) {
+                                return;
+                              }
+                              final confirmed = await _showCancelOrderDialog(
+                                tableNumber: selectedTable.tableNumber,
+                              );
+                              if (!confirmed) {
+                                return;
+                              }
+
+                              await orderNotifier.cancelOrder(
+                                activeOrder.id,
+                                restaurantId,
+                              );
+                              final nextState = ref.read(orderProvider);
+                              if (!mounted) {
+                                return;
+                              }
+                              if (nextState.error == null) {
+                                _onCancelOrderPanel();
+                                _showOrderCancelledSnackBar();
+                              }
+                            },
                             onSendOrder: () async {
                               if (restaurantId == null) {
                                 return;
@@ -289,12 +378,18 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                             state: tableState,
                             onRetry: () {
                               if (restaurantId != null) {
-                                ref.read(waiterTableProvider.notifier).loadTables(restaurantId);
+                                ref
+                                    .read(waiterTableProvider.notifier)
+                                    .loadTables(restaurantId);
                               }
                             },
                             onTapTable: (table) {
                               if (restaurantId != null) {
-                                _onSelectTable(table, restaurantId, isBuffetMode);
+                                _onSelectTable(
+                                  table,
+                                  restaurantId,
+                                  isBuffetMode,
+                                );
                               }
                             },
                           ),
@@ -325,9 +420,7 @@ class _WaiterTopBar extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: const BoxDecoration(
         color: AppColors.surface0,
-        border: Border(
-          bottom: BorderSide(color: AppColors.surface2),
-        ),
+        border: Border(bottom: BorderSide(color: AppColors.surface2)),
       ),
       child: Row(
         children: [
@@ -459,7 +552,10 @@ class _TableGridView extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
               onTap: () => onTapTable(table),
               child: Container(
-                constraints: const BoxConstraints(minWidth: 120, minHeight: 120),
+                constraints: const BoxConstraints(
+                  minWidth: 120,
+                  minHeight: 120,
+                ),
                 decoration: BoxDecoration(
                   color: isOccupied
                       ? AppColors.surface1.withValues(alpha: 0.95)
@@ -470,13 +566,25 @@ class _TableGridView extends StatelessWidget {
                         ? const BorderSide(color: AppColors.amber500, width: 4)
                         : const BorderSide(color: AppColors.surface2, width: 1),
                     top: isOccupied
-                        ? BorderSide(color: AppColors.statusOccupied.withValues(alpha: 0.4))
+                        ? BorderSide(
+                            color: AppColors.statusOccupied.withValues(
+                              alpha: 0.4,
+                            ),
+                          )
                         : BorderSide.none,
                     right: isOccupied
-                        ? BorderSide(color: AppColors.statusOccupied.withValues(alpha: 0.4))
+                        ? BorderSide(
+                            color: AppColors.statusOccupied.withValues(
+                              alpha: 0.4,
+                            ),
+                          )
                         : BorderSide.none,
                     bottom: isOccupied
-                        ? BorderSide(color: AppColors.statusOccupied.withValues(alpha: 0.4))
+                        ? BorderSide(
+                            color: AppColors.statusOccupied.withValues(
+                              alpha: 0.4,
+                            ),
+                          )
                         : BorderSide.none,
                   ),
                   gradient: isOccupied
@@ -558,6 +666,7 @@ class _OrderWorkspace extends StatelessWidget {
     required this.onIncrementCartItem,
     required this.onDecrementCartItem,
     required this.onCancel,
+    required this.onCancelOrder,
     required this.onSendOrder,
   });
 
@@ -571,6 +680,7 @@ class _OrderWorkspace extends StatelessWidget {
   final ValueChanged<CartItem> onIncrementCartItem;
   final ValueChanged<String> onDecrementCartItem;
   final VoidCallback onCancel;
+  final Future<void> Function() onCancelOrder;
   final Future<void> Function() onSendOrder;
 
   @override
@@ -580,14 +690,16 @@ class _OrderWorkspace extends StatelessWidget {
     final menuLoading = categoriesAsync.isLoading || itemsAsync.isLoading;
     final menuError = categoriesAsync.hasError || itemsAsync.hasError;
 
-    final categories = categoriesAsync.valueOrNull ?? const <Map<String, dynamic>>[];
+    final categories =
+        categoriesAsync.valueOrNull ?? const <Map<String, dynamic>>[];
     final items = itemsAsync.valueOrNull ?? const <Map<String, dynamic>>[];
     final selectedCategoryId = menuState.selectedCategoryId;
 
     final filteredItems = selectedCategoryId == null
         ? const <Map<String, dynamic>>[]
         : items.where((item) {
-            final matchesCategory = item['category_id']?.toString() == selectedCategoryId;
+            final matchesCategory =
+                item['category_id']?.toString() == selectedCategoryId;
             final isAvailable = item['is_available'];
             if (isAvailable is bool) {
               return matchesCategory && isAvailable;
@@ -609,7 +721,8 @@ class _OrderWorkspace extends StatelessWidget {
                   categories: categories,
                   selectedCategoryId: selectedCategoryId,
                   filteredItems: filteredItems,
-                  onSelectCategory: (categoryId) => menuNotifier?.selectCategory(categoryId),
+                  onSelectCategory: (categoryId) =>
+                      menuNotifier?.selectCategory(categoryId),
                   onAddItem: onAddToCart,
                 ),
               ),
@@ -623,6 +736,7 @@ class _OrderWorkspace extends StatelessWidget {
                   onIncrementCartItem: onIncrementCartItem,
                   onDecrementCartItem: onDecrementCartItem,
                   onCancel: onCancel,
+                  onCancelOrder: onCancelOrder,
                   onSendOrder: onSendOrder,
                 ),
               ),
@@ -640,7 +754,8 @@ class _OrderWorkspace extends StatelessWidget {
                 categories: categories,
                 selectedCategoryId: selectedCategoryId,
                 filteredItems: filteredItems,
-                onSelectCategory: (categoryId) => menuNotifier?.selectCategory(categoryId),
+                onSelectCategory: (categoryId) =>
+                    menuNotifier?.selectCategory(categoryId),
                 onAddItem: onAddToCart,
               ),
             ),
@@ -654,6 +769,7 @@ class _OrderWorkspace extends StatelessWidget {
                 onIncrementCartItem: onIncrementCartItem,
                 onDecrementCartItem: onDecrementCartItem,
                 onCancel: onCancel,
+                onCancelOrder: onCancelOrder,
                 onSendOrder: onSendOrder,
               ),
             ),
@@ -743,22 +859,30 @@ class _MenuBrowser extends StatelessWidget {
                       final selected = selectedCategoryId == categoryId;
 
                       return InkWell(
-                        onTap: categoryId.isEmpty ? null : () => onSelectCategory(categoryId),
+                        onTap: categoryId.isEmpty
+                            ? null
+                            : () => onSelectCategory(categoryId),
                         borderRadius: BorderRadius.circular(20),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 14),
                           decoration: BoxDecoration(
-                            color: selected ? AppColors.amber500 : AppColors.surface1,
+                            color: selected
+                                ? AppColors.amber500
+                                : AppColors.surface1,
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                              color: selected ? AppColors.amber500 : AppColors.surface2,
+                              color: selected
+                                  ? AppColors.amber500
+                                  : AppColors.surface2,
                             ),
                           ),
                           alignment: Alignment.center,
                           child: Text(
                             category['name']?.toString() ?? '-',
                             style: GoogleFonts.notoSansKr(
-                              color: selected ? AppColors.surface0 : AppColors.textPrimary,
+                              color: selected
+                                  ? AppColors.surface0
+                                  : AppColors.textPrimary,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -781,12 +905,13 @@ class _MenuBrowser extends StatelessWidget {
                   )
                 : GridView.builder(
                     itemCount: filteredItems.length,
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 1.9,
-                    ),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                          childAspectRatio: 1.9,
+                        ),
                     itemBuilder: (context, index) {
                       final item = filteredItems[index];
                       final menuItemId = item['id']?.toString() ?? '';
@@ -839,13 +964,13 @@ class _MenuBrowser extends StatelessWidget {
                               onTap: menuItemId.isEmpty
                                   ? null
                                   : () => onAddItem(
-                                        CartItem(
-                                          menuItemId: menuItemId,
-                                          name: name,
-                                          price: price,
-                                          quantity: 1,
-                                        ),
+                                      CartItem(
+                                        menuItemId: menuItemId,
+                                        name: name,
+                                        price: price,
+                                        quantity: 1,
                                       ),
+                                    ),
                               borderRadius: BorderRadius.circular(20),
                               child: Container(
                                 width: 36,
@@ -882,6 +1007,7 @@ class _CurrentOrderPanel extends StatelessWidget {
     required this.onIncrementCartItem,
     required this.onDecrementCartItem,
     required this.onCancel,
+    required this.onCancelOrder,
     required this.onSendOrder,
   });
 
@@ -892,6 +1018,7 @@ class _CurrentOrderPanel extends StatelessWidget {
   final ValueChanged<CartItem> onIncrementCartItem;
   final ValueChanged<String> onDecrementCartItem;
   final VoidCallback onCancel;
+  final Future<void> Function() onCancelOrder;
   final Future<void> Function() onSendOrder;
 
   @override
@@ -901,6 +1028,11 @@ class _CurrentOrderPanel extends StatelessWidget {
       0,
       (sum, item) => sum + (item.price * item.quantity),
     );
+    final activeStatus = state.activeOrder?.status.toLowerCase();
+    final canCancelOrder =
+        state.activeOrder != null &&
+        activeStatus != 'completed' &&
+        activeStatus != 'cancelled';
 
     return Container(
       decoration: const BoxDecoration(
@@ -924,7 +1056,10 @@ class _CurrentOrderPanel extends StatelessWidget {
               const Spacer(),
               if (state.activeOrder != null)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.surface2,
                     borderRadius: BorderRadius.circular(16),
@@ -941,7 +1076,10 @@ class _CurrentOrderPanel extends StatelessWidget {
               if (guestCount != null && state.activeOrder == null) ...[
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.surface2,
                     borderRadius: BorderRadius.circular(16),
@@ -962,7 +1100,8 @@ class _CurrentOrderPanel extends StatelessWidget {
           Expanded(
             child: ListView(
               children: [
-                if (state.activeOrder != null && state.activeOrder!.items.isNotEmpty) ...[
+                if (state.activeOrder != null &&
+                    state.activeOrder!.items.isNotEmpty) ...[
                   Text(
                     'Already Sent',
                     style: GoogleFonts.notoSansKr(
@@ -1055,7 +1194,8 @@ class _CurrentOrderPanel extends StatelessWidget {
                           children: [
                             IconButton(
                               visualDensity: VisualDensity.compact,
-                              onPressed: () => onDecrementCartItem(item.menuItemId),
+                              onPressed: () =>
+                                  onDecrementCartItem(item.menuItemId),
                               icon: const Icon(Icons.remove_circle_outline),
                               color: AppColors.textSecondary,
                             ),
@@ -1130,15 +1270,20 @@ class _CurrentOrderPanel extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: FilledButton(
-                    onPressed: state.isSubmitting ||
+                    onPressed:
+                        state.isSubmitting ||
                             (!allowSubmitWithoutCart && state.cart.isEmpty)
                         ? null
                         : onSendOrder,
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.amber500,
                       foregroundColor: AppColors.surface0,
-                      disabledBackgroundColor: AppColors.amber500.withValues(alpha: 0.4),
-                      disabledForegroundColor: AppColors.surface0.withValues(alpha: 0.8),
+                      disabledBackgroundColor: AppColors.amber500.withValues(
+                        alpha: 0.4,
+                      ),
+                      disabledForegroundColor: AppColors.surface0.withValues(
+                        alpha: 0.8,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -1163,6 +1308,28 @@ class _CurrentOrderPanel extends StatelessWidget {
               ],
             ),
           ),
+          if (canCancelOrder) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton.icon(
+                onPressed: state.isSubmitting ? null : onCancelOrder,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.statusCancelled,
+                  side: const BorderSide(color: AppColors.statusCancelled),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: const Icon(Icons.cancel),
+                label: Text(
+                  '주문 취소',
+                  style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

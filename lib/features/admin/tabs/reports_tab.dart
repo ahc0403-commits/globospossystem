@@ -97,7 +97,9 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                         ),
                         child: Text(
                           'From ${dateFormat.format(_pendingStart ?? reportState.startDate)}',
-                          style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                          style: GoogleFonts.notoSansKr(
+                            color: AppColors.textPrimary,
+                          ),
                         ),
                       ),
                       OutlinedButton(
@@ -117,16 +119,23 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                         ),
                         child: Text(
                           'To ${dateFormat.format(_pendingEnd ?? reportState.endDate)}',
-                          style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                          style: GoogleFonts.notoSansKr(
+                            color: AppColors.textPrimary,
+                          ),
                         ),
                       ),
                       FilledButton(
                         onPressed: restaurantId == null
                             ? null
                             : () {
-                                final start = _pendingStart ?? reportState.startDate;
+                                final start =
+                                    _pendingStart ?? reportState.startDate;
                                 final end = _pendingEnd ?? reportState.endDate;
-                                reportNotifier.setDateRange(start, end, restaurantId);
+                                reportNotifier.setDateRange(
+                                  start,
+                                  end,
+                                  restaurantId,
+                                );
                               },
                         style: FilledButton.styleFrom(
                           backgroundColor: AppColors.amber500,
@@ -147,12 +156,20 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                             ? null
                             : () {
                                 final now = DateTime.now();
-                                final start = DateTime(now.year, now.month, now.day);
+                                final start = DateTime(
+                                  now.year,
+                                  now.month,
+                                  now.day,
+                                );
                                 setState(() {
                                   _pendingStart = start;
                                   _pendingEnd = now;
                                 });
-                                reportNotifier.setDateRange(start, now, restaurantId);
+                                reportNotifier.setDateRange(
+                                  start,
+                                  now,
+                                  restaurantId,
+                                );
                               },
                       ),
                       _quickRangeChip(
@@ -171,7 +188,11 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                   _pendingStart = start;
                                   _pendingEnd = now;
                                 });
-                                reportNotifier.setDateRange(start, now, restaurantId);
+                                reportNotifier.setDateRange(
+                                  start,
+                                  now,
+                                  restaurantId,
+                                );
                               },
                       ),
                       _quickRangeChip(
@@ -185,13 +206,20 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                   _pendingStart = start;
                                   _pendingEnd = now;
                                 });
-                                reportNotifier.setDateRange(start, now, restaurantId);
+                                reportNotifier.setDateRange(
+                                  start,
+                                  now,
+                                  restaurantId,
+                                );
                               },
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  _SummaryGrid(summary: reportState.summary, currency: currency),
+                  _SummaryGrid(
+                    summary: reportState.summary,
+                    currency: currency,
+                  ),
                   const SizedBox(height: 16),
                   _DailyTable(summary: reportState.summary, currency: currency),
                 ],
@@ -261,9 +289,9 @@ class _SummaryGrid extends StatelessWidget {
               valueFontSize: 28,
             ),
             _summaryCard(
-              title: 'Service Total',
+              title: '서비스 지출 (매출 미포함)',
               value: '₫${currency.format(data.serviceTotal)}',
-              valueColor: Colors.grey.shade500,
+              valueColor: AppColors.textSecondary,
               valueFontSize: 28,
             ),
             _summaryCard(
@@ -367,7 +395,9 @@ class _DailyTable extends StatelessWidget {
           ...data.dailyBreakdown.asMap().entries.map((entry) {
             final index = entry.key;
             final row = entry.value;
-            final rowColor = index.isEven ? AppColors.surface1 : AppColors.surface0;
+            final rowColor = index.isEven
+                ? AppColors.surface1
+                : AppColors.surface0;
             return _tableRow(
               date: DateFormat('dd/MM').format(row.date),
               dineIn: row.dineIn,

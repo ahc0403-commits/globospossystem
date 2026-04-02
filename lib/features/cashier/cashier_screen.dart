@@ -65,6 +65,77 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     super.dispose();
   }
 
+  Future<bool> _showCancelOrderDialog({required String tableNumber}) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface1,
+        title: Text(
+          '주문을 취소하시겠습니까?',
+          style: GoogleFonts.notoSansKr(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: Text(
+          'T$tableNumber 주문이 취소되고 테이블이 비워집니다.',
+          style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('돌아가기'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.statusCancelled,
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.cancel),
+            label: const Text('주문 취소'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  Future<bool> _showServiceConfirmDialog() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface1,
+        title: Text(
+          '서비스 제공 처리',
+          style: GoogleFonts.notoSansKr(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: Text(
+          '이 주문은 매출에 반영되지 않고 서비스로 처리됩니다.\n직원 식사, 서비스 음료 등에 사용하세요.',
+          style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.amber500,
+              foregroundColor: AppColors.surface0,
+            ),
+            child: const Text('서비스 처리'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
@@ -89,7 +160,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                   width: 420,
                   decoration: const BoxDecoration(
                     color: AppColors.surface1,
-                    border: Border(right: BorderSide(color: AppColors.surface2)),
+                    border: Border(
+                      right: BorderSide(color: AppColors.surface2),
+                    ),
                   ),
                   child: Column(
                     children: [
@@ -108,7 +181,10 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                             ),
                             const Spacer(),
                             IconButton(
-                              icon: const Icon(Icons.logout, color: AppColors.textSecondary),
+                              icon: const Icon(
+                                Icons.logout,
+                                color: AppColors.textSecondary,
+                              ),
                               tooltip: '로그아웃',
                               onPressed: () async {
                                 await ref.read(authProvider.notifier).logout();
@@ -129,13 +205,20 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                 ),
                               )
                             : ListView.separated(
-                                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                                padding: const EdgeInsets.fromLTRB(
+                                  12,
+                                  0,
+                                  12,
+                                  12,
+                                ),
                                 itemCount: paymentState.orders.length,
-                                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                                separatorBuilder: (_, _) =>
+                                    const SizedBox(height: 10),
                                 itemBuilder: (context, index) {
                                   final order = paymentState.orders[index];
                                   final selected =
-                                      paymentState.selectedOrder?.orderId == order.orderId;
+                                      paymentState.selectedOrder?.orderId ==
+                                      order.orderId;
                                   return InkWell(
                                     onTap: () {
                                       setState(() => _selectedMethod = null);
@@ -143,7 +226,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                     },
                                     borderRadius: BorderRadius.circular(14),
                                     child: AnimatedContainer(
-                                      duration: const Duration(milliseconds: 220),
+                                      duration: const Duration(
+                                        milliseconds: 220,
+                                      ),
                                       padding: const EdgeInsets.all(14),
                                       decoration: BoxDecoration(
                                         color: selected
@@ -158,7 +243,8 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                         ),
                                       ),
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             'Table ${order.tableNumber}',
@@ -184,7 +270,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                             ),
                                           ),
                                           const SizedBox(height: 6),
-                                          _OrderStatusBadge(status: order.status),
+                                          _OrderStatusBadge(
+                                            status: order.status,
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -220,20 +308,57 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                 },
                                 onProcess: () async {
                                   final method = _selectedMethod;
-                                  final selectedOrder = paymentState.selectedOrder;
+                                  final selectedOrder =
+                                      paymentState.selectedOrder;
                                   if (restaurantId == null ||
                                       method == null ||
                                       selectedOrder == null) {
                                     return;
                                   }
+                                  if (method == 'service') {
+                                    final proceed =
+                                        await _showServiceConfirmDialog();
+                                    if (!proceed) {
+                                      return;
+                                    }
+                                  }
+
                                   await notifier.processPayment(
                                     restaurantId,
                                     selectedOrder.orderId,
                                     selectedOrder.totalAmount,
                                     method,
                                   );
-                                  if (mounted && ref.read(paymentProvider).paymentSuccess) {
+                                  if (mounted &&
+                                      ref
+                                          .read(paymentProvider)
+                                          .paymentSuccess) {
                                     setState(() => _selectedMethod = null);
+                                  }
+                                },
+                                onCancelOrder: () async {
+                                  final selectedOrder =
+                                      paymentState.selectedOrder;
+                                  if (restaurantId == null ||
+                                      selectedOrder == null ||
+                                      !isAdmin) {
+                                    return;
+                                  }
+                                  final confirmed =
+                                      await _showCancelOrderDialog(
+                                        tableNumber: selectedOrder.tableNumber,
+                                      );
+                                  if (!confirmed) {
+                                    return;
+                                  }
+                                  await notifier.cancelOrder(
+                                    selectedOrder.orderId,
+                                    restaurantId,
+                                  );
+                                  if (context.mounted &&
+                                      ref.read(paymentProvider).error == null) {
+                                    setState(() => _selectedMethod = null);
+                                    showSuccessToast(context, '주문이 취소되었습니다');
                                   }
                                 },
                               ),
@@ -248,7 +373,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                               width: 180,
                               height: 180,
                               decoration: BoxDecoration(
-                                color: AppColors.statusAvailable.withValues(alpha: 0.2),
+                                color: AppColors.statusAvailable.withValues(
+                                  alpha: 0.2,
+                                ),
                                 shape: BoxShape.circle,
                                 border: Border.all(
                                   color: AppColors.statusAvailable,
@@ -284,6 +411,7 @@ class _SelectedOrderView extends StatelessWidget {
     required this.isProcessing,
     required this.onSelectMethod,
     required this.onProcess,
+    required this.onCancelOrder,
   });
 
   final CashierOrder order;
@@ -292,16 +420,18 @@ class _SelectedOrderView extends StatelessWidget {
   final bool isProcessing;
   final ValueChanged<String> onSelectMethod;
   final Future<void> Function() onProcess;
+  final Future<void> Function() onCancelOrder;
 
   @override
   Widget build(BuildContext context) {
     final currency = NumberFormat('#,###', 'vi_VN');
-    final methods = <_PaymentMethod>[
+    final regularMethods = <_PaymentMethod>[
       const _PaymentMethod('cash', 'CASH', Color(0xFF2E7D32)),
       const _PaymentMethod('card', 'CARD', Color(0xFF1565C0)),
       const _PaymentMethod('pay', 'PAY', Color(0xFF8E44AD)),
-      if (isAdmin) const _PaymentMethod('service', 'SERVICE', AppColors.surface2),
     ];
+    final canCancelOrder = isAdmin && order.status.toLowerCase() != 'completed';
+    final isServiceSelected = selectedMethod == 'service';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -328,7 +458,8 @@ class _SelectedOrderView extends StatelessWidget {
                 Expanded(
                   child: ListView.separated(
                     itemCount: order.items.length,
-                    separatorBuilder: (_, _) => const Divider(color: AppColors.surface2),
+                    separatorBuilder: (_, _) =>
+                        const Divider(color: AppColors.surface2),
                     itemBuilder: (context, index) {
                       final item = order.items[index];
                       final itemName = item.label ?? 'Item';
@@ -379,7 +510,7 @@ class _SelectedOrderView extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 Row(
-                  children: methods.map((method) {
+                  children: regularMethods.map((method) {
                     final selected = selectedMethod == method.value;
                     return Expanded(
                       child: Padding(
@@ -414,17 +545,86 @@ class _SelectedOrderView extends StatelessWidget {
                     );
                   }).toList(),
                 ),
+                if (isAdmin) ...[
+                  const SizedBox(height: 10),
+                  InkWell(
+                    onTap: () => onSelectMethod('service'),
+                    borderRadius: BorderRadius.circular(12),
+                    child: _DashedCard(
+                      selected: isServiceSelected,
+                      child: Container(
+                        width: double.infinity,
+                        height: 48,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        alignment: Alignment.centerLeft,
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.volunteer_activism,
+                              size: 16,
+                              color: isServiceSelected
+                                  ? AppColors.textPrimary
+                                  : AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '서비스 제공 (매출 미반영)',
+                              style: GoogleFonts.notoSansKr(
+                                color: isServiceSelected
+                                    ? AppColors.textPrimary
+                                    : AppColors.textSecondary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                if (isServiceSelected) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.statusOccupied.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppColors.statusOccupied.withValues(alpha: 0.8),
+                      ),
+                    ),
+                    child: Text(
+                      '⚠️ 서비스 처리 시 매출에 반영되지 않습니다',
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textPrimary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 14),
                 SizedBox(
                   width: double.infinity,
                   height: 64,
                   child: FilledButton(
-                    onPressed: selectedMethod == null || isProcessing ? null : onProcess,
+                    onPressed: selectedMethod == null || isProcessing
+                        ? null
+                        : onProcess,
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.amber500,
                       foregroundColor: AppColors.surface0,
-                      disabledBackgroundColor: AppColors.amber500.withValues(alpha: 0.4),
-                      disabledForegroundColor: AppColors.surface0.withValues(alpha: 0.8),
+                      disabledBackgroundColor: AppColors.amber500.withValues(
+                        alpha: 0.4,
+                      ),
+                      disabledForegroundColor: AppColors.surface0.withValues(
+                        alpha: 0.8,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -439,7 +639,7 @@ class _SelectedOrderView extends StatelessWidget {
                             ),
                           )
                         : Text(
-                            'PROCESS PAYMENT',
+                            isServiceSelected ? '서비스 처리 완료' : 'PROCESS PAYMENT',
                             style: GoogleFonts.bebasNeue(
                               fontSize: 22,
                               letterSpacing: 1.0,
@@ -447,6 +647,28 @@ class _SelectedOrderView extends StatelessWidget {
                           ),
                   ),
                 ),
+                if (canCancelOrder) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: isProcessing ? null : onCancelOrder,
+                      icon: const Icon(
+                        Icons.cancel_outlined,
+                        color: AppColors.statusCancelled,
+                        size: 18,
+                      ),
+                      label: Text(
+                        '주문 취소',
+                        style: GoogleFonts.notoSansKr(
+                          color: AppColors.statusCancelled,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -499,4 +721,64 @@ class _PaymentMethod {
   final String value;
   final String label;
   final Color color;
+}
+
+class _DashedCard extends StatelessWidget {
+  const _DashedCard({required this.selected, required this.child});
+
+  final bool selected;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = selected ? AppColors.amber500 : AppColors.textSecondary;
+    return CustomPaint(
+      painter: _DashedBorderPainter(color: borderColor),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: selected ? AppColors.surface2 : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _DashedBorderPainter extends CustomPainter {
+  _DashedBorderPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const radius = 12.0;
+    const dashWidth = 8.0;
+    const dashSpace = 5.0;
+    final rrect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      const Radius.circular(radius),
+    );
+
+    final path = Path()..addRRect(rrect);
+    final metrics = path.computeMetrics().toList();
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    for (final metric in metrics) {
+      double distance = 0;
+      while (distance < metric.length) {
+        final end = distance + dashWidth;
+        canvas.drawPath(metric.extractPath(distance, end), paint);
+        distance += dashWidth + dashSpace;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedBorderPainter oldDelegate) {
+    return oldDelegate.color != color;
+  }
 }

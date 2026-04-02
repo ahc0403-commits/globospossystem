@@ -88,10 +88,11 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         final itemsRaw = data['order_items'];
         final items = (itemsRaw is List)
             ? itemsRaw
-                .map<OrderItem>(
-                  (item) => OrderItem.fromJson(Map<String, dynamic>.from(item)),
-                )
-                .toList()
+                  .map<OrderItem>(
+                    (item) =>
+                        OrderItem.fromJson(Map<String, dynamic>.from(item)),
+                  )
+                  .toList()
             : <OrderItem>[];
 
         final total = items.fold<double>(
@@ -189,6 +190,31 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     }
   }
 
+  Future<void> cancelOrder(String orderId, String restaurantId) async {
+    state = state.copyWith(isProcessing: true, clearError: true);
+    try {
+      await supabase.rpc(
+        'cancel_order',
+        params: {'p_order_id': orderId, 'p_restaurant_id': restaurantId},
+      );
+      state = state.copyWith(
+        isProcessing: false,
+        clearSelectedOrder: true,
+        clearError: true,
+      );
+      await loadOrders(restaurantId);
+    } on PostgrestException catch (error) {
+      state = state.copyWith(
+        isProcessing: false,
+        error: error.message == 'ORDER_NOT_CANCELLABLE'
+            ? '완료되거나 이미 취소된 주문은 취소할 수 없습니다.'
+            : '주문 취소 실패: ${error.message}',
+      );
+    } catch (error) {
+      state = state.copyWith(isProcessing: false, error: '주문 취소 실패: $error');
+    }
+  }
+
   void resetPaymentSuccess() {
     if (!state.paymentSuccess) {
       return;
@@ -197,7 +223,9 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   }
 
   Future<void> subscribeRealtime(String restaurantId) async {
-    if (_restaurantId == restaurantId && _ordersChannel != null && _paymentsChannel != null) {
+    if (_restaurantId == restaurantId &&
+        _ordersChannel != null &&
+        _paymentsChannel != null) {
       return;
     }
 
