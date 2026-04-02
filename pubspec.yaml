@@ -1,0 +1,69 @@
+name: globos_pos_system
+description: GLOBOS POS System - Flutter Native F&B POS
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.11.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Backend
+  supabase_flutter: ^2.8.4
+
+  # State Management
+  flutter_riverpod: ^2.6.1
+  riverpod_annotation: ^2.6.1
+
+  # Routing
+  go_router: ^15.1.1
+
+  # Models
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+
+  # Local Cache (read-only, 메뉴 조회 한정)
+  drift: ^2.22.1
+  sqlite3_flutter_libs: ^0.5.28
+  path_provider: ^2.1.5
+  path: ^1.9.1
+
+  # Printer
+  esc_pos_utils_plus: ^2.0.4
+  blue_thermal_printer: ^1.1.8
+
+  # Utils
+  intl: ^0.20.2
+  uuid: ^4.5.1
+  flutter_dotenv: ^6.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  build_runner: ^2.4.14
+  freezed: ^2.5.7
+  json_serializable: ^6.9.2
+  riverpod_generator: ^2.6.3
+  drift_dev: ^2.22.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env
+    - assets/images/
+  fonts:
+    - family: BebasNeue
+      fonts:
+        - asset: assets/fonts/BebasNeue-Regular.ttf
+    - family: NotoSansKR
+      fonts:
+        - asset: assets/fonts/NotoSansKR-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSansKR-Bold.ttf
+          weight: 700
+    - family: JetBrainsMono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
