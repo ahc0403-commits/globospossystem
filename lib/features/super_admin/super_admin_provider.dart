@@ -261,7 +261,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
       for (final restaurant in sourceRestaurants) {
         final payments = await supabase
             .from('payments')
-            .select('amount, sales_channel, orders(sales_channel)')
+            .select('amount, orders(sales_channel)')
             .eq('restaurant_id', restaurant.id)
             .eq('is_revenue', true)
             .gte('created_at', startIso)
@@ -281,9 +281,9 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         for (final row in payments) {
           final payment = Map<String, dynamic>.from(row);
           final amount = _toDouble(payment['amount']);
-          String channel = payment['sales_channel']?.toString() ?? '';
+          String channel = '';
           final orderRaw = payment['orders'];
-          if (channel.isEmpty && orderRaw is Map<String, dynamic>) {
+          if (orderRaw is Map<String, dynamic>) {
             channel = orderRaw['sales_channel']?.toString() ?? '';
           }
           if (channel.toLowerCase() == 'delivery') {

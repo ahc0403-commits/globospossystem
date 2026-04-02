@@ -112,7 +112,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
 
       final paymentsRevenueResponse = await supabase
           .from('payments')
-          .select('amount, created_at, sales_channel, orders(sales_channel)')
+          .select('amount, created_at, orders(sales_channel)')
           .eq('restaurant_id', restaurantId)
           .eq('is_revenue', true)
           .gte('created_at', startIso)
@@ -152,9 +152,9 @@ class ReportNotifier extends StateNotifier<ReportState> {
         final dateKey = DateFormat('yyyy-MM-dd').format(createdAt);
         final accumulator = dailyMap.putIfAbsent(dateKey, () => _DailyAccumulator(date: DateTime(createdAt.year, createdAt.month, createdAt.day)));
 
-        String channel = payment['sales_channel']?.toString() ?? '';
+        String channel = '';
         final orderRaw = payment['orders'];
-        if (channel.isEmpty && orderRaw is Map<String, dynamic>) {
+        if (orderRaw is Map<String, dynamic>) {
           channel = orderRaw['sales_channel']?.toString() ?? '';
         }
         final normalized = channel.toLowerCase();
