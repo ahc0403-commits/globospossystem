@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-
 import 'package:go_router/go_router.dart';
 
+import '../../core/layout/adaptive_layout.dart';
+import '../../core/layout/web_sidebar_layout.dart';
 import '../../main.dart';
 import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
@@ -40,6 +41,76 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   @override
   Widget build(BuildContext context) {
     final isSuperAdminView = widget.overrideRestaurantId != null;
+
+    if (isWebOrDesktop) {
+      return _buildWebDesktopLayout(context, isSuperAdminView);
+    }
+
+    return _buildMobileLayout(context, isSuperAdminView);
+  }
+
+  Widget _buildWebDesktopLayout(BuildContext context, bool isSuperAdminView) {
+    final items = <SidebarItem>[
+      const SidebarItem(icon: Icons.table_restaurant, label: 'Tables'),
+      const SidebarItem(icon: Icons.restaurant_menu, label: 'Menu'),
+      const SidebarItem(icon: Icons.people, label: 'Staff'),
+      const SidebarItem(icon: Icons.bar_chart, label: 'Reports'),
+      const SidebarItem(icon: Icons.access_time, label: 'Attendance'),
+      const SidebarItem(icon: Icons.settings, label: 'Settings'),
+    ];
+
+    return WebSidebarLayout(
+      title: isSuperAdminView ? 'ADMIN VIEW' : 'GLOBOS POS',
+      items: items,
+      selectedIndex: _currentIndex,
+      onItemSelected: (index) => setState(() => _currentIndex = index),
+      topBarLeading: isSuperAdminView
+          ? IconButton(
+              icon: const Icon(Icons.arrow_back, color: AppColors.amber500),
+              tooltip: '시스템 관리로 돌아가기',
+              onPressed: () => context.go('/super-admin'),
+            )
+          : null,
+      topBarTrailing: isSuperAdminView
+          ? Container(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.statusOccupied.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.statusOccupied),
+              ),
+              child: Text(
+                'SUPER ADMIN MODE',
+                style: GoogleFonts.notoSansKr(
+                  color: AppColors.statusOccupied,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            )
+          : null,
+      bottomItems: isSuperAdminView
+          ? null
+          : [
+              SidebarItem(
+                icon: Icons.logout,
+                label: 'Logout',
+                onTap: () => ref.read(authProvider.notifier).logout(),
+              ),
+            ],
+      body: Column(
+        children: [
+          const OfflineBanner(),
+          Expanded(
+            child: IndexedStack(index: _currentIndex, children: _tabs),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileLayout(BuildContext context, bool isSuperAdminView) {
     final showKioskItem =
         !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
     final navItems = <BottomNavigationBarItem>[
