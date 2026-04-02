@@ -96,14 +96,25 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       Container(
                         height: 80,
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'CASHIER',
-                          style: GoogleFonts.bebasNeue(
-                            color: AppColors.amber500,
-                            fontSize: 28,
-                            letterSpacing: 1.0,
-                          ),
+                        child: Row(
+                          children: [
+                            Text(
+                              'CASHIER',
+                              style: GoogleFonts.bebasNeue(
+                                color: AppColors.amber500,
+                                fontSize: 28,
+                                letterSpacing: 1.0,
+                              ),
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              icon: const Icon(Icons.logout, color: AppColors.textSecondary),
+                              tooltip: '로그아웃',
+                              onPressed: () async {
+                                await ref.read(authProvider.notifier).logout();
+                              },
+                            ),
+                          ],
                         ),
                       ),
                       Expanded(

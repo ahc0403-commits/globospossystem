@@ -402,6 +402,14 @@ class _KitchenTopBar extends ConsumerWidget {
               letterSpacing: 1.0,
             ),
           ),
+          const SizedBox(width: 12),
+          IconButton(
+            icon: const Icon(Icons.logout, color: AppColors.textSecondary),
+            tooltip: '로그아웃',
+            onPressed: () async {
+              await ref.read(authProvider.notifier).logout();
+            },
+          ),
         ],
       ),
     );
