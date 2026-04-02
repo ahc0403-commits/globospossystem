@@ -11,7 +11,6 @@ import '../../features/onboarding/onboarding_screen.dart';
 import '../../features/super_admin/super_admin_screen.dart';
 import '../../features/waiter/waiter_screen.dart';
 
-/// authProvider 변경을 GoRouter가 감지하도록 ChangeNotifier 브릿지
 class _AuthListenable extends ChangeNotifier {
   _AuthListenable(ProviderContainer container) {
     container.listen<PosAuthState>(authProvider, (_, __) {
@@ -20,7 +19,6 @@ class _AuthListenable extends ChangeNotifier {
     _container = container;
   }
   late final ProviderContainer _container;
-
   PosAuthState get authState => _container.read(authProvider);
 }
 
@@ -31,44 +29,58 @@ GoRouter buildAppRouter(ProviderContainer container) {
     initialLocation: '/login',
     refreshListenable: listenable,
     redirect: (context, state) {
-      final authState = listenable.authState;
-      final role = authState.role;
-      final restaurantId = authState.restaurantId;
-      final isLoggedIn = authState.user != null && role != null;
+      final auth = listenable.authState;
+      final role = auth.role;
+      final restaurantId = auth.restaurantId;
+      final isLoggedIn = auth.user != null && role != null;
       final location = state.matchedLocation;
 
-      // 로그아웃 → 로그인
+      // 1. 비로그인 → 로그인 화면
       if (!isLoggedIn) {
         return location == '/login' ? null : '/login';
       }
 
-      // super_admin + 레스토랑 없음 → 온보딩
+      // 2. super_admin + 레스토랑 없음 → 온보딩
       if (role == 'super_admin' && restaurantId == null) {
         return location == '/onboarding' ? null : '/onboarding';
       }
 
-      // 로그인 상태에서 /login 또는 /onboarding → 역할별 화면
-      if (location == '/login' || location == '/onboarding') {
-        switch (role) {
-          case 'waiter':    return '/waiter';
-          case 'kitchen':   return '/kitchen';
-          case 'cashier':   return '/cashier';
-          case 'admin':     return '/admin';
-          case 'super_admin': return '/super-admin';
-          default:          return '/admin';
-        }
+      // 3. 역할별 허용 경로 정의
+      final String homeRoute = switch (role) {
+        'waiter'      => '/waiter',
+        'kitchen'     => '/kitchen',
+        'cashier'     => '/cashier',
+        'super_admin' => '/super-admin',
+        _             => '/admin',
+      };
+
+      const publicRoutes = ['/login', '/onboarding'];
+
+      // 4. 공개 경로에 있으면 → 홈으로
+      if (publicRoutes.contains(location)) {
+        return homeRoute;
+      }
+
+      // 5. super_admin이 /admin에 있으면 → /super-admin으로 강제
+      if (role == 'super_admin' && location == '/admin') {
+        return '/super-admin';
+      }
+
+      // 6. admin이 /super-admin에 있으면 → /admin으로 강제
+      if (role == 'admin' && location == '/super-admin') {
+        return '/admin';
       }
 
       return null;
     },
     routes: [
-      GoRoute(path: '/login',      builder: (_, __) => const LoginScreen()),
-      GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingScreen()),
-      GoRoute(path: '/waiter',     builder: (_, __) => const WaiterScreen()),
-      GoRoute(path: '/kitchen',    builder: (_, __) => const KitchenScreen()),
-      GoRoute(path: '/cashier',    builder: (_, __) => const CashierScreen()),
+      GoRoute(path: '/login',       builder: (_, __) => const LoginScreen()),
+      GoRoute(path: '/onboarding',  builder: (_, __) => const OnboardingScreen()),
+      GoRoute(path: '/waiter',      builder: (_, __) => const WaiterScreen()),
+      GoRoute(path: '/kitchen',     builder: (_, __) => const KitchenScreen()),
+      GoRoute(path: '/cashier',     builder: (_, __) => const CashierScreen()),
       GoRoute(path: '/super-admin', builder: (_, __) => const SuperAdminScreen()),
-      GoRoute(path: '/admin',      builder: (_, __) => const AdminScreen()),
+      GoRoute(path: '/admin',       builder: (_, __) => const AdminScreen()),
     ],
   );
 }
