@@ -1,15 +1,19 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/hardware/printer_service.dart';
+import '../../core/hardware/receipt_builder.dart';
 import '../../main.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
 import '../payment/payment_provider.dart';
+import '../settings/printer_provider.dart';
 
 class CashierScreen extends ConsumerStatefulWidget {
   const CashierScreen({super.key});
@@ -134,6 +138,47 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       ),
     );
     return result ?? false;
+  }
+
+  Future<void> _printReceipt({
+    required CashierOrder order,
+    required String method,
+  }) async {
+    if (kIsWeb) {
+      showErrorToast(context, '프린터는 앱에서만 지원됩니다.');
+      return;
+    }
+
+    final printerState = ref.read(printerProvider);
+    if (printerState.printerIp.isEmpty) {
+      return;
+    }
+
+    final bytes = await ReceiptBuilder.buildPaymentReceipt(
+      restaurantName: 'GLOBOS POS',
+      tableNumber: order.tableNumber,
+      items: order.items
+          .map(
+            (item) => ReceiptItem(
+              name: item.label ?? 'Item',
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+            ),
+          )
+          .toList(),
+      totalAmount: order.totalAmount,
+      paymentMethod: method,
+      paidAt: DateTime.now(),
+      isService: method == 'service',
+    );
+
+    final result = await ref.read(printerProvider.notifier).print(bytes);
+    if (!mounted) {
+      return;
+    }
+    if (result != PrintResult.success) {
+      showErrorToast(context, '결제 완료. 영수증 출력 실패 - 프린터를 확인해주세요.');
+    }
   }
 
   @override
@@ -333,6 +378,10 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                       ref
                                           .read(paymentProvider)
                                           .paymentSuccess) {
+                                    await _printReceipt(
+                                      order: selectedOrder,
+                                      method: method,
+                                    );
                                     setState(() => _selectedMethod = null);
                                   }
                                 },
@@ -360,6 +409,18 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                     setState(() => _selectedMethod = null);
                                     showSuccessToast(context, '주문이 취소되었습니다');
                                   }
+                                },
+                                onReprint: () async {
+                                  final selectedOrder =
+                                      paymentState.selectedOrder;
+                                  if (selectedOrder == null) {
+                                    return;
+                                  }
+                                  final method = _selectedMethod ?? 'cash';
+                                  await _printReceipt(
+                                    order: selectedOrder,
+                                    method: method,
+                                  );
                                 },
                               ),
                       ),
@@ -412,6 +473,7 @@ class _SelectedOrderView extends StatelessWidget {
     required this.onSelectMethod,
     required this.onProcess,
     required this.onCancelOrder,
+    required this.onReprint,
   });
 
   final CashierOrder order;
@@ -421,6 +483,7 @@ class _SelectedOrderView extends StatelessWidget {
   final ValueChanged<String> onSelectMethod;
   final Future<void> Function() onProcess;
   final Future<void> Function() onCancelOrder;
+  final Future<void> Function() onReprint;
 
   @override
   Widget build(BuildContext context) {
@@ -442,6 +505,25 @@ class _SelectedOrderView extends StatelessWidget {
             color: AppColors.textPrimary,
             fontSize: 48,
             letterSpacing: 1.2,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Align(
+          alignment: Alignment.centerRight,
+          child: OutlinedButton.icon(
+            onPressed: isProcessing ? null : onReprint,
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: AppColors.surface2),
+              foregroundColor: AppColors.textPrimary,
+            ),
+            icon: const Icon(Icons.print, size: 16),
+            label: Text(
+              '영수증 재출력',
+              style: GoogleFonts.notoSansKr(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 12),
