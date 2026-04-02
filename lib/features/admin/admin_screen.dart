@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../main.dart';
 import '../auth/auth_provider.dart';
+import 'tabs/attendance_tab.dart';
 import 'tabs/menu_tab.dart';
 import 'tabs/reports_tab.dart';
 import 'tabs/staff_tab.dart';
@@ -24,6 +25,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     MenuTab(),
     StaffTab(),
     ReportsTab(),
+    AttendanceTab(),
   ];
 
   @override
@@ -74,6 +76,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.bar_chart),
             label: 'Reports',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.access_time),
+            label: 'Attendance',
           ),
         ],
       ),
