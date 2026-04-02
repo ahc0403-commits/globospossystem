@@ -138,43 +138,42 @@ class StaffNotifier extends StateNotifier<StaffState> {
     }
   }
 
-  Future<String?> createStaff(
-    String restaurantId,
-    String email,
-    String password,
-    String fullName,
-    String role,
-  ) async {
+  Future<void> createStaff({
+    required String restaurantId,
+    required String email,
+    required String password,
+    required String fullName,
+    required String role,
+  }) async {
     state = state.copyWith(isCreating: true, clearError: true);
     try {
-      try {
-        await supabase.from('users').insert({
-          'restaurant_id': restaurantId,
-          'auth_id': '00000000-0000-0000-0000-000000000000',
+      final response = await supabase.functions.invoke(
+        'create_staff_user',
+        body: {
           'email': email,
+          'password': password,
           'full_name': fullName,
           'role': role,
-          'is_active': true,
-        });
-      } catch (_) {
-        await supabase.from('users').insert({
           'restaurant_id': restaurantId,
-          'auth_id': '00000000-0000-0000-0000-000000000000',
-          'full_name': fullName,
-          'role': role,
-          'is_active': true,
-        });
+        },
+      );
+
+      if (response.status != 200) {
+        final errorData = response.data;
+        final errorMsg = errorData is Map
+            ? errorData['error'] ?? 'Failed to create staff'
+            : 'Failed to create staff';
+        state = state.copyWith(isCreating: false, error: errorMsg.toString());
+        return;
       }
 
-      await loadStaff(restaurantId);
       state = state.copyWith(isCreating: false, clearError: true);
-      return 'Share this email with staff: $email. They must sign up at the app login.';
+      await loadStaff(restaurantId);
     } catch (error) {
       state = state.copyWith(
         isCreating: false,
         error: 'Failed to create staff: $error',
       );
-      return null;
     }
   }
 

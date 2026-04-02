@@ -32,9 +32,16 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     try {
       final data = await supabase
           .from('users')
-          .select('role, restaurant_id')
+          .select('role, restaurant_id, is_active')
           .eq('auth_id', user.id)
           .single();
+
+      final isActive = data['is_active'] as bool? ?? true;
+      if (!isActive) {
+        await supabase.auth.signOut();
+        state = const PosAuthState(errorMessage: '비활성화된 계정입니다. 관리자에게 문의하세요.');
+        return;
+      }
 
       state = state.copyWith(
         isLoading: false,

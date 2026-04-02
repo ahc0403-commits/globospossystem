@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../main.dart';
+import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
 import '../providers/staff_provider.dart';
 
@@ -214,7 +215,10 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                     controller: passwordController,
                     obscureText: true,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(labelText: 'Password'),
+                    decoration: const InputDecoration(
+                      labelText: 'Password',
+                      hintText: 'Minimum 8 characters',
+                    ),
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
@@ -247,46 +251,26 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                                 return;
                               }
 
-                              final infoMessage = await notifier.createStaff(
-                                restaurantId,
-                                email,
-                                password,
-                                fullName,
-                                role,
+                              await notifier.createStaff(
+                                restaurantId: restaurantId,
+                                email: email,
+                                password: password,
+                                fullName: fullName,
+                                role: role,
                               );
 
                               if (!context.mounted) {
                                 return;
                               }
-                              Navigator.of(context).pop();
-                              if (infoMessage != null) {
-                                await showDialog<void>(
-                                  context: context,
-                                  builder: (context) {
-                                    return AlertDialog(
-                                      backgroundColor: AppColors.surface1,
-                                      title: Text(
-                                        'Staff Created',
-                                        style: GoogleFonts.notoSansKr(
-                                          color: AppColors.textPrimary,
-                                        ),
-                                      ),
-                                      content: Text(
-                                        infoMessage,
-                                        style: GoogleFonts.notoSansKr(
-                                          color: AppColors.textSecondary,
-                                        ),
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () => Navigator.of(context).pop(),
-                                          child: const Text('OK'),
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                );
+                              final nextState = ref.read(staffProvider);
+                              if (nextState.error != null) {
+                                return;
                               }
+                              Navigator.of(context).pop();
+                              showSuccessToast(
+                                context,
+                                'Staff account created. They can now log in with their email and password.',
+                              );
                             },
                       style: FilledButton.styleFrom(
                         backgroundColor: AppColors.amber500,
