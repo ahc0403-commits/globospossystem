@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:go_router/go_router.dart';
+
 import '../../main.dart';
 import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
@@ -13,7 +15,10 @@ import 'tabs/staff_tab.dart';
 import 'tabs/tables_tab.dart';
 
 class AdminScreen extends ConsumerStatefulWidget {
-  const AdminScreen({super.key});
+  const AdminScreen({super.key, this.overrideRestaurantId});
+
+  /// super_admin이 특정 레스토랑 admin 화면을 볼 때 사용
+  final String? overrideRestaurantId;
 
   @override
   ConsumerState<AdminScreen> createState() => _AdminScreenState();
@@ -33,13 +38,22 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isSuperAdminView = widget.overrideRestaurantId != null;
+
     return Scaffold(
       backgroundColor: AppColors.surface0,
       appBar: AppBar(
         backgroundColor: AppColors.surface0,
         elevation: 0,
+        leading: isSuperAdminView
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back, color: AppColors.amber500),
+                tooltip: '시스템 관리로 돌아가기',
+                onPressed: () => context.go('/super-admin'),
+              )
+            : null,
         title: Text(
-          'GLOBOS POS',
+          isSuperAdminView ? 'ADMIN VIEW' : 'GLOBOS POS',
           style: GoogleFonts.bebasNeue(
             color: AppColors.amber500,
             fontSize: 34,
@@ -47,12 +61,31 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
           ),
         ),
         actions: [
-          IconButton(
-            onPressed: () => ref.read(authProvider.notifier).logout(),
-            icon: const Icon(Icons.logout),
-            color: AppColors.textPrimary,
-            tooltip: 'Logout',
-          ),
+          if (isSuperAdminView)
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.statusOccupied.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.statusOccupied),
+              ),
+              child: Text(
+                'SUPER ADMIN MODE',
+                style: GoogleFonts.notoSansKr(
+                  color: AppColors.statusOccupied,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          if (!isSuperAdminView)
+            IconButton(
+              onPressed: () => ref.read(authProvider.notifier).logout(),
+              icon: const Icon(Icons.logout),
+              color: AppColors.textPrimary,
+              tooltip: 'Logout',
+            ),
         ],
       ),
       body: Column(

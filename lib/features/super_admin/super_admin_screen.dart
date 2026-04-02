@@ -92,7 +92,7 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
                 0 => _RestaurantsTab(
                     state: state,
                     notifier: notifier,
-                    onGoToAdmin: () => context.go('/admin'),
+                    onGoToAdmin: (restaurantId) => context.go('/admin/$restaurantId'),
                   ),
                 1 => _AllReportsTab(state: state, notifier: notifier),
                 _ => _SystemSettingsTab(authState: authState),
@@ -147,7 +147,7 @@ class _RestaurantsTab extends StatelessWidget {
 
   final SuperAdminState state;
   final SuperAdminNotifier notifier;
-  final VoidCallback onGoToAdmin;
+  final void Function(String restaurantId) onGoToAdmin;
 
   @override
   Widget build(BuildContext context) {
@@ -240,7 +240,7 @@ class _RestaurantsTab extends StatelessWidget {
                           FilledButton(
                             onPressed: () {
                               notifier.selectRestaurant(restaurant);
-                              onGoToAdmin();
+                              onGoToAdmin(restaurant.id);
                             },
                             style: FilledButton.styleFrom(
                               backgroundColor: AppColors.amber500,

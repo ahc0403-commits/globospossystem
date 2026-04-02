@@ -62,8 +62,14 @@ GoRouter buildAppRouter(ProviderContainer container) {
       }
 
       // 5. super_admin이 /admin에 있으면 → /super-admin으로 강제
+      // 단, /admin/:id 형태(특정 레스토랑 뷰)는 허용
       if (role == 'super_admin' && location == '/admin') {
         return '/super-admin';
+      }
+
+      // super_admin이 /admin/:restaurantId에 접근하는 건 허용
+      if (role == 'super_admin' && location.startsWith('/admin/')) {
+        return null;
       }
 
       // 6. admin이 /super-admin에 있으면 → /admin으로 강제
@@ -81,6 +87,13 @@ GoRouter buildAppRouter(ProviderContainer container) {
       GoRoute(path: '/cashier',     builder: (_, __) => const CashierScreen()),
       GoRoute(path: '/super-admin', builder: (_, __) => const SuperAdminScreen()),
       GoRoute(path: '/admin',       builder: (_, __) => const AdminScreen()),
+      // super_admin이 특정 레스토랑 admin 화면으로 진입하는 경로
+      GoRoute(
+        path: '/admin/:restaurantId',
+        builder: (_, state) => AdminScreen(
+          overrideRestaurantId: state.pathParameters['restaurantId'],
+        ),
+      ),
     ],
   );
 }
