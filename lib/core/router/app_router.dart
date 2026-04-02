@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/admin/admin_screen.dart';
 import '../../features/auth/auth_provider.dart';
 import '../../features/auth/login_screen.dart';
+import '../../features/waiter/waiter_screen.dart';
 import '../../main.dart';
 
 // 플레이스홀더 화면
@@ -62,7 +63,7 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/waiter',
-      builder: (context, state) => const _PlaceholderScreen('Waiter Screen'),
+      builder: (context, state) => const WaiterScreen(),
     ),
     GoRoute(
       path: '/kitchen',
