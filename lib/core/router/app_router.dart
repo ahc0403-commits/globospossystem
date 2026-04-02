@@ -1,33 +1,11 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/admin/admin_screen.dart';
 import '../../features/auth/auth_provider.dart';
 import '../../features/auth/login_screen.dart';
+import '../../features/cashier/cashier_screen.dart';
+import '../../features/kitchen/kitchen_screen.dart';
 import '../../features/waiter/waiter_screen.dart';
-import '../../main.dart';
-
-// 플레이스홀더 화면
-class _PlaceholderScreen extends StatelessWidget {
-  final String title;
-  const _PlaceholderScreen(this.title);
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.surface0,
-      body: Center(
-        child: Text(
-          title,
-          style: const TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 24,
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 final appRouter = GoRouter(
   initialLocation: '/login',
@@ -67,11 +45,11 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/kitchen',
-      builder: (context, state) => const _PlaceholderScreen('Kitchen Screen'),
+      builder: (context, state) => const KitchenScreen(),
     ),
     GoRoute(
       path: '/cashier',
-      builder: (context, state) => const _PlaceholderScreen('Cashier Screen'),
+      builder: (context, state) => const CashierScreen(),
     ),
     GoRoute(
       path: '/admin',
