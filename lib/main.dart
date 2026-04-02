@@ -3,27 +3,17 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
 import 'core/constants/app_constants.dart';
+import 'core/router/app_router.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // 1. .env 로드
   await dotenv.load(fileName: '.env');
-
-  // 2. Supabase 초기화
   await Supabase.initialize(
     url: AppConstants.supabaseUrl,
     anonKey: AppConstants.supabaseAnonKey,
   );
-
-  // 3. Riverpod + 앱 실행
-  runApp(
-    const ProviderScope(
-      child: GlobosPosApp(),
-    ),
-  );
+  runApp(const ProviderScope(child: GlobosPosApp()));
 }
 
 /// Supabase client 전역 접근용
@@ -34,7 +24,7 @@ class GlobosPosApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'GLOBOS POS',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -42,41 +32,7 @@ class GlobosPosApp extends StatelessWidget {
         useMaterial3: true,
         textTheme: GoogleFonts.notoSansKrTextTheme(),
       ),
-      home: const _SplashScreen(),
-    );
-  }
-}
-
-class _SplashScreen extends StatelessWidget {
-  const _SplashScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.surface0,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'GLOBOS',
-              style: GoogleFonts.bebasNeue(
-                fontSize: 64,
-                color: AppColors.amber500,
-                letterSpacing: 8,
-              ),
-            ),
-            Text(
-              'POS SYSTEM',
-              style: GoogleFonts.notoSansKr(
-                fontSize: 16,
-                color: AppColors.textSecondary,
-                letterSpacing: 4,
-              ),
-            ),
-          ],
-        ),
-      ),
+      routerConfig: appRouter,
     );
   }
 }
