@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../main.dart';
+import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
 import '../payment/payment_provider.dart';
 
@@ -66,169 +67,182 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.surface0,
-      body: Row(
+      body: Column(
         children: [
-          Container(
-            width: 420,
-            decoration: const BoxDecoration(
-              color: AppColors.surface1,
-              border: Border(right: BorderSide(color: AppColors.surface2)),
-            ),
-            child: Column(
+          const OfflineBanner(),
+          Expanded(
+            child: Row(
               children: [
                 Container(
-                  height: 80,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'CASHIER',
-                    style: GoogleFonts.bebasNeue(
-                      color: AppColors.amber500,
-                      fontSize: 28,
-                      letterSpacing: 1.0,
-                    ),
+                  width: 420,
+                  decoration: const BoxDecoration(
+                    color: AppColors.surface1,
+                    border: Border(right: BorderSide(color: AppColors.surface2)),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        height: 80,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'CASHIER',
+                          style: GoogleFonts.bebasNeue(
+                            color: AppColors.amber500,
+                            fontSize: 28,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: paymentState.orders.isEmpty
+                            ? Center(
+                                child: Text(
+                                  'No payable orders',
+                                  style: GoogleFonts.notoSansKr(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              )
+                            : ListView.separated(
+                                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                                itemCount: paymentState.orders.length,
+                                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                                itemBuilder: (context, index) {
+                                  final order = paymentState.orders[index];
+                                  final selected =
+                                      paymentState.selectedOrder?.orderId == order.orderId;
+                                  return InkWell(
+                                    onTap: () {
+                                      setState(() => _selectedMethod = null);
+                                      notifier.selectOrder(order);
+                                    },
+                                    borderRadius: BorderRadius.circular(14),
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 220),
+                                      padding: const EdgeInsets.all(14),
+                                      decoration: BoxDecoration(
+                                        color: selected
+                                            ? AppColors.surface0
+                                            : AppColors.surface1,
+                                        borderRadius: BorderRadius.circular(14),
+                                        border: Border.all(
+                                          color: selected
+                                              ? AppColors.amber500
+                                              : AppColors.surface2,
+                                          width: selected ? 1.8 : 1,
+                                        ),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Table ${order.tableNumber}',
+                                            style: GoogleFonts.bebasNeue(
+                                              color: AppColors.textPrimary,
+                                              fontSize: 34,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            '₫${currency.format(order.totalAmount)}',
+                                            style: GoogleFonts.bebasNeue(
+                                              color: AppColors.amber500,
+                                              fontSize: 24,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            '${order.items.length} items',
+                                            style: GoogleFonts.notoSansKr(
+                                              color: AppColors.textSecondary,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          _OrderStatusBadge(status: order.status),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
                   ),
                 ),
                 Expanded(
-                  child: paymentState.orders.isEmpty
-                      ? Center(
-                          child: Text(
-                            'No payable orders',
-                            style: GoogleFonts.notoSansKr(
-                              color: AppColors.textSecondary,
-                              fontSize: 14,
-                            ),
-                          ),
-                        )
-                      : ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                          itemCount: paymentState.orders.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: 10),
-                          itemBuilder: (context, index) {
-                            final order = paymentState.orders[index];
-                            final selected = paymentState.selectedOrder?.orderId == order.orderId;
-                            return InkWell(
-                              onTap: () {
-                                setState(() => _selectedMethod = null);
-                                notifier.selectOrder(order);
-                              },
-                              borderRadius: BorderRadius.circular(14),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 220),
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  color: selected ? AppColors.surface0 : AppColors.surface1,
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: selected
-                                        ? AppColors.amber500
-                                        : AppColors.surface2,
-                                    width: selected ? 1.8 : 1,
+                  child: Stack(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: paymentState.selectedOrder == null
+                            ? Center(
+                                child: Text(
+                                  'Select a table to process payment',
+                                  style: GoogleFonts.notoSansKr(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 18,
                                   ),
                                 ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Table ${order.tableNumber}',
-                                      style: GoogleFonts.bebasNeue(
-                                        color: AppColors.textPrimary,
-                                        fontSize: 34,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '₫${currency.format(order.totalAmount)}',
-                                      style: GoogleFonts.bebasNeue(
-                                        color: AppColors.amber500,
-                                        fontSize: 24,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      '${order.items.length} items',
-                                      style: GoogleFonts.notoSansKr(
-                                        color: AppColors.textSecondary,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    _OrderStatusBadge(status: order.status),
-                                  ],
+                              )
+                            : _SelectedOrderView(
+                                order: paymentState.selectedOrder!,
+                                selectedMethod: _selectedMethod,
+                                isAdmin: isAdmin,
+                                isProcessing: paymentState.isProcessing,
+                                error: paymentState.error,
+                                onSelectMethod: (method) {
+                                  setState(() => _selectedMethod = method);
+                                },
+                                onProcess: () async {
+                                  final method = _selectedMethod;
+                                  final selectedOrder = paymentState.selectedOrder;
+                                  if (restaurantId == null ||
+                                      method == null ||
+                                      selectedOrder == null) {
+                                    return;
+                                  }
+                                  await notifier.processPayment(
+                                    restaurantId,
+                                    selectedOrder.orderId,
+                                    selectedOrder.totalAmount,
+                                    method,
+                                  );
+                                  if (mounted && ref.read(paymentProvider).paymentSuccess) {
+                                    setState(() => _selectedMethod = null);
+                                  }
+                                },
+                              ),
+                      ),
+                      IgnorePointer(
+                        ignoring: true,
+                        child: AnimatedOpacity(
+                          opacity: paymentState.paymentSuccess ? 1 : 0,
+                          duration: const Duration(milliseconds: 240),
+                          child: Center(
+                            child: Container(
+                              width: 180,
+                              height: 180,
+                              decoration: BoxDecoration(
+                                color: AppColors.statusAvailable.withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: AppColors.statusAvailable,
+                                  width: 3,
                                 ),
                               ),
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Stack(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: paymentState.selectedOrder == null
-                      ? Center(
-                          child: Text(
-                            'Select a table to process payment',
-                            style: GoogleFonts.notoSansKr(
-                              color: AppColors.textSecondary,
-                              fontSize: 18,
+                              child: const Icon(
+                                Icons.check,
+                                color: AppColors.statusAvailable,
+                                size: 94,
+                              ),
                             ),
                           ),
-                        )
-                      : _SelectedOrderView(
-                          order: paymentState.selectedOrder!,
-                          selectedMethod: _selectedMethod,
-                          isAdmin: isAdmin,
-                          isProcessing: paymentState.isProcessing,
-                          error: paymentState.error,
-                          onSelectMethod: (method) {
-                            setState(() => _selectedMethod = method);
-                          },
-                          onProcess: () async {
-                            final method = _selectedMethod;
-                            final selectedOrder = paymentState.selectedOrder;
-                            if (restaurantId == null ||
-                                method == null ||
-                                selectedOrder == null) {
-                              return;
-                            }
-                            await notifier.processPayment(
-                              restaurantId,
-                              selectedOrder.orderId,
-                              selectedOrder.totalAmount,
-                              method,
-                            );
-                            if (mounted && ref.read(paymentProvider).paymentSuccess) {
-                              setState(() => _selectedMethod = null);
-                            }
-                          },
-                        ),
-                ),
-                IgnorePointer(
-                  ignoring: true,
-                  child: AnimatedOpacity(
-                    opacity: paymentState.paymentSuccess ? 1 : 0,
-                    duration: const Duration(milliseconds: 240),
-                    child: Center(
-                      child: Container(
-                        width: 180,
-                        height: 180,
-                        decoration: BoxDecoration(
-                          color: AppColors.statusAvailable.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.statusAvailable, width: 3),
-                        ),
-                        child: const Icon(
-                          Icons.check,
-                          color: AppColors.statusAvailable,
-                          size: 94,
                         ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ],

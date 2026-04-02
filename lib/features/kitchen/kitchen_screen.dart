@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../main.dart';
+import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
 import 'kitchen_provider.dart';
 
@@ -117,196 +118,203 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
       backgroundColor: AppColors.surface0,
       body: Column(
         children: [
-          _KitchenTopBar(now: _now, restaurantId: restaurantId),
+          const OfflineBanner(),
           Expanded(
-            child: Builder(
-              builder: (context) {
-                if (kitchenState.isLoading) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: AppColors.amber500),
-                  );
-                }
-                if (kitchenState.error != null) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          kitchenState.error!,
-                          style: GoogleFonts.notoSansKr(
-                            color: AppColors.statusCancelled,
-                            fontSize: 14,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 12),
-                        ElevatedButton(
-                          onPressed: restaurantId == null
-                              ? null
-                              : () => notifier.loadOrders(restaurantId),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.amber500,
-                            foregroundColor: AppColors.surface0,
-                          ),
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                if (kitchenState.orders.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.restaurant_menu,
-                          color: AppColors.textSecondary,
-                          size: 54,
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          'No active orders',
-                          style: GoogleFonts.notoSansKr(
-                            color: AppColors.textSecondary,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return GridView.builder(
-                  padding: const EdgeInsets.all(16),
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 420,
-                    mainAxisSpacing: 14,
-                    crossAxisSpacing: 14,
-                    childAspectRatio: 1.1,
-                  ),
-                  itemCount: kitchenState.orders.length,
-                  itemBuilder: (context, index) {
-                    final order = kitchenState.orders[index];
-                    final hasPending = order.items.any((item) => item.status == 'pending');
-                    final flashing = _flashingOrderIds.contains(order.orderId);
-                    final elapsed = _elapsedLabel(order.createdAt, _now);
-
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 260),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface1,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: flashing ? AppColors.amber500 : AppColors.surface2,
-                          width: flashing ? 2.5 : 1,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.4),
-                            blurRadius: 16,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                              color: hasPending ? AppColors.amber500 : AppColors.surface2,
-                              borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(16),
+            child: Column(
+              children: [
+                _KitchenTopBar(now: _now, restaurantId: restaurantId),
+                Expanded(
+                  child: Builder(
+                    builder: (context) {
+                      if (kitchenState.isLoading) {
+                        return const Center(
+                          child: CircularProgressIndicator(color: AppColors.amber500),
+                        );
+                      }
+                      if (kitchenState.error != null) {
+                        return Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                kitchenState.error!,
+                                style: GoogleFonts.notoSansKr(
+                                  color: AppColors.statusCancelled,
+                                  fontSize: 14,
+                                ),
+                                textAlign: TextAlign.center,
                               ),
+                              const SizedBox(height: 12),
+                              ElevatedButton(
+                                onPressed: restaurantId == null
+                                    ? null
+                                    : () => notifier.loadOrders(restaurantId),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.amber500,
+                                  foregroundColor: AppColors.surface0,
+                                ),
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      if (kitchenState.orders.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.restaurant_menu,
+                                color: AppColors.textSecondary,
+                                size: 54,
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                'No active orders',
+                                style: GoogleFonts.notoSansKr(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      return GridView.builder(
+                        padding: const EdgeInsets.all(16),
+                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 420,
+                          mainAxisSpacing: 14,
+                          crossAxisSpacing: 14,
+                          childAspectRatio: 1.1,
+                        ),
+                        itemCount: kitchenState.orders.length,
+                        itemBuilder: (context, index) {
+                          final order = kitchenState.orders[index];
+                          final hasPending = order.items.any((item) => item.status == 'pending');
+                          final flashing = _flashingOrderIds.contains(order.orderId);
+                          final elapsed = _elapsedLabel(order.createdAt, _now);
+
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 260),
+                            decoration: BoxDecoration(
+                              color: AppColors.surface1,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: flashing ? AppColors.amber500 : AppColors.surface2,
+                                width: flashing ? 2.5 : 1,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.4),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
                             ),
-                            child: Row(
+                            child: Column(
                               children: [
-                                Text(
-                                  'T${order.tableNumber}',
-                                  style: GoogleFonts.bebasNeue(
-                                    color: hasPending
-                                        ? AppColors.surface0
-                                        : AppColors.textPrimary,
-                                    fontSize: 32,
-                                    letterSpacing: 1.0,
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: hasPending ? AppColors.amber500 : AppColors.surface2,
+                                    borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(16),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        'T${order.tableNumber}',
+                                        style: GoogleFonts.bebasNeue(
+                                          color: hasPending
+                                              ? AppColors.surface0
+                                              : AppColors.textPrimary,
+                                          fontSize: 32,
+                                          letterSpacing: 1.0,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      Text(
+                                        elapsed,
+                                        style: GoogleFonts.notoSansKr(
+                                          color: hasPending
+                                              ? AppColors.surface0
+                                              : AppColors.textSecondary,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                const Spacer(),
-                                Text(
-                                  elapsed,
-                                  style: GoogleFonts.notoSansKr(
-                                    color: hasPending
-                                        ? AppColors.surface0
-                                        : AppColors.textSecondary,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
+                                Expanded(
+                                  child: ListView.separated(
+                                    padding: const EdgeInsets.all(12),
+                                    itemCount: order.items.length,
+                                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                                    itemBuilder: (context, itemIndex) {
+                                      final item = order.items[itemIndex];
+                                      final nextStatus = _cycleStatus(item.status);
+                                      return InkWell(
+                                        onTap: () => notifier.updateItemStatus(
+                                          item.itemId,
+                                          nextStatus,
+                                        ),
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 8,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.surface0,
+                                            borderRadius: BorderRadius.circular(10),
+                                            border: Border.all(color: AppColors.surface2),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Text(
+                                                '${item.quantity}x',
+                                                style: GoogleFonts.bebasNeue(
+                                                  color: AppColors.amber500,
+                                                  fontSize: 24,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  item.label,
+                                                  style: GoogleFonts.notoSansKr(
+                                                    color: AppColors.textPrimary,
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ),
+                                              _StatusChip(status: item.status),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                          Expanded(
-                            child: ListView.separated(
-                              padding: const EdgeInsets.all(12),
-                              itemCount: order.items.length,
-                              separatorBuilder: (_, _) => const SizedBox(height: 8),
-                              itemBuilder: (context, itemIndex) {
-                                final item = order.items[itemIndex];
-                                final nextStatus = _cycleStatus(item.status);
-                                return InkWell(
-                                  onTap: () => notifier.updateItemStatus(
-                                    item.itemId,
-                                    nextStatus,
-                                  ),
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.surface0,
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(color: AppColors.surface2),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Text(
-                                          '${item.quantity}x',
-                                          style: GoogleFonts.bebasNeue(
-                                            color: AppColors.amber500,
-                                            fontSize: 24,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            item.label,
-                                            style: GoogleFonts.notoSansKr(
-                                              color: AppColors.textPrimary,
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ),
-                                        _StatusChip(status: item.status),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                );
-              },
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
         ],

@@ -77,6 +77,15 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     state = const PosAuthState();
   }
 
+  Future<void> refreshProfile() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) {
+      state = const PosAuthState();
+      return;
+    }
+    await _fetchUserProfile(user);
+  }
+
   @override
   void dispose() {
     _authSub?.cancel();

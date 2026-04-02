@@ -36,6 +36,20 @@ class OrderState {
 class OrderNotifier extends StateNotifier<OrderState> {
   OrderNotifier() : super(const OrderState());
 
+  List<Map<String, dynamic>> _cartPayloadItems() {
+    return state.cart
+        .map(
+          (item) => {
+            'menu_item_id': item.menuItemId,
+            'label': item.name,
+            'unit_price': item.price,
+            'quantity': item.quantity,
+            'item_type': 'menu',
+          },
+        )
+        .toList();
+  }
+
   void addToCart(CartItem item) {
     final current = [...state.cart];
     final index = current.indexWhere((cartItem) => cartItem.menuItemId == item.menuItemId);
@@ -118,24 +132,12 @@ class OrderNotifier extends StateNotifier<OrderState> {
     state = state.copyWith(isSubmitting: true, clearError: true);
 
     try {
-      final payloadItems = state.cart
-          .map(
-            (item) => {
-              'menu_item_id': item.menuItemId,
-              'label': item.name,
-              'unit_price': item.price,
-              'quantity': item.quantity,
-              'item_type': 'menu',
-            },
-          )
-          .toList();
-
       await supabase.rpc(
         'create_order',
         params: {
           'p_restaurant_id': restaurantId,
           'p_table_id': tableId,
-          'p_items': payloadItems,
+          'p_items': _cartPayloadItems(),
         },
       );
 
@@ -157,24 +159,12 @@ class OrderNotifier extends StateNotifier<OrderState> {
     state = state.copyWith(isSubmitting: true, clearError: true);
 
     try {
-      final payloadItems = state.cart
-          .map(
-            (item) => {
-              'menu_item_id': item.menuItemId,
-              'label': item.name,
-              'unit_price': item.price,
-              'quantity': item.quantity,
-              'item_type': 'menu',
-            },
-          )
-          .toList();
-
       await supabase.rpc(
         'add_items_to_order',
         params: {
           'p_order_id': orderId,
           'p_restaurant_id': restaurantId,
-          'p_items': payloadItems,
+          'p_items': _cartPayloadItems(),
         },
       );
 
@@ -184,6 +174,38 @@ class OrderNotifier extends StateNotifier<OrderState> {
       }
     } catch (error) {
       state = state.copyWith(error: 'Failed to add items to order: $error');
+    } finally {
+      state = state.copyWith(isSubmitting: false);
+    }
+  }
+
+  Future<void> submitBuffetOrder(
+    String restaurantId,
+    String tableId,
+    int guestCount,
+  ) async {
+    if (guestCount <= 0) {
+      state = state.copyWith(error: 'Guest count must be at least 1.');
+      return;
+    }
+
+    state = state.copyWith(isSubmitting: true, clearError: true);
+
+    try {
+      await supabase.rpc(
+        'create_buffet_order',
+        params: {
+          'p_restaurant_id': restaurantId,
+          'p_table_id': tableId,
+          'p_guest_count': guestCount,
+          'p_extra_items': _cartPayloadItems(),
+        },
+      );
+
+      state = state.copyWith(cart: const []);
+      await loadActiveOrder(tableId, restaurantId);
+    } catch (error) {
+      state = state.copyWith(error: 'Failed to submit buffet order: $error');
     } finally {
       state = state.copyWith(isSubmitting: false);
     }

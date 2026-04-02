@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../main.dart';
+import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
 import 'tabs/attendance_tab.dart';
 import 'tabs/menu_tab.dart';
@@ -52,7 +53,12 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
           ),
         ],
       ),
-      body: IndexedStack(index: _currentIndex, children: _tabs),
+      body: Column(
+        children: [
+          const OfflineBanner(),
+          Expanded(child: IndexedStack(index: _currentIndex, children: _tabs)),
+        ],
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),

@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../main.dart';
+import '../../widgets/offline_banner.dart';
 import '../admin/providers/menu_provider.dart';
 import '../auth/auth_provider.dart';
 import '../order/order_model.dart';
@@ -23,6 +24,37 @@ final restaurantNameProvider = FutureProvider.family<String, String>((
   return response?['name']?.toString() ?? 'Restaurant';
 });
 
+class RestaurantSettings {
+  const RestaurantSettings({
+    required this.operationMode,
+    required this.perPersonCharge,
+  });
+
+  final String operationMode;
+  final double? perPersonCharge;
+}
+
+final restaurantSettingsProvider = FutureProvider.family<RestaurantSettings, String>((
+  ref,
+  restaurantId,
+) async {
+  final response = await supabase
+      .from('restaurants')
+      .select('operation_mode, per_person_charge')
+      .eq('id', restaurantId)
+      .single();
+
+  final mode = response['operation_mode']?.toString().toLowerCase() ?? 'standard';
+  final rawCharge = response['per_person_charge'];
+  final charge = switch (rawCharge) {
+    num value => value.toDouble(),
+    String value => double.tryParse(value),
+    _ => null,
+  };
+
+  return RestaurantSettings(operationMode: mode, perPersonCharge: charge);
+});
+
 class WaiterScreen extends ConsumerStatefulWidget {
   const WaiterScreen({super.key});
 
@@ -32,6 +64,7 @@ class WaiterScreen extends ConsumerStatefulWidget {
 
 class _WaiterScreenState extends ConsumerState<WaiterScreen> {
   PosTable? _selectedTable;
+  int? _selectedGuestCount;
   bool _showOrderPanel = false;
   String? _initializedRestaurantId;
 
@@ -46,9 +79,22 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     });
   }
 
-  Future<void> _onSelectTable(PosTable table, String restaurantId) async {
+  Future<void> _onSelectTable(
+    PosTable table,
+    String restaurantId,
+    bool requireGuestCount,
+  ) async {
+    int? guestCount;
+    if (requireGuestCount) {
+      guestCount = await _showGuestCountDialog();
+      if (guestCount == null) {
+        return;
+      }
+    }
+
     setState(() {
       _selectedTable = table;
+      _selectedGuestCount = guestCount;
       _showOrderPanel = true;
     });
     await ref.read(orderProvider.notifier).loadActiveOrder(table.id, restaurantId);
@@ -59,7 +105,52 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     setState(() {
       _showOrderPanel = false;
       _selectedTable = null;
+      _selectedGuestCount = null;
     });
+  }
+
+  Future<int?> _showGuestCountDialog() async {
+    final controller = TextEditingController(text: _selectedGuestCount?.toString() ?? '');
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface1,
+          title: Text(
+            'How many guests?',
+            style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+          ),
+          content: TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+            decoration: const InputDecoration(labelText: 'Guest count'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.amber500,
+                foregroundColor: AppColors.surface0,
+              ),
+              onPressed: () {
+                final guestCount = int.tryParse(controller.text.trim());
+                if (guestCount == null || guestCount < 1) {
+                  return;
+                }
+                Navigator.of(context).pop(guestCount);
+              },
+              child: const Text('Confirm'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+    return result;
   }
 
   PosTable? _resolveSelectedTable(List<PosTable> tables) {
@@ -84,6 +175,11 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
 
     final tableState = ref.watch(waiterTableProvider);
     final orderState = ref.watch(orderProvider);
+    final restaurantSettings = restaurantId == null
+        ? const AsyncValue<RestaurantSettings>.data(
+            RestaurantSettings(operationMode: 'standard', perPersonCharge: null),
+          )
+        : ref.watch(restaurantSettingsProvider(restaurantId));
     final menuState = restaurantId == null
         ? const MenuState()
         : ref.watch(menuProvider(restaurantId));
@@ -93,74 +189,95 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     final orderNotifier = ref.read(orderProvider.notifier);
 
     final selectedTable = _resolveSelectedTable(tableState.tables);
+    final operationMode =
+        restaurantSettings.valueOrNull?.operationMode.toLowerCase() ?? 'standard';
+    final isBuffetMode = operationMode == 'buffet' || operationMode == 'hybrid';
+    final allowSubmitWithoutCart = isBuffetMode && orderState.activeOrder == null;
 
     return Scaffold(
       backgroundColor: AppColors.surface0,
       body: Column(
         children: [
-          _WaiterTopBar(restaurantId: restaurantId),
+          const OfflineBanner(),
           Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 260),
-              transitionBuilder: (child, animation) {
-                final curved = CurvedAnimation(
-                  parent: animation,
-                  curve: Curves.easeOutCubic,
-                );
-                return SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0.15, 0),
-                    end: Offset.zero,
-                  ).animate(curved),
-                  child: child,
-                );
-              },
-              child: _showOrderPanel && selectedTable != null
-                  ? _OrderWorkspace(
-                      key: ValueKey<String>('order-${selectedTable.id}'),
-                      table: selectedTable,
-                      menuState: menuState,
-                      menuNotifier: menuNotifier,
-                      orderState: orderState,
-                      onAddToCart: orderNotifier.addToCart,
-                      onIncrementCartItem: (cartItem) {
-                        orderNotifier.addToCart(
-                          cartItem.copyWith(quantity: 1),
-                        );
-                      },
-                      onDecrementCartItem: orderNotifier.decrementCartItem,
-                      onCancel: _onCancelOrderPanel,
-                      onSendOrder: () async {
-                        if (restaurantId == null) {
-                          return;
-                        }
-                        if (orderState.activeOrder == null) {
-                          await orderNotifier.submitOrder(
-                            restaurantId,
-                            selectedTable.id,
-                          );
-                        } else {
-                          await orderNotifier.addMoreItems(
-                            orderState.activeOrder!.id,
-                            restaurantId,
-                          );
-                        }
-                      },
-                    )
-                  : _TableGridView(
-                      key: const ValueKey<String>('tables'),
-                      state: tableState,
-                      onRetry: () {
-                        if (restaurantId != null) {
-                          ref.read(waiterTableProvider.notifier).loadTables(restaurantId);
-                        }
-                      },
-                      onTapTable: (table) {
-                        if (restaurantId != null) {
-                          _onSelectTable(table, restaurantId);
-                        }
-                      },
-                    ),
+            child: Column(
+              children: [
+                _WaiterTopBar(restaurantId: restaurantId),
+                Expanded(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 260),
+                    transitionBuilder: (child, animation) {
+                      final curved = CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOutCubic,
+                      );
+                      return SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0.15, 0),
+                          end: Offset.zero,
+                        ).animate(curved),
+                        child: child,
+                      );
+                    },
+                    child: _showOrderPanel && selectedTable != null
+                        ? _OrderWorkspace(
+                            key: ValueKey<String>('order-${selectedTable.id}'),
+                            table: selectedTable,
+                            guestCount: _selectedGuestCount,
+                            menuState: menuState,
+                            menuNotifier: menuNotifier,
+                            orderState: orderState,
+                            allowSubmitWithoutCart: allowSubmitWithoutCart,
+                            onAddToCart: orderNotifier.addToCart,
+                            onIncrementCartItem: (cartItem) {
+                              orderNotifier.addToCart(
+                                cartItem.copyWith(quantity: 1),
+                              );
+                            },
+                            onDecrementCartItem: orderNotifier.decrementCartItem,
+                            onCancel: _onCancelOrderPanel,
+                            onSendOrder: () async {
+                              if (restaurantId == null) {
+                                return;
+                              }
+                              if (orderState.activeOrder == null) {
+                                if (isBuffetMode) {
+                                  await orderNotifier.submitBuffetOrder(
+                                    restaurantId,
+                                    selectedTable.id,
+                                    _selectedGuestCount ?? 1,
+                                  );
+                                } else {
+                                  await orderNotifier.submitOrder(
+                                    restaurantId,
+                                    selectedTable.id,
+                                  );
+                                }
+                              } else {
+                                await orderNotifier.addMoreItems(
+                                  orderState.activeOrder!.id,
+                                  restaurantId,
+                                );
+                              }
+                            },
+                          )
+                        : _TableGridView(
+                            key: const ValueKey<String>('tables'),
+                            state: tableState,
+                            onRetry: () {
+                              if (restaurantId != null) {
+                                ref.read(waiterTableProvider.notifier).loadTables(restaurantId);
+                              }
+                            },
+                            onTapTable: (table) {
+                              if (restaurantId != null) {
+                                _onSelectTable(table, restaurantId, isBuffetMode);
+                              }
+                            },
+                          ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -409,9 +526,11 @@ class _OrderWorkspace extends StatelessWidget {
   const _OrderWorkspace({
     super.key,
     required this.table,
+    required this.guestCount,
     required this.menuState,
     required this.menuNotifier,
     required this.orderState,
+    required this.allowSubmitWithoutCart,
     required this.onAddToCart,
     required this.onIncrementCartItem,
     required this.onDecrementCartItem,
@@ -420,9 +539,11 @@ class _OrderWorkspace extends StatelessWidget {
   });
 
   final PosTable table;
+  final int? guestCount;
   final MenuState menuState;
   final MenuNotifier? menuNotifier;
   final OrderState orderState;
+  final bool allowSubmitWithoutCart;
   final ValueChanged<CartItem> onAddToCart;
   final ValueChanged<CartItem> onIncrementCartItem;
   final ValueChanged<String> onDecrementCartItem;
@@ -473,7 +594,9 @@ class _OrderWorkspace extends StatelessWidget {
                 flex: 4,
                 child: _CurrentOrderPanel(
                   table: table,
+                  guestCount: guestCount,
                   state: orderState,
+                  allowSubmitWithoutCart: allowSubmitWithoutCart,
                   onIncrementCartItem: onIncrementCartItem,
                   onDecrementCartItem: onDecrementCartItem,
                   onCancel: onCancel,
@@ -502,7 +625,9 @@ class _OrderWorkspace extends StatelessWidget {
               flex: 4,
               child: _CurrentOrderPanel(
                 table: table,
+                guestCount: guestCount,
                 state: orderState,
+                allowSubmitWithoutCart: allowSubmitWithoutCart,
                 onIncrementCartItem: onIncrementCartItem,
                 onDecrementCartItem: onDecrementCartItem,
                 onCancel: onCancel,
@@ -728,7 +853,9 @@ class _MenuBrowser extends StatelessWidget {
 class _CurrentOrderPanel extends StatelessWidget {
   const _CurrentOrderPanel({
     required this.table,
+    required this.guestCount,
     required this.state,
+    required this.allowSubmitWithoutCart,
     required this.onIncrementCartItem,
     required this.onDecrementCartItem,
     required this.onCancel,
@@ -736,7 +863,9 @@ class _CurrentOrderPanel extends StatelessWidget {
   });
 
   final PosTable table;
+  final int? guestCount;
   final OrderState state;
+  final bool allowSubmitWithoutCart;
   final ValueChanged<CartItem> onIncrementCartItem;
   final ValueChanged<String> onDecrementCartItem;
   final VoidCallback onCancel;
@@ -786,6 +915,24 @@ class _CurrentOrderPanel extends StatelessWidget {
                     ),
                   ),
                 ),
+              if (guestCount != null && state.activeOrder == null) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface2,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Text(
+                    '$guestCount guests',
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 10),
@@ -971,7 +1118,10 @@ class _CurrentOrderPanel extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: FilledButton(
-                    onPressed: state.isSubmitting || state.cart.isEmpty ? null : onSendOrder,
+                    onPressed: state.isSubmitting ||
+                            (!allowSubmitWithoutCart && state.cart.isEmpty)
+                        ? null
+                        : onSendOrder,
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.amber500,
                       foregroundColor: AppColors.surface0,
