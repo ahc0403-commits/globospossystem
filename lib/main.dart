@@ -13,14 +13,24 @@ Future<void> main() async {
     url: AppConstants.supabaseUrl,
     anonKey: AppConstants.supabaseAnonKey,
   );
-  runApp(const ProviderScope(child: GlobosPosApp()));
+
+  final container = ProviderContainer();
+  final router = buildAppRouter(container);
+
+  runApp(
+    UncontrolledProviderScope(
+      container: container,
+      child: GlobosPosApp(router: router),
+    ),
+  );
 }
 
 /// Supabase client 전역 접근용
 final supabase = Supabase.instance.client;
 
 class GlobosPosApp extends StatelessWidget {
-  const GlobosPosApp({super.key});
+  const GlobosPosApp({super.key, required this.router});
+  final dynamic router;
 
   @override
   Widget build(BuildContext context) {
@@ -32,21 +42,21 @@ class GlobosPosApp extends StatelessWidget {
         useMaterial3: true,
         textTheme: GoogleFonts.notoSansKrTextTheme(),
       ),
-      routerConfig: appRouter,
+      routerConfig: router,
     );
   }
 }
 
 /// 앱 전역 색상 상수
 class AppColors {
-  static const surface0 = Color(0xFF111210);
-  static const surface1 = Color(0xFF1C1D1A);
-  static const surface2 = Color(0xFF252621);
-  static const textPrimary = Color(0xFFF0EDE6);
-  static const textSecondary = Color(0xFF9E9B92);
-  static const amber500 = Color(0xFFF5A623);
+  static const surface0        = Color(0xFF111210);
+  static const surface1        = Color(0xFF1C1D1A);
+  static const surface2        = Color(0xFF252621);
+  static const textPrimary     = Color(0xFFF0EDE6);
+  static const textSecondary   = Color(0xFF9E9B92);
+  static const amber500        = Color(0xFFF5A623);
   static const statusAvailable = Color(0xFF4CAF7D);
-  static const statusOccupied = Color(0xFFE8935A);
-  static const statusReady = Color(0xFFF5A623);
+  static const statusOccupied  = Color(0xFFE8935A);
+  static const statusReady     = Color(0xFFF5A623);
   static const statusCancelled = Color(0xFFC0392B);
 }
