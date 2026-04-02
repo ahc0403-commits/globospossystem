@@ -8,6 +8,7 @@ import '../../features/auth/login_screen.dart';
 import '../../features/cashier/cashier_screen.dart';
 import '../../features/kitchen/kitchen_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
+import '../../features/super_admin/super_admin_screen.dart';
 import '../../features/waiter/waiter_screen.dart';
 
 /// authProvider 변경을 GoRouter가 감지하도록 ChangeNotifier 브릿지
@@ -52,8 +53,8 @@ GoRouter buildAppRouter(ProviderContainer container) {
           case 'waiter':    return '/waiter';
           case 'kitchen':   return '/kitchen';
           case 'cashier':   return '/cashier';
-          case 'admin':
-          case 'super_admin':
+          case 'admin':     return '/admin';
+          case 'super_admin': return '/super-admin';
           default:          return '/admin';
         }
       }
@@ -66,6 +67,7 @@ GoRouter buildAppRouter(ProviderContainer container) {
       GoRoute(path: '/waiter',     builder: (_, __) => const WaiterScreen()),
       GoRoute(path: '/kitchen',    builder: (_, __) => const KitchenScreen()),
       GoRoute(path: '/cashier',    builder: (_, __) => const CashierScreen()),
+      GoRoute(path: '/super-admin', builder: (_, __) => const SuperAdminScreen()),
       GoRoute(path: '/admin',      builder: (_, __) => const AdminScreen()),
     ],
   );
