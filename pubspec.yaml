@@ -38,6 +38,9 @@ dependencies:
   uuid: ^4.5.1
   flutter_dotenv: ^6.0.0
   google_fonts: ^8.0.2
+  zkfinger10:
+    git:
+      url: https://github.com/Mamasodikov/zk_finger_10.git
 
 dev_dependencies:
   flutter_test:

@@ -8,6 +8,7 @@ import '../../features/auth/login_screen.dart';
 import '../../features/cashier/cashier_screen.dart';
 import '../../features/kitchen/kitchen_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
+import '../../features/attendance/attendance_kiosk_screen.dart';
 import '../../features/super_admin/super_admin_screen.dart';
 import '../../features/waiter/waiter_screen.dart';
 
@@ -47,11 +48,11 @@ GoRouter buildAppRouter(ProviderContainer container) {
 
       // 3. 역할별 허용 경로 정의
       final String homeRoute = switch (role) {
-        'waiter'      => '/waiter',
-        'kitchen'     => '/kitchen',
-        'cashier'     => '/cashier',
+        'waiter' => '/waiter',
+        'kitchen' => '/kitchen',
+        'cashier' => '/cashier',
         'super_admin' => '/super-admin',
-        _             => '/admin',
+        _ => '/admin',
       };
 
       const publicRoutes = ['/login', '/onboarding'];
@@ -80,13 +81,23 @@ GoRouter buildAppRouter(ProviderContainer container) {
       return null;
     },
     routes: [
-      GoRoute(path: '/login',       builder: (_, __) => const LoginScreen()),
-      GoRoute(path: '/onboarding',  builder: (_, __) => const OnboardingScreen()),
-      GoRoute(path: '/waiter',      builder: (_, __) => const WaiterScreen()),
-      GoRoute(path: '/kitchen',     builder: (_, __) => const KitchenScreen()),
-      GoRoute(path: '/cashier',     builder: (_, __) => const CashierScreen()),
-      GoRoute(path: '/super-admin', builder: (_, __) => const SuperAdminScreen()),
-      GoRoute(path: '/admin',       builder: (_, __) => const AdminScreen()),
+      GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+      GoRoute(
+        path: '/onboarding',
+        builder: (_, __) => const OnboardingScreen(),
+      ),
+      GoRoute(path: '/waiter', builder: (_, __) => const WaiterScreen()),
+      GoRoute(path: '/kitchen', builder: (_, __) => const KitchenScreen()),
+      GoRoute(path: '/cashier', builder: (_, __) => const CashierScreen()),
+      GoRoute(
+        path: '/attendance-kiosk',
+        builder: (_, __) => const AttendanceKioskScreen(),
+      ),
+      GoRoute(
+        path: '/super-admin',
+        builder: (_, __) => const SuperAdminScreen(),
+      ),
+      GoRoute(path: '/admin', builder: (_, __) => const AdminScreen()),
       // super_admin이 특정 레스토랑 admin 화면으로 진입하는 경로
       GoRoute(
         path: '/admin/:restaurantId',

@@ -21,5 +21,10 @@ CREATE INDEX IF NOT EXISTS idx_fingerprint_templates_user
 
 ALTER TABLE fingerprint_templates ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS fingerprint_templates_restaurant_policy ON fingerprint_templates;
 CREATE POLICY fingerprint_templates_restaurant_policy ON fingerprint_templates
   USING (restaurant_id = get_user_restaurant_id());
+
+DROP POLICY IF EXISTS fingerprint_templates_service_policy ON fingerprint_templates;
+CREATE POLICY fingerprint_templates_service_policy ON fingerprint_templates
+  FOR ALL TO service_role USING (true);

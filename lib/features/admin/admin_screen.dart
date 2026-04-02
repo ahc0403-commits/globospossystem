@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -39,6 +40,36 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   @override
   Widget build(BuildContext context) {
     final isSuperAdminView = widget.overrideRestaurantId != null;
+    final showKioskItem =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    final navItems = <BottomNavigationBarItem>[
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.table_restaurant),
+        label: 'Tables',
+      ),
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.restaurant_menu),
+        label: 'Menu',
+      ),
+      const BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Staff'),
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.bar_chart),
+        label: 'Reports',
+      ),
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.access_time),
+        label: 'Attendance',
+      ),
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.settings),
+        label: 'Settings',
+      ),
+      if (showKioskItem)
+        const BottomNavigationBarItem(
+          icon: Icon(Icons.touch_app),
+          label: 'Kiosk',
+        ),
+    ];
 
     return Scaffold(
       backgroundColor: AppColors.surface0,
@@ -91,42 +122,28 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       body: Column(
         children: [
           const OfflineBanner(),
-          Expanded(child: IndexedStack(index: _currentIndex, children: _tabs)),
+          Expanded(
+            child: IndexedStack(index: _currentIndex, children: _tabs),
+          ),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+        onTap: (index) {
+          if (showKioskItem && index == navItems.length - 1) {
+            context.go('/attendance-kiosk');
+            return;
+          }
+          if (index >= _tabs.length) {
+            return;
+          }
+          setState(() => _currentIndex = index);
+        },
         type: BottomNavigationBarType.fixed,
         backgroundColor: AppColors.surface1,
         selectedItemColor: AppColors.amber500,
         unselectedItemColor: AppColors.textSecondary,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.table_restaurant),
-            label: 'Tables',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.restaurant_menu),
-            label: 'Menu',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.people),
-            label: 'Staff',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.bar_chart),
-            label: 'Reports',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.access_time),
-            label: 'Attendance',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-        ],
+        items: navItems,
       ),
     );
   }
