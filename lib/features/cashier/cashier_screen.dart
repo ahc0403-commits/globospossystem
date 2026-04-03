@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/services/connectivity_service.dart';
+import '../../core/layout/platform_info.dart';
 import '../../core/hardware/printer_service.dart';
 import '../../core/hardware/receipt_builder.dart';
 import '../../main.dart';
@@ -145,7 +145,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     required CashierOrder order,
     required String method,
   }) async {
-    if (kIsWeb) {
+    if (!PlatformInfo.isPrinterSupported) {
       showErrorToast(context, '프린터는 앱에서만 지원됩니다.');
       return;
     }

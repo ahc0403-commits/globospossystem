@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import '../../../core/layout/platform_info.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -332,7 +332,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                               onPressed: printerState.isTesting
                                   ? null
                                   : () async {
-                                      if (kIsWeb) {
+                                      if (!PlatformInfo.isPrinterSupported) {
                                         showErrorToast(
                                           context,
                                           '프린터는 앱에서만 지원됩니다.',
@@ -364,7 +364,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                               onPressed: printerState.isPrinting
                                   ? null
                                   : () async {
-                                      if (kIsWeb) {
+                                      if (!PlatformInfo.isPrinterSupported) {
                                         showErrorToast(
                                           context,
                                           '프린터는 앱에서만 지원됩니다.',

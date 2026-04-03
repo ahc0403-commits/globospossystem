@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+import '../../core/layout/platform_info.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
@@ -42,7 +42,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   Widget build(BuildContext context) {
     final isSuperAdminView = widget.overrideRestaurantId != null;
 
-    if (isWebOrDesktop) {
+    if (PlatformInfo.isWebOrDesktop) {
       return _buildWebDesktopLayout(context, isSuperAdminView);
     }
 
@@ -112,7 +112,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
 
   Widget _buildMobileLayout(BuildContext context, bool isSuperAdminView) {
     final showKioskItem =
-        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+        PlatformInfo.isKioskSupported;
     final navItems = <BottomNavigationBarItem>[
       const BottomNavigationBarItem(
         icon: Icon(Icons.table_restaurant),
