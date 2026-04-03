@@ -2,11 +2,13 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/layout/platform_info.dart';
+import '../../core/utils/permission_utils.dart';
 import '../../core/utils/time_utils.dart';
 import '../../main.dart';
 import '../../widgets/error_toast.dart';
@@ -26,6 +28,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
 
   String? _initializedRestaurantId;
   bool _didPrepopulate = false;
+  bool _didHandleUnauthorized = false;
 
   DateTime get _todayVn {
     final now = TimeUtils.nowVietnam();
@@ -139,8 +142,42 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final restaurantId = auth.restaurantId;
+    final canAccess = PermissionUtils.canDoQcCheck(
+      auth.role,
+      auth.extraPermissions,
+    );
     final templateState = ref.watch(qcTemplateProvider);
     final checkState = ref.watch(qcCheckProvider);
+
+    if (!canAccess) {
+      if (!_didHandleUnauthorized) {
+        _didHandleUnauthorized = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          showErrorToast(context, '권한이 없습니다. 관리자에게 문의하세요.');
+          final homeRoute = switch (auth.role) {
+            'waiter' => '/waiter',
+            'kitchen' => '/kitchen',
+            'cashier' => '/cashier',
+            'super_admin' => '/super-admin',
+            _ => '/admin',
+          };
+          context.go(homeRoute);
+        });
+      }
+      return Scaffold(
+        backgroundColor: AppColors.surface0,
+        body: Center(
+          child: Text(
+            '권한이 없습니다. 관리자에게 문의하세요.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      );
+    }
 
     if (restaurantId != null && _initializedRestaurantId != restaurantId) {
       _initializedRestaurantId = restaurantId;

@@ -5,8 +5,10 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/hardware/printer_service.dart';
 import '../../../core/hardware/receipt_builder.dart';
+import '../../../core/services/pin_service.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
+import '../../../widgets/pin_dialog.dart';
 import '../../auth/auth_provider.dart';
 import '../../settings/printer_provider.dart';
 import '../providers/settings_provider.dart';
@@ -28,6 +30,8 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
   String? _initializedRestaurantId;
   String? _lastError;
   String? _lastPrinterError;
+  bool? _hasPayrollPin;
+  bool _isSavingPayrollPin = false;
 
   @override
   void dispose() {
@@ -37,6 +41,154 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     _fullNameController.dispose();
     _printerIpController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadPayrollPinStatus(String restaurantId) async {
+    try {
+      final hash = await pinService.fetchPinHash(restaurantId);
+      if (!mounted) return;
+      setState(() => _hasPayrollPin = hash != null && hash.isNotEmpty);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _hasPayrollPin = false);
+    }
+  }
+
+  Future<void> _showSetPayrollPinDialog(String restaurantId) async {
+    final pageContext = context;
+    final pinController = TextEditingController();
+    final confirmController = TextEditingController();
+    String? validationMessage;
+
+    await showDialog<void>(
+      context: context,
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface1,
+              title: Text(
+                '급여 관리 PIN 설정',
+                style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: pinController,
+                    keyboardType: TextInputType.number,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: '새 PIN (4자리 숫자)',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: confirmController,
+                    keyboardType: TextInputType.number,
+                    obscureText: true,
+                    decoration: const InputDecoration(labelText: 'PIN 확인'),
+                  ),
+                  if (validationMessage != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      validationMessage!,
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.statusCancelled,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('취소'),
+                ),
+                FilledButton(
+                  onPressed: _isSavingPayrollPin
+                      ? null
+                      : () async {
+                          final pin = pinController.text.trim();
+                          final confirm = confirmController.text.trim();
+                          final validPin = RegExp(r'^\d{4}$').hasMatch(pin);
+                          if (!validPin) {
+                            setModalState(
+                              () => validationMessage = 'PIN은 4자리 숫자여야 합니다.',
+                            );
+                            return;
+                          }
+                          if (pin != confirm) {
+                            setModalState(
+                              () => validationMessage = 'PIN 확인 값이 일치하지 않습니다.',
+                            );
+                            return;
+                          }
+
+                          setState(() => _isSavingPayrollPin = true);
+                          try {
+                            await pinService.setPin(restaurantId, pin);
+                            if (!pageContext.mounted) return;
+                            Navigator.of(pageContext).pop();
+                            await _loadPayrollPinStatus(restaurantId);
+                            if (!pageContext.mounted) return;
+                            showSuccessToast(pageContext, '급여 PIN이 저장되었습니다.');
+                          } catch (e) {
+                            if (pageContext.mounted) {
+                              showErrorToast(pageContext, 'PIN 저장 실패: $e');
+                            }
+                          } finally {
+                            if (mounted) {
+                              setState(() => _isSavingPayrollPin = false);
+                            }
+                          }
+                        },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.amber500,
+                    foregroundColor: AppColors.surface0,
+                  ),
+                  child: _isSavingPayrollPin
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('저장'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    pinController.dispose();
+    confirmController.dispose();
+  }
+
+  Future<void> _clearPayrollPin(String restaurantId) async {
+    final entered = await showPinDialog(context, title: '현재 PIN 입력');
+    if (entered == null) return;
+
+    try {
+      final ok = await pinService.verifyPin(restaurantId, entered);
+      if (!ok) {
+        if (mounted) {
+          showErrorToast(context, 'PIN이 올바르지 않습니다.');
+        }
+        return;
+      }
+      await pinService.clearPin(restaurantId);
+      await _loadPayrollPinStatus(restaurantId);
+      if (mounted) {
+        showSuccessToast(context, '급여 PIN이 삭제되었습니다.');
+      }
+    } catch (e) {
+      if (mounted) {
+        showErrorToast(context, 'PIN 삭제 실패: $e');
+      }
+    }
   }
 
   @override
@@ -53,7 +205,10 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
         authUid != null &&
         restaurantId != _initializedRestaurantId) {
       _initializedRestaurantId = restaurantId;
-      Future.microtask(() => notifier.loadSettings(restaurantId, authUid));
+      Future.microtask(() async {
+        await notifier.loadSettings(restaurantId, authUid);
+        await _loadPayrollPinStatus(restaurantId);
+      });
     }
 
     if (!settingsState.isLoading && settingsState.restaurantName.isNotEmpty) {
@@ -428,6 +583,73 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                       ),
                       const SizedBox(height: 10),
                       _printerStatusRow(printerState.lastTestResult),
+                      const SizedBox(height: 28),
+                      _sectionTitle('급여 관리 PIN 설정'),
+                      const SizedBox(height: 10),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface1,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.surface2),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                _infoChip(
+                                  _hasPayrollPin == true
+                                      ? '현재 상태: 설정됨 ✅'
+                                      : _hasPayrollPin == false
+                                      ? '현재 상태: 미설정'
+                                      : '현재 상태: 확인 중...',
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: FilledButton(
+                                    onPressed: restaurantId == null
+                                        ? null
+                                        : () => _showSetPayrollPinDialog(
+                                            restaurantId,
+                                          ),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: AppColors.amber500,
+                                      foregroundColor: AppColors.surface0,
+                                    ),
+                                    child: const Text('PIN 변경'),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed:
+                                        restaurantId == null ||
+                                            _hasPayrollPin != true
+                                        ? null
+                                        : () => _clearPayrollPin(restaurantId),
+                                    style: OutlinedButton.styleFrom(
+                                      side: const BorderSide(
+                                        color: AppColors.statusCancelled,
+                                      ),
+                                      foregroundColor:
+                                          AppColors.statusCancelled,
+                                    ),
+                                    child: const Text('PIN 삭제'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
                       const SizedBox(height: 28),
                       _sectionTitle('Danger Zone'),
                       const SizedBox(height: 10),

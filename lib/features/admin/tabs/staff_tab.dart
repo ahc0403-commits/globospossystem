@@ -16,6 +16,7 @@ class StaffTab extends ConsumerStatefulWidget {
 
 class _StaffTabState extends ConsumerState<StaffTab> {
   String? _initializedRestaurantId;
+  String? _lastError;
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +27,17 @@ class _StaffTabState extends ConsumerState<StaffTab> {
     if (restaurantId != null && _initializedRestaurantId != restaurantId) {
       _initializedRestaurantId = restaurantId;
       Future.microtask(() => notifier.loadStaff(restaurantId));
+    }
+
+    if (staffState.error != null &&
+        staffState.error!.isNotEmpty &&
+        staffState.error != _lastError) {
+      _lastError = staffState.error;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          showErrorToast(context, staffState.error!);
+        }
+      });
     }
 
     return Scaffold(
@@ -59,17 +71,6 @@ class _StaffTabState extends ConsumerState<StaffTab> {
               ],
             ),
             const SizedBox(height: 12),
-            if (staffState.error != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  staffState.error!,
-                  style: GoogleFonts.notoSansKr(
-                    color: AppColors.statusCancelled,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
             Expanded(
               child: staffState.isLoading
                   ? const Center(
@@ -142,10 +143,38 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                                           fontSize: 12,
                                         ),
                                       ),
+                                      if (member.extraPermissions.isNotEmpty)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 4,
+                                          ),
+                                          child: Text(
+                                            member.extraPermissions.join(', '),
+                                            style: GoogleFonts.notoSansKr(
+                                              color: AppColors.amber500,
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                        ),
                                     ],
                                   ),
                                 ),
                                 const SizedBox(width: 8),
+                                if (restaurantId != null &&
+                                    member.role != 'admin' &&
+                                    member.role != 'super_admin')
+                                  OutlinedButton(
+                                    onPressed: () => _showPermissionDialog(
+                                      context: context,
+                                      restaurantId: restaurantId,
+                                      member: member,
+                                    ),
+                                    child: const Text('권한 설정'),
+                                  ),
+                                if (restaurantId != null &&
+                                    member.role != 'admin' &&
+                                    member.role != 'super_admin')
+                                  const SizedBox(width: 8),
                                 Switch(
                                   value: member.isActive,
                                   activeThumbColor: AppColors.amber500,
@@ -320,6 +349,95 @@ class _StaffTabState extends ConsumerState<StaffTab> {
     fullNameController.dispose();
     emailController.dispose();
     passwordController.dispose();
+  }
+
+  Future<void> _showPermissionDialog({
+    required BuildContext context,
+    required String restaurantId,
+    required StaffMember member,
+  }) async {
+    final notifier = ref.read(staffProvider.notifier);
+    bool canQc = member.extraPermissions.contains('qc_check');
+    bool canCount = member.extraPermissions.contains('inventory_count');
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface1,
+              title: Text(
+                '${member.fullName} 권한 설정',
+                style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CheckboxListTile(
+                    value: canQc,
+                    activeColor: AppColors.amber500,
+                    title: Text(
+                      'QC 점검 수행 가능',
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                      ),
+                    ),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    onChanged: (value) =>
+                        setModalState(() => canQc = value ?? false),
+                  ),
+                  CheckboxListTile(
+                    value: canCount,
+                    activeColor: AppColors.amber500,
+                    title: Text(
+                      '실재고 실사 수행 가능',
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                      ),
+                    ),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    onChanged: (value) =>
+                        setModalState(() => canCount = value ?? false),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('취소'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    final permissions = <String>[
+                      if (canQc) 'qc_check',
+                      if (canCount) 'inventory_count',
+                    ];
+                    await notifier.updateExtraPermissions(
+                      userId: member.id,
+                      restaurantId: restaurantId,
+                      permissions: permissions,
+                    );
+                    if (!context.mounted) return;
+                    final nextState = ref.read(staffProvider);
+                    if (nextState.error != null) return;
+                    Navigator.of(context).pop();
+                    showSuccessToast(context, '권한이 저장되었습니다.');
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.amber500,
+                    foregroundColor: AppColors.surface0,
+                  ),
+                  child: const Text('저장'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 }
 

@@ -8,8 +8,10 @@ import 'package:intl/intl.dart';
 
 import '../../../core/services/attendance_service.dart';
 import '../../../core/services/payroll_service.dart';
+import '../../../core/services/pin_service.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
+import '../../../widgets/pin_dialog.dart';
 import '../../auth/auth_provider.dart';
 
 class AttendanceTab extends ConsumerStatefulWidget {
@@ -21,13 +23,14 @@ class AttendanceTab extends ConsumerStatefulWidget {
 
 class _AttendanceTabState extends ConsumerState<AttendanceTab>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabController = TabController(
-    length: 2,
-    vsync: this,
-  );
+  late final TabController _tabController;
   final _currencyFormat = NumberFormat('#,###', 'vi_VN');
 
   String? _initializedRestaurantId;
+  bool _payrollUnlocked = false;
+  bool _isVerifyingPayrollPin = false;
+  int _payrollPinFailCount = 0;
+  DateTime? _payrollPinLockedUntil;
 
   DateTime _logFrom = _startOfWeek(DateTime.now());
   DateTime _logTo = DateTime.now();
@@ -60,7 +63,92 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab>
   }
 
   @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this)
+      ..addListener(_handleTabChange);
+  }
+
+  void _handleTabChange() {
+    if (_tabController.index == 1 && !_payrollUnlocked) {
+      _checkPayrollPinAndUnlock();
+    }
+  }
+
+  Future<void> _checkPayrollPinAndUnlock() async {
+    if (_isVerifyingPayrollPin) return;
+
+    final restaurantId = ref.read(authProvider).restaurantId;
+    if (restaurantId == null) {
+      _tabController.animateTo(0);
+      return;
+    }
+
+    final now = DateTime.now();
+    if (_payrollPinLockedUntil != null &&
+        now.isBefore(_payrollPinLockedUntil!)) {
+      final remain = _payrollPinLockedUntil!.difference(now).inSeconds;
+      _tabController.animateTo(0);
+      if (mounted) {
+        showErrorToast(context, '잠시 후 다시 시도하세요 (${remain}s)');
+      }
+      return;
+    }
+
+    _isVerifyingPayrollPin = true;
+    _tabController.animateTo(0);
+
+    try {
+      final hasPin = await pinService.fetchPinHash(restaurantId) != null;
+      if (!hasPin) {
+        if (!mounted) return;
+        setState(() {
+          _payrollUnlocked = true;
+          _payrollPinFailCount = 0;
+          _payrollPinLockedUntil = null;
+        });
+        _tabController.animateTo(1);
+        return;
+      }
+
+      if (!mounted) return;
+      final pin = await showPinDialog(context, title: '급여 관리 PIN 입력');
+      if (pin == null) {
+        return;
+      }
+
+      final ok = await pinService.verifyPin(restaurantId, pin);
+      if (!mounted) return;
+      if (ok) {
+        setState(() {
+          _payrollUnlocked = true;
+          _payrollPinFailCount = 0;
+          _payrollPinLockedUntil = null;
+        });
+        _tabController.animateTo(1);
+      } else {
+        setState(() {
+          _payrollPinFailCount += 1;
+          if (_payrollPinFailCount >= 3) {
+            _payrollPinLockedUntil = DateTime.now().add(
+              const Duration(seconds: 30),
+            );
+            _payrollPinFailCount = 0;
+          }
+        });
+        showErrorToast(
+          context,
+          _payrollPinLockedUntil != null ? '잠시 후 다시 시도하세요' : 'PIN이 올바르지 않습니다.',
+        );
+      }
+    } finally {
+      _isVerifyingPayrollPin = false;
+    }
+  }
+
+  @override
   void dispose() {
+    _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     _hourlyRateController.dispose();
     for (final row in _shiftRows) {
@@ -296,6 +384,12 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab>
 
     if (restaurantId != null && _initializedRestaurantId != restaurantId) {
       _initializedRestaurantId = restaurantId;
+      _payrollUnlocked = false;
+      _payrollPinFailCount = 0;
+      _payrollPinLockedUntil = null;
+      if (_tabController.index != 0) {
+        _tabController.animateTo(0);
+      }
       Future.microtask(() => _initialize(restaurantId));
     }
 
@@ -640,6 +734,18 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab>
   }
 
   Widget _buildPayrollTab(String? restaurantId) {
+    if (!_payrollUnlocked) {
+      return Center(
+        child: Text(
+          'PIN 인증 후 접근 가능합니다.',
+          style: GoogleFonts.notoSansKr(
+            color: AppColors.textSecondary,
+            fontSize: 14,
+          ),
+        ),
+      );
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(

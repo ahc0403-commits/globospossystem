@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/utils/permission_utils.dart';
 import '../../features/admin/admin_screen.dart';
 import '../../features/auth/auth_provider.dart';
 import '../../features/auth/auth_state.dart';
@@ -79,6 +80,12 @@ GoRouter buildAppRouter(ProviderContainer container) {
         return '/admin';
       }
 
+      // 7. /qc-check 접근 제한
+      if (location == '/qc-check' &&
+          !PermissionUtils.canDoQcCheck(role, auth.extraPermissions)) {
+        return homeRoute;
+      }
+
       return null;
     },
     routes: [
@@ -125,8 +132,9 @@ int _tabIndexFromQuery(String? value) {
     'staff' => 2,
     'reports' => 3,
     'attendance' => 4,
-    'qc' => 5,
-    'settings' => 6,
+    'inventory' => 5,
+    'qc' => 6,
+    'settings' => 7,
     _ => 0,
   };
 }

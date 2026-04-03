@@ -12,6 +12,7 @@ class StaffMember {
     required this.isActive,
     required this.createdAt,
     this.email,
+    this.extraPermissions = const [],
   });
 
   final String id;
@@ -21,6 +22,7 @@ class StaffMember {
   final bool isActive;
   final DateTime createdAt;
   final String? email;
+  final List<String> extraPermissions;
 
   factory StaffMember.fromJson(Map<String, dynamic> json) {
     final createdAtRaw = json['created_at']?.toString();
@@ -34,6 +36,10 @@ class StaffMember {
           ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
           : DateTime.now(),
       email: json['email']?.toString(),
+      extraPermissions:
+          (json['extra_permissions'] as List<dynamic>? ?? const [])
+              .map((e) => e.toString())
+              .toList(),
     );
   }
 }
@@ -181,6 +187,22 @@ class StaffNotifier extends StateNotifier<StaffState> {
       await loadStaff(restaurantId);
     } catch (error) {
       state = state.copyWith(error: 'Failed to update staff status: $error');
+    }
+  }
+
+  Future<void> updateExtraPermissions({
+    required String userId,
+    required String restaurantId,
+    required List<String> permissions,
+  }) async {
+    try {
+      await supabase
+          .from('users')
+          .update({'extra_permissions': permissions})
+          .eq('id', userId);
+      await loadStaff(restaurantId);
+    } catch (error) {
+      state = state.copyWith(error: 'Failed to update permissions: $error');
     }
   }
 }

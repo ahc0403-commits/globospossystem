@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show AuthChangeEvent, AuthException, User;
+import 'package:supabase_flutter/supabase_flutter.dart'
+    show AuthChangeEvent, AuthException, User;
 import '../../main.dart';
 import 'auth_state.dart';
 
@@ -32,7 +33,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     try {
       final data = await supabase
           .from('users')
-          .select('role, restaurant_id, is_active')
+          .select('role, restaurant_id, is_active, extra_permissions')
           .eq('auth_id', user.id)
           .single();
 
@@ -43,11 +44,17 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         return;
       }
 
+      final extraRaw = data['extra_permissions'];
+      final extraPermissions = extraRaw is List
+          ? extraRaw.map((e) => e.toString()).toList()
+          : const <String>[];
+
       state = state.copyWith(
         isLoading: false,
         user: user,
         role: data['role'] as String?,
         restaurantId: data['restaurant_id'] as String?,
+        extraPermissions: extraPermissions,
         clearError: true,
       );
     } catch (_) {

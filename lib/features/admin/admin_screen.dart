@@ -10,6 +10,7 @@ import '../../main.dart';
 import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
 import 'tabs/attendance_tab.dart';
+import 'tabs/inventory_tab.dart';
 import 'tabs/menu_tab.dart';
 import 'tabs/qc_tab.dart';
 import 'tabs/reports_tab.dart';
@@ -41,6 +42,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     StaffTab(),
     ReportsTab(),
     AttendanceTab(),
+    InventoryTab(),
     QcTab(),
     SettingsTab(),
   ];
@@ -69,6 +71,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       const SidebarItem(icon: Icons.people, label: 'Staff'),
       const SidebarItem(icon: Icons.bar_chart, label: 'Reports'),
       const SidebarItem(icon: Icons.access_time, label: 'Attendance'),
+      const SidebarItem(icon: Icons.inventory_2_outlined, label: '재고'),
       const SidebarItem(icon: Icons.fact_check, label: 'QC'),
       const SidebarItem(icon: Icons.settings, label: 'Settings'),
     ];
@@ -143,6 +146,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       const BottomNavigationBarItem(
         icon: Icon(Icons.access_time),
         label: 'Attendance',
+      ),
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.inventory_2_outlined),
+        label: '재고',
       ),
       const BottomNavigationBarItem(icon: Icon(Icons.fact_check), label: 'QC'),
       const BottomNavigationBarItem(

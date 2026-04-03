@@ -5,6 +5,7 @@ class PosAuthState {
   final User? user;
   final String? role;
   final String? restaurantId;
+  final List<String> extraPermissions;
   final String? errorMessage;
 
   const PosAuthState({
@@ -12,6 +13,7 @@ class PosAuthState {
     this.user,
     this.role,
     this.restaurantId,
+    this.extraPermissions = const [],
     this.errorMessage,
   });
 
@@ -20,6 +22,7 @@ class PosAuthState {
     User? user,
     String? role,
     String? restaurantId,
+    List<String>? extraPermissions,
     String? errorMessage,
     bool clearError = false,
     bool clearUser = false,
@@ -29,6 +32,9 @@ class PosAuthState {
       user: clearUser ? null : (user ?? this.user),
       role: clearUser ? null : (role ?? this.role),
       restaurantId: clearUser ? null : (restaurantId ?? this.restaurantId),
+      extraPermissions: clearUser
+          ? const []
+          : (extraPermissions ?? this.extraPermissions),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );
   }
