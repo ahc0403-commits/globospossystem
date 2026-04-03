@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/staff_service.dart';
 import '../../../main.dart';
 
 class StaffMember {
@@ -126,7 +127,9 @@ class StaffNotifier extends StateNotifier<StaffState> {
           .order('created_at', ascending: true);
 
       final staff = response
-          .map<StaffMember>((row) => StaffMember.fromJson(Map<String, dynamic>.from(row)))
+          .map<StaffMember>(
+            (row) => StaffMember.fromJson(Map<String, dynamic>.from(row)),
+          )
           .toList();
 
       state = state.copyWith(staff: staff, isLoading: false, clearError: true);
@@ -147,25 +150,13 @@ class StaffNotifier extends StateNotifier<StaffState> {
   }) async {
     state = state.copyWith(isCreating: true, clearError: true);
     try {
-      final response = await supabase.functions.invoke(
-        'create_staff_user',
-        body: {
-          'email': email,
-          'password': password,
-          'full_name': fullName,
-          'role': role,
-          'restaurant_id': restaurantId,
-        },
+      await staffService.createStaffUser(
+        email: email,
+        password: password,
+        fullName: fullName,
+        role: role,
+        restaurantId: restaurantId,
       );
-
-      if (response.status != 200) {
-        final errorData = response.data;
-        final errorMsg = errorData is Map
-            ? errorData['error'] ?? 'Failed to create staff'
-            : 'Failed to create staff';
-        state = state.copyWith(isCreating: false, error: errorMsg.toString());
-        return;
-      }
 
       state = state.copyWith(isCreating: false, clearError: true);
       await loadStaff(restaurantId);
@@ -177,9 +168,16 @@ class StaffNotifier extends StateNotifier<StaffState> {
     }
   }
 
-  Future<void> toggleActive(String userId, bool isActive, String restaurantId) async {
+  Future<void> toggleActive(
+    String userId,
+    bool isActive,
+    String restaurantId,
+  ) async {
     try {
-      await supabase.from('users').update({'is_active': isActive}).eq('id', userId);
+      await supabase
+          .from('users')
+          .update({'is_active': isActive})
+          .eq('id', userId);
       await loadStaff(restaurantId);
     } catch (error) {
       state = state.copyWith(error: 'Failed to update staff status: $error');

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/services/order_service.dart';
 import '../../main.dart';
 import 'order_model.dart';
 
@@ -137,13 +138,10 @@ class OrderNotifier extends StateNotifier<OrderState> {
     state = state.copyWith(isSubmitting: true, clearError: true);
 
     try {
-      await supabase.rpc(
-        'create_order',
-        params: {
-          'p_restaurant_id': restaurantId,
-          'p_table_id': tableId,
-          'p_items': _cartPayloadItems(),
-        },
+      await orderService.createOrder(
+        restaurantId: restaurantId,
+        tableId: tableId,
+        items: _cartPayloadItems(),
       );
 
       state = state.copyWith(cart: const []);
@@ -164,13 +162,10 @@ class OrderNotifier extends StateNotifier<OrderState> {
     state = state.copyWith(isSubmitting: true, clearError: true);
 
     try {
-      await supabase.rpc(
-        'add_items_to_order',
-        params: {
-          'p_order_id': orderId,
-          'p_restaurant_id': restaurantId,
-          'p_items': _cartPayloadItems(),
-        },
+      await orderService.addItemsToOrder(
+        orderId: orderId,
+        restaurantId: restaurantId,
+        items: _cartPayloadItems(),
       );
 
       state = state.copyWith(cart: const []);
@@ -197,14 +192,11 @@ class OrderNotifier extends StateNotifier<OrderState> {
     state = state.copyWith(isSubmitting: true, clearError: true);
 
     try {
-      await supabase.rpc(
-        'create_buffet_order',
-        params: {
-          'p_restaurant_id': restaurantId,
-          'p_table_id': tableId,
-          'p_guest_count': guestCount,
-          'p_extra_items': _cartPayloadItems(),
-        },
+      await orderService.createBuffetOrder(
+        restaurantId: restaurantId,
+        tableId: tableId,
+        guestCount: guestCount,
+        extraItems: _cartPayloadItems(),
       );
 
       state = state.copyWith(cart: const []);
@@ -219,9 +211,9 @@ class OrderNotifier extends StateNotifier<OrderState> {
   Future<void> cancelOrder(String orderId, String restaurantId) async {
     state = state.copyWith(isSubmitting: true, clearError: true);
     try {
-      await supabase.rpc(
-        'cancel_order',
-        params: {'p_order_id': orderId, 'p_restaurant_id': restaurantId},
+      await orderService.cancelOrder(
+        orderId: orderId,
+        restaurantId: restaurantId,
       );
       state = state.copyWith(
         isSubmitting: false,

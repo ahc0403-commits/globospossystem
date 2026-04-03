@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/services/order_service.dart';
+import '../../core/services/payment_service.dart';
 import '../../main.dart';
 import '../order/order_model.dart';
 
@@ -165,14 +167,11 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     );
 
     try {
-      await supabase.rpc(
-        'process_payment',
-        params: {
-          'p_order_id': orderId,
-          'p_restaurant_id': restaurantId,
-          'p_amount': amount,
-          'p_method': method,
-        },
+      await paymentService.processPayment(
+        orderId: orderId,
+        restaurantId: restaurantId,
+        amount: amount,
+        method: method,
       );
 
       await loadOrders(restaurantId);
@@ -193,9 +192,9 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   Future<void> cancelOrder(String orderId, String restaurantId) async {
     state = state.copyWith(isProcessing: true, clearError: true);
     try {
-      await supabase.rpc(
-        'cancel_order',
-        params: {'p_order_id': orderId, 'p_restaurant_id': restaurantId},
+      await orderService.cancelOrder(
+        orderId: orderId,
+        restaurantId: restaurantId,
       );
       state = state.copyWith(
         isProcessing: false,
