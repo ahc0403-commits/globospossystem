@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../../core/utils/time_utils.dart';
 
 import '../../main.dart';
 import '../../widgets/error_toast.dart';
@@ -31,7 +32,7 @@ class KitchenScreen extends ConsumerStatefulWidget {
 }
 
 class _KitchenScreenState extends ConsumerState<KitchenScreen> {
-  DateTime _now = DateTime.now();
+  DateTime _now = DateTime.now().toUtc();
   Timer? _clockTimer;
   String? _initializedRestaurantId;
   final Set<String> _flashingOrderIds = <String>{};
@@ -48,7 +49,7 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
         return;
       }
       setState(() {
-        _now = DateTime.now();
+        _now = DateTime.now().toUtc(); // UTC 기준으로 유지
       });
     });
 
@@ -395,7 +396,7 @@ class _KitchenTopBar extends ConsumerWidget {
             ),
           ),
           Text(
-            DateFormat('HH:mm:ss').format(now),
+            DateFormat('HH:mm:ss').format(TimeUtils.toVietnam(now)), // UTC→VN
             style: GoogleFonts.bebasNeue(
               color: AppColors.textPrimary,
               fontSize: 30,

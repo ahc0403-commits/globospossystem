@@ -1,4 +1,5 @@
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import '../utils/time_utils.dart';
 
 class ReceiptBuilder {
   static Future<List<int>> buildPaymentReceipt({
@@ -37,8 +38,7 @@ class ReceiptBuilder {
       generator.row([
         PosColumn(text: '테이블 / Bàn: $tableNumber', width: 8),
         PosColumn(
-          text:
-              '${paidAt.hour.toString().padLeft(2, '0')}:${paidAt.minute.toString().padLeft(2, '0')}',
+          text: TimeUtils.formatTime(paidAt),  // UTC→베트남 시간
           width: 4,
           styles: const PosStyles(align: PosAlign.right),
         ),
@@ -46,7 +46,7 @@ class ReceiptBuilder {
     );
     bytes.addAll(
       generator.text(
-        '${paidAt.year}-${paidAt.month.toString().padLeft(2, '0')}-${paidAt.day.toString().padLeft(2, '0')}',
+        TimeUtils.formatDate(paidAt),  // UTC→베트남 날짜
       ),
     );
     bytes.addAll(generator.hr());

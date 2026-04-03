@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/services/connectivity_service.dart';
 import '../../core/hardware/printer_service.dart';
 import '../../core/hardware/receipt_builder.dart';
 import '../../main.dart';
@@ -192,6 +193,8 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     final paymentState = ref.watch(paymentProvider);
     final notifier = ref.read(paymentProvider.notifier);
     final currency = NumberFormat('#,###', 'vi_VN');
+    // 오프라인 상태 감지 - RULES.md: 결제는 온라인 필수
+    final isOnline = ref.watch(connectivityProvider).asData?.value ?? true;
 
     return Scaffold(
       backgroundColor: AppColors.surface0,
@@ -348,6 +351,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                 selectedMethod: _selectedMethod,
                                 isAdmin: isAdmin,
                                 isProcessing: paymentState.isProcessing,
+                                isOnline: isOnline,
                                 onSelectMethod: (method) {
                                   setState(() => _selectedMethod = method);
                                 },
@@ -470,6 +474,7 @@ class _SelectedOrderView extends StatelessWidget {
     required this.selectedMethod,
     required this.isAdmin,
     required this.isProcessing,
+    required this.isOnline,
     required this.onSelectMethod,
     required this.onProcess,
     required this.onCancelOrder,
@@ -480,6 +485,7 @@ class _SelectedOrderView extends StatelessWidget {
   final String? selectedMethod;
   final bool isAdmin;
   final bool isProcessing;
+  final bool isOnline;
   final ValueChanged<String> onSelectMethod;
   final Future<void> Function() onProcess;
   final Future<void> Function() onCancelOrder;
@@ -695,7 +701,8 @@ class _SelectedOrderView extends StatelessWidget {
                   width: double.infinity,
                   height: 64,
                   child: FilledButton(
-                    onPressed: selectedMethod == null || isProcessing
+                    // RULES.md: 결제는 온라인 필수 — 오프라인 시 버튼 비활성화
+                    onPressed: selectedMethod == null || isProcessing || !isOnline
                         ? null
                         : onProcess,
                     style: FilledButton.styleFrom(

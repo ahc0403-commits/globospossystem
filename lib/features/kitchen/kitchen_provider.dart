@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -104,6 +106,9 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
 
   RealtimeChannel? _ordersChannel;
   String? _restaurantId;
+  // RULES.md: Realtime 끊김 → 30초 폴링 자동 전환
+  Timer? _pollTimer;
+  bool _realtimeConnected = false;
 
   Future<void> loadOrders(String restaurantId) async {
     _restaurantId = restaurantId;
@@ -186,7 +191,34 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
           table: 'orders',
           callback: (_) => loadOrders(restaurantId),
         )
-        .subscribe();
+        .subscribe((status, [error]) {
+          // Realtime 연결 상태 추적
+          final connected = status == RealtimeSubscribeStatus.subscribed;
+          if (connected != _realtimeConnected) {
+            _realtimeConnected = connected;
+            if (connected) {
+              // Realtime 복구 → 폴링 중단
+              _pollTimer?.cancel();
+              _pollTimer = null;
+            } else {
+              // Realtime 끊김 → 30초 폴링 시작
+              _startPollingFallback(restaurantId);
+            }
+          }
+        });
+    // 구독 후 초기 연결 확인용 타이머 (5초 내 연결 안 되면 폴링 시작)
+    Future.delayed(const Duration(seconds: 5), () {
+      if (mounted && !_realtimeConnected && _restaurantId == restaurantId) {
+        _startPollingFallback(restaurantId);
+      }
+    });
+  }
+
+  void _startPollingFallback(String restaurantId) {
+    if (_pollTimer != null) return; // 이미 폴링 중
+    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) loadOrders(restaurantId);
+    });
   }
 
   Future<void> updateItemStatus(String itemId, String newStatus) async {
@@ -223,6 +255,8 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
     _ordersChannel?.unsubscribe();
     _ordersChannel = null;
     super.dispose();
