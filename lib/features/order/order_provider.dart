@@ -232,6 +232,44 @@ class OrderNotifier extends StateNotifier<OrderState> {
       state = state.copyWith(isSubmitting: false, error: '주문 취소 실패: $error');
     }
   }
+
+  Future<void> updateOrderItemStatus(
+    String itemId,
+    String newStatus,
+    String restaurantId,
+    String tableId,
+  ) async {
+    if (itemId.isEmpty) {
+      return;
+    }
+
+    final previousOrder = state.activeOrder;
+    if (previousOrder != null) {
+      final updatedItems = previousOrder.items.map((item) {
+        if (item.id != itemId) {
+          return item;
+        }
+        return item.copyWith(status: newStatus);
+      }).toList();
+      state = state.copyWith(
+        activeOrder: previousOrder.copyWith(items: updatedItems),
+        clearError: true,
+      );
+    }
+
+    try {
+      await supabase
+          .from('order_items')
+          .update({'status': newStatus})
+          .eq('id', itemId);
+      await loadActiveOrder(tableId, restaurantId);
+    } catch (error) {
+      state = state.copyWith(
+        activeOrder: previousOrder,
+        error: 'Failed to update item status: $error',
+      );
+    }
+  }
 }
 
 final orderProvider = StateNotifierProvider<OrderNotifier, OrderState>(

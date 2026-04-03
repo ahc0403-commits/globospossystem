@@ -45,6 +45,26 @@ class OrderItem {
   final String status;
   final String itemType;
 
+  OrderItem copyWith({
+    String? id,
+    String? menuItemId,
+    String? label,
+    double? unitPrice,
+    int? quantity,
+    String? status,
+    String? itemType,
+  }) {
+    return OrderItem(
+      id: id ?? this.id,
+      menuItemId: menuItemId ?? this.menuItemId,
+      label: label ?? this.label,
+      unitPrice: unitPrice ?? this.unitPrice,
+      quantity: quantity ?? this.quantity,
+      status: status ?? this.status,
+      itemType: itemType ?? this.itemType,
+    );
+  }
+
   factory OrderItem.fromJson(Map<String, dynamic> json) {
     final unitPriceRaw = json['unit_price'];
     final quantityRaw = json['quantity'];
@@ -84,6 +104,22 @@ class Order {
   final String status;
   final DateTime createdAt;
   final List<OrderItem> items;
+
+  Order copyWith({
+    String? id,
+    String? tableId,
+    String? status,
+    DateTime? createdAt,
+    List<OrderItem>? items,
+  }) {
+    return Order(
+      id: id ?? this.id,
+      tableId: tableId ?? this.tableId,
+      status: status ?? this.status,
+      createdAt: createdAt ?? this.createdAt,
+      items: items ?? this.items,
+    );
+  }
 
   factory Order.fromJson(Map<String, dynamic> json) {
     final createdAtRaw = json['created_at']?.toString();

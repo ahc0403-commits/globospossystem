@@ -137,7 +137,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                                         member.email != null &&
                                                 member.email!.isNotEmpty
                                             ? member.email!
-                                            : member.role,
+                                            : _roleLabelKo(member.role),
                                         style: GoogleFonts.notoSansKr(
                                           color: AppColors.textSecondary,
                                           fontSize: 12,
@@ -465,7 +465,7 @@ class _RoleBadge extends StatelessWidget {
         border: Border.all(color: color),
       ),
       child: Text(
-        normalized.toUpperCase(),
+        _roleLabelKo(normalized),
         style: GoogleFonts.notoSansKr(
           color: AppColors.textPrimary,
           fontSize: 11,
@@ -474,4 +474,15 @@ class _RoleBadge extends StatelessWidget {
       ),
     );
   }
+}
+
+String _roleLabelKo(String role) {
+  return switch (role.toLowerCase()) {
+    'waiter' => '홀 직원',
+    'kitchen' => '주방',
+    'cashier' => '캐셔',
+    'admin' => '관리자',
+    'super_admin' => '슈퍼관리자',
+    _ => role,
+  };
 }

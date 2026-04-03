@@ -101,6 +101,11 @@ class MenuTab extends ConsumerWidget {
                     selectedCategoryId: selectedCategoryId,
                     numberFormat: numberFormat,
                     onToggleAvailability: menuNotifier.toggleAvailability,
+                    onEditItem: (item) => _showEditItemDialog(
+                      context,
+                      item,
+                      menuNotifier,
+                    ),
                     onAddItem: () => _showAddItemDialog(
                       context,
                       selectedCategoryId,
@@ -130,6 +135,11 @@ class MenuTab extends ConsumerWidget {
                   selectedCategoryId: selectedCategoryId,
                   numberFormat: numberFormat,
                   onToggleAvailability: menuNotifier.toggleAvailability,
+                  onEditItem: (item) => _showEditItemDialog(
+                    context,
+                    item,
+                    menuNotifier,
+                  ),
                   onAddItem: () => _showAddItemDialog(
                     context,
                     selectedCategoryId,
@@ -265,6 +275,93 @@ class MenuTab extends ConsumerWidget {
     nameController.dispose();
     priceController.dispose();
   }
+
+  Future<void> _showEditItemDialog(
+    BuildContext context,
+    Map<String, dynamic> item,
+    MenuNotifier menuNotifier,
+  ) async {
+    final itemId = item['id']?.toString() ?? '';
+    if (itemId.isEmpty) {
+      return;
+    }
+    final nameController = TextEditingController(
+      text: item['name']?.toString() ?? '',
+    );
+    final rawPrice = item['price'];
+    final initialPrice = switch (rawPrice) {
+      num value => value.toDouble(),
+      String value => double.tryParse(value) ?? 0,
+      _ => 0.0,
+    };
+    final priceController = TextEditingController(
+      text: initialPrice <= 0 ? '' : initialPrice.toStringAsFixed(0),
+    );
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface1,
+          title: Text(
+            'Edit Item',
+            style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                decoration: const InputDecoration(labelText: 'Item name'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: priceController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                decoration: const InputDecoration(labelText: 'Price'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.amber500,
+                foregroundColor: AppColors.surface0,
+              ),
+              onPressed: () async {
+                final name = nameController.text.trim();
+                final price = double.tryParse(priceController.text.trim());
+                if (name.isEmpty || price == null || price <= 0) {
+                  return;
+                }
+
+                await menuNotifier.updateMenuItem(
+                  itemId: itemId,
+                  name: name,
+                  price: price,
+                );
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    nameController.dispose();
+    priceController.dispose();
+  }
 }
 
 class _CategoryPanel extends StatelessWidget {
@@ -363,6 +460,7 @@ class _ItemsPanel extends StatelessWidget {
     required this.selectedCategoryId,
     required this.numberFormat,
     required this.onToggleAvailability,
+    required this.onEditItem,
     required this.onAddItem,
   });
 
@@ -370,6 +468,7 @@ class _ItemsPanel extends StatelessWidget {
   final String? selectedCategoryId;
   final NumberFormat numberFormat;
   final Future<void> Function(String itemId, bool isAvailable) onToggleAvailability;
+  final ValueChanged<Map<String, dynamic>> onEditItem;
   final VoidCallback onAddItem;
 
   @override
@@ -455,6 +554,16 @@ class _ItemsPanel extends StatelessWidget {
                               onChanged: itemId.isEmpty
                                   ? null
                                   : (value) => onToggleAvailability(itemId, value),
+                            ),
+                            IconButton(
+                              onPressed: itemId.isEmpty
+                                  ? null
+                                  : () => onEditItem(item),
+                              icon: const Icon(
+                                Icons.edit_outlined,
+                                color: AppColors.textSecondary,
+                              ),
+                              tooltip: 'Edit item',
                             ),
                           ],
                         ),

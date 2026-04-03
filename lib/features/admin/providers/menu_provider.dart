@@ -138,6 +138,22 @@ class MenuNotifier extends StateNotifier<MenuState> {
       state = state.copyWith(items: AsyncValue.error(error, stackTrace));
     }
   }
+
+  Future<void> updateMenuItem({
+    required String itemId,
+    required String name,
+    required double price,
+  }) async {
+    try {
+      await supabase
+          .from('menu_items')
+          .update({'name': name, 'price': price})
+          .eq('id', itemId);
+      await fetchItems();
+    } catch (error, stackTrace) {
+      state = state.copyWith(items: AsyncValue.error(error, stackTrace));
+    }
+  }
 }
 
 final menuProvider = StateNotifierProvider.autoDispose
