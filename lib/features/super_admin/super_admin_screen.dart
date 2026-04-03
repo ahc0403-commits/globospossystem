@@ -9,6 +9,7 @@ import '../../main.dart';
 import '../../widgets/error_toast.dart';
 import '../auth/auth_provider.dart';
 import '../auth/auth_state.dart';
+import '../qc/qc_provider.dart';
 import 'super_admin_provider.dart';
 
 class SuperAdminScreen extends ConsumerStatefulWidget {
@@ -37,7 +38,9 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
       });
     }
 
-    if (state.error != null && state.error!.isNotEmpty && state.error != _lastError) {
+    if (state.error != null &&
+        state.error!.isNotEmpty &&
+        state.error != _lastError) {
       _lastError = state.error;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) {
@@ -71,7 +74,9 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
                 const SizedBox(height: 8),
                 _navItem(Icons.bar_chart, 'All Reports', 1),
                 const SizedBox(height: 8),
-                _navItem(Icons.settings, 'System Settings', 2),
+                _navItem(Icons.fact_check, 'QC 현황', 2),
+                const SizedBox(height: 8),
+                _navItem(Icons.settings, 'System Settings', 3),
                 const Spacer(),
                 OutlinedButton.icon(
                   onPressed: () => ref.read(authProvider.notifier).logout(),
@@ -90,11 +95,13 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
               padding: const EdgeInsets.all(16),
               child: switch (_tabIndex) {
                 0 => _RestaurantsTab(
-                    state: state,
-                    notifier: notifier,
-                    onGoToAdmin: (restaurantId) => context.go('/admin/$restaurantId'),
-                  ),
+                  state: state,
+                  notifier: notifier,
+                  onGoToAdmin: (restaurantId) =>
+                      context.go('/admin/$restaurantId'),
+                ),
                 1 => _AllReportsTab(state: state, notifier: notifier),
+                2 => const _QcOverviewTab(),
                 _ => _SystemSettingsTab(authState: authState),
               },
             ),
@@ -112,7 +119,9 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? AppColors.amber500.withValues(alpha: 0.16) : Colors.transparent,
+          color: selected
+              ? AppColors.amber500.withValues(alpha: 0.16)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: selected ? AppColors.amber500 : AppColors.surface2,
@@ -120,13 +129,19 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
         ),
         child: Row(
           children: [
-            Icon(icon, color: selected ? AppColors.amber500 : AppColors.textSecondary, size: 18),
+            Icon(
+              icon,
+              color: selected ? AppColors.amber500 : AppColors.textSecondary,
+              size: 18,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 label,
                 style: GoogleFonts.notoSansKr(
-                  color: selected ? AppColors.textPrimary : AppColors.textSecondary,
+                  color: selected
+                      ? AppColors.textPrimary
+                      : AppColors.textSecondary,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -134,6 +149,135 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _QcOverviewTab extends ConsumerWidget {
+  const _QcOverviewTab();
+
+  DateTime _startOfWeek(DateTime now) {
+    final day = DateTime(now.year, now.month, now.day);
+    return day.subtract(Duration(days: day.weekday - 1));
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final weekStart = _startOfWeek(DateTime.now());
+    final summaryAsync = ref.watch(superAdminQcSummaryProvider(weekStart));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'QC 현황',
+          style: GoogleFonts.bebasNeue(
+            color: AppColors.amber500,
+            fontSize: 28,
+            letterSpacing: 1,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: summaryAsync.when(
+            data: (rows) {
+              if (rows.isEmpty) {
+                return Center(
+                  child: Text(
+                    'QC 데이터가 없습니다.',
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                );
+              }
+
+              return ListView.separated(
+                itemCount: rows.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final row = rows[index];
+                  final restaurantId = row['restaurant_id']?.toString() ?? '';
+                  final restaurantName =
+                      row['restaurant_name']?.toString() ?? '-';
+                  final coverage = (row['coverage'] as num?)?.toDouble() ?? 0.0;
+                  final failCount = row['fail_count']?.toString() ?? '0';
+                  final latest = row['latest_check_date']?.toString() ?? '-';
+
+                  return InkWell(
+                    onTap: restaurantId.isEmpty
+                        ? null
+                        : () => context.go('/admin/$restaurantId?tab=qc'),
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface1,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppColors.surface2),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              restaurantName,
+                              style: GoogleFonts.notoSansKr(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              '${coverage.toStringAsFixed(0)}%',
+                              style: GoogleFonts.bebasNeue(
+                                color: AppColors.amber500,
+                                fontSize: 24,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              '$failCount건',
+                              style: GoogleFonts.notoSansKr(
+                                color: failCount == '0'
+                                    ? AppColors.statusAvailable
+                                    : AppColors.statusCancelled,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              latest,
+                              style: GoogleFonts.notoSansKr(
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+            loading: () => const Center(
+              child: CircularProgressIndicator(color: AppColors.amber500),
+            ),
+            error: (error, _) => Center(
+              child: Text(
+                '$error',
+                style: GoogleFonts.notoSansKr(color: AppColors.statusCancelled),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -165,7 +309,8 @@ class _RestaurantsTab extends StatelessWidget {
             ),
             const Spacer(),
             FilledButton.icon(
-              onPressed: () => _showRestaurantSheet(context, notifier: notifier),
+              onPressed: () =>
+                  _showRestaurantSheet(context, notifier: notifier),
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.amber500,
                 foregroundColor: AppColors.surface0,
@@ -290,7 +435,9 @@ class _RestaurantsTab extends StatelessWidget {
   }) async {
     final isEdit = initial != null;
     final nameController = TextEditingController(text: initial?.name ?? '');
-    final addressController = TextEditingController(text: initial?.address ?? '');
+    final addressController = TextEditingController(
+      text: initial?.address ?? '',
+    );
     final slugController = TextEditingController(text: initial?.slug ?? '');
     final chargeController = TextEditingController(
       text: initial?.perPersonCharge?.toString() ?? '',
@@ -387,9 +534,14 @@ class _RestaurantsTab extends StatelessWidget {
                     initialValue: operationMode,
                     dropdownColor: AppColors.surface1,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(labelText: 'Operation Mode'),
+                    decoration: const InputDecoration(
+                      labelText: 'Operation Mode',
+                    ),
                     items: const [
-                      DropdownMenuItem(value: 'standard', child: Text('Standard')),
+                      DropdownMenuItem(
+                        value: 'standard',
+                        child: Text('Standard'),
+                      ),
                       DropdownMenuItem(value: 'buffet', child: Text('Buffet')),
                       DropdownMenuItem(value: 'hybrid', child: Text('Hybrid')),
                     ],
@@ -399,13 +551,20 @@ class _RestaurantsTab extends StatelessWidget {
                       }
                     },
                   ),
-                  if (operationMode == 'buffet' || operationMode == 'hybrid') ...[
+                  if (operationMode == 'buffet' ||
+                      operationMode == 'hybrid') ...[
                     const SizedBox(height: 10),
                     TextField(
                       controller: chargeController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                      decoration: const InputDecoration(labelText: 'Per Person Charge'),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textPrimary,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Per Person Charge',
+                      ),
                     ),
                   ],
                   const SizedBox(height: 16),
@@ -426,14 +585,18 @@ class _RestaurantsTab extends StatelessWidget {
                       width: double.infinity,
                       child: OutlinedButton(
                         onPressed: () async {
-                          final success = await notifier.deactivateRestaurant(initial.id);
+                          final success = await notifier.deactivateRestaurant(
+                            initial.id,
+                          );
                           if (success && context.mounted) {
                             showSuccessToast(context, 'Restaurant deactivated');
                             Navigator.of(context).pop();
                           }
                         },
                         style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: AppColors.statusCancelled),
+                          side: const BorderSide(
+                            color: AppColors.statusCancelled,
+                          ),
                           foregroundColor: AppColors.statusCancelled,
                         ),
                         child: const Text('DELETE (Deactivate)'),
@@ -479,10 +642,7 @@ class _AllReportsTab extends StatelessWidget {
       children: [
         Text(
           'ALL REPORTS',
-          style: GoogleFonts.bebasNeue(
-            color: AppColors.amber500,
-            fontSize: 30,
-          ),
+          style: GoogleFonts.bebasNeue(color: AppColors.amber500, fontSize: 30),
         ),
         const SizedBox(height: 12),
         Wrap(
@@ -510,7 +670,9 @@ class _AllReportsTab extends StatelessWidget {
                     value: restaurant,
                     child: Text(
                       restaurant.name,
-                      style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textPrimary,
+                      ),
                     ),
                   );
                 }),
@@ -547,9 +709,18 @@ class _AllReportsTab extends StatelessWidget {
             spacing: 10,
             runSpacing: 10,
             children: [
-              _summaryCard('Total Revenue', '₫${currency.format(summary.totalRevenue)}'),
-              _summaryCard('Dine-in', '₫${currency.format(summary.dineInRevenue)}'),
-              _summaryCard('Delivery', '₫${currency.format(summary.deliveryRevenue)}'),
+              _summaryCard(
+                'Total Revenue',
+                '₫${currency.format(summary.totalRevenue)}',
+              ),
+              _summaryCard(
+                'Dine-in',
+                '₫${currency.format(summary.dineInRevenue)}',
+              ),
+              _summaryCard(
+                'Delivery',
+                '₫${currency.format(summary.deliveryRevenue)}',
+              ),
             ],
           ),
         const SizedBox(height: 16),
@@ -577,10 +748,15 @@ class _AllReportsTab extends StatelessWidget {
                           itemCount: summary.rows.length,
                           itemBuilder: (context, index) {
                             final row = summary.rows[index];
-                            final bg = index.isEven ? AppColors.surface1 : AppColors.surface0;
+                            final bg = index.isEven
+                                ? AppColors.surface1
+                                : AppColors.surface0;
                             return Container(
                               color: bg,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
                               child: Row(
                                 children: [
                                   _cell(row.restaurantName, flex: 3),
@@ -670,7 +846,9 @@ class _SystemSettingsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final projectRef = Uri.tryParse(AppConstants.supabaseUrl)?.host ?? AppConstants.supabaseUrl;
+    final projectRef =
+        Uri.tryParse(AppConstants.supabaseUrl)?.host ??
+        AppConstants.supabaseUrl;
     final email = authState.user?.email?.toString() ?? '-';
     final role = authState.role?.toString() ?? '-';
 

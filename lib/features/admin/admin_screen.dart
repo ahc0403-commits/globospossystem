@@ -11,16 +11,22 @@ import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
 import 'tabs/attendance_tab.dart';
 import 'tabs/menu_tab.dart';
+import 'tabs/qc_tab.dart';
 import 'tabs/reports_tab.dart';
 import 'tabs/settings_tab.dart';
 import 'tabs/staff_tab.dart';
 import 'tabs/tables_tab.dart';
 
 class AdminScreen extends ConsumerStatefulWidget {
-  const AdminScreen({super.key, this.overrideRestaurantId});
+  const AdminScreen({
+    super.key,
+    this.overrideRestaurantId,
+    this.initialTabIndex = 0,
+  });
 
   /// super_admin이 특정 레스토랑 admin 화면을 볼 때 사용
   final String? overrideRestaurantId;
+  final int initialTabIndex;
 
   @override
   ConsumerState<AdminScreen> createState() => _AdminScreenState();
@@ -35,8 +41,15 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     StaffTab(),
     ReportsTab(),
     AttendanceTab(),
+    QcTab(),
     SettingsTab(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialTabIndex.clamp(0, _tabs.length - 1);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +69,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       const SidebarItem(icon: Icons.people, label: 'Staff'),
       const SidebarItem(icon: Icons.bar_chart, label: 'Reports'),
       const SidebarItem(icon: Icons.access_time, label: 'Attendance'),
+      const SidebarItem(icon: Icons.fact_check, label: 'QC'),
       const SidebarItem(icon: Icons.settings, label: 'Settings'),
     ];
 
@@ -111,8 +125,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   }
 
   Widget _buildMobileLayout(BuildContext context, bool isSuperAdminView) {
-    final showKioskItem =
-        PlatformInfo.isKioskSupported;
+    final showKioskItem = PlatformInfo.isKioskSupported;
     final navItems = <BottomNavigationBarItem>[
       const BottomNavigationBarItem(
         icon: Icon(Icons.table_restaurant),
@@ -131,6 +144,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         icon: Icon(Icons.access_time),
         label: 'Attendance',
       ),
+      const BottomNavigationBarItem(icon: Icon(Icons.fact_check), label: 'QC'),
       const BottomNavigationBarItem(
         icon: Icon(Icons.settings),
         label: 'Settings',

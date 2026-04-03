@@ -9,6 +9,7 @@ import '../../features/cashier/cashier_screen.dart';
 import '../../features/kitchen/kitchen_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
 import '../../features/attendance/attendance_kiosk_screen.dart';
+import '../../features/qc/qc_check_screen.dart';
 import '../../features/super_admin/super_admin_screen.dart';
 import '../../features/waiter/waiter_screen.dart';
 
@@ -93,18 +94,39 @@ GoRouter buildAppRouter(ProviderContainer container) {
         path: '/attendance-kiosk',
         builder: (_, __) => const AttendanceKioskScreen(),
       ),
+      GoRoute(path: '/qc-check', builder: (_, __) => const QcCheckScreen()),
       GoRoute(
         path: '/super-admin',
         builder: (_, __) => const SuperAdminScreen(),
       ),
-      GoRoute(path: '/admin', builder: (_, __) => const AdminScreen()),
+      GoRoute(
+        path: '/admin',
+        builder: (_, state) => AdminScreen(
+          initialTabIndex: _tabIndexFromQuery(state.uri.queryParameters['tab']),
+        ),
+      ),
       // super_admin이 특정 레스토랑 admin 화면으로 진입하는 경로
       GoRoute(
         path: '/admin/:restaurantId',
         builder: (_, state) => AdminScreen(
           overrideRestaurantId: state.pathParameters['restaurantId'],
+          initialTabIndex: _tabIndexFromQuery(state.uri.queryParameters['tab']),
         ),
       ),
     ],
   );
+}
+
+int _tabIndexFromQuery(String? value) {
+  if (value == null) return 0;
+  return switch (value.toLowerCase()) {
+    'tables' => 0,
+    'menu' => 1,
+    'staff' => 2,
+    'reports' => 3,
+    'attendance' => 4,
+    'qc' => 5,
+    'settings' => 6,
+    _ => 0,
+  };
 }
