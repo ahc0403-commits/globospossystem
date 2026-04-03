@@ -43,6 +43,10 @@ dependencies:
     git:
       url: https://github.com/Mamasodikov/zk_finger_10.git
   timezone: ^0.11.0
+  camera: ^0.10.5+9
+  image: ^4.1.7
+  excel: ^4.0.6
+  file_saver: ^0.2.14
 
 dev_dependencies:
   flutter_test:
