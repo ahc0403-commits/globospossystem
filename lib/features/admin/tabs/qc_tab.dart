@@ -89,8 +89,10 @@ class _QcTabState extends ConsumerState<QcTab>
                 _TemplateManagementTab(
                   picker: _picker,
                   restaurantId: restaurantId,
+                  role: ref.watch(authProvider).role,
                 ),
                 _WeeklyViewTab(
+                  restaurantId: restaurantId,
                   weekStart: _weekStart,
                   onPrevWeek: restaurantId == null
                       ? null
@@ -118,15 +120,18 @@ class _TemplateManagementTab extends ConsumerWidget {
   const _TemplateManagementTab({
     required this.picker,
     required this.restaurantId,
+    required this.role,
   });
 
   final ImagePicker picker;
   final String? restaurantId;
+  final String? role;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(qcTemplateProvider);
     final notifier = ref.read(qcTemplateProvider.notifier);
+    final isSuperAdmin = role == 'super_admin';
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -198,6 +203,11 @@ class _TemplateManagementTab extends ConsumerWidget {
                       copied.insert(newIndex, item);
 
                       for (var i = 0; i < copied.length; i++) {
+                        final template = copied[i];
+                        final isGlobal = template['is_global'] == true;
+                        if (isGlobal && !isSuperAdmin) {
+                          continue;
+                        }
                         final id = copied[i]['id']?.toString() ?? '';
                         if (id.isEmpty) continue;
                         await notifier.updateTemplate(id, {'sort_order': i});
@@ -209,6 +219,8 @@ class _TemplateManagementTab extends ConsumerWidget {
                       final category = template['category']?.toString() ?? '기타';
                       final text = template['criteria_text']?.toString() ?? '-';
                       final photo = template['criteria_photo_url']?.toString();
+                      final isGlobal = template['is_global'] == true;
+                      final canEdit = !isGlobal || isSuperAdmin;
 
                       return Container(
                         key: ValueKey(id),
@@ -272,6 +284,27 @@ class _TemplateManagementTab extends ConsumerWidget {
                                     fontSize: 11,
                                   ),
                                 ),
+                                if (isGlobal)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 3,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.amber500.withValues(
+                                        alpha: 0.16,
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      '📌 본사 공통',
+                                      style: GoogleFonts.notoSansKr(
+                                        color: AppColors.amber500,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -280,7 +313,7 @@ class _TemplateManagementTab extends ConsumerWidget {
                             child: Row(
                               children: [
                                 IconButton(
-                                  onPressed: restaurantId == null
+                                  onPressed: !canEdit || restaurantId == null
                                       ? null
                                       : () => _showTemplateSheet(
                                           context,
@@ -293,18 +326,21 @@ class _TemplateManagementTab extends ConsumerWidget {
                                   color: AppColors.textSecondary,
                                 ),
                                 IconButton(
-                                  onPressed: () async {
-                                    await notifier.deleteTemplate(id);
-                                    if (!context.mounted) return;
-                                    showSuccessToast(context, '삭제 완료');
-                                  },
+                                  onPressed: !canEdit
+                                      ? null
+                                      : () async {
+                                          await notifier.deleteTemplate(id);
+                                          if (!context.mounted) return;
+                                          showSuccessToast(context, '삭제 완료');
+                                        },
                                   icon: const Icon(Icons.delete_outline),
                                   color: AppColors.statusCancelled,
                                 ),
-                                const Icon(
-                                  Icons.drag_handle,
-                                  color: AppColors.textSecondary,
-                                ),
+                                if (canEdit)
+                                  const Icon(
+                                    Icons.drag_handle,
+                                    color: AppColors.textSecondary,
+                                  ),
                               ],
                             ),
                           ),
@@ -493,22 +529,46 @@ class _TemplateManagementTab extends ConsumerWidget {
   }
 }
 
-class _WeeklyViewTab extends ConsumerWidget {
+class _WeeklyViewTab extends ConsumerStatefulWidget {
   const _WeeklyViewTab({
+    required this.restaurantId,
     required this.weekStart,
     required this.onPrevWeek,
     required this.onNextWeek,
   });
 
+  final String? restaurantId;
   final DateTime weekStart;
   final VoidCallback? onPrevWeek;
   final VoidCallback? onNextWeek;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_WeeklyViewTab> createState() => _WeeklyViewTabState();
+}
+
+class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
+  bool _rangeMode = false;
+  DateTime _from = DateTime.now().subtract(const Duration(days: 6));
+  DateTime _to = DateTime.now();
+  String _resultFilter = 'all';
+  String _categoryFilter = 'all';
+
+  Future<void> _searchByRange() async {
+    final restaurantId = widget.restaurantId;
+    if (restaurantId == null) return;
+    await ref
+        .read(qcCheckProvider.notifier)
+        .loadDateRange(restaurantId: restaurantId, from: _from, to: _to);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final templates = ref.watch(qcTemplateProvider).templates;
     final checkState = ref.watch(qcCheckProvider);
-    final weekDays = List.generate(7, (i) => weekStart.add(Duration(days: i)));
+    final weekDays = List.generate(
+      7,
+      (i) => widget.weekStart.add(Duration(days: i)),
+    );
 
     final checksByKey = <String, Map<String, dynamic>>{};
     for (final check in checkState.checks) {
@@ -519,6 +579,25 @@ class _WeeklyViewTab extends ConsumerWidget {
     }
 
     final rows = _buildRows(templates);
+    final categoryOptions = <String>{
+      'all',
+      ...templates.map((e) => e['category']?.toString() ?? '기타'),
+    }.toList();
+
+    final filteredRangeChecks = checkState.dateRangeChecks.where((check) {
+      final result = check['result']?.toString() ?? '';
+      final template = check['qc_templates'] as Map<String, dynamic>?;
+      final category = template?['category']?.toString() ?? '기타';
+      final matchesResult = switch (_resultFilter) {
+        'pass' => result == 'pass',
+        'fail' => result == 'fail',
+        'na' => result == 'na',
+        _ => true,
+      };
+      final matchesCategory =
+          _categoryFilter == 'all' || category == _categoryFilter;
+      return matchesResult && matchesCategory;
+    }).toList();
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -526,244 +605,507 @@ class _WeeklyViewTab extends ConsumerWidget {
         children: [
           Row(
             children: [
-              IconButton(
-                onPressed: onPrevWeek,
-                icon: const Icon(Icons.chevron_left),
-                color: AppColors.textPrimary,
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment<bool>(value: false, label: Text('주간 보기')),
+                  ButtonSegment<bool>(value: true, label: Text('기간 검색')),
+                ],
+                selected: {_rangeMode},
+                onSelectionChanged: (selection) {
+                  setState(() => _rangeMode = selection.first);
+                },
               ),
-              Text(
-                '${DateFormat('yyyy-MM-dd').format(weekStart)} ~ '
-                '${DateFormat('yyyy-MM-dd').format(weekStart.add(const Duration(days: 6)))}',
-                style: GoogleFonts.notoSansKr(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              IconButton(
-                onPressed: onNextWeek,
-                icon: const Icon(Icons.chevron_right),
-                color: AppColors.textPrimary,
-              ),
-              const Spacer(),
-              _legendItem('✅', AppColors.statusAvailable),
-              const SizedBox(width: 8),
-              _legendItem('❌', AppColors.statusCancelled),
-              const SizedBox(width: 8),
-              _legendItem('—', AppColors.textSecondary),
             ],
           ),
           const SizedBox(height: 10),
-          if (checkState.isLoading)
+          if (_rangeMode)
+            _buildRangeSearchSection(
+              context: context,
+              categoryOptions: categoryOptions,
+              checks: filteredRangeChecks,
+              isLoading: checkState.isLoading,
+            )
+          else
+            Expanded(
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      IconButton(
+                        onPressed: widget.onPrevWeek,
+                        icon: const Icon(Icons.chevron_left),
+                        color: AppColors.textPrimary,
+                      ),
+                      Text(
+                        '${DateFormat('yyyy-MM-dd').format(widget.weekStart)} ~ '
+                        '${DateFormat('yyyy-MM-dd').format(widget.weekStart.add(const Duration(days: 6)))}',
+                        style: GoogleFonts.notoSansKr(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: widget.onNextWeek,
+                        icon: const Icon(Icons.chevron_right),
+                        color: AppColors.textPrimary,
+                      ),
+                      const Spacer(),
+                      _legendItem('✅', AppColors.statusAvailable),
+                      const SizedBox(width: 8),
+                      _legendItem('❌', AppColors.statusCancelled),
+                      const SizedBox(width: 8),
+                      _legendItem('—', AppColors.textSecondary),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  if (checkState.isLoading)
+                    const Expanded(
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: AppColors.amber500,
+                        ),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 160,
+                            child: Column(
+                              children: [
+                                Container(
+                                  height: 56,
+                                  alignment: Alignment.centerLeft,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                  ),
+                                  color: AppColors.surface2,
+                                  child: Text(
+                                    '기준',
+                                    style: GoogleFonts.notoSansKr(
+                                      color: AppColors.textSecondary,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: ListView.builder(
+                                    itemCount: rows.length,
+                                    itemBuilder: (context, index) {
+                                      final row = rows[index];
+                                      if (row.isCategory) {
+                                        return Container(
+                                          height: 42,
+                                          alignment: Alignment.centerLeft,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                          ),
+                                          color: AppColors.amber500.withValues(
+                                            alpha: 0.2,
+                                          ),
+                                          child: Text(
+                                            '[${row.category}]',
+                                            style: GoogleFonts.notoSansKr(
+                                              color: AppColors.amber500,
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        );
+                                      }
+
+                                      return Container(
+                                        height: 48,
+                                        alignment: Alignment.centerLeft,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                        ),
+                                        decoration: const BoxDecoration(
+                                          border: Border(
+                                            bottom: BorderSide(
+                                              color: AppColors.surface2,
+                                            ),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          row.criteria,
+                                          style: GoogleFonts.notoSansKr(
+                                            color: AppColors.textPrimary,
+                                            fontSize: 12,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: SizedBox(
+                                width: 64.0 * 7,
+                                child: Column(
+                                  children: [
+                                    Row(
+                                      children: weekDays
+                                          .map(
+                                            (day) => Container(
+                                              width: 64,
+                                              height: 56,
+                                              alignment: Alignment.center,
+                                              color: AppColors.surface2,
+                                              child: Column(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Text(
+                                                    DateFormat(
+                                                      'E',
+                                                      'ko',
+                                                    ).format(day),
+                                                    style:
+                                                        GoogleFonts.notoSansKr(
+                                                          color: AppColors
+                                                              .textSecondary,
+                                                          fontSize: 11,
+                                                        ),
+                                                  ),
+                                                  Text(
+                                                    DateFormat(
+                                                      'M/d',
+                                                    ).format(day),
+                                                    style:
+                                                        GoogleFonts.notoSansKr(
+                                                          color: AppColors
+                                                              .textPrimary,
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          fontSize: 12,
+                                                        ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          )
+                                          .toList(),
+                                    ),
+                                    Expanded(
+                                      child: ListView.builder(
+                                        itemCount: rows.length,
+                                        itemBuilder: (context, index) {
+                                          final row = rows[index];
+                                          if (row.isCategory) {
+                                            return Container(
+                                              height: 42,
+                                              width: 64.0 * 7,
+                                              color: AppColors.amber500
+                                                  .withValues(alpha: 0.2),
+                                            );
+                                          }
+
+                                          return Row(
+                                            children: weekDays.map((day) {
+                                              final dayStr = DateFormat(
+                                                'yyyy-MM-dd',
+                                              ).format(day);
+                                              final check =
+                                                  checksByKey['${row.templateId}|$dayStr'];
+                                              final result = check?['result']
+                                                  ?.toString();
+
+                                              final (
+                                                bg,
+                                                label,
+                                              ) = switch (result) {
+                                                'pass' => (
+                                                  AppColors.statusAvailable
+                                                      .withValues(alpha: 0.18),
+                                                  '✅',
+                                                ),
+                                                'fail' => (
+                                                  AppColors.statusCancelled
+                                                      .withValues(alpha: 0.20),
+                                                  '❌',
+                                                ),
+                                                'na' => (
+                                                  AppColors.surface2,
+                                                  '—',
+                                                ),
+                                                _ => (Colors.transparent, ''),
+                                              };
+
+                                              return GestureDetector(
+                                                onTap: () => _showCellDialog(
+                                                  context,
+                                                  day,
+                                                  row,
+                                                  check,
+                                                ),
+                                                child: Container(
+                                                  width: 64,
+                                                  height: 48,
+                                                  alignment: Alignment.center,
+                                                  decoration: BoxDecoration(
+                                                    color: bg,
+                                                    border: const Border(
+                                                      bottom: BorderSide(
+                                                        color:
+                                                            AppColors.surface2,
+                                                      ),
+                                                      left: BorderSide(
+                                                        color:
+                                                            AppColors.surface2,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  child: Text(
+                                                    label,
+                                                    style: GoogleFonts.notoSansKr(
+                                                      color: result == 'fail'
+                                                          ? AppColors
+                                                                .statusCancelled
+                                                          : AppColors
+                                                                .textPrimary,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                ),
+                                              );
+                                            }).toList(),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRangeSearchSection({
+    required BuildContext context,
+    required List<String> categoryOptions,
+    required List<Map<String, dynamic>> checks,
+    required bool isLoading,
+  }) {
+    return Expanded(
+      child: Column(
+        children: [
+          Row(
+            children: [
+              _dateButton(
+                context: context,
+                label: 'From',
+                value: _from,
+                onPicked: (picked) => setState(() => _from = picked),
+              ),
+              const SizedBox(width: 8),
+              _dateButton(
+                context: context,
+                label: 'To',
+                value: _to,
+                onPicked: (picked) => setState(() => _to = picked),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: _searchByRange,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.amber500,
+                  foregroundColor: AppColors.surface0,
+                ),
+                child: const Text('검색'),
+              ),
+              const Spacer(),
+              SizedBox(
+                width: 140,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _resultFilter,
+                  dropdownColor: AppColors.surface1,
+                  style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    labelText: '결과',
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('전체')),
+                    DropdownMenuItem(value: 'pass', child: Text('통과')),
+                    DropdownMenuItem(value: 'fail', child: Text('불합격')),
+                    DropdownMenuItem(value: 'na', child: Text('해당없음')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setState(() => _resultFilter = value);
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 180,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _categoryFilter,
+                  dropdownColor: AppColors.surface1,
+                  style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    labelText: '카테고리',
+                  ),
+                  items: categoryOptions
+                      .map(
+                        (category) => DropdownMenuItem(
+                          value: category,
+                          child: Text(category == 'all' ? '전체' : category),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) setState(() => _categoryFilter = value);
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (isLoading)
             const Expanded(
               child: Center(
                 child: CircularProgressIndicator(color: AppColors.amber500),
               ),
             )
+          else if (checks.isEmpty)
+            Expanded(
+              child: Center(
+                child: Text(
+                  '검색 결과가 없습니다.',
+                  style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
+                ),
+              ),
+            )
           else
             Expanded(
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 160,
-                    child: Column(
+              child: ListView.separated(
+                itemCount: checks.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final row = checks[index];
+                  final template = row['qc_templates'] as Map<String, dynamic>?;
+                  final result = row['result']?.toString() ?? '';
+                  final resultLabel = switch (result) {
+                    'pass' => '✅ 통과',
+                    'fail' => '❌ 불합격',
+                    'na' => '— 해당없음',
+                    _ => '-',
+                  };
+                  return Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface1,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.surface2),
+                    ),
+                    child: Row(
                       children: [
-                        Container(
-                          height: 56,
-                          alignment: Alignment.centerLeft,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          color: AppColors.surface2,
+                        SizedBox(
+                          width: 90,
                           child: Text(
-                            '기준',
+                            row['check_date']?.toString() ?? '-',
                             style: GoogleFonts.notoSansKr(
                               color: AppColors.textSecondary,
-                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
                             ),
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Expanded(
-                          child: ListView.builder(
-                            itemCount: rows.length,
-                            itemBuilder: (context, index) {
-                              final row = rows[index];
-                              if (row.isCategory) {
-                                return Container(
-                                  height: 42,
-                                  alignment: Alignment.centerLeft,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                  ),
-                                  color: AppColors.amber500.withValues(
-                                    alpha: 0.2,
-                                  ),
-                                  child: Text(
-                                    '[${row.category}]',
-                                    style: GoogleFonts.notoSansKr(
-                                      color: AppColors.amber500,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                );
-                              }
-
-                              return Container(
-                                height: 48,
-                                alignment: Alignment.centerLeft,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                ),
-                                decoration: const BoxDecoration(
-                                  border: Border(
-                                    bottom: BorderSide(
-                                      color: AppColors.surface2,
-                                    ),
-                                  ),
-                                ),
-                                child: Text(
-                                  row.criteria,
-                                  style: GoogleFonts.notoSansKr(
-                                    color: AppColors.textPrimary,
-                                    fontSize: 12,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              );
-                            },
+                          child: Text(
+                            '${template?['category'] ?? '기타'} | ${template?['criteria_text'] ?? '-'}',
+                            style: GoogleFonts.notoSansKr(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          resultLabel,
+                          style: GoogleFonts.notoSansKr(
+                            color: result == 'fail'
+                                ? AppColors.statusCancelled
+                                : AppColors.textPrimary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _thumbnailCell(
+                          context,
+                          row['evidence_photo_url']?.toString(),
                         ),
                       ],
                     ),
-                  ),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SizedBox(
-                        width: 64.0 * 7,
-                        child: Column(
-                          children: [
-                            Row(
-                              children: weekDays
-                                  .map(
-                                    (day) => Container(
-                                      width: 64,
-                                      height: 56,
-                                      alignment: Alignment.center,
-                                      color: AppColors.surface2,
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Text(
-                                            DateFormat('E', 'ko').format(day),
-                                            style: GoogleFonts.notoSansKr(
-                                              color: AppColors.textSecondary,
-                                              fontSize: 11,
-                                            ),
-                                          ),
-                                          Text(
-                                            DateFormat('M/d').format(day),
-                                            style: GoogleFonts.notoSansKr(
-                                              color: AppColors.textPrimary,
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                            ),
-                            Expanded(
-                              child: ListView.builder(
-                                itemCount: rows.length,
-                                itemBuilder: (context, index) {
-                                  final row = rows[index];
-                                  if (row.isCategory) {
-                                    return Container(
-                                      height: 42,
-                                      width: 64.0 * 7,
-                                      color: AppColors.amber500.withValues(
-                                        alpha: 0.2,
-                                      ),
-                                    );
-                                  }
-
-                                  return Row(
-                                    children: weekDays.map((day) {
-                                      final dayStr = DateFormat(
-                                        'yyyy-MM-dd',
-                                      ).format(day);
-                                      final check =
-                                          checksByKey['${row.templateId}|$dayStr'];
-                                      final result = check?['result']
-                                          ?.toString();
-
-                                      final (bg, label) = switch (result) {
-                                        'pass' => (
-                                          AppColors.statusAvailable.withValues(
-                                            alpha: 0.18,
-                                          ),
-                                          '✅',
-                                        ),
-                                        'fail' => (
-                                          AppColors.statusCancelled.withValues(
-                                            alpha: 0.20,
-                                          ),
-                                          '❌',
-                                        ),
-                                        'na' => (AppColors.surface2, '—'),
-                                        _ => (Colors.transparent, ''),
-                                      };
-
-                                      return GestureDetector(
-                                        onTap: () => _showCellDialog(
-                                          context,
-                                          day,
-                                          row,
-                                          check,
-                                        ),
-                                        child: Container(
-                                          width: 64,
-                                          height: 48,
-                                          alignment: Alignment.center,
-                                          decoration: BoxDecoration(
-                                            color: bg,
-                                            border: const Border(
-                                              bottom: BorderSide(
-                                                color: AppColors.surface2,
-                                              ),
-                                              left: BorderSide(
-                                                color: AppColors.surface2,
-                                              ),
-                                            ),
-                                          ),
-                                          child: Text(
-                                            label,
-                                            style: GoogleFonts.notoSansKr(
-                                              color: result == 'fail'
-                                                  ? AppColors.statusCancelled
-                                                  : AppColors.textPrimary,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                        ),
-                                      );
-                                    }).toList(),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                  );
+                },
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _dateButton({
+    required BuildContext context,
+    required String label,
+    required DateTime value,
+    required ValueChanged<DateTime> onPicked,
+  }) {
+    return OutlinedButton.icon(
+      onPressed: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: value,
+          firstDate: DateTime(2020),
+          lastDate: DateTime.now(),
+        );
+        if (picked != null) {
+          onPicked(DateTime(picked.year, picked.month, picked.day));
+        }
+      },
+      icon: const Icon(Icons.event),
+      label: Text('$label ${DateFormat('yyyy-MM-dd').format(value)}'),
+    );
+  }
+
+  Widget _thumbnailCell(BuildContext context, String? evidencePhotoUrl) {
+    if (evidencePhotoUrl == null || evidencePhotoUrl.isEmpty) {
+      return const Icon(
+        Icons.image_not_supported_outlined,
+        color: AppColors.textSecondary,
+      );
+    }
+    return GestureDetector(
+      onTap: () => _showImageDialog(context, evidencePhotoUrl),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: Image.network(
+          evidencePhotoUrl,
+          width: 40,
+          height: 40,
+          fit: BoxFit.cover,
+        ),
       ),
     );
   }

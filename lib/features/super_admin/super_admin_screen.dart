@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'dart:io';
 
 import '../../core/constants/app_constants.dart';
 import '../../main.dart';
@@ -76,7 +78,9 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
                 const SizedBox(height: 8),
                 _navItem(Icons.fact_check, 'QC 현황', 2),
                 const SizedBox(height: 8),
-                _navItem(Icons.settings, 'System Settings', 3),
+                _navItem(Icons.rule, 'QC 기준표', 3),
+                const SizedBox(height: 8),
+                _navItem(Icons.settings, 'System Settings', 4),
                 const Spacer(),
                 OutlinedButton.icon(
                   onPressed: () => ref.read(authProvider.notifier).logout(),
@@ -102,6 +106,7 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
                 ),
                 1 => _AllReportsTab(state: state, notifier: notifier),
                 2 => const _QcOverviewTab(),
+                3 => const _QcGlobalTemplatesTab(),
                 _ => _SystemSettingsTab(authState: authState),
               },
             ),
@@ -150,6 +155,357 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
         ),
       ),
     );
+  }
+}
+
+class _QcGlobalTemplatesTab extends ConsumerWidget {
+  const _QcGlobalTemplatesTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final templatesAsync = ref.watch(globalQcTemplatesProvider);
+    final notifier = ref.read(qcTemplateProvider.notifier);
+    final picker = ImagePicker();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              '본사 공통 QC 기준표 관리',
+              style: GoogleFonts.bebasNeue(
+                color: AppColors.amber500,
+                fontSize: 30,
+                letterSpacing: 1,
+              ),
+            ),
+            const Spacer(),
+            FilledButton.icon(
+              onPressed: () =>
+                  _showGlobalTemplateSheet(context, ref, picker, notifier),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.amber500,
+                foregroundColor: AppColors.surface0,
+              ),
+              icon: const Icon(Icons.add),
+              label: const Text('공통 기준 추가'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: templatesAsync.when(
+            data: (templates) {
+              if (templates.isEmpty) {
+                return Center(
+                  child: Text(
+                    '등록된 공통 기준표가 없습니다.',
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                );
+              }
+              final grouped = <String, List<Map<String, dynamic>>>{};
+              for (final template in templates) {
+                final category = template['category']?.toString() ?? '기타';
+                grouped.putIfAbsent(category, () => []).add(template);
+              }
+
+              return ListView(
+                children: [
+                  for (final category in grouped.keys) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.amber500.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        category,
+                        style: GoogleFonts.notoSansKr(
+                          color: AppColors.amber500,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    ...grouped[category]!.map((template) {
+                      final id = template['id']?.toString() ?? '';
+                      final photo = template['criteria_photo_url']?.toString();
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface1,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.surface2),
+                        ),
+                        child: Row(
+                          children: [
+                            if (photo != null && photo.isNotEmpty)
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.network(
+                                  photo,
+                                  width: 52,
+                                  height: 52,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            else
+                              const Icon(
+                                Icons.image_not_supported_outlined,
+                                color: AppColors.textSecondary,
+                              ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    template['criteria_text']?.toString() ??
+                                        '-',
+                                    style: GoogleFonts.notoSansKr(
+                                      color: AppColors.textPrimary,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.amber500.withValues(
+                                        alpha: 0.16,
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      '📌 전체 매장 공통',
+                                      style: GoogleFonts.notoSansKr(
+                                        color: AppColors.amber500,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => _showGlobalTemplateSheet(
+                                context,
+                                ref,
+                                picker,
+                                notifier,
+                                initial: template,
+                              ),
+                              icon: const Icon(Icons.edit_outlined),
+                              color: AppColors.textSecondary,
+                            ),
+                            IconButton(
+                              onPressed: () async {
+                                await notifier.deleteTemplate(id);
+                                ref.invalidate(globalQcTemplatesProvider);
+                                if (!context.mounted) return;
+                                showSuccessToast(context, '비활성화 완료');
+                              },
+                              icon: const Icon(Icons.block_outlined),
+                              color: AppColors.statusCancelled,
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ],
+              );
+            },
+            loading: () => const Center(
+              child: CircularProgressIndicator(color: AppColors.amber500),
+            ),
+            error: (error, _) => Center(
+              child: Text(
+                '$error',
+                style: GoogleFonts.notoSansKr(color: AppColors.statusCancelled),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '✅ 위 항목은 모든 매장에 자동 적용됩니다. 매장별 추가 항목은 매장 어드민이 설정합니다.',
+          style: GoogleFonts.notoSansKr(
+            color: AppColors.textSecondary,
+            fontSize: 12,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showGlobalTemplateSheet(
+    BuildContext context,
+    WidgetRef ref,
+    ImagePicker picker,
+    QcTemplateNotifier notifier, {
+    Map<String, dynamic>? initial,
+  }) async {
+    final isEdit = initial != null;
+    final categoryController = TextEditingController(
+      text: initial?['category']?.toString() ?? '',
+    );
+    final criteriaController = TextEditingController(
+      text: initial?['criteria_text']?.toString() ?? '',
+    );
+    File? selectedFile;
+    String? existingUrl = initial?['criteria_photo_url']?.toString();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface1,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 16,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isEdit ? '공통 기준 수정' : '공통 기준 추가',
+                    style: GoogleFonts.bebasNeue(
+                      color: AppColors.amber500,
+                      fontSize: 30,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: categoryController,
+                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    decoration: const InputDecoration(labelText: '카테고리'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: criteriaController,
+                    minLines: 2,
+                    maxLines: 4,
+                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    decoration: const InputDecoration(labelText: '기준 내용'),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final picked = await picker.pickImage(
+                            source: ImageSource.gallery,
+                          );
+                          if (picked == null) return;
+                          setModalState(() {
+                            selectedFile = File(picked.path);
+                            existingUrl = null;
+                          });
+                        },
+                        icon: const Icon(Icons.photo_library_outlined),
+                        label: const Text('기준사진 업로드'),
+                      ),
+                      const SizedBox(width: 8),
+                      if (selectedFile != null)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.file(
+                            selectedFile!,
+                            width: 40,
+                            height: 40,
+                            fit: BoxFit.cover,
+                          ),
+                        )
+                      else if (existingUrl != null && existingUrl!.isNotEmpty)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            existingUrl!,
+                            width: 40,
+                            height: 40,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () async {
+                        final category = categoryController.text.trim();
+                        final criteria = criteriaController.text.trim();
+                        if (category.isEmpty || criteria.isEmpty) {
+                          return;
+                        }
+
+                        String? photoUrl = existingUrl;
+                        if (selectedFile != null) {
+                          final templateId = isEdit
+                              ? initial['id'].toString()
+                              : notifier.generateTemplateId();
+                          photoUrl = await notifier.uploadCriteriaPhoto(
+                            'global',
+                            templateId,
+                            selectedFile!,
+                          );
+                        }
+
+                        if (isEdit) {
+                          await notifier
+                              .updateTemplate(initial['id'].toString(), {
+                                'category': category,
+                                'criteria_text': criteria,
+                                'criteria_photo_url': photoUrl,
+                              });
+                        } else {
+                          await notifier.addGlobalTemplate(
+                            category: category,
+                            criteriaText: criteria,
+                            criteriaPhotoUrl: photoUrl,
+                          );
+                        }
+                        ref.invalidate(globalQcTemplatesProvider);
+                        if (!context.mounted) return;
+                        Navigator.of(context).pop();
+                        showSuccessToast(context, '저장 완료');
+                      },
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.amber500,
+                        foregroundColor: AppColors.surface0,
+                      ),
+                      child: const Text('저장'),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    categoryController.dispose();
+    criteriaController.dispose();
   }
 }
 

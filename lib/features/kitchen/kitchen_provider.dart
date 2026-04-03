@@ -130,11 +130,13 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
             final orderItems = data['order_items'];
             final items = (orderItems is List)
                 ? orderItems
-                    .map<KitchenItem>(
-                      (item) => KitchenItem.fromJson(Map<String, dynamic>.from(item)),
-                    )
-                    .where((item) => item.status != 'served')
-                    .toList()
+                      .map<KitchenItem>(
+                        (item) => KitchenItem.fromJson(
+                          Map<String, dynamic>.from(item),
+                        ),
+                      )
+                      .where((item) => item.status != 'served')
+                      .toList()
                 : <KitchenItem>[];
 
             final tableData = data['tables'];
@@ -157,7 +159,11 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
           .where((order) => order.items.isNotEmpty)
           .toList();
 
-      state = state.copyWith(orders: orders, isLoading: false, clearError: true);
+      state = state.copyWith(
+        orders: orders,
+        isLoading: false,
+        clearError: true,
+      );
       await subscribeRealtime(restaurantId);
     } catch (error) {
       state = state.copyWith(
@@ -236,6 +242,18 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
                 .toList(),
           ),
         )
+        .where((order) {
+          if (order.items.isEmpty) return false;
+          final hasThisItem = order.items.any((item) => item.itemId == itemId);
+          if (!hasThisItem) return true;
+          final allServed = order.items.every((item) {
+            if (item.itemId == itemId) {
+              return newStatus == 'served';
+            }
+            return item.status == 'served';
+          });
+          return !allServed;
+        })
         .toList();
 
     state = state.copyWith(orders: optimisticOrders, clearError: true);
@@ -245,6 +263,9 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
           .from('order_items')
           .update({'status': newStatus})
           .eq('id', itemId);
+      if (newStatus == 'served' && _restaurantId != null) {
+        await loadOrders(_restaurantId!);
+      }
     } catch (error) {
       state = state.copyWith(
         orders: previous,

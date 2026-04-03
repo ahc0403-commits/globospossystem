@@ -11,8 +11,9 @@ class QcService {
     final result = await supabase
         .from('qc_templates')
         .select()
-        .eq('restaurant_id', restaurantId)
+        .or('is_global.eq.true,restaurant_id.eq.$restaurantId')
         .eq('is_active', true)
+        .order('is_global', ascending: false)
         .order('category')
         .order('sort_order');
     return List<Map<String, dynamic>>.from(result as List);
@@ -26,12 +27,40 @@ class QcService {
     int sortOrder = 0,
   }) async {
     await supabase.from('qc_templates').insert({
+      'is_global': false,
       'restaurant_id': restaurantId,
       'category': category,
       'criteria_text': criteriaText,
       'criteria_photo_url': criteriaPhotoUrl,
       'sort_order': sortOrder,
     });
+  }
+
+  Future<void> createGlobalTemplate({
+    required String category,
+    required String criteriaText,
+    String? criteriaPhotoUrl,
+    int sortOrder = 0,
+  }) async {
+    await supabase.from('qc_templates').insert({
+      'is_global': true,
+      'restaurant_id': null,
+      'category': category,
+      'criteria_text': criteriaText,
+      'criteria_photo_url': criteriaPhotoUrl,
+      'sort_order': sortOrder,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> fetchGlobalTemplates() async {
+    final result = await supabase
+        .from('qc_templates')
+        .select()
+        .eq('is_global', true)
+        .eq('is_active', true)
+        .order('category')
+        .order('sort_order');
+    return List<Map<String, dynamic>>.from(result as List);
   }
 
   Future<void> updateTemplate(String id, Map<String, dynamic> data) async {
@@ -53,11 +82,12 @@ class QcService {
     final result = await supabase
         .from('qc_checks')
         .select(
-          '*, qc_templates(id, category, criteria_text, criteria_photo_url)',
+          '*, qc_templates(id, category, criteria_text, criteria_photo_url, is_global)',
         )
         .eq('restaurant_id', restaurantId)
         .gte('check_date', from.toIso8601String().substring(0, 10))
-        .lte('check_date', to.toIso8601String().substring(0, 10));
+        .lte('check_date', to.toIso8601String().substring(0, 10))
+        .order('check_date', ascending: false);
     return List<Map<String, dynamic>>.from(result as List);
   }
 
@@ -134,7 +164,7 @@ class QcService {
 
     final templateRaw = await supabase
         .from('qc_templates')
-        .select('restaurant_id')
+        .select('restaurant_id, is_global')
         .eq('is_active', true);
     final templateRows = List<Map<String, dynamic>>.from(templateRaw as List);
 
@@ -146,7 +176,13 @@ class QcService {
     final checkRows = List<Map<String, dynamic>>.from(checkRaw as List);
 
     final templateCountByRestaurant = <String, int>{};
+    var globalTemplateCount = 0;
     for (final row in templateRows) {
+      final isGlobal = row['is_global'] == true;
+      if (isGlobal) {
+        globalTemplateCount += 1;
+        continue;
+      }
       final id = row['restaurant_id']?.toString() ?? '';
       if (id.isEmpty) continue;
       templateCountByRestaurant[id] = (templateCountByRestaurant[id] ?? 0) + 1;
@@ -165,7 +201,8 @@ class QcService {
       final restaurantId = restaurant['id']?.toString() ?? '';
       if (restaurantId.isEmpty) continue;
 
-      final templateCount = templateCountByRestaurant[restaurantId] ?? 0;
+      final templateCount =
+          (templateCountByRestaurant[restaurantId] ?? 0) + globalTemplateCount;
       final checks = checksByRestaurant[restaurantId] ?? const [];
       final checkedCount = checks.length;
       final failCount = checks

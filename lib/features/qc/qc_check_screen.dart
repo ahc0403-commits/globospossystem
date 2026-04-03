@@ -275,35 +275,71 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            '기준: ${template['criteria_text'] ?? '-'}',
-                            style: GoogleFonts.notoSansKr(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.assignment_outlined,
+                                color: AppColors.amber500,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  template['criteria_text']?.toString() ?? '-',
+                                  style: GoogleFonts.notoSansKr(
+                                    color: AppColors.textPrimary,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 10),
                           if (criteriaPhotoUrl != null &&
                               criteriaPhotoUrl.isNotEmpty)
-                            Row(
-                              children: [
-                                const Text('기준사진: '),
-                                GestureDetector(
-                                  onTap: () =>
-                                      _showImageDialog(criteriaPhotoUrl),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Image.network(
-                                      criteriaPhotoUrl,
-                                      width: 40,
-                                      height: 40,
-                                      fit: BoxFit.cover,
+                            GestureDetector(
+                              onTap: () => _showImageDialog(criteriaPhotoUrl),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: AppColors.amber500.withValues(
+                                      alpha: 0.5,
                                     ),
                                   ),
                                 ),
-                              ],
+                                child: Column(
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: const BorderRadius.vertical(
+                                        top: Radius.circular(8),
+                                      ),
+                                      child: Image.network(
+                                        criteriaPhotoUrl,
+                                        height: 100,
+                                        width: double.infinity,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 4,
+                                      ),
+                                      child: Text(
+                                        '📷 기준 예시사진 (탭하여 크게 보기)',
+                                        style: GoogleFonts.notoSansKr(
+                                          color: AppColors.amber500,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 10),
                           Wrap(
                             spacing: 8,
                             runSpacing: 8,

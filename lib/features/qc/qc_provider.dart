@@ -72,6 +72,31 @@ class QcTemplateNotifier extends StateNotifier<QcTemplateState> {
     }
   }
 
+  Future<void> addGlobalTemplate({
+    required String category,
+    required String criteriaText,
+    String? criteriaPhotoUrl,
+    int sortOrder = 0,
+  }) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      await qcService.createGlobalTemplate(
+        category: category,
+        criteriaText: criteriaText,
+        criteriaPhotoUrl: criteriaPhotoUrl,
+        sortOrder: sortOrder,
+      );
+      final restaurantId = _restaurantId;
+      if (restaurantId != null) {
+        await loadTemplates(restaurantId);
+      } else {
+        state = state.copyWith(isLoading: false, clearError: true);
+      }
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: '$e');
+    }
+  }
+
   Future<void> updateTemplate(String id, Map<String, dynamic> data) async {
     final restaurantId = _restaurantId;
     if (restaurantId == null) return;
@@ -120,22 +145,26 @@ final qcTemplateProvider =
 class QcCheckState {
   const QcCheckState({
     this.checks = const [],
+    this.dateRangeChecks = const [],
     this.isLoading = false,
     this.error,
   });
 
   final List<Map<String, dynamic>> checks;
+  final List<Map<String, dynamic>> dateRangeChecks;
   final bool isLoading;
   final String? error;
 
   QcCheckState copyWith({
     List<Map<String, dynamic>>? checks,
+    List<Map<String, dynamic>>? dateRangeChecks,
     bool? isLoading,
     String? error,
     bool clearError = false,
   }) {
     return QcCheckState(
       checks: checks ?? this.checks,
+      dateRangeChecks: dateRangeChecks ?? this.dateRangeChecks,
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
     );
@@ -212,6 +241,29 @@ class QcCheckNotifier extends StateNotifier<QcCheckState> {
       rethrow;
     }
   }
+
+  Future<void> loadDateRange({
+    required String restaurantId,
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    _restaurantId = restaurantId;
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final checks = await qcService.fetchChecks(
+        restaurantId: restaurantId,
+        from: from,
+        to: to,
+      );
+      state = state.copyWith(
+        dateRangeChecks: checks,
+        isLoading: false,
+        clearError: true,
+      );
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: '$e');
+    }
+  }
 }
 
 final qcCheckProvider = StateNotifierProvider<QcCheckNotifier, QcCheckState>(
@@ -221,4 +273,9 @@ final qcCheckProvider = StateNotifierProvider<QcCheckNotifier, QcCheckState>(
 final superAdminQcSummaryProvider = FutureProvider.family
     .autoDispose<List<Map<String, dynamic>>, DateTime>((ref, weekStart) async {
       return qcService.fetchSuperAdminSummary(weekStart: weekStart);
+    });
+
+final globalQcTemplatesProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+      return qcService.fetchGlobalTemplates();
     });

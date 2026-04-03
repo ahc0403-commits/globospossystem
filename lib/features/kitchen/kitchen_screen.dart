@@ -36,6 +36,7 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
   Timer? _clockTimer;
   String? _initializedRestaurantId;
   final Set<String> _flashingOrderIds = <String>{};
+  final Set<String> _completedOrderIds = <String>{};
   final Map<String, Timer> _flashTimers = <String, Timer>{};
   String? _lastError;
   late final ProviderSubscription<KitchenState> _kitchenSub;
@@ -57,13 +58,18 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
       final oldIds = (prev?.orders ?? const <KitchenOrder>[])
           .map((order) => order.orderId)
           .toSet();
-      final newOrders = next.orders.where((order) => !oldIds.contains(order.orderId));
+      final newOrders = next.orders.where(
+        (order) => !oldIds.contains(order.orderId),
+      );
       for (final order in newOrders) {
         _triggerFlash(order.orderId);
       }
     });
 
-    _kitchenErrorSub = ref.listenManual<KitchenState>(kitchenProvider, (prev, next) {
+    _kitchenErrorSub = ref.listenManual<KitchenState>(kitchenProvider, (
+      prev,
+      next,
+    ) {
       final error = next.error;
       if (error != null && error.isNotEmpty && error != _lastError) {
         _lastError = error;
@@ -104,9 +110,36 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
     return switch (status) {
       'pending' => 'preparing',
       'preparing' => 'ready',
-      'ready' => 'pending',
+      'ready' => 'served',
       _ => 'pending',
     };
+  }
+
+  Future<void> _handleItemTap(
+    KitchenNotifier notifier,
+    KitchenOrder order,
+    KitchenItem item,
+  ) async {
+    final nextStatus = _cycleStatus(item.status);
+    final isLastToServe =
+        nextStatus == 'served' &&
+        order.items.every(
+          (current) =>
+              current.itemId == item.itemId || current.status == 'served',
+        );
+
+    if (isLastToServe) {
+      setState(() {
+        _completedOrderIds.add(order.orderId);
+      });
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      if (!mounted) return;
+      setState(() {
+        _completedOrderIds.remove(order.orderId);
+      });
+    }
+
+    await notifier.updateItemStatus(item.itemId, nextStatus);
   }
 
   @override
@@ -143,7 +176,9 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                     builder: (context) {
                       if (kitchenState.isLoading) {
                         return const Center(
-                          child: CircularProgressIndicator(color: AppColors.amber500),
+                          child: CircularProgressIndicator(
+                            color: AppColors.amber500,
+                          ),
                         );
                       }
                       if (kitchenState.error != null) {
@@ -199,17 +234,25 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
 
                       return GridView.builder(
                         padding: const EdgeInsets.all(16),
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 420,
-                          mainAxisSpacing: 14,
-                          crossAxisSpacing: 14,
-                          childAspectRatio: 1.1,
-                        ),
+                        gridDelegate:
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 420,
+                              mainAxisSpacing: 14,
+                              crossAxisSpacing: 14,
+                              childAspectRatio: 1.1,
+                            ),
                         itemCount: kitchenState.orders.length,
                         itemBuilder: (context, index) {
                           final order = kitchenState.orders[index];
-                          final hasPending = order.items.any((item) => item.status == 'pending');
-                          final flashing = _flashingOrderIds.contains(order.orderId);
+                          final hasPending = order.items.any(
+                            (item) => item.status == 'pending',
+                          );
+                          final flashing = _flashingOrderIds.contains(
+                            order.orderId,
+                          );
+                          final completedFlashing = _completedOrderIds.contains(
+                            order.orderId,
+                          );
                           final elapsed = _elapsedLabel(order.createdAt, _now);
 
                           return AnimatedContainer(
@@ -218,7 +261,11 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                               color: AppColors.surface1,
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
-                                color: flashing ? AppColors.amber500 : AppColors.surface2,
+                                color: completedFlashing
+                                    ? AppColors.statusAvailable
+                                    : flashing
+                                    ? AppColors.amber500
+                                    : AppColors.surface2,
                                 width: flashing ? 2.5 : 1,
                               ),
                               boxShadow: [
@@ -238,7 +285,9 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                                     vertical: 10,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: hasPending ? AppColors.amber500 : AppColors.surface2,
+                                    color: hasPending
+                                        ? AppColors.amber500
+                                        : AppColors.surface2,
                                     borderRadius: const BorderRadius.vertical(
                                       top: Radius.circular(16),
                                     ),
@@ -273,14 +322,15 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                                   child: ListView.separated(
                                     padding: const EdgeInsets.all(12),
                                     itemCount: order.items.length,
-                                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                                    separatorBuilder: (_, _) =>
+                                        const SizedBox(height: 8),
                                     itemBuilder: (context, itemIndex) {
                                       final item = order.items[itemIndex];
-                                      final nextStatus = _cycleStatus(item.status);
                                       return InkWell(
-                                        onTap: () => notifier.updateItemStatus(
-                                          item.itemId,
-                                          nextStatus,
+                                        onTap: () => _handleItemTap(
+                                          notifier,
+                                          order,
+                                          item,
                                         ),
                                         borderRadius: BorderRadius.circular(10),
                                         child: Container(
@@ -290,8 +340,12 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                                           ),
                                           decoration: BoxDecoration(
                                             color: AppColors.surface0,
-                                            borderRadius: BorderRadius.circular(10),
-                                            border: Border.all(color: AppColors.surface2),
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                            border: Border.all(
+                                              color: AppColors.surface2,
+                                            ),
                                           ),
                                           child: Row(
                                             children: [
@@ -307,7 +361,8 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                                                 child: Text(
                                                   item.label,
                                                   style: GoogleFonts.notoSansKr(
-                                                    color: AppColors.textPrimary,
+                                                    color:
+                                                        AppColors.textPrimary,
                                                     fontSize: 14,
                                                     fontWeight: FontWeight.w600,
                                                   ),

@@ -69,6 +69,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
   PosTable? _selectedTable;
   int? _selectedGuestCount;
   bool _showOrderPanel = false;
+  int _orderPanelNonce = 0;
   String? _initializedRestaurantId;
   String? _lastOrderError;
   late final ProviderSubscription<OrderState> _orderSub;
@@ -115,6 +116,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
       _selectedTable = table;
       _selectedGuestCount = guestCount;
       _showOrderPanel = true;
+      _orderPanelNonce = DateTime.now().millisecondsSinceEpoch;
     });
     await ref
         .read(orderProvider.notifier)
@@ -307,7 +309,9 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                     },
                     child: _showOrderPanel && selectedTable != null
                         ? _OrderWorkspace(
-                            key: ValueKey<String>('order-${selectedTable.id}'),
+                            key: ValueKey<String>(
+                              'order-${selectedTable.id}-$_orderPanelNonce',
+                            ),
                             table: selectedTable,
                             guestCount: _selectedGuestCount,
                             menuState: menuState,
