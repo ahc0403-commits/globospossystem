@@ -10,6 +10,7 @@ import '../../core/layout/platform_info.dart';
 import '../../core/hardware/printer_service.dart';
 import '../../core/hardware/receipt_builder.dart';
 import '../../main.dart';
+import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
@@ -219,6 +220,8 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Row(
                           children: [
+                            const AppNavBar(),
+                            const SizedBox(width: 10),
                             Text(
                               'CASHIER',
                               style: GoogleFonts.bebasNeue(
@@ -702,7 +705,8 @@ class _SelectedOrderView extends StatelessWidget {
                   height: 64,
                   child: FilledButton(
                     // RULES.md: 결제는 온라인 필수 — 오프라인 시 버튼 비활성화
-                    onPressed: selectedMethod == null || isProcessing || !isOnline
+                    onPressed:
+                        selectedMethod == null || isProcessing || !isOnline
                         ? null
                         : onProcess,
                     style: FilledButton.styleFrom(

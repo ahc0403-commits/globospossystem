@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
     show AuthChangeEvent, AuthException, User;
+import '../../core/services/navigation_history_service.dart';
 import '../../main.dart';
 import 'auth_state.dart';
 
@@ -24,6 +25,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
       if (event == AuthChangeEvent.signedIn && session != null) {
         await _fetchUserProfile(session.user);
       } else if (event == AuthChangeEvent.signedOut) {
+        NavigationHistoryService.instance.clear();
         state = const PosAuthState();
       }
     });
@@ -57,6 +59,17 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         extraPermissions: extraPermissions,
         clearError: true,
       );
+
+      final role = data['role'] as String?;
+      final homeRoute = switch (role) {
+        'super_admin' => '/super-admin',
+        'admin' => '/admin',
+        'waiter' => '/waiter',
+        'kitchen' => '/kitchen',
+        'cashier' => '/cashier',
+        _ => '/login',
+      };
+      NavigationHistoryService.instance.push(homeRoute);
     } catch (_) {
       state = state.copyWith(
         isLoading: false,
@@ -88,6 +101,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
 
   Future<void> logout() async {
     await supabase.auth.signOut();
+    NavigationHistoryService.instance.clear();
     state = const PosAuthState();
   }
 

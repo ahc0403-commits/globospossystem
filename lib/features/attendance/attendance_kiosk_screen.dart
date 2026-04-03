@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/layout/platform_info.dart';
 import '../../core/utils/time_utils.dart';
 import '../../main.dart';
+import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../auth/auth_provider.dart';
 import 'fingerprint_provider.dart';
@@ -234,11 +235,30 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
             Positioned(
               top: 16,
               right: 20,
+              child: Row(
+                children: [
+                  if (_viewState == _KioskViewState.idle) ...[
+                    const AppNavBar(),
+                    const SizedBox(width: 10),
+                  ],
+                  Text(
+                    '${_nowVn.hour.toString().padLeft(2, '0')}:${_nowVn.minute.toString().padLeft(2, '0')}',
+                    style: GoogleFonts.bebasNeue(
+                      color: AppColors.textPrimary,
+                      fontSize: 42,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              top: 16,
+              left: 20,
               child: Text(
-                '${_nowVn.hour.toString().padLeft(2, '0')}:${_nowVn.minute.toString().padLeft(2, '0')}',
+                'KIOSK',
                 style: GoogleFonts.bebasNeue(
-                  color: AppColors.textPrimary,
-                  fontSize: 42,
+                  color: AppColors.textSecondary,
+                  fontSize: 26,
                 ),
               ),
             ),

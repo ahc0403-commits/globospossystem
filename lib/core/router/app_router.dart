@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/services/navigation_history_service.dart';
 import '../../core/utils/permission_utils.dart';
 import '../../features/admin/admin_screen.dart';
 import '../../features/auth/auth_provider.dart';
@@ -37,15 +38,21 @@ GoRouter buildAppRouter(ProviderContainer container) {
       final restaurantId = auth.restaurantId;
       final isLoggedIn = auth.user != null && role != null;
       final location = state.matchedLocation;
+      final fullLocation = state.uri.toString();
+      String? redirectTo;
 
       // 1. 비로그인 → 로그인 화면
       if (!isLoggedIn) {
-        return location == '/login' ? null : '/login';
+        redirectTo = location == '/login' ? null : '/login';
+        NavigationHistoryService.instance.push(redirectTo ?? fullLocation);
+        return redirectTo;
       }
 
       // 2. super_admin + 레스토랑 없음 → 온보딩
       if (role == 'super_admin' && restaurantId == null) {
-        return location == '/onboarding' ? null : '/onboarding';
+        redirectTo = location == '/onboarding' ? null : '/onboarding';
+        NavigationHistoryService.instance.push(redirectTo ?? fullLocation);
+        return redirectTo;
       }
 
       // 3. 역할별 허용 경로 정의
@@ -61,31 +68,41 @@ GoRouter buildAppRouter(ProviderContainer container) {
 
       // 4. 공개 경로에 있으면 → 홈으로
       if (publicRoutes.contains(location)) {
-        return homeRoute;
+        redirectTo = homeRoute;
+        NavigationHistoryService.instance.push(redirectTo);
+        return redirectTo;
       }
 
       // 5. super_admin이 /admin에 있으면 → /super-admin으로 강제
       // 단, /admin/:id 형태(특정 레스토랑 뷰)는 허용
       if (role == 'super_admin' && location == '/admin') {
-        return '/super-admin';
+        redirectTo = '/super-admin';
+        NavigationHistoryService.instance.push(redirectTo);
+        return redirectTo;
       }
 
       // super_admin이 /admin/:restaurantId에 접근하는 건 허용
       if (role == 'super_admin' && location.startsWith('/admin/')) {
+        NavigationHistoryService.instance.push(fullLocation);
         return null;
       }
 
       // 6. admin이 /super-admin에 있으면 → /admin으로 강제
       if (role == 'admin' && location == '/super-admin') {
-        return '/admin';
+        redirectTo = '/admin';
+        NavigationHistoryService.instance.push(redirectTo);
+        return redirectTo;
       }
 
       // 7. /qc-check 접근 제한
       if (location == '/qc-check' &&
           !PermissionUtils.canDoQcCheck(role, auth.extraPermissions)) {
-        return homeRoute;
+        redirectTo = homeRoute;
+        NavigationHistoryService.instance.push(redirectTo);
+        return redirectTo;
       }
 
+      NavigationHistoryService.instance.push(fullLocation);
       return null;
     },
     routes: [

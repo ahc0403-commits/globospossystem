@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../core/utils/time_utils.dart';
 
 import '../../main.dart';
+import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
@@ -413,6 +414,8 @@ class _KitchenTopBar extends ConsumerWidget {
       ),
       child: Row(
         children: [
+          const AppNavBar(),
+          const SizedBox(width: 12),
           Text(
             'KITCHEN',
             style: GoogleFonts.bebasNeue(

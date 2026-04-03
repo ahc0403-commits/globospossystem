@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../main.dart';
+import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/offline_banner.dart';
 import '../admin/providers/menu_provider.dart';
@@ -428,6 +429,8 @@ class _WaiterTopBar extends ConsumerWidget {
       ),
       child: Row(
         children: [
+          const AppNavBar(),
+          const SizedBox(width: 12),
           Text(
             'GLOBOS POS',
             style: GoogleFonts.bebasNeue(

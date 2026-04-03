@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/layout/adaptive_layout.dart';
 import '../../core/layout/web_sidebar_layout.dart';
 import '../../main.dart';
+import '../../widgets/app_nav_bar.dart';
 import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
 import 'tabs/attendance_tab.dart';
@@ -89,24 +90,34 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
             )
           : null,
       topBarTrailing: isSuperAdminView
-          ? Container(
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.statusOccupied.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.statusOccupied),
-              ),
-              child: Text(
-                'SUPER ADMIN MODE',
-                style: GoogleFonts.notoSansKr(
-                  color: AppColors.statusOccupied,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const AppNavBar(),
+                const SizedBox(width: 10),
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.statusOccupied.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.statusOccupied),
+                  ),
+                  child: Text(
+                    'SUPER ADMIN MODE',
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.statusOccupied,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
-              ),
+              ],
             )
-          : null,
+          : const AppNavBar(),
       bottomItems: isSuperAdminView
           ? null
           : [
@@ -184,6 +195,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
           ),
         ),
         actions: [
+          const Padding(
+            padding: EdgeInsets.only(right: 8),
+            child: Center(child: AppNavBar()),
+          ),
           if (isSuperAdminView)
             Container(
               margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),

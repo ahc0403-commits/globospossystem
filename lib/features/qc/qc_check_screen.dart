@@ -11,6 +11,7 @@ import '../../core/layout/platform_info.dart';
 import '../../core/utils/permission_utils.dart';
 import '../../core/utils/time_utils.dart';
 import '../../main.dart';
+import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../auth/auth_provider.dart';
 import 'qc_provider.dart';
@@ -198,6 +199,12 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.surface0,
         elevation: 0,
+        actions: const [
+          Padding(
+            padding: EdgeInsets.only(right: 12),
+            child: Center(child: AppNavBar()),
+          ),
+        ],
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

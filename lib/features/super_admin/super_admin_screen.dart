@@ -8,6 +8,7 @@ import 'dart:io';
 
 import '../../core/constants/app_constants.dart';
 import '../../main.dart';
+import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../auth/auth_provider.dart';
 import '../auth/auth_state.dart';
@@ -97,18 +98,29 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: switch (_tabIndex) {
-                0 => _RestaurantsTab(
-                  state: state,
-                  notifier: notifier,
-                  onGoToAdmin: (restaurantId) =>
-                      context.go('/admin/$restaurantId'),
-                ),
-                1 => _AllReportsTab(state: state, notifier: notifier),
-                2 => const _QcOverviewTab(),
-                3 => const _QcGlobalTemplatesTab(),
-                _ => _SystemSettingsTab(authState: authState),
-              },
+              child: Column(
+                children: [
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: AppNavBar(),
+                  ),
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: switch (_tabIndex) {
+                      0 => _RestaurantsTab(
+                        state: state,
+                        notifier: notifier,
+                        onGoToAdmin: (restaurantId) =>
+                            context.go('/admin/$restaurantId'),
+                      ),
+                      1 => _AllReportsTab(state: state, notifier: notifier),
+                      2 => const _QcOverviewTab(),
+                      3 => const _QcGlobalTemplatesTab(),
+                      _ => _SystemSettingsTab(authState: authState),
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
         ],
