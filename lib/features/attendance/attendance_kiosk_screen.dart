@@ -7,10 +7,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/layout/platform_info.dart';
+import '../../core/services/connectivity_service.dart';
 import '../../core/utils/time_utils.dart';
 import '../../main.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
+import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
 import 'fingerprint_provider.dart';
 
@@ -207,6 +209,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
     final auth = ref.watch(authProvider);
     final restaurantId = auth.restaurantId;
     final kioskState = ref.watch(attendanceKioskProvider);
+    final isOnline = ref.watch(connectivityProvider).asData?.value ?? true;
 
     if (!PlatformInfo.isAndroid) {
       return Scaffold(
@@ -230,51 +233,58 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
     return Scaffold(
       backgroundColor: AppColors.surface0,
       body: SafeArea(
-        child: Stack(
+        child: Column(
           children: [
-            Positioned(
-              top: 16,
-              right: 20,
-              child: Row(
+            const OfflineBanner(),
+            Expanded(
+              child: Stack(
                 children: [
-                  if (_viewState == _KioskViewState.idle) ...[
-                    const AppNavBar(),
-                    const SizedBox(width: 10),
-                  ],
-                  Text(
-                    '${_nowVn.hour.toString().padLeft(2, '0')}:${_nowVn.minute.toString().padLeft(2, '0')}',
-                    style: GoogleFonts.bebasNeue(
-                      color: AppColors.textPrimary,
-                      fontSize: 42,
+                  Positioned(
+                    top: 16,
+                    right: 20,
+                    child: Row(
+                      children: [
+                        if (_viewState == _KioskViewState.idle) ...[
+                          const AppNavBar(),
+                          const SizedBox(width: 10),
+                        ],
+                        Text(
+                          '${_nowVn.hour.toString().padLeft(2, '0')}:${_nowVn.minute.toString().padLeft(2, '0')}',
+                          style: GoogleFonts.bebasNeue(
+                            color: AppColors.textPrimary,
+                            fontSize: 42,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  Positioned(
+                    top: 16,
+                    left: 20,
+                    child: Text(
+                      'KIOSK',
+                      style: GoogleFonts.bebasNeue(
+                        color: AppColors.textSecondary,
+                        fontSize: 26,
+                      ),
+                    ),
+                  ),
+                  Positioned.fill(child: _buildBody(kioskState, isOnline)),
                 ],
               ),
             ),
-            Positioned(
-              top: 16,
-              left: 20,
-              child: Text(
-                'KIOSK',
-                style: GoogleFonts.bebasNeue(
-                  color: AppColors.textSecondary,
-                  fontSize: 26,
-                ),
-              ),
-            ),
-            Positioned.fill(child: _buildBody(kioskState)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildBody(AttendanceKioskState state) {
+  Widget _buildBody(AttendanceKioskState state, bool isOnline) {
     switch (_viewState) {
       case _KioskViewState.idle:
         return _buildIdle(state);
       case _KioskViewState.typeSelect:
-        return _buildTypeSelect();
+        return _buildTypeSelect(isOnline);
       case _KioskViewState.camera:
         return _buildCamera();
       case _KioskViewState.preview:
@@ -351,7 +361,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
     );
   }
 
-  Widget _buildTypeSelect() {
+  Widget _buildTypeSelect(bool isOnline) {
     final selectedName = _selectedStaff?['full_name']?.toString() ?? '-';
 
     return Column(
@@ -373,10 +383,12 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
               width: 220,
               height: 80,
               child: FilledButton(
-                onPressed: () {
-                  _selectedType = 'clock_in';
-                  _goToCamera();
-                },
+                onPressed: !isOnline
+                    ? null
+                    : () {
+                        _selectedType = 'clock_in';
+                        _goToCamera();
+                      },
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.amber500,
                   foregroundColor: AppColors.surface0,
@@ -395,10 +407,12 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
               width: 220,
               height: 80,
               child: OutlinedButton(
-                onPressed: () {
-                  _selectedType = 'clock_out';
-                  _goToCamera();
-                },
+                onPressed: !isOnline
+                    ? null
+                    : () {
+                        _selectedType = 'clock_out';
+                        _goToCamera();
+                      },
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: AppColors.surface2),
                 ),
@@ -414,6 +428,17 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
             ),
           ],
         ),
+        if (!isOnline) ...[
+          const SizedBox(height: 12),
+          Text(
+            '인터넷 연결 후 이용 가능합니다',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.statusOccupied,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
         const SizedBox(height: 24),
         TextButton(
           onPressed: _backToIdle,

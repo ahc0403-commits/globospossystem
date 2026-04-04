@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/tables_service.dart';
 import '../../../main.dart';
 
 class TableOrderSummary {
@@ -56,17 +57,7 @@ class TablesNotifier extends StateNotifier<TablesState> {
   Future<void> fetchTables() async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final response = await supabase
-          .from('tables')
-          .select()
-          .eq('restaurant_id', restaurantId)
-          .order('table_number');
-
-      final tables = response
-          .map<Map<String, dynamic>>(
-            (table) => Map<String, dynamic>.from(table),
-          )
-          .toList();
+      final tables = await tablesService.fetchTables(restaurantId);
 
       final occupiedTableIds = tables
           .where((table) {
@@ -127,11 +118,7 @@ class TablesNotifier extends StateNotifier<TablesState> {
 
   Future<void> addTable(String tableNumber, int seatCount) async {
     try {
-      await supabase.from('tables').insert({
-        'restaurant_id': restaurantId,
-        'table_number': tableNumber,
-        'seat_count': seatCount,
-      });
+      await tablesService.addTable(restaurantId, tableNumber, seatCount);
       await fetchTables();
     } catch (error) {
       state = state.copyWith(error: 'Failed to add table: $error');
@@ -140,7 +127,7 @@ class TablesNotifier extends StateNotifier<TablesState> {
 
   Future<void> deleteTable(String id) async {
     try {
-      await supabase.from('tables').delete().eq('id', id);
+      await tablesService.deleteTable(id);
       await fetchTables();
     } catch (error) {
       state = state.copyWith(error: 'Failed to delete table: $error');

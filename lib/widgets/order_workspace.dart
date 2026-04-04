@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../core/services/connectivity_service.dart';
 import '../features/admin/providers/menu_provider.dart';
 import '../features/order/order_model.dart';
 import '../features/order/order_provider.dart';
@@ -374,7 +375,7 @@ class _MenuBrowser extends StatelessWidget {
   }
 }
 
-class _CurrentOrderPanel extends StatefulWidget {
+class _CurrentOrderPanel extends ConsumerStatefulWidget {
   const _CurrentOrderPanel({
     required this.table,
     required this.guestCount,
@@ -408,10 +409,10 @@ class _CurrentOrderPanel extends StatefulWidget {
   final bool isProcessingPayment;
 
   @override
-  State<_CurrentOrderPanel> createState() => _CurrentOrderPanelState();
+  ConsumerState<_CurrentOrderPanel> createState() => _CurrentOrderPanelState();
 }
 
-class _CurrentOrderPanelState extends State<_CurrentOrderPanel> {
+class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
   String? _selectedPaymentMethod;
 
   String _cycleStatus(String status) {
@@ -425,6 +426,7 @@ class _CurrentOrderPanelState extends State<_CurrentOrderPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final isOnline = ref.watch(connectivityProvider).asData?.value ?? true;
     final formatter = NumberFormat('#,###', 'vi_VN');
     final total = widget.state.cart.fold<double>(
       0,
@@ -703,7 +705,8 @@ class _CurrentOrderPanelState extends State<_CurrentOrderPanel> {
                     onPressed:
                         widget.state.isSubmitting ||
                             (!widget.allowSubmitWithoutCart &&
-                                widget.state.cart.isEmpty)
+                                widget.state.cart.isEmpty) ||
+                            !isOnline
                         ? null
                         : widget.onSendOrder,
                     style: FilledButton.styleFrom(
@@ -739,6 +742,18 @@ class _CurrentOrderPanelState extends State<_CurrentOrderPanel> {
               ],
             ),
           ),
+          if (!isOnline)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                '인터넷 연결이 필요합니다',
+                style: GoogleFonts.notoSansKr(
+                  color: AppColors.statusOccupied,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
           if (canCancelOrder) ...[
             const SizedBox(height: 10),
             SizedBox(

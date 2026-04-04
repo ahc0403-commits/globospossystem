@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import '../../../core/services/attendance_service.dart';
 import '../../../core/services/payroll_service.dart';
 import '../../../core/services/pin_service.dart';
+import '../../../core/utils/time_utils.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../../widgets/pin_dialog.dart';
@@ -32,8 +33,8 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab>
   int _payrollPinFailCount = 0;
   DateTime? _payrollPinLockedUntil;
 
-  DateTime _logFrom = _startOfWeek(DateTime.now());
-  DateTime _logTo = DateTime.now();
+  DateTime _logFrom = _startOfWeek(TimeUtils.nowVietnam());
+  DateTime _logTo = TimeUtils.nowVietnam();
   String _selectedStaffFilter = 'all';
   List<Map<String, dynamic>> _staffList = const [];
   List<Map<String, dynamic>> _logs = const [];
@@ -46,8 +47,8 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab>
   final List<_ShiftRowData> _shiftRows = [];
   bool _isSavingWage = false;
 
-  DateTime _payrollFrom = _startOfWeek(DateTime.now());
-  DateTime _payrollTo = DateTime.now();
+  DateTime _payrollFrom = _startOfWeek(TimeUtils.nowVietnam());
+  DateTime _payrollTo = TimeUtils.nowVietnam();
   bool _isCalculating = false;
   bool _isExporting = false;
   String? _payrollError;
@@ -84,7 +85,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab>
       return;
     }
 
-    final now = DateTime.now();
+    final now = TimeUtils.nowVietnam();
     if (_payrollPinLockedUntil != null &&
         now.isBefore(_payrollPinLockedUntil!)) {
       final remain = _payrollPinLockedUntil!.difference(now).inSeconds;
@@ -130,7 +131,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab>
         setState(() {
           _payrollPinFailCount += 1;
           if (_payrollPinFailCount >= 3) {
-            _payrollPinLockedUntil = DateTime.now().add(
+            _payrollPinLockedUntil = TimeUtils.nowVietnam().add(
               const Duration(seconds: 30),
             );
             _payrollPinFailCount = 0;
@@ -354,7 +355,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab>
         periodEnd: _payrollTo,
       );
 
-      final now = DateTime.now();
+      final now = TimeUtils.nowVietnam();
       final fileName =
           'globos_payroll_${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
 
@@ -446,7 +447,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab>
                     context: context,
                     initialDate: _logFrom,
                     firstDate: DateTime(2020),
-                    lastDate: DateTime.now(),
+                    lastDate: TimeUtils.nowVietnam(),
                   );
                   if (picked != null) {
                     setState(
@@ -468,7 +469,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab>
                     context: context,
                     initialDate: _logTo,
                     firstDate: DateTime(2020),
-                    lastDate: DateTime.now(),
+                    lastDate: TimeUtils.nowVietnam(),
                   );
                   if (picked != null) {
                     setState(() {
@@ -575,9 +576,12 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab>
                   const Divider(height: 1, color: AppColors.surface2),
               itemBuilder: (context, index) {
                 final row = logs[index];
-                final dateTime = DateTime.tryParse(
+                final rawDateTime = DateTime.tryParse(
                   row['logged_at']?.toString() ?? '',
                 );
+                final dateTime = rawDateTime == null
+                    ? null
+                    : TimeUtils.toVietnam(rawDateTime);
                 final user = row['users'];
                 final userName = user is Map<String, dynamic>
                     ? user['full_name']?.toString() ?? '-'
@@ -980,7 +984,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab>
                           context: context,
                           initialDate: _payrollFrom,
                           firstDate: DateTime(2020),
-                          lastDate: DateTime.now(),
+                          lastDate: TimeUtils.nowVietnam(),
                         );
                         if (picked != null) {
                           setState(() {
@@ -1002,7 +1006,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab>
                           context: context,
                           initialDate: _payrollTo,
                           firstDate: DateTime(2020),
-                          lastDate: DateTime.now(),
+                          lastDate: TimeUtils.nowVietnam(),
                         );
                         if (picked != null) {
                           setState(() {

@@ -4,6 +4,7 @@ import 'package:excel/excel.dart';
 
 import '../../main.dart';
 import 'attendance_service.dart';
+import '../utils/time_utils.dart';
 
 class DailyRecord {
   const DailyRecord({
@@ -73,12 +74,14 @@ class PayrollService {
       final userId = entry.key;
       final userLogs = entry.value;
       userLogs.sort((a, b) {
-        final at =
-            DateTime.tryParse(a['logged_at']?.toString() ?? '') ??
-            DateTime.fromMillisecondsSinceEpoch(0);
-        final bt =
-            DateTime.tryParse(b['logged_at']?.toString() ?? '') ??
-            DateTime.fromMillisecondsSinceEpoch(0);
+        final atRaw = DateTime.tryParse(a['logged_at']?.toString() ?? '');
+        final btRaw = DateTime.tryParse(b['logged_at']?.toString() ?? '');
+        final at = atRaw == null
+            ? DateTime.fromMillisecondsSinceEpoch(0)
+            : TimeUtils.toVietnam(atRaw);
+        final bt = btRaw == null
+            ? DateTime.fromMillisecondsSinceEpoch(0)
+            : TimeUtils.toVietnam(btRaw);
         return at.compareTo(bt);
       });
 
@@ -156,8 +159,9 @@ class PayrollService {
 
     for (final row in logs) {
       final type = row['type']?.toString().toLowerCase();
-      final dt = DateTime.tryParse(row['logged_at']?.toString() ?? '');
-      if (dt == null) continue;
+      final raw = DateTime.tryParse(row['logged_at']?.toString() ?? '');
+      if (raw == null) continue;
+      final dt = TimeUtils.toVietnam(raw);
 
       if (type == 'clock_in') {
         if (pendingIn != null) {
