@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
 
 import '../../core/constants/app_constants.dart';
@@ -36,6 +38,7 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
     if (!_initialized) {
       _initialized = true;
       Future.microtask(() async {
+        await notifier.loadBrands();
         await notifier.loadAllRestaurants();
         await notifier.loadAllReports();
       });
@@ -661,6 +664,11 @@ class _RestaurantsTab extends StatelessWidget {
   final SuperAdminNotifier notifier;
   final void Function(String restaurantId) onGoToAdmin;
 
+  Future<void> _openOfficeSystem() async {
+    final uri = Uri.parse(AppConstants.officeSystemUrl);
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -676,6 +684,12 @@ class _RestaurantsTab extends StatelessWidget {
               ),
             ),
             const Spacer(),
+            OutlinedButton.icon(
+              onPressed: _openOfficeSystem,
+              icon: const Icon(Icons.business),
+              label: const Text('Office System으로 이동'),
+            ),
+            const SizedBox(width: 8),
             FilledButton.icon(
               onPressed: () =>
                   _showRestaurantSheet(context, notifier: notifier),
@@ -689,16 +703,68 @@ class _RestaurantsTab extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
+        Row(
+          children: [
+            Text(
+              '브랜드 필터',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(width: 8),
+            DropdownButton<String?>(
+              value: state.selectedBrandId,
+              dropdownColor: AppColors.surface1,
+              hint: Text(
+                '전체',
+                style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+              ),
+              items: [
+                DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text(
+                    '전체',
+                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                  ),
+                ),
+                DropdownMenuItem<String?>(
+                  value: kUnclassifiedBrandFilter,
+                  child: Text(
+                    '미분류',
+                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                  ),
+                ),
+                ...state.brands.map((brand) {
+                  final id = brand['id']?.toString();
+                  final code = brand['code']?.toString() ?? '-';
+                  final name = brand['name']?.toString() ?? '-';
+                  return DropdownMenuItem<String?>(
+                    value: id,
+                    child: Text(
+                      '$name ($code)',
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  );
+                }),
+              ],
+              onChanged: notifier.setBrandFilter,
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
         Expanded(
           child: state.isLoading && state.restaurants.isEmpty
               ? const Center(
                   child: CircularProgressIndicator(color: AppColors.amber500),
                 )
               : ListView.separated(
-                  itemCount: state.restaurants.length,
+                  itemCount: state.filteredRestaurants.length,
                   separatorBuilder: (_, _) => const SizedBox(height: 10),
                   itemBuilder: (context, index) {
-                    final restaurant = state.restaurants[index];
+                    final restaurant = state.filteredRestaurants[index];
                     return Container(
                       decoration: BoxDecoration(
                         color: AppColors.surface1,
@@ -734,6 +800,14 @@ class _RestaurantsTab extends StatelessWidget {
                                   style: GoogleFonts.notoSansKr(
                                     color: AppColors.textSecondary,
                                     fontSize: 12,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '브랜드: ${restaurant.brandName ?? '미분류'}',
+                                  style: GoogleFonts.notoSansKr(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 11,
                                   ),
                                 ),
                               ],
@@ -811,6 +885,7 @@ class _RestaurantsTab extends StatelessWidget {
       text: initial?.perPersonCharge?.toString() ?? '',
     );
     String operationMode = initial?.operationMode ?? 'standard';
+    String? selectedBrandId = initial?.brandId;
 
     Future<void> save() async {
       final name = nameController.text.trim();
@@ -831,6 +906,7 @@ class _RestaurantsTab extends StatelessWidget {
               slug: slug,
               operationMode: operationMode,
               perPersonCharge: charge,
+              brandId: selectedBrandId,
             )
           : await notifier.addRestaurant(
               name: name,
@@ -838,6 +914,7 @@ class _RestaurantsTab extends StatelessWidget {
               slug: slug,
               operationMode: operationMode,
               perPersonCharge: charge,
+              brandId: selectedBrandId,
             );
 
       if (success && context.mounted) {
@@ -919,6 +996,31 @@ class _RestaurantsTab extends StatelessWidget {
                       }
                     },
                   ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String?>(
+                    initialValue: selectedBrandId,
+                    dropdownColor: AppColors.surface1,
+                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    decoration: const InputDecoration(labelText: 'Brand'),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('미분류'),
+                      ),
+                      ...state.brands.map((brand) {
+                        final id = brand['id']?.toString();
+                        final name = brand['name']?.toString() ?? '-';
+                        final code = brand['code']?.toString() ?? '-';
+                        return DropdownMenuItem<String?>(
+                          value: id,
+                          child: Text('$name ($code)'),
+                        );
+                      }),
+                    ],
+                    onChanged: (value) {
+                      setModalState(() => selectedBrandId = value);
+                    },
+                  ),
                   if (operationMode == 'buffet' ||
                       operationMode == 'hybrid') ...[
                     const SizedBox(height: 10),
@@ -994,16 +1096,60 @@ class _RestaurantsTab extends StatelessWidget {
   }
 }
 
-class _AllReportsTab extends StatelessWidget {
+class _AllReportsTab extends StatefulWidget {
   const _AllReportsTab({required this.state, required this.notifier});
 
   final SuperAdminState state;
   final SuperAdminNotifier notifier;
 
   @override
+  State<_AllReportsTab> createState() => _AllReportsTabState();
+}
+
+class _AllReportsTabState extends State<_AllReportsTab> {
+  bool _groupByBrand = false;
+
+  Future<void> _openOfficeKpi() async {
+    final uri = Uri.parse(AppConstants.officeKpiUrl);
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  List<_BrandRevenueRow> _brandRows(
+    List<SuperAdminRestaurantReport> rows,
+    List<SuperRestaurant> restaurants,
+  ) {
+    final map = <String, _BrandRevenueRow>{};
+    for (final row in rows) {
+      final restaurant = restaurants
+          .where((r) => r.id == row.restaurantId)
+          .cast<SuperRestaurant?>()
+          .firstWhere((r) => r != null, orElse: () => null);
+      final key = restaurant?.brandId ?? kUnclassifiedBrandFilter;
+      final name = restaurant?.brandName ?? '미분류';
+      final current = map[key];
+      if (current == null) {
+        map[key] = _BrandRevenueRow(name: name, total: row.total);
+      } else {
+        map[key] = _BrandRevenueRow(
+          name: name,
+          total: current.total + row.total,
+        );
+      }
+    }
+    final rowsSorted = map.values.toList();
+    rowsSorted.sort((a, b) => b.total.compareTo(a.total));
+    return rowsSorted;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final state = widget.state;
+    final notifier = widget.notifier;
     final summary = state.reportSummary;
     final currency = NumberFormat('#,###', 'vi_VN');
+    final brandRows = summary == null
+        ? const <_BrandRevenueRow>[]
+        : _brandRows(summary.rows, state.restaurants);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1050,6 +1196,31 @@ class _AllReportsTab extends StatelessWidget {
                 await notifier.loadAllReports(selectedRestaurantId: value?.id);
               },
             ),
+            DropdownButton<bool>(
+              value: _groupByBrand,
+              dropdownColor: AppColors.surface1,
+              items: [
+                DropdownMenuItem<bool>(
+                  value: false,
+                  child: Text(
+                    '레스토랑별',
+                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                  ),
+                ),
+                DropdownMenuItem<bool>(
+                  value: true,
+                  child: Text(
+                    '브랜드 그룹',
+                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                  ),
+                ),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() => _groupByBrand = value);
+                }
+              },
+            ),
             OutlinedButton(
               onPressed: () async {
                 final picked = await showDateRangePicker(
@@ -1068,6 +1239,11 @@ class _AllReportsTab extends StatelessWidget {
               child: Text(
                 '${DateFormat('dd/MM/yyyy').format(state.reportStart)} - ${DateFormat('dd/MM/yyyy').format(state.reportEnd)}',
               ),
+            ),
+            OutlinedButton.icon(
+              onPressed: _openOfficeKpi,
+              icon: const Icon(Icons.dashboard_customize),
+              label: const Text('상세 리포트는 Office에서 확인'),
             ),
           ],
         ),
@@ -1091,6 +1267,10 @@ class _AllReportsTab extends StatelessWidget {
               ),
             ],
           ),
+        if (brandRows.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _BrandRevenueChart(rows: brandRows),
+        ],
         const SizedBox(height: 16),
         Expanded(
           child: summary == null || summary.rows.isEmpty
@@ -1110,32 +1290,63 @@ class _AllReportsTab extends StatelessWidget {
                   ),
                   child: Column(
                     children: [
-                      _reportHeader(),
+                      _reportHeader(
+                        label: _groupByBrand ? 'Brand' : 'Restaurant',
+                      ),
                       Expanded(
-                        child: ListView.builder(
-                          itemCount: summary.rows.length,
-                          itemBuilder: (context, index) {
-                            final row = summary.rows[index];
-                            final bg = index.isEven
-                                ? AppColors.surface1
-                                : AppColors.surface0;
-                            return Container(
-                              color: bg,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 10,
+                        child: _groupByBrand
+                            ? ListView.builder(
+                                itemCount: brandRows.length,
+                                itemBuilder: (context, index) {
+                                  final row = brandRows[index];
+                                  final bg = index.isEven
+                                      ? AppColors.surface1
+                                      : AppColors.surface0;
+                                  return Container(
+                                    color: bg,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        _cell(row.name, flex: 3),
+                                        _cell('-'),
+                                        _cell('-'),
+                                        _cell('₫${currency.format(row.total)}'),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              )
+                            : ListView.builder(
+                                itemCount: summary.rows.length,
+                                itemBuilder: (context, index) {
+                                  final row = summary.rows[index];
+                                  final bg = index.isEven
+                                      ? AppColors.surface1
+                                      : AppColors.surface0;
+                                  return Container(
+                                    color: bg,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        _cell(row.restaurantName, flex: 3),
+                                        _cell(
+                                          '₫${currency.format(row.dineIn)}',
+                                        ),
+                                        _cell(
+                                          '₫${currency.format(row.delivery)}',
+                                        ),
+                                        _cell('₫${currency.format(row.total)}'),
+                                      ],
+                                    ),
+                                  );
+                                },
                               ),
-                              child: Row(
-                                children: [
-                                  _cell(row.restaurantName, flex: 3),
-                                  _cell('₫${currency.format(row.dineIn)}'),
-                                  _cell('₫${currency.format(row.delivery)}'),
-                                  _cell('₫${currency.format(row.total)}'),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
                       ),
                     ],
                   ),
@@ -1175,7 +1386,7 @@ class _AllReportsTab extends StatelessWidget {
     );
   }
 
-  Widget _reportHeader() {
+  Widget _reportHeader({required String label}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: const BoxDecoration(
@@ -1183,7 +1394,7 @@ class _AllReportsTab extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _cell('Restaurant', flex: 3, bold: true),
+          _cell(label, flex: 3, bold: true),
           _cell('Dine-in', bold: true),
           _cell('Delivery', bold: true),
           _cell('Total', bold: true),
@@ -1201,6 +1412,88 @@ class _AllReportsTab extends StatelessWidget {
           color: AppColors.textPrimary,
           fontSize: 12,
           fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+        ),
+      ),
+    );
+  }
+}
+
+class _BrandRevenueRow {
+  const _BrandRevenueRow({required this.name, required this.total});
+
+  final String name;
+  final double total;
+}
+
+class _BrandRevenueChart extends StatelessWidget {
+  const _BrandRevenueChart({required this.rows});
+
+  final List<_BrandRevenueRow> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxY = rows
+        .map((e) => e.total)
+        .fold<double>(0, (a, b) => a > b ? a : b);
+    return Container(
+      height: 260,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: BarChart(
+        BarChartData(
+          maxY: maxY <= 0 ? 1 : maxY * 1.2,
+          alignment: BarChartAlignment.spaceAround,
+          gridData: const FlGridData(show: true),
+          borderData: FlBorderData(show: false),
+          titlesData: FlTitlesData(
+            topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            rightTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            leftTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: true),
+            ),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                getTitlesWidget: (value, meta) {
+                  final index = value.toInt();
+                  if (index < 0 || index >= rows.length) {
+                    return const SizedBox.shrink();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      rows[index].name,
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textSecondary,
+                        fontSize: 10,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+          barGroups: [
+            for (var i = 0; i < rows.length; i++)
+              BarChartGroupData(
+                x: i,
+                barRods: [
+                  BarChartRodData(
+                    toY: rows[i].total,
+                    color: AppColors.amber500,
+                    width: 18,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ],
+              ),
+          ],
         ),
       ),
     );

@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../main.dart';
 
+const kUnclassifiedBrandFilter = '__unclassified__';
+
 class SuperRestaurant {
   const SuperRestaurant({
     required this.id,
@@ -12,6 +14,9 @@ class SuperRestaurant {
     required this.perPersonCharge,
     required this.isActive,
     required this.createdAt,
+    this.brandId,
+    this.brandName,
+    this.brandCode,
   });
 
   final String id;
@@ -22,6 +27,9 @@ class SuperRestaurant {
   final double? perPersonCharge;
   final bool isActive;
   final DateTime createdAt;
+  final String? brandId;
+  final String? brandName;
+  final String? brandCode;
 
   factory SuperRestaurant.fromJson(Map<String, dynamic> json) {
     final rawCharge = json['per_person_charge'];
@@ -36,12 +44,16 @@ class SuperRestaurant {
       name: json['name']?.toString() ?? '',
       slug: json['slug']?.toString() ?? '',
       address: json['address']?.toString() ?? '',
-      operationMode: json['operation_mode']?.toString().toLowerCase() ?? 'standard',
+      operationMode:
+          json['operation_mode']?.toString().toLowerCase() ?? 'standard',
       perPersonCharge: charge,
       isActive: json['is_active'] == true,
       createdAt: createdAtRaw != null
           ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
           : DateTime.now(),
+      brandId: json['brand_id']?.toString(),
+      brandName: (json['brands'] as Map<String, dynamic>?)?['name']?.toString(),
+      brandCode: (json['brands'] as Map<String, dynamic>?)?['code']?.toString(),
     );
   }
 }
@@ -79,6 +91,8 @@ class SuperAdminReportSummary {
 class SuperAdminState {
   const SuperAdminState({
     this.restaurants = const [],
+    this.brands = const [],
+    this.selectedBrandId,
     this.selectedRestaurant,
     this.reportSummary,
     required this.reportStart,
@@ -88,6 +102,8 @@ class SuperAdminState {
   });
 
   final List<SuperRestaurant> restaurants;
+  final List<Map<String, dynamic>> brands;
+  final String? selectedBrandId;
   final SuperRestaurant? selectedRestaurant;
   final SuperAdminReportSummary? reportSummary;
   final DateTime reportStart;
@@ -95,8 +111,21 @@ class SuperAdminState {
   final bool isLoading;
   final String? error;
 
+  /// Returns restaurants filtered by selected brand (or all if none selected)
+  List<SuperRestaurant> get filteredRestaurants {
+    if (selectedBrandId == null) return restaurants;
+    if (selectedBrandId == kUnclassifiedBrandFilter) {
+      return restaurants
+          .where((r) => r.brandId == null || r.brandId!.isEmpty)
+          .toList();
+    }
+    return restaurants.where((r) => r.brandId == selectedBrandId).toList();
+  }
+
   SuperAdminState copyWith({
     List<SuperRestaurant>? restaurants,
+    List<Map<String, dynamic>>? brands,
+    String? selectedBrandId,
     SuperRestaurant? selectedRestaurant,
     SuperAdminReportSummary? reportSummary,
     DateTime? reportStart,
@@ -106,13 +135,20 @@ class SuperAdminState {
     bool clearSelectedRestaurant = false,
     bool clearReportSummary = false,
     bool clearError = false,
+    bool clearBrandFilter = false,
   }) {
     return SuperAdminState(
       restaurants: restaurants ?? this.restaurants,
+      brands: brands ?? this.brands,
+      selectedBrandId: clearBrandFilter
+          ? null
+          : (selectedBrandId ?? this.selectedBrandId),
       selectedRestaurant: clearSelectedRestaurant
           ? null
           : (selectedRestaurant ?? this.selectedRestaurant),
-      reportSummary: clearReportSummary ? null : (reportSummary ?? this.reportSummary),
+      reportSummary: clearReportSummary
+          ? null
+          : (reportSummary ?? this.reportSummary),
       reportStart: reportStart ?? this.reportStart,
       reportEnd: reportEnd ?? this.reportEnd,
       isLoading: isLoading ?? this.isLoading,
@@ -133,14 +169,45 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
   Future<void> loadAllRestaurants() async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final response = await supabase.from('restaurants').select().order('created_at', ascending: false);
+      final response = await supabase
+          .from('restaurants')
+          .select('*, brands(name, code)')
+          .order('created_at', ascending: false);
       final restaurants = response
-          .map<SuperRestaurant>((row) => SuperRestaurant.fromJson(Map<String, dynamic>.from(row)))
+          .map<SuperRestaurant>(
+            (row) => SuperRestaurant.fromJson(Map<String, dynamic>.from(row)),
+          )
           .toList();
-      state = state.copyWith(restaurants: restaurants, isLoading: false, clearError: true);
+      state = state.copyWith(
+        restaurants: restaurants,
+        isLoading: false,
+        clearError: true,
+      );
     } catch (error) {
-      state = state.copyWith(isLoading: false, error: 'Failed to load restaurants: $error');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to load restaurants: $error',
+      );
     }
+  }
+
+  Future<void> loadBrands() async {
+    try {
+      final response = await supabase
+          .from('brands')
+          .select('id, code, name')
+          .order('name', ascending: true);
+      state = state.copyWith(brands: List<Map<String, dynamic>>.from(response));
+    } catch (_) {
+      // brands 로드 실패는 치명적이지 않음 — 필터 없이 계속
+    }
+  }
+
+  void setBrandFilter(String? brandId) {
+    state = state.copyWith(
+      selectedBrandId: brandId,
+      clearBrandFilter: brandId == null,
+    );
   }
 
   Future<bool> addRestaurant({
@@ -149,6 +216,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     required String slug,
     required String operationMode,
     required double? perPersonCharge,
+    String? brandId,
   }) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
@@ -158,12 +226,16 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         'slug': slug,
         'operation_mode': operationMode.toLowerCase(),
         'per_person_charge': perPersonCharge,
+        'brand_id': brandId,
         'is_active': true,
       });
       await loadAllRestaurants();
       return true;
     } catch (error) {
-      state = state.copyWith(isLoading: false, error: 'Failed to create restaurant: $error');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to create restaurant: $error',
+      );
       return false;
     }
   }
@@ -175,6 +247,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     required String slug,
     required String operationMode,
     required double? perPersonCharge,
+    String? brandId,
   }) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
@@ -186,12 +259,16 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
             'slug': slug,
             'operation_mode': operationMode.toLowerCase(),
             'per_person_charge': perPersonCharge,
+            'brand_id': brandId,
           })
           .eq('id', id);
       await loadAllRestaurants();
       return true;
     } catch (error) {
-      state = state.copyWith(isLoading: false, error: 'Failed to update restaurant: $error');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to update restaurant: $error',
+      );
       return false;
     }
   }
@@ -199,11 +276,17 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
   Future<bool> deactivateRestaurant(String id) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      await supabase.from('restaurants').update({'is_active': false}).eq('id', id);
+      await supabase
+          .from('restaurants')
+          .update({'is_active': false})
+          .eq('id', id);
       await loadAllRestaurants();
       return true;
     } catch (error) {
-      state = state.copyWith(isLoading: false, error: 'Failed to deactivate restaurant: $error');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to deactivate restaurant: $error',
+      );
       return false;
     }
   }
@@ -299,21 +382,28 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         }
       }
 
-      final reportRows = accumulators.values
-          .map(
-            (value) => SuperAdminRestaurantReport(
-              restaurantId: value.restaurantId,
-              restaurantName: value.restaurantName,
-              dineIn: value.dineIn,
-              delivery: value.delivery,
-              total: value.dineIn + value.delivery,
-            ),
-          )
-          .toList()
-        ..sort((a, b) => b.total.compareTo(a.total));
+      final reportRows =
+          accumulators.values
+              .map(
+                (value) => SuperAdminRestaurantReport(
+                  restaurantId: value.restaurantId,
+                  restaurantName: value.restaurantName,
+                  dineIn: value.dineIn,
+                  delivery: value.delivery,
+                  total: value.dineIn + value.delivery,
+                ),
+              )
+              .toList()
+            ..sort((a, b) => b.total.compareTo(a.total));
 
-      final dineInTotal = reportRows.fold<double>(0, (sum, row) => sum + row.dineIn);
-      final deliveryTotal = reportRows.fold<double>(0, (sum, row) => sum + row.delivery);
+      final dineInTotal = reportRows.fold<double>(
+        0,
+        (sum, row) => sum + row.dineIn,
+      );
+      final deliveryTotal = reportRows.fold<double>(
+        0,
+        (sum, row) => sum + row.delivery,
+      );
 
       state = state.copyWith(
         reportSummary: SuperAdminReportSummary(
@@ -326,7 +416,10 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         clearError: true,
       );
     } catch (error) {
-      state = state.copyWith(isLoading: false, error: 'Failed to load reports: $error');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to load reports: $error',
+      );
     }
   }
 }
@@ -347,6 +440,7 @@ class _Accumulator {
   double delivery = 0;
 }
 
-final superAdminProvider = StateNotifierProvider<SuperAdminNotifier, SuperAdminState>(
-  (ref) => SuperAdminNotifier(),
-);
+final superAdminProvider =
+    StateNotifierProvider<SuperAdminNotifier, SuperAdminState>(
+      (ref) => SuperAdminNotifier(),
+    );
