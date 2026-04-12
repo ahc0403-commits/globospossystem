@@ -558,7 +558,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                                               ),
                                             ],
                                             totalAmount: 10000,
-                                            paymentMethod: 'cash',
+                                            paymentMethod: 'CASH',
                                             paidAt: DateTime.now(),
                                           );
                                       final result = await printerNotifier

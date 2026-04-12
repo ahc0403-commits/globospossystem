@@ -208,6 +208,7 @@ class _MenuBrowser extends StatelessWidget {
     }
 
     return Container(
+      key: const Key('menu_root'),
       color: AppColors.surface0,
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -310,6 +311,7 @@ class _MenuBrowser extends StatelessWidget {
                       };
 
                       return Container(
+                        key: index == 0 ? const Key('menu_first_item') : null,
                         decoration: BoxDecoration(
                           color: AppColors.surface1,
                           borderRadius: BorderRadius.circular(12),
@@ -523,6 +525,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
         widget.state.cart.isEmpty;
 
     return Container(
+      key: const Key('orders_root'),
       decoration: const BoxDecoration(
         color: AppColors.surface1,
         border: Border(left: BorderSide(color: AppColors.surface2)),
@@ -612,6 +615,37 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
               ],
             ],
           ),
+          if (widget.state.activeOrder != null && !widget.state.isSubmitting) ...[
+            const SizedBox(height: 6),
+            Container(
+              key: const Key('order_create_success_banner'),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.statusAvailable.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.check_circle_outline,
+                    color: AppColors.statusAvailable,
+                    size: 12,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    key: const Key('latest_order_number_text'),
+                    widget.state.activeOrder!.id.length >= 8
+                        ? widget.state.activeOrder!.id.substring(0, 8)
+                        : widget.state.activeOrder!.id,
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.statusAvailable,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           Expanded(
             child: ListView(
@@ -863,6 +897,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: FilledButton(
+                    key: const Key('cart_submit_order'),
                     onPressed:
                         widget.state.isSubmitting ||
                             (!widget.allowSubmitWithoutCart &&
@@ -952,10 +987,9 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
               spacing: 8,
               runSpacing: 8,
               children: const [
-                _PaymentMethodTag(method: 'cash', label: 'CASH'),
-                _PaymentMethodTag(method: 'card', label: 'CARD'),
-                _PaymentMethodTag(method: 'pay', label: 'PAY'),
-                _PaymentMethodTag(method: 'service', label: 'SERVICE'),
+                _PaymentMethodTag(method: 'CASH', label: 'Cash'),
+                _PaymentMethodTag(method: 'CREDITCARD', label: 'Card'),
+                _PaymentMethodTag(method: 'OTHER', label: 'E-Pay'),
               ].map((tag) {
                 final selected = _selectedPaymentMethod == tag.method;
                 return ChoiceChip(

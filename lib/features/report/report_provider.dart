@@ -201,10 +201,18 @@ class ReportNotifier extends StateNotifier<ReportState> {
           case 'cash':
             cashTotal += amount;
             accumulator.cash += amount;
-          case 'card':
+          case 'creditcard':
+          case 'atm':
+          case 'banktransfer':
             cardTotal += amount;
             accumulator.card += amount;
-          case 'pay':
+          case 'momo':
+          case 'zalopay':
+          case 'vnpay':
+          case 'shopeepay':
+          case 'voucher':
+          case 'creditsale':
+          case 'other':
             payTotal += amount;
             accumulator.pay += amount;
         }

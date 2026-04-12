@@ -180,7 +180,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       totalAmount: order.totalAmount,
       paymentMethod: method,
       paidAt: DateTime.now(),
-      isService: method == 'service',
+      isService: false,
     );
 
     final result = await ref.read(printerProvider.notifier).print(bytes);
@@ -207,6 +207,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     final isOnline = ref.watch(connectivityProvider).asData?.value ?? true;
 
     return Scaffold(
+      key: const Key('cashier_root'),
       backgroundColor: AppColors.surface0,
       body: Column(
         children: [
@@ -251,6 +252,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                   : () => _showTodaySummaryDialog(storeId),
                             ),
                             IconButton(
+                              key: const Key('logout_button'),
                               icon: const Icon(
                                 Icons.logout,
                                 color: AppColors.textSecondary,
@@ -290,6 +292,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                       paymentState.selectedOrder?.orderId ==
                                       order.orderId;
                                   return InkWell(
+                                    key: index == 0
+                                        ? const Key('payment_first_candidate')
+                                        : null,
                                     onTap: () {
                                       setState(() => _selectedMethod = null);
                                       notifier.selectOrder(order);
@@ -457,6 +462,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                           duration: const Duration(milliseconds: 240),
                           child: Center(
                             child: Container(
+                              key: const Key('payment_success_banner'),
                               width: 180,
                               height: 180,
                               decoration: BoxDecoration(
@@ -723,6 +729,7 @@ class _SelectedOrderView extends StatelessWidget {
                   width: double.infinity,
                   height: 64,
                   child: FilledButton(
+                    key: const Key('payment_submit_button'),
                     // RULES.md: 결제는 온라인 필수 — 오프라인 시 버튼 비활성화
                     onPressed:
                         selectedMethod == null || isProcessing || !isOnline
