@@ -1,0 +1,15 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://apitest.wetax.com.vn/api/wtx/pa/v1/pos/invoices-status",
+    "body": {"data": [{"ref_id": "019d7fed-d105-7089-9650-5aa2f2799c74"}]}
+  },
+  "response": {
+    "http_status": 400,
+    "body": {
+      "status": {"success": false, "message": "must not be empty"},
+      "data": ""
+    }
+  },
+  "notes": "PDF wrapper shape rejected — same as initial audit. 'data' key is ignored by server; 'invoices' is the correct key."
+}

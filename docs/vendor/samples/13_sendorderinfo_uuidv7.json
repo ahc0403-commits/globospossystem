@@ -1,0 +1,40 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://apitest.wetax.com.vn/api/wtx/pa/v1/pos/sendOrderInfo",
+    "body": {
+      "bills": [{
+        "ref_id": "019d7fed-d105-7089-9650-5aa2f2799c74",
+        "store_code": "0319388179",
+        "store_name": "GLOBOSVN Test Store",
+        "order_date": "20260412",
+        "order_time": "202604121330",
+        "pos_number": 1,
+        "order_id": 2001,
+        "trans_type": 1,
+        "payment_method": "CASH",
+        "list_product": [
+          {
+            "item_code": "PHO001",
+            "item_name": "Pho Bo",
+            "unit_price": 80000,
+            "quantity": 1,
+            "uom": "EA",
+            "total_amount": 80000,
+            "vat_rate": 8,
+            "vat_amount": 6400,
+            "paying_amount": 86400
+          }
+        ]
+      }]
+    }
+  },
+  "response": {
+    "http_status": 200,
+    "body": {"status": {"success": true, "message": "Success"}, "data": ""}
+  },
+  "notes": {
+    "ref_id_format": "UUIDv7 (019d7fed-d105-7089-9650-5aa2f2799c74), version=7, variant=9 (10xx)",
+    "result": "Accepted — server does not reject UUID format ref_id"
+  }
+}

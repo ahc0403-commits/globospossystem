@@ -1,0 +1,25 @@
+{
+  "request": {"method": "GET", "url": "https://apitest.wetax.com.vn/api/wtx/pa/v1/commons/payment-methods"},
+  "response": {
+    "http_status": 200,
+    "body": {
+      "status": {"success": true, "message": "Success"},
+      "data": [
+        {"code": "TM/CK", "description": "Tiền mặt/chuyển khoản"},
+        {"code": "TM", "description": "Tiền mặt"},
+        {"code": "CK", "description": "Chuyển khoản"},
+        {"code": "TT", "description": "Thanh toán TT"},
+        {"code": "LC", "description": "Thanh toán LC"},
+        {"code": "Không thu tiền", "description": "Không thu tiền"},
+        {"code": "KTT", "description": "Không thu tiền"},
+        {"code": "CC", "description": "Thẻ tín dụng"},
+        {"code": "HDDT", "description": "Thanh toán HĐĐT"},
+        {"code": "BT", "description": "Thanh toán bù trừ"}
+      ]
+    }
+  },
+  "notes": {
+    "UR-11": "RESOLVED — commons/payment-methods codes (TM, CK, TM/CK, etc.) are completely different from sendOrderInfo enum (CASH, CREDITCARD, etc.). These are TWO SEPARATE classification systems. Commons are for invoice display; sendOrderInfo enum is for POS dispatch.",
+    "UR-19": "PARTIALLY RESOLVED — sendOrderInfo accepted 'CASH' directly. Commons codes like 'TM' are not used in sendOrderInfo."
+  }
+}

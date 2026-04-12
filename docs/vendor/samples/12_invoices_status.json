@@ -1,0 +1,24 @@
+{
+  "request_invoices_key": {
+    "method": "POST",
+    "url": "https://apitest.wetax.com.vn/api/wtx/pa/v1/pos/invoices-status",
+    "body": {"invoices": ["GLOBOS-TEST-20260412110521-001"]}
+  },
+  "response_invoices_key": {
+    "http_status": 400,
+    "body": {"status": {"success": false, "message": "Cannot invoke \"java.util.UUID.toString()\" because the return value of \"com.kosign.wetax.domain.pos.POSSaleMaster.getGuid()\" is null"}, "data": ""}
+  },
+  "request_data_key": {
+    "body": {"data": [{"ref_id": "GLOBOS-TEST-20260412110521-001"}]}
+  },
+  "response_data_key": {
+    "http_status": 400,
+    "body": {"status": {"success": false, "message": "must not be empty"}, "data": ""}
+  },
+  "notes": {
+    "UR-08": "RESOLVED — 'invoices' is the correct wrapper key (accepted, though NPE on lookup). 'data' key returns 'must not be empty' (server ignores it).",
+    "UR-09": "UNRESOLVABLE — cannot confirm error_message field presence because our ref_id has no matching order GUID in the system. The NPE suggests ref_id format mismatch (server may expect UUID format).",
+    "UR-10": "RESOLVED — response status pattern is {success: bool, message: string}, NOT {code: string, message: string} as OpenAPI documented. Matches the PDF sample pattern.",
+    "server_bug": "NPE when looking up ref_id — server expects internal GUID, not our ref_id format. This may mean sendOrderInfo does not store ref_id in a way invoices-status can look up immediately."
+  }
+}

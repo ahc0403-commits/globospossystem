@@ -1,0 +1,27 @@
+{
+  "request": {"method": "GET", "url": "https://apitest.wetax.com.vn/api/wtx/pa/v1/seller-info", "headers": {"Authorization": "Bearer [JWT]"}},
+  "response": {
+    "http_status": 200,
+    "body_summary": {
+      "status": {"success": true, "message": "Success"},
+      "data": {
+        "declaration": {"register_date": "2024-03-29", "status": "5", "name": "Accepted"},
+        "shops_count": 37,
+        "end_point": "webcashvn",
+        "top_level_keys": ["declaration", "shops", "end_point"],
+        "pos_key": "NOT PRESENT in declaration",
+        "top_level_template": "NOT PRESENT",
+        "globos_shop": {
+          "shop_code": "0319388179",
+          "using_templates": ["1C26MTT", "1C26TKT", "and 47 more"]
+        }
+      }
+    }
+  },
+  "notes": {
+    "UR-16": "RESOLVED — seller-info works WITHOUT tax_code param. Token identifies seller. tax_code param is optional (works with or without).",
+    "UD-05": "RESOLVED — pos_key is NOT in the seller-info response at all. declaration only has register_date, status, name.",
+    "UD-06": "RESOLVED — end_point = 'webcashvn'. Present at data.end_point level.",
+    "declaration_status_field": "Field is 'status' (string '5'), NOT 'status_code' as OpenAPI documented"
+  }
+}

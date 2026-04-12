@@ -1,0 +1,16 @@
+{
+  "request_8char": {
+    "method": "POST",
+    "url": "https://apitest.wetax.com.vn/api/wtx/pa/v1/pos/shops/inform-closing-store",
+    "body": {"closing_date": "20261012", "closing_time": "20261012", "store_code": "0319388179", "store_name": "GLOBOSVN Test Store", "total_order_count": "5"}
+  },
+  "response_8char": {"http_status": 200, "body": {"status": {"success": true, "message": "Success"}, "data": ""}},
+  "request_14char_number": {
+    "body": {"closing_date": "20261013", "closing_time": "20261013235959", "store_code": "0319388179", "store_name": "GLOBOSVN Test Store", "total_order_count": 3}
+  },
+  "response_14char_number": {"http_status": 200, "body": {"status": {"success": true, "message": "Success"}, "data": ""}},
+  "notes": {
+    "UR-06": "RESOLVED — BOTH 8-char (yyyymmdd) and 14-char (yyyymmddhhmmss) formats accepted for closing_time. Server is flexible.",
+    "UR-07": "RESOLVED — BOTH string '5' and number 3 accepted for total_order_count. Server is flexible."
+  }
+}

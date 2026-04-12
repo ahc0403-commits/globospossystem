@@ -1,0 +1,14 @@
+{
+  "request": {"method": "GET", "url": "https://apitest.wetax.com.vn/api/wtx/pa/v1/company/0319388179"},
+  "response": {
+    "http_status": 400,
+    "body": {
+      "status": {"success": false, "message": "Cannot invoke \"String.isEmpty()\" because the return value of \"com.kosign.wetax.service.cooconapi.payload.RegistrationDetail.getCloseDate()\" is null"},
+      "data": ""
+    }
+  },
+  "notes": {
+    "UR-05": "UNRESOLVABLE — server returns Java NPE (NullPointerException on getCloseDate). Cannot determine whether field is tax_id or tax_code. This is a server-side bug on apitest.",
+    "impact": "WT09 auto-fill in b2b_buyer_cache cannot be tested. Must test on apidev or wait for server fix."
+  }
+}

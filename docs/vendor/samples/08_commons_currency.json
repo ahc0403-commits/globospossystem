@@ -1,0 +1,14 @@
+{
+  "request": {"method": "GET", "url": "https://apitest.wetax.com.vn/api/wtx/pa/v1/commons/currency"},
+  "response": {
+    "http_status": 200,
+    "body": {
+      "status": {"success": true, "message": "Success"},
+      "data": [
+        {"code": "VND", "description": "VND"},
+        {"code": "USD", "description": "USD"}
+      ]
+    }
+  },
+  "notes": "Only VND and USD supported."
+}

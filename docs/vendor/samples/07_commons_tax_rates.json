@@ -1,0 +1,23 @@
+{
+  "request": {"method": "GET", "url": "https://apitest.wetax.com.vn/api/wtx/pa/v1/commons/tax-rates"},
+  "response": {
+    "http_status": 200,
+    "body": {
+      "status": {"success": true, "message": "Success"},
+      "data": [
+        {"code": "0%", "description": "Thuế suất 0%"},
+        {"code": "5%", "description": "Thuế suất 5%"},
+        {"code": "8%", "description": "Thuế suất 8%"},
+        {"code": "10%", "description": "Thuế suất 10%"},
+        {"code": "KHAC:10.0%", "description": "KHAC:10.0%"},
+        {"code": "KCT", "description": "Không chịu thuế GTGT"},
+        {"code": "KHAC:6.0%", "description": "KHAC:6.0%"},
+        {"code": "KHAC:4.0%", "description": "KHAC:4.0%"},
+        {"code": "KHAC:7.5%", "description": "KHAC:7.5%"},
+        {"code": "KHAC:8.0%", "description": "KHAC:8.0%"},
+        {"code": "KKKNT", "description": "Không kê khai, tính nộp thuế GTGT"}
+      ]
+    }
+  },
+  "notes": "Full tax rate list. Includes custom rates (KHAC:X.X%). Confirms 8% and 10% are valid for food and alcohol."
+}
