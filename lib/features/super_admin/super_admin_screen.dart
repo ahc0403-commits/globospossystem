@@ -76,13 +76,13 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
-                _navItem(Icons.store, 'Restaurants', 0),
+                _navItem(Icons.store, 'Stores', 0),
                 const SizedBox(height: 8),
                 _navItem(Icons.bar_chart, 'All Reports', 1),
                 const SizedBox(height: 8),
-                _navItem(Icons.fact_check, 'QC 현황', 2),
+                _navItem(Icons.fact_check, 'QC Status', 2),
                 const SizedBox(height: 8),
-                _navItem(Icons.rule, 'QC 기준표', 3),
+                _navItem(Icons.rule, 'QC Template', 3),
                 const SizedBox(height: 8),
                 _navItem(Icons.settings, 'System Settings', 4),
                 const Spacer(),
@@ -113,8 +113,8 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
                       0 => _RestaurantsTab(
                         state: state,
                         notifier: notifier,
-                        onGoToAdmin: (restaurantId) =>
-                            context.go('/admin/$restaurantId'),
+                        onGoToAdmin: (storeId) =>
+                            context.go('/admin/$storeId'),
                       ),
                       1 => _AllReportsTab(state: state, notifier: notifier),
                       2 => const _QcOverviewTab(),
@@ -188,7 +188,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
         Row(
           children: [
             Text(
-              '본사 공통 QC 기준표 관리',
+              'HQ Shared QC Template Management',
               style: GoogleFonts.bebasNeue(
                 color: AppColors.amber500,
                 fontSize: 30,
@@ -204,7 +204,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
                 foregroundColor: AppColors.surface0,
               ),
               icon: const Icon(Icons.add),
-              label: const Text('공통 기준 추가'),
+              label: const Text('Add Shared Criterion'),
             ),
           ],
         ),
@@ -215,7 +215,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
               if (templates.isEmpty) {
                 return Center(
                   child: Text(
-                    '등록된 공통 기준표가 없습니다.',
+                    'No shared templates registered.',
                     style: GoogleFonts.notoSansKr(
                       color: AppColors.textSecondary,
                     ),
@@ -224,7 +224,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
               }
               final grouped = <String, List<Map<String, dynamic>>>{};
               for (final template in templates) {
-                final category = template['category']?.toString() ?? '기타';
+                final category = template['category']?.toString() ?? 'Other';
                 grouped.putIfAbsent(category, () => []).add(template);
               }
 
@@ -303,7 +303,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: Text(
-                                      '📌 전체 매장 공통',
+                                      '📌 Shared Across All Stores',
                                       style: GoogleFonts.notoSansKr(
                                         color: AppColors.amber500,
                                         fontSize: 11,
@@ -330,7 +330,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
                                 await notifier.deleteTemplate(id);
                                 ref.invalidate(globalQcTemplatesProvider);
                                 if (!context.mounted) return;
-                                showSuccessToast(context, '비활성화 완료');
+                                showSuccessToast(context, 'Deactivated');
                               },
                               icon: const Icon(Icons.block_outlined),
                               color: AppColors.statusCancelled,
@@ -356,7 +356,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          '✅ 위 항목은 모든 매장에 자동 적용됩니다. 매장별 추가 항목은 매장 어드민이 설정합니다.',
+          '✅ The items above apply automatically to all stores. Store-specific items are configured by the store admin.',
           style: GoogleFonts.notoSansKr(
             color: AppColors.textSecondary,
             fontSize: 12,
@@ -402,7 +402,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isEdit ? '공통 기준 수정' : '공통 기준 추가',
+                    isEdit ? 'Edit Shared Criterion' : 'Add Shared Criterion',
                     style: GoogleFonts.bebasNeue(
                       color: AppColors.amber500,
                       fontSize: 30,
@@ -412,7 +412,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
                   TextField(
                     controller: categoryController,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(labelText: '카테고리'),
+                    decoration: const InputDecoration(labelText: 'Category'),
                   ),
                   const SizedBox(height: 10),
                   TextField(
@@ -420,7 +420,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
                     minLines: 2,
                     maxLines: 4,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(labelText: '기준 내용'),
+                    decoration: const InputDecoration(labelText: 'Criterion Details'),
                   ),
                   const SizedBox(height: 10),
                   Row(
@@ -437,7 +437,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
                           });
                         },
                         icon: const Icon(Icons.photo_library_outlined),
-                        label: const Text('기준사진 업로드'),
+                        label: const Text('Upload Reference Photo'),
                       ),
                       const SizedBox(width: 8),
                       if (selectedFile != null)
@@ -502,13 +502,13 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
                         ref.invalidate(globalQcTemplatesProvider);
                         if (!context.mounted) return;
                         Navigator.of(context).pop();
-                        showSuccessToast(context, '저장 완료');
+                        showSuccessToast(context, 'Saved');
                       },
                       style: FilledButton.styleFrom(
                         backgroundColor: AppColors.amber500,
                         foregroundColor: AppColors.surface0,
                       ),
-                      child: const Text('저장'),
+                      child: const Text('Save'),
                     ),
                   ),
                 ],
@@ -541,7 +541,7 @@ class _QcOverviewTab extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'QC 현황',
+          'QC Status',
           style: GoogleFonts.bebasNeue(
             color: AppColors.amber500,
             fontSize: 28,
@@ -555,7 +555,7 @@ class _QcOverviewTab extends ConsumerWidget {
               if (rows.isEmpty) {
                 return Center(
                   child: Text(
-                    'QC 데이터가 없습니다.',
+                    'No QC data.',
                     style: GoogleFonts.notoSansKr(
                       color: AppColors.textSecondary,
                     ),
@@ -568,7 +568,7 @@ class _QcOverviewTab extends ConsumerWidget {
                 separatorBuilder: (_, _) => const SizedBox(height: 10),
                 itemBuilder: (context, index) {
                   final row = rows[index];
-                  final restaurantId = row['restaurant_id']?.toString() ?? '';
+                  final storeId = row['restaurant_id']?.toString() ?? '';
                   final restaurantName =
                       row['restaurant_name']?.toString() ?? '-';
                   final coverage = (row['coverage'] as num?)?.toDouble() ?? 0.0;
@@ -576,9 +576,9 @@ class _QcOverviewTab extends ConsumerWidget {
                   final latest = row['latest_check_date']?.toString() ?? '-';
 
                   return InkWell(
-                    onTap: restaurantId.isEmpty
+                    onTap: storeId.isEmpty
                         ? null
-                        : () => context.go('/admin/$restaurantId?tab=qc'),
+                        : () => context.go('/admin/$storeId?tab=qc'),
                     borderRadius: BorderRadius.circular(14),
                     child: Container(
                       padding: const EdgeInsets.all(14),
@@ -612,7 +612,7 @@ class _QcOverviewTab extends ConsumerWidget {
                           Expanded(
                             flex: 2,
                             child: Text(
-                              '$failCount건',
+                              '$failCount',
                               style: GoogleFonts.notoSansKr(
                                 color: failCount == '0'
                                     ? AppColors.statusAvailable
@@ -662,7 +662,7 @@ class _RestaurantsTab extends StatelessWidget {
 
   final SuperAdminState state;
   final SuperAdminNotifier notifier;
-  final void Function(String restaurantId) onGoToAdmin;
+  final void Function(String storeId) onGoToAdmin;
 
   Future<void> _openOfficeSystem() async {
     final uri = Uri.parse(AppConstants.officeSystemUrl);
@@ -687,7 +687,7 @@ class _RestaurantsTab extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: _openOfficeSystem,
               icon: const Icon(Icons.business),
-              label: const Text('Office System으로 이동'),
+              label: const Text('Go to Office System'),
             ),
             const SizedBox(width: 8),
             FilledButton.icon(
@@ -698,15 +698,21 @@ class _RestaurantsTab extends StatelessWidget {
                 foregroundColor: AppColors.surface0,
               ),
               icon: const Icon(Icons.add_business),
-              label: const Text('Add Restaurant'),
+              label: const Text('Add Store'),
             ),
           ],
         ),
         const SizedBox(height: 12),
         Row(
           children: [
+            _storeTypeChip(null, 'All', state.selectedStoreType),
+            const SizedBox(width: 6),
+            _storeTypeChip('direct', 'Direct', state.selectedStoreType),
+            const SizedBox(width: 6),
+            _storeTypeChip('external', 'External', state.selectedStoreType),
+            const SizedBox(width: 16),
             Text(
-              '브랜드 필터',
+              'Brand',
               style: GoogleFonts.notoSansKr(
                 color: AppColors.textSecondary,
                 fontSize: 12,
@@ -717,21 +723,21 @@ class _RestaurantsTab extends StatelessWidget {
               value: state.selectedBrandId,
               dropdownColor: AppColors.surface1,
               hint: Text(
-                '전체',
+                'All',
                 style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
               ),
               items: [
                 DropdownMenuItem<String?>(
                   value: null,
                   child: Text(
-                    '전체',
+                    'All',
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
                   ),
                 ),
                 DropdownMenuItem<String?>(
                   value: kUnclassifiedBrandFilter,
                   child: Text(
-                    '미분류',
+                    'Uncategorized',
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
                   ),
                 ),
@@ -804,7 +810,7 @@ class _RestaurantsTab extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  '브랜드: ${restaurant.brandName ?? '미분류'}',
+                                  "Brand: ${restaurant.brandName ?? 'Uncategorized'}",
                                   style: GoogleFonts.notoSansKr(
                                     color: AppColors.textSecondary,
                                     fontSize: 11,
@@ -813,6 +819,8 @@ class _RestaurantsTab extends StatelessWidget {
                               ],
                             ),
                           ),
+                          _storeTypeBadge(restaurant.storeType),
+                          const SizedBox(width: 6),
                           _modeBadge(restaurant.operationMode),
                           const SizedBox(width: 10),
                           OutlinedButton(
@@ -842,6 +850,51 @@ class _RestaurantsTab extends StatelessWidget {
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _storeTypeChip(String? type, String label, String? selected) {
+    final isSelected = type == selected;
+    return ChoiceChip(
+      label: Text(
+        label,
+        style: GoogleFonts.notoSansKr(
+          color: isSelected ? AppColors.surface0 : AppColors.textPrimary,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      selected: isSelected,
+      selectedColor: type == 'external'
+          ? const Color(0xFFE57373)
+          : AppColors.amber500,
+      backgroundColor: AppColors.surface1,
+      side: BorderSide.none,
+      onSelected: (_) => notifier.setStoreTypeFilter(type),
+    );
+  }
+
+  Widget _storeTypeBadge(String storeType) {
+    final isExternal = storeType == 'external';
+    final color = isExternal
+        ? const Color(0xFFE57373)
+        : const Color(0xFF66BB6A);
+    final label = isExternal ? 'External' : 'Direct';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.notoSansKr(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
     );
   }
 
@@ -885,6 +938,7 @@ class _RestaurantsTab extends StatelessWidget {
       text: initial?.perPersonCharge?.toString() ?? '',
     );
     String operationMode = initial?.operationMode ?? 'standard';
+    String storeType = initial?.storeType ?? 'direct';
     String? selectedBrandId = initial?.brandId;
 
     Future<void> save() async {
@@ -907,6 +961,7 @@ class _RestaurantsTab extends StatelessWidget {
               operationMode: operationMode,
               perPersonCharge: charge,
               brandId: selectedBrandId,
+              storeType: storeType,
             )
           : await notifier.addRestaurant(
               name: name,
@@ -915,12 +970,13 @@ class _RestaurantsTab extends StatelessWidget {
               operationMode: operationMode,
               perPersonCharge: charge,
               brandId: selectedBrandId,
+              storeType: storeType,
             );
 
       if (success && context.mounted) {
         showSuccessToast(
           context,
-          isEdit ? 'Restaurant updated' : 'Restaurant created',
+          isEdit ? 'Store updated' : 'Store created',
         );
         Navigator.of(context).pop();
       }
@@ -945,7 +1001,7 @@ class _RestaurantsTab extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isEdit ? 'Edit Restaurant' : 'Add Restaurant',
+                    isEdit ? 'Edit Store' : 'Add Store',
                     style: GoogleFonts.bebasNeue(
                       color: AppColors.amber500,
                       fontSize: 30,
@@ -1005,7 +1061,7 @@ class _RestaurantsTab extends StatelessWidget {
                     items: [
                       const DropdownMenuItem<String?>(
                         value: null,
-                        child: Text('미분류'),
+                        child: Text('Uncategorized'),
                       ),
                       ...state.brands.map((brand) {
                         final id = brand['id']?.toString();
@@ -1019,6 +1075,30 @@ class _RestaurantsTab extends StatelessWidget {
                     ],
                     onChanged: (value) {
                       setModalState(() => selectedBrandId = value);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: storeType,
+                    dropdownColor: AppColors.surface1,
+                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    decoration: const InputDecoration(
+                      labelText: 'Store Type',
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'direct',
+                        child: Text('Direct'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'external',
+                        child: Text('External'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setModalState(() => storeType = value);
+                      }
                     },
                   ),
                   if (operationMode == 'buffet' ||
@@ -1059,7 +1139,7 @@ class _RestaurantsTab extends StatelessWidget {
                             initial.id,
                           );
                           if (success && context.mounted) {
-                            showSuccessToast(context, 'Restaurant deactivated');
+                            showSuccessToast(context, 'Store deactivated');
                             Navigator.of(context).pop();
                           }
                         },
@@ -1121,11 +1201,11 @@ class _AllReportsTabState extends State<_AllReportsTab> {
     final map = <String, _BrandRevenueRow>{};
     for (final row in rows) {
       final restaurant = restaurants
-          .where((r) => r.id == row.restaurantId)
+          .where((r) => r.id == row.storeId)
           .cast<SuperRestaurant?>()
           .firstWhere((r) => r != null, orElse: () => null);
       final key = restaurant?.brandId ?? kUnclassifiedBrandFilter;
-      final name = restaurant?.brandName ?? '미분류';
+      final name = restaurant?.brandName ?? 'Uncategorized';
       final current = map[key];
       if (current == null) {
         map[key] = _BrandRevenueRow(name: name, total: row.total);
@@ -1168,14 +1248,14 @@ class _AllReportsTabState extends State<_AllReportsTab> {
               value: state.selectedRestaurant,
               dropdownColor: AppColors.surface1,
               hint: Text(
-                'All Restaurants',
+                'All Stores',
                 style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
               ),
               items: [
                 DropdownMenuItem<SuperRestaurant?>(
                   value: null,
                   child: Text(
-                    'All Restaurants',
+                    'All Stores',
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
                   ),
                 ),
@@ -1203,14 +1283,14 @@ class _AllReportsTabState extends State<_AllReportsTab> {
                 DropdownMenuItem<bool>(
                   value: false,
                   child: Text(
-                    '레스토랑별',
+                    'By Store',
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
                   ),
                 ),
                 DropdownMenuItem<bool>(
                   value: true,
                   child: Text(
-                    '브랜드 그룹',
+                    'Brand Group',
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
                   ),
                 ),
@@ -1243,7 +1323,7 @@ class _AllReportsTabState extends State<_AllReportsTab> {
             OutlinedButton.icon(
               onPressed: _openOfficeKpi,
               icon: const Icon(Icons.dashboard_customize),
-              label: const Text('상세 리포트는 Office에서 확인'),
+              label: const Text('View detailed reports in Office'),
             ),
           ],
         ),
@@ -1291,7 +1371,7 @@ class _AllReportsTabState extends State<_AllReportsTab> {
                   child: Column(
                     children: [
                       _reportHeader(
-                        label: _groupByBrand ? 'Brand' : 'Restaurant',
+                        label: _groupByBrand ? 'Brand' : 'Store',
                       ),
                       Expanded(
                         child: _groupByBrand

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/services/order_service.dart';
 import '../../main.dart';
 
 class KitchenItem {
@@ -34,9 +35,18 @@ class KitchenItem {
 
   factory KitchenItem.fromJson(Map<String, dynamic> json) {
     final quantityRaw = json['quantity'];
+    final menuItemRaw = json['menu_items'];
+    String? menuItemName;
+    if (menuItemRaw is Map<String, dynamic>) {
+      menuItemName = menuItemRaw['name']?.toString();
+    }
     return KitchenItem(
       itemId: json['id'].toString(),
-      label: json['label']?.toString() ?? json['name']?.toString() ?? 'Item',
+      label:
+          json['label']?.toString() ??
+          json['name']?.toString() ??
+          menuItemName ??
+          'Item',
       quantity: switch (quantityRaw) {
         int value => value,
         num value => value.toInt(),
@@ -110,17 +120,17 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
   Timer? _pollTimer;
   bool _realtimeConnected = false;
 
-  Future<void> loadOrders(String restaurantId) async {
-    _restaurantId = restaurantId;
+  Future<void> loadOrders(String storeId) async {
+    _restaurantId = storeId;
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
       final response = await supabase
           .from('orders')
           .select(
-            'id, created_at, status, tables(table_number), order_items(id, label, quantity, status)',
+            'id, created_at, status, tables(table_number), order_items(id, label, quantity, status, menu_items(name))',
           )
-          .eq('restaurant_id', restaurantId)
+          .eq('restaurant_id', storeId)
           .inFilter('status', ['pending', 'confirmed', 'serving'])
           .order('created_at', ascending: true);
 
@@ -135,7 +145,11 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
                           Map<String, dynamic>.from(item),
                         ),
                       )
-                      .where((item) => item.status != 'served')
+                      .where(
+                        (item) =>
+                            item.status != 'served' &&
+                            item.status != 'cancelled',
+                      )
                       .toList()
                 : <KitchenItem>[];
 
@@ -164,7 +178,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
         isLoading: false,
         clearError: true,
       );
-      await subscribeRealtime(restaurantId);
+      await subscribeRealtime(storeId);
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
@@ -173,8 +187,8 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
     }
   }
 
-  Future<void> subscribeRealtime(String restaurantId) async {
-    if (_ordersChannel != null && _restaurantId == restaurantId) {
+  Future<void> subscribeRealtime(String storeId) async {
+    if (_ordersChannel != null && _restaurantId == storeId) {
       return;
     }
 
@@ -182,20 +196,20 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
       await _ordersChannel!.unsubscribe();
     }
 
-    _restaurantId = restaurantId;
+    _restaurantId = storeId;
     _ordersChannel = supabase
-        .channel('public:kitchen_orders:$restaurantId')
+        .channel('public:kitchen_orders:$storeId')
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'orders',
-          callback: (_) => loadOrders(restaurantId),
+          callback: (_) => loadOrders(storeId),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
           table: 'orders',
-          callback: (_) => loadOrders(restaurantId),
+          callback: (_) => loadOrders(storeId),
         )
         .subscribe((status, [error]) {
           // Realtime 연결 상태 추적
@@ -208,26 +222,34 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
               _pollTimer = null;
             } else {
               // Realtime 끊김 → 30초 폴링 시작
-              _startPollingFallback(restaurantId);
+              _startPollingFallback(storeId);
             }
           }
         });
     // 구독 후 초기 연결 확인용 타이머 (5초 내 연결 안 되면 폴링 시작)
     Future.delayed(const Duration(seconds: 5), () {
-      if (mounted && !_realtimeConnected && _restaurantId == restaurantId) {
-        _startPollingFallback(restaurantId);
+      if (mounted && !_realtimeConnected && _restaurantId == storeId) {
+        _startPollingFallback(storeId);
       }
     });
   }
 
-  void _startPollingFallback(String restaurantId) {
-    if (_pollTimer != null) return; // 이미 폴링 중
+  void _startPollingFallback(String storeId) {
+    if (_pollTimer != null) return; // already polling
     _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) loadOrders(restaurantId);
+      if (mounted) loadOrders(storeId);
     });
   }
 
   Future<void> updateItemStatus(String itemId, String newStatus) async {
+    final storeId = _restaurantId;
+    if (storeId == null) {
+      state = state.copyWith(
+        error: 'Failed to update item status: restaurant context missing',
+      );
+      return;
+    }
+
     final previous = state.orders;
 
     final optimisticOrders = state.orders
@@ -259,12 +281,13 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
     state = state.copyWith(orders: optimisticOrders, clearError: true);
 
     try {
-      await supabase
-          .from('order_items')
-          .update({'status': newStatus})
-          .eq('id', itemId);
-      if (newStatus == 'served' && _restaurantId != null) {
-        await loadOrders(_restaurantId!);
+      await orderService.updateOrderItemStatus(
+        itemId: itemId,
+        storeId: storeId,
+        status: newStatus,
+      );
+      if (newStatus == 'served') {
+        await loadOrders(storeId);
       }
     } catch (error) {
       state = state.copyWith(

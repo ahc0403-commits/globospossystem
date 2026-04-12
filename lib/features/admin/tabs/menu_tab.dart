@@ -4,25 +4,47 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../main.dart';
+import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
+import '../providers/admin_audit_provider.dart';
 import '../providers/menu_provider.dart';
+import '../widgets/admin_audit_trace_panel.dart';
 
-class MenuTab extends ConsumerWidget {
+class MenuTab extends ConsumerStatefulWidget {
   const MenuTab({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final restaurantId = ref.watch(authProvider).restaurantId;
-    if (restaurantId == null) {
+  ConsumerState<MenuTab> createState() => _MenuTabState();
+}
+
+class _MenuTabState extends ConsumerState<MenuTab> {
+  String? _lastError;
+
+  @override
+  Widget build(BuildContext context) {
+    final storeId = ref.watch(authProvider).storeId;
+    if (storeId == null) {
       return const _RestaurantMissingView();
     }
 
-    final menuState = ref.watch(menuProvider(restaurantId));
-    final menuNotifier = ref.read(menuProvider(restaurantId).notifier);
+    final menuState = ref.watch(menuProvider(storeId));
+    final menuNotifier = ref.read(menuProvider(storeId).notifier);
+    final auditTraceAsync = ref.watch(adminAuditTraceProvider(storeId));
     final numberFormat = NumberFormat('#,###', 'vi_VN');
 
     final categoriesAsync = menuState.categories;
     final itemsAsync = menuState.items;
+
+    if (menuState.error != null &&
+        menuState.error!.isNotEmpty &&
+        menuState.error != _lastError) {
+      _lastError = menuState.error;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          showErrorToast(context, menuState.error!);
+        }
+      });
+    }
 
     final isLoading = categoriesAsync.isLoading || itemsAsync.isLoading;
     final categoriesError = categoriesAsync.hasError;
@@ -45,7 +67,7 @@ class MenuTab extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Failed to load menu data.',
+                'Failed to load menu info.',
                 style: GoogleFonts.notoSansKr(
                   color: AppColors.statusCancelled,
                   fontSize: 14,
@@ -73,10 +95,10 @@ class MenuTab extends ConsumerWidget {
     final selectedItems = selectedCategoryId == null
         ? <Map<String, dynamic>>[]
         : allItems
-            .where(
-              (item) => item['category_id']?.toString() == selectedCategoryId,
-            )
-            .toList();
+              .where(
+                (item) => item['category_id']?.toString() == selectedCategoryId,
+              )
+              .toList();
 
     return Scaffold(
       backgroundColor: AppColors.surface0,
@@ -90,8 +112,10 @@ class MenuTab extends ConsumerWidget {
                   child: _CategoryPanel(
                     categories: categories,
                     selectedCategoryId: selectedCategoryId,
+                    auditTraceAsync: auditTraceAsync,
                     onSelect: menuNotifier.selectCategory,
-                    onAddCategory: () => _showAddCategoryDialog(context, menuNotifier),
+                    onAddCategory: () =>
+                        _showAddCategoryDialog(context, menuNotifier),
                   ),
                 ),
                 Expanded(
@@ -101,11 +125,8 @@ class MenuTab extends ConsumerWidget {
                     selectedCategoryId: selectedCategoryId,
                     numberFormat: numberFormat,
                     onToggleAvailability: menuNotifier.toggleAvailability,
-                    onEditItem: (item) => _showEditItemDialog(
-                      context,
-                      item,
-                      menuNotifier,
-                    ),
+                    onEditItem: (item) =>
+                        _showEditItemDialog(context, item, menuNotifier),
                     onAddItem: () => _showAddItemDialog(
                       context,
                       selectedCategoryId,
@@ -124,8 +145,10 @@ class MenuTab extends ConsumerWidget {
                 child: _CategoryPanel(
                   categories: categories,
                   selectedCategoryId: selectedCategoryId,
+                  auditTraceAsync: auditTraceAsync,
                   onSelect: menuNotifier.selectCategory,
-                  onAddCategory: () => _showAddCategoryDialog(context, menuNotifier),
+                  onAddCategory: () =>
+                      _showAddCategoryDialog(context, menuNotifier),
                 ),
               ),
               Expanded(
@@ -135,11 +158,8 @@ class MenuTab extends ConsumerWidget {
                   selectedCategoryId: selectedCategoryId,
                   numberFormat: numberFormat,
                   onToggleAvailability: menuNotifier.toggleAvailability,
-                  onEditItem: (item) => _showEditItemDialog(
-                    context,
-                    item,
-                    menuNotifier,
-                  ),
+                  onEditItem: (item) =>
+                      _showEditItemDialog(context, item, menuNotifier),
                   onAddItem: () => _showAddItemDialog(
                     context,
                     selectedCategoryId,
@@ -172,7 +192,7 @@ class MenuTab extends ConsumerWidget {
           content: TextField(
             controller: nameController,
             style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-            decoration: const InputDecoration(labelText: 'Category name'),
+            decoration: const InputDecoration(labelText: 'Category Name'),
           ),
           actions: [
             TextButton(
@@ -187,12 +207,16 @@ class MenuTab extends ConsumerWidget {
               onPressed: () async {
                 final name = nameController.text.trim();
                 if (name.isEmpty) {
+                  showErrorToast(context, 'Enter a category name.');
                   return;
                 }
 
-                await menuNotifier.addCategory(name);
+                final success = await menuNotifier.addCategory(name);
                 if (context.mounted) {
-                  Navigator.of(context).pop();
+                  if (success) {
+                    Navigator.of(context).pop();
+                    showSuccessToast(context, 'Category "$name" added.');
+                  }
                 }
               },
               child: const Text('Add'),
@@ -223,7 +247,7 @@ class MenuTab extends ConsumerWidget {
         return AlertDialog(
           backgroundColor: AppColors.surface1,
           title: Text(
-            'Add Item',
+            'Add Menu',
             style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
           ),
           content: Column(
@@ -232,7 +256,7 @@ class MenuTab extends ConsumerWidget {
               TextField(
                 controller: nameController,
                 style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                decoration: const InputDecoration(labelText: 'Item name'),
+                decoration: const InputDecoration(labelText: 'Menu Name'),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -257,12 +281,20 @@ class MenuTab extends ConsumerWidget {
                 final name = nameController.text.trim();
                 final price = double.tryParse(priceController.text.trim());
                 if (name.isEmpty || price == null || price <= 0) {
+                  showErrorToast(context, 'Enter a valid menu name and price.');
                   return;
                 }
 
-                await menuNotifier.addMenuItem(categoryId, name, price);
+                final success = await menuNotifier.addMenuItem(
+                  categoryId,
+                  name,
+                  price,
+                );
                 if (context.mounted) {
-                  Navigator.of(context).pop();
+                  if (success) {
+                    Navigator.of(context).pop();
+                    showSuccessToast(context, 'Menu "$name" added.');
+                  }
                 }
               },
               child: const Text('Add'),
@@ -304,7 +336,7 @@ class MenuTab extends ConsumerWidget {
         return AlertDialog(
           backgroundColor: AppColors.surface1,
           title: Text(
-            'Edit Item',
+            'Edit Menu',
             style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
           ),
           content: Column(
@@ -313,7 +345,7 @@ class MenuTab extends ConsumerWidget {
               TextField(
                 controller: nameController,
                 style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                decoration: const InputDecoration(labelText: 'Item name'),
+                decoration: const InputDecoration(labelText: 'Menu Name'),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -340,16 +372,26 @@ class MenuTab extends ConsumerWidget {
                 final name = nameController.text.trim();
                 final price = double.tryParse(priceController.text.trim());
                 if (name.isEmpty || price == null || price <= 0) {
+                  showErrorToast(context, 'Enter a valid menu name and price.');
                   return;
                 }
 
-                await menuNotifier.updateMenuItem(
+                if (name == (item['name']?.toString() ?? '') &&
+                    price == initialPrice) {
+                  showErrorToast(context, 'No menu changes.');
+                  return;
+                }
+
+                final success = await menuNotifier.updateMenuItem(
                   itemId: itemId,
                   name: name,
                   price: price,
                 );
                 if (context.mounted) {
-                  Navigator.of(context).pop();
+                  if (success) {
+                    Navigator.of(context).pop();
+                    showSuccessToast(context, 'Menu "$name" saved.');
+                  }
                 }
               },
               child: const Text('Save'),
@@ -368,12 +410,14 @@ class _CategoryPanel extends StatelessWidget {
   const _CategoryPanel({
     required this.categories,
     required this.selectedCategoryId,
+    required this.auditTraceAsync,
     required this.onSelect,
     required this.onAddCategory,
   });
 
   final List<Map<String, dynamic>> categories;
   final String? selectedCategoryId;
+  final AsyncValue<List<Map<String, dynamic>>> auditTraceAsync;
   final ValueChanged<String> onSelect;
   final VoidCallback onAddCategory;
 
@@ -388,7 +432,7 @@ class _CategoryPanel extends StatelessWidget {
             child: categories.isEmpty
                 ? Center(
                     child: Text(
-                      'No categories',
+                      'No categories.',
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textSecondary,
                         fontSize: 13,
@@ -404,7 +448,9 @@ class _CategoryPanel extends StatelessWidget {
                       final isSelected = categoryId == selectedCategoryId;
 
                       return InkWell(
-                        onTap: categoryId.isEmpty ? null : () => onSelect(categoryId),
+                        onTap: categoryId.isEmpty
+                            ? null
+                            : () => onSelect(categoryId),
                         borderRadius: BorderRadius.circular(12),
                         child: Container(
                           decoration: BoxDecoration(
@@ -434,6 +480,23 @@ class _CategoryPanel extends StatelessWidget {
                       );
                     },
                   ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Recent Menu Changes',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          AdminAuditTracePanel(
+            auditTraceAsync: auditTraceAsync,
+            allowedEntityTypes: const {'menu_categories', 'menu_items'},
+            maxItems: 3,
+            compact: true,
+            emptyMessage: 'No recent menu changes.',
           ),
           const SizedBox(height: 12),
           SizedBox(
@@ -467,7 +530,8 @@ class _ItemsPanel extends StatelessWidget {
   final List<Map<String, dynamic>> selectedItems;
   final String? selectedCategoryId;
   final NumberFormat numberFormat;
-  final Future<void> Function(String itemId, bool isAvailable) onToggleAvailability;
+  final Future<bool> Function(String itemId, bool isAvailable)
+  onToggleAvailability;
   final ValueChanged<Map<String, dynamic>> onEditItem;
   final VoidCallback onAddItem;
 
@@ -486,7 +550,7 @@ class _ItemsPanel extends StatelessWidget {
         child: selectedCategoryId == null
             ? Center(
                 child: Text(
-                  'Select a category to view items.',
+                  'Select a category to view menus.',
                   style: GoogleFonts.notoSansKr(
                     color: AppColors.textSecondary,
                     fontSize: 14,
@@ -494,82 +558,94 @@ class _ItemsPanel extends StatelessWidget {
                 ),
               )
             : selectedItems.isEmpty
-                ? Center(
-                    child: Text(
-                      'No items yet. Add your first menu item.',
-                      style: GoogleFonts.notoSansKr(
-                        color: AppColors.textSecondary,
-                        fontSize: 14,
-                      ),
-                    ),
-                  )
-                : ListView.separated(
-                    itemCount: selectedItems.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final item = selectedItems[index];
-                      final itemId = item['id']?.toString() ?? '';
-                      final name = item['name']?.toString() ?? '-';
-                      final priceRaw = item['price'];
-                      final isAvailable = item['is_available'] == true;
-                      final priceValue = switch (priceRaw) {
-                        num value => value.toDouble(),
-                        _ => 0.0,
-                      };
-
-                      return Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.surface1,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.all(14),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    name,
-                                    style: GoogleFonts.notoSansKr(
-                                      color: AppColors.textPrimary,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '₫${numberFormat.format(priceValue)}',
-                                    style: GoogleFonts.notoSansKr(
-                                      color: AppColors.textSecondary,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Switch(
-                              value: isAvailable,
-                              activeThumbColor: AppColors.amber500,
-                              onChanged: itemId.isEmpty
-                                  ? null
-                                  : (value) => onToggleAvailability(itemId, value),
-                            ),
-                            IconButton(
-                              onPressed: itemId.isEmpty
-                                  ? null
-                                  : () => onEditItem(item),
-                              icon: const Icon(
-                                Icons.edit_outlined,
-                                color: AppColors.textSecondary,
-                              ),
-                              tooltip: 'Edit item',
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+            ? Center(
+                child: Text(
+                  'No menus. Add your first menu.',
+                  style: GoogleFonts.notoSansKr(
+                    color: AppColors.textSecondary,
+                    fontSize: 14,
                   ),
+                ),
+              )
+            : ListView.separated(
+                itemCount: selectedItems.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final item = selectedItems[index];
+                  final itemId = item['id']?.toString() ?? '';
+                  final name = item['name']?.toString() ?? '-';
+                  final priceRaw = item['price'];
+                  final isAvailable = item['is_available'] == true;
+                  final priceValue = switch (priceRaw) {
+                    num value => value.toDouble(),
+                    _ => 0.0,
+                  };
+
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.surface1,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                name,
+                                style: GoogleFonts.notoSansKr(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '₫${numberFormat.format(priceValue)}',
+                                style: GoogleFonts.notoSansKr(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Switch(
+                          value: isAvailable,
+                          activeThumbColor: AppColors.amber500,
+                          onChanged: itemId.isEmpty
+                              ? null
+                              : (value) async {
+                                  final success = await onToggleAvailability(
+                                    itemId,
+                                    value,
+                                  );
+                                  if (!context.mounted || !success) return;
+                                  showSuccessToast(
+                                    context,
+                                    value
+                                        ? 'Menu "$name" marked as available.'
+                                        : 'Menu "$name" marked as sold out.',
+                                  );
+                                },
+                        ),
+                        IconButton(
+                          onPressed: itemId.isEmpty
+                              ? null
+                              : () => onEditItem(item),
+                          icon: const Icon(
+                            Icons.edit_outlined,
+                            color: AppColors.textSecondary,
+                          ),
+                          tooltip: 'Edit Menu',
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
       ),
     );
   }
@@ -584,7 +660,7 @@ class _RestaurantMissingView extends StatelessWidget {
       backgroundColor: AppColors.surface0,
       body: Center(
         child: Text(
-          'Restaurant not found for this account.',
+          'Store not found for this account.',
           style: GoogleFonts.notoSansKr(
             color: AppColors.statusCancelled,
             fontSize: 14,

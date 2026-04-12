@@ -36,9 +36,9 @@ class ReceiptBuilder {
 
     bytes.addAll(
       generator.row([
-        PosColumn(text: '테이블 / Bàn: $tableNumber', width: 8),
+        PosColumn(text: 'Table / Bàn: $tableNumber', width: 8),
         PosColumn(
-          text: TimeUtils.formatTime(paidAt),  // UTC→베트남 시간
+          text: TimeUtils.formatTime(paidAt),  // UTC to Vietnam time
           width: 4,
           styles: const PosStyles(align: PosAlign.right),
         ),
@@ -46,7 +46,7 @@ class ReceiptBuilder {
     );
     bytes.addAll(
       generator.text(
-        TimeUtils.formatDate(paidAt),  // UTC→베트남 날짜
+        TimeUtils.formatDate(paidAt),  // UTC to Vietnam date
       ),
     );
     bytes.addAll(generator.hr());
@@ -54,7 +54,7 @@ class ReceiptBuilder {
     bytes.addAll(
       generator.row([
         PosColumn(
-          text: '메뉴 / Món',
+          text: 'Menu / Món',
           width: 6,
           styles: const PosStyles(bold: true),
         ),
@@ -94,7 +94,7 @@ class ReceiptBuilder {
     bytes.addAll(
       generator.row([
         PosColumn(
-          text: isService ? 'DỊCH VỤ / 서비스' : 'TỔNG CỘNG / 합계',
+          text: isService ? 'DỊCH VỤ / Service' : 'TỔNG CỘNG / Total',
           width: 6,
           styles: const PosStyles(bold: true),
         ),
@@ -107,13 +107,13 @@ class ReceiptBuilder {
     );
 
     final methodLabel = _methodLabel(paymentMethod);
-    bytes.addAll(generator.text('Thanh toán / 결제: $methodLabel'));
+    bytes.addAll(generator.text('Thanh toán / Payment: $methodLabel'));
 
     if (isService) {
       bytes.addAll(generator.hr());
       bytes.addAll(
         generator.text(
-          '* 서비스 제공 - 매출 미반영',
+          '* Service Provision — not counted in revenue',
           styles: const PosStyles(align: PosAlign.center),
         ),
       );
@@ -128,7 +128,7 @@ class ReceiptBuilder {
     bytes.addAll(generator.hr());
     bytes.addAll(
       generator.text(
-        'Cam on quy khach! / 감사합니다!',
+        'Cam on quy khach! / Thank you!',
         styles: const PosStyles(align: PosAlign.center),
       ),
     );
@@ -154,13 +154,13 @@ class ReceiptBuilder {
   static String _methodLabel(String method) {
     switch (method) {
       case 'cash':
-        return '현금 / Tien mat';
+        return 'Cash / Tien mat';
       case 'card':
-        return '카드 / The';
+        return 'Card / The';
       case 'pay':
-        return '간편결제 / Vi dien tu';
+        return 'E-wallet / Vi dien tu';
       case 'service':
-        return '서비스 / Dich vu';
+        return 'Service / Dich vu';
       default:
         return method;
     }

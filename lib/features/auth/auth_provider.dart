@@ -42,7 +42,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
       final isActive = data['is_active'] as bool? ?? true;
       if (!isActive) {
         await supabase.auth.signOut();
-        state = const PosAuthState(errorMessage: '비활성화된 계정입니다. 관리자에게 문의하세요.');
+        state = const PosAuthState(errorMessage: 'Deactivated account. Contact your administrator.');
         return;
       }
 
@@ -55,7 +55,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         isLoading: false,
         user: user,
         role: data['role'] as String?,
-        restaurantId: data['restaurant_id'] as String?,
+        storeId: data['restaurant_id'] as String?,
         extraPermissions: extraPermissions,
         clearError: true,
       );
@@ -74,7 +74,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
       state = state.copyWith(
         isLoading: false,
         user: user,
-        errorMessage: '사용자 정보를 불러올 수 없습니다.',
+        errorMessage: 'Failed to load user info.',
       );
     }
   }
@@ -94,7 +94,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     } catch (_) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: '로그인 중 오류가 발생했습니다.',
+        errorMessage: 'An error occurred during login.',
       );
     }
   }

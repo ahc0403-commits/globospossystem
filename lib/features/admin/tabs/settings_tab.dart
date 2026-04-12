@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../../core/layout/platform_info.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-
 import '../../../core/hardware/printer_service.dart';
 import '../../../core/hardware/receipt_builder.dart';
 import '../../../core/services/pin_service.dart';
@@ -11,7 +10,9 @@ import '../../../widgets/error_toast.dart';
 import '../../../widgets/pin_dialog.dart';
 import '../../auth/auth_provider.dart';
 import '../../settings/printer_provider.dart';
+import '../providers/admin_audit_provider.dart';
 import '../providers/settings_provider.dart';
+import '../widgets/admin_audit_trace_panel.dart';
 
 class SettingsTab extends ConsumerStatefulWidget {
   const SettingsTab({super.key});
@@ -43,9 +44,9 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     super.dispose();
   }
 
-  Future<void> _loadPayrollPinStatus(String restaurantId) async {
+  Future<void> _loadPayrollPinStatus(String storeId) async {
     try {
-      final hash = await pinService.fetchPinHash(restaurantId);
+      final hash = await pinService.fetchPinHash(storeId);
       if (!mounted) return;
       setState(() => _hasPayrollPin = hash != null && hash.isNotEmpty);
     } catch (_) {
@@ -54,7 +55,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     }
   }
 
-  Future<void> _showSetPayrollPinDialog(String restaurantId) async {
+  Future<void> _showSetPayrollPinDialog(String storeId) async {
     final pageContext = context;
     final pinController = TextEditingController();
     final confirmController = TextEditingController();
@@ -68,7 +69,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
             return AlertDialog(
               backgroundColor: AppColors.surface1,
               title: Text(
-                '급여 관리 PIN 설정',
+                'Set Payroll PIN',
                 style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
               ),
               content: Column(
@@ -79,7 +80,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                     keyboardType: TextInputType.number,
                     obscureText: true,
                     decoration: const InputDecoration(
-                      labelText: '새 PIN (4자리 숫자)',
+                      labelText: 'New PIN (4 digits)',
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -87,7 +88,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                     controller: confirmController,
                     keyboardType: TextInputType.number,
                     obscureText: true,
-                    decoration: const InputDecoration(labelText: 'PIN 확인'),
+                    decoration: const InputDecoration(labelText: 'Confirm PIN'),
                   ),
                   if (validationMessage != null) ...[
                     const SizedBox(height: 8),
@@ -104,7 +105,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('취소'),
+                  child: const Text('Cancel'),
                 ),
                 FilledButton(
                   onPressed: _isSavingPayrollPin
@@ -115,28 +116,28 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                           final validPin = RegExp(r'^\d{4}$').hasMatch(pin);
                           if (!validPin) {
                             setModalState(
-                              () => validationMessage = 'PIN은 4자리 숫자여야 합니다.',
+                              () => validationMessage = 'PIN must be 4 digits.',
                             );
                             return;
                           }
                           if (pin != confirm) {
                             setModalState(
-                              () => validationMessage = 'PIN 확인 값이 일치하지 않습니다.',
+                              () => validationMessage = 'PIN confirmation does not match.',
                             );
                             return;
                           }
 
                           setState(() => _isSavingPayrollPin = true);
                           try {
-                            await pinService.setPin(restaurantId, pin);
+                            await pinService.setPin(storeId, pin);
                             if (!pageContext.mounted) return;
                             Navigator.of(pageContext).pop();
-                            await _loadPayrollPinStatus(restaurantId);
+                            await _loadPayrollPinStatus(storeId);
                             if (!pageContext.mounted) return;
-                            showSuccessToast(pageContext, '급여 PIN이 저장되었습니다.');
+                            showSuccessToast(pageContext, 'Payroll PIN saved.');
                           } catch (e) {
                             if (pageContext.mounted) {
-                              showErrorToast(pageContext, 'PIN 저장 실패: $e');
+                              showErrorToast(pageContext, 'Failed to save PIN: $e');
                             }
                           } finally {
                             if (mounted) {
@@ -154,7 +155,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                           height: 18,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('저장'),
+                      : const Text('Save'),
                 ),
               ],
             );
@@ -167,26 +168,26 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     confirmController.dispose();
   }
 
-  Future<void> _clearPayrollPin(String restaurantId) async {
-    final entered = await showPinDialog(context, title: '현재 PIN 입력');
+  Future<void> _clearPayrollPin(String storeId) async {
+    final entered = await showPinDialog(context, title: 'Enter current PIN');
     if (entered == null) return;
 
     try {
-      final ok = await pinService.verifyPin(restaurantId, entered);
+      final ok = await pinService.verifyPin(storeId, entered);
       if (!ok) {
         if (mounted) {
-          showErrorToast(context, 'PIN이 올바르지 않습니다.');
+          showErrorToast(context, 'Incorrect PIN.');
         }
         return;
       }
-      await pinService.clearPin(restaurantId);
-      await _loadPayrollPinStatus(restaurantId);
+      await pinService.clearPin(storeId);
+      await _loadPayrollPinStatus(storeId);
       if (mounted) {
-        showSuccessToast(context, '급여 PIN이 삭제되었습니다.');
+        showSuccessToast(context, 'Payroll PIN deleted.');
       }
     } catch (e) {
       if (mounted) {
-        showErrorToast(context, 'PIN 삭제 실패: $e');
+        showErrorToast(context, 'Failed to delete PIN: $e');
       }
     }
   }
@@ -195,19 +196,22 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final authUid = authState.user?.id;
-    final restaurantId = authState.restaurantId;
+    final storeId = authState.storeId;
     final settingsState = ref.watch(settingsProvider);
     final notifier = ref.read(settingsProvider.notifier);
     final printerState = ref.watch(printerProvider);
     final printerNotifier = ref.read(printerProvider.notifier);
+    final auditTraceAsync = storeId == null
+        ? const AsyncValue<List<Map<String, dynamic>>>.data([])
+        : ref.watch(adminAuditTraceProvider(storeId));
 
-    if (restaurantId != null &&
+    if (storeId != null &&
         authUid != null &&
-        restaurantId != _initializedRestaurantId) {
-      _initializedRestaurantId = restaurantId;
+        storeId != _initializedRestaurantId) {
+      _initializedRestaurantId = storeId;
       Future.microtask(() async {
-        await notifier.loadSettings(restaurantId, authUid);
-        await _loadPayrollPinStatus(restaurantId);
+        await notifier.loadSettings(storeId, authUid);
+        await _loadPayrollPinStatus(storeId);
       });
     }
 
@@ -272,7 +276,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _sectionTitle('Restaurant Info'),
+                      _sectionTitle('Store Info'),
                       const SizedBox(height: 10),
                       TextField(
                         controller: _restaurantNameController,
@@ -280,7 +284,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                           color: AppColors.textPrimary,
                         ),
                         decoration: const InputDecoration(
-                          labelText: 'Restaurant Name',
+                          labelText: 'Store Name',
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -363,7 +367,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                                   if (success) {
                                     showSuccessToast(
                                       context,
-                                      'Restaurant updated successfully',
+                                      'Store settings saved.',
                                     );
                                   }
                                 },
@@ -423,17 +427,13 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                               ? null
                               : () async {
                                   final success = await notifier.updateFullName(
-                                    authUid,
                                     _fullNameController.text.trim(),
                                   );
                                   if (!context.mounted) {
                                     return;
                                   }
                                   if (success) {
-                                    showSuccessToast(
-                                      context,
-                                      'Profile updated',
-                                    );
+                                    showSuccessToast(context, 'Name saved.');
                                   }
                                 },
                           child: settingsState.isSavingProfile
@@ -448,10 +448,18 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                         ),
                       ),
                       const SizedBox(height: 28),
-                      _sectionTitle('프린터 설정 (영수증 프린터)'),
+                      _sectionTitle('Recent Admin Changes'),
+                      const SizedBox(height: 8),
+                      AdminAuditTracePanel(
+                        auditTraceAsync: auditTraceAsync,
+                        storeId: storeId,
+                        showRetry: true,
+                      ),
+                      const SizedBox(height: 28),
+                      _sectionTitle('Printer Settings (Receipt Printer)'),
                       const SizedBox(height: 8),
                       Text(
-                        'Xprinter XP-K200W WiFi 연결',
+                        'Xprinter XP-K200W WiFi Connection',
                         style: GoogleFonts.notoSansKr(
                           color: AppColors.textPrimary,
                           fontSize: 14,
@@ -460,7 +468,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '프린터와 태블릿이 같은 WiFi 네트워크에 있어야 합니다.',
+                        'The printer and the tablet must be on the same WiFi network.',
                         style: GoogleFonts.notoSansKr(
                           color: AppColors.textSecondary,
                           fontSize: 12,
@@ -475,8 +483,8 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                           color: AppColors.textPrimary,
                         ),
                         decoration: const InputDecoration(
-                          labelText: '프린터 IP 주소',
-                          hintText: '예: 192.168.1.100',
+                          labelText: 'Printer IP Address',
+                          hintText: 'e.g. 192.168.1.100',
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -490,7 +498,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                                       if (!PlatformInfo.isPrinterSupported) {
                                         showErrorToast(
                                           context,
-                                          '프린터는 앱에서만 지원됩니다.',
+                                          'Printer is only supported on the app.',
                                         );
                                         return;
                                       }
@@ -510,7 +518,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                                         strokeWidth: 2,
                                       ),
                                     )
-                                  : const Text('연결 테스트'),
+                                  : const Text('Connection Test'),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -522,14 +530,14 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                                       if (!PlatformInfo.isPrinterSupported) {
                                         showErrorToast(
                                           context,
-                                          '프린터는 앱에서만 지원됩니다.',
+                                          'Printer is only supported on the app.',
                                         );
                                         return;
                                       }
                                       if (printerState.printerIp.isEmpty) {
                                         showErrorToast(
                                           context,
-                                          'IP 주소를 먼저 입력해주세요.',
+                                          'Enter the IP address first.',
                                         );
                                         return;
                                       }
@@ -559,9 +567,9 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                                         return;
                                       }
                                       if (result == PrintResult.success) {
-                                        showSuccessToast(context, '테스트 출력 완료');
+                                        showSuccessToast(context, 'Test print complete');
                                       } else {
-                                        showErrorToast(context, '테스트 출력 실패');
+                                        showErrorToast(context, 'Test print failed');
                                       }
                                     },
                               style: FilledButton.styleFrom(
@@ -576,7 +584,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                                         strokeWidth: 2,
                                       ),
                                     )
-                                  : const Text('테스트 출력'),
+                                  : const Text('Test Print'),
                             ),
                           ),
                         ],
@@ -584,7 +592,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                       const SizedBox(height: 10),
                       _printerStatusRow(printerState.lastTestResult),
                       const SizedBox(height: 28),
-                      _sectionTitle('급여 관리 PIN 설정'),
+                      _sectionTitle('Set Payroll PIN'),
                       const SizedBox(height: 10),
                       Container(
                         width: double.infinity,
@@ -603,10 +611,10 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                               children: [
                                 _infoChip(
                                   _hasPayrollPin == true
-                                      ? '현재 상태: 설정됨 ✅'
+                                      ? 'Current status: Set ✅'
                                       : _hasPayrollPin == false
-                                      ? '현재 상태: 미설정'
-                                      : '현재 상태: 확인 중...',
+                                      ? 'Current status: Not set'
+                                      : 'Current status: Checking...',
                                 ),
                               ],
                             ),
@@ -615,26 +623,26 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                               children: [
                                 Expanded(
                                   child: FilledButton(
-                                    onPressed: restaurantId == null
+                                    onPressed: storeId == null
                                         ? null
                                         : () => _showSetPayrollPinDialog(
-                                            restaurantId,
+                                            storeId,
                                           ),
                                     style: FilledButton.styleFrom(
                                       backgroundColor: AppColors.amber500,
                                       foregroundColor: AppColors.surface0,
                                     ),
-                                    child: const Text('PIN 변경'),
+                                    child: const Text('Change PIN'),
                                   ),
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: OutlinedButton(
                                     onPressed:
-                                        restaurantId == null ||
+                                        storeId == null ||
                                             _hasPayrollPin != true
                                         ? null
-                                        : () => _clearPayrollPin(restaurantId),
+                                        : () => _clearPayrollPin(storeId),
                                     style: OutlinedButton.styleFrom(
                                       side: const BorderSide(
                                         color: AppColors.statusCancelled,
@@ -642,7 +650,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                                       foregroundColor:
                                           AppColors.statusCancelled,
                                     ),
-                                    child: const Text('PIN 삭제'),
+                                    child: const Text('Delete PIN'),
                                   ),
                                 ),
                               ],
@@ -712,9 +720,9 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
       null => AppColors.textSecondary,
     };
     final label = switch (lastTestResult) {
-      true => '연결됨',
-      false => '연결 실패',
-      null => '미확인',
+      true => 'Connected',
+      false => 'Connection failed',
+      null => 'Unverified',
     };
 
     return Row(

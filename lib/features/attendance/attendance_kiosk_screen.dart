@@ -66,10 +66,10 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
     }
   }
 
-  Future<void> _loadStaffIfNeeded(String restaurantId) async {
-    if (_initializedRestaurantId == restaurantId) return;
-    _initializedRestaurantId = restaurantId;
-    await ref.read(attendanceKioskProvider.notifier).loadStaff(restaurantId);
+  Future<void> _loadStaffIfNeeded(String storeId) async {
+    if (_initializedRestaurantId == storeId) return;
+    _initializedRestaurantId = storeId;
+    await ref.read(attendanceKioskProvider.notifier).loadStaff(storeId);
   }
 
   void _backToIdle() {
@@ -165,10 +165,10 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
   }
 
   Future<void> _submitAttendance({File? photoFile}) async {
-    final restaurantId = ref.read(authProvider).restaurantId;
+    final storeId = ref.read(authProvider).storeId;
     final selected = _selectedStaff;
     final selectedType = _selectedType;
-    if (restaurantId == null || selected == null || selectedType == null) {
+    if (storeId == null || selected == null || selectedType == null) {
       _backToIdle();
       return;
     }
@@ -179,7 +179,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
         .read(attendanceKioskProvider.notifier)
         .recordAttendance(
           userId: selected['id'].toString(),
-          restaurantId: restaurantId,
+          storeId: storeId,
           type: selectedType,
           photoFile: photoFile,
         );
@@ -188,11 +188,11 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
 
     final state = ref.read(attendanceKioskProvider);
     if (state.error == 'PHOTO_UPLOAD_FAILED') {
-      showErrorToast(context, '사진 업로드 실패. 출근은 기록됐습니다.');
+      showErrorToast(context, 'Photo upload failed. Clock-in was recorded.');
     }
 
     if (!success) {
-      showErrorToast(context, '근태 기록 실패');
+      showErrorToast(context, 'Attendance record failed');
       _backToIdle();
       return;
     }
@@ -207,7 +207,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
-    final restaurantId = auth.restaurantId;
+    final storeId = auth.storeId;
     final kioskState = ref.watch(attendanceKioskProvider);
     final isOnline = ref.watch(connectivityProvider).asData?.value ?? true;
 
@@ -216,7 +216,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
         backgroundColor: AppColors.surface0,
         body: Center(
           child: Text(
-            '카메라는 Android 태블릿에서만 지원됩니다',
+            'Camera is only supported on Android tablets',
             style: GoogleFonts.notoSansKr(
               color: AppColors.textPrimary,
               fontSize: 18,
@@ -226,8 +226,8 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
       );
     }
 
-    if (restaurantId != null) {
-      Future.microtask(() => _loadStaffIfNeeded(restaurantId));
+    if (storeId != null) {
+      Future.microtask(() => _loadStaffIfNeeded(storeId));
     }
 
     return Scaffold(
@@ -350,7 +350,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
         Padding(
           padding: const EdgeInsets.only(bottom: 20),
           child: Text(
-            '이름을 선택하세요',
+            'Select a name',
             style: GoogleFonts.notoSansKr(
               color: AppColors.textSecondary,
               fontSize: 14,
@@ -394,7 +394,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                   foregroundColor: AppColors.surface0,
                 ),
                 child: Text(
-                  '출근',
+                  'Clock In',
                   style: GoogleFonts.notoSansKr(
                     fontSize: 28,
                     fontWeight: FontWeight.w700,
@@ -417,7 +417,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                   side: const BorderSide(color: AppColors.surface2),
                 ),
                 child: Text(
-                  '퇴근',
+                  'Clock Out',
                   style: GoogleFonts.notoSansKr(
                     color: AppColors.textPrimary,
                     fontSize: 28,
@@ -431,7 +431,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
         if (!isOnline) ...[
           const SizedBox(height: 12),
           Text(
-            '인터넷 연결 후 이용 가능합니다',
+            'Available after internet connection',
             style: GoogleFonts.notoSansKr(
               color: AppColors.statusOccupied,
               fontSize: 14,
@@ -443,7 +443,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
         TextButton(
           onPressed: _backToIdle,
           child: Text(
-            '← 돌아가기',
+            '← Back',
             style: GoogleFonts.notoSansKr(
               color: AppColors.textSecondary,
               fontSize: 14,
@@ -492,7 +492,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
           right: 0,
           bottom: 22,
           child: Text(
-            '얼굴을 원 안에 맞춰주세요',
+            'Align your face within the circle',
             textAlign: TextAlign.center,
             style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 16),
           ),
@@ -524,7 +524,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                     foregroundColor: Colors.white,
                   ),
                   child: Text(
-                    '다시 찍기',
+                    'Retake',
                     style: GoogleFonts.notoSansKr(fontSize: 16),
                   ),
                 ),
@@ -539,7 +539,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                     foregroundColor: AppColors.surface0,
                   ),
                   child: Text(
-                    '확인 ✓',
+                    'Confirm ✓',
                     style: GoogleFonts.notoSansKr(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -562,7 +562,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
           const CircularProgressIndicator(color: AppColors.amber500),
           const SizedBox(height: 14),
           Text(
-            '기록 중...',
+            'Recording...',
             style: GoogleFonts.notoSansKr(
               color: AppColors.textPrimary,
               fontSize: 18,
@@ -586,7 +586,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            isIn ? '출근 완료' : '퇴근 완료',
+            isIn ? 'Clock-in complete' : 'Clock-out complete',
             style: GoogleFonts.notoSansKr(
               color: AppColors.textPrimary,
               fontSize: 32,

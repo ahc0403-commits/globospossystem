@@ -1,18 +1,13 @@
-import 'dart:typed_data';
-
-import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/attendance_service.dart';
-import '../../../core/services/payroll_service.dart';
-import '../../../core/services/pin_service.dart';
 import '../../../core/utils/time_utils.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
-import '../../../widgets/pin_dialog.dart';
 import '../../auth/auth_provider.dart';
 
 class AttendanceTab extends ConsumerStatefulWidget {
@@ -22,17 +17,8 @@ class AttendanceTab extends ConsumerStatefulWidget {
   ConsumerState<AttendanceTab> createState() => _AttendanceTabState();
 }
 
-class _AttendanceTabState extends ConsumerState<AttendanceTab>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
-  final _currencyFormat = NumberFormat('#,###', 'vi_VN');
-
+class _AttendanceTabState extends ConsumerState<AttendanceTab> {
   String? _initializedRestaurantId;
-  bool _payrollUnlocked = false;
-  bool _isVerifyingPayrollPin = false;
-  int _payrollPinFailCount = 0;
-  DateTime? _payrollPinLockedUntil;
-
   DateTime _logFrom = _startOfWeek(TimeUtils.nowVietnam());
   DateTime _logTo = TimeUtils.nowVietnam();
   String _selectedStaffFilter = 'all';
@@ -40,19 +26,6 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab>
   List<Map<String, dynamic>> _logs = const [];
   bool _isLogsLoading = false;
   String? _logsError;
-
-  String? _wageStaffId;
-  String _wageType = 'hourly';
-  final TextEditingController _hourlyRateController = TextEditingController();
-  final List<_ShiftRowData> _shiftRows = [];
-  bool _isSavingWage = false;
-
-  DateTime _payrollFrom = _startOfWeek(TimeUtils.nowVietnam());
-  DateTime _payrollTo = TimeUtils.nowVietnam();
-  bool _isCalculating = false;
-  bool _isExporting = false;
-  String? _payrollError;
-  List<StaffPayroll> _payrolls = const [];
 
   static DateTime _startOfWeek(DateTime now) {
     final weekday = now.weekday;
@@ -63,111 +36,16 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab>
     ).subtract(Duration(days: weekday - 1));
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this)
-      ..addListener(_handleTabChange);
-  }
-
-  void _handleTabChange() {
-    if (_tabController.index == 1 && !_payrollUnlocked) {
-      _checkPayrollPinAndUnlock();
-    }
-  }
-
-  Future<void> _checkPayrollPinAndUnlock() async {
-    if (_isVerifyingPayrollPin) return;
-
-    final restaurantId = ref.read(authProvider).restaurantId;
-    if (restaurantId == null) {
-      _tabController.animateTo(0);
-      return;
-    }
-
-    final now = TimeUtils.nowVietnam();
-    if (_payrollPinLockedUntil != null &&
-        now.isBefore(_payrollPinLockedUntil!)) {
-      final remain = _payrollPinLockedUntil!.difference(now).inSeconds;
-      _tabController.animateTo(0);
-      if (mounted) {
-        showErrorToast(context, '잠시 후 다시 시도하세요 (${remain}s)');
-      }
-      return;
-    }
-
-    _isVerifyingPayrollPin = true;
-    _tabController.animateTo(0);
-
-    try {
-      final hasPin = await pinService.fetchPinHash(restaurantId) != null;
-      if (!hasPin) {
-        if (!mounted) return;
-        setState(() {
-          _payrollUnlocked = true;
-          _payrollPinFailCount = 0;
-          _payrollPinLockedUntil = null;
-        });
-        _tabController.animateTo(1);
-        return;
-      }
-
-      if (!mounted) return;
-      final pin = await showPinDialog(context, title: '급여 관리 PIN 입력');
-      if (pin == null) {
-        return;
-      }
-
-      final ok = await pinService.verifyPin(restaurantId, pin);
-      if (!mounted) return;
-      if (ok) {
-        setState(() {
-          _payrollUnlocked = true;
-          _payrollPinFailCount = 0;
-          _payrollPinLockedUntil = null;
-        });
-        _tabController.animateTo(1);
-      } else {
-        setState(() {
-          _payrollPinFailCount += 1;
-          if (_payrollPinFailCount >= 3) {
-            _payrollPinLockedUntil = TimeUtils.nowVietnam().add(
-              const Duration(seconds: 30),
-            );
-            _payrollPinFailCount = 0;
-          }
-        });
-        showErrorToast(
-          context,
-          _payrollPinLockedUntil != null ? '잠시 후 다시 시도하세요' : 'PIN이 올바르지 않습니다.',
-        );
-      }
-    } finally {
-      _isVerifyingPayrollPin = false;
-    }
-  }
-
-  @override
-  void dispose() {
-    _tabController.removeListener(_handleTabChange);
-    _tabController.dispose();
-    _hourlyRateController.dispose();
-    for (final row in _shiftRows) {
-      row.dispose();
-    }
-    super.dispose();
-  }
-
-  Future<void> _initialize(String restaurantId) async {
+  Future<void> _initialize(String storeId) async {
     setState(() {
       _isLogsLoading = true;
       _logsError = null;
     });
 
     try {
-      final staff = await attendanceService.fetchStaffList(restaurantId);
+      final staff = await attendanceService.fetchStaffList(storeId);
       final logs = await attendanceService.fetchLogs(
-        restaurantId: restaurantId,
+        storeId: storeId,
         from: _logFrom,
         to: _logTo,
       );
@@ -176,30 +54,26 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab>
       setState(() {
         _staffList = staff;
         _logs = logs;
-        _wageStaffId = staff.isNotEmpty ? staff.first['id']?.toString() : null;
         _isLogsLoading = false;
       });
-
-      if (_wageStaffId != null) {
-        await _loadWageConfig(restaurantId, _wageStaffId!);
-      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isLogsLoading = false;
-        _logsError = '근태 데이터를 불러오지 못했습니다: $e';
+        _logsError = _mapAttendanceError(e, 'Failed to load attendance data.');
       });
     }
   }
 
-  Future<void> _reloadLogs(String restaurantId) async {
+  Future<void> _reloadLogs(String storeId) async {
     setState(() {
       _isLogsLoading = true;
       _logsError = null;
     });
+
     try {
       final logs = await attendanceService.fetchLogs(
-        restaurantId: restaurantId,
+        storeId: storeId,
         from: _logFrom,
         to: _logTo,
       );
@@ -212,349 +86,231 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab>
       if (!mounted) return;
       setState(() {
         _isLogsLoading = false;
-        _logsError = '근태 로그 조회 실패: $e';
+        _logsError = _mapAttendanceError(e, 'Failed to reload attendance logs.');
       });
-      showErrorToast(context, '근태 로그 조회 실패');
+      showErrorToast(context, 'Failed to query attendance logs');
     }
   }
 
-  Future<void> _loadWageConfig(String restaurantId, String userId) async {
-    try {
-      final config = await attendanceService.fetchWageConfig(
-        restaurantId: restaurantId,
-        userId: userId,
-      );
+  String _mapAttendanceError(Object error, String fallback) {
+    final message = error is PostgrestException ? error.message : '$error';
 
-      for (final row in _shiftRows) {
-        row.dispose();
-      }
-      _shiftRows.clear();
-
-      if (config == null) {
-        if (!mounted) return;
-        setState(() {
-          _wageType = 'hourly';
-          _hourlyRateController.text = '';
-        });
-        return;
-      }
-
-      final type = config['wage_type']?.toString() ?? 'hourly';
-      final hourlyRate = config['hourly_rate'];
-      final shiftRates = config['shift_rates'];
-
-      if (!mounted) return;
-      setState(() {
-        _wageType = type;
-        _hourlyRateController.text = hourlyRate == null ? '' : '$hourlyRate';
-        if (shiftRates is List) {
-          for (final row in shiftRates) {
-            if (row is Map<String, dynamic>) {
-              _shiftRows.add(
-                _ShiftRowData(
-                  start: _parseTime(row['start']?.toString() ?? '09:00'),
-                  end: _parseTime(row['end']?.toString() ?? '18:00'),
-                  amount: row['amount']?.toString() ?? '',
-                ),
-              );
-            }
-          }
-        }
-      });
-    } catch (_) {
-      // ignore and keep defaults
+    if (message.contains('ATTENDANCE_STAFF_DIRECTORY_FORBIDDEN') ||
+        message.contains('ATTENDANCE_LOG_VIEW_FORBIDDEN')) {
+      return 'No permission to view attendance data for this store.';
     }
-  }
-
-  Future<void> _saveWageConfig(String restaurantId) async {
-    final staffId = _wageStaffId;
-    if (staffId == null) {
-      showErrorToast(context, '직원을 먼저 선택하세요');
-      return;
+    if (message.contains('ATTENDANCE_LOG_RANGE_REQUIRED') ||
+        message.contains('ATTENDANCE_LOG_RANGE_INVALID')) {
+      return 'Re-select the query period.';
+    }
+    if (message.contains('ATTENDANCE_LOG_USER_NOT_FOUND')) {
+      return 'Re-select the staff filter.';
     }
 
-    setState(() => _isSavingWage = true);
-
-    try {
-      final hourlyRate = double.tryParse(_hourlyRateController.text.trim());
-      final shiftRates = _shiftRows
-          .map(
-            (row) => {
-              'start': _formatTime(row.start),
-              'end': _formatTime(row.end),
-              'amount': double.tryParse(row.amountController.text.trim()) ?? 0,
-            },
-          )
-          .toList();
-
-      await attendanceService.upsertWageConfig(
-        restaurantId: restaurantId,
-        userId: staffId,
-        wageType: _wageType,
-        hourlyRate: _wageType == 'hourly' ? (hourlyRate ?? 0) : null,
-        shiftRates: _wageType == 'shift' ? shiftRates : const [],
-      );
-
-      if (!mounted) return;
-      showSuccessToast(context, '급여 설정이 저장되었습니다');
-    } catch (e) {
-      if (!mounted) return;
-      showErrorToast(context, '급여 설정 저장 실패: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _isSavingWage = false);
-      }
-    }
-  }
-
-  Future<void> _calculatePayroll(String restaurantId) async {
-    setState(() {
-      _isCalculating = true;
-      _payrollError = null;
-    });
-
-    try {
-      final payrolls = await payrollService.calculatePayroll(
-        restaurantId: restaurantId,
-        periodStart: _payrollFrom,
-        periodEnd: _payrollTo,
-      );
-
-      if (!mounted) return;
-      setState(() {
-        _payrolls = payrolls;
-      });
-
-      await payrollService.savePayrollCache(
-        restaurantId: restaurantId,
-        periodStart: _payrollFrom,
-        periodEnd: _payrollTo,
-        payrolls: payrolls,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _payrollError = '급여 계산 실패: $e';
-      });
-      showErrorToast(context, '급여 계산 실패');
-    } finally {
-      if (mounted) {
-        setState(() => _isCalculating = false);
-      }
-    }
-  }
-
-  Future<void> _exportPayroll() async {
-    if (_payrolls.isEmpty) return;
-    setState(() => _isExporting = true);
-
-    try {
-      final bytes = await payrollService.exportToExcel(
-        payrolls: _payrolls,
-        periodStart: _payrollFrom,
-        periodEnd: _payrollTo,
-      );
-
-      final now = TimeUtils.nowVietnam();
-      final fileName =
-          'globos_payroll_${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-
-      await FileSaver.instance.saveFile(
-        name: fileName,
-        bytes: Uint8List.fromList(bytes),
-        ext: 'xlsx',
-        mimeType: MimeType.microsoftExcel,
-      );
-
-      if (!mounted) return;
-      showSuccessToast(context, '엑셀 파일 저장 완료');
-    } catch (e) {
-      if (!mounted) return;
-      showErrorToast(context, '엑셀 저장 실패: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _isExporting = false);
-      }
-    }
+    return fallback;
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
-    final restaurantId = auth.restaurantId;
+    final storeId = auth.storeId;
 
-    if (restaurantId != null && _initializedRestaurantId != restaurantId) {
-      _initializedRestaurantId = restaurantId;
-      _payrollUnlocked = false;
-      _payrollPinFailCount = 0;
-      _payrollPinLockedUntil = null;
-      if (_tabController.index != 0) {
-        _tabController.animateTo(0);
-      }
-      Future.microtask(() => _initialize(restaurantId));
+    if (storeId != null && _initializedRestaurantId != storeId) {
+      _initializedRestaurantId = storeId;
+      Future.microtask(() => _initialize(storeId));
     }
 
-    return Scaffold(
-      backgroundColor: AppColors.surface0,
-      body: Column(
-        children: [
-          Container(
-            color: AppColors.surface0,
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: TabBar(
-              controller: _tabController,
-              indicatorColor: AppColors.amber500,
-              labelColor: AppColors.amber500,
-              unselectedLabelColor: AppColors.textSecondary,
-              labelStyle: GoogleFonts.notoSansKr(fontWeight: FontWeight.w700),
-              tabs: const [
-                Tab(text: '근태 기록'),
-                Tab(text: '급여 관리'),
-              ],
-            ),
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildLogsTab(restaurantId),
-                _buildPayrollTab(restaurantId),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLogsTab(String? restaurantId) {
     final filteredLogs = _logs.where((row) {
       if (_selectedStaffFilter == 'all') return true;
       return row['user_id']?.toString() == _selectedStaffFilter;
     }).toList();
 
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              _DateButton(
-                label: 'From',
-                value: _logFrom,
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: _logFrom,
-                    firstDate: DateTime(2020),
-                    lastDate: TimeUtils.nowVietnam(),
-                  );
-                  if (picked != null) {
-                    setState(
-                      () => _logFrom = DateTime(
-                        picked.year,
-                        picked.month,
-                        picked.day,
-                      ),
+    return Scaffold(
+      backgroundColor: AppColors.surface0,
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Attendance Records',
+              style: GoogleFonts.bebasNeue(
+                color: AppColors.textPrimary,
+                fontSize: 32,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Attendance v1 scope includes only clock-in/out events and admin log queries. Payroll calculation, export, and device extensions are out of scope.',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                _DateButton(
+                  label: 'From',
+                  value: _logFrom,
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _logFrom,
+                      firstDate: DateTime(2020),
+                      lastDate: TimeUtils.nowVietnam(),
                     );
-                  }
-                },
-              ),
-              const SizedBox(width: 10),
-              _DateButton(
-                label: 'To',
-                value: _logTo,
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: _logTo,
-                    firstDate: DateTime(2020),
-                    lastDate: TimeUtils.nowVietnam(),
-                  );
-                  if (picked != null) {
-                    setState(() {
-                      _logTo = DateTime(
-                        picked.year,
-                        picked.month,
-                        picked.day,
-                        23,
-                        59,
-                        59,
+                    if (picked != null) {
+                      setState(
+                        () => _logFrom = DateTime(
+                          picked.year,
+                          picked.month,
+                          picked.day,
+                        ),
                       );
-                    });
-                  }
-                },
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedStaffFilter,
-                  dropdownColor: AppColors.surface1,
-                  style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                  ),
-                  items: [
-                    const DropdownMenuItem(value: 'all', child: Text('전체')),
-                    ..._staffList.map(
-                      (s) => DropdownMenuItem(
-                        value: s['id']?.toString() ?? '',
-                        child: Text(s['full_name']?.toString() ?? '-'),
-                      ),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _selectedStaffFilter = value);
                     }
                   },
                 ),
-              ),
-              const SizedBox(width: 10),
-              FilledButton(
-                onPressed: restaurantId == null
-                    ? null
-                    : () => _reloadLogs(restaurantId),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.amber500,
-                  foregroundColor: AppColors.surface0,
+                const SizedBox(width: 10),
+                _DateButton(
+                  label: 'To',
+                  value: _logTo,
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _logTo,
+                      firstDate: DateTime(2020),
+                      lastDate: TimeUtils.nowVietnam(),
+                    );
+                    if (picked != null) {
+                      setState(() {
+                        _logTo = DateTime(
+                          picked.year,
+                          picked.month,
+                          picked.day,
+                          23,
+                          59,
+                          59,
+                        );
+                      });
+                    }
+                  },
                 ),
-                child: const Text('적용'),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _selectedStaffFilter,
+                    dropdownColor: AppColors.surface1,
+                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem(
+                        value: 'all',
+                        child: Text('All Staff'),
+                      ),
+                      ..._staffList.map(
+                        (staff) => DropdownMenuItem(
+                          value: staff['user_id']?.toString() ?? '',
+                          child: Text(staff['full_name']?.toString() ?? '-'),
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => _selectedStaffFilter = value);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 10),
+                FilledButton(
+                  onPressed: storeId == null
+                      ? null
+                      : () => _reloadLogs(storeId),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.amber500,
+                    foregroundColor: AppColors.surface0,
+                  ),
+                  child: const Text('Apply'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            if (_logsError != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  _logsError!,
+                  style: GoogleFonts.notoSansKr(
+                    color: AppColors.statusCancelled,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            Expanded(
+              child: _isLogsLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.amber500,
+                      ),
+                    )
+                  : filteredLogs.isEmpty
+                  ? _buildInfoState(
+                      icon: Icons.event_note_outlined,
+                      title: 'No attendance records for the selected period.',
+                      message: 'Events recorded at the clock-in/out kiosk appear here.',
+                    )
+                  : _buildLogsTable(filteredLogs),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoState({
+    required IconData icon,
+    required String title,
+    required String message,
+  }) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: AppColors.surface1,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.surface2),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: AppColors.textSecondary, size: 32),
+              const SizedBox(height: 12),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.notoSansKr(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.notoSansKr(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          if (_logsError != null)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                _logsError!,
-                style: GoogleFonts.notoSansKr(
-                  color: AppColors.statusCancelled,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          if (_logsError != null) const SizedBox(height: 10),
-          Expanded(
-            child: _isLogsLoading
-                ? const Center(
-                    child: CircularProgressIndicator(color: AppColors.amber500),
-                  )
-                : filteredLogs.isEmpty
-                ? Center(
-                    child: Text(
-                      'No data for selected period',
-                      style: GoogleFonts.notoSansKr(
-                        color: AppColors.textSecondary,
-                        fontSize: 14,
-                      ),
-                    ),
-                  )
-                : _buildLogsTable(filteredLogs),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -587,8 +343,8 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab>
                     ? user['full_name']?.toString() ?? '-'
                     : '-';
                 final type = row['type']?.toString() == 'clock_in'
-                    ? '출근'
-                    : '퇴근';
+                    ? 'Clock In'
+                    : 'Clock Out';
                 final photoUrl = row['photo_url']?.toString();
 
                 return Container(
@@ -682,11 +438,11 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab>
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: Row(
         children: [
-          _headerCell('날짜', flex: 3),
-          _headerCell('직원', flex: 3),
-          _headerCell('유형', flex: 2),
-          _headerCell('시간', flex: 2),
-          _headerCell('사진', flex: 2),
+          _headerCell('Date', flex: 3),
+          _headerCell('Staff', flex: 3),
+          _headerCell('Type', flex: 2),
+          _headerCell('Time', flex: 2),
+          _headerCell('Photo', flex: 2),
         ],
       ),
     );
@@ -736,576 +492,6 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab>
       },
     );
   }
-
-  Widget _buildPayrollTab(String? restaurantId) {
-    if (!_payrollUnlocked) {
-      return Center(
-        child: Text(
-          'PIN 인증 후 접근 가능합니다.',
-          style: GoogleFonts.notoSansKr(
-            color: AppColors.textSecondary,
-            fontSize: 14,
-          ),
-        ),
-      );
-    }
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '급여 설정',
-            style: GoogleFonts.bebasNeue(
-              color: AppColors.textPrimary,
-              fontSize: 28,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.surface1,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Column(
-              children: [
-                DropdownButtonFormField<String>(
-                  initialValue: _wageStaffId,
-                  dropdownColor: AppColors.surface1,
-                  style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                  decoration: const InputDecoration(labelText: '직원 선택'),
-                  items: _staffList
-                      .map(
-                        (s) => DropdownMenuItem(
-                          value: s['id']?.toString(),
-                          child: Text(s['full_name']?.toString() ?? '-'),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: restaurantId == null
-                      ? null
-                      : (value) {
-                          if (value == null) return;
-                          setState(() => _wageStaffId = value);
-                          _loadWageConfig(restaurantId, value);
-                        },
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment<String>(
-                        value: 'hourly',
-                        label: Text('시급제'),
-                      ),
-                      ButtonSegment<String>(
-                        value: 'shift',
-                        label: Text('시프트제'),
-                      ),
-                    ],
-                    selected: {_wageType},
-                    style: ButtonStyle(
-                      foregroundColor: WidgetStateProperty.resolveWith((
-                        states,
-                      ) {
-                        if (states.contains(WidgetState.selected)) {
-                          return AppColors.amber500;
-                        }
-                        return AppColors.textPrimary;
-                      }),
-                      backgroundColor: WidgetStateProperty.resolveWith((
-                        states,
-                      ) {
-                        if (states.contains(WidgetState.selected)) {
-                          return AppColors.amber500.withValues(alpha: 0.2);
-                        }
-                        return Colors.transparent;
-                      }),
-                      side: WidgetStateProperty.all(
-                        const BorderSide(color: AppColors.surface2),
-                      ),
-                    ),
-                    onSelectionChanged: (selection) {
-                      if (selection.isNotEmpty) {
-                        setState(() => _wageType = selection.first);
-                      }
-                    },
-                  ),
-                ),
-                if (_wageType == 'hourly')
-                  TextField(
-                    controller: _hourlyRateController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(labelText: '시급 (VND)'),
-                  )
-                else
-                  Column(
-                    children: [
-                      ..._shiftRows.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final row = entry.value;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: () async {
-                                    final picked = await showTimePicker(
-                                      context: context,
-                                      initialTime: row.start,
-                                    );
-                                    if (picked != null) {
-                                      setState(() => row.start = picked);
-                                    }
-                                  },
-                                  child: Text(_formatTime(row.start)),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: () async {
-                                    final picked = await showTimePicker(
-                                      context: context,
-                                      initialTime: row.end,
-                                    );
-                                    if (picked != null) {
-                                      setState(() => row.end = picked);
-                                    }
-                                  },
-                                  child: Text(_formatTime(row.end)),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: TextField(
-                                  controller: row.amountController,
-                                  keyboardType:
-                                      const TextInputType.numberWithOptions(
-                                        decimal: true,
-                                      ),
-                                  style: GoogleFonts.notoSansKr(
-                                    color: AppColors.textPrimary,
-                                  ),
-                                  decoration: const InputDecoration(
-                                    labelText: '금액',
-                                  ),
-                                ),
-                              ),
-                              IconButton(
-                                onPressed: () {
-                                  setState(() {
-                                    final removed = _shiftRows.removeAt(index);
-                                    removed.dispose();
-                                  });
-                                },
-                                icon: const Icon(
-                                  Icons.close,
-                                  color: AppColors.statusCancelled,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              _shiftRows.add(
-                                _ShiftRowData(
-                                  start: const TimeOfDay(hour: 9, minute: 0),
-                                  end: const TimeOfDay(hour: 18, minute: 0),
-                                ),
-                              );
-                            });
-                          },
-                          icon: const Icon(Icons.add),
-                          label: const Text('시프트 추가'),
-                        ),
-                      ),
-                    ],
-                  ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: (restaurantId == null || _isSavingWage)
-                        ? null
-                        : () => _saveWageConfig(restaurantId),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.amber500,
-                      foregroundColor: AppColors.surface0,
-                    ),
-                    child: _isSavingWage
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('저장'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            '급여 계산',
-            style: GoogleFonts.bebasNeue(
-              color: AppColors.textPrimary,
-              fontSize: 28,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.surface1,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    _DateButton(
-                      label: 'From',
-                      value: _payrollFrom,
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: _payrollFrom,
-                          firstDate: DateTime(2020),
-                          lastDate: TimeUtils.nowVietnam(),
-                        );
-                        if (picked != null) {
-                          setState(() {
-                            _payrollFrom = DateTime(
-                              picked.year,
-                              picked.month,
-                              picked.day,
-                            );
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(width: 10),
-                    _DateButton(
-                      label: 'To',
-                      value: _payrollTo,
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: _payrollTo,
-                          firstDate: DateTime(2020),
-                          lastDate: TimeUtils.nowVietnam(),
-                        );
-                        if (picked != null) {
-                          setState(() {
-                            _payrollTo = DateTime(
-                              picked.year,
-                              picked.month,
-                              picked.day,
-                              23,
-                              59,
-                              59,
-                            );
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(width: 10),
-                    FilledButton(
-                      onPressed: (restaurantId == null || _isCalculating)
-                          ? null
-                          : () => _calculatePayroll(restaurantId),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.amber500,
-                        foregroundColor: AppColors.surface0,
-                      ),
-                      child: _isCalculating
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('계산하기'),
-                    ),
-                    const Spacer(),
-                    FilledButton.icon(
-                      onPressed: (_payrolls.isEmpty || _isExporting)
-                          ? null
-                          : _exportPayroll,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.amber500,
-                        foregroundColor: AppColors.surface0,
-                      ),
-                      icon: const Icon(Icons.download),
-                      label: _isExporting
-                          ? const Text('저장 중...')
-                          : const Text('엑셀 저장 📥'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (_payrollError != null)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      _payrollError!,
-                      style: GoogleFonts.notoSansKr(
-                        color: AppColors.statusCancelled,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                if (_payrollError != null) const SizedBox(height: 10),
-                _buildPayrollResultTable(),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPayrollResultTable() {
-    if (_isCalculating) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: CircularProgressIndicator(color: AppColors.amber500),
-      );
-    }
-
-    if (_payrolls.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(20),
-        child: Text(
-          '계산 결과가 없습니다.',
-          style: GoogleFonts.notoSansKr(
-            color: AppColors.textSecondary,
-            fontSize: 13,
-          ),
-        ),
-      );
-    }
-
-    final children = <Widget>[
-      _buildPayrollHeaderRow(),
-      const Divider(height: 1, color: AppColors.surface2),
-    ];
-
-    double grandHours = 0;
-    double grandAmount = 0;
-
-    for (final payroll in _payrolls) {
-      for (final row in payroll.dailyRecords) {
-        grandHours += row.hours;
-        grandAmount += row.amount;
-        children.add(
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            child: Row(
-              children: [
-                _payrollCell(
-                  payroll.userName,
-                  flex: 3,
-                  color: AppColors.textPrimary,
-                ),
-                _payrollCell(
-                  DateFormat('yyyy-MM-dd').format(row.date),
-                  flex: 2,
-                  color: AppColors.textPrimary,
-                ),
-                _payrollCell(
-                  row.clockIn == null
-                      ? '-'
-                      : DateFormat('HH:mm').format(row.clockIn!),
-                  flex: 2,
-                  color: row.isUnpaired
-                      ? AppColors.statusCancelled
-                      : AppColors.textPrimary,
-                ),
-                _payrollCell(
-                  row.clockOut == null
-                      ? '-'
-                      : DateFormat('HH:mm').format(row.clockOut!),
-                  flex: 2,
-                  color: row.isUnpaired
-                      ? AppColors.statusCancelled
-                      : AppColors.textPrimary,
-                ),
-                _payrollCell(
-                  row.hours.toStringAsFixed(2),
-                  flex: 2,
-                  color: row.isUnpaired
-                      ? AppColors.statusCancelled
-                      : AppColors.textPrimary,
-                ),
-                _payrollCell(
-                  _currencyFormat.format(row.amount),
-                  flex: 2,
-                  color: row.isUnpaired
-                      ? AppColors.statusCancelled
-                      : AppColors.textPrimary,
-                ),
-              ],
-            ),
-          ),
-        );
-      }
-
-      children.add(
-        Container(
-          color: AppColors.surface2,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-          child: Row(
-            children: [
-              _payrollCell(
-                '${payroll.userName} 소계',
-                flex: 7,
-                color: AppColors.textPrimary,
-                bold: true,
-              ),
-              _payrollCell(
-                payroll.totalHours.toStringAsFixed(2),
-                flex: 2,
-                color: AppColors.textPrimary,
-                bold: true,
-              ),
-              _payrollCell(
-                _currencyFormat.format(payroll.totalAmount),
-                flex: 2,
-                color: AppColors.textPrimary,
-                bold: true,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    children.add(
-      Container(
-        color: AppColors.amber500.withValues(alpha: 0.2),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        child: Row(
-          children: [
-            _payrollCell('합계', flex: 7, color: AppColors.amber500, bold: true),
-            _payrollCell(
-              grandHours.toStringAsFixed(2),
-              flex: 2,
-              color: AppColors.amber500,
-              bold: true,
-            ),
-            _payrollCell(
-              _currencyFormat.format(grandAmount),
-              flex: 2,
-              color: AppColors.amber500,
-              bold: true,
-            ),
-          ],
-        ),
-      ),
-    );
-
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.surface2),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(children: children),
-    );
-  }
-
-  Widget _buildPayrollHeaderRow() {
-    return Container(
-      color: AppColors.surface2,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      child: Row(
-        children: [
-          _payrollCell(
-            '직원명',
-            flex: 3,
-            color: AppColors.textSecondary,
-            bold: true,
-          ),
-          _payrollCell(
-            '날짜',
-            flex: 2,
-            color: AppColors.textSecondary,
-            bold: true,
-          ),
-          _payrollCell(
-            '출근',
-            flex: 2,
-            color: AppColors.textSecondary,
-            bold: true,
-          ),
-          _payrollCell(
-            '퇴근',
-            flex: 2,
-            color: AppColors.textSecondary,
-            bold: true,
-          ),
-          _payrollCell(
-            '근무시간',
-            flex: 2,
-            color: AppColors.textSecondary,
-            bold: true,
-          ),
-          _payrollCell(
-            '금액(VND)',
-            flex: 2,
-            color: AppColors.textSecondary,
-            bold: true,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _payrollCell(
-    String text, {
-    required int flex,
-    required Color color,
-    bool bold = false,
-  }) {
-    return Expanded(
-      flex: flex,
-      child: Text(
-        text,
-        style: GoogleFonts.notoSansKr(
-          color: color,
-          fontSize: 12,
-          fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
-        ),
-      ),
-    );
-  }
-
-  static TimeOfDay _parseTime(String value) {
-    final parts = value.split(':');
-    if (parts.length != 2) return const TimeOfDay(hour: 9, minute: 0);
-    return TimeOfDay(
-      hour: int.tryParse(parts[0]) ?? 9,
-      minute: int.tryParse(parts[1]) ?? 0,
-    );
-  }
-
-  static String _formatTime(TimeOfDay time) {
-    final hour = time.hour.toString().padLeft(2, '0');
-    final minute = time.minute.toString().padLeft(2, '0');
-    return '$hour:$minute';
-  }
 }
 
 class _DateButton extends StatelessWidget {
@@ -1323,21 +509,15 @@ class _DateButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return OutlinedButton.icon(
       onPressed: onTap,
-      icon: const Icon(Icons.event),
-      label: Text('$label ${DateFormat('yyyy-MM-dd').format(value)}'),
+      icon: const Icon(Icons.calendar_month_outlined),
+      label: Text(
+        '$label ${DateFormat('yyyy-MM-dd').format(value)}',
+        style: GoogleFonts.notoSansKr(),
+      ),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.textPrimary,
+        side: const BorderSide(color: AppColors.surface2),
+      ),
     );
-  }
-}
-
-class _ShiftRowData {
-  _ShiftRowData({required this.start, required this.end, String amount = ''})
-    : amountController = TextEditingController(text: amount);
-
-  TimeOfDay start;
-  TimeOfDay end;
-  final TextEditingController amountController;
-
-  void dispose() {
-    amountController.dispose();
   }
 }

@@ -15,14 +15,14 @@ import 'kitchen_provider.dart';
 
 final kitchenRestaurantNameProvider = FutureProvider.family<String, String>((
   ref,
-  restaurantId,
+  storeId,
 ) async {
   final response = await supabase
       .from('restaurants')
       .select('name')
-      .eq('id', restaurantId)
+      .eq('id', storeId)
       .maybeSingle();
-  return response?['name']?.toString() ?? 'Restaurant';
+  return response?['name']?.toString() ?? 'Store';
 });
 
 class KitchenScreen extends ConsumerStatefulWidget {
@@ -51,7 +51,7 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
         return;
       }
       setState(() {
-        _now = DateTime.now().toUtc(); // UTC 기준으로 유지
+        _now = DateTime.now().toUtc(); // keep as UTC baseline
       });
     });
 
@@ -97,13 +97,13 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
     });
   }
 
-  void _ensureLoaded(String? restaurantId) {
-    if (restaurantId == null || _initializedRestaurantId == restaurantId) {
+  void _ensureLoaded(String? storeId) {
+    if (storeId == null || _initializedRestaurantId == storeId) {
       return;
     }
-    _initializedRestaurantId = restaurantId;
+    _initializedRestaurantId = storeId;
     Future.microtask(() {
-      ref.read(kitchenProvider.notifier).loadOrders(restaurantId);
+      ref.read(kitchenProvider.notifier).loadOrders(storeId);
     });
   }
 
@@ -157,8 +157,8 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
-    final restaurantId = authState.restaurantId;
-    _ensureLoaded(restaurantId);
+    final storeId = authState.storeId;
+    _ensureLoaded(storeId);
 
     final kitchenState = ref.watch(kitchenProvider);
     final notifier = ref.read(kitchenProvider.notifier);
@@ -171,7 +171,7 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
           Expanded(
             child: Column(
               children: [
-                _KitchenTopBar(now: _now, restaurantId: restaurantId),
+                _KitchenTopBar(now: _now, storeId: storeId),
                 Expanded(
                   child: Builder(
                     builder: (context) {
@@ -197,9 +197,9 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                               ),
                               const SizedBox(height: 12),
                               ElevatedButton(
-                                onPressed: restaurantId == null
+                                onPressed: storeId == null
                                     ? null
-                                    : () => notifier.loadOrders(restaurantId),
+                                    : () => notifier.loadOrders(storeId),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.amber500,
                                   foregroundColor: AppColors.surface0,
@@ -395,16 +395,16 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
 }
 
 class _KitchenTopBar extends ConsumerWidget {
-  const _KitchenTopBar({required this.now, required this.restaurantId});
+  const _KitchenTopBar({required this.now, required this.storeId});
 
   final DateTime now;
-  final String? restaurantId;
+  final String? storeId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final restaurantName = restaurantId == null
-        ? const AsyncValue<String>.data('Restaurant')
-        : ref.watch(kitchenRestaurantNameProvider(restaurantId!));
+    final restaurantName = storeId == null
+        ? const AsyncValue<String>.data('Store')
+        : ref.watch(kitchenRestaurantNameProvider(storeId!));
 
     return Container(
       height: 72,
@@ -444,7 +444,7 @@ class _KitchenTopBar extends ConsumerWidget {
                   ),
                 ),
                 error: (_, _) => Text(
-                  'Restaurant',
+                  'Store',
                   style: GoogleFonts.notoSansKr(
                     color: AppColors.textSecondary,
                     fontSize: 14,
@@ -464,7 +464,7 @@ class _KitchenTopBar extends ConsumerWidget {
           const SizedBox(width: 12),
           IconButton(
             icon: const Icon(Icons.logout, color: AppColors.textSecondary),
-            tooltip: '로그아웃',
+            tooltip: 'Log Out',
             onPressed: () async {
               await ref.read(authProvider.notifier).logout();
             },

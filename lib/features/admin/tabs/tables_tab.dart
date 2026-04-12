@@ -9,8 +9,10 @@ import '../../auth/auth_provider.dart';
 import '../../order/order_provider.dart';
 import '../../payment/payment_provider.dart';
 import '../../table/table_model.dart';
+import '../providers/admin_audit_provider.dart';
 import '../providers/menu_provider.dart';
 import '../providers/tables_provider.dart';
+import '../widgets/admin_audit_trace_panel.dart';
 
 class TablesTab extends ConsumerStatefulWidget {
   const TablesTab({super.key});
@@ -23,22 +25,26 @@ class _TablesTabState extends ConsumerState<TablesTab> {
   PosTable? _selectedTable;
   bool _showOrderPanel = false;
   String? _initializedRestaurantId;
+  String? _lastTablesError;
   String? _lastOrderError;
   String? _lastPaymentError;
 
-  void _ensureLoaded(String? restaurantId) {
-    if (restaurantId == null || _initializedRestaurantId == restaurantId) {
+  void _ensureLoaded(String? storeId) {
+    if (storeId == null || _initializedRestaurantId == storeId) {
       return;
     }
-    _initializedRestaurantId = restaurantId;
+    _initializedRestaurantId = storeId;
     Future.microtask(() {
-      ref.read(tablesProvider(restaurantId).notifier).fetchTables();
+      ref.read(tablesProvider(storeId).notifier).fetchTables();
       ref.read(orderProvider.notifier).clearSession();
-      ref.read(paymentProvider.notifier).loadOrders(restaurantId);
+      ref.read(paymentProvider.notifier).loadOrders(storeId);
     });
   }
 
-  Future<void> _onTapTable(Map<String, dynamic> table, String restaurantId) async {
+  Future<void> _onTapTable(
+    Map<String, dynamic> table,
+    String storeId,
+  ) async {
     final tableId = table['id']?.toString() ?? '';
     final tableNumber = table['table_number']?.toString() ?? '-';
     if (tableId.isEmpty) {
@@ -48,7 +54,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     setState(() {
       _selectedTable = PosTable(
         id: tableId,
-        restaurantId: restaurantId,
+        storeId: storeId,
         tableNumber: tableNumber,
         seatCount: int.tryParse(table['seat_count']?.toString() ?? '0') ?? 0,
         status: table['status']?.toString().toLowerCase() ?? 'available',
@@ -56,7 +62,9 @@ class _TablesTabState extends ConsumerState<TablesTab> {
       _showOrderPanel = true;
     });
 
-    await ref.read(orderProvider.notifier).loadActiveOrder(tableId, restaurantId);
+    await ref
+        .read(orderProvider.notifier)
+        .loadActiveOrder(tableId, storeId);
   }
 
   void _closeOrderPanel() {
@@ -69,21 +77,33 @@ class _TablesTabState extends ConsumerState<TablesTab> {
 
   @override
   Widget build(BuildContext context) {
-    final restaurantId = ref.watch(authProvider).restaurantId;
-    _ensureLoaded(restaurantId);
+    final storeId = ref.watch(authProvider).storeId;
+    _ensureLoaded(storeId);
 
-    if (restaurantId == null) {
+    if (storeId == null) {
       return const _RestaurantMissingView();
     }
 
-    final tablesState = ref.watch(tablesProvider(restaurantId));
-    final tablesNotifier = ref.read(tablesProvider(restaurantId).notifier);
-    final menuState = ref.watch(menuProvider(restaurantId));
-    final menuNotifier = ref.read(menuProvider(restaurantId).notifier);
+    final tablesState = ref.watch(tablesProvider(storeId));
+    final tablesNotifier = ref.read(tablesProvider(storeId).notifier);
+    final auditTraceAsync = ref.watch(adminAuditTraceProvider(storeId));
+    final menuState = ref.watch(menuProvider(storeId));
+    final menuNotifier = ref.read(menuProvider(storeId).notifier);
     final orderState = ref.watch(orderProvider);
     final orderNotifier = ref.read(orderProvider.notifier);
     final paymentState = ref.watch(paymentProvider);
     final paymentNotifier = ref.read(paymentProvider.notifier);
+
+    if (tablesState.error != null &&
+        tablesState.error!.isNotEmpty &&
+        tablesState.error != _lastTablesError) {
+      _lastTablesError = tablesState.error;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          showErrorToast(context, tablesState.error!);
+        }
+      });
+    }
 
     if (orderState.error != null &&
         orderState.error!.isNotEmpty &&
@@ -128,7 +148,8 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                     child: _buildTableGrid(
                       tablesState: tablesState,
                       tablesNotifier: tablesNotifier,
-                      restaurantId: restaurantId,
+                      storeId: storeId,
+                      auditTraceAsync: auditTraceAsync,
                     ),
                   ),
                   Expanded(
@@ -149,22 +170,28 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                       onCancelOrder: () async {
                         final activeOrder = orderState.activeOrder;
                         if (activeOrder == null) return;
-                        await orderNotifier.cancelOrder(activeOrder.id, restaurantId);
+                        await orderNotifier.cancelOrder(
+                          activeOrder.id,
+                          storeId,
+                        );
                         await tablesNotifier.fetchTables();
                         final next = ref.read(orderProvider);
                         if (!context.mounted) return;
                         if (next.error == null) {
-                          showSuccessToast(context, '주문이 취소되었습니다');
+                          showSuccessToast(context, 'Order cancelled');
                           _closeOrderPanel();
                         }
                       },
                       onSendOrder: () async {
                         if (orderState.activeOrder == null) {
-                          await orderNotifier.submitOrder(restaurantId, selectedTable.id);
+                          await orderNotifier.submitOrder(
+                            storeId,
+                            selectedTable.id,
+                          );
                         } else {
                           await orderNotifier.addMoreItems(
                             orderState.activeOrder!.id,
-                            restaurantId,
+                            storeId,
                           );
                         }
                         await tablesNotifier.fetchTables();
@@ -174,7 +201,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                         await orderNotifier.updateOrderItemStatus(
                           item.id,
                           nextStatus,
-                          restaurantId,
+                          storeId,
                           selectedTable.id,
                         );
                         await tablesNotifier.fetchTables();
@@ -189,7 +216,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                           (sum, item) => sum + (item.unitPrice * item.quantity),
                         );
                         await paymentNotifier.processPayment(
-                          restaurantId,
+                          storeId,
                           activeOrder.id,
                           amount,
                           method,
@@ -198,7 +225,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                         if (next.error == null) {
                           await tablesNotifier.fetchTables();
                           if (context.mounted) {
-                            showSuccessToast(context, '결제가 완료되었습니다');
+                            showSuccessToast(context, 'Payment complete');
                           }
                           _closeOrderPanel();
                         }
@@ -211,7 +238,8 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                 key: const ValueKey<String>('admin-table-grid'),
                 tablesState: tablesState,
                 tablesNotifier: tablesNotifier,
-                restaurantId: restaurantId,
+                storeId: storeId,
+                auditTraceAsync: auditTraceAsync,
               ),
       ),
     );
@@ -226,10 +254,11 @@ class _TablesTabState extends ConsumerState<TablesTab> {
       if (id != selected.id) continue;
       return PosTable(
         id: id,
-        restaurantId: selected.restaurantId,
+        storeId: selected.storeId,
         tableNumber: table['table_number']?.toString() ?? selected.tableNumber,
         seatCount:
-            int.tryParse(table['seat_count']?.toString() ?? '') ?? selected.seatCount,
+            int.tryParse(table['seat_count']?.toString() ?? '') ??
+            selected.seatCount,
         status: table['status']?.toString().toLowerCase() ?? selected.status,
       );
     }
@@ -240,7 +269,8 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     Key? key,
     required TablesState tablesState,
     required TablesNotifier tablesNotifier,
-    required String restaurantId,
+    required String storeId,
+    required AsyncValue<List<Map<String, dynamic>>> auditTraceAsync,
   }) {
     if (tablesState.isLoading && tablesState.tables.isEmpty) {
       return const Center(
@@ -286,7 +316,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
             ),
             const SizedBox(height: 12),
             Text(
-              'No tables yet. Add your first table.',
+              'No tables. Add your first table.',
               style: GoogleFonts.notoSansKr(
                 color: AppColors.textSecondary,
                 fontSize: 14,
@@ -297,115 +327,158 @@ class _TablesTabState extends ConsumerState<TablesTab> {
       );
     }
 
-    return GridView.builder(
+    return Column(
       key: key,
-      padding: const EdgeInsets.all(16),
-      itemCount: tablesState.tables.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: 1.25,
-      ),
-      itemBuilder: (context, index) {
-        final table = tablesState.tables[index];
-        final tableId = table['id']?.toString() ?? '';
-        final tableNumber = table['table_number']?.toString() ?? '-';
-        final seatCount = table['seat_count']?.toString() ?? '0';
-        final occupied = _isOccupied(table);
-        final summary = tablesState.activeOrderSummaryByTableId[tableId];
-
-        return InkWell(
-          onTap: () => _onTapTable(table, restaurantId),
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.surface1,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: _selectedTable?.id == tableId
-                    ? AppColors.amber500
-                    : AppColors.surface2,
-                width: _selectedTable?.id == tableId ? 1.5 : 1,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Recent Table Changes',
+                style: GoogleFonts.notoSansKr(
+                  color: AppColors.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Align(
-                  alignment: Alignment.topRight,
-                  child: InkWell(
-                    onTap: tableId.isEmpty
-                        ? null
-                        : () => tablesNotifier.deleteTable(tableId),
-                    child: const Icon(
-                      Icons.delete_outline,
-                      color: AppColors.textSecondary,
-                      size: 18,
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  tableNumber,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.bebasNeue(
-                    color: AppColors.amber500,
-                    fontSize: 32,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$seatCount seats',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.notoSansKr(
-                    color: AppColors.textSecondary,
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                if (summary != null)
-                  Text(
-                    '🍽 ${summary.itemCount}개 메뉴 · ${summary.elapsedMinutes}분 전',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.notoSansKr(
-                      color: AppColors.statusOccupied,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: occupied
-                            ? AppColors.statusOccupied
-                            : AppColors.statusAvailable,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      occupied ? 'Occupied' : 'Available',
-                      style: GoogleFonts.notoSansKr(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-                const Spacer(),
-              ],
-            ),
+              const SizedBox(height: 8),
+              AdminAuditTracePanel(
+                auditTraceAsync: auditTraceAsync,
+                allowedEntityTypes: const {'tables'},
+                maxItems: 3,
+                compact: true,
+                emptyMessage: 'No recent table changes.',
+              ),
+            ],
           ),
-        );
-      },
+        ),
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: tablesState.tables.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 1.25,
+            ),
+            itemBuilder: (context, index) {
+              final table = tablesState.tables[index];
+              final tableId = table['id']?.toString() ?? '';
+              final tableNumber = table['table_number']?.toString() ?? '-';
+              final seatCount = table['seat_count']?.toString() ?? '0';
+              final occupied = _isOccupied(table);
+              final summary = tablesState.activeOrderSummaryByTableId[tableId];
+
+              return InkWell(
+                onTap: () => _onTapTable(table, storeId),
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surface1,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: _selectedTable?.id == tableId
+                          ? AppColors.amber500
+                          : AppColors.surface2,
+                      width: _selectedTable?.id == tableId ? 1.5 : 1,
+                    ),
+                  ),
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Align(
+                        alignment: Alignment.topRight,
+                        child: InkWell(
+                          onTap: tableId.isEmpty
+                              ? null
+                              : () async {
+                                  final success = await tablesNotifier
+                                      .deleteTable(tableId);
+                                  if (!context.mounted || !success) {
+                                    return;
+                                  }
+                                  if (_selectedTable?.id == tableId) {
+                                    _closeOrderPanel();
+                                  }
+                                  showSuccessToast(
+                                    context,
+                                    'Table "$tableNumber" deleted.',
+                                  );
+                                },
+                          child: const Icon(
+                            Icons.delete_outline,
+                            color: AppColors.textSecondary,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        tableNumber,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.bebasNeue(
+                          color: AppColors.amber500,
+                          fontSize: 32,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$seatCount seats',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.notoSansKr(
+                          color: AppColors.textSecondary,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (summary != null)
+                        Text(
+                          '🍽 ${summary.itemCount} items · ${summary.elapsedMinutes} min ago',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.notoSansKr(
+                            color: AppColors.statusOccupied,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: occupied
+                                  ? AppColors.statusOccupied
+                                  : AppColors.statusAvailable,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            occupied ? 'Occupied' : 'Available',
+                            style: GoogleFonts.notoSansKr(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Spacer(),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -431,14 +504,14 @@ class _TablesTabState extends ConsumerState<TablesTab> {
               TextField(
                 controller: tableController,
                 style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                decoration: const InputDecoration(labelText: 'Table number'),
+                decoration: const InputDecoration(labelText: 'Table Number'),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: seatController,
                 keyboardType: TextInputType.number,
                 style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                decoration: const InputDecoration(labelText: 'Seat count'),
+                decoration: const InputDecoration(labelText: 'Seat Count'),
               ),
             ],
           ),
@@ -455,13 +528,22 @@ class _TablesTabState extends ConsumerState<TablesTab> {
               onPressed: () async {
                 final tableNumber = tableController.text.trim();
                 final seatCount = int.tryParse(seatController.text.trim());
-                if (tableNumber.isEmpty || seatCount == null || seatCount <= 0) {
+                if (tableNumber.isEmpty ||
+                    seatCount == null ||
+                    seatCount <= 0) {
+                  showErrorToast(context, 'Enter a valid table number and seat count.');
                   return;
                 }
 
-                await tablesNotifier.addTable(tableNumber, seatCount);
+                final success = await tablesNotifier.addTable(
+                  tableNumber,
+                  seatCount,
+                );
                 if (context.mounted) {
-                  Navigator.of(context).pop();
+                  if (success) {
+                    Navigator.of(context).pop();
+                    showSuccessToast(context, 'Table "$tableNumber" added.');
+                  }
                 }
               },
               child: const Text('Add'),
@@ -496,7 +578,7 @@ class _RestaurantMissingView extends StatelessWidget {
       backgroundColor: AppColors.surface0,
       body: Center(
         child: Text(
-          'Restaurant not found for this account.',
+          'No store linked to this account.',
           style: GoogleFonts.notoSansKr(
             color: AppColors.statusCancelled,
             fontSize: 14,

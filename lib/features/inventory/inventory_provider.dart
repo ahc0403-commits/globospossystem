@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/inventory_service.dart';
 
@@ -27,18 +28,21 @@ class IngredientState {
 class IngredientNotifier extends StateNotifier<IngredientState> {
   IngredientNotifier() : super(const IngredientState());
 
-  Future<void> load(String restaurantId) async {
+  Future<void> load(String storeId) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final items = await inventoryService.fetchIngredients(restaurantId);
+      final items = await inventoryService.fetchIngredients(storeId);
       state = state.copyWith(items: items, isLoading: false);
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(
+        isLoading: false,
+        error: _mapIngredientError(e, 'Failed to load ingredients.'),
+      );
     }
   }
 
-  Future<void> add({
-    required String restaurantId,
+  Future<bool> add({
+    required String storeId,
     required String name,
     required String unit,
     double? currentStock,
@@ -46,47 +50,148 @@ class IngredientNotifier extends StateNotifier<IngredientState> {
     double? costPerUnit,
     String? supplierName,
   }) async {
-    await inventoryService.createIngredient(
-      restaurantId: restaurantId,
-      name: name,
-      unit: unit,
-      currentStock: currentStock,
-      reorderPoint: reorderPoint,
-      costPerUnit: costPerUnit,
-      supplierName: supplierName,
-    );
-    await load(restaurantId);
+    state = state.copyWith(clearError: true);
+    try {
+      await inventoryService.createIngredient(
+        storeId: storeId,
+        name: name,
+        unit: unit,
+        currentStock: currentStock,
+        reorderPoint: reorderPoint,
+        costPerUnit: costPerUnit,
+        supplierName: supplierName,
+      );
+      await load(storeId);
+      return true;
+    } catch (e) {
+      state = state.copyWith(error: _mapIngredientError(e, 'Failed to add ingredient.'));
+      return false;
+    }
   }
 
-  Future<void> update(
+  Future<bool> update(
     String id,
-    String restaurantId,
+    String storeId,
     Map<String, dynamic> data,
   ) async {
-    await inventoryService.updateIngredient(id, data);
-    await load(restaurantId);
+    state = state.copyWith(clearError: true);
+    try {
+      await inventoryService.updateIngredient(
+        id,
+        data,
+        storeId: storeId,
+      );
+      await load(storeId);
+      return true;
+    } catch (e) {
+      state = state.copyWith(error: _mapIngredientError(e, 'Failed to update ingredient.'));
+      return false;
+    }
   }
 
-  Future<void> delete(String id, String restaurantId) async {
-    await inventoryService.deleteIngredient(id);
-    await load(restaurantId);
+  Future<void> delete(String id, String storeId) async {
+    await inventoryService.deleteIngredient(id, storeId: storeId);
+    await load(storeId);
   }
 
-  Future<void> restock(
-    String restaurantId,
+  Future<bool> restock(
+    String storeId,
     String ingredientId,
     double qty,
     String? note,
-    String? userId,
   ) async {
-    await inventoryService.restockIngredient(
-      restaurantId: restaurantId,
-      ingredientId: ingredientId,
-      quantityG: qty,
-      note: note,
-      userId: userId,
-    );
-    await load(restaurantId);
+    try {
+      await inventoryService.restockIngredient(
+        storeId: storeId,
+        ingredientId: ingredientId,
+        quantityG: qty,
+        note: note,
+      );
+      await load(storeId);
+      return true;
+    } catch (e) {
+      state = state.copyWith(error: _mapRestockWasteError(e, 'Stock-in failed.'));
+      return false;
+    }
+  }
+
+  Future<bool> recordWaste(
+    String storeId,
+    String ingredientId,
+    double qty,
+    String? note,
+  ) async {
+    try {
+      await inventoryService.recordWaste(
+        storeId: storeId,
+        ingredientId: ingredientId,
+        quantityG: qty,
+        note: note,
+      );
+      await load(storeId);
+      return true;
+    } catch (e) {
+      state = state.copyWith(error: _mapRestockWasteError(e, 'Waste record failed.'));
+      return false;
+    }
+  }
+
+  String _mapRestockWasteError(Object error, String fallback) {
+    final message = error is PostgrestException
+        ? (error.message)
+        : error.toString();
+
+    if (message.contains('INVENTORY_RESTOCK_FORBIDDEN') ||
+        message.contains('INVENTORY_WASTE_FORBIDDEN')) {
+      return 'No permission to change inventory for this store.';
+    }
+    if (message.contains('QUANTITY_INVALID')) {
+      return 'Quantity must be greater than 0.';
+    }
+    if (message.contains('INGREDIENT_NOT_FOUND')) {
+      return 'Ingredient not found.';
+    }
+    return fallback;
+  }
+
+  String _mapIngredientError(Object error, String fallback) {
+    final message = error is PostgrestException
+        ? (error.message)
+        : error.toString();
+
+    if (message.contains('INVENTORY_CATALOG_FORBIDDEN') ||
+        message.contains('INVENTORY_ITEM_WRITE_FORBIDDEN')) {
+      return 'No permission to modify ingredient catalog for this store.';
+    }
+    if (message.contains('INVENTORY_ITEM_NAME_REQUIRED')) {
+      return 'Enter an ingredient name.';
+    }
+    if (message.contains('INVENTORY_ITEM_UNIT_INVALID')) {
+      return 'Unit must be g, ml, or ea.';
+    }
+    if (message.contains('INVENTORY_ITEM_CURRENT_STOCK_INVALID') ||
+        message.contains('INVENTORY_ITEM_CURRENT_STOCK_REQUIRED')) {
+      return 'Current stock must be 0 or greater.';
+    }
+    if (message.contains('INVENTORY_ITEM_REORDER_POINT_INVALID')) {
+      return 'Reorder threshold must be 0 or greater.';
+    }
+    if (message.contains('INVENTORY_ITEM_COST_INVALID')) {
+      return 'Unit price must be 0 or greater.';
+    }
+    if (message.contains('INVENTORY_ITEM_NAME_DUPLICATE')) {
+      return 'An ingredient with the same name already exists in this store.';
+    }
+    if (message.contains('INVENTORY_ITEM_PATCH_INVALID') ||
+        message.contains('INVENTORY_ITEM_PATCH_EMPTY') ||
+        message.contains('INVENTORY_ITEM_PATCH_UNSUPPORTED')) {
+      return 'Only editable ingredient items can be changed.';
+    }
+    if (message.contains('INVENTORY_ITEM_NOT_FOUND')) {
+      return 'Reload ingredients and try again.';
+    }
+
+    return fallback;
   }
 }
 
@@ -124,43 +229,84 @@ class RecipeState {
 class RecipeNotifier extends StateNotifier<RecipeState> {
   RecipeNotifier() : super(const RecipeState());
 
-  Future<void> loadAll(String restaurantId) async {
+  Future<void> loadAll(String storeId) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final recipes = await inventoryService.fetchAllRecipes(restaurantId);
-      final menuItems = await inventoryService.fetchMenuItems(restaurantId);
+      final recipes = await inventoryService.fetchAllRecipes(storeId);
+      final menuItems = await inventoryService.fetchMenuItems(storeId);
       state = state.copyWith(
         allRecipes: recipes,
         menuItems: menuItems,
         isLoading: false,
       );
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(
+        isLoading: false,
+        error: _mapRecipeError(e, 'Failed to load recipe mappings.'),
+      );
     }
   }
 
-  Future<void> upsert({
-    required String restaurantId,
+  Future<bool> upsert({
+    required String storeId,
     required String menuItemId,
     required String ingredientId,
     required double quantityG,
   }) async {
-    await inventoryService.upsertRecipe(
-      restaurantId: restaurantId,
-      menuItemId: menuItemId,
-      ingredientId: ingredientId,
-      quantityG: quantityG,
-    );
-    await loadAll(restaurantId);
+    state = state.copyWith(clearError: true);
+    try {
+      await inventoryService.upsertRecipe(
+        storeId: storeId,
+        menuItemId: menuItemId,
+        ingredientId: ingredientId,
+        quantityG: quantityG,
+      );
+      await loadAll(storeId);
+      return true;
+    } catch (e) {
+      state = state.copyWith(error: _mapRecipeError(e, 'Failed to save recipe mapping.'));
+      return false;
+    }
   }
 
   Future<void> delete(
-    String restaurantId,
+    String storeId,
     String menuItemId,
     String ingredientId,
   ) async {
-    await inventoryService.deleteRecipe(menuItemId, ingredientId);
-    await loadAll(restaurantId);
+    await inventoryService.deleteRecipe(
+      menuItemId,
+      ingredientId,
+      storeId: storeId,
+    );
+    await loadAll(storeId);
+  }
+
+  String _mapRecipeError(Object error, String fallback) {
+    final message = error is PostgrestException
+        ? (error.message)
+        : error.toString();
+
+    if (message.contains('INVENTORY_RECIPE_FORBIDDEN') ||
+        message.contains('INVENTORY_RECIPE_WRITE_FORBIDDEN')) {
+      return 'No permission to modify recipes for this store.';
+    }
+    if (message.contains('INVENTORY_RECIPE_MENU_ITEM_REQUIRED') ||
+        message.contains('INVENTORY_RECIPE_MENU_ITEM_NOT_FOUND')) {
+      return 'Select a valid menu.';
+    }
+    if (message.contains('INVENTORY_RECIPE_INGREDIENT_REQUIRED') ||
+        message.contains('INVENTORY_RECIPE_INGREDIENT_NOT_FOUND')) {
+      return 'Select a valid ingredient.';
+    }
+    if (message.contains('INVENTORY_RECIPE_QUANTITY_INVALID')) {
+      return 'Usage (g) must be greater than 0.';
+    }
+    if (message.contains('INVENTORY_RECIPE_INGREDIENT_UNIT_UNSUPPORTED')) {
+      return 'In v1, only ingredients with unit g can be linked to recipes.';
+    }
+
+    return fallback;
   }
 }
 
@@ -197,42 +343,69 @@ class PhysicalCountState {
 class PhysicalCountNotifier extends StateNotifier<PhysicalCountState> {
   PhysicalCountNotifier() : super(const PhysicalCountState());
 
-  Future<void> load(String restaurantId, String countDate) async {
+  Future<void> load(String storeId, String countDate) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       final counts = await inventoryService.fetchPhysicalCounts(
-        restaurantId,
+        storeId,
         countDate,
       );
       state = state.copyWith(counts: counts, isLoading: false);
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(
+        isLoading: false,
+        error: _mapPhysicalCountError(e, 'Failed to load physical count sheet.'),
+      );
     }
   }
 
   Future<void> submit({
-    required String restaurantId,
+    required String storeId,
     required String ingredientId,
     required String countDate,
     required double actualQty,
-    required double theoreticalQty,
-    String? userId,
+    String? note,
   }) async {
     state = state.copyWith(isSaving: true);
     try {
       await inventoryService.submitPhysicalCount(
-        restaurantId: restaurantId,
+        storeId: storeId,
         ingredientId: ingredientId,
         countDate: countDate,
         actualQty: actualQty,
-        theoreticalQty: theoreticalQty,
-        userId: userId,
+        note: note,
       );
-      await load(restaurantId, countDate);
+      await load(storeId, countDate);
       state = state.copyWith(isSaving: false, clearError: true);
     } catch (e) {
-      state = state.copyWith(isSaving: false, error: e.toString());
+      state = state.copyWith(
+        isSaving: false,
+        error: _mapPhysicalCountError(e, 'Failed to apply physical count.'),
+      );
     }
+  }
+
+  String _mapPhysicalCountError(Object error, String fallback) {
+    final message = error is PostgrestException
+        ? (error.message)
+        : error.toString();
+
+    if (message.contains('INVENTORY_PHYSICAL_COUNT_FORBIDDEN') ||
+        message.contains('INVENTORY_PHYSICAL_COUNT_WRITE_FORBIDDEN')) {
+      return 'No permission to apply physical count for this store.';
+    }
+    if (message.contains('INVENTORY_PHYSICAL_COUNT_DATE_REQUIRED')) {
+      return 'Check the physical count reference date.';
+    }
+    if (message.contains('INVENTORY_PHYSICAL_COUNT_INGREDIENT_REQUIRED') ||
+        message.contains('INVENTORY_PHYSICAL_COUNT_INGREDIENT_NOT_FOUND')) {
+      return 'Select a valid ingredient.';
+    }
+    if (message.contains('INVENTORY_PHYSICAL_COUNT_ACTUAL_INVALID')) {
+      return 'Actual stock must be 0 or greater.';
+    }
+
+    return fallback;
   }
 }
 
@@ -267,21 +440,41 @@ class InventoryReportNotifier extends StateNotifier<InventoryReportState> {
   InventoryReportNotifier() : super(const InventoryReportState());
 
   Future<void> load({
-    required String restaurantId,
+    required String storeId,
     required DateTime from,
     required DateTime to,
   }) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       final tx = await inventoryService.fetchTransactions(
-        restaurantId: restaurantId,
+        storeId: storeId,
         from: from,
         to: to,
       );
       state = state.copyWith(transactions: tx, isLoading: false);
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(
+        isLoading: false,
+        error: _mapInventoryReportError(e),
+      );
     }
+  }
+
+  String _mapInventoryReportError(Object error) {
+    final fallback = 'Failed to load inventory transactions.';
+    final message = error.toString();
+
+    if (message.contains('INVENTORY_TRANSACTION_VISIBILITY_FORBIDDEN')) {
+      return 'No permission to view inventory transactions for this store.';
+    }
+    if (message.contains('INVENTORY_TRANSACTION_VISIBILITY_RANGE_REQUIRED')) {
+      return 'Re-check the query period.';
+    }
+    if (message.contains('INVENTORY_TRANSACTION_VISIBILITY_RANGE_INVALID')) {
+      return 'Check the start and end date order.';
+    }
+
+    return fallback;
   }
 }
 

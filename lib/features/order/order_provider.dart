@@ -38,6 +38,9 @@ class OrderState {
 class OrderNotifier extends StateNotifier<OrderState> {
   OrderNotifier() : super(const OrderState());
 
+  RealtimeChannel? _orderItemsChannel;
+  String? _subscribedOrderId;
+
   List<Map<String, dynamic>> _cartPayloadItems() {
     return state.cart
         .map(
@@ -99,6 +102,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
   }
 
   void clearSession() {
+    _unsubscribeOrderItems();
     state = state.copyWith(
       cart: const [],
       clearActiveOrder: true,
@@ -107,15 +111,15 @@ class OrderNotifier extends StateNotifier<OrderState> {
     );
   }
 
-  Future<void> loadActiveOrder(String tableId, String restaurantId) async {
+  Future<void> loadActiveOrder(String tableId, String storeId) async {
     try {
       final response = await supabase
           .from('orders')
           .select(
-            'id, table_id, status, created_at, order_items(id, menu_item_id, label, unit_price, quantity, status, item_type)',
+            'id, table_id, status, created_at, order_items(id, menu_item_id, label, unit_price, quantity, status, item_type, menu_items(name))',
           )
           .eq('table_id', tableId)
-          .eq('restaurant_id', restaurantId)
+          .eq('restaurant_id', storeId)
           .not('status', 'in', '(completed,cancelled)')
           .order('created_at', ascending: false)
           .limit(1);
@@ -125,12 +129,54 @@ class OrderNotifier extends StateNotifier<OrderState> {
           : Order.fromJson(Map<String, dynamic>.from(response.first));
 
       state = state.copyWith(activeOrder: activeOrder, clearError: true);
+
+      // Subscribe to order_items changes for realtime kitchen status updates
+      if (activeOrder != null) {
+        await _subscribeOrderItems(activeOrder.id, tableId, storeId);
+      } else {
+        await _unsubscribeOrderItems();
+      }
     } catch (error) {
       state = state.copyWith(error: 'Failed to load active order: $error');
     }
   }
 
-  Future<void> submitOrder(String restaurantId, String tableId) async {
+  Future<void> _subscribeOrderItems(
+    String orderId,
+    String tableId,
+    String storeId,
+  ) async {
+    if (_subscribedOrderId == orderId && _orderItemsChannel != null) {
+      return;
+    }
+
+    await _unsubscribeOrderItems();
+    _subscribedOrderId = orderId;
+
+    _orderItemsChannel = supabase
+        .channel('public:waiter_order_items:$orderId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'order_items',
+          callback: (_) {
+            if (mounted) {
+              loadActiveOrder(tableId, storeId);
+            }
+          },
+        )
+        .subscribe();
+  }
+
+  Future<void> _unsubscribeOrderItems() async {
+    if (_orderItemsChannel != null) {
+      await _orderItemsChannel!.unsubscribe();
+      _orderItemsChannel = null;
+      _subscribedOrderId = null;
+    }
+  }
+
+  Future<void> submitOrder(String storeId, String tableId) async {
     if (state.cart.isEmpty) {
       return;
     }
@@ -139,21 +185,23 @@ class OrderNotifier extends StateNotifier<OrderState> {
 
     try {
       await orderService.createOrder(
-        restaurantId: restaurantId,
+        storeId: storeId,
         tableId: tableId,
         items: _cartPayloadItems(),
       );
 
       state = state.copyWith(cart: const []);
-      await loadActiveOrder(tableId, restaurantId);
+      await loadActiveOrder(tableId, storeId);
     } catch (error) {
-      state = state.copyWith(error: 'Failed to submit order: $error');
+      state = state.copyWith(
+        error: _mapOrderError(error, 'Failed to submit order'),
+      );
     } finally {
       state = state.copyWith(isSubmitting: false);
     }
   }
 
-  Future<void> addMoreItems(String orderId, String restaurantId) async {
+  Future<void> addMoreItems(String orderId, String storeId) async {
     if (state.cart.isEmpty) {
       return;
     }
@@ -164,23 +212,25 @@ class OrderNotifier extends StateNotifier<OrderState> {
     try {
       await orderService.addItemsToOrder(
         orderId: orderId,
-        restaurantId: restaurantId,
+        storeId: storeId,
         items: _cartPayloadItems(),
       );
 
       state = state.copyWith(cart: const []);
       if (activeTableId != null) {
-        await loadActiveOrder(activeTableId, restaurantId);
+        await loadActiveOrder(activeTableId, storeId);
       }
     } catch (error) {
-      state = state.copyWith(error: 'Failed to add items to order: $error');
+      state = state.copyWith(
+        error: _mapOrderError(error, 'Failed to add items to order'),
+      );
     } finally {
       state = state.copyWith(isSubmitting: false);
     }
   }
 
   Future<void> submitBuffetOrder(
-    String restaurantId,
+    String storeId,
     String tableId,
     int guestCount,
   ) async {
@@ -193,27 +243,29 @@ class OrderNotifier extends StateNotifier<OrderState> {
 
     try {
       await orderService.createBuffetOrder(
-        restaurantId: restaurantId,
+        storeId: storeId,
         tableId: tableId,
         guestCount: guestCount,
         extraItems: _cartPayloadItems(),
       );
 
       state = state.copyWith(cart: const []);
-      await loadActiveOrder(tableId, restaurantId);
+      await loadActiveOrder(tableId, storeId);
     } catch (error) {
-      state = state.copyWith(error: 'Failed to submit buffet order: $error');
+      state = state.copyWith(
+        error: _mapOrderError(error, 'Failed to submit buffet order'),
+      );
     } finally {
       state = state.copyWith(isSubmitting: false);
     }
   }
 
-  Future<void> cancelOrder(String orderId, String restaurantId) async {
+  Future<void> cancelOrder(String orderId, String storeId) async {
     state = state.copyWith(isSubmitting: true, clearError: true);
     try {
       await orderService.cancelOrder(
         orderId: orderId,
-        restaurantId: restaurantId,
+        storeId: storeId,
       );
       state = state.copyWith(
         isSubmitting: false,
@@ -224,19 +276,90 @@ class OrderNotifier extends StateNotifier<OrderState> {
     } on PostgrestException catch (error) {
       state = state.copyWith(
         isSubmitting: false,
-        error: error.message == 'ORDER_NOT_CANCELLABLE'
-            ? '완료되거나 이미 취소된 주문은 취소할 수 없습니다.'
-            : '주문 취소 실패: ${error.message}',
+        error: _mapOrderError(error, 'Failed to cancel order'),
       );
     } catch (error) {
-      state = state.copyWith(isSubmitting: false, error: '주문 취소 실패: $error');
+      state = state.copyWith(
+        isSubmitting: false,
+        error: _mapOrderError(error, 'Failed to cancel order'),
+      );
+    }
+  }
+
+  Future<void> cancelOrderItem(
+    String itemId,
+    String storeId,
+  ) async {
+    final tableId = state.activeOrder?.tableId;
+    state = state.copyWith(isSubmitting: true, clearError: true);
+    try {
+      await orderService.cancelOrderItem(
+        itemId: itemId,
+        storeId: storeId,
+      );
+      if (tableId != null) {
+        await loadActiveOrder(tableId, storeId);
+      }
+    } catch (error) {
+      state = state.copyWith(
+        error: _mapOrderError(error, 'Failed to cancel item'),
+      );
+    } finally {
+      state = state.copyWith(isSubmitting: false);
+    }
+  }
+
+  Future<void> editOrderItemQuantity(
+    String itemId,
+    String storeId,
+    int newQuantity,
+  ) async {
+    final tableId = state.activeOrder?.tableId;
+    state = state.copyWith(isSubmitting: true, clearError: true);
+    try {
+      await orderService.editOrderItemQuantity(
+        itemId: itemId,
+        storeId: storeId,
+        newQuantity: newQuantity,
+      );
+      if (tableId != null) {
+        await loadActiveOrder(tableId, storeId);
+      }
+    } catch (error) {
+      state = state.copyWith(
+        error: _mapOrderError(error, 'Failed to change quantity'),
+      );
+    } finally {
+      state = state.copyWith(isSubmitting: false);
+    }
+  }
+
+  Future<void> transferOrderTable(
+    String orderId,
+    String storeId,
+    String newTableId,
+  ) async {
+    state = state.copyWith(isSubmitting: true, clearError: true);
+    try {
+      await orderService.transferOrderTable(
+        orderId: orderId,
+        storeId: storeId,
+        newTableId: newTableId,
+      );
+      await loadActiveOrder(newTableId, storeId);
+    } catch (error) {
+      state = state.copyWith(
+        error: _mapOrderError(error, 'Failed to move table'),
+      );
+    } finally {
+      state = state.copyWith(isSubmitting: false);
     }
   }
 
   Future<void> updateOrderItemStatus(
     String itemId,
     String newStatus,
-    String restaurantId,
+    String storeId,
     String tableId,
   ) async {
     if (itemId.isEmpty) {
@@ -258,15 +381,21 @@ class OrderNotifier extends StateNotifier<OrderState> {
     }
 
     try {
-      await supabase
-          .from('order_items')
-          .update({'status': newStatus})
-          .eq('id', itemId);
-      await loadActiveOrder(tableId, restaurantId);
+      await orderService.updateOrderItemStatus(
+        itemId: itemId,
+        storeId: storeId,
+        status: newStatus,
+      );
+      await loadActiveOrder(tableId, storeId);
+    } on PostgrestException catch (error) {
+      state = state.copyWith(
+        activeOrder: previousOrder,
+        error: _mapOrderError(error, 'Failed to update item status'),
+      );
     } catch (error) {
       state = state.copyWith(
         activeOrder: previousOrder,
-        error: 'Failed to update item status: $error',
+        error: _mapOrderError(error, 'Failed to update item status'),
       );
     }
   }
@@ -275,3 +404,45 @@ class OrderNotifier extends StateNotifier<OrderState> {
 final orderProvider = StateNotifierProvider<OrderNotifier, OrderState>(
   (ref) => OrderNotifier(),
 );
+
+String _mapOrderError(Object error, String fallbackPrefix) {
+  if (error is PostgrestException) {
+    return switch (error.message) {
+      'TABLE_ALREADY_OCCUPIED' => 'The selected table is already occupied.',
+      'TABLE_NOT_FOUND' => 'The selected table could not be found.',
+      'ORDER_ITEMS_REQUIRED' =>
+        'Add at least one item before sending the order.',
+      'INVALID_ORDER_ITEM_INPUT' =>
+        'One or more selected items are invalid for this order.',
+      'MENU_ITEM_NOT_AVAILABLE' =>
+        'One or more selected menu items are unavailable.',
+      'ORDER_CREATE_FORBIDDEN' =>
+        'You do not have permission to create an order for this restaurant.',
+      'ORDER_MUTATION_FORBIDDEN' =>
+        'You do not have permission to change this order.',
+      'ORDER_NOT_FOUND' => 'The selected order could not be found.',
+      'ORDER_NOT_MUTABLE' => 'This order can no longer be changed.',
+      'ORDER_NOT_CANCELLABLE' =>
+        'Only pending or confirmed orders can be cancelled.',
+      'BUFFET_GUEST_COUNT_REQUIRED' =>
+        'Buffet orders require a guest count of at least 1.',
+      'OPERATION_MODE_MISMATCH' =>
+        'This restaurant does not support buffet ordering for this flow.',
+      'ORDER_ITEM_STATUS_FORBIDDEN' =>
+        'You do not have permission to change kitchen item status.',
+      'ORDER_ITEM_NOT_FOUND' => 'The selected order item could not be found.',
+      'INVALID_ORDER_ITEM_STATUS_TRANSITION' =>
+        'That item status transition is not allowed.',
+      'ORDER_NOT_PAYABLE' => 'Completed or cancelled orders cannot be changed.',
+      'ITEM_NOT_CANCELLABLE' =>
+        'Only pending or preparing items can be cancelled.',
+      'ITEM_NOT_EDITABLE' =>
+        'Only pending items can have their quantity edited.',
+      'ITEM_IS_CANCELLED' => 'This item has been cancelled.',
+      'INVALID_QUANTITY' => 'Quantity must be at least 1.',
+      'TRANSFER_SAME_TABLE' => 'Cannot transfer to the same table.',
+      _ => '$fallbackPrefix: ${error.message}',
+    };
+  }
+  return '$fallbackPrefix: $error';
+}

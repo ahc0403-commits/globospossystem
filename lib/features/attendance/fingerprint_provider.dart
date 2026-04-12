@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/attendance_service.dart';
 import '../../core/hardware/zkteco_fingerprint_service.dart';
@@ -68,162 +69,33 @@ class FingerprintNotifier extends StateNotifier<FingerprintState> {
   final _service = createFingerprintService();
 
   Future<void> initialize() async {
-    if (!_service.isSupported) {
-      state = state.copyWith(
-        isInitialized: false,
-        error: '이 기기에서는 지문 인식기를 지원하지 않습니다.',
-      );
-      return;
-    }
-
-    final ok = await _service.init();
     state = state.copyWith(
-      isInitialized: ok,
-      error: ok ? null : 'ZK9500 연결 실패. USB 케이블을 확인해주세요.',
+      isInitialized: false,
+      error: 'Fingerprint attendance is currently disabled.',
       clearSuccess: true,
     );
   }
 
   Future<bool> enrollFingerprint({
     required String userId,
-    required String restaurantId,
+    required String storeId,
     required int fingerIndex,
   }) async {
     state = state.copyWith(
-      isEnrolling: true,
-      clearError: true,
+      isEnrolling: false,
+      error: 'Fingerprint attendance is currently disabled.',
       clearSuccess: true,
     );
-
-    try {
-      final template = await _service.captureTemplate();
-      if (template == null || template.isEmpty) {
-        state = state.copyWith(
-          isEnrolling: false,
-          error: '지문 인식 실패. 다시 시도해주세요.',
-        );
-        return false;
-      }
-
-      await supabase.from('fingerprint_templates').upsert({
-        'user_id': userId,
-        'restaurant_id': restaurantId,
-        'template_data': template,
-        'finger_index': fingerIndex,
-      }, onConflict: 'user_id,finger_index');
-
-      state = state.copyWith(
-        isEnrolling: false,
-        successMessage: '지문 등록 완료!',
-        clearError: true,
-      );
-      return true;
-    } catch (error) {
-      state = state.copyWith(isEnrolling: false, error: error.toString());
-      return false;
-    }
+    return false;
   }
 
-  Future<void> identifyAndRecord(String restaurantId) async {
-    if (!state.isInitialized) {
-      state = state.copyWith(error: '지문 인식기가 연결되지 않았습니다.');
-      return;
-    }
-
+  Future<void> identifyAndRecord(String storeId) async {
     state = state.copyWith(
-      isCapturing: true,
-      clearError: true,
+      isCapturing: false,
       clearResult: true,
       clearSuccess: true,
+      error: 'Fingerprint attendance is currently disabled.',
     );
-
-    try {
-      final capturedTemplate = await _service.captureTemplate();
-      if (capturedTemplate == null || capturedTemplate.isEmpty) {
-        state = state.copyWith(
-          isCapturing: false,
-          error: '지문 인식 실패. 다시 시도해주세요.',
-        );
-        return;
-      }
-
-      final rows = await supabase
-          .from('fingerprint_templates')
-          .select('user_id, template_data, users(full_name)')
-          .eq('restaurant_id', restaurantId);
-
-      String? matchedUserId;
-      String? matchedUserName;
-
-      for (final row in rows) {
-        final map = Map<String, dynamic>.from(row);
-        final storedTemplate = map['template_data']?.toString() ?? '';
-        if (storedTemplate.isEmpty) {
-          continue;
-        }
-
-        final isMatch = await _service.matchTemplate(
-          capturedTemplate,
-          storedTemplate,
-        );
-        if (!isMatch) {
-          continue;
-        }
-
-        matchedUserId = map['user_id']?.toString();
-        final userData = map['users'];
-        if (userData is Map<String, dynamic>) {
-          matchedUserName = userData['full_name']?.toString();
-        }
-        break;
-      }
-
-      if (matchedUserId == null) {
-        state = state.copyWith(isCapturing: false, error: '등록되지 않은 지문입니다.');
-        return;
-      }
-
-      final lastLog = await supabase
-          .from('attendance_logs')
-          .select('type')
-          .eq('restaurant_id', restaurantId)
-          .eq('user_id', matchedUserId)
-          .order('logged_at', ascending: false)
-          .limit(1)
-          .maybeSingle();
-
-      final lastType = lastLog?['type']?.toString();
-      final newType = lastType == 'clock_in' ? 'clock_out' : 'clock_in';
-
-      await supabase.from('attendance_logs').insert({
-        'restaurant_id': restaurantId,
-        'user_id': matchedUserId,
-        'type': newType,
-        'logged_at': DateTime.now().toUtc().toIso8601String(),
-      });
-
-      final safeName = matchedUserName ?? '스태프';
-      state = state.copyWith(
-        isCapturing: false,
-        lastIdentifiedUserId: matchedUserId,
-        lastIdentifiedUserName: safeName,
-        attendanceType: newType,
-        successMessage: newType == 'clock_in'
-            ? '출근 완료: $safeName'
-            : '퇴근 완료: $safeName',
-      );
-
-      await Future<void>.delayed(const Duration(seconds: 3));
-      if (mounted) {
-        state = state.copyWith(
-          clearResult: true,
-          clearSuccess: true,
-          clearError: true,
-        );
-      }
-    } catch (error) {
-      state = state.copyWith(isCapturing: false, error: error.toString());
-    }
   }
 
   void clearResult() {
@@ -250,21 +122,17 @@ final staffFingerprintCountProvider = FutureProvider.family<int, String>((
   ref,
   userId,
 ) async {
-  final response = await supabase
-      .from('fingerprint_templates')
-      .select('id')
-      .eq('user_id', userId);
-  return response.length;
+  return 0;
 });
 
 final restaurantNameProvider = FutureProvider.family<String, String>((
   ref,
-  restaurantId,
+  storeId,
 ) async {
   final response = await supabase
       .from('restaurants')
       .select('name')
-      .eq('id', restaurantId)
+      .eq('id', storeId)
       .single();
   final name = response['name']?.toString().trim();
   if (name == null || name.isEmpty) {
@@ -310,23 +178,26 @@ class AttendanceKioskState {
 class AttendanceKioskNotifier extends StateNotifier<AttendanceKioskState> {
   AttendanceKioskNotifier() : super(const AttendanceKioskState());
 
-  Future<void> loadStaff(String restaurantId) async {
+  Future<void> loadStaff(String storeId) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final staff = await attendanceService.fetchStaffList(restaurantId);
+      final staff = await attendanceService.fetchStaffList(storeId);
       state = state.copyWith(
         staffList: staff,
         isLoading: false,
         clearError: true,
       );
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: '$e');
+      state = state.copyWith(
+        isLoading: false,
+        error: _mapAttendanceError(e, 'Failed to load staff list.'),
+      );
     }
   }
 
   Future<bool> recordAttendance({
     required String userId,
-    required String restaurantId,
+    required String storeId,
     required String type,
     File? photoFile,
   }) async {
@@ -341,7 +212,7 @@ class AttendanceKioskNotifier extends StateNotifier<AttendanceKioskState> {
       if (photoFile != null) {
         try {
           photoUrl = await attendanceService.uploadAttendancePhoto(
-            restaurantId: restaurantId,
+            storeId: storeId,
             userId: userId,
             originalFile: photoFile,
             type: type,
@@ -353,7 +224,7 @@ class AttendanceKioskNotifier extends StateNotifier<AttendanceKioskState> {
       }
 
       await attendanceService.logAttendance(
-        restaurantId: restaurantId,
+        storeId: storeId,
         userId: userId,
         type: type,
         photoUrl: photoUrl,
@@ -362,9 +233,32 @@ class AttendanceKioskNotifier extends StateNotifier<AttendanceKioskState> {
       state = state.copyWith(isUploading: false, lastAction: type);
       return true;
     } catch (e) {
-      state = state.copyWith(isUploading: false, error: '$e');
+      state = state.copyWith(
+        isUploading: false,
+        error: _mapAttendanceError(e, 'Failed to record attendance.'),
+      );
       return false;
     }
+  }
+
+  String _mapAttendanceError(Object error, String fallback) {
+    final message = error is PostgrestException ? error.message : '$error';
+
+    if (message.contains('ATTENDANCE_STAFF_DIRECTORY_FORBIDDEN')) {
+      return 'No permission to view attendance staff for this store.';
+    }
+    if (message.contains('ATTENDANCE_EVENT_FORBIDDEN')) {
+      return 'No permission to record attendance events.';
+    }
+    if (message.contains('ATTENDANCE_EVENT_USER_REQUIRED') ||
+        message.contains('ATTENDANCE_EVENT_USER_NOT_FOUND')) {
+      return 'Re-select a valid employee.';
+    }
+    if (message.contains('ATTENDANCE_EVENT_TYPE_INVALID')) {
+      return 'Only clock-in or clock-out can be recorded.';
+    }
+
+    return fallback;
   }
 
   void clearTransientState() {

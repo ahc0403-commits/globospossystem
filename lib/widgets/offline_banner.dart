@@ -34,7 +34,7 @@ class OfflineBanner extends ConsumerWidget {
                 const Icon(Icons.wifi_off, color: AppColors.surface0, size: 16),
                 const SizedBox(width: 6),
                 Text(
-                  '인터넷 연결이 끊겼습니다',
+                  'Internet connection lost',
                   style: GoogleFonts.notoSansKr(
                     color: AppColors.surface0,
                     fontSize: 12,

@@ -54,13 +54,13 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     });
   }
 
-  void _ensureLoaded(String? restaurantId) {
-    if (restaurantId == null || restaurantId == _initializedRestaurantId) {
+  void _ensureLoaded(String? storeId) {
+    if (storeId == null || storeId == _initializedRestaurantId) {
       return;
     }
-    _initializedRestaurantId = restaurantId;
+    _initializedRestaurantId = storeId;
     Future.microtask(() {
-      ref.read(paymentProvider.notifier).loadOrders(restaurantId);
+      ref.read(paymentProvider.notifier).loadOrders(storeId);
     });
   }
 
@@ -77,20 +77,20 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surface1,
         title: Text(
-          '주문을 취소하시겠습니까?',
+          'Cancel this order?',
           style: GoogleFonts.notoSansKr(
             color: AppColors.textPrimary,
             fontWeight: FontWeight.w700,
           ),
         ),
         content: Text(
-          'T$tableNumber 주문이 취소되고 테이블이 비워집니다.',
+          'Table T$tableNumber order will be cancelled and the table cleared.',
           style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('돌아가기'),
+            child: const Text('Back'),
           ),
           FilledButton.icon(
             onPressed: () => Navigator.of(context).pop(true),
@@ -99,7 +99,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
               foregroundColor: Colors.white,
             ),
             icon: const Icon(Icons.cancel),
-            label: const Text('주문 취소'),
+            label: const Text('Cancel Order'),
           ),
         ],
       ),
@@ -113,20 +113,20 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surface1,
         title: Text(
-          '서비스 제공 처리',
+          'Service Provision',
           style: GoogleFonts.notoSansKr(
             color: AppColors.textPrimary,
             fontWeight: FontWeight.w700,
           ),
         ),
         content: Text(
-          '이 주문은 매출에 반영되지 않고 서비스로 처리됩니다.\n직원 식사, 서비스 음료 등에 사용하세요.',
+          'This order is treated as a service and not counted in revenue.\nUse for staff meals, service drinks, etc.',
           style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('취소'),
+            child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
@@ -134,7 +134,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
               backgroundColor: AppColors.amber500,
               foregroundColor: AppColors.surface0,
             ),
-            child: const Text('서비스 처리'),
+            child: const Text('Service'),
           ),
         ],
       ),
@@ -142,12 +142,21 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     return result ?? false;
   }
 
+  void _showTodaySummaryDialog(String storeId) {
+    showDialog(
+      context: context,
+      builder: (context) => _CashierTodaySummaryDialog(
+        storeId: storeId,
+      ),
+    );
+  }
+
   Future<void> _printReceipt({
     required CashierOrder order,
     required String method,
   }) async {
     if (!PlatformInfo.isPrinterSupported) {
-      showErrorToast(context, '프린터는 앱에서만 지원됩니다.');
+      showErrorToast(context, 'Printer is only supported on the app.');
       return;
     }
 
@@ -179,17 +188,17 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       return;
     }
     if (result != PrintResult.success) {
-      showErrorToast(context, '결제 완료. 영수증 출력 실패 - 프린터를 확인해주세요.');
+      showErrorToast(context, 'Payment complete. Receipt print failed — check the printer.');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
-    final restaurantId = authState.restaurantId;
+    final storeId = authState.storeId;
     final role = authState.role ?? '';
     final isAdmin = role == 'admin' || role == 'super_admin';
-    _ensureLoaded(restaurantId);
+    _ensureLoaded(storeId);
 
     final paymentState = ref.watch(paymentProvider);
     final notifier = ref.read(paymentProvider.notifier);
@@ -233,10 +242,20 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                             const Spacer(),
                             IconButton(
                               icon: const Icon(
+                                Icons.summarize,
+                                color: AppColors.textSecondary,
+                              ),
+                              tooltip: "Today's Settlement",
+                              onPressed: storeId == null
+                                  ? null
+                                  : () => _showTodaySummaryDialog(storeId),
+                            ),
+                            IconButton(
+                              icon: const Icon(
                                 Icons.logout,
                                 color: AppColors.textSecondary,
                               ),
-                              tooltip: '로그아웃',
+                              tooltip: 'Log Out',
                               onPressed: () async {
                                 await ref.read(authProvider.notifier).logout();
                               },
@@ -362,7 +381,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                   final method = _selectedMethod;
                                   final selectedOrder =
                                       paymentState.selectedOrder;
-                                  if (restaurantId == null ||
+                                  if (storeId == null ||
                                       method == null ||
                                       selectedOrder == null) {
                                     return;
@@ -376,7 +395,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                   }
 
                                   await notifier.processPayment(
-                                    restaurantId,
+                                    storeId,
                                     selectedOrder.orderId,
                                     selectedOrder.totalAmount,
                                     method,
@@ -395,7 +414,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                 onCancelOrder: () async {
                                   final selectedOrder =
                                       paymentState.selectedOrder;
-                                  if (restaurantId == null ||
+                                  if (storeId == null ||
                                       selectedOrder == null ||
                                       !isAdmin) {
                                     return;
@@ -409,12 +428,12 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                   }
                                   await notifier.cancelOrder(
                                     selectedOrder.orderId,
-                                    restaurantId,
+                                    storeId,
                                   );
                                   if (context.mounted &&
                                       ref.read(paymentProvider).error == null) {
                                     setState(() => _selectedMethod = null);
-                                    showSuccessToast(context, '주문이 취소되었습니다');
+                                    showSuccessToast(context, 'Order cancelled');
                                   }
                                 },
                                 onReprint: () async {
@@ -527,7 +546,7 @@ class _SelectedOrderView extends StatelessWidget {
             ),
             icon: const Icon(Icons.print, size: 16),
             label: Text(
-              '영수증 재출력',
+              'Reprint Receipt',
               style: GoogleFonts.notoSansKr(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
@@ -659,7 +678,7 @@ class _SelectedOrderView extends StatelessWidget {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              '서비스 제공 (매출 미반영)',
+                              'Service Provision (not counted in revenue)',
                               style: GoogleFonts.notoSansKr(
                                 color: isServiceSelected
                                     ? AppColors.textPrimary
@@ -690,7 +709,7 @@ class _SelectedOrderView extends StatelessWidget {
                       ),
                     ),
                     child: Text(
-                      '⚠️ 서비스 처리 시 매출에 반영되지 않습니다',
+                      '⚠️ Service provision is not counted in revenue',
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textPrimary,
                         fontSize: 12,
@@ -732,7 +751,7 @@ class _SelectedOrderView extends StatelessWidget {
                             ),
                           )
                         : Text(
-                            isServiceSelected ? '서비스 처리 완료' : 'PROCESS PAYMENT',
+                            isServiceSelected ? 'Service processed' : 'PROCESS PAYMENT',
                             style: GoogleFonts.bebasNeue(
                               fontSize: 22,
                               letterSpacing: 1.0,
@@ -752,7 +771,7 @@ class _SelectedOrderView extends StatelessWidget {
                         size: 18,
                       ),
                       label: Text(
-                        '주문 취소',
+                        'Cancel Order',
                         style: GoogleFonts.notoSansKr(
                           color: AppColors.statusCancelled,
                           fontSize: 12,
@@ -873,5 +892,212 @@ class _DashedBorderPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _DashedBorderPainter oldDelegate) {
     return oldDelegate.color != color;
+  }
+}
+
+class _CashierTodaySummaryDialog extends ConsumerWidget {
+  const _CashierTodaySummaryDialog({required this.storeId});
+
+  final String storeId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final summaryAsync = ref.watch(cashierTodaySummaryProvider(storeId));
+    final currency = NumberFormat('#,###', 'vi_VN');
+
+    return AlertDialog(
+      backgroundColor: AppColors.surface1,
+      title: Row(
+        children: [
+          const Icon(Icons.summarize, color: AppColors.amber500, size: 22),
+          const SizedBox(width: 8),
+          Text(
+            "Today's Settlement Status",
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 18,
+            ),
+          ),
+          const Spacer(),
+          InkWell(
+            onTap: () =>
+                ref.refresh(cashierTodaySummaryProvider(storeId)),
+            borderRadius: BorderRadius.circular(4),
+            child: const Padding(
+              padding: EdgeInsets.all(4),
+              child: Icon(
+                Icons.refresh,
+                size: 18,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 380,
+        child: summaryAsync.when(
+          data: (summary) => _buildSummaryContent(summary, currency),
+          loading: () => const SizedBox(
+            height: 120,
+            child: Center(
+              child: CircularProgressIndicator(
+                color: AppColors.amber500,
+                strokeWidth: 2,
+              ),
+            ),
+          ),
+          error: (error, _) => Text(
+            'Failed to load settlement status.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.statusCancelled,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.amber500,
+            foregroundColor: AppColors.surface0,
+          ),
+          child: const Text('Confirm'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSummaryContent(
+    CashierTodaySummary summary,
+    NumberFormat currency,
+  ) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _summarySection(
+          'Revenue Payment',
+          [
+            _summaryRow(
+              'Payment Count',
+              '${summary.paymentsCount}',
+            ),
+            _summaryRow(
+              'Total',
+              '₫${currency.format(summary.paymentsTotal)}',
+              valueColor: AppColors.amber500,
+              bold: true,
+            ),
+            _summaryRow(
+              'Cash',
+              '₫${currency.format(summary.paymentsCash)}',
+            ),
+            _summaryRow(
+              'Card',
+              '₫${currency.format(summary.paymentsCard)}',
+            ),
+            _summaryRow(
+              'Other (Pay, etc.)',
+              '₫${currency.format(summary.paymentsPay)}',
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _summarySection(
+          'Service (not counted)',
+          [
+            _summaryRow(
+              'Service Count',
+              '${summary.serviceCount}',
+            ),
+            _summaryRow(
+              'Service Total',
+              '₫${currency.format(summary.serviceTotal)}',
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _summarySection(
+          'Order Status',
+          [
+            _summaryRow(
+              'Done',
+              '${summary.ordersCompleted}',
+              valueColor: AppColors.statusAvailable,
+            ),
+            _summaryRow(
+              'In Progress',
+              '${summary.ordersActive}',
+              valueColor: AppColors.amber500,
+            ),
+            _summaryRow(
+              'Cancel',
+              '${summary.ordersCancelled}',
+              valueColor: AppColors.statusCancelled,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _summarySection(String title, List<Widget> rows) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: GoogleFonts.notoSansKr(
+            color: AppColors.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.surface0,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.surface2),
+          ),
+          child: Column(children: rows),
+        ),
+      ],
+    );
+  }
+
+  Widget _summaryRow(
+    String label,
+    String value, {
+    Color? valueColor,
+    bool bold = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            value,
+            style: GoogleFonts.notoSansKr(
+              color: valueColor ?? AppColors.textPrimary,
+              fontSize: bold ? 15 : 13,
+              fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

@@ -5,7 +5,7 @@ import '../main.dart';
 
 Future<String?> showPinDialog(
   BuildContext context, {
-  String title = 'PIN 입력',
+  String title = 'Enter PIN',
 }) async {
   return showDialog<String>(
     context: context,
@@ -121,7 +121,7 @@ class _PinDialogState extends State<_PinDialog> {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('취소'),
+                    child: const Text('Cancel'),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -134,7 +134,7 @@ class _PinDialogState extends State<_PinDialog> {
                       backgroundColor: AppColors.amber500,
                       foregroundColor: AppColors.surface0,
                     ),
-                    child: const Text('확인'),
+                    child: const Text('Confirm'),
                   ),
                 ),
               ],

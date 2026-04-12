@@ -35,13 +35,13 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
   RealtimeChannel? _channel;
   String? _subscribedRestaurantId;
 
-  Future<void> loadTables(String restaurantId) async {
+  Future<void> loadTables(String storeId) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       final response = await supabase
           .from('tables')
           .select()
-          .eq('restaurant_id', restaurantId)
+          .eq('restaurant_id', storeId)
           .order('table_number', ascending: true);
 
       final tables = response
@@ -54,7 +54,7 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
         clearError: true,
       );
 
-      await subscribe(restaurantId);
+      await subscribe(storeId);
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
@@ -63,8 +63,8 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
     }
   }
 
-  Future<void> subscribe(String restaurantId) async {
-    if (_subscribedRestaurantId == restaurantId && _channel != null) {
+  Future<void> subscribe(String storeId) async {
+    if (_subscribedRestaurantId == storeId && _channel != null) {
       return;
     }
 
@@ -73,10 +73,10 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
       _channel = null;
     }
 
-    _subscribedRestaurantId = restaurantId;
+    _subscribedRestaurantId = storeId;
 
     _channel = supabase
-        .channel('public:tables:$restaurantId')
+        .channel('public:tables:$storeId')
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
@@ -88,7 +88,7 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
             }
 
             final updated = PosTable.fromJson(Map<String, dynamic>.from(raw));
-            if (updated.restaurantId != restaurantId) {
+            if (updated.storeId != storeId) {
               return;
             }
 
