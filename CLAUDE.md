@@ -28,9 +28,15 @@ Stack: Flutter + Supabase (Postgres + RLS + Edge Functions + Storage + pg_cron).
   preserved for history. Do not re-litigate decisions already in v1.3.
 - **Do not re-run Phase -1, Phase 0, or Phase 1.** They are complete and
   documented in the vault. Same for Phase 2 Step 1.
-- **Phase 2 Step 2 (restaurants→stores rename) is complete** as of
-  2026-04-12. DB is in expand-migrate state with dual naming. Do not
-  redo this work. See `Stage 1/phase_2_step_2_harness_final.md`.
+- **Phase 2 Steps 2–10 are complete** as of 2026-04-13.
+  DB is in expand-migrate state with dual naming (Step 2).
+  11 WeTax tables added (Step 4). 4 edge functions deployed (Step 7).
+  process_payment extended with VAT + einvoice_jobs (Step 8).
+  Do not re-run any completed step.
+- **Phase 3 verification complete.** 11/11 invariants PASS. E2E PASS.
+- **bytea decode:** Supabase returns bytea as `\x313233...` hex — use
+  `decodeByteaToString()` helper in edge functions, not `atob()`.
+  See ADR-014 in vault.
 
 ## 4. Hard constraints (binding)
 
