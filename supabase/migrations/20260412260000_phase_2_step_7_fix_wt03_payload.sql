@@ -1,0 +1,4 @@
+-- Phase 2 Step 7 Fix — process_payment rebuilt for WT03 /pos/invoices format
+-- Vendor confirmed 2026-04-13: correct endpoint is /pos/invoices (WT03, PDF), not sendOrderInfo
+-- Applied via Supabase MCP. See docs/vendor/samples/16_wt03_pos_invoices_confirmed.json
+-- Key changes: order_date 14-char, bill_no+pos_no, products[], vat_rate='8%', sid returned immediately
