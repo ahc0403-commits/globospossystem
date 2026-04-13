@@ -212,7 +212,8 @@ async function processRequestEinvoice(supabase: any, job: any, token: string, co
   if (nextRetry && new Date() < nextRetry) return;
   const maxRetries = parseInt(config.wetax_request_einvoice_max_retries ?? "5");
   const backoff = (config.wetax_request_einvoice_backoff_seconds ?? "0,3,10,30,60").split(",").map(Number);
-  const reqBody = { invoices: [job.request_einvoice_payload] };
+  // WT05 body: {seller:{...}, invoices:[...]} — stored as complete body in request_einvoice_payload
+  const reqBody = job.request_einvoice_payload;
   const result = await wetaxPost("/api/wtx/pa/v1/pos/invoices-issue", reqBody, token);
   const retryCount = job.request_einvoice_retry_count ?? 0;
   await logEvent(supabase, job.id, "request_einvoice_attempt",
