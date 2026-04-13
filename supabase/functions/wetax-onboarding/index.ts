@@ -16,6 +16,22 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// Supabase returns bytea as hex "\\x313233..." — decode correctly
+function decodeByteaToString(v) {
+  if (!v) return "";
+  if (v instanceof Uint8Array) return new TextDecoder().decode(v);
+  const s = String(v);
+  const hexMatch = s.match(/^[\\\\]?x([0-9a-fA-F]+)$/);
+  if (hexMatch) {
+    const bytes = new Uint8Array(hexMatch[1].length / 2);
+    for (let i = 0; i < hexMatch[1].length; i += 2)
+      bytes[i / 2] = parseInt(hexMatch[1].substring(i, i + 2), 16);
+    return new TextDecoder().decode(bytes);
+  }
+  try { return atob(s); } catch { return s; }
+}
+
+
 const WETAX_BASE_URL = Deno.env.get("WETAX_BASE_URL") ??
   "https://apitest.wetax.com.vn";
 
@@ -34,9 +50,7 @@ async function getToken(supabase: any): Promise<string> {
 
   if (cred.current_token && expiresAt && now < threshold) return cred.current_token;
 
-  const password = typeof cred.password_value === "string"
-    ? atob(cred.password_value)
-    : new TextDecoder().decode(cred.password_value);
+  const password = decodeByteaToString(cred.password_value);
 
   const loginRes = await fetch(`${WETAX_BASE_URL}/api/wtx/pa/v1/auth/login`, {
     method: "POST",
