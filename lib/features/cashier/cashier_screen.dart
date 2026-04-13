@@ -16,6 +16,7 @@ import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
 import '../payment/payment_provider.dart';
 import '../settings/printer_provider.dart';
+import 'red_invoice_modal.dart';
 
 class CashierScreen extends ConsumerStatefulWidget {
   const CashierScreen({super.key});
@@ -414,6 +415,17 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                       method: method,
                                     );
                                     setState(() => _selectedMethod = null);
+                                    // Stage 2: Red Invoice modal
+                                    if (mounted && method != 'service') {
+                                      await showDialog<bool>(
+                                        context: context,
+                                        barrierDismissible: false,
+                                        builder: (_) => RedInvoiceModal(
+                                          orderId: selectedOrder.orderId,
+                                          storeId: storeId,
+                                        ),
+                                      );
+                                    }
                                   }
                                 },
                                 onCancelOrder: () async {
