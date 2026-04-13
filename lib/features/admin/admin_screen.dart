@@ -69,10 +69,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
 
   Widget _buildWebDesktopLayout(BuildContext context, bool isSuperAdminView) {
     final items = <SidebarItem>[
-      const SidebarItem(icon: Icons.table_restaurant, label: 'Tables'),
-      const SidebarItem(icon: Icons.restaurant_menu, label: 'Menu'),
+      const SidebarItem(icon: Icons.table_restaurant, label: 'Tables', itemKey: Key('nav_tables')),
+      const SidebarItem(icon: Icons.restaurant_menu, label: 'Menu', itemKey: Key('nav_menu')),
       const SidebarItem(icon: Icons.people, label: 'Staff'),
-      const SidebarItem(icon: Icons.bar_chart, label: 'Reports'),
+      const SidebarItem(icon: Icons.bar_chart, label: 'Reports', itemKey: Key('nav_reports')),
       const SidebarItem(icon: Icons.access_time, label: 'Attendance'),
       const SidebarItem(icon: Icons.inventory_2_outlined, label: 'Inventory'),
       const SidebarItem(icon: Icons.fact_check, label: 'QC'),
@@ -81,6 +81,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     ];
 
     return WebSidebarLayout(
+      key: const Key('admin_root'),
       title: isSuperAdminView ? 'ADMIN VIEW' : 'GLOBOS POS',
       items: items,
       selectedIndex: _currentIndex,
@@ -127,6 +128,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
               SidebarItem(
                 icon: Icons.logout,
                 label: 'Logout',
+                itemKey: const Key('logout_button'),
                 onTap: () => ref.read(authProvider.notifier).logout(),
               ),
             ],
@@ -176,6 +178,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     ];
 
     return Scaffold(
+      key: const Key('admin_root'),
       backgroundColor: AppColors.surface0,
       appBar: AppBar(
         backgroundColor: AppColors.surface0,
@@ -220,6 +223,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
             ),
           if (!isSuperAdminView)
             IconButton(
+              key: const Key('logout_button'),
               onPressed: () => ref.read(authProvider.notifier).logout(),
               icon: const Icon(Icons.logout),
               color: AppColors.textPrimary,

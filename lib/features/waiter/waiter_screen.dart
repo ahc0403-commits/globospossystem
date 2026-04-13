@@ -350,6 +350,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
         isBuffetMode && orderState.activeOrder == null;
 
     return Scaffold(
+      key: const Key('dashboard_root'),
       backgroundColor: AppColors.surface0,
       body: Column(
         children: [
@@ -481,7 +482,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                             },
                           )
                         : _TableGridView(
-                            key: const ValueKey<String>('tables'),
+                            key: const Key('tables_root'),
                             state: tableState,
                             onRetry: () {
                               if (storeId != null) {
@@ -571,6 +572,7 @@ class _WaiterTopBar extends ConsumerWidget {
             ),
           ),
           IconButton(
+            key: const Key('logout_button'),
             onPressed: () => ref.read(authProvider.notifier).logout(),
             icon: const Icon(Icons.logout),
             color: AppColors.textPrimary,
@@ -658,6 +660,7 @@ class _TableGridView extends StatelessWidget {
             final isOccupied = table.isOccupied;
 
             return InkWell(
+              key: index == 0 ? const Key('table_first_card') : null,
               borderRadius: BorderRadius.circular(16),
               onTap: () => onTapTable(table),
               child: Container(

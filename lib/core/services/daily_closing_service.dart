@@ -1,19 +1,17 @@
 import '../../main.dart';
 
 class DailyClosingService {
-  Future<Map<String, dynamic>> createDailyClosing({
+  Future<void> createDailyClosing({
     required String storeId,
     String? notes,
   }) async {
-    final result = await supabase.rpc(
+    await supabase.rpc(
       'create_daily_closing',
       params: {
         'p_restaurant_id': storeId,
         if (notes != null && notes.isNotEmpty) 'p_notes': notes,
       },
     );
-
-    return Map<String, dynamic>.from(result as Map);
   }
 
   Future<List<Map<String, dynamic>>> fetchDailyClosings({

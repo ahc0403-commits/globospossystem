@@ -164,6 +164,7 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
     final notifier = ref.read(kitchenProvider.notifier);
 
     return Scaffold(
+      key: const Key('kitchen_root'),
       backgroundColor: AppColors.surface0,
       body: Column(
         children: [
@@ -257,6 +258,7 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                           final elapsed = _elapsedLabel(order.createdAt, _now);
 
                           return AnimatedContainer(
+                            key: index == 0 ? const Key('kitchen_first_order_card') : null,
                             duration: const Duration(milliseconds: 260),
                             decoration: BoxDecoration(
                               color: AppColors.surface1,
@@ -328,6 +330,9 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                                     itemBuilder: (context, itemIndex) {
                                       final item = order.items[itemIndex];
                                       return InkWell(
+                                        key: (index == 0 && itemIndex == 0)
+                                            ? const Key('kitchen_advance_status_button')
+                                            : null,
                                         onTap: () => _handleItemTap(
                                           notifier,
                                           order,
@@ -463,6 +468,7 @@ class _KitchenTopBar extends ConsumerWidget {
           ),
           const SizedBox(width: 12),
           IconButton(
+            key: const Key('logout_button'),
             icon: const Icon(Icons.logout, color: AppColors.textSecondary),
             tooltip: 'Log Out',
             onPressed: () async {

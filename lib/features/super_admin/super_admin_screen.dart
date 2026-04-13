@@ -56,6 +56,7 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
     }
 
     return Scaffold(
+      key: const Key('admin_root'),
       backgroundColor: AppColors.surface0,
       body: Row(
         children: [
@@ -76,17 +77,18 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
-                _navItem(Icons.store, 'Stores', 0),
+                _navItem(Icons.store, 'Stores', 0, itemKey: const Key('super_admin_nav_stores')),
                 const SizedBox(height: 8),
-                _navItem(Icons.bar_chart, 'All Reports', 1),
+                _navItem(Icons.bar_chart, 'All Reports', 1, itemKey: const Key('super_admin_nav_reports')),
                 const SizedBox(height: 8),
-                _navItem(Icons.fact_check, 'QC Status', 2),
+                _navItem(Icons.fact_check, 'QC Status', 2, itemKey: const Key('super_admin_nav_qc_status')),
                 const SizedBox(height: 8),
-                _navItem(Icons.rule, 'QC Template', 3),
+                _navItem(Icons.rule, 'QC Template', 3, itemKey: const Key('super_admin_nav_qc_template')),
                 const SizedBox(height: 8),
-                _navItem(Icons.settings, 'System Settings', 4),
+                _navItem(Icons.settings, 'System Settings', 4, itemKey: const Key('super_admin_nav_system_settings')),
                 const Spacer(),
                 OutlinedButton.icon(
+                  key: const Key('logout_button'),
                   onPressed: () => ref.read(authProvider.notifier).logout(),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: AppColors.statusCancelled),
@@ -131,9 +133,10 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
     );
   }
 
-  Widget _navItem(IconData icon, String label, int index) {
+  Widget _navItem(IconData icon, String label, int index, {Key? itemKey}) {
     final selected = _tabIndex == index;
     return InkWell(
+      key: itemKey,
       onTap: () => setState(() => _tabIndex = index),
       borderRadius: BorderRadius.circular(12),
       child: Container(
