@@ -19,6 +19,7 @@ import 'tabs/settings_tab.dart';
 import 'tabs/staff_tab.dart';
 import 'tabs/tables_tab.dart';
 import '../delivery/screens/delivery_settlement_tab.dart';
+import 'tabs/einvoice_tab.dart';
 
 class AdminScreen extends ConsumerStatefulWidget {
   const AdminScreen({
@@ -48,6 +49,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     QcTab(),
     SettingsTab(),
     DeliverySettlementTab(),
+    EinvoiceTab(),
   ];
 
   @override
@@ -78,6 +80,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       const SidebarItem(icon: Icons.fact_check, label: 'QC'),
       const SidebarItem(icon: Icons.settings, label: 'Settings'),
       const SidebarItem(icon: Icons.delivery_dining, label: 'Delivery Settlement'),
+      const SidebarItem(icon: Icons.receipt_long, label: 'E-Invoice'),
     ];
 
     return WebSidebarLayout(
@@ -174,6 +177,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       const BottomNavigationBarItem(
         icon: Icon(Icons.delivery_dining),
         label: 'Delivery Settlement',
+      ),
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.receipt_long),
+        label: 'E-Invoice',
       ),
     ];
 
