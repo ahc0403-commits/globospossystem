@@ -30,6 +30,9 @@ class OrderWorkspace extends StatelessWidget {
     this.showPaymentActions = false,
     this.onProcessPayment,
     this.isProcessingPayment = false,
+    this.onCancelOrderItem,
+    this.onEditOrderItemQuantity,
+    this.onTransferTable,
   });
 
   final PosTable table;
@@ -49,6 +52,9 @@ class OrderWorkspace extends StatelessWidget {
   final bool showPaymentActions;
   final Future<void> Function(String method)? onProcessPayment;
   final bool isProcessingPayment;
+  final Future<void> Function(String itemId)? onCancelOrderItem;
+  final Future<void> Function(String itemId, int newQuantity)? onEditOrderItemQuantity;
+  final VoidCallback? onTransferTable;
 
   @override
   Widget build(BuildContext context) {
@@ -110,6 +116,9 @@ class OrderWorkspace extends StatelessWidget {
                   showPaymentActions: showPaymentActions,
                   onProcessPayment: onProcessPayment,
                   isProcessingPayment: isProcessingPayment,
+                  onCancelOrderItem: onCancelOrderItem,
+                  onEditOrderItemQuantity: onEditOrderItemQuantity,
+                  onTransferTable: onTransferTable,
                 ),
               ),
             ],
@@ -199,6 +208,7 @@ class _MenuBrowser extends StatelessWidget {
     }
 
     return Container(
+      key: const Key('menu_root'),
       color: AppColors.surface0,
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -301,6 +311,7 @@ class _MenuBrowser extends StatelessWidget {
                       };
 
                       return Container(
+                        key: index == 0 ? const Key('menu_first_item') : null,
                         decoration: BoxDecoration(
                           color: AppColors.surface1,
                           borderRadius: BorderRadius.circular(12),
@@ -391,6 +402,9 @@ class _CurrentOrderPanel extends ConsumerStatefulWidget {
     required this.showPaymentActions,
     required this.onProcessPayment,
     required this.isProcessingPayment,
+    this.onCancelOrderItem,
+    this.onEditOrderItemQuantity,
+    this.onTransferTable,
   });
 
   final PosTable table;
@@ -407,6 +421,9 @@ class _CurrentOrderPanel extends ConsumerStatefulWidget {
   final bool showPaymentActions;
   final Future<void> Function(String method)? onProcessPayment;
   final bool isProcessingPayment;
+  final Future<void> Function(String itemId)? onCancelOrderItem;
+  final Future<void> Function(String itemId, int newQuantity)? onEditOrderItemQuantity;
+  final VoidCallback? onTransferTable;
 
   @override
   ConsumerState<_CurrentOrderPanel> createState() => _CurrentOrderPanelState();
@@ -424,6 +441,63 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
     };
   }
 
+  Future<void> _showEditQuantityDialog(OrderItem item) async {
+    final controller = TextEditingController(text: '${item.quantity}');
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface1,
+        title: Text(
+          'Change Quantity',
+          style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              item.label ?? 'Item',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+              decoration: const InputDecoration(labelText: 'New quantity'),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.amber500,
+              foregroundColor: AppColors.surface0,
+            ),
+            onPressed: () {
+              final qty = int.tryParse(controller.text.trim());
+              if (qty == null || qty < 1) return;
+              Navigator.of(context).pop(qty);
+            },
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result != null && result != item.quantity) {
+      await widget.onEditOrderItemQuantity!(item.id, result);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isOnline = ref.watch(connectivityProvider).asData?.value ?? true;
@@ -433,6 +507,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
       (sum, item) => sum + (item.price * item.quantity),
     );
     final activeTotal = (widget.state.activeOrder?.items ?? const <OrderItem>[])
+        .where((item) => item.status != 'cancelled')
         .fold<double>(
           0,
           (sum, item) => sum + (item.unitPrice * item.quantity),
@@ -450,6 +525,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
         widget.state.cart.isEmpty;
 
     return Container(
+      key: const Key('orders_root'),
       decoration: const BoxDecoration(
         color: AppColors.surface1,
         border: Border(left: BorderSide(color: AppColors.surface2)),
@@ -469,7 +545,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                 ),
               ),
               const Spacer(),
-              if (widget.state.activeOrder != null)
+              if (widget.state.activeOrder != null) ...[
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
@@ -488,6 +564,34 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                     ),
                   ),
                 ),
+                if (widget.onTransferTable != null) ...[
+                  const SizedBox(width: 6),
+                  SizedBox(
+                    height: 28,
+                    child: OutlinedButton.icon(
+                      onPressed: widget.state.isSubmitting
+                          ? null
+                          : widget.onTransferTable,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.textSecondary,
+                        side: const BorderSide(color: AppColors.surface2),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      icon: const Icon(Icons.swap_horiz, size: 14),
+                      label: Text(
+                        'Move',
+                        style: GoogleFonts.notoSansKr(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
               if (widget.guestCount != null && widget.state.activeOrder == null) ...[
                 const SizedBox(width: 8),
                 Container(
@@ -511,6 +615,37 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
               ],
             ],
           ),
+          if (widget.state.activeOrder != null && !widget.state.isSubmitting) ...[
+            const SizedBox(height: 6),
+            Container(
+              key: const Key('order_create_success_banner'),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.statusAvailable.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.check_circle_outline,
+                    color: AppColors.statusAvailable,
+                    size: 12,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    key: const Key('latest_order_number_text'),
+                    widget.state.activeOrder!.id.length >= 8
+                        ? widget.state.activeOrder!.id.substring(0, 8)
+                        : widget.state.activeOrder!.id,
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.statusAvailable,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           Expanded(
             child: ListView(
@@ -528,36 +663,96 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                   const SizedBox(height: 8),
                   ...widget.state.activeOrder!.items.map((item) {
                     final label = item.label ?? 'Item';
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface2,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '$label x${item.quantity}',
-                              style: GoogleFonts.notoSansKr(
-                                color: AppColors.textSecondary,
-                                fontSize: 13,
+                    final isCancelled = item.status == 'cancelled';
+                    final canCancel = !isCancelled &&
+                        item.status != 'ready' &&
+                        item.status != 'served' &&
+                        widget.onCancelOrderItem != null;
+                    final canEditQty = item.status == 'pending' &&
+                        widget.onEditOrderItemQuantity != null;
+                    return Opacity(
+                      opacity: isCancelled ? 0.45 : 1.0,
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: isCancelled
+                              ? AppColors.surface2.withValues(alpha: 0.5)
+                              : AppColors.surface2,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      '$label x${item.quantity}',
+                                      style: GoogleFonts.notoSansKr(
+                                        color: isCancelled
+                                            ? AppColors.statusCancelled
+                                            : AppColors.textSecondary,
+                                        fontSize: 13,
+                                        decoration: isCancelled
+                                            ? TextDecoration.lineThrough
+                                            : null,
+                                      ),
+                                    ),
+                                  ),
+                                  if (canEditQty) ...[
+                                    const SizedBox(width: 4),
+                                    InkWell(
+                                      onTap: widget.state.isSubmitting
+                                          ? null
+                                          : () => _showEditQuantityDialog(item),
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: const Padding(
+                                        padding: EdgeInsets.all(2),
+                                        child: Icon(
+                                          Icons.edit,
+                                          size: 14,
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             ),
-                          ),
-                          InkWell(
-                            onTap: !widget.canManageSentItems ||
-                                    widget.onCycleSentItemStatus == null
-                                ? null
-                                : () => widget.onCycleSentItemStatus!(
-                                      item,
-                                      _cycleStatus(item.status),
-                                    ),
-                            borderRadius: BorderRadius.circular(10),
-                            child: _OrderItemStatusChip(status: item.status),
-                          ),
-                        ],
+                            if (canCancel)
+                              InkWell(
+                                onTap: widget.state.isSubmitting
+                                    ? null
+                                    : () => widget.onCancelOrderItem!(item.id),
+                                borderRadius: BorderRadius.circular(10),
+                                child: const Padding(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                    vertical: 2,
+                                  ),
+                                  child: Icon(
+                                    Icons.close,
+                                    size: 16,
+                                    color: AppColors.statusCancelled,
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(width: 4),
+                            InkWell(
+                              onTap: !widget.canManageSentItems ||
+                                      widget.onCycleSentItemStatus == null ||
+                                      isCancelled
+                                  ? null
+                                  : () => widget.onCycleSentItemStatus!(
+                                        item,
+                                        _cycleStatus(item.status),
+                                      ),
+                              borderRadius: BorderRadius.circular(10),
+                              child: _OrderItemStatusChip(status: item.status),
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   }),
@@ -702,6 +897,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: FilledButton(
+                    key: const Key('cart_submit_order'),
                     onPressed:
                         widget.state.isSubmitting ||
                             (!widget.allowSubmitWithoutCart &&
@@ -746,7 +942,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                '인터넷 연결이 필요합니다',
+                'Internet connection required',
                 style: GoogleFonts.notoSansKr(
                   color: AppColors.statusOccupied,
                   fontSize: 12,
@@ -770,7 +966,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                 ),
                 icon: const Icon(Icons.cancel),
                 label: Text(
-                  '주문 취소',
+                  'Cancel Order',
                   style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w700),
                 ),
               ),
@@ -779,7 +975,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
           if (canProcessPayment) ...[
             const SizedBox(height: 12),
             Text(
-              '결제 처리 (₫${formatter.format(activeTotal)})',
+              'Process Payment (₫${formatter.format(activeTotal)})',
               style: GoogleFonts.notoSansKr(
                 color: AppColors.textSecondary,
                 fontSize: 12,
@@ -791,10 +987,9 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
               spacing: 8,
               runSpacing: 8,
               children: const [
-                _PaymentMethodTag(method: 'cash', label: 'CASH'),
-                _PaymentMethodTag(method: 'card', label: 'CARD'),
-                _PaymentMethodTag(method: 'pay', label: 'PAY'),
-                _PaymentMethodTag(method: 'service', label: 'SERVICE'),
+                _PaymentMethodTag(method: 'CASH', label: 'Cash'),
+                _PaymentMethodTag(method: 'CREDITCARD', label: 'Card'),
+                _PaymentMethodTag(method: 'OTHER', label: 'E-Pay'),
               ].map((tag) {
                 final selected = _selectedPaymentMethod == tag.method;
                 return ChoiceChip(
@@ -838,7 +1033,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : Text(
-                        '결제 완료',
+                        'Payment complete',
                         style: GoogleFonts.notoSansKr(
                           fontWeight: FontWeight.w700,
                         ),
@@ -850,7 +1045,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                '결제 전 새로 추가한 항목을 먼저 전송하세요.',
+                'Send newly added items before payment.',
                 style: GoogleFonts.notoSansKr(
                   color: AppColors.statusOccupied,
                   fontSize: 12,
@@ -883,6 +1078,7 @@ class _OrderItemStatusChip extends StatelessWidget {
       'preparing' => (AppColors.amber500, 'PREPARING'),
       'ready' => (AppColors.statusAvailable, 'READY'),
       'served' => (AppColors.statusOccupied, 'SERVED'),
+      'cancelled' => (AppColors.statusCancelled, 'CANCELLED'),
       _ => (AppColors.textSecondary, normalized.toUpperCase()),
     };
 

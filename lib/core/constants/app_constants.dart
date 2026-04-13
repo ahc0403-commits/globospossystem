@@ -1,38 +1,38 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AppConstants {
-  static const String _supabaseUrlFallback =
-      'https://ynriuoomotxuwhuxxmhj.supabase.co';
-  static const String _supabaseAnonKeyFallback =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'
-      '.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlucml1b29tb3R4dXdodXh4bWhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwOTMxNTcsImV4cCI6MjA5MDY2OTE1N30'
-      '.U8zP57ff3m190C6seRTUn4COpFNd6Zyd6M5KGtTNI18';
   static const String _officeSystemUrlFallback =
       'https://office.globos.vn/dashboard';
   static const String _officeKpiUrlFallback = 'https://office.globos.vn/kpi';
 
-  // Web에서는 fallback 상수 사용 (anon key는 공개 가능)
-  // Native에서는 .env에서 읽음
+  // Web: --dart-define으로 빌드 시 주입
+  // Native: .env 파일에서 읽음
+  static const String _supabaseUrlFromDefine =
+      String.fromEnvironment('SUPABASE_URL');
+  static const String _supabaseAnonKeyFromDefine =
+      String.fromEnvironment('SUPABASE_ANON_KEY');
+
   static String get supabaseUrl {
-    if (kIsWeb) return _supabaseUrlFallback;
-    return dotenv.env['SUPABASE_URL'] ?? _supabaseUrlFallback;
+    if (_supabaseUrlFromDefine.isNotEmpty) return _supabaseUrlFromDefine;
+    final envVal = dotenv.env['SUPABASE_URL'];
+    if (envVal != null && envVal.isNotEmpty) return envVal;
+    throw StateError(
+        'SUPABASE_URL not configured. Set via --dart-define or .env');
   }
 
   static String get supabaseAnonKey {
-    if (kIsWeb) return _supabaseAnonKeyFallback;
-    return dotenv.env['SUPABASE_ANON_KEY'] ?? _supabaseAnonKeyFallback;
+    if (_supabaseAnonKeyFromDefine.isNotEmpty) return _supabaseAnonKeyFromDefine;
+    final envVal = dotenv.env['SUPABASE_ANON_KEY'];
+    if (envVal != null && envVal.isNotEmpty) return envVal;
+    throw StateError(
+        'SUPABASE_ANON_KEY not configured. Set via --dart-define or .env');
   }
 
   static String get officeSystemUrl {
-    if (kIsWeb) {
-      return dotenv.env['OFFICE_SYSTEM_URL'] ?? _officeSystemUrlFallback;
-    }
     return dotenv.env['OFFICE_SYSTEM_URL'] ?? _officeSystemUrlFallback;
   }
 
   static String get officeKpiUrl {
-    if (kIsWeb) return dotenv.env['OFFICE_KPI_URL'] ?? _officeKpiUrlFallback;
     return dotenv.env['OFFICE_KPI_URL'] ?? _officeKpiUrlFallback;
   }
 }

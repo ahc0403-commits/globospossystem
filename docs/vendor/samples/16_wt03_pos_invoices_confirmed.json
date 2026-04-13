@@ -1,0 +1,40 @@
+{
+  "endpoint": "POST /api/wtx/pa/v1/pos/invoices",
+  "date": "2026-04-13",
+  "vendor_confirmation": "Correct endpoint per vendor reply 2026-04-13. sendOrderInfo was wrong path.",
+  "request_body": {
+    "invoices": [{
+      "ref_id": "K626255-919a-026b-2cd2-cd251ddb9514",
+      "cqt_code": "", "store_code": "0319388179", "store_name": "GLOBOSVN",
+      "order_date": "20260413152501", "bill_no": "20260413DH626255",
+      "pos_no": "001", "trans_type": "1", "currency_code": "VND",
+      "exchange_rate": "1.0", "payment_method": "TM/CK",
+      "buyer_comp_name": "", "buyer_comp_tax_code": "", "buyer_comp_address": "",
+      "buyer_comp_tel": "", "buyer_comp_email": "", "buyer_nm": "",
+      "buyer_cccd": "", "buyer_passport_no": "", "buyer_budget_unit_code": "",
+      "products": [{
+        "feature": "1", "seq": "1", "item_code": "PHO001",
+        "item_name": "Test Pho Bo", "uom": "EA", "quantity": "1",
+        "unit_price": "80000", "dc_rate": "", "dc_amt": "",
+        "total_amount": "80000", "vat_rate": "8%", "vat_amount": "6400",
+        "paying_amount": "86400"
+      }]
+    }]
+  },
+  "response": {
+    "http_status": 200,
+    "body": {
+      "status": { "success": true, "message": "Success" },
+      "data": [{ "ref_id": "K626255-919a-026b-2cd2-cd251ddb9514", "sid": "02a94532-df52-4800-9139-0a34726d4829", "status": { "code": "0", "message": "Insert successfully!" } }]
+    }
+  },
+  "resolved": {
+    "AP1_eliminated": "sid returned immediately — no longer nullable from sendOrderInfo",
+    "correct_url": "/pos/invoices (not /pos/sendOrderInfo)",
+    "order_date_format": "14 chars yyyymmddhhmmss",
+    "fields": "bill_no + pos_no (not order_id + pos_number)",
+    "lineitem_key": "products[] (not list_product[])",
+    "vat_rate_format": "string '8%' — numbers also accepted",
+    "response_data_shape": "array [{ref_id, sid, status:{code, message}}]"
+  }
+}

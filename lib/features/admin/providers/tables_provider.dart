@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/tables_service.dart';
 import '../../../main.dart';
@@ -48,16 +49,38 @@ class TablesState {
 }
 
 class TablesNotifier extends StateNotifier<TablesState> {
-  TablesNotifier(this.restaurantId) : super(const TablesState()) {
+  TablesNotifier(this.storeId) : super(const TablesState()) {
     fetchTables();
   }
 
-  final String restaurantId;
+  final String storeId;
+
+  String _mapTablesError(Object error, String fallback) {
+    if (error is! PostgrestException) {
+      return fallback;
+    }
+
+    final message = error.message;
+    if (message.contains('ADMIN_MUTATION_FORBIDDEN')) {
+      return 'No permission to change tables.';
+    }
+    if (message.contains('TABLE_NUMBER_REQUIRED')) {
+      return 'Enter a table number.';
+    }
+    if (message.contains('TABLE_NOT_FOUND')) {
+      return 'Reload tables and try again.';
+    }
+    if (message.contains('duplicate key value') || message.contains('23505')) {
+      return 'A table with the same number already exists.';
+    }
+
+    return fallback;
+  }
 
   Future<void> fetchTables() async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final tables = await tablesService.fetchTables(restaurantId);
+      final tables = await tablesService.fetchTables(storeId);
 
       final occupiedTableIds = tables
           .where((table) {
@@ -76,7 +99,7 @@ class TablesNotifier extends StateNotifier<TablesState> {
         final orders = await supabase
             .from('orders')
             .select('id, table_id, created_at, status, order_items(id)')
-            .eq('restaurant_id', restaurantId)
+            .eq('restaurant_id', storeId)
             .inFilter('status', ['pending', 'confirmed', 'serving'])
             .inFilter('table_id', occupiedTableIds)
             .order('created_at', ascending: false);
@@ -109,33 +132,34 @@ class TablesNotifier extends StateNotifier<TablesState> {
         clearError: true,
       );
     } catch (error) {
-      state = state.copyWith(
-        isLoading: false,
-        error: 'Failed to load tables: $error',
-      );
+      state = state.copyWith(isLoading: false, error: 'Failed to load tables.');
     }
   }
 
-  Future<void> addTable(String tableNumber, int seatCount) async {
+  Future<bool> addTable(String tableNumber, int seatCount) async {
     try {
-      await tablesService.addTable(restaurantId, tableNumber, seatCount);
+      await tablesService.addTable(storeId, tableNumber, seatCount);
       await fetchTables();
+      return true;
     } catch (error) {
-      state = state.copyWith(error: 'Failed to add table: $error');
+      state = state.copyWith(error: _mapTablesError(error, 'Failed to add table.'));
+      return false;
     }
   }
 
-  Future<void> deleteTable(String id) async {
+  Future<bool> deleteTable(String id) async {
     try {
-      await tablesService.deleteTable(id);
+      await tablesService.deleteTable(id, storeId);
       await fetchTables();
+      return true;
     } catch (error) {
-      state = state.copyWith(error: 'Failed to delete table: $error');
+      state = state.copyWith(error: _mapTablesError(error, 'Failed to delete table.'));
+      return false;
     }
   }
 }
 
 final tablesProvider = StateNotifierProvider.autoDispose
     .family<TablesNotifier, TablesState, String>(
-      (ref, restaurantId) => TablesNotifier(restaurantId),
+      (ref, storeId) => TablesNotifier(storeId),
     );

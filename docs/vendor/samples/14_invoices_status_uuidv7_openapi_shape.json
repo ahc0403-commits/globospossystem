@@ -1,0 +1,22 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://apitest.wetax.com.vn/api/wtx/pa/v1/pos/invoices-status",
+    "body": {"invoices": ["019d7fed-d105-7089-9650-5aa2f2799c74"]},
+    "delay_after_sendOrderInfo": "5 seconds"
+  },
+  "response": {
+    "http_status": 400,
+    "body": {
+      "status": {
+        "success": false,
+        "message": "Cannot invoke \"java.util.UUID.toString()\" because the return value of \"com.kosign.wetax.domain.pos.POSSaleMaster.getGuid()\" is null"
+      },
+      "data": ""
+    }
+  },
+  "notes": {
+    "classification": "STILL_NPE",
+    "analysis": "Same NPE as initial audit (sample 12). Valid UUIDv7 ref_id did NOT fix the issue. The server's POSSaleMaster entity has a null GUID field even though the order was accepted by sendOrderInfo 5 seconds earlier. Root cause is server-side: either (a) sendOrderInfo does not populate POSSaleMaster.guid with the client-provided ref_id, (b) there is a processing pipeline delay longer than 5 seconds, or (c) the GUID field is populated by a different mechanism entirely."
+  }
+}

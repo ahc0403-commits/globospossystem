@@ -15,18 +15,18 @@ import '../table/table_provider.dart';
 
 final restaurantNameProvider = FutureProvider.family<String, String>((
   ref,
-  restaurantId,
+  storeId,
 ) async {
   final response = await supabase
       .from('restaurants')
       .select('name')
-      .eq('id', restaurantId)
+      .eq('id', storeId)
       .maybeSingle();
-  return response?['name']?.toString() ?? 'Restaurant';
+  return response?['name']?.toString() ?? 'Store';
 });
 
-class RestaurantSettings {
-  const RestaurantSettings({
+class StoreSettings {
+  const StoreSettings({
     required this.operationMode,
     required this.perPersonCharge,
   });
@@ -36,14 +36,14 @@ class RestaurantSettings {
 }
 
 final restaurantSettingsProvider =
-    FutureProvider.family<RestaurantSettings, String>((
+    FutureProvider.family<StoreSettings, String>((
       ref,
-      restaurantId,
+      storeId,
     ) async {
       final response = await supabase
           .from('restaurants')
           .select('operation_mode, per_person_charge')
-          .eq('id', restaurantId)
+          .eq('id', storeId)
           .single();
 
       final mode =
@@ -55,7 +55,7 @@ final restaurantSettingsProvider =
         _ => null,
       };
 
-      return RestaurantSettings(operationMode: mode, perPersonCharge: charge);
+      return StoreSettings(operationMode: mode, perPersonCharge: charge);
     });
 
 class WaiterScreen extends ConsumerStatefulWidget {
@@ -88,20 +88,20 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     });
   }
 
-  void _ensureRestaurantLoaded(String? restaurantId) {
-    if (restaurantId == null || restaurantId == _initializedRestaurantId) {
+  void _ensureRestaurantLoaded(String? storeId) {
+    if (storeId == null || storeId == _initializedRestaurantId) {
       return;
     }
-    _initializedRestaurantId = restaurantId;
+    _initializedRestaurantId = storeId;
     Future.microtask(() {
-      ref.read(waiterTableProvider.notifier).loadTables(restaurantId);
+      ref.read(waiterTableProvider.notifier).loadTables(storeId);
       ref.read(orderProvider.notifier).clearSession();
     });
   }
 
   Future<void> _onSelectTable(
     PosTable table,
-    String restaurantId,
+    String storeId,
     bool requireGuestCount,
   ) async {
     int? guestCount;
@@ -120,7 +120,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     });
     await ref
         .read(orderProvider.notifier)
-        .loadActiveOrder(table.id, restaurantId);
+        .loadActiveOrder(table.id, storeId);
   }
 
   void _onCancelOrderPanel() {
@@ -184,20 +184,20 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surface1,
         title: Text(
-          '주문을 취소하시겠습니까?',
+          'Cancel this order?',
           style: GoogleFonts.notoSansKr(
             color: AppColors.textPrimary,
             fontWeight: FontWeight.w700,
           ),
         ),
         content: Text(
-          'T$tableNumber 주문이 취소되고 테이블이 비워집니다.',
+          'Table T$tableNumber order will be cancelled and the table cleared.',
           style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('돌아가기'),
+            child: const Text('Back'),
           ),
           FilledButton.icon(
             onPressed: () => Navigator.of(context).pop(true),
@@ -206,7 +206,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
               foregroundColor: Colors.white,
             ),
             icon: const Icon(Icons.cancel),
-            label: const Text('주문 취소'),
+            label: const Text('Cancel Order'),
           ),
         ],
       ),
@@ -214,11 +214,78 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     return result ?? false;
   }
 
+  Future<PosTable?> _showTransferTableDialog(String storeId) async {
+    final tableState = ref.read(waiterTableProvider);
+    final currentTableId = _selectedTable?.id;
+    final availableTables = tableState.tables
+        .where((t) => t.id != currentTableId && !t.isOccupied)
+        .toList();
+
+    if (availableTables.isEmpty) {
+      if (mounted) {
+        showErrorToast(context, 'No empty tables available to move to.');
+      }
+      return null;
+    }
+
+    return showDialog<PosTable>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface1,
+        title: Text(
+          'Move Table',
+          style: GoogleFonts.notoSansKr(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: SizedBox(
+          width: 280,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: availableTables.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final table = availableTables[index];
+              return ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                tileColor: AppColors.surface2,
+                title: Text(
+                  'Table ${table.tableNumber}',
+                  style: GoogleFonts.notoSansKr(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: Text(
+                  '${table.seatCount ?? 0} seats',
+                  style: GoogleFonts.notoSansKr(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+                onTap: () => Navigator.of(context).pop(table),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showOrderCancelledSnackBar() {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          '주문이 취소되었습니다',
+          'Order cancelled',
           style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
         ),
         backgroundColor: AppColors.statusOccupied,
@@ -252,26 +319,26 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
-    final restaurantId = authState.restaurantId;
+    final storeId = authState.storeId;
 
-    _ensureRestaurantLoaded(restaurantId);
+    _ensureRestaurantLoaded(storeId);
 
     final tableState = ref.watch(waiterTableProvider);
     final orderState = ref.watch(orderProvider);
-    final restaurantSettings = restaurantId == null
-        ? const AsyncValue<RestaurantSettings>.data(
-            RestaurantSettings(
+    final restaurantSettings = storeId == null
+        ? const AsyncValue<StoreSettings>.data(
+            StoreSettings(
               operationMode: 'standard',
               perPersonCharge: null,
             ),
           )
-        : ref.watch(restaurantSettingsProvider(restaurantId));
-    final menuState = restaurantId == null
+        : ref.watch(restaurantSettingsProvider(storeId));
+    final menuState = storeId == null
         ? const MenuState()
-        : ref.watch(menuProvider(restaurantId));
-    final menuNotifier = restaurantId == null
+        : ref.watch(menuProvider(storeId));
+    final menuNotifier = storeId == null
         ? null
-        : ref.read(menuProvider(restaurantId).notifier);
+        : ref.read(menuProvider(storeId).notifier);
     final orderNotifier = ref.read(orderProvider.notifier);
 
     final selectedTable = _resolveSelectedTable(tableState.tables);
@@ -283,6 +350,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
         isBuffetMode && orderState.activeOrder == null;
 
     return Scaffold(
+      key: const Key('dashboard_root'),
       backgroundColor: AppColors.surface0,
       body: Column(
         children: [
@@ -290,7 +358,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
           Expanded(
             child: Column(
               children: [
-                _WaiterTopBar(restaurantId: restaurantId),
+                _WaiterTopBar(storeId: storeId),
                 Expanded(
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 260),
@@ -327,9 +395,45 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                             onDecrementCartItem:
                                 orderNotifier.decrementCartItem,
                             onCancel: _onCancelOrderPanel,
+                            onCancelOrderItem: storeId == null
+                                ? null
+                                : (itemId) => orderNotifier.cancelOrderItem(
+                                      itemId,
+                                      storeId,
+                                    ),
+                            onEditOrderItemQuantity: storeId == null
+                                ? null
+                                : (itemId, qty) =>
+                                    orderNotifier.editOrderItemQuantity(
+                                      itemId,
+                                      storeId,
+                                      qty,
+                                    ),
+                            onTransferTable: storeId == null ||
+                                    orderState.activeOrder == null
+                                ? null
+                                : () async {
+                                    final newTable =
+                                        await _showTransferTableDialog(
+                                          storeId,
+                                        );
+                                    if (newTable == null) return;
+                                    await orderNotifier.transferOrderTable(
+                                      orderState.activeOrder!.id,
+                                      storeId,
+                                      newTable.id,
+                                    );
+                                    ref
+                                        .read(waiterTableProvider.notifier)
+                                        .loadTables(storeId);
+                                    if (!mounted) return;
+                                    setState(() {
+                                      _selectedTable = newTable;
+                                    });
+                                  },
                             onCancelOrder: () async {
                               final activeOrder = orderState.activeOrder;
-                              if (restaurantId == null || activeOrder == null) {
+                              if (storeId == null || activeOrder == null) {
                                 return;
                               }
                               final confirmed = await _showCancelOrderDialog(
@@ -341,7 +445,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
 
                               await orderNotifier.cancelOrder(
                                 activeOrder.id,
-                                restaurantId,
+                                storeId,
                               );
                               final nextState = ref.read(orderProvider);
                               if (!mounted) {
@@ -353,45 +457,45 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                               }
                             },
                             onSendOrder: () async {
-                              if (restaurantId == null) {
+                              if (storeId == null) {
                                 return;
                               }
                               if (orderState.activeOrder == null) {
                                 if (isBuffetMode) {
                                   await orderNotifier.submitBuffetOrder(
-                                    restaurantId,
+                                    storeId,
                                     selectedTable.id,
                                     _selectedGuestCount ?? 1,
                                   );
                                 } else {
                                   await orderNotifier.submitOrder(
-                                    restaurantId,
+                                    storeId,
                                     selectedTable.id,
                                   );
                                 }
                               } else {
                                 await orderNotifier.addMoreItems(
                                   orderState.activeOrder!.id,
-                                  restaurantId,
+                                  storeId,
                                 );
                               }
                             },
                           )
                         : _TableGridView(
-                            key: const ValueKey<String>('tables'),
+                            key: const Key('tables_root'),
                             state: tableState,
                             onRetry: () {
-                              if (restaurantId != null) {
+                              if (storeId != null) {
                                 ref
                                     .read(waiterTableProvider.notifier)
-                                    .loadTables(restaurantId);
+                                    .loadTables(storeId);
                               }
                             },
                             onTapTable: (table) {
-                              if (restaurantId != null) {
+                              if (storeId != null) {
                                 _onSelectTable(
                                   table,
-                                  restaurantId,
+                                  storeId,
                                   isBuffetMode,
                                 );
                               }
@@ -409,15 +513,15 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
 }
 
 class _WaiterTopBar extends ConsumerWidget {
-  const _WaiterTopBar({required this.restaurantId});
+  const _WaiterTopBar({required this.storeId});
 
-  final String? restaurantId;
+  final String? storeId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final restaurantName = restaurantId == null
-        ? const AsyncValue<String>.data('Restaurant')
-        : ref.watch(restaurantNameProvider(restaurantId!));
+    final restaurantName = storeId == null
+        ? const AsyncValue<String>.data('Store')
+        : ref.watch(restaurantNameProvider(storeId!));
 
     return Container(
       height: 72,
@@ -458,7 +562,7 @@ class _WaiterTopBar extends ConsumerWidget {
                   ),
                 ),
                 error: (_, _) => Text(
-                  'Restaurant',
+                  'Store',
                   style: GoogleFonts.notoSansKr(
                     color: AppColors.textSecondary,
                     fontSize: 14,
@@ -468,6 +572,7 @@ class _WaiterTopBar extends ConsumerWidget {
             ),
           ),
           IconButton(
+            key: const Key('logout_button'),
             onPressed: () => ref.read(authProvider.notifier).logout(),
             icon: const Icon(Icons.logout),
             color: AppColors.textPrimary,
@@ -555,6 +660,7 @@ class _TableGridView extends StatelessWidget {
             final isOccupied = table.isOccupied;
 
             return InkWell(
+              key: index == 0 ? const Key('table_first_card') : null,
               borderRadius: BorderRadius.circular(16),
               onTap: () => onTapTable(table),
               child: Container(

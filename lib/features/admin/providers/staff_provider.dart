@@ -123,13 +123,13 @@ class AttendanceState {
 class StaffNotifier extends StateNotifier<StaffState> {
   StaffNotifier() : super(const StaffState());
 
-  Future<void> loadStaff(String restaurantId) async {
+  Future<void> loadStaff(String storeId) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       final response = await supabase
           .from('users')
           .select()
-          .eq('restaurant_id', restaurantId)
+          .eq('restaurant_id', storeId)
           .order('created_at', ascending: true);
 
       final staff = response
@@ -148,7 +148,7 @@ class StaffNotifier extends StateNotifier<StaffState> {
   }
 
   Future<void> createStaff({
-    required String restaurantId,
+    required String storeId,
     required String email,
     required String password,
     required String fullName,
@@ -161,11 +161,11 @@ class StaffNotifier extends StateNotifier<StaffState> {
         password: password,
         fullName: fullName,
         role: role,
-        restaurantId: restaurantId,
+        storeId: storeId,
       );
 
       state = state.copyWith(isCreating: false, clearError: true);
-      await loadStaff(restaurantId);
+      await loadStaff(storeId);
     } catch (error) {
       state = state.copyWith(
         isCreating: false,
@@ -177,14 +177,15 @@ class StaffNotifier extends StateNotifier<StaffState> {
   Future<void> toggleActive(
     String userId,
     bool isActive,
-    String restaurantId,
+    String storeId,
   ) async {
     try {
-      await supabase
-          .from('users')
-          .update({'is_active': isActive})
-          .eq('id', userId);
-      await loadStaff(restaurantId);
+      await staffService.adminUpdateStaffAccount(
+        userId: userId,
+        storeId: storeId,
+        isActive: isActive,
+      );
+      await loadStaff(storeId);
     } catch (error) {
       state = state.copyWith(error: 'Failed to update staff status: $error');
     }
@@ -192,15 +193,16 @@ class StaffNotifier extends StateNotifier<StaffState> {
 
   Future<void> updateExtraPermissions({
     required String userId,
-    required String restaurantId,
+    required String storeId,
     required List<String> permissions,
   }) async {
     try {
-      await supabase
-          .from('users')
-          .update({'extra_permissions': permissions})
-          .eq('id', userId);
-      await loadStaff(restaurantId);
+      await staffService.adminUpdateStaffAccount(
+        userId: userId,
+        storeId: storeId,
+        extraPermissions: permissions,
+      );
+      await loadStaff(storeId);
     } catch (error) {
       state = state.copyWith(error: 'Failed to update permissions: $error');
     }
@@ -210,7 +212,7 @@ class StaffNotifier extends StateNotifier<StaffState> {
 class AttendanceNotifier extends StateNotifier<AttendanceState> {
   AttendanceNotifier() : super(const AttendanceState());
 
-  Future<void> loadLogs(String restaurantId, {DateTime? date}) async {
+  Future<void> loadLogs(String storeId, {DateTime? date}) async {
     final selectedDate = date ?? state.selectedDate ?? DateTime.now();
     final dayStart = DateTime(
       selectedDate.year,
@@ -229,7 +231,7 @@ class AttendanceNotifier extends StateNotifier<AttendanceState> {
       final response = await supabase
           .from('attendance_logs')
           .select('id, user_id, type, logged_at, users(full_name, role)')
-          .eq('restaurant_id', restaurantId)
+          .eq('restaurant_id', storeId)
           .gte('logged_at', dayStart.toIso8601String())
           .lt('logged_at', dayEnd.toIso8601String())
           .order('logged_at', ascending: false)

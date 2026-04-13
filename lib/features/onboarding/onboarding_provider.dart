@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/services/store_service.dart';
 import '../../main.dart';
 import '../auth/auth_provider.dart';
 
@@ -31,7 +32,8 @@ class OnboardingState {
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
       createdRestaurantId: createdRestaurantId ?? this.createdRestaurantId,
-      createdRestaurantName: createdRestaurantName ?? this.createdRestaurantName,
+      createdRestaurantName:
+          createdRestaurantName ?? this.createdRestaurantName,
     );
   }
 }
@@ -47,18 +49,20 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
     String operationMode,
     double? perPersonCharge,
   ) async {
+    final authState = ref.read(authProvider);
+    if (authState.role != 'super_admin') {
+      state = state.copyWith(error: 'Only super_admin can create restaurants');
+      return;
+    }
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final inserted = await supabase
-          .from('restaurants')
-          .insert({
-            'name': name,
-            'address': address.isEmpty ? null : address,
-            'operation_mode': operationMode.toLowerCase(),
-            'per_person_charge': perPersonCharge,
-          })
-          .select('id, name')
-          .single();
+      final inserted = await restaurantService.createRestaurant(
+        name: name,
+        slug: '',
+        operationMode: operationMode,
+        address: address.isEmpty ? null : address,
+        perPersonCharge: perPersonCharge,
+      );
 
       state = state.copyWith(
         isLoading: false,
@@ -78,8 +82,8 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
   Future<void> createAdminAccount(String fullName, String role) async {
     final authState = ref.read(authProvider);
     final user = authState.user;
-    final restaurantId = state.createdRestaurantId;
-    if (user == null || restaurantId == null) {
+    final storeId = state.createdRestaurantId;
+    if (user == null || storeId == null) {
       state = state.copyWith(
         error: 'Missing user or restaurant setup information.',
       );
@@ -88,20 +92,16 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
 
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      await supabase
-          .from('users')
-          .update({
-            'restaurant_id': restaurantId,
-            'full_name': fullName,
-            'role': role,
-          })
-          .eq('auth_id', user.id);
-
-      state = state.copyWith(
-        isLoading: false,
-        step: 2,
-        clearError: true,
+      await supabase.rpc(
+        'complete_onboarding_account_setup',
+        params: {
+          'p_restaurant_id': storeId,
+          'p_full_name': fullName,
+          'p_role': role,
+        },
       );
+
+      state = state.copyWith(isLoading: false, step: 2, clearError: true);
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
@@ -124,6 +124,7 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
   }
 }
 
-final onboardingProvider = StateNotifierProvider<OnboardingNotifier, OnboardingState>(
-  (ref) => OnboardingNotifier(ref),
-);
+final onboardingProvider =
+    StateNotifierProvider<OnboardingNotifier, OnboardingState>(
+      (ref) => OnboardingNotifier(ref),
+    );

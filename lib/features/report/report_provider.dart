@@ -1,3 +1,4 @@
+import 'package:excel/excel.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -9,12 +10,25 @@ class DailyRevenue {
     required this.dineIn,
     required this.delivery,
     required this.total,
+    this.cashAmount = 0,
+    this.cardAmount = 0,
+    this.payAmount = 0,
   });
 
   final DateTime date;
   final double dineIn;
   final double delivery;
   final double total;
+  final double cashAmount;
+  final double cardAmount;
+  final double payAmount;
+}
+
+class HourlyRevenue {
+  const HourlyRevenue({required this.hour, required this.amount});
+
+  final int hour;
+  final double amount;
 }
 
 class ReportSummary {
@@ -26,6 +40,12 @@ class ReportSummary {
     required this.totalOrders,
     required this.completedOrders,
     required this.dailyBreakdown,
+    this.cashTotal = 0,
+    this.cardTotal = 0,
+    this.payTotal = 0,
+    this.cancelledOrders = 0,
+    this.cancelledItems = 0,
+    this.hourlyBreakdown = const [],
   });
 
   final double dineInRevenue;
@@ -35,6 +55,12 @@ class ReportSummary {
   final int totalOrders;
   final int completedOrders;
   final List<DailyRevenue> dailyBreakdown;
+  final double cashTotal;
+  final double cardTotal;
+  final double payTotal;
+  final int cancelledOrders;
+  final int cancelledItems;
+  final List<HourlyRevenue> hourlyBreakdown;
 }
 
 class ReportState {
@@ -84,7 +110,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
         ),
       );
 
-  Future<void> setDateRange(DateTime start, DateTime end, String restaurantId) async {
+  Future<void> setDateRange(DateTime start, DateTime end, String storeId) async {
     final normalizedStart = DateTime(start.year, start.month, start.day);
     final normalizedEnd = DateTime(
       end.year,
@@ -100,10 +126,10 @@ class ReportNotifier extends StateNotifier<ReportState> {
       endDate: normalizedEnd,
       clearError: true,
     );
-    await loadReport(restaurantId);
+    await loadReport(storeId);
   }
 
-  Future<void> loadReport(String restaurantId) async {
+  Future<void> loadReport(String storeId) async {
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
@@ -112,8 +138,8 @@ class ReportNotifier extends StateNotifier<ReportState> {
 
       final paymentsRevenueResponse = await supabase
           .from('payments')
-          .select('amount, created_at, orders(sales_channel)')
-          .eq('restaurant_id', restaurantId)
+          .select('amount, method, created_at, orders(sales_channel)')
+          .eq('restaurant_id', storeId)
           .eq('is_revenue', true)
           .gte('created_at', startIso)
           .lte('created_at', endIso);
@@ -121,7 +147,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
       final externalSalesResponse = await supabase
           .from('external_sales')
           .select('net_amount, completed_at')
-          .eq('restaurant_id', restaurantId)
+          .eq('restaurant_id', storeId)
           .eq('is_revenue', true)
           .eq('order_status', 'completed')
           .gte('completed_at', startIso)
@@ -130,7 +156,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
       final servicePaymentsResponse = await supabase
           .from('payments')
           .select('amount')
-          .eq('restaurant_id', restaurantId)
+          .eq('restaurant_id', storeId)
           .eq('is_revenue', false)
           .gte('created_at', startIso)
           .lte('created_at', endIso);
@@ -138,19 +164,58 @@ class ReportNotifier extends StateNotifier<ReportState> {
       final ordersResponse = await supabase
           .from('orders')
           .select('id, status')
-          .eq('restaurant_id', restaurantId)
+          .eq('restaurant_id', storeId)
           .gte('created_at', startIso)
           .lte('created_at', endIso);
 
+      // Cancelled items count
+      final cancelledItemsResponse = await supabase
+          .from('order_items')
+          .select('id, order_id, orders!inner(restaurant_id, created_at)')
+          .eq('status', 'cancelled')
+          .eq('orders.restaurant_id', storeId)
+          .gte('orders.created_at', startIso)
+          .lte('orders.created_at', endIso);
+
       double dineInRevenue = 0;
+      double cashTotal = 0;
+      double cardTotal = 0;
+      double payTotal = 0;
       final dailyMap = <String, _DailyAccumulator>{};
+      final hourlyMap = <int, double>{};
 
       for (final row in paymentsRevenueResponse) {
         final payment = Map<String, dynamic>.from(row);
         final amount = _toDouble(payment['amount']);
+        final method = (payment['method']?.toString() ?? '').toLowerCase();
         final createdAt = _parseDateTime(payment['created_at']) ?? state.startDate;
         final dateKey = DateFormat('yyyy-MM-dd').format(createdAt);
         final accumulator = dailyMap.putIfAbsent(dateKey, () => _DailyAccumulator(date: DateTime(createdAt.year, createdAt.month, createdAt.day)));
+
+        // Hourly aggregation
+        hourlyMap[createdAt.hour] =
+            (hourlyMap[createdAt.hour] ?? 0) + amount;
+
+        // Payment method aggregation
+        switch (method) {
+          case 'cash':
+            cashTotal += amount;
+            accumulator.cash += amount;
+          case 'creditcard':
+          case 'atm':
+          case 'banktransfer':
+            cardTotal += amount;
+            accumulator.card += amount;
+          case 'momo':
+          case 'zalopay':
+          case 'vnpay':
+          case 'shopeepay':
+          case 'voucher':
+          case 'creditsale':
+          case 'other':
+            payTotal += amount;
+            accumulator.pay += amount;
+        }
 
         String channel = '';
         final orderRaw = payment['orders'];
@@ -187,6 +252,15 @@ class ReportNotifier extends StateNotifier<ReportState> {
       final completedOrders = ordersResponse
           .where((order) => order['status']?.toString().toLowerCase() == 'completed')
           .length;
+      final cancelledOrders = ordersResponse
+          .where((order) => order['status']?.toString().toLowerCase() == 'cancelled')
+          .length;
+      final cancelledItems = cancelledItemsResponse.length;
+
+      final hourlyBreakdown = hourlyMap.entries
+          .map((e) => HourlyRevenue(hour: e.key, amount: e.value))
+          .toList()
+        ..sort((a, b) => a.hour.compareTo(b.hour));
 
       final breakdown = dailyMap.values
           .map(
@@ -195,6 +269,9 @@ class ReportNotifier extends StateNotifier<ReportState> {
               dineIn: day.dineIn,
               delivery: day.delivery,
               total: day.dineIn + day.delivery,
+              cashAmount: day.cash,
+              cardAmount: day.card,
+              payAmount: day.pay,
             ),
           )
           .toList()
@@ -208,6 +285,12 @@ class ReportNotifier extends StateNotifier<ReportState> {
         totalOrders: totalOrders,
         completedOrders: completedOrders,
         dailyBreakdown: breakdown,
+        cashTotal: cashTotal,
+        cardTotal: cardTotal,
+        payTotal: payTotal,
+        cancelledOrders: cancelledOrders,
+        cancelledItems: cancelledItems,
+        hourlyBreakdown: hourlyBreakdown,
       );
 
       state = state.copyWith(
@@ -221,6 +304,118 @@ class ReportNotifier extends StateNotifier<ReportState> {
         error: 'Failed to load report: $error',
       );
     }
+  }
+
+  List<int> exportToExcel() {
+    final summary = state.summary;
+    if (summary == null) return <int>[];
+
+    final currency = NumberFormat('#,###', 'vi_VN');
+    final dateFormat = DateFormat('dd/MM/yyyy');
+    final excel = Excel.createExcel();
+    final sheet = excel['Sales Report'];
+
+    // Title
+    sheet.appendRow([
+      TextCellValue(
+        'GLOBOS Sales Report ${dateFormat.format(state.startDate)} ~ ${dateFormat.format(state.endDate)}',
+      ),
+    ]);
+    sheet.appendRow([TextCellValue('')]);
+
+    // Summary section
+    sheet.appendRow([TextCellValue('Summary')]);
+    sheet.appendRow([
+      TextCellValue('Store Revenue'),
+      DoubleCellValue(summary.dineInRevenue),
+    ]);
+    sheet.appendRow([
+      TextCellValue('Delivery Revenue'),
+      DoubleCellValue(summary.deliveryRevenue),
+    ]);
+    sheet.appendRow([
+      TextCellValue('Total Revenue'),
+      DoubleCellValue(summary.totalRevenue),
+    ]);
+    sheet.appendRow([
+      TextCellValue('Service Expenses'),
+      DoubleCellValue(summary.serviceTotal),
+    ]);
+    sheet.appendRow([TextCellValue('')]);
+
+    // Payment method breakdown
+    sheet.appendRow([TextCellValue('By Payment Method')]);
+    sheet.appendRow([
+      TextCellValue('Cash'),
+      TextCellValue('₫${currency.format(summary.cashTotal)}'),
+    ]);
+    sheet.appendRow([
+      TextCellValue('Card'),
+      TextCellValue('₫${currency.format(summary.cardTotal)}'),
+    ]);
+    sheet.appendRow([
+      TextCellValue('Pay'),
+      TextCellValue('₫${currency.format(summary.payTotal)}'),
+    ]);
+    sheet.appendRow([TextCellValue('')]);
+
+    // Order counts
+    sheet.appendRow([TextCellValue('Order Status')]);
+    sheet.appendRow([
+      TextCellValue('Total Orders'),
+      IntCellValue(summary.totalOrders),
+    ]);
+    sheet.appendRow([
+      TextCellValue('Done'),
+      IntCellValue(summary.completedOrders),
+    ]);
+    sheet.appendRow([
+      TextCellValue('Cancelled Orders'),
+      IntCellValue(summary.cancelledOrders),
+    ]);
+    sheet.appendRow([
+      TextCellValue('Cancelled Items'),
+      IntCellValue(summary.cancelledItems),
+    ]);
+    sheet.appendRow([TextCellValue('')]);
+
+    // Daily breakdown
+    sheet.appendRow([TextCellValue('Daily Details')]);
+    sheet.appendRow([
+      TextCellValue('Date'),
+      TextCellValue('Store'),
+      TextCellValue('Delivery'),
+      TextCellValue('Total'),
+      TextCellValue('Cash'),
+      TextCellValue('Card'),
+      TextCellValue('Pay'),
+    ]);
+
+    for (final day in summary.dailyBreakdown) {
+      sheet.appendRow([
+        TextCellValue(DateFormat('dd/MM').format(day.date)),
+        DoubleCellValue(day.dineIn),
+        DoubleCellValue(day.delivery),
+        DoubleCellValue(day.total),
+        DoubleCellValue(day.cashAmount),
+        DoubleCellValue(day.cardAmount),
+        DoubleCellValue(day.payAmount),
+      ]);
+    }
+
+    // Totals row
+    sheet.appendRow([
+      TextCellValue('Total'),
+      DoubleCellValue(summary.dineInRevenue),
+      DoubleCellValue(summary.deliveryRevenue),
+      DoubleCellValue(summary.totalRevenue),
+      DoubleCellValue(summary.cashTotal),
+      DoubleCellValue(summary.cardTotal),
+      DoubleCellValue(summary.payTotal),
+    ]);
+
+    final bytes = excel.encode();
+    return bytes ?? <int>[];
   }
 }
 
@@ -245,6 +440,9 @@ class _DailyAccumulator {
   final DateTime date;
   double dineIn = 0;
   double delivery = 0;
+  double cash = 0;
+  double card = 0;
+  double pay = 0;
 }
 
 final reportProvider = StateNotifierProvider<ReportNotifier, ReportState>(

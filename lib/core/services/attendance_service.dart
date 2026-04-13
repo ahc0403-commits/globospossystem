@@ -8,7 +8,7 @@ import '../../main.dart';
 
 class AttendanceService {
   Future<String?> uploadAttendancePhoto({
-    required String restaurantId,
+    required String storeId,
     required String userId,
     required File originalFile,
     required String type,
@@ -32,7 +32,7 @@ class AttendanceService {
     final dateStr =
         '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     final ts = now.millisecondsSinceEpoch;
-    final path = '$restaurantId/$userId/$dateStr/${ts}_$type.jpg';
+    final path = '$storeId/$userId/$dateStr/${ts}_$type.jpg';
 
     await supabase.storage
         .from('attendance-photos')
@@ -49,55 +49,86 @@ class AttendanceService {
     return signedUrl;
   }
 
+  Future<void> upsertFingerprintTemplate({
+    required String userId,
+    required String storeId,
+    required String templateData,
+    int fingerIndex = 0,
+  }) async {
+    throw UnsupportedError(
+      'Fingerprint attendance is dormant and disabled by default.',
+    );
+  }
+
   Future<void> logAttendance({
-    required String restaurantId,
+    required String storeId,
     required String userId,
     required String type,
     String? photoUrl,
   }) async {
-    await supabase.from('attendance_logs').insert({
-      'restaurant_id': restaurantId,
-      'user_id': userId,
-      'type': type,
-      'photo_url': photoUrl,
-      'photo_thumbnail_url': photoUrl,
-      'logged_at': DateTime.now().toUtc().toIso8601String(),
-    });
+    await supabase.rpc(
+      'record_attendance_event',
+      params: {
+        'p_restaurant_id': storeId,
+        'p_user_id': userId,
+        'p_type': type,
+        'p_photo_url': photoUrl,
+        'p_photo_thumbnail_url': photoUrl,
+      },
+    );
   }
 
   Future<List<Map<String, dynamic>>> fetchLogs({
-    required String restaurantId,
+    required String storeId,
     required DateTime from,
     required DateTime to,
   }) async {
-    final result = await supabase
-        .from('attendance_logs')
-        .select('*, users(id, full_name, role)')
-        .eq('restaurant_id', restaurantId)
-        .gte('logged_at', from.toUtc().toIso8601String())
-        .lte('logged_at', to.toUtc().toIso8601String())
-        .order('logged_at', ascending: false);
-    return List<Map<String, dynamic>>.from(result as List);
+    final result = await supabase.rpc(
+      'get_attendance_log_view',
+      params: {
+        'p_restaurant_id': storeId,
+        'p_from': from.toUtc().toIso8601String(),
+        'p_to': to.toUtc().toIso8601String(),
+        'p_user_id': null,
+      },
+    );
+
+    return List<Map<String, dynamic>>.from(result as List).map((row) {
+      final map = Map<String, dynamic>.from(row);
+      return {
+        'id': map['attendance_log_id'],
+        'restaurant_id': map['restaurant_id'],
+        'user_id': map['user_id'],
+        'type': map['attendance_type'],
+        'photo_url': map['photo_url'],
+        'photo_thumbnail_url': map['photo_thumbnail_url'],
+        'logged_at': map['logged_at'],
+        'created_at': map['created_at'],
+        'users': {
+          'id': map['user_id'],
+          'full_name': map['user_full_name'],
+          'role': map['user_role'],
+        },
+      };
+    }).toList();
   }
 
-  Future<List<Map<String, dynamic>>> fetchStaffList(String restaurantId) async {
-    final result = await supabase
-        .from('users')
-        .select('id, full_name, role')
-        .eq('restaurant_id', restaurantId)
-        .eq('is_active', true)
-        .order('full_name');
+  Future<List<Map<String, dynamic>>> fetchStaffList(String storeId) async {
+    final result = await supabase.rpc(
+      'get_attendance_staff_directory',
+      params: {'p_restaurant_id': storeId},
+    );
     return List<Map<String, dynamic>>.from(result as List);
   }
 
   Future<Map<String, dynamic>?> fetchWageConfig({
-    required String restaurantId,
+    required String storeId,
     required String userId,
   }) async {
     final result = await supabase
         .from('staff_wage_configs')
         .select()
-        .eq('restaurant_id', restaurantId)
+        .eq('restaurant_id', storeId)
         .eq('user_id', userId)
         .eq('is_active', true)
         .order('effective_from', ascending: false)
@@ -111,14 +142,14 @@ class AttendanceService {
   }
 
   Future<void> upsertWageConfig({
-    required String restaurantId,
+    required String storeId,
     required String userId,
     required String wageType,
     double? hourlyRate,
     List<Map<String, dynamic>> shiftRates = const [],
   }) async {
     await supabase.from('staff_wage_configs').upsert({
-      'restaurant_id': restaurantId,
+      'restaurant_id': storeId,
       'user_id': userId,
       'wage_type': wageType,
       'hourly_rate': hourlyRate,

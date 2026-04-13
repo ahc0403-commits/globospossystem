@@ -72,16 +72,16 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   RealtimeChannel? _paymentsChannel;
   String? _restaurantId;
 
-  Future<void> loadOrders(String restaurantId) async {
-    _restaurantId = restaurantId;
+  Future<void> loadOrders(String storeId) async {
+    _restaurantId = storeId;
 
     try {
       final response = await supabase
           .from('orders')
           .select(
-            'id, table_id, status, created_at, tables(table_number), order_items(id, menu_item_id, label, unit_price, quantity, status, item_type)',
+            'id, table_id, status, created_at, tables(table_number), order_items(id, menu_item_id, label, unit_price, quantity, status, item_type, menu_items(name))',
           )
-          .eq('restaurant_id', restaurantId)
+          .eq('restaurant_id', storeId)
           .not('status', 'in', '(completed,cancelled)')
           .order('created_at', ascending: true);
 
@@ -97,10 +97,12 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
                   .toList()
             : <OrderItem>[];
 
-        final total = items.fold<double>(
-          0,
-          (sum, item) => sum + (item.unitPrice * item.quantity),
-        );
+        final total = items
+            .where((item) => item.status != 'cancelled')
+            .fold<double>(
+              0,
+              (sum, item) => sum + (item.unitPrice * item.quantity),
+            );
 
         final tableRaw = data['tables'];
         final tableNumber = tableRaw is Map<String, dynamic>
@@ -140,7 +142,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         clearError: true,
       );
 
-      await subscribeRealtime(restaurantId);
+      await subscribeRealtime(storeId);
     } catch (error) {
       state = state.copyWith(error: 'Failed to load payable orders: $error');
     }
@@ -155,7 +157,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   }
 
   Future<void> processPayment(
-    String restaurantId,
+    String storeId,
     String orderId,
     double amount,
     String method,
@@ -169,12 +171,12 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     try {
       await paymentService.processPayment(
         orderId: orderId,
-        restaurantId: restaurantId,
+        storeId: storeId,
         amount: amount,
         method: method,
       );
 
-      await loadOrders(restaurantId);
+      await loadOrders(storeId);
 
       state = state.copyWith(
         isProcessing: false,
@@ -184,33 +186,34 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     } catch (error) {
       state = state.copyWith(
         isProcessing: false,
-        error: 'Failed to process payment: $error',
+        error: _mapPaymentError(error, 'Failed to process payment'),
       );
     }
   }
 
-  Future<void> cancelOrder(String orderId, String restaurantId) async {
+  Future<void> cancelOrder(String orderId, String storeId) async {
     state = state.copyWith(isProcessing: true, clearError: true);
     try {
       await orderService.cancelOrder(
         orderId: orderId,
-        restaurantId: restaurantId,
+        storeId: storeId,
       );
       state = state.copyWith(
         isProcessing: false,
         clearSelectedOrder: true,
         clearError: true,
       );
-      await loadOrders(restaurantId);
+      await loadOrders(storeId);
     } on PostgrestException catch (error) {
       state = state.copyWith(
         isProcessing: false,
-        error: error.message == 'ORDER_NOT_CANCELLABLE'
-            ? '완료되거나 이미 취소된 주문은 취소할 수 없습니다.'
-            : '주문 취소 실패: ${error.message}',
+        error: _mapPaymentError(error, 'Failed to cancel order'),
       );
     } catch (error) {
-      state = state.copyWith(isProcessing: false, error: '주문 취소 실패: $error');
+      state = state.copyWith(
+        isProcessing: false,
+        error: _mapPaymentError(error, 'Failed to cancel order'),
+      );
     }
   }
 
@@ -221,8 +224,8 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     state = state.copyWith(clearPaymentSuccess: true);
   }
 
-  Future<void> subscribeRealtime(String restaurantId) async {
-    if (_restaurantId == restaurantId &&
+  Future<void> subscribeRealtime(String storeId) async {
+    if (_restaurantId == storeId &&
         _ordersChannel != null &&
         _paymentsChannel != null) {
       return;
@@ -235,31 +238,31 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       await _paymentsChannel!.unsubscribe();
     }
 
-    _restaurantId = restaurantId;
+    _restaurantId = storeId;
 
     _ordersChannel = supabase
-        .channel('public:cashier_orders:$restaurantId')
+        .channel('public:cashier_orders:$storeId')
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'orders',
-          callback: (_) => loadOrders(restaurantId),
+          callback: (_) => loadOrders(storeId),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
           table: 'orders',
-          callback: (_) => loadOrders(restaurantId),
+          callback: (_) => loadOrders(storeId),
         )
         .subscribe();
 
     _paymentsChannel = supabase
-        .channel('public:cashier_payments:$restaurantId')
+        .channel('public:cashier_payments:$storeId')
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'payments',
-          callback: (_) => loadOrders(restaurantId),
+          callback: (_) => loadOrders(storeId),
         )
         .subscribe();
   }
@@ -277,3 +280,89 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
 final paymentProvider = StateNotifierProvider<PaymentNotifier, PaymentState>(
   (ref) => PaymentNotifier(),
 );
+
+class CashierTodaySummary {
+  const CashierTodaySummary({
+    required this.paymentsCount,
+    required this.paymentsTotal,
+    required this.paymentsCash,
+    required this.paymentsCard,
+    required this.paymentsPay,
+    required this.serviceCount,
+    required this.serviceTotal,
+    required this.ordersCompleted,
+    required this.ordersCancelled,
+    required this.ordersActive,
+  });
+
+  final int paymentsCount;
+  final double paymentsTotal;
+  final double paymentsCash;
+  final double paymentsCard;
+  final double paymentsPay;
+  final int serviceCount;
+  final double serviceTotal;
+  final int ordersCompleted;
+  final int ordersCancelled;
+  final int ordersActive;
+
+  factory CashierTodaySummary.fromJson(Map<String, dynamic> json) {
+    return CashierTodaySummary(
+      paymentsCount: _toInt(json['payments_count']),
+      paymentsTotal: _toDouble(json['payments_total']),
+      paymentsCash: _toDouble(json['payments_cash']),
+      paymentsCard: _toDouble(json['payments_card']),
+      paymentsPay: _toDouble(json['payments_pay']),
+      serviceCount: _toInt(json['service_count']),
+      serviceTotal: _toDouble(json['service_total']),
+      ordersCompleted: _toInt(json['orders_completed']),
+      ordersCancelled: _toInt(json['orders_cancelled']),
+      ordersActive: _toInt(json['orders_active']),
+    );
+  }
+
+  static int _toInt(dynamic v) => switch (v) {
+    int val => val,
+    num val => val.toInt(),
+    String val => int.tryParse(val) ?? 0,
+    _ => 0,
+  };
+
+  static double _toDouble(dynamic v) => switch (v) {
+    num val => val.toDouble(),
+    String val => double.tryParse(val) ?? 0,
+    _ => 0,
+  };
+}
+
+final cashierTodaySummaryProvider = FutureProvider.autoDispose
+    .family<CashierTodaySummary, String>((ref, storeId) async {
+      final json = await paymentService.fetchCashierTodaySummary(
+        storeId: storeId,
+      );
+      return CashierTodaySummary.fromJson(json);
+    });
+
+String _mapPaymentError(Object error, String fallbackPrefix) {
+  if (error is PostgrestException) {
+    return switch (error.message) {
+      'PAYMENT_FORBIDDEN' =>
+        'You do not have permission to complete payment for this order.',
+      'INVALID_PAYMENT_METHOD' =>
+        'The selected payment method is not supported.',
+      'PAYMENT_ALREADY_EXISTS' => 'This order has already been paid.',
+      'ORDER_NOT_FOUND' => 'The selected order could not be found.',
+      'ORDER_NOT_PAYABLE' => 'Only open dine-in orders can be paid.',
+      'ORDER_TOTAL_INVALID' =>
+        'This order total is invalid and cannot be processed.',
+      'PAYMENT_AMOUNT_MISMATCH' =>
+        'The payment amount no longer matches the current order total.',
+      'ORDER_NOT_CANCELLABLE' =>
+        'Only pending or confirmed orders can be cancelled.',
+      'ORDER_MUTATION_FORBIDDEN' =>
+        'You do not have permission to cancel this order.',
+      _ => '$fallbackPrefix: ${error.message}',
+    };
+  }
+  return '$fallbackPrefix: $error';
+}

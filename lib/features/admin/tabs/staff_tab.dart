@@ -20,13 +20,13 @@ class _StaffTabState extends ConsumerState<StaffTab> {
 
   @override
   Widget build(BuildContext context) {
-    final restaurantId = ref.watch(authProvider).restaurantId;
+    final storeId = ref.watch(authProvider).storeId;
     final staffState = ref.watch(staffProvider);
     final notifier = ref.read(staffProvider.notifier);
 
-    if (restaurantId != null && _initializedRestaurantId != restaurantId) {
-      _initializedRestaurantId = restaurantId;
-      Future.microtask(() => notifier.loadStaff(restaurantId));
+    if (storeId != null && _initializedRestaurantId != storeId) {
+      _initializedRestaurantId = storeId;
+      Future.microtask(() => notifier.loadStaff(storeId));
     }
 
     if (staffState.error != null &&
@@ -58,9 +58,9 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                 ),
                 const Spacer(),
                 FilledButton.icon(
-                  onPressed: restaurantId == null
+                  onPressed: storeId == null
                       ? null
-                      : () => _showAddStaffSheet(context, restaurantId),
+                      : () => _showAddStaffSheet(context, storeId),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.amber500,
                     foregroundColor: AppColors.surface0,
@@ -160,30 +160,30 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                if (restaurantId != null &&
+                                if (storeId != null &&
                                     member.role != 'admin' &&
                                     member.role != 'super_admin')
                                   OutlinedButton(
                                     onPressed: () => _showPermissionDialog(
                                       context: context,
-                                      restaurantId: restaurantId,
+                                      storeId: storeId,
                                       member: member,
                                     ),
-                                    child: const Text('권한 설정'),
+                                    child: const Text('Permissions'),
                                   ),
-                                if (restaurantId != null &&
+                                if (storeId != null &&
                                     member.role != 'admin' &&
                                     member.role != 'super_admin')
                                   const SizedBox(width: 8),
                                 Switch(
                                   value: member.isActive,
                                   activeThumbColor: AppColors.amber500,
-                                  onChanged: restaurantId == null
+                                  onChanged: storeId == null
                                       ? null
                                       : (value) => notifier.toggleActive(
                                           member.id,
                                           value,
-                                          restaurantId,
+                                          storeId,
                                         ),
                                 ),
                               ],
@@ -201,7 +201,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
 
   Future<void> _showAddStaffSheet(
     BuildContext context,
-    String restaurantId,
+    String storeId,
   ) async {
     final fullNameController = TextEditingController();
     final emailController = TextEditingController();
@@ -297,7 +297,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                               }
 
                               await notifier.createStaff(
-                                restaurantId: restaurantId,
+                                storeId: storeId,
                                 email: email,
                                 password: password,
                                 fullName: fullName,
@@ -353,7 +353,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
 
   Future<void> _showPermissionDialog({
     required BuildContext context,
-    required String restaurantId,
+    required String storeId,
     required StaffMember member,
   }) async {
     final notifier = ref.read(staffProvider.notifier);
@@ -368,7 +368,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
             return AlertDialog(
               backgroundColor: AppColors.surface1,
               title: Text(
-                '${member.fullName} 권한 설정',
+                '${member.fullName} Permissions',
                 style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
               ),
               content: Column(
@@ -378,7 +378,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                     value: canQc,
                     activeColor: AppColors.amber500,
                     title: Text(
-                      'QC 점검 수행 가능',
+                      'Can perform QC inspections',
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textPrimary,
                         fontSize: 14,
@@ -392,7 +392,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                     value: canCount,
                     activeColor: AppColors.amber500,
                     title: Text(
-                      '실재고 실사 수행 가능',
+                      'Can perform physical count',
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textPrimary,
                         fontSize: 14,
@@ -407,7 +407,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('취소'),
+                  child: const Text('Cancel'),
                 ),
                 FilledButton(
                   onPressed: () async {
@@ -417,20 +417,20 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                     ];
                     await notifier.updateExtraPermissions(
                       userId: member.id,
-                      restaurantId: restaurantId,
+                      storeId: storeId,
                       permissions: permissions,
                     );
                     if (!context.mounted) return;
                     final nextState = ref.read(staffProvider);
                     if (nextState.error != null) return;
                     Navigator.of(context).pop();
-                    showSuccessToast(context, '권한이 저장되었습니다.');
+                    showSuccessToast(context, 'Permissions saved.');
                   },
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.amber500,
                     foregroundColor: AppColors.surface0,
                   ),
-                  child: const Text('저장'),
+                  child: const Text('Save'),
                 ),
               ],
             );
@@ -478,11 +478,11 @@ class _RoleBadge extends StatelessWidget {
 
 String _roleLabelKo(String role) {
   return switch (role.toLowerCase()) {
-    'waiter' => '홀 직원',
-    'kitchen' => '주방',
-    'cashier' => '캐셔',
-    'admin' => '관리자',
-    'super_admin' => '슈퍼관리자',
+    'waiter' => 'Hall Staff',
+    'kitchen' => 'Kitchen',
+    'cashier' => 'Cashier',
+    'admin' => 'Admin',
+    'super_admin' => 'Super Admin',
     _ => role,
   };
 }

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/services/store_service.dart';
 import '../../main.dart';
 
 const kUnclassifiedBrandFilter = '__unclassified__';
@@ -14,6 +15,7 @@ class SuperRestaurant {
     required this.perPersonCharge,
     required this.isActive,
     required this.createdAt,
+    this.storeType = 'direct',
     this.brandId,
     this.brandName,
     this.brandCode,
@@ -27,9 +29,13 @@ class SuperRestaurant {
   final double? perPersonCharge;
   final bool isActive;
   final DateTime createdAt;
+  final String storeType;
   final String? brandId;
   final String? brandName;
   final String? brandCode;
+
+  bool get isDirect => storeType == 'direct';
+  bool get isExternal => storeType == 'external';
 
   factory SuperRestaurant.fromJson(Map<String, dynamic> json) {
     final rawCharge = json['per_person_charge'];
@@ -51,6 +57,7 @@ class SuperRestaurant {
       createdAt: createdAtRaw != null
           ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
           : DateTime.now(),
+      storeType: json['store_type']?.toString() ?? 'direct',
       brandId: json['brand_id']?.toString(),
       brandName: (json['brands'] as Map<String, dynamic>?)?['name']?.toString(),
       brandCode: (json['brands'] as Map<String, dynamic>?)?['code']?.toString(),
@@ -60,14 +67,14 @@ class SuperRestaurant {
 
 class SuperAdminRestaurantReport {
   const SuperAdminRestaurantReport({
-    required this.restaurantId,
+    required this.storeId,
     required this.restaurantName,
     required this.dineIn,
     required this.delivery,
     required this.total,
   });
 
-  final String restaurantId;
+  final String storeId;
   final String restaurantName;
   final double dineIn;
   final double delivery;
@@ -93,6 +100,7 @@ class SuperAdminState {
     this.restaurants = const [],
     this.brands = const [],
     this.selectedBrandId,
+    this.selectedStoreType,
     this.selectedRestaurant,
     this.reportSummary,
     required this.reportStart,
@@ -104,6 +112,7 @@ class SuperAdminState {
   final List<SuperRestaurant> restaurants;
   final List<Map<String, dynamic>> brands;
   final String? selectedBrandId;
+  final String? selectedStoreType; // null=All, 'direct', 'external'
   final SuperRestaurant? selectedRestaurant;
   final SuperAdminReportSummary? reportSummary;
   final DateTime reportStart;
@@ -111,21 +120,30 @@ class SuperAdminState {
   final bool isLoading;
   final String? error;
 
-  /// Returns restaurants filtered by selected brand (or all if none selected)
+  /// Returns restaurants filtered by selected brand and store type
   List<SuperRestaurant> get filteredRestaurants {
-    if (selectedBrandId == null) return restaurants;
+    var list = restaurants;
+
+    // Store type filter
+    if (selectedStoreType != null) {
+      list = list.where((r) => r.storeType == selectedStoreType).toList();
+    }
+
+    // Brand filter
+    if (selectedBrandId == null) return list;
     if (selectedBrandId == kUnclassifiedBrandFilter) {
-      return restaurants
+      return list
           .where((r) => r.brandId == null || r.brandId!.isEmpty)
           .toList();
     }
-    return restaurants.where((r) => r.brandId == selectedBrandId).toList();
+    return list.where((r) => r.brandId == selectedBrandId).toList();
   }
 
   SuperAdminState copyWith({
     List<SuperRestaurant>? restaurants,
     List<Map<String, dynamic>>? brands,
     String? selectedBrandId,
+    String? selectedStoreType,
     SuperRestaurant? selectedRestaurant,
     SuperAdminReportSummary? reportSummary,
     DateTime? reportStart,
@@ -136,6 +154,7 @@ class SuperAdminState {
     bool clearReportSummary = false,
     bool clearError = false,
     bool clearBrandFilter = false,
+    bool clearStoreTypeFilter = false,
   }) {
     return SuperAdminState(
       restaurants: restaurants ?? this.restaurants,
@@ -143,6 +162,9 @@ class SuperAdminState {
       selectedBrandId: clearBrandFilter
           ? null
           : (selectedBrandId ?? this.selectedBrandId),
+      selectedStoreType: clearStoreTypeFilter
+          ? null
+          : (selectedStoreType ?? this.selectedStoreType),
       selectedRestaurant: clearSelectedRestaurant
           ? null
           : (selectedRestaurant ?? this.selectedRestaurant),
@@ -210,6 +232,13 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     );
   }
 
+  void setStoreTypeFilter(String? storeType) {
+    state = state.copyWith(
+      selectedStoreType: storeType,
+      clearStoreTypeFilter: storeType == null,
+    );
+  }
+
   Future<bool> addRestaurant({
     required String name,
     required String address,
@@ -217,18 +246,19 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     required String operationMode,
     required double? perPersonCharge,
     String? brandId,
+    String storeType = 'direct',
   }) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      await supabase.from('restaurants').insert({
-        'name': name,
-        'address': address.isEmpty ? null : address,
-        'slug': slug,
-        'operation_mode': operationMode.toLowerCase(),
-        'per_person_charge': perPersonCharge,
-        'brand_id': brandId,
-        'is_active': true,
-      });
+      await restaurantService.createRestaurant(
+        name: name,
+        slug: slug,
+        operationMode: operationMode,
+        address: address.isEmpty ? null : address,
+        perPersonCharge: perPersonCharge,
+        brandId: brandId,
+        storeType: storeType,
+      );
       await loadAllRestaurants();
       return true;
     } catch (error) {
@@ -248,20 +278,20 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     required String operationMode,
     required double? perPersonCharge,
     String? brandId,
+    String storeType = 'direct',
   }) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      await supabase
-          .from('restaurants')
-          .update({
-            'name': name,
-            'address': address.isEmpty ? null : address,
-            'slug': slug,
-            'operation_mode': operationMode.toLowerCase(),
-            'per_person_charge': perPersonCharge,
-            'brand_id': brandId,
-          })
-          .eq('id', id);
+      await restaurantService.updateRestaurant(
+        id: id,
+        name: name,
+        slug: slug,
+        operationMode: operationMode,
+        address: address.isEmpty ? null : address,
+        perPersonCharge: perPersonCharge,
+        brandId: brandId,
+        storeType: storeType,
+      );
       await loadAllRestaurants();
       return true;
     } catch (error) {
@@ -276,10 +306,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
   Future<bool> deactivateRestaurant(String id) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      await supabase
-          .from('restaurants')
-          .update({'is_active': false})
-          .eq('id', id);
+      await restaurantService.deactivateRestaurant(id);
       await loadAllRestaurants();
       return true;
     } catch (error) {
@@ -319,7 +346,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
 
       for (final restaurant in sourceRestaurants) {
         accumulators[restaurant.id] = _Accumulator(
-          restaurantId: restaurant.id,
+          storeId: restaurant.id,
           restaurantName: restaurant.name,
         );
       }
@@ -386,7 +413,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
           accumulators.values
               .map(
                 (value) => SuperAdminRestaurantReport(
-                  restaurantId: value.restaurantId,
+                  storeId: value.storeId,
                   restaurantName: value.restaurantName,
                   dineIn: value.dineIn,
                   delivery: value.delivery,
@@ -433,8 +460,8 @@ double _toDouble(dynamic value) {
 }
 
 class _Accumulator {
-  _Accumulator({required this.restaurantId, required this.restaurantName});
-  final String restaurantId;
+  _Accumulator({required this.storeId, required this.restaurantName});
+  final String storeId;
   final String restaurantName;
   double dineIn = 0;
   double delivery = 0;

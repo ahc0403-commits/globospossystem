@@ -1,0 +1,34 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://apitest.wetax.com.vn/api/wtx/pa/v1/auth/login",
+    "headers": { "Content-Type": "application/json" },
+    "body": {
+      "user_id": "webcashvietnam_test_api@gmail.com",
+      "password": "12345679Aa"
+    }
+  },
+  "response": {
+    "http_status": 200,
+    "content_type": "application/json",
+    "body": {
+      "status": {
+        "success": true,
+        "message": "Success"
+      },
+      "data": {
+        "access_token": "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ3ZWJjYXNodmlldG5hbV90ZXN0X2FwaUBnbWFpbC5jb20iLCJzY29wZSI6IlNZU19BRE1JTiIsImlzcyI6IlBBUlRORVIiLCJuYW1lIjoid2ViY2FzaHZpZXRuYW1fdGVzdF9hcGlAZ21haWwuY29tIiwiZXhwIjoxNzc2MDUyODkyLCJpYXQiOjE3NzU5NjY0OTJ9.jHNEFZClQYOQN8UD4eCCRtSy7ybVst0DOFkNP06wmBMUDaCXaR7Lct97T3VUzYBM0z7Em6jP7ZDPZaXN5yUO9ss-9B_5OD1o6jE2e9aZgEG5smFTp9vultQeZ5Uf81DCyEpOja4f0qHx4-2nUZX87nw2QFzeTimF5hN31tNm65EZ_7Io-hkpJCOh5jLF4sIc8qeVxt8NQLyGVpANW-VRdC1xobmwAUlrRMUcJPJtlYorlIRC8ROVgVnxOFPR5oYxxSeu9Tj0vJukozqXzzrKipj50jLGhB0febW4fbreLRlRM6H9CFpWVfXi5JGBHEpmHh4_iW8mOziLqqs6HQZcDA",
+        "token_type": "Bearer",
+        "expires_in": 86400
+      }
+    }
+  },
+  "notes": {
+    "UR-01": "RESOLVED — plaintext password accepted (200 OK). AES256 NOT enforced on apitest.",
+    "UR-02": "RESOLVED — expires_in = 86400 (24 hours, matches PDF, NOT OpenAPI example of 7200)",
+    "UR-03": "RESOLVED — expires_in is number type (not string as PDF claimed)",
+    "jwt_algorithm": "RS256 (from header)",
+    "jwt_scope": "SYS_ADMIN",
+    "jwt_issuer": "PARTNER"
+  }
+}

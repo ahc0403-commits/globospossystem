@@ -18,6 +18,7 @@ import 'tabs/reports_tab.dart';
 import 'tabs/settings_tab.dart';
 import 'tabs/staff_tab.dart';
 import 'tabs/tables_tab.dart';
+import '../delivery/screens/delivery_settlement_tab.dart';
 
 class AdminScreen extends ConsumerStatefulWidget {
   const AdminScreen({
@@ -46,6 +47,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     InventoryTab(),
     QcTab(),
     SettingsTab(),
+    DeliverySettlementTab(),
   ];
 
   @override
@@ -67,17 +69,19 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
 
   Widget _buildWebDesktopLayout(BuildContext context, bool isSuperAdminView) {
     final items = <SidebarItem>[
-      const SidebarItem(icon: Icons.table_restaurant, label: 'Tables'),
-      const SidebarItem(icon: Icons.restaurant_menu, label: 'Menu'),
+      const SidebarItem(icon: Icons.table_restaurant, label: 'Tables', itemKey: Key('nav_tables')),
+      const SidebarItem(icon: Icons.restaurant_menu, label: 'Menu', itemKey: Key('nav_menu')),
       const SidebarItem(icon: Icons.people, label: 'Staff'),
-      const SidebarItem(icon: Icons.bar_chart, label: 'Reports'),
+      const SidebarItem(icon: Icons.bar_chart, label: 'Reports', itemKey: Key('nav_reports')),
       const SidebarItem(icon: Icons.access_time, label: 'Attendance'),
-      const SidebarItem(icon: Icons.inventory_2_outlined, label: '재고'),
+      const SidebarItem(icon: Icons.inventory_2_outlined, label: 'Inventory'),
       const SidebarItem(icon: Icons.fact_check, label: 'QC'),
       const SidebarItem(icon: Icons.settings, label: 'Settings'),
+      const SidebarItem(icon: Icons.delivery_dining, label: 'Delivery Settlement'),
     ];
 
     return WebSidebarLayout(
+      key: const Key('admin_root'),
       title: isSuperAdminView ? 'ADMIN VIEW' : 'GLOBOS POS',
       items: items,
       selectedIndex: _currentIndex,
@@ -85,7 +89,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       topBarLeading: isSuperAdminView
           ? IconButton(
               icon: const Icon(Icons.arrow_back, color: AppColors.amber500),
-              tooltip: '시스템 관리로 돌아가기',
+              tooltip: 'Back to System Admin',
               onPressed: () => context.go('/super-admin'),
             )
           : null,
@@ -124,6 +128,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
               SidebarItem(
                 icon: Icons.logout,
                 label: 'Logout',
+                itemKey: const Key('logout_button'),
                 onTap: () => ref.read(authProvider.notifier).logout(),
               ),
             ],
@@ -139,7 +144,6 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   }
 
   Widget _buildMobileLayout(BuildContext context, bool isSuperAdminView) {
-    final showKioskItem = PlatformInfo.isKioskSupported;
     final navItems = <BottomNavigationBarItem>[
       const BottomNavigationBarItem(
         icon: Icon(Icons.table_restaurant),
@@ -160,21 +164,21 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       ),
       const BottomNavigationBarItem(
         icon: Icon(Icons.inventory_2_outlined),
-        label: '재고',
+        label: 'Inventory',
       ),
       const BottomNavigationBarItem(icon: Icon(Icons.fact_check), label: 'QC'),
       const BottomNavigationBarItem(
         icon: Icon(Icons.settings),
         label: 'Settings',
       ),
-      if (showKioskItem)
-        const BottomNavigationBarItem(
-          icon: Icon(Icons.touch_app),
-          label: 'Kiosk',
-        ),
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.delivery_dining),
+        label: 'Delivery Settlement',
+      ),
     ];
 
     return Scaffold(
+      key: const Key('admin_root'),
       backgroundColor: AppColors.surface0,
       appBar: AppBar(
         backgroundColor: AppColors.surface0,
@@ -182,7 +186,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         leading: isSuperAdminView
             ? IconButton(
                 icon: const Icon(Icons.arrow_back, color: AppColors.amber500),
-                tooltip: '시스템 관리로 돌아가기',
+                tooltip: 'Back to System Admin',
                 onPressed: () => context.go('/super-admin'),
               )
             : null,
@@ -219,6 +223,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
             ),
           if (!isSuperAdminView)
             IconButton(
+              key: const Key('logout_button'),
               onPressed: () => ref.read(authProvider.notifier).logout(),
               icon: const Icon(Icons.logout),
               color: AppColors.textPrimary,
@@ -237,10 +242,6 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {
-          if (showKioskItem && index == navItems.length - 1) {
-            context.go('/attendance-kiosk');
-            return;
-          }
           if (index >= _tabs.length) {
             return;
           }

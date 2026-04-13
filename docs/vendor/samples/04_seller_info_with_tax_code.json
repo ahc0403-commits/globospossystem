@@ -1,0 +1,5 @@
+{
+  "request": {"method": "GET", "url": "https://apitest.wetax.com.vn/api/wtx/pa/v1/seller-info?tax_code=0319388179"},
+  "response": {"http_status": 200, "body": "identical to 03_seller_info_no_params.json"},
+  "notes": "tax_code query param accepted but makes no difference — same response as without param"
+}

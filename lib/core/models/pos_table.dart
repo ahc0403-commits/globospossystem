@@ -1,14 +1,14 @@
 class PosTable {
   const PosTable({
     required this.id,
-    required this.restaurantId,
+    required this.storeId,
     required this.tableNumber,
     required this.seatCount,
     required this.status,
   });
 
   final String id;
-  final String restaurantId;
+  final String storeId;
   final String tableNumber;
   final int? seatCount;
   final String status;
@@ -30,7 +30,7 @@ class PosTable {
 
     return PosTable(
       id: json['id'].toString(),
-      restaurantId: json['restaurant_id']?.toString() ?? '',
+      storeId: json['restaurant_id']?.toString() ?? '',
       tableNumber: json['table_number']?.toString() ?? '-',
       seatCount: switch (seatRaw) {
         int value => value,

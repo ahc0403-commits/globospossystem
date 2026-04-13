@@ -68,11 +68,17 @@ class OrderItem {
   factory OrderItem.fromJson(Map<String, dynamic> json) {
     final unitPriceRaw = json['unit_price'];
     final quantityRaw = json['quantity'];
+    final menuItemRaw = json['menu_items'];
+    String? menuItemName;
+    if (menuItemRaw is Map<String, dynamic>) {
+      menuItemName = menuItemRaw['name']?.toString();
+    }
 
     return OrderItem(
       id: json['id'].toString(),
       menuItemId: json['menu_item_id']?.toString(),
-      label: json['label']?.toString(),
+      label:
+          json['label']?.toString() ?? json['name']?.toString() ?? menuItemName,
       unitPrice: switch (unitPriceRaw) {
         num value => value.toDouble(),
         String value => double.tryParse(value) ?? 0,
@@ -126,10 +132,10 @@ class Order {
     final rawItems = json['order_items'];
     final items = (rawItems is List)
         ? rawItems
-            .map<OrderItem>(
-              (item) => OrderItem.fromJson(Map<String, dynamic>.from(item)),
-            )
-            .toList()
+              .map<OrderItem>(
+                (item) => OrderItem.fromJson(Map<String, dynamic>.from(item)),
+              )
+              .toList()
         : const <OrderItem>[];
 
     return Order(
@@ -137,7 +143,8 @@ class Order {
       tableId: json['table_id'].toString(),
       status: json['status']?.toString() ?? 'pending',
       createdAt: createdAtRaw != null
-          ? DateTime.tryParse(createdAtRaw) ?? DateTime.fromMillisecondsSinceEpoch(0)
+          ? DateTime.tryParse(createdAtRaw) ??
+                DateTime.fromMillisecondsSinceEpoch(0)
           : DateTime.fromMillisecondsSinceEpoch(0),
       items: items,
     );

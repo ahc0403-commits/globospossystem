@@ -35,7 +35,7 @@ GoRouter buildAppRouter(ProviderContainer container) {
     redirect: (context, state) {
       final auth = listenable.authState;
       final role = auth.role;
-      final restaurantId = auth.restaurantId;
+      final storeId = auth.storeId;
       final isLoggedIn = auth.user != null && role != null;
       final location = state.matchedLocation;
       final fullLocation = state.uri.toString();
@@ -49,7 +49,7 @@ GoRouter buildAppRouter(ProviderContainer container) {
       }
 
       // 2. super_admin + 레스토랑 없음 → 온보딩
-      if (role == 'super_admin' && restaurantId == null) {
+      if (role == 'super_admin' && storeId == null) {
         redirectTo = location == '/onboarding' ? null : '/onboarding';
         NavigationHistoryService.instance.push(redirectTo ?? fullLocation);
         return redirectTo;
@@ -94,6 +94,34 @@ GoRouter buildAppRouter(ProviderContainer container) {
         return redirectTo;
       }
 
+      // 6-B. /super-admin 은 super_admin 전용
+      if (location == '/super-admin' && role != 'super_admin') {
+        redirectTo = homeRoute;
+        NavigationHistoryService.instance.push(redirectTo);
+        return redirectTo;
+      }
+
+      // 6-C. /admin 은 admin / super_admin 전용
+      if (location == '/admin' && role != 'admin' && role != 'super_admin') {
+        redirectTo = homeRoute;
+        NavigationHistoryService.instance.push(redirectTo);
+        return redirectTo;
+      }
+
+      // 6-D. /admin/:storeId 는 super_admin 전용
+      if (location.startsWith('/admin/') && role != 'super_admin') {
+        redirectTo = homeRoute;
+        NavigationHistoryService.instance.push(redirectTo);
+        return redirectTo;
+      }
+
+      // 6-E. attendance kiosk / fingerprint flow is dormant and disabled
+      if (location == '/attendance-kiosk') {
+        redirectTo = homeRoute;
+        NavigationHistoryService.instance.push(redirectTo);
+        return redirectTo;
+      }
+
       // 7. /qc-check 접근 제한
       if (location == '/qc-check' &&
           !PermissionUtils.canDoQcCheck(role, auth.extraPermissions)) {
@@ -131,9 +159,9 @@ GoRouter buildAppRouter(ProviderContainer container) {
       ),
       // super_admin이 특정 레스토랑 admin 화면으로 진입하는 경로
       GoRoute(
-        path: '/admin/:restaurantId',
+        path: '/admin/:storeId',
         builder: (_, state) => AdminScreen(
-          overrideRestaurantId: state.pathParameters['restaurantId'],
+          overrideRestaurantId: state.pathParameters['storeId'],
           initialTabIndex: _tabIndexFromQuery(state.uri.queryParameters['tab']),
         ),
       ),
@@ -152,6 +180,7 @@ int _tabIndexFromQuery(String? value) {
     'inventory' => 5,
     'qc' => 6,
     'settings' => 7,
+    'delivery' || 'settlement' => 8,
     _ => 0,
   };
 }

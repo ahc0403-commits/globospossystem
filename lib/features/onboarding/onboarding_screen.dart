@@ -100,7 +100,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           TextField(
             controller: _restaurantNameController,
             style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-            decoration: const InputDecoration(labelText: 'Restaurant Name'),
+            decoration: const InputDecoration(labelText: 'Store Name'),
           ),
           const SizedBox(height: 10),
           TextField(

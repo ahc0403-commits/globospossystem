@@ -135,6 +135,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
             const SizedBox(height: 48),
             TextField(
+              key: const Key('login_email_field'),
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
               style: const TextStyle(color: AppColors.textPrimary),
@@ -142,6 +143,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
             const SizedBox(height: 16),
             TextField(
+              key: const Key('login_password_field'),
               controller: _passwordController,
               obscureText: _obscurePassword,
               style: const TextStyle(color: AppColors.textPrimary),
@@ -163,6 +165,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 alignment: Alignment.centerLeft,
                 child: Text(
                   authState.errorMessage!,
+                  key: const Key('auth_error_text'),
                   style: GoogleFonts.notoSansKr(
                     fontSize: 13,
                     color: AppColors.statusCancelled,
@@ -175,6 +178,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               width: double.infinity,
               height: 56,
               child: ElevatedButton(
+                key: const Key('login_submit_button'),
                 onPressed: authState.isLoading
                     ? null
                     : () => ref

@@ -45,12 +45,12 @@ class StaffPayroll {
 
 class PayrollService {
   Future<List<StaffPayroll>> calculatePayroll({
-    required String restaurantId,
+    required String storeId,
     required DateTime periodStart,
     required DateTime periodEnd,
   }) async {
     final logs = await attendanceService.fetchLogs(
-      restaurantId: restaurantId,
+      storeId: storeId,
       from: periodStart,
       to: periodEnd,
     );
@@ -86,7 +86,7 @@ class PayrollService {
       });
 
       final wageConfig = await attendanceService.fetchWageConfig(
-        restaurantId: restaurantId,
+        storeId: storeId,
         userId: userId,
       );
 
@@ -227,21 +227,21 @@ class PayrollService {
     required DateTime periodEnd,
   }) async {
     final excel = Excel.createExcel();
-    final sheet = excel['급여계산'];
+    final sheet = excel['Payroll Calculation'];
 
     sheet.appendRow([
       TextCellValue(
-        'GLOBOS 급여 계산서 ${periodStart.toIso8601String().substring(0, 10)} ~ ${periodEnd.toIso8601String().substring(0, 10)}',
+        'GLOBOS Payroll Statement ${periodStart.toIso8601String().substring(0, 10)} ~ ${periodEnd.toIso8601String().substring(0, 10)}',
       ),
     ]);
     sheet.appendRow([TextCellValue('')]);
     sheet.appendRow([
-      TextCellValue('직원명'),
-      TextCellValue('날짜'),
-      TextCellValue('출근'),
-      TextCellValue('퇴근'),
-      TextCellValue('근무시간(h)'),
-      TextCellValue('금액(VND)'),
+      TextCellValue('Employee Name'),
+      TextCellValue('Date'),
+      TextCellValue('Clock In'),
+      TextCellValue('Clock Out'),
+      TextCellValue('Hours (h)'),
+      TextCellValue('Amount (VND)'),
     ]);
 
     double totalHours = 0;
@@ -263,7 +263,7 @@ class PayrollService {
     }
 
     sheet.appendRow([
-      TextCellValue('합계'),
+      TextCellValue('Total'),
       TextCellValue(''),
       TextCellValue(''),
       TextCellValue(''),
@@ -282,7 +282,7 @@ class PayrollService {
   }
 
   Future<void> savePayrollCache({
-    required String restaurantId,
+    required String storeId,
     required DateTime periodStart,
     required DateTime periodEnd,
     required List<StaffPayroll> payrolls,
@@ -303,7 +303,7 @@ class PayrollService {
           .toList();
 
       await supabase.from('payroll_records').insert({
-        'restaurant_id': restaurantId,
+        'restaurant_id': storeId,
         'user_id': payroll.userId,
         'period_start': periodStart.toIso8601String().substring(0, 10),
         'period_end': periodEnd.toIso8601String().substring(0, 10),

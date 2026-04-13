@@ -1,23 +1,28 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../main.dart';
+import '../../../core/services/menu_service.dart';
 
 class MenuState {
   const MenuState({
     this.categories = const AsyncValue.loading(),
     this.items = const AsyncValue.loading(),
     this.selectedCategoryId,
+    this.error,
   });
 
   final AsyncValue<List<Map<String, dynamic>>> categories;
   final AsyncValue<List<Map<String, dynamic>>> items;
   final String? selectedCategoryId;
+  final String? error;
 
   MenuState copyWith({
     AsyncValue<List<Map<String, dynamic>>>? categories,
     AsyncValue<List<Map<String, dynamic>>>? items,
     String? selectedCategoryId,
+    String? error,
     bool clearSelectedCategory = false,
+    bool clearError = false,
   }) {
     return MenuState(
       categories: categories ?? this.categories,
@@ -25,16 +30,45 @@ class MenuState {
       selectedCategoryId: clearSelectedCategory
           ? null
           : (selectedCategoryId ?? this.selectedCategoryId),
+      error: clearError ? null : (error ?? this.error),
     );
   }
 }
 
 class MenuNotifier extends StateNotifier<MenuState> {
-  MenuNotifier(this.restaurantId) : super(const MenuState()) {
+  MenuNotifier(this.storeId) : super(const MenuState()) {
     fetchAll();
   }
 
-  final String restaurantId;
+  final String storeId;
+
+  String _mapMenuError(Object error, String fallback) {
+    if (error is! PostgrestException) {
+      return fallback;
+    }
+
+    final message = error.message;
+    if (message.contains('ADMIN_MUTATION_FORBIDDEN')) {
+      return 'No permission to change menus.';
+    }
+    if (message.contains('MENU_CATEGORY_NAME_REQUIRED')) {
+      return 'Enter a category name.';
+    }
+    if (message.contains('MENU_ITEM_NAME_REQUIRED')) {
+      return 'Enter a menu name.';
+    }
+    if (message.contains('MENU_CATEGORY_NOT_FOUND')) {
+      return 'Re-select a category.';
+    }
+    if (message.contains('MENU_ITEM_NOT_FOUND')) {
+      return 'Reload menus and try again.';
+    }
+    if (message.contains('duplicate key value') || message.contains('23505')) {
+      return 'An item with the same sort or name already exists.';
+    }
+
+    return fallback;
+  }
 
   Future<void> fetchAll() async {
     await Future.wait([fetchCategories(), fetchItems()]);
@@ -43,18 +77,11 @@ class MenuNotifier extends StateNotifier<MenuState> {
   Future<void> fetchCategories() async {
     state = state.copyWith(categories: const AsyncValue.loading());
     try {
-      final response = await supabase
-          .from('menu_categories')
-          .select()
-          .eq('restaurant_id', restaurantId)
-          .order('sort_order');
-
-      final categories = response
-          .map<Map<String, dynamic>>((category) => Map<String, dynamic>.from(category))
-          .toList();
+      final categories = await menuService.fetchCategories(storeId);
 
       final selectedId = state.selectedCategoryId;
-      final hasSelectedId = selectedId != null &&
+      final hasSelectedId =
+          selectedId != null &&
           categories.any((category) => category['id'].toString() == selectedId);
 
       state = state.copyWith(
@@ -63,6 +90,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
             ? (hasSelectedId ? selectedId : categories.first['id'].toString())
             : null,
         clearSelectedCategory: categories.isEmpty,
+        clearError: true,
       );
     } catch (error, stackTrace) {
       state = state.copyWith(categories: AsyncValue.error(error, stackTrace));
@@ -72,17 +100,8 @@ class MenuNotifier extends StateNotifier<MenuState> {
   Future<void> fetchItems() async {
     state = state.copyWith(items: const AsyncValue.loading());
     try {
-      final response = await supabase
-          .from('menu_items')
-          .select()
-          .eq('restaurant_id', restaurantId)
-          .order('sort_order');
-
-      final items = response
-          .map<Map<String, dynamic>>((item) => Map<String, dynamic>.from(item))
-          .toList();
-
-      state = state.copyWith(items: AsyncValue.data(items));
+      final items = await menuService.fetchItems(storeId);
+      state = state.copyWith(items: AsyncValue.data(items), clearError: true);
     } catch (error, stackTrace) {
       state = state.copyWith(items: AsyncValue.error(error, stackTrace));
     }
@@ -92,71 +111,80 @@ class MenuNotifier extends StateNotifier<MenuState> {
     state = state.copyWith(selectedCategoryId: categoryId);
   }
 
-  Future<void> addCategory(String name) async {
+  Future<bool> addCategory(String name) async {
     try {
       final currentCategories = state.categories.valueOrNull ?? [];
-      await supabase.from('menu_categories').insert({
-        'restaurant_id': restaurantId,
-        'name': name,
-        'sort_order': currentCategories.length,
-      });
+      await menuService.addCategory(
+        storeId: storeId,
+        name: name,
+        sortOrder: currentCategories.length,
+      );
       await fetchCategories();
-    } catch (error, stackTrace) {
-      state = state.copyWith(categories: AsyncValue.error(error, stackTrace));
+      state = state.copyWith(clearError: true);
+      return true;
+    } catch (error, _) {
+      state = state.copyWith(error: _mapMenuError(error, 'Failed to add category.'));
+      return false;
     }
   }
 
-  Future<void> addMenuItem(String categoryId, String name, double price) async {
+  Future<bool> addMenuItem(String categoryId, String name, double price) async {
     try {
       final currentItems = state.items.valueOrNull ?? [];
       final sortOrder = currentItems
           .where((item) => item['category_id'].toString() == categoryId)
           .length;
 
-      await supabase.from('menu_items').insert({
-        'restaurant_id': restaurantId,
-        'category_id': categoryId,
-        'name': name,
-        'price': price,
-        'is_available': true,
-        'sort_order': sortOrder,
-      });
+      await menuService.addMenuItem(
+        storeId: storeId,
+        categoryId: categoryId,
+        name: name,
+        price: price,
+        sortOrder: sortOrder,
+      );
       await fetchItems();
-    } catch (error, stackTrace) {
-      state = state.copyWith(items: AsyncValue.error(error, stackTrace));
+      state = state.copyWith(clearError: true);
+      return true;
+    } catch (error, _) {
+      state = state.copyWith(error: _mapMenuError(error, 'Failed to add menu.'));
+      return false;
     }
   }
 
-  Future<void> toggleAvailability(String itemId, bool isAvailable) async {
+  Future<bool> toggleAvailability(String itemId, bool isAvailable) async {
     try {
-      await supabase
-          .from('menu_items')
-          .update({'is_available': isAvailable})
-          .eq('id', itemId);
+      await menuService.toggleAvailability(itemId, isAvailable);
       await fetchItems();
-    } catch (error, stackTrace) {
-      state = state.copyWith(items: AsyncValue.error(error, stackTrace));
+      state = state.copyWith(clearError: true);
+      return true;
+    } catch (error, _) {
+      state = state.copyWith(error: _mapMenuError(error, 'Failed to change menu status.'));
+      return false;
     }
   }
 
-  Future<void> updateMenuItem({
+  Future<bool> updateMenuItem({
     required String itemId,
     required String name,
     required double price,
   }) async {
     try {
-      await supabase
-          .from('menu_items')
-          .update({'name': name, 'price': price})
-          .eq('id', itemId);
+      await menuService.updateMenuItem(
+        itemId: itemId,
+        name: name,
+        price: price,
+      );
       await fetchItems();
-    } catch (error, stackTrace) {
-      state = state.copyWith(items: AsyncValue.error(error, stackTrace));
+      state = state.copyWith(clearError: true);
+      return true;
+    } catch (error, _) {
+      state = state.copyWith(error: _mapMenuError(error, 'Failed to update menu.'));
+      return false;
     }
   }
 }
 
 final menuProvider = StateNotifierProvider.autoDispose
     .family<MenuNotifier, MenuState, String>(
-      (ref, restaurantId) => MenuNotifier(restaurantId),
+      (ref, storeId) => MenuNotifier(storeId),
     );

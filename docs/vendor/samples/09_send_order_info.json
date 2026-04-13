@@ -1,0 +1,37 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://apitest.wetax.com.vn/api/wtx/pa/v1/pos/sendOrderInfo",
+    "body": {
+      "bills": [{
+        "ref_id": "GLOBOS-TEST-20260412110521-001",
+        "store_code": "0319388179",
+        "store_name": "GLOBOSVN Test Store",
+        "order_date": "20260412",
+        "order_time": "202604121200",
+        "pos_number": 1,
+        "order_id": 1001,
+        "trans_type": 1,
+        "payment_method": "CASH",
+        "list_product": [
+          {"item_code": "PHO001", "item_name": "Pho Bo", "unit_price": 80000, "quantity": 1, "uom": "EA", "total_amount": 80000, "vat_rate": 8, "vat_amount": 6400, "paying_amount": 86400},
+          {"item_code": "BIA001", "item_name": "Bia Saigon", "unit_price": 50000, "quantity": 1, "uom": "EA", "total_amount": 50000, "vat_rate": 10, "vat_amount": 5000, "paying_amount": 55000}
+        ]
+      }]
+    }
+  },
+  "response": {
+    "http_status": 200,
+    "body": {"status": {"success": true, "message": "Success"}, "data": ""}
+  },
+  "notes": {
+    "UR-17": "RESOLVED — no maxLength rejection observed for any field. Server accepted all values without format/length errors.",
+    "UR-18": "RESOLVED — order_id as number (1001) accepted.",
+    "UR-20": "RESOLVED — pos_number as number (1) accepted.",
+    "UR-21": "RESOLVED — response is {status: {success, message}, data: ''} — data is empty string, NOT null, NOT array with sid/ref_id. No sid returned.",
+    "UR-22": "RESOLVED — vat_rate as numbers (8 and 10) accepted. Not string format like '10%' or 'KCT'.",
+    "UD-07": "sale_price field was NOT sent and server did not complain — field is optional and not needed.",
+    "key_name": "list_product confirmed as the correct key name for line items.",
+    "CRITICAL_FINDING": "data is empty string '' — no sid, no ref_id echo. Dispatcher cannot extract sid from sendOrderInfo response. Must rely on invoices-status polling to get sid."
+  }
+}

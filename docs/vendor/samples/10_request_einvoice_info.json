@@ -1,0 +1,35 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://apitest.wetax.com.vn/api/wtx/pa/v1/pos/requestEinvoiceInfo",
+    "body": {
+      "bills": [{
+        "ref_id": "GLOBOS-TEST-20260412110521-001",
+        "tax_id": "0319388179",
+        "tax_company_name": "GLOBOSVN CO LTD",
+        "tax_address": "Ho Chi Minh City",
+        "tax_buyer_name": "Test Buyer",
+        "receiver_email": "test@globosvn.com",
+        "order_date": "20260412",
+        "store_code": "0319388179",
+        "store_name": "GLOBOSVN Test Store",
+        "pos_number": "1",
+        "order_id": "1001"
+      }]
+    }
+  },
+  "response": {
+    "http_status": 400,
+    "body": {"status": {"success": false, "message": "POS ID not found."}, "data": ""}
+  },
+  "retry_with_numbers": {
+    "pos_number": 1,
+    "order_id": 1001,
+    "result": "same 400 POS ID not found"
+  },
+  "notes": {
+    "UR-13": "PARTIALLY RESOLVED — both string '1001' and number 1001 accepted structurally (no type error). Business error 'POS ID not found' suggests order matching issue, not type rejection.",
+    "UR-14": "PARTIALLY RESOLVED — both string '1' and number 1 accepted structurally for pos_number.",
+    "business_error": "POS ID not found — likely the sendOrderInfo order needs processing time before requestEinvoiceInfo can reference it, OR the matching key is different from what we used."
+  }
+}

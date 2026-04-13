@@ -4,11 +4,12 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../main.dart';
 
 class SidebarItem {
-  const SidebarItem({required this.icon, required this.label, this.onTap});
+  const SidebarItem({required this.icon, required this.label, this.onTap, this.itemKey});
 
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
+  final Key? itemKey;
 }
 
 class WebSidebarLayout extends StatelessWidget {
@@ -78,6 +79,7 @@ class WebSidebarLayout extends StatelessWidget {
                       final item = items[index];
                       final isSelected = selectedIndex == index;
                       return _SidebarNavItem(
+                        key: item.itemKey,
                         icon: item.icon,
                         label: item.label,
                         isSelected: isSelected,
@@ -142,6 +144,7 @@ class WebSidebarLayout extends StatelessWidget {
 
 class _SidebarNavItem extends StatelessWidget {
   const _SidebarNavItem({
+    super.key,
     required this.icon,
     required this.label,
     required this.isSelected,

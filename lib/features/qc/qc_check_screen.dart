@@ -49,12 +49,12 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
     super.dispose();
   }
 
-  Future<void> _initialize(String restaurantId) async {
-    await ref.read(qcTemplateProvider.notifier).loadTemplates(restaurantId);
+  Future<void> _initialize(String storeId) async {
+    await ref.read(qcTemplateProvider.notifier).loadTemplates(storeId);
     await ref
         .read(qcCheckProvider.notifier)
         .loadWeek(
-          restaurantId: restaurantId,
+          storeId: storeId,
           weekStart: _startOfWeek(_todayVn),
         );
   }
@@ -93,12 +93,12 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      showErrorToast(context, '사진 첨부 실패: $e');
+      showErrorToast(context, 'Photo attachment failed: $e');
     }
   }
 
   Future<void> _submitAll({
-    required String restaurantId,
+    required String storeId,
     required String? checkedBy,
   }) async {
     final notifier = ref.read(qcCheckProvider.notifier);
@@ -111,14 +111,14 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
     }
 
     if (toSubmit.isEmpty) {
-      showErrorToast(context, '선택된 점검 항목이 없습니다');
+      showErrorToast(context, 'No inspection items selected');
       return;
     }
 
     try {
       for (final entry in toSubmit) {
         await notifier.submitCheck(
-          restaurantId: restaurantId,
+          storeId: storeId,
           templateId: entry.key,
           checkDate: checkDate,
           result: entry.value.result!,
@@ -131,18 +131,18 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
       }
 
       if (!mounted) return;
-      showSuccessToast(context, '저장 완료');
+      showSuccessToast(context, 'Saved');
       Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
-      showErrorToast(context, '저장 실패: $e');
+      showErrorToast(context, 'Save failed: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
-    final restaurantId = auth.restaurantId;
+    final storeId = auth.storeId;
     final canAccess = PermissionUtils.canDoQcCheck(
       auth.role,
       auth.extraPermissions,
@@ -155,7 +155,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
         _didHandleUnauthorized = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          showErrorToast(context, '권한이 없습니다. 관리자에게 문의하세요.');
+          showErrorToast(context, 'No permission. Contact your administrator.');
           final homeRoute = switch (auth.role) {
             'waiter' => '/waiter',
             'kitchen' => '/kitchen',
@@ -170,7 +170,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
         backgroundColor: AppColors.surface0,
         body: Center(
           child: Text(
-            '권한이 없습니다. 관리자에게 문의하세요.',
+            'No permission. Contact your administrator.',
             style: GoogleFonts.notoSansKr(
               color: AppColors.textPrimary,
               fontSize: 14,
@@ -180,17 +180,17 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
       );
     }
 
-    if (restaurantId != null && _initializedRestaurantId != restaurantId) {
-      _initializedRestaurantId = restaurantId;
+    if (storeId != null && _initializedRestaurantId != storeId) {
+      _initializedRestaurantId = storeId;
       _didPrepopulate = false;
-      Future.microtask(() => _initialize(restaurantId));
+      Future.microtask(() => _initialize(storeId));
     }
 
     _prepopulateFromExistingChecks(checkState.checks);
 
     final grouped = <String, List<Map<String, dynamic>>>{};
     for (final t in templateState.templates) {
-      final category = t['category']?.toString() ?? '기타';
+      final category = t['category']?.toString() ?? 'Other';
       grouped.putIfAbsent(category, () => []).add(t);
     }
 
@@ -209,7 +209,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '오늘의 품질 점검',
+              "Today's Quality Check",
               style: GoogleFonts.notoSansKr(
                 color: AppColors.textPrimary,
                 fontSize: 18,
@@ -233,6 +233,34 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                Text(
+                  "QC v1 scope includes only today's inspection records. Template management, overall status, and follow-ups are handled on the admin screen.",
+                  style: GoogleFonts.notoSansKr(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (templateState.error != null) ...[
+                  Text(
+                    templateState.error!,
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.statusCancelled,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                if (checkState.error != null) ...[
+                  Text(
+                    checkState.error!,
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.statusCancelled,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 for (final category in grouped.keys) ...[
                   Container(
                     margin: const EdgeInsets.only(bottom: 8),
@@ -334,7 +362,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                                         vertical: 4,
                                       ),
                                       child: Text(
-                                        '📷 기준 예시사진 (탭하여 크게 보기)',
+                                        '📷 Reference Photo (tap to enlarge)',
                                         style: GoogleFonts.notoSansKr(
                                           color: AppColors.amber500,
                                           fontSize: 11,
@@ -352,19 +380,19 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                             runSpacing: 8,
                             children: [
                               _resultButton(
-                                label: '✅ 통과',
+                                label: '✅ Pass',
                                 selected: draft.result == 'pass',
                                 onTap: () =>
                                     setState(() => draft.result = 'pass'),
                               ),
                               _resultButton(
-                                label: '❌ 불합격',
+                                label: '❌ Fail',
                                 selected: draft.result == 'fail',
                                 onTap: () =>
                                     setState(() => draft.result = 'fail'),
                               ),
                               _resultButton(
-                                label: '— 해당없음',
+                                label: '— N/A',
                                 selected: draft.result == 'na',
                                 onTap: () =>
                                     setState(() => draft.result = 'na'),
@@ -377,7 +405,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                               OutlinedButton.icon(
                                 onPressed: () => _pickEvidencePhoto(templateId),
                                 icon: const Icon(Icons.photo_camera),
-                                label: const Text('사진 첨부'),
+                                label: const Text('Attach Photo'),
                               ),
                               const SizedBox(width: 8),
                               if (draft.photoFile != null)
@@ -420,7 +448,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                               fontSize: 13,
                             ),
                             decoration: const InputDecoration(
-                              hintText: '메모 입력 (선택)',
+                              hintText: 'Enter memo (optional)',
                               border: OutlineInputBorder(),
                             ),
                             maxLines: 2,
@@ -434,10 +462,10 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                 SizedBox(
                   height: 52,
                   child: FilledButton(
-                    onPressed: restaurantId == null
+                    onPressed: storeId == null
                         ? null
                         : () => _submitAll(
-                            restaurantId: restaurantId,
+                            storeId: storeId,
                             checkedBy: auth.user?.id,
                           ),
                     style: FilledButton.styleFrom(
@@ -445,7 +473,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                       foregroundColor: AppColors.surface0,
                     ),
                     child: Text(
-                      '저장 완료',
+                      'Saved',
                       style: GoogleFonts.notoSansKr(
                         fontWeight: FontWeight.w700,
                       ),

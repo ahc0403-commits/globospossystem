@@ -67,7 +67,7 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
 
   Future<void> testConnection() async {
     if (state.printerIp.isEmpty) {
-      state = state.copyWith(error: 'IP 주소를 먼저 입력해주세요.');
+      state = state.copyWith(error: 'Enter the IP address first.');
       return;
     }
 
@@ -88,11 +88,11 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
     final result = await _service.printReceipt(state.printerIp, bytes);
     state = state.copyWith(isPrinting: false);
     if (result == PrintResult.connectionFailed) {
-      state = state.copyWith(error: '프린터 연결 실패. IP를 확인해주세요.');
+      state = state.copyWith(error: 'Printer connection failed. Check the IP.');
     } else if (result == PrintResult.printFailed) {
-      state = state.copyWith(error: '영수증 출력 실패. 프린터 상태를 확인해주세요.');
+      state = state.copyWith(error: 'Receipt print failed. Check printer status.');
     } else if (result == PrintResult.notSupported) {
-      state = state.copyWith(error: '프린터는 앱에서만 지원됩니다.');
+      state = state.copyWith(error: 'Printer is only supported on the app.');
     }
     return result;
   }

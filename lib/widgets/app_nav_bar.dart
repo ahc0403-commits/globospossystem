@@ -36,7 +36,7 @@ class AppNavBar extends ConsumerWidget {
       children: [
         _NavButton(
           icon: Icons.arrow_back_ios_new_rounded,
-          tooltip: '뒤로',
+          tooltip: 'Back',
           enabled: nav.canGoBack,
           onTap: () {
             final prev = nav.goBack();
@@ -48,7 +48,7 @@ class AppNavBar extends ConsumerWidget {
         const SizedBox(width: 4),
         _NavButton(
           icon: Icons.arrow_forward_ios_rounded,
-          tooltip: '앞으로',
+          tooltip: 'Forward',
           enabled: nav.canGoForward,
           onTap: () {
             final next = nav.goForward();
@@ -60,7 +60,7 @@ class AppNavBar extends ConsumerWidget {
         const SizedBox(width: 4),
         _NavButton(
           icon: Icons.home_rounded,
-          tooltip: '홈',
+          tooltip: 'Home',
           enabled: !isHome,
           onTap: () {
             nav.push(homeRoute);

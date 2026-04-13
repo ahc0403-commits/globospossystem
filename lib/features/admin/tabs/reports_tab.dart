@@ -1,11 +1,18 @@
+import 'dart:typed_data';
+
+import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/services/daily_closing_service.dart';
 import '../../../main.dart';
 import '../../auth/auth_provider.dart';
 import '../../report/report_provider.dart';
+import '../providers/admin_audit_provider.dart';
+import '../providers/daily_closing_provider.dart';
+import '../widgets/admin_audit_trace_panel.dart';
 
 class ReportsTab extends ConsumerStatefulWidget {
   const ReportsTab({super.key});
@@ -21,7 +28,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
 
   @override
   Widget build(BuildContext context) {
-    final restaurantId = ref.watch(authProvider).restaurantId;
+    final storeId = ref.watch(authProvider).storeId;
     final reportState = ref.watch(reportProvider);
     final reportNotifier = ref.read(reportProvider.notifier);
     final currency = NumberFormat('#,###', 'vi_VN');
@@ -32,12 +39,13 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       _pendingEnd ??= reportState.endDate;
     }
 
-    if (restaurantId != null && _initializedRestaurantId != restaurantId) {
-      _initializedRestaurantId = restaurantId;
-      Future.microtask(() => reportNotifier.loadReport(restaurantId));
+    if (storeId != null && _initializedRestaurantId != storeId) {
+      _initializedRestaurantId = storeId;
+      Future.microtask(() => reportNotifier.loadReport(storeId));
     }
 
     return Scaffold(
+      key: const Key('reports_root'),
       backgroundColor: AppColors.surface0,
       body: reportState.isLoading
           ? const Center(
@@ -58,9 +66,9 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                   ),
                   const SizedBox(height: 12),
                   ElevatedButton(
-                    onPressed: restaurantId == null
+                    onPressed: storeId == null
                         ? null
-                        : () => reportNotifier.loadReport(restaurantId),
+                        : () => reportNotifier.loadReport(storeId),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.amber500,
                       foregroundColor: AppColors.surface0,
@@ -125,7 +133,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                         ),
                       ),
                       FilledButton(
-                        onPressed: restaurantId == null
+                        onPressed: storeId == null
                             ? null
                             : () {
                                 final start =
@@ -134,7 +142,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                 reportNotifier.setDateRange(
                                   start,
                                   end,
-                                  restaurantId,
+                                  storeId,
                                 );
                               },
                         style: FilledButton.styleFrom(
@@ -143,6 +151,16 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                         ),
                         child: const Text('Apply'),
                       ),
+                      if (reportState.summary != null)
+                        OutlinedButton.icon(
+                          onPressed: () => _exportReport(reportNotifier),
+                          icon: const Icon(Icons.download, size: 16),
+                          label: const Text('Excel'),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: AppColors.surface2),
+                            foregroundColor: AppColors.textPrimary,
+                          ),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -152,7 +170,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                     children: [
                       _quickRangeChip(
                         'Today',
-                        onTap: restaurantId == null
+                        onTap: storeId == null
                             ? null
                             : () {
                                 final now = DateTime.now();
@@ -168,13 +186,13 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                 reportNotifier.setDateRange(
                                   start,
                                   now,
-                                  restaurantId,
+                                  storeId,
                                 );
                               },
                       ),
                       _quickRangeChip(
                         'This Week',
-                        onTap: restaurantId == null
+                        onTap: storeId == null
                             ? null
                             : () {
                                 final now = DateTime.now();
@@ -191,13 +209,13 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                 reportNotifier.setDateRange(
                                   start,
                                   now,
-                                  restaurantId,
+                                  storeId,
                                 );
                               },
                       ),
                       _quickRangeChip(
                         'This Month',
-                        onTap: restaurantId == null
+                        onTap: storeId == null
                             ? null
                             : () {
                                 final now = DateTime.now();
@@ -209,7 +227,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                 reportNotifier.setDateRange(
                                   start,
                                   now,
-                                  restaurantId,
+                                  storeId,
                                 );
                               },
                       ),
@@ -220,12 +238,72 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                     summary: reportState.summary,
                     currency: currency,
                   ),
+                  if (reportState.summary != null) ...[
+                    const SizedBox(height: 8),
+                    _OrderCountRow(summary: reportState.summary!),
+                    const SizedBox(height: 8),
+                    _PaymentMethodRow(
+                      summary: reportState.summary!,
+                      currency: currency,
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  if (storeId != null)
+                    _TodaySummarySection(storeId: storeId),
+                  if (storeId != null) ...[
+                    const SizedBox(height: 16),
+                    _DailyClosingSection(storeId: storeId),
+                  ],
                   const SizedBox(height: 16),
                   _DailyTable(summary: reportState.summary, currency: currency),
+                  if (reportState.summary != null &&
+                      reportState.summary!.hourlyBreakdown.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    _HourlyRevenueSection(
+                      summary: reportState.summary!,
+                      currency: currency,
+                    ),
+                  ],
+                  if (storeId != null) ...[
+                    const SizedBox(height: 24),
+                    Text(
+                      'Recent Operations',
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _ReportsAuditTraceSection(storeId: storeId),
+                  ],
                 ],
               ),
             ),
     );
+  }
+
+  Future<void> _exportReport(ReportNotifier notifier) async {
+    final reportState = ref.read(reportProvider);
+    final bytes = notifier.exportToExcel();
+    if (bytes.isEmpty) return;
+
+    final dateFormat = DateFormat('yyyyMMdd');
+    final fileName =
+        'report_${dateFormat.format(reportState.startDate)}_${dateFormat.format(reportState.endDate)}';
+
+    await FileSaver.instance.saveFile(
+      name: fileName,
+      bytes: Uint8List.fromList(bytes),
+      ext: 'xlsx',
+      mimeType: MimeType.microsoftExcel,
+    );
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Report saved.')),
+      );
+    }
   }
 
   Widget _quickRangeChip(String label, {VoidCallback? onTap}) {
@@ -289,7 +367,7 @@ class _SummaryGrid extends StatelessWidget {
               valueFontSize: 28,
             ),
             _summaryCard(
-              title: '서비스 지출 (매출 미포함)',
+              title: 'Service Expenses (not included in revenue)',
               value: '₫${currency.format(data.serviceTotal)}',
               valueColor: AppColors.textSecondary,
               valueFontSize: 28,
@@ -403,6 +481,9 @@ class _DailyTable extends StatelessWidget {
               dineIn: row.dineIn,
               delivery: row.delivery,
               total: row.total,
+              cash: row.cashAmount,
+              card: row.cardAmount,
+              pay: row.payAmount,
               bgColor: rowColor,
             );
           }),
@@ -424,6 +505,9 @@ class _DailyTable extends StatelessWidget {
           _cell('Dine-in', bold: true),
           _cell('Delivery', bold: true),
           _cell('Total', bold: true),
+          _cell('Cash', bold: true),
+          _cell('Card', bold: true),
+          _cell('Pay', bold: true),
         ],
       ),
     );
@@ -434,6 +518,9 @@ class _DailyTable extends StatelessWidget {
     required double dineIn,
     required double delivery,
     required double total,
+    required double cash,
+    required double card,
+    required double pay,
     required Color bgColor,
   }) {
     return Container(
@@ -445,6 +532,9 @@ class _DailyTable extends StatelessWidget {
           _cell('₫${currency.format(dineIn)}'),
           _cell('₫${currency.format(delivery)}'),
           _cell('₫${currency.format(total)}'),
+          _cell('₫${currency.format(cash)}'),
+          _cell('₫${currency.format(card)}'),
+          _cell('₫${currency.format(pay)}'),
         ],
       ),
     );
@@ -462,6 +552,9 @@ class _DailyTable extends StatelessWidget {
           _cell('₫${currency.format(summary.dineInRevenue)}', bold: true),
           _cell('₫${currency.format(summary.deliveryRevenue)}', bold: true),
           _cell('₫${currency.format(summary.totalRevenue)}', bold: true),
+          _cell('₫${currency.format(summary.cashTotal)}', bold: true),
+          _cell('₫${currency.format(summary.cardTotal)}', bold: true),
+          _cell('₫${currency.format(summary.payTotal)}', bold: true),
         ],
       ),
     );
@@ -478,6 +571,729 @@ class _DailyTable extends StatelessWidget {
           fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
         ),
       ),
+    );
+  }
+}
+
+class _OrderCountRow extends StatelessWidget {
+  const _OrderCountRow({required this.summary});
+
+  final ReportSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Text(
+            'Order ${summary.totalOrders}',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Done ${summary.completedOrders}',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.statusAvailable,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (summary.totalOrders > summary.completedOrders + summary.cancelledOrders) ...[
+            const SizedBox(width: 12),
+            Text(
+              'In Progress ${summary.totalOrders - summary.completedOrders - summary.cancelledOrders}',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.amber500,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+          if (summary.cancelledOrders > 0) ...[
+            const SizedBox(width: 12),
+            Text(
+              'Cancel ${summary.cancelledOrders} (items ${summary.cancelledItems})',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.statusCancelled,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentMethodRow extends StatelessWidget {
+  const _PaymentMethodRow({
+    required this.summary,
+    required this.currency,
+  });
+
+  final ReportSummary summary;
+  final NumberFormat currency;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Text(
+            'Payment Method',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Cash ₫${currency.format(summary.cashTotal)}',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Card ₫${currency.format(summary.cardTotal)}',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (summary.payTotal > 0) ...[
+            const SizedBox(width: 12),
+            Text(
+              'Pay ₫${currency.format(summary.payTotal)}',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _TodaySummarySection extends ConsumerWidget {
+  const _TodaySummarySection({required this.storeId});
+
+  final String storeId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final summaryAsync = ref.watch(adminTodaySummaryProvider(storeId));
+    final currency = NumberFormat('#,###', 'vi_VN');
+
+    return summaryAsync.when(
+      data: (summary) => _buildContent(summary, currency, ref),
+      loading: () => const SizedBox(
+        height: 60,
+        child: Center(
+          child: CircularProgressIndicator(
+            color: AppColors.amber500,
+            strokeWidth: 2,
+          ),
+        ),
+      ),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+
+  Widget _buildContent(
+    TodaySummary summary,
+    NumberFormat currency,
+    WidgetRef ref,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              "Today's Operations",
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const Spacer(),
+            InkWell(
+              onTap: () =>
+                  ref.refresh(adminTodaySummaryProvider(storeId)),
+              borderRadius: BorderRadius.circular(4),
+              child: const Padding(
+                padding: EdgeInsets.all(4),
+                child: Icon(
+                  Icons.refresh,
+                  size: 18,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final crossAxisCount = constraints.maxWidth < 700 ? 2 : 4;
+            return GridView.count(
+              physics: const NeverScrollableScrollPhysics(),
+              shrinkWrap: true,
+              crossAxisCount: crossAxisCount,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              childAspectRatio: constraints.maxWidth < 700 ? 2.0 : 2.5,
+              children: [
+                _metricTile(
+                  'Order',
+                  '${summary.ordersTotal}',
+                  AppColors.textPrimary,
+                ),
+                _metricTile(
+                  'Done',
+                  '${summary.ordersCompleted}',
+                  AppColors.statusAvailable,
+                ),
+                _metricTile(
+                  'In Progress',
+                  '${summary.ordersPending + summary.ordersConfirmed + summary.ordersServing}',
+                  AppColors.amber500,
+                ),
+                _metricTile(
+                  'Cancel',
+                  '${summary.ordersCancelled} (items ${summary.itemsCancelled})',
+                  AppColors.statusCancelled,
+                ),
+                _metricTile(
+                  'Payment',
+                  '${summary.paymentsCount}',
+                  AppColors.textPrimary,
+                ),
+                _metricTile(
+                  'Payment Total',
+                  '₫${currency.format(summary.paymentsTotal)}',
+                  AppColors.amber500,
+                ),
+                _metricTile(
+                  'Cash / Card',
+                  '₫${currency.format(summary.paymentsCash)} / ₫${currency.format(summary.paymentsCard)}',
+                  AppColors.textSecondary,
+                ),
+                _metricTile(
+                  'Table',
+                  '${summary.tablesOccupied} / ${summary.tablesTotal} in use',
+                  AppColors.statusOccupied,
+                ),
+                _metricTile(
+                  'Low Stock',
+                  '${summary.lowStockCount}',
+                  summary.lowStockCount > 0
+                      ? AppColors.statusCancelled
+                      : AppColors.statusAvailable,
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _metricTile(String label, String value, Color valueColor) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: GoogleFonts.notoSansKr(
+              color: valueColor,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HourlyRevenueSection extends StatelessWidget {
+  const _HourlyRevenueSection({
+    required this.summary,
+    required this.currency,
+  });
+
+  final ReportSummary summary;
+  final NumberFormat currency;
+
+  @override
+  Widget build(BuildContext context) {
+    final hours = summary.hourlyBreakdown;
+    final maxAmount =
+        hours.fold<double>(0, (m, h) => h.amount > m ? h.amount : m);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Revenue by Hour',
+          style: GoogleFonts.notoSansKr(
+            color: AppColors.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surface1,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            children: hours.map((h) {
+              final barFraction =
+                  maxAmount > 0 ? (h.amount / maxAmount) : 0.0;
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 36,
+                      child: Text(
+                        '${h.hour.toString().padLeft(2, '0')}:00',
+                        style: GoogleFonts.notoSansKr(
+                          color: AppColors.textSecondary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          return Stack(
+                            children: [
+                              Container(
+                                height: 18,
+                                decoration: BoxDecoration(
+                                  color: AppColors.surface2,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                              Container(
+                                height: 18,
+                                width: constraints.maxWidth * barFraction,
+                                decoration: BoxDecoration(
+                                  color: AppColors.amber500,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 90,
+                      child: Text(
+                        '₫${currency.format(h.amount)}',
+                        style: GoogleFonts.notoSansKr(
+                          color: AppColors.textPrimary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DailyClosingSection extends ConsumerStatefulWidget {
+  const _DailyClosingSection({required this.storeId});
+
+  final String storeId;
+
+  @override
+  ConsumerState<_DailyClosingSection> createState() =>
+      _DailyClosingSectionState();
+}
+
+class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
+  bool _isClosing = false;
+  bool _closingSucceeded = false;
+  bool _closingAlreadyClosed = false;
+
+  Future<void> _createClosing() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface1,
+        title: Text(
+          'Close Today',
+          style: GoogleFonts.notoSansKr(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: Text(
+          "Save today's operations data as a closing record?",
+          style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
+            ),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.amber500,
+              foregroundColor: AppColors.surface0,
+            ),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isClosing = true);
+    try {
+      await dailyClosingService.createDailyClosing(
+        storeId: widget.storeId,
+      );
+      debugPrint('DAILY_CLOSING: success');
+      ref.invalidate(dailyClosingHistoryProvider);
+      if (mounted) {
+        setState(() => _closingSucceeded = true);
+        debugPrint('DAILY_CLOSING: _closingSucceeded=true');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Closing complete.'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        final errorMsg = mapDailyClosingError(e);
+        final isAlreadyClosed = errorMsg.contains('already complete');
+        debugPrint('DAILY_CLOSING: error=$e');
+        debugPrint('DAILY_CLOSING: mapped=$errorMsg');
+        debugPrint('DAILY_CLOSING: isAlreadyClosed=$isAlreadyClosed');
+        if (isAlreadyClosed) {
+          setState(() => _closingAlreadyClosed = true);
+          debugPrint('DAILY_CLOSING: _closingAlreadyClosed=true');
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMsg)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isClosing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final historyAsync = ref.watch(
+      dailyClosingHistoryProvider(widget.storeId),
+    );
+    final currency = NumberFormat('#,###', 'vi_VN');
+
+    return Column(
+      key: const Key('daily_closing_root'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          key: const Key('nav_daily_closing'),
+          children: [
+            Text(
+              'Daily Close',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const Spacer(),
+            FilledButton.icon(
+              key: const Key('daily_closing_submit_button'),
+              onPressed: _isClosing ? null : _createClosing,
+              icon: _isClosing
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        color: AppColors.surface0,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Icon(Icons.lock_clock, size: 16),
+              label: const Text('Close Today'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.amber500,
+                foregroundColor: AppColors.surface0,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_closingSucceeded)
+          Container(
+            key: const Key('daily_closing_success_banner'),
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.check_circle_outline,
+                    color: AppColors.statusAvailable, size: 14),
+                const SizedBox(width: 4),
+                Text(
+                  'Closing complete.',
+                  style: GoogleFonts.notoSansKr(
+                      color: AppColors.statusAvailable, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        if (_closingAlreadyClosed)
+          Container(
+            key: const Key('daily_closing_already_closed_banner'),
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              'Today is already complete.',
+              style: GoogleFonts.notoSansKr(
+                  color: AppColors.amber500, fontSize: 12),
+            ),
+          ),
+        historyAsync.when(
+          data: (records) => records.isEmpty
+              ? Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface1,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Text(
+                      'No closing history.',
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textSecondary,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                )
+              : Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surface1,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      _closingTableHeader(),
+                      ...records.take(10).toList().asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final record = entry.value;
+                        return _closingTableRow(
+                          record: record,
+                          currency: currency,
+                          bgColor: index.isEven
+                              ? AppColors.surface1
+                              : AppColors.surface0,
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+          loading: () => const SizedBox(
+            height: 40,
+            child: Center(
+              child: CircularProgressIndicator(
+                color: AppColors.amber500,
+                strokeWidth: 2,
+              ),
+            ),
+          ),
+          error: (e, _) => Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.surface1,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: Text(
+                mapDailyClosingError(e),
+                style: GoogleFonts.notoSansKr(
+                  color: AppColors.statusCancelled,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _closingTableHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.surface2)),
+      ),
+      child: Row(
+        children: [
+          _hCell('Date', flex: 2),
+          _hCell('Order'),
+          _hCell('Done'),
+          _hCell('Cancel'),
+          _hCell('Revenue'),
+          _hCell('Cash'),
+          _hCell('Card'),
+          _hCell('Low'),
+          _hCell('Assignee'),
+        ],
+      ),
+    );
+  }
+
+  Widget _closingTableRow({
+    required DailyClosingRecord record,
+    required NumberFormat currency,
+    required Color bgColor,
+  }) {
+    return Container(
+      color: bgColor,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          _dCell(record.closingDate.length >= 10
+              ? record.closingDate.substring(5)
+              : record.closingDate, flex: 2),
+          _dCell('${record.ordersTotal}'),
+          _dCell('${record.ordersCompleted}'),
+          _dCell('${record.ordersCancelled}'),
+          _dCell('₫${currency.format(record.paymentsTotal)}'),
+          _dCell('₫${currency.format(record.paymentsCash)}'),
+          _dCell('₫${currency.format(record.paymentsCard)}'),
+          _dCell('${record.lowStockCount}'),
+          _dCell(record.closedByName, overflow: true),
+        ],
+      ),
+    );
+  }
+
+  Widget _hCell(String text, {int flex = 1}) {
+    return Expanded(
+      flex: flex,
+      child: Text(
+        text,
+        style: GoogleFonts.notoSansKr(
+          color: AppColors.textPrimary,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _dCell(String text, {int flex = 1, bool overflow = false}) {
+    return Expanded(
+      flex: flex,
+      child: Text(
+        text,
+        style: GoogleFonts.notoSansKr(
+          color: AppColors.textPrimary,
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+        ),
+        overflow: overflow ? TextOverflow.ellipsis : null,
+      ),
+    );
+  }
+}
+
+class _ReportsAuditTraceSection extends ConsumerWidget {
+  const _ReportsAuditTraceSection({required this.storeId});
+
+  final String storeId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auditTraceAsync = ref.watch(
+      adminAuditTraceProvider(storeId),
+    );
+
+    return AdminAuditTracePanel(
+      auditTraceAsync: auditTraceAsync,
+      storeId: storeId,
+      allowedEntityTypes: const {
+        'orders',
+        'order_items',
+        'payments',
+      },
+      maxItems: 10,
+      compact: true,
+      showRetry: true,
+      emptyMessage: 'No recent operations.',
     );
   }
 }
