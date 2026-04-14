@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
-    show AuthChangeEvent, AuthException, User;
+    show AuthChangeEvent, AuthException, PostgrestException, User;
 import '../../core/services/navigation_history_service.dart';
 import '../../main.dart';
 import 'auth_state.dart';
@@ -12,6 +12,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
   }
 
   StreamSubscription<dynamic>? _authSub;
+  String? _pendingSignedOutErrorMessage;
 
   void _init() {
     final session = supabase.auth.currentSession;
@@ -26,7 +27,8 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         await _fetchUserProfile(session.user);
       } else if (event == AuthChangeEvent.signedOut) {
         NavigationHistoryService.instance.clear();
-        state = const PosAuthState();
+        state = PosAuthState(errorMessage: _pendingSignedOutErrorMessage);
+        _pendingSignedOutErrorMessage = null;
       }
     });
   }
@@ -41,8 +43,9 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
 
       final isActive = data['is_active'] as bool? ?? true;
       if (!isActive) {
-        await supabase.auth.signOut();
-        state = const PosAuthState(errorMessage: 'Deactivated account. Contact your administrator.');
+        await _signOutWithError(
+          'Account is deactivated. Contact your administrator.',
+        );
         return;
       }
 
@@ -70,11 +73,14 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         _ => '/login',
       };
       NavigationHistoryService.instance.push(homeRoute);
+    } on PostgrestException catch (error) {
+      await _handleProfileLoadError(error);
     } catch (_) {
       state = state.copyWith(
         isLoading: false,
-        user: user,
-        errorMessage: 'Failed to load user info.',
+        clearUser: true,
+        errorMessage:
+            'Login succeeded, but your POS account profile could not be loaded.',
       );
     }
   }
@@ -97,6 +103,44 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         errorMessage: 'An error occurred during login.',
       );
     }
+  }
+
+  Future<void> _handleProfileLoadError(PostgrestException error) async {
+    final code = error.code?.toUpperCase() ?? '';
+    final message = error.message.toUpperCase();
+
+    if (code == 'PGRST116' ||
+        message.contains('0 ROWS') ||
+        message.contains('NO ROWS') ||
+        message.contains('JSON OBJECT REQUESTED')) {
+      await _signOutWithError(
+        'Login succeeded, but this account is not linked to a POS user profile.',
+      );
+      return;
+    }
+
+    if (code == '42501' ||
+        message.contains('PERMISSION') ||
+        message.contains('ROW-LEVEL SECURITY') ||
+        message.contains('JWT')) {
+      await _signOutWithError(
+        'Login succeeded, but this account does not have permission to load its POS profile.',
+      );
+      return;
+    }
+
+    state = state.copyWith(
+      isLoading: false,
+      clearUser: true,
+      errorMessage:
+          'Login succeeded, but the POS profile lookup failed: ${error.message}',
+    );
+  }
+
+  Future<void> _signOutWithError(String message) async {
+    _pendingSignedOutErrorMessage = message;
+    await supabase.auth.signOut();
+    state = PosAuthState(errorMessage: message);
   }
 
   Future<void> logout() async {
