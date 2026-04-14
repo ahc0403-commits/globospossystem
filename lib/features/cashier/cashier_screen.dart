@@ -15,6 +15,7 @@ import '../../widgets/error_toast.dart';
 import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
 import '../payment/payment_provider.dart';
+import '../payment/einvoice_status_badge.dart';
 import '../settings/printer_provider.dart';
 import 'red_invoice_modal.dart';
 
@@ -30,6 +31,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   String? _initializedRestaurantId;
   Timer? _successTimer;
   String? _lastError;
+  String? _lastCompletedOrderId; // for einvoice badge
   late final ProviderSubscription<PaymentState> _paymentSub;
 
   @override
@@ -414,7 +416,10 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                       order: selectedOrder,
                                       method: method,
                                     );
-                                    setState(() => _selectedMethod = null);
+                                    setState(() {
+                                      _selectedMethod = null;
+                                      _lastCompletedOrderId = selectedOrder.orderId;
+                                    });
                                     // Stage 2: Red Invoice modal
                                     if (mounted && method != 'service') {
                                       await showDialog<bool>(
@@ -496,6 +501,15 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                           ),
                         ),
                       ),
+                      // Stage 2: Einvoice status badge after payment
+                      if (_lastCompletedOrderId != null)
+                        Positioned(
+                          bottom: 24,
+                          left: 24,
+                          child: EinvoiceStatusBadge(
+                            orderId: _lastCompletedOrderId!,
+                          ),
+                        ),
                     ],
                   ),
                 ),
