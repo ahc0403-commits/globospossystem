@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
     show AuthChangeEvent, AuthException, PostgrestException, User;
 import '../../core/services/navigation_history_service.dart';
@@ -11,6 +12,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     _init();
   }
 
+  static const _activeStorePrefsPrefix = 'active_store_';
   StreamSubscription<dynamic>? _authSub;
   String? _pendingSignedOutErrorMessage;
 
@@ -53,12 +55,28 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
       final extraPermissions = extraRaw is List
           ? extraRaw.map((e) => e.toString()).toList()
           : const <String>[];
+      final stores = await _resolveAccessibleStores(
+        user: user,
+        fallbackStoreId: data['restaurant_id'] as String?,
+      );
+      final primaryStoreId = _resolvePrimaryStoreId(
+        user: user,
+        fallbackStoreId: data['restaurant_id'] as String?,
+        stores: stores,
+      );
+      final activeStoreId = await _resolveActiveStoreId(
+        user: user,
+        primaryStoreId: primaryStoreId,
+        stores: stores,
+      );
 
       state = state.copyWith(
         isLoading: false,
         user: user,
         role: data['role'] as String?,
-        storeId: data['restaurant_id'] as String?,
+        storeId: activeStoreId,
+        primaryStoreId: primaryStoreId,
+        accessibleStores: stores,
         extraPermissions: extraPermissions,
         clearError: true,
       );
@@ -66,6 +84,8 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
       final role = data['role'] as String?;
       final homeRoute = switch (role) {
         'super_admin' => '/super-admin',
+        'photo_objet_master' || 'photo_objet_store_admin' => '/photo-ops',
+        'brand_admin' || 'store_admin' => '/admin',
         'admin' => '/admin',
         'waiter' => '/waiter',
         'kitchen' => '/kitchen',
@@ -149,6 +169,20 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     state = const PosAuthState();
   }
 
+  Future<void> setActiveStore(String storeId) async {
+    final user = state.user;
+    if (user == null) return;
+
+    final isAccessible = state.accessibleStores.any(
+      (store) => store.id == storeId,
+    );
+    if (!isAccessible) return;
+
+    state = state.copyWith(storeId: storeId);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('$_activeStorePrefsPrefix${user.id}', storeId);
+  }
+
   Future<void> refreshProfile() async {
     final user = supabase.auth.currentUser;
     if (user == null) {
@@ -162,6 +196,109 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
   void dispose() {
     _authSub?.cancel();
     super.dispose();
+  }
+
+  Future<List<AccessibleStore>> _resolveAccessibleStores({
+    required User user,
+    required String? fallbackStoreId,
+  }) async {
+    final rawStoreIds = user.appMetadata['accessible_store_ids'];
+    final claimedStoreIds = rawStoreIds is List
+        ? rawStoreIds.map((item) => item.toString()).toSet().toList()
+        : [];
+
+    final storeIds = {
+      ...claimedStoreIds,
+      if (fallbackStoreId != null && fallbackStoreId.isNotEmpty)
+        fallbackStoreId,
+    }.toList();
+
+    if (storeIds.isEmpty) return const [];
+
+    try {
+      final rows = await supabase
+          .from('restaurants')
+          .select('id, name, brand_id, brands(name)')
+          .inFilter('id', storeIds);
+
+      final stores = rows.map<AccessibleStore>((row) {
+        final map = Map<String, dynamic>.from(row);
+        final brandRaw = map['brands'];
+        return AccessibleStore(
+          id: map['id'].toString(),
+          name: map['name']?.toString() ?? 'Unknown Store',
+          brandId: map['brand_id']?.toString(),
+          brandName: brandRaw is Map<String, dynamic>
+              ? brandRaw['name']?.toString()
+              : null,
+        );
+      }).toList();
+
+      stores.sort((a, b) => a.name.compareTo(b.name));
+      return stores;
+    } catch (_) {
+      return storeIds
+          .map(
+            (id) => AccessibleStore(
+              id: id,
+              name: id == fallbackStoreId ? 'Current Store' : 'Store $id',
+            ),
+          )
+          .toList();
+    }
+  }
+
+  String? _resolvePrimaryStoreId({
+    required User user,
+    required String? fallbackStoreId,
+    required List<AccessibleStore> stores,
+  }) {
+    final claimedPrimary = user.appMetadata['primary_store_id']?.toString();
+    final candidateIds = {
+      if (claimedPrimary != null && claimedPrimary.isNotEmpty) claimedPrimary,
+      if (fallbackStoreId != null && fallbackStoreId.isNotEmpty)
+        fallbackStoreId,
+    };
+
+    for (final store in stores) {
+      if (candidateIds.contains(store.id)) {
+        return store.id;
+      }
+    }
+
+    return stores.isNotEmpty ? stores.first.id : fallbackStoreId;
+  }
+
+  Future<String?> _resolveActiveStoreId({
+    required User user,
+    required String? primaryStoreId,
+    required List<AccessibleStore> stores,
+  }) async {
+    if (stores.isEmpty) return null;
+
+    final prefs = await SharedPreferences.getInstance();
+    final persistedStoreId = prefs.getString(
+      '$_activeStorePrefsPrefix${user.id}',
+    );
+
+    final candidateIds = [
+      if (persistedStoreId != null && persistedStoreId.isNotEmpty)
+        persistedStoreId,
+      if (primaryStoreId != null && primaryStoreId.isNotEmpty) primaryStoreId,
+      stores.first.id,
+    ];
+
+    for (final candidateId in candidateIds) {
+      if (stores.any((store) => store.id == candidateId)) {
+        await prefs.setString(
+          '$_activeStorePrefsPrefix${user.id}',
+          candidateId,
+        );
+        return candidateId;
+      }
+    }
+
+    return stores.first.id;
   }
 }
 

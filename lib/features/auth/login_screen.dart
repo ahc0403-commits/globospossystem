@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/ui/app_primitives.dart';
 import '../../main.dart';
 import 'auth_provider.dart';
 import 'auth_state.dart';
@@ -25,23 +26,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
-  InputDecoration _fieldDecoration(String label) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: TextStyle(color: AppColors.textSecondary),
-      filled: true,
-      fillColor: AppColors.surface1,
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.surface2),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.amber500, width: 2),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
@@ -56,114 +40,155 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.surface0,
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          if (constraints.maxWidth > 900) {
-            return Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    color: AppColors.surface1,
-                    padding: const EdgeInsets.symmetric(horizontal: 48),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'GLOBOS',
-                          style: GoogleFonts.bebasNeue(
-                            fontSize: 80,
-                            color: AppColors.amber500,
-                            letterSpacing: 8,
-                          ),
-                        ),
-                        Text(
-                          'POS SYSTEM',
-                          style: GoogleFonts.notoSansKr(
-                            fontSize: 20,
-                            color: AppColors.textPrimary,
-                            letterSpacing: 4,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          'Powered by GLOBOSVN',
-                          style: GoogleFonts.notoSansKr(
-                            fontSize: 13,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Expanded(child: Center(child: _buildLoginForm(authState))),
-              ],
-            );
-          }
+      body: AppShell(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth > 980) {
+              return Row(
+                children: [
+                  Expanded(child: _buildBrandPanel()),
+                  const SizedBox(width: AppSpacing.xl),
+                  Expanded(child: Center(child: _buildLoginForm(authState))),
+                ],
+              );
+            }
 
-          return Center(child: _buildLoginForm(authState));
-        },
+            return Center(child: _buildLoginForm(authState));
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBrandPanel() {
+    return AppPanel(
+      padding: const EdgeInsets.all(AppSpacing.xxl),
+      backgroundColor: AppColors.surface1,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.amber500.withValues(alpha: 0.12),
+              borderRadius: AppRadius.pill,
+              border: Border.all(
+                color: AppColors.amber500.withValues(alpha: 0.35),
+              ),
+            ),
+            child: Text(
+              'OPERATIONAL CONSOLE',
+              style: AppTextStyles.operationalCaption(
+                color: AppColors.amber500,
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xl),
+          Text(
+            'GLOBOS',
+            style: GoogleFonts.bebasNeue(
+              fontSize: 92,
+              color: AppColors.amber500,
+              letterSpacing: 8,
+            ),
+          ),
+          Text(
+            'POS SYSTEM',
+            style: GoogleFonts.notoSansKr(
+              fontSize: 20,
+              color: AppColors.textPrimary,
+              letterSpacing: 4,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Text(
+            'Cashier, kitchen, attendance, and admin workflows in one operational surface.',
+            style: GoogleFonts.notoSansKr(
+              fontSize: 15,
+              color: AppColors.textSecondary,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xxl),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: const [
+              AppStatusBadge(label: 'FAST SCAN', color: AppColors.statusInfo),
+              AppStatusBadge(
+                label: 'HIGH CONTRAST',
+                color: AppColors.statusAvailable,
+              ),
+              AppStatusBadge(
+                label: 'TABLET READY',
+                color: AppColors.statusReady,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildLoginForm(PosAuthState authState) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 400),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'GLOBOS',
-              style: GoogleFonts.bebasNeue(
-                fontSize: 56,
-                color: AppColors.amber500,
-                letterSpacing: 6,
+        constraints: const BoxConstraints(maxWidth: 460),
+        child: AppPanel(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const AppSectionHeader(
+                title: 'LOGIN',
+                subtitle:
+                    'Sign in to continue to your role-specific workspace.',
               ),
-            ),
-            Text(
-              'POS SYSTEM',
-              style: GoogleFonts.notoSansKr(
-                fontSize: 13,
-                color: AppColors.textSecondary,
-                letterSpacing: 4,
-              ),
-            ),
-            const SizedBox(height: 48),
-            TextField(
-              key: const Key('login_email_field'),
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: _fieldDecoration('Email'),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              key: const Key('login_password_field'),
-              controller: _passwordController,
-              obscureText: _obscurePassword,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: _fieldDecoration('Password').copyWith(
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                    color: AppColors.textSecondary,
-                  ),
-                  onPressed: () =>
-                      setState(() => _obscurePassword = !_obscurePassword),
+              const SizedBox(height: AppSpacing.xl),
+              TextField(
+                key: const Key('login_email_field'),
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                style: const TextStyle(color: AppColors.textPrimary),
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  prefixIcon: Icon(Icons.alternate_email),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            if (authState.errorMessage != null) ...[
-              const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
+              const SizedBox(height: AppSpacing.lg),
+              TextField(
+                key: const Key('login_password_field'),
+                controller: _passwordController,
+                obscureText: _obscurePassword,
+                style: const TextStyle(color: AppColors.textPrimary),
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                      color: AppColors.textSecondary,
+                    ),
+                    onPressed: () =>
+                        setState(() => _obscurePassword = !_obscurePassword),
+                  ),
+                ),
+              ),
+              if (authState.errorMessage != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                const AppStatusBadge(
+                  label: 'AUTH ERROR',
+                  color: AppColors.statusCancelled,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
                   authState.errorMessage!,
                   key: const Key('auth_error_text'),
                   style: GoogleFonts.notoSansKr(
@@ -171,47 +196,38 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     color: AppColors.statusCancelled,
                   ),
                 ),
+              ],
+              const SizedBox(height: AppSpacing.xl),
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  key: const Key('login_submit_button'),
+                  onPressed: authState.isLoading
+                      ? null
+                      : () => ref
+                            .read(authProvider.notifier)
+                            .login(
+                              _emailController.text,
+                              _passwordController.text,
+                            ),
+                  child: authState.isLoading
+                      ? const CircularProgressIndicator(
+                          color: AppColors.surface0,
+                          strokeWidth: 2,
+                        )
+                      : Text(
+                          'LOGIN',
+                          style: GoogleFonts.bebasNeue(
+                            fontSize: 20,
+                            color: AppColors.surface0,
+                            letterSpacing: 3,
+                          ),
+                        ),
+                ),
               ),
             ],
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                key: const Key('login_submit_button'),
-                onPressed: authState.isLoading
-                    ? null
-                    : () => ref
-                          .read(authProvider.notifier)
-                          .login(
-                            _emailController.text,
-                            _passwordController.text,
-                          ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.amber500,
-                  disabledBackgroundColor: AppColors.amber500.withValues(
-                    alpha: 0.5,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: authState.isLoading
-                    ? const CircularProgressIndicator(
-                        color: AppColors.surface0,
-                        strokeWidth: 2,
-                      )
-                    : Text(
-                        'LOGIN',
-                        style: GoogleFonts.bebasNeue(
-                          fontSize: 20,
-                          color: AppColors.surface0,
-                          letterSpacing: 3,
-                        ),
-                      ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -225,8 +241,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         return '/kitchen';
       case 'cashier':
         return '/cashier';
+      case 'brand_admin':
+      case 'store_admin':
       case 'admin':
         return '/admin';
+      case 'photo_objet_master':
+      case 'photo_objet_store_admin':
+        return '/photo-ops';
       case 'super_admin':
         return '/super-admin';
       default:

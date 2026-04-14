@@ -20,7 +20,9 @@ class _StaffTabState extends ConsumerState<StaffTab> {
 
   @override
   Widget build(BuildContext context) {
-    final storeId = ref.watch(authProvider).storeId;
+    final authState = ref.watch(authProvider);
+    final storeId = authState.storeId;
+    final viewerRole = authState.role;
     final staffState = ref.watch(staffProvider);
     final notifier = ref.read(staffProvider.notifier);
 
@@ -60,7 +62,11 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                 FilledButton.icon(
                   onPressed: storeId == null
                       ? null
-                      : () => _showAddStaffSheet(context, storeId),
+                      : () => _showAddStaffSheet(
+                          context,
+                          storeId,
+                          viewerRole: viewerRole,
+                        ),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.amber500,
                     foregroundColor: AppColors.surface0,
@@ -162,6 +168,10 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                                 const SizedBox(width: 8),
                                 if (storeId != null &&
                                     member.role != 'admin' &&
+                                    member.role != 'store_admin' &&
+                                    member.role != 'brand_admin' &&
+                                    member.role != 'photo_objet_master' &&
+                                    member.role != 'photo_objet_store_admin' &&
                                     member.role != 'super_admin')
                                   OutlinedButton(
                                     onPressed: () => _showPermissionDialog(
@@ -173,6 +183,10 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                                   ),
                                 if (storeId != null &&
                                     member.role != 'admin' &&
+                                    member.role != 'store_admin' &&
+                                    member.role != 'brand_admin' &&
+                                    member.role != 'photo_objet_master' &&
+                                    member.role != 'photo_objet_store_admin' &&
                                     member.role != 'super_admin')
                                   const SizedBox(width: 8),
                                 Switch(
@@ -201,8 +215,9 @@ class _StaffTabState extends ConsumerState<StaffTab> {
 
   Future<void> _showAddStaffSheet(
     BuildContext context,
-    String storeId,
-  ) async {
+    String storeId, {
+    required String? viewerRole,
+  }) async {
     final fullNameController = TextEditingController();
     final emailController = TextEditingController();
     final passwordController = TextEditingController();
@@ -262,18 +277,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                     initialValue: role,
                     dropdownColor: AppColors.surface1,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    items: const [
-                      DropdownMenuItem(value: 'waiter', child: Text('Waiter')),
-                      DropdownMenuItem(
-                        value: 'kitchen',
-                        child: Text('Kitchen'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'cashier',
-                        child: Text('Cashier'),
-                      ),
-                      DropdownMenuItem(value: 'admin', child: Text('Admin')),
-                    ],
+                    items: _availableRoleOptions(viewerRole),
                     onChanged: (value) {
                       if (value != null) {
                         setModalState(() => role = value);
@@ -454,6 +458,10 @@ class _RoleBadge extends StatelessWidget {
       'kitchen' => AppColors.statusOccupied,
       'cashier' => AppColors.statusAvailable,
       'admin' => AppColors.amber500,
+      'store_admin' => const Color(0xFF7C5CFA),
+      'brand_admin' => const Color(0xFFFF8A3D),
+      'photo_objet_master' => const Color(0xFF00BFA5),
+      'photo_objet_store_admin' => const Color(0xFF4DD0E1),
       _ => AppColors.surface2,
     };
 
@@ -482,7 +490,53 @@ String _roleLabelKo(String role) {
     'kitchen' => 'Kitchen',
     'cashier' => 'Cashier',
     'admin' => 'Admin',
+    'store_admin' => 'Store Admin',
+    'brand_admin' => 'Brand Admin',
+    'photo_objet_master' => 'Photo Objet Master',
+    'photo_objet_store_admin' => 'Photo Objet Store Admin',
     'super_admin' => 'Super Admin',
     _ => role,
   };
+}
+
+List<DropdownMenuItem<String>> _availableRoleOptions(String? viewerRole) {
+  const baseRoles = [
+    DropdownMenuItem(value: 'waiter', child: Text('Waiter')),
+    DropdownMenuItem(value: 'kitchen', child: Text('Kitchen')),
+    DropdownMenuItem(value: 'cashier', child: Text('Cashier')),
+  ];
+
+  if (viewerRole == 'super_admin') {
+    return const [
+      ...baseRoles,
+      DropdownMenuItem(value: 'admin', child: Text('Admin')),
+      DropdownMenuItem(value: 'store_admin', child: Text('Store Admin')),
+      DropdownMenuItem(value: 'brand_admin', child: Text('Brand Admin')),
+      DropdownMenuItem(
+        value: 'photo_objet_master',
+        child: Text('Photo Objet Master'),
+      ),
+      DropdownMenuItem(
+        value: 'photo_objet_store_admin',
+        child: Text('Photo Objet Store Admin'),
+      ),
+    ];
+  }
+
+  if (viewerRole == 'brand_admin') {
+    return const [
+      ...baseRoles,
+      DropdownMenuItem(value: 'admin', child: Text('Admin')),
+      DropdownMenuItem(value: 'store_admin', child: Text('Store Admin')),
+      DropdownMenuItem(
+        value: 'photo_objet_store_admin',
+        child: Text('Photo Objet Store Admin'),
+      ),
+    ];
+  }
+
+  return const [
+    ...baseRoles,
+    DropdownMenuItem(value: 'admin', child: Text('Admin')),
+  ];
 }

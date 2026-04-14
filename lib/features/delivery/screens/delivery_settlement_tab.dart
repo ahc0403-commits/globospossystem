@@ -7,6 +7,7 @@ import '../../../main.dart';
 import '../delivery_models.dart';
 import '../delivery_settlement_provider.dart';
 import '../../auth/auth_provider.dart';
+import '../../../core/utils/permission_utils.dart';
 
 class DeliverySettlementTab extends ConsumerStatefulWidget {
   const DeliverySettlementTab({super.key});
@@ -45,6 +46,16 @@ class _DeliverySettlementTabState
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(deliverySettlementProvider);
+    final role = ref.watch(authProvider).role;
+
+    if (!PermissionUtils.canAccessDeliverySettlement(role)) {
+      return Center(
+        child: Text(
+          'This Deliberry settlement workspace is only available to admin roles.',
+          style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
+        ),
+      );
+    }
 
     if (state.isLoading) {
       return const Center(child: CircularProgressIndicator(
@@ -76,6 +87,35 @@ class _DeliverySettlementTabState
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.surface1,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.surface2),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.info_outline,
+                  color: AppColors.amber500,
+                  size: 22,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Deliberry settlement is a separate financial workflow. It is not part of Photo Objet office operations.',
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
           // ─── 미정산 카드 ───
           if (state.unsettled != null) _buildUnsettledCard(state.unsettled!),
           const SizedBox(height: 16),

@@ -44,7 +44,7 @@ serve(async (req) => {
     // Check caller role from users table
     const { data: callerProfile, error: profileError } = await anonClient
       .from('users')
-      .select('role, restaurant_id')
+      .select('id, role, restaurant_id, primary_store_id, brand_id')
       .eq('auth_id', callerUser.id)
       .single()
 
@@ -55,7 +55,11 @@ serve(async (req) => {
       })
     }
 
-    if (!['admin', 'super_admin'].includes(callerProfile.role)) {
+    if (
+      !['admin', 'store_admin', 'brand_admin', 'super_admin'].includes(
+        callerProfile.role,
+      )
+    ) {
       return new Response(
         JSON.stringify({ error: 'Forbidden: admin role required' }),
         {
@@ -81,10 +85,68 @@ serve(async (req) => {
       )
     }
 
-    // admin can only create staff for their own restaurant
+    const supportedRoles = [
+      'waiter',
+      'kitchen',
+      'cashier',
+      'admin',
+      'store_admin',
+      'brand_admin',
+      'photo_objet_master',
+      'photo_objet_store_admin',
+    ]
+
+    if (!supportedRoles.includes(role)) {
+      return new Response(
+        JSON.stringify({ error: `Unsupported role: ${role}` }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
+    }
+
+    const { data: targetStore, error: targetStoreError } = await anonClient
+      .from('restaurants')
+      .select('id, brand_id, is_active')
+      .eq('id', restaurant_id)
+      .single()
+
+    if (targetStoreError || !targetStore) {
+      return new Response(JSON.stringify({ error: 'Target store not found' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    if (targetStore.is_active === false) {
+      return new Response(JSON.stringify({ error: 'Target store is inactive' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     if (
-      callerProfile.role === 'admin' &&
-      callerProfile.restaurant_id !== restaurant_id
+      ['brand_admin', 'photo_objet_master'].includes(role) &&
+      !targetStore.brand_id
+    ) {
+      return new Response(
+        JSON.stringify({
+          error: 'Target store must belong to a brand for brand-scoped roles',
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
+    }
+
+    const callerStoreId = callerProfile.primary_store_id ?? callerProfile.restaurant_id
+
+    // store-scoped admins can only create staff for their own store
+    if (
+      ['admin', 'store_admin'].includes(callerProfile.role) &&
+      callerStoreId !== restaurant_id
     ) {
       return new Response(
         JSON.stringify({
@@ -97,13 +159,48 @@ serve(async (req) => {
       )
     }
 
-    // admin cannot create another admin or super_admin
     if (
-      callerProfile.role === 'admin' &&
-      ['admin', 'super_admin'].includes(role)
+      callerProfile.role === 'brand_admin' &&
+      callerProfile.brand_id !== targetStore.brand_id
+    ) {
+      return new Response(
+        JSON.stringify({
+          error: 'Forbidden: cannot create staff for another brand',
+        }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
+    }
+
+    // store-scoped admins cannot create elevated admin roles
+    if (
+      ['admin', 'store_admin'].includes(callerProfile.role) &&
+      [
+        'admin',
+        'store_admin',
+        'brand_admin',
+        'super_admin',
+        'photo_objet_master',
+        'photo_objet_store_admin',
+      ].includes(role)
     ) {
       return new Response(
         JSON.stringify({ error: 'Forbidden: cannot create admin accounts' }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
+    }
+
+    if (
+      callerProfile.role === 'brand_admin' &&
+      ['brand_admin', 'super_admin', 'photo_objet_master'].includes(role)
+    ) {
+      return new Response(
+        JSON.stringify({ error: 'Forbidden: cannot create this role' }),
         {
           status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -143,6 +240,8 @@ serve(async (req) => {
       .insert({
         auth_id: newAuthUser.user.id,
         restaurant_id,
+        brand_id: targetStore.brand_id,
+        primary_store_id: restaurant_id,
         role,
         full_name,
         is_active: true,
@@ -157,6 +256,70 @@ serve(async (req) => {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
+    }
+
+    const { error: storeAccessError } = await serviceClient
+      .from('user_store_access')
+      .upsert(
+        {
+          user_id: newUser.id,
+          store_id: restaurant_id,
+          is_primary: true,
+          is_active: true,
+          source_type: 'direct',
+          granted_by: callerProfile.id,
+        },
+        { onConflict: 'user_id,store_id,source_type' },
+      )
+
+    if (storeAccessError) {
+      await serviceClient.from('users').delete().eq('id', newUser.id)
+      await serviceClient.auth.admin.deleteUser(newAuthUser.user.id)
+      return new Response(JSON.stringify({ error: storeAccessError.message }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    if (role === 'brand_admin' || role === 'photo_objet_master') {
+      const { error: brandAccessError } = await serviceClient
+        .from('user_brand_access')
+        .upsert(
+          {
+            user_id: newUser.id,
+            brand_id: targetStore.brand_id,
+            is_active: true,
+            granted_by: callerProfile.id,
+          },
+          { onConflict: 'user_id,brand_id' },
+        )
+
+      if (brandAccessError) {
+        await serviceClient.from('user_store_access').delete().eq('user_id', newUser.id)
+        await serviceClient.from('users').delete().eq('id', newUser.id)
+        await serviceClient.auth.admin.deleteUser(newAuthUser.user.id)
+        return new Response(JSON.stringify({ error: brandAccessError.message }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      const { error: syncError } = await serviceClient.rpc(
+        'sync_user_store_access',
+        {
+          p_user_id: newUser.id,
+        },
+      )
+      if (syncError) {
+        console.error('sync_user_store_access error:', syncError)
+      }
+    }
+
+    const { error: refreshClaimsError } = await serviceClient.rpc('refresh_user_claims', {
+      p_auth_user_id: newAuthUser.user.id,
+    })
+    if (refreshClaimsError) {
+      console.error('refresh_user_claims error:', refreshClaimsError)
     }
 
     return new Response(JSON.stringify({ success: true, user: newUser }), {

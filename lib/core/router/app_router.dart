@@ -10,6 +10,7 @@ import '../../features/auth/login_screen.dart';
 import '../../features/cashier/cashier_screen.dart';
 import '../../features/kitchen/kitchen_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
+import '../../features/photo_ops/photo_ops_screen.dart';
 import '../../features/attendance/attendance_kiosk_screen.dart';
 import '../../features/qc/qc_check_screen.dart';
 import '../../features/super_admin/super_admin_screen.dart';
@@ -61,6 +62,8 @@ GoRouter buildAppRouter(ProviderContainer container) {
         'kitchen' => '/kitchen',
         'cashier' => '/cashier',
         'super_admin' => '/super-admin',
+        'photo_objet_master' || 'photo_objet_store_admin' => '/photo-ops',
+        'brand_admin' || 'store_admin' => '/admin',
         _ => '/admin',
       };
 
@@ -88,7 +91,8 @@ GoRouter buildAppRouter(ProviderContainer container) {
       }
 
       // 6. admin이 /super-admin에 있으면 → /admin으로 강제
-      if (role == 'admin' && location == '/super-admin') {
+      if ((role == 'admin' || role == 'brand_admin' || role == 'store_admin') &&
+          location == '/super-admin') {
         redirectTo = '/admin';
         NavigationHistoryService.instance.push(redirectTo);
         return redirectTo;
@@ -102,7 +106,17 @@ GoRouter buildAppRouter(ProviderContainer container) {
       }
 
       // 6-C. /admin 은 admin / super_admin 전용
-      if (location == '/admin' && role != 'admin' && role != 'super_admin') {
+      if (location == '/admin' &&
+          role != 'admin' &&
+          role != 'brand_admin' &&
+          role != 'store_admin' &&
+          role != 'super_admin') {
+        redirectTo = homeRoute;
+        NavigationHistoryService.instance.push(redirectTo);
+        return redirectTo;
+      }
+
+      if (location == '/photo-ops' && !PermissionUtils.canAccessPhotoOps(role)) {
         redirectTo = homeRoute;
         NavigationHistoryService.instance.push(redirectTo);
         return redirectTo;
@@ -147,6 +161,7 @@ GoRouter buildAppRouter(ProviderContainer container) {
         builder: (_, __) => const AttendanceKioskScreen(),
       ),
       GoRoute(path: '/qc-check', builder: (_, __) => const QcCheckScreen()),
+      GoRoute(path: '/photo-ops', builder: (_, __) => const PhotoOpsScreen()),
       GoRoute(
         path: '/super-admin',
         builder: (_, __) => const SuperAdminScreen(),

@@ -9,6 +9,7 @@ import '../../core/layout/web_sidebar_layout.dart';
 import '../../main.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/offline_banner.dart';
+import '../../core/utils/permission_utils.dart';
 import '../auth/auth_provider.dart';
 import 'tabs/attendance_tab.dart';
 import 'tabs/inventory_tab.dart';
@@ -39,37 +40,45 @@ class AdminScreen extends ConsumerStatefulWidget {
 class _AdminScreenState extends ConsumerState<AdminScreen> {
   int _currentIndex = 0;
 
-  static const List<Widget> _tabs = [
-    TablesTab(),
-    MenuTab(),
-    StaffTab(),
-    ReportsTab(),
-    AttendanceTab(),
-    InventoryTab(),
-    QcTab(),
-    SettingsTab(),
-    DeliverySettlementTab(),
-    EinvoiceTab(),
-  ];
-
   @override
   void initState() {
     super.initState();
-    _currentIndex = widget.initialTabIndex.clamp(0, _tabs.length - 1);
+    _currentIndex = widget.initialTabIndex;
   }
 
   @override
   Widget build(BuildContext context) {
     final isSuperAdminView = widget.overrideRestaurantId != null;
+    final role = ref.watch(authProvider).role;
 
     if (PlatformInfo.isWebOrDesktop) {
-      return _buildWebDesktopLayout(context, isSuperAdminView);
+      return _buildWebDesktopLayout(context, isSuperAdminView, role);
     }
 
-    return _buildMobileLayout(context, isSuperAdminView);
+    return _buildMobileLayout(context, isSuperAdminView, role);
   }
 
-  Widget _buildWebDesktopLayout(BuildContext context, bool isSuperAdminView) {
+  List<Widget> _tabsForRole(String? role) {
+    final tabs = <Widget>[
+      const TablesTab(),
+      const MenuTab(),
+      const StaffTab(),
+      const ReportsTab(),
+      const AttendanceTab(),
+      const InventoryTab(),
+      const QcTab(),
+      const SettingsTab(),
+    ];
+
+    if (PermissionUtils.canAccessDeliverySettlement(role)) {
+      tabs.add(const DeliverySettlementTab());
+    }
+
+    tabs.add(const EinvoiceTab());
+    return tabs;
+  }
+
+  List<SidebarItem> _sidebarItemsForRole(String? role) {
     final items = <SidebarItem>[
       const SidebarItem(icon: Icons.table_restaurant, label: 'Tables', itemKey: Key('nav_tables')),
       const SidebarItem(icon: Icons.restaurant_menu, label: 'Menu', itemKey: Key('nav_menu')),
@@ -79,15 +88,83 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       const SidebarItem(icon: Icons.inventory_2_outlined, label: 'Inventory'),
       const SidebarItem(icon: Icons.fact_check, label: 'QC'),
       const SidebarItem(icon: Icons.settings, label: 'Settings'),
-      const SidebarItem(icon: Icons.delivery_dining, label: 'Delivery Settlement'),
-      const SidebarItem(icon: Icons.receipt_long, label: 'E-Invoice'),
     ];
+
+    if (PermissionUtils.canAccessDeliverySettlement(role)) {
+      items.add(
+        const SidebarItem(
+          icon: Icons.delivery_dining,
+          label: 'Deliberry Settlement',
+        ),
+      );
+    }
+
+    items.add(const SidebarItem(icon: Icons.receipt_long, label: 'E-Invoice'));
+    return items;
+  }
+
+  List<BottomNavigationBarItem> _mobileNavItemsForRole(String? role) {
+    final items = <BottomNavigationBarItem>[
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.table_restaurant),
+        label: 'Tables',
+      ),
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.restaurant_menu),
+        label: 'Menu',
+      ),
+      const BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Staff'),
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.bar_chart),
+        label: 'Reports',
+      ),
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.access_time),
+        label: 'Attendance',
+      ),
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.inventory_2_outlined),
+        label: 'Inventory',
+      ),
+      const BottomNavigationBarItem(icon: Icon(Icons.fact_check), label: 'QC'),
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.settings),
+        label: 'Settings',
+      ),
+    ];
+
+    if (PermissionUtils.canAccessDeliverySettlement(role)) {
+      items.add(
+        const BottomNavigationBarItem(
+          icon: Icon(Icons.delivery_dining),
+          label: 'Deliberry',
+        ),
+      );
+    }
+
+    items.add(
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.receipt_long),
+        label: 'E-Invoice',
+      ),
+    );
+    return items;
+  }
+
+  Widget _buildWebDesktopLayout(
+    BuildContext context,
+    bool isSuperAdminView,
+    String? role,
+  ) {
+    final tabs = _tabsForRole(role);
+    final items = _sidebarItemsForRole(role);
+    final safeIndex = _currentIndex.clamp(0, tabs.length - 1);
 
     return WebSidebarLayout(
       key: const Key('admin_root'),
       title: isSuperAdminView ? 'ADMIN VIEW' : 'GLOBOS POS',
       items: items,
-      selectedIndex: _currentIndex,
+      selectedIndex: safeIndex,
       onItemSelected: (index) => setState(() => _currentIndex = index),
       topBarLeading: isSuperAdminView
           ? IconButton(
@@ -139,50 +216,21 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         children: [
           const OfflineBanner(),
           Expanded(
-            child: IndexedStack(index: _currentIndex, children: _tabs),
+            child: IndexedStack(index: safeIndex, children: tabs),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildMobileLayout(BuildContext context, bool isSuperAdminView) {
-    final navItems = <BottomNavigationBarItem>[
-      const BottomNavigationBarItem(
-        icon: Icon(Icons.table_restaurant),
-        label: 'Tables',
-      ),
-      const BottomNavigationBarItem(
-        icon: Icon(Icons.restaurant_menu),
-        label: 'Menu',
-      ),
-      const BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Staff'),
-      const BottomNavigationBarItem(
-        icon: Icon(Icons.bar_chart),
-        label: 'Reports',
-      ),
-      const BottomNavigationBarItem(
-        icon: Icon(Icons.access_time),
-        label: 'Attendance',
-      ),
-      const BottomNavigationBarItem(
-        icon: Icon(Icons.inventory_2_outlined),
-        label: 'Inventory',
-      ),
-      const BottomNavigationBarItem(icon: Icon(Icons.fact_check), label: 'QC'),
-      const BottomNavigationBarItem(
-        icon: Icon(Icons.settings),
-        label: 'Settings',
-      ),
-      const BottomNavigationBarItem(
-        icon: Icon(Icons.delivery_dining),
-        label: 'Delivery Settlement',
-      ),
-      const BottomNavigationBarItem(
-        icon: Icon(Icons.receipt_long),
-        label: 'E-Invoice',
-      ),
-    ];
+  Widget _buildMobileLayout(
+    BuildContext context,
+    bool isSuperAdminView,
+    String? role,
+  ) {
+    final tabs = _tabsForRole(role);
+    final navItems = _mobileNavItemsForRole(role);
+    final safeIndex = _currentIndex.clamp(0, tabs.length - 1);
 
     return Scaffold(
       key: const Key('admin_root'),
@@ -242,14 +290,14 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         children: [
           const OfflineBanner(),
           Expanded(
-            child: IndexedStack(index: _currentIndex, children: _tabs),
+            child: IndexedStack(index: safeIndex, children: tabs),
           ),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
+        currentIndex: safeIndex,
         onTap: (index) {
-          if (index >= _tabs.length) {
+          if (index >= tabs.length) {
             return;
           }
           setState(() => _currentIndex = index);
