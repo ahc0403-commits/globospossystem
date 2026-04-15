@@ -4,10 +4,16 @@ version: "1.0"
 date: "2026-04-12"
 target: "~/globos_pos_system (branch: main)"
 scope_basis: "stage1_scope_v1.md"
-status: "complete"
+status: "historical baseline — superseded by Phase 2+ implementation docs"
 ---
 
 # Phase 0 — Existing Repo Audit
+
+This document is a pre-Phase-2 snapshot of the repo before the later multi-access,
+WeTax, and hardening work landed. It is retained as a historical baseline and
+should not be read as the current shipped state. For active design truth, prefer
+the Phase 1 architecture, ADR-014, and the later phase completion/verification
+reports.
 
 ## 1. Supabase Schema Inventory
 
@@ -237,6 +243,8 @@ The `UNIQUE(order_id)` constraint must be evaluated — if the scope requires hy
 
 ## 4. Menu/Product VAT Handling
 
+> Historical note: this section records the pre-implementation audit state. The current shipped VAT behavior is documented in `/Users/andreahn/globos_pos_system/docs/phase_1_architecture.md` Section 12 and implemented in `process_payment`.
+
 ### 4.1 Current State
 
 | Aspect | Finding |
@@ -246,7 +254,7 @@ The `UNIQUE(order_id)` constraint must be evaluated — if the scope requires hy
 | Global VAT constant in app code | **Does not exist** |
 | Category-level tax classification | **Does not exist** — `menu_categories` is display-only (name, sort_order) |
 | Item type system | `order_items.item_type` has `standard/buffet_base/a_la_carte` — operational types, not tax classes |
-| Price storage convention | Prices stored as-is (presumably VAT-inclusive), no tax breakout |
+| Price storage convention | Prices were stored as-is at audit time; VAT semantics were not yet formalized in code |
 
 ### 4.2 Vietnam F&B VAT Rule
 

@@ -8,7 +8,7 @@ class DailyClosingService {
     await supabase.rpc(
       'create_daily_closing',
       params: {
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         if (notes != null && notes.isNotEmpty) 'p_notes': notes,
       },
     );
@@ -20,7 +20,7 @@ class DailyClosingService {
   }) async {
     final result = await supabase.rpc(
       'get_daily_closings',
-      params: {'p_restaurant_id': storeId, 'p_limit': limit},
+      params: {'p_store_id': storeId, 'p_limit': limit},
     );
 
     return List<Map<String, dynamic>>.from(

@@ -3,7 +3,7 @@ title: "Phase 2 Step 2 — Harness Report"
 version: "1.0"
 date: "2026-04-12"
 scope_basis: "stage1_scope_v1.3.md, Appendix A.1"
-status: "complete — awaiting apply"
+status: "historical — big-bang path abandoned"
 ---
 
 ## OBSOLETE (Big-Bang Path Abandoned)
@@ -12,6 +12,7 @@ This report documents the original big-bang `restaurants -> stores` rename path 
 The staging run on 2026-04-12 failed with a live dependency conflict on `get_user_restaurant_id()` (`2BP01`), confirming the approach is not safe for direct apply in current state.
 Replacement path is now POS-only phased rollout: **Expand -> Migrate -> Contract**.
 The original big-bang SQL artifacts are retained only as archive references under `docs/archive/`.
+Current shipped truth for the rename rollout is documented in `/Users/andreahn/globos_pos_system/docs/phase_1_architecture.md` Section 11 and the Phase 2 Step 2 expand/migrate reports.
 
 # Phase 2 Step 2 — Harness Report: restaurants → stores Rename
 

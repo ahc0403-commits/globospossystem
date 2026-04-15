@@ -7,7 +7,7 @@ class AdminAuditService {
   }) async {
     final result = await supabase.rpc(
       'get_admin_mutation_audit_trace',
-      params: {'p_restaurant_id': storeId, 'p_limit': limit},
+      params: {'p_store_id': storeId, 'p_limit': limit},
     );
 
     return List<Map<String, dynamic>>.from(
@@ -20,7 +20,7 @@ class AdminAuditService {
   }) async {
     final result = await supabase.rpc(
       'get_admin_today_summary',
-      params: {'p_restaurant_id': storeId},
+      params: {'p_store_id': storeId},
     );
 
     return Map<String, dynamic>.from(result as Map);

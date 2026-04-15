@@ -19,7 +19,7 @@ status: "COMPLETE"
 | I13 | wetax_polling_enabled=false (dispatcher on, poller skipping) | ✅ PASS |
 | I14 | wetax_request_einvoice_max_retries=5 seeded | ✅ PASS |
 | L2 | partner_credentials: 0 RLS policies (authenticated users denied) | ✅ PASS |
-| P6 | process_payment creates einvoice_job asynchronously | ✅ PASS |
+| P6 | process_payment inserts einvoice_job in the same RPC transaction | ✅ PASS |
 | RLS | All 11 Step 4 tables have RLS ENABLED | ✅ PASS |
 | seed | system_config: 4 rows seeded | ✅ PASS |
 
@@ -80,7 +80,7 @@ Commit: `b7d016f`
 | Item | Status | Reason |
 |------|--------|--------|
 | WT06 polling | Intentionally disabled | apitest NPE bug (Appendix B activation when vendor fixes) |
-| requestEinvoiceInfo "POS ID not found" | Expected on apitest | AP3 backoff handles this |
+| WT05 `/pos/invoices-issue` | Blocked by vendor-side apitest error | Latest retest hits server-side BigDecimal / null arithmetic failure; keep red-invoice flow behind admin retry and vendor follow-up |
 | process_payment not callable from SQL test | auth.uid() required | Dart app must call via authenticated session |
 | All stores use placeholder tax_entity | Dev state | Real onboarding via wetax-onboarding edge function |
 

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../core/ui/app_primitives.dart';
 import '../../main.dart';
 import 'onboarding_provider.dart';
 
@@ -14,7 +15,7 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
-  final _restaurantNameController = TextEditingController();
+  final _storeNameController = TextEditingController();
   final _addressController = TextEditingController();
   final _perPersonController = TextEditingController();
   final _fullNameController = TextEditingController();
@@ -22,7 +23,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   @override
   void dispose() {
-    _restaurantNameController.dispose();
+    _storeNameController.dispose();
     _addressController.dispose();
     _perPersonController.dispose();
     _fullNameController.dispose();
@@ -36,20 +37,27 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.surface0,
-      body: SafeArea(
+      body: AppShell(
+        padding: const EdgeInsets.all(AppSpacing.xl),
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: AppPanel(
+              padding: const EdgeInsets.all(AppSpacing.xl),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  const AppSectionHeader(
+                    title: 'SETUP',
+                    subtitle:
+                        'Create the first store and admin profile for this workspace.',
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
                   _ProgressDots(step: state.step),
-                  const SizedBox(height: 26),
+                  const SizedBox(height: AppSpacing.xl),
                   if (state.error != null)
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.only(bottom: AppSpacing.md),
                       child: Text(
                         state.error!,
                         style: GoogleFonts.notoSansKr(
@@ -60,7 +68,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     ),
                   Expanded(
                     child: switch (state.step) {
-                      0 => _restaurantStep(notifier, state.isLoading),
+                      0 => _storeStep(notifier, state.isLoading),
                       1 => _profileStep(notifier, state.isLoading),
                       _ => _doneStep(notifier, state),
                     },
@@ -74,20 +82,17 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     );
   }
 
-  Widget _restaurantStep(OnboardingNotifier notifier, bool isLoading) {
-    final needsPerPerson = _operationMode == 'buffet' || _operationMode == 'hybrid';
+  Widget _storeStep(OnboardingNotifier notifier, bool isLoading) {
+    final needsPerPerson =
+        _operationMode == 'buffet' || _operationMode == 'hybrid';
 
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'CREATE YOUR RESTAURANT',
-            style: GoogleFonts.bebasNeue(
-              color: AppColors.amber500,
-              fontSize: 36,
-              letterSpacing: 1.1,
-            ),
+            'CREATE YOUR STORE',
+            style: AppTextStyles.operationalTitle(size: 36),
           ),
           Text(
             'Set up your first location',
@@ -98,22 +103,31 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           ),
           const SizedBox(height: 18),
           TextField(
-            controller: _restaurantNameController,
+            controller: _storeNameController,
             style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-            decoration: const InputDecoration(labelText: 'Store Name'),
+            decoration: const InputDecoration(
+              labelText: 'Store Name',
+              prefixIcon: Icon(Icons.storefront_outlined),
+            ),
           ),
           const SizedBox(height: 10),
           TextField(
             controller: _addressController,
             style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-            decoration: const InputDecoration(labelText: 'Address'),
+            decoration: const InputDecoration(
+              labelText: 'Address',
+              prefixIcon: Icon(Icons.location_on_outlined),
+            ),
           ),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
             initialValue: _operationMode,
             dropdownColor: AppColors.surface1,
             style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-            decoration: const InputDecoration(labelText: 'Operation Mode'),
+            decoration: const InputDecoration(
+              labelText: 'Operation Mode',
+              prefixIcon: Icon(Icons.tune),
+            ),
             items: const [
               DropdownMenuItem(value: 'standard', child: Text('Standard')),
               DropdownMenuItem(value: 'buffet', child: Text('Buffet')),
@@ -129,9 +143,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             const SizedBox(height: 10),
             TextField(
               controller: _perPersonController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-              decoration: const InputDecoration(labelText: 'Per Person Charge'),
+              decoration: const InputDecoration(
+                labelText: 'Per Person Charge',
+                prefixIcon: Icon(Icons.payments_outlined),
+              ),
             ),
           ],
           const SizedBox(height: 24),
@@ -142,27 +161,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               onPressed: isLoading
                   ? null
                   : () async {
-                      final name = _restaurantNameController.text.trim();
+                      final name = _storeNameController.text.trim();
                       if (name.isEmpty) {
                         return;
                       }
                       final perPerson = needsPerPerson
                           ? double.tryParse(_perPersonController.text.trim())
                           : null;
-                      await notifier.createRestaurant(
+                      await notifier.createStore(
                         name,
                         _addressController.text.trim(),
                         _operationMode,
                         perPerson,
                       );
                     },
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.amber500,
-                foregroundColor: AppColors.surface0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
               child: isLoading
                   ? const SizedBox(
                       width: 20,
@@ -174,7 +186,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     )
                   : Text(
                       'NEXT',
-                      style: GoogleFonts.bebasNeue(fontSize: 24, letterSpacing: 1.0),
+                      style: GoogleFonts.bebasNeue(
+                        fontSize: 24,
+                        letterSpacing: 1.0,
+                      ),
                     ),
             ),
           ),
@@ -188,19 +203,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'YOUR PROFILE',
-            style: GoogleFonts.bebasNeue(
-              color: AppColors.amber500,
-              fontSize: 36,
-              letterSpacing: 1.1,
-            ),
-          ),
+          Text('YOUR PROFILE', style: AppTextStyles.operationalTitle(size: 36)),
           const SizedBox(height: 18),
           TextField(
             controller: _fullNameController,
             style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-            decoration: const InputDecoration(labelText: 'Full Name'),
+            decoration: const InputDecoration(
+              labelText: 'Full Name',
+              prefixIcon: Icon(Icons.badge_outlined),
+            ),
           ),
           const SizedBox(height: 12),
           Container(
@@ -230,15 +241,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       if (fullName.isEmpty) {
                         return;
                       }
-                      await notifier.createAdminAccount(fullName, 'super_admin');
+                      await notifier.createAdminAccount(
+                        fullName,
+                        'super_admin',
+                      );
                     },
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.amber500,
-                foregroundColor: AppColors.surface0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
               child: isLoading
                   ? const SizedBox(
                       width: 20,
@@ -250,7 +257,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     )
                   : Text(
                       'COMPLETE SETUP',
-                      style: GoogleFonts.bebasNeue(fontSize: 24, letterSpacing: 1.0),
+                      style: GoogleFonts.bebasNeue(
+                        fontSize: 24,
+                        letterSpacing: 1.0,
+                      ),
                     ),
             ),
           ),
@@ -278,9 +288,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               letterSpacing: 1.2,
             ),
           ),
-          if (state.createdRestaurantName != null)
+          if (state.createdStoreName != null)
             Text(
-              state.createdRestaurantName!,
+              state.createdStoreName!,
               style: GoogleFonts.notoSansKr(
                 color: AppColors.textSecondary,
                 fontSize: 16,
@@ -318,7 +328,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     )
                   : Text(
                       'GO TO DASHBOARD',
-                      style: GoogleFonts.bebasNeue(fontSize: 24, letterSpacing: 1.0),
+                      style: GoogleFonts.bebasNeue(
+                        fontSize: 24,
+                        letterSpacing: 1.0,
+                      ),
                     ),
             ),
           ),

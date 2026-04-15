@@ -2,9 +2,14 @@
 title: "Phase 2 Step 2 — Verification Plan"
 version: "1.0"
 date: "2026-04-12"
+status: "historical plan — big-bang apply not used"
 ---
 
 # Phase 2 Step 2 — Verification Plan
+
+> Historical note: this checklist belongs to the abandoned atomic rename apply plan.
+>
+> It should not be used as the current rollout checklist. The shipped path is the coexistence-based Expand -> Migrate -> Contract sequence documented in `/Users/andreahn/globos_pos_system/docs/phase_1_architecture.md` Section 11 plus the Step 2 expand/migrate reports.
 
 ## Pre-Apply Checks
 

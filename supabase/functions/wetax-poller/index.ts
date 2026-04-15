@@ -138,7 +138,7 @@ serve(async (req: Request) => {
     const now = new Date().toISOString();
     const { data: jobs } = await supabase
       .from("einvoice_jobs")
-      .select("id,ref_id,sid,tax_entity_id,redinvoice_requested")
+      .select("id,ref_id,sid,tax_entity_id,redinvoice_requested,dispatched_at")
       .eq("status", "dispatched")
       .lte("polling_next_at", now)
       .order("dispatched_at", { ascending: true })

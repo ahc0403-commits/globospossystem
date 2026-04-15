@@ -615,7 +615,7 @@ class _QcOverviewTab extends ConsumerWidget {
                           Expanded(
                             flex: 2,
                             child: Text(
-                              '$failCount',
+                              failCount,
                               style: GoogleFonts.notoSansKr(
                                 color: failCount == '0'
                                     ? AppColors.statusAvailable

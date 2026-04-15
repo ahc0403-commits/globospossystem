@@ -156,7 +156,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     );
   }
 
-  Future<void> processPayment(
+  Future<Map<String, dynamic>?> processPayment(
     String storeId,
     String orderId,
     double amount,
@@ -169,7 +169,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     );
 
     try {
-      await paymentService.processPayment(
+      final payment = await paymentService.processPayment(
         orderId: orderId,
         storeId: storeId,
         amount: amount,
@@ -183,21 +183,20 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         paymentSuccess: true,
         clearSelectedOrder: true,
       );
+      return payment;
     } catch (error) {
       state = state.copyWith(
         isProcessing: false,
         error: _mapPaymentError(error, 'Failed to process payment'),
       );
+      return null;
     }
   }
 
   Future<void> cancelOrder(String orderId, String storeId) async {
     state = state.copyWith(isProcessing: true, clearError: true);
     try {
-      await orderService.cancelOrder(
-        orderId: orderId,
-        storeId: storeId,
-      );
+      await orderService.cancelOrder(orderId: orderId, storeId: storeId);
       state = state.copyWith(
         isProcessing: false,
         clearSelectedOrder: true,

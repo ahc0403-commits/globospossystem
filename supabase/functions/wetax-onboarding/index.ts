@@ -223,16 +223,38 @@ serve(async (req: Request) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   // Allow service_role key OR internal caller header
   const internalSecret = Deno.env.get("INTERNAL_SECRET");
-  const authorized = authHeader === `Bearer ${serviceKey}` ||
-    (internalSecret && authHeader === `Bearer ${internalSecret}`);
-  if (!authorized) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
+
+  let authorized = authHeader === `Bearer ${serviceKey}` ||
+    (internalSecret && authHeader === `Bearer ${internalSecret}`);
+
+  if (!authorized && authHeader?.startsWith("Bearer ")) {
+    const jwt = authHeader.replace("Bearer ", "").trim();
+    const { data: authData } = await supabase.auth.getUser(jwt);
+    const user = authData.user;
+
+    if (user) {
+      const { data: actor } = await supabase
+        .from("users")
+        .select("role,is_active")
+        .eq("auth_id", user.id)
+        .maybeSingle();
+
+      if (
+        actor?.is_active === true &&
+        ["cashier", "admin", "store_admin", "brand_admin", "super_admin"].includes(actor.role)
+      ) {
+        authorized = true;
+      }
+    }
+  }
+
+  if (!authorized) {
+    return new Response("Unauthorized", { status: 401 });
+  }
 
   try {
     const body = await req.json();

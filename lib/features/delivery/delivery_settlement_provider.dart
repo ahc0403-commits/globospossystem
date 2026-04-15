@@ -95,7 +95,10 @@ class DeliverySettlementNotifier
         clearError: true,
       );
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: 'Failed to load settlement data: $e');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to load settlement data: $e',
+      );
     }
   }
 
@@ -105,17 +108,17 @@ class DeliverySettlementNotifier
     try {
       await supabase.rpc(
         'confirm_delivery_settlement_received',
-        params: {
-          'p_settlement_id': settlementId,
-          'p_restaurant_id': storeId,
-        },
+        params: {'p_settlement_id': settlementId, 'p_store_id': storeId},
       );
 
       // 성공 후 전체 리로드
       await load(storeId);
       state = state.copyWith(clearConfirming: true);
     } catch (e) {
-      state = state.copyWith(error: 'Deposit confirmation failed: $e', clearConfirming: true);
+      state = state.copyWith(
+        error: 'Deposit confirmation failed: $e',
+        clearConfirming: true,
+      );
     }
   }
 }

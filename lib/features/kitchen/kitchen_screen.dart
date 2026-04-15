@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../core/utils/time_utils.dart';
 
+import '../../core/ui/app_primitives.dart';
 import '../../main.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
@@ -177,60 +178,26 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                   child: Builder(
                     builder: (context) {
                       if (kitchenState.isLoading) {
-                        return const Center(
-                          child: CircularProgressIndicator(
-                            color: AppColors.amber500,
-                          ),
+                        return const AppLoadingView(
+                          label: 'Loading kitchen orders',
                         );
                       }
                       if (kitchenState.error != null) {
-                        return Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Could not load kitchen orders.',
-                                style: GoogleFonts.notoSansKr(
-                                  color: AppColors.statusCancelled,
-                                  fontSize: 14,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 12),
-                              ElevatedButton(
-                                onPressed: storeId == null
-                                    ? null
-                                    : () => notifier.loadOrders(storeId),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.amber500,
-                                  foregroundColor: AppColors.surface0,
-                                ),
-                                child: const Text('Retry'),
-                              ),
-                            ],
-                          ),
+                        return AppErrorState(
+                          title: 'Could not load kitchen orders',
+                          message:
+                              'Try reloading this board once the connection is stable.',
+                          onRetry: storeId == null
+                              ? null
+                              : () => notifier.loadOrders(storeId),
                         );
                       }
                       if (kitchenState.orders.isEmpty) {
-                        return Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.restaurant_menu,
-                                color: AppColors.textSecondary,
-                                size: 54,
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                'No active orders',
-                                style: GoogleFonts.notoSansKr(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          ),
+                        return const AppEmptyState(
+                          title: 'No active orders',
+                          message:
+                              'Incoming tickets will appear here as soon as the dining floor sends them.',
+                          icon: Icons.restaurant_menu,
                         );
                       }
 
@@ -258,7 +225,9 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                           final elapsed = _elapsedLabel(order.createdAt, _now);
 
                           return AnimatedContainer(
-                            key: index == 0 ? const Key('kitchen_first_order_card') : null,
+                            key: index == 0
+                                ? const Key('kitchen_first_order_card')
+                                : null,
                             duration: const Duration(milliseconds: 260),
                             decoration: BoxDecoration(
                               color: AppColors.surface1,
@@ -331,7 +300,9 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                                       final item = order.items[itemIndex];
                                       return InkWell(
                                         key: (index == 0 && itemIndex == 0)
-                                            ? const Key('kitchen_advance_status_button')
+                                            ? const Key(
+                                                'kitchen_advance_status_button',
+                                              )
                                             : null,
                                         onTap: () => _handleItemTap(
                                           notifier,
@@ -412,23 +383,16 @@ class _KitchenTopBar extends ConsumerWidget {
         : ref.watch(kitchenRestaurantNameProvider(storeId!));
 
     return Container(
-      height: 72,
+      height: 76,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.surface2)),
+        border: Border(bottom: BorderSide(color: AppColors.surface3)),
       ),
       child: Row(
         children: [
           const AppNavBar(),
           const SizedBox(width: 12),
-          Text(
-            'KITCHEN',
-            style: GoogleFonts.bebasNeue(
-              color: AppColors.amber500,
-              fontSize: 28,
-              letterSpacing: 1.0,
-            ),
-          ),
+          Text('KITCHEN', style: AppTextStyles.operationalTitle(size: 28)),
           const SizedBox(width: 16),
           Expanded(
             child: Center(

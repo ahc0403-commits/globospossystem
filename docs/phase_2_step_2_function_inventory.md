@@ -2,10 +2,16 @@
 title: "Phase 2 Step 2 — Function & Trigger Inventory"
 version: "1.0"
 date: "2026-04-12"
-status: "static analysis complete"
+status: "historical snapshot — expand-stage inventory before later hardening"
 ---
 
 # Phase 2 Step 2 — Function & Trigger Inventory
+
+This inventory captures the expand-stage function surface during the restaurant-
+era coexistence pass. It remains useful as a historical reference for rename and
+contract planning, but it is not the final shipped authorization model. Later
+multi-access hardening, auth-hook deployment, and write-boundary changes are
+documented in the subsequent architecture, ADR, and verification reports.
 
 ## Summary
 - Total active functions: 38

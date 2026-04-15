@@ -5,6 +5,8 @@ import '../../main.dart';
 import '../../core/services/einvoice_service.dart';
 import '../../widgets/error_toast.dart';
 
+enum _BuyerLookupState { idle, cacheHit, wt09Hit, manualFallback }
+
 /// Modal shown after successful payment.
 /// Step 1: Ask "Red invoice?" → Step 2: Buyer form.
 class RedInvoiceModal extends StatefulWidget {
@@ -25,14 +27,16 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
   bool _showForm = false;
   bool _isSubmitting = false;
 
-  final _taxCodeCtrl    = TextEditingController();
-  final _companyCtrl    = TextEditingController();
-  final _addressCtrl    = TextEditingController();
-  final _emailCtrl      = TextEditingController();
-  final _emailCcCtrl    = TextEditingController();
-  final _formKey        = GlobalKey<FormState>();
+  final _taxCodeCtrl = TextEditingController();
+  final _companyCtrl = TextEditingController();
+  final _addressCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _emailCcCtrl = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
 
   bool _isLookingUp = false;
+  _BuyerLookupState _lookupState = _BuyerLookupState.idle;
+  String? _lookupNote;
 
   @override
   void dispose() {
@@ -45,24 +49,55 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
   }
 
   Future<void> _onTaxCodeSubmitted(String taxCode) async {
-    if (taxCode.trim().isEmpty) return;
+    final normalized = taxCode.trim();
+    if (normalized.isEmpty) return;
     setState(() => _isLookingUp = true);
+
     try {
       final cached = await einvoiceService.lookupB2bBuyer(
         storeId: widget.storeId,
-        taxCode: taxCode.trim(),
+        taxCode: normalized,
       );
       if (!mounted) return;
       if (cached != null) {
         _companyCtrl.text = cached['tax_company_name'] ?? '';
         _addressCtrl.text = cached['tax_address'] ?? '';
-        _emailCtrl.text   = cached['receiver_email'] ?? '';
+        _emailCtrl.text = cached['receiver_email'] ?? '';
         _emailCcCtrl.text = cached['receiver_email_cc'] ?? '';
+        setState(() {
+          _lookupState = _BuyerLookupState.cacheHit;
+          _lookupNote = 'Known buyer loaded from store or tax-entity cache.';
+        });
+        return;
+      }
+
+      final company = await einvoiceService.lookupCompanyByTaxCode(normalized);
+      if (!mounted) return;
+      if (company != null) {
+        _companyCtrl.text = company['tax_company_name'] ?? _companyCtrl.text;
+        _addressCtrl.text = company['tax_address'] ?? _addressCtrl.text;
+        if (_emailCtrl.text.trim().isEmpty) {
+          _emailCtrl.text = company['receiver_email'] ?? '';
+        }
+        setState(() {
+          _lookupState = _BuyerLookupState.wt09Hit;
+          _lookupNote = 'WT09 company lookup filled legal name and address.';
+        });
+        return;
       }
     } catch (_) {
-      // silent — cache miss is fine
+      // graceful fallback: manual entry remains valid
     } finally {
-      if (mounted) setState(() => _isLookingUp = false);
+      if (mounted) {
+        setState(() {
+          if (_lookupState == _BuyerLookupState.idle) {
+            _lookupState = _BuyerLookupState.manualFallback;
+            _lookupNote =
+                'No cache or live WT09 match. Continue with manual entry.';
+          }
+          _isLookingUp = false;
+        });
+      }
     }
   }
 
@@ -71,12 +106,15 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
     setState(() => _isSubmitting = true);
     try {
       await einvoiceService.requestRedInvoice(
-        orderId:        widget.orderId,
-        receiverEmail:  _emailCtrl.text.trim(),
-        buyerTaxCode:   _taxCodeCtrl.text.trim(),
-        buyerName:      _companyCtrl.text.trim(),
-        buyerAddress:   _addressCtrl.text.trim(),
-        receiverEmailCc:_emailCcCtrl.text.trim().isEmpty ? null : _emailCcCtrl.text.trim(),
+        orderId: widget.orderId,
+        storeId: widget.storeId,
+        receiverEmail: _emailCtrl.text.trim(),
+        buyerTaxCode: _taxCodeCtrl.text.trim(),
+        buyerName: _companyCtrl.text.trim(),
+        buyerAddress: _addressCtrl.text.trim(),
+        receiverEmailCc: _emailCcCtrl.text.trim().isEmpty
+            ? null
+            : _emailCcCtrl.text.trim(),
       );
       if (!mounted) return;
       Navigator.of(context).pop(true); // true = submitted
@@ -198,11 +236,21 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
             ],
           ),
           const SizedBox(height: 10),
+          _lookupStatusPanel(),
+          const SizedBox(height: 10),
           _label('Company Name'),
-          _field(controller: _companyCtrl, hint: 'GLOBOSVN Co., Ltd.', required: false),
+          _field(
+            controller: _companyCtrl,
+            hint: 'GLOBOSVN Co., Ltd.',
+            required: false,
+          ),
           const SizedBox(height: 10),
           _label('Address'),
-          _field(controller: _addressCtrl, hint: 'Registered address', required: false),
+          _field(
+            controller: _addressCtrl,
+            hint: 'Registered address',
+            required: false,
+          ),
           const SizedBox(height: 10),
           _label('Email *'),
           _field(
@@ -233,7 +281,9 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
   List<Widget> _buildFormActions() {
     return [
       TextButton(
-        onPressed: _isSubmitting ? null : () => setState(() => _showForm = false),
+        onPressed: _isSubmitting
+            ? null
+            : () => setState(() => _showForm = false),
         child: Text(
           'Back',
           style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
@@ -247,8 +297,12 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
         ),
         child: _isSubmitting
             ? const SizedBox(
-                width: 18, height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
               )
             : Text(
                 'Submit',
@@ -256,6 +310,88 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
               ),
       ),
     ];
+  }
+
+  Widget _lookupStatusPanel() {
+    if (_lookupState == _BuyerLookupState.idle) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.surface0,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.surface2),
+        ),
+        child: Text(
+          'Enter a tax code to check store cache first, then WT09 if nothing is cached.',
+          style: GoogleFonts.notoSansKr(
+            color: AppColors.textSecondary,
+            fontSize: 12,
+            height: 1.35,
+          ),
+        ),
+      );
+    }
+
+    final (color, icon, title) = switch (_lookupState) {
+      _BuyerLookupState.cacheHit => (
+        AppColors.statusAvailable,
+        Icons.inventory_2_outlined,
+        'Cache Match',
+      ),
+      _BuyerLookupState.wt09Hit => (
+        AppColors.amber500,
+        Icons.cloud_sync_outlined,
+        'WT09 Auto-Fill',
+      ),
+      _BuyerLookupState.manualFallback => (
+        AppColors.statusOccupied,
+        Icons.edit_note,
+        'Manual Entry',
+      ),
+      _ => (AppColors.textSecondary, Icons.info_outline, 'Buyer Lookup'),
+    };
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.notoSansKr(
+                    color: color,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _lookupNote ?? '',
+                  style: GoogleFonts.notoSansKr(
+                    color: AppColors.textPrimary,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _label(String text) {
@@ -287,8 +423,14 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
       style: GoogleFonts.notoSansKr(color: AppColors.textPrimary, fontSize: 14),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: GoogleFonts.notoSansKr(color: AppColors.textSecondary, fontSize: 13),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        hintStyle: GoogleFonts.notoSansKr(
+          color: AppColors.textSecondary,
+          fontSize: 13,
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
         filled: true,
         fillColor: AppColors.surface0,
         border: OutlineInputBorder(

@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/layout/platform_info.dart';
 import '../../core/services/connectivity_service.dart';
+import '../../core/ui/app_primitives.dart';
 import '../../core/utils/time_utils.dart';
 import '../../main.dart';
 import '../../widgets/app_nav_bar.dart';
@@ -214,14 +215,11 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
     if (!PlatformInfo.isAndroid) {
       return Scaffold(
         backgroundColor: AppColors.surface0,
-        body: Center(
-          child: Text(
-            'Camera is only supported on Android tablets',
-            style: GoogleFonts.notoSansKr(
-              color: AppColors.textPrimary,
-              fontSize: 18,
-            ),
-          ),
+        body: const AppEmptyState(
+          title: 'Android tablet required',
+          message:
+              'The attendance kiosk camera flow is only available on Android tablets.',
+          icon: Icons.tablet_android,
         ),
       );
     }
@@ -248,6 +246,11 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                           const AppNavBar(),
                           const SizedBox(width: 10),
                         ],
+                        const AppStatusBadge(
+                          label: 'ATTENDANCE',
+                          color: AppColors.statusInfo,
+                        ),
+                        const SizedBox(width: 12),
                         Text(
                           '${_nowVn.hour.toString().padLeft(2, '0')}:${_nowVn.minute.toString().padLeft(2, '0')}',
                           style: GoogleFonts.bebasNeue(

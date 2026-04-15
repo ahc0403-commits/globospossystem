@@ -9,6 +9,8 @@ import '../../core/services/connectivity_service.dart';
 import '../../core/layout/platform_info.dart';
 import '../../core/hardware/printer_service.dart';
 import '../../core/hardware/receipt_builder.dart';
+import '../../core/ui/app_primitives.dart';
+import '../../core/utils/permission_utils.dart';
 import '../../main.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
@@ -17,6 +19,8 @@ import '../auth/auth_provider.dart';
 import '../payment/payment_provider.dart';
 import '../payment/einvoice_status_badge.dart';
 import '../settings/printer_provider.dart';
+import '../../core/services/payment_proof_service.dart';
+import 'payment_proof_modal.dart';
 import 'red_invoice_modal.dart';
 
 class CashierScreen extends ConsumerStatefulWidget {
@@ -32,6 +36,8 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   Timer? _successTimer;
   String? _lastError;
   String? _lastCompletedOrderId; // for einvoice badge
+  bool _isFlushingProofQueue = false;
+  bool _hasAttemptedProofFlush = false;
   late final ProviderSubscription<PaymentState> _paymentSub;
 
   @override
@@ -55,6 +61,22 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
         }
       }
     });
+  }
+
+  Future<void> _flushProofQueueIfNeeded(bool isOnline) async {
+    if (!isOnline || _isFlushingProofQueue) {
+      return;
+    }
+
+    _isFlushingProofQueue = true;
+    try {
+      final uploaded = await paymentProofService.flushPendingUploads();
+      if (mounted && uploaded > 0) {
+        showSuccessToast(context, '$uploaded queued proof photo(s) uploaded.');
+      }
+    } finally {
+      _isFlushingProofQueue = false;
+    }
   }
 
   void _ensureLoaded(String? storeId) {
@@ -148,9 +170,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   void _showTodaySummaryDialog(String storeId) {
     showDialog(
       context: context,
-      builder: (context) => _CashierTodaySummaryDialog(
-        storeId: storeId,
-      ),
+      builder: (context) => _CashierTodaySummaryDialog(storeId: storeId),
     );
   }
 
@@ -191,7 +211,10 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       return;
     }
     if (result != PrintResult.success) {
-      showErrorToast(context, 'Payment complete. Receipt print failed — check the printer.');
+      showErrorToast(
+        context,
+        'Payment complete. Receipt print failed — check the printer.',
+      );
     }
   }
 
@@ -200,7 +223,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     final authState = ref.watch(authProvider);
     final storeId = authState.storeId;
     final role = authState.role ?? '';
-    final isAdmin = role == 'admin' || role == 'super_admin';
+    final isAdmin = PermissionUtils.isAdminLike(role);
     _ensureLoaded(storeId);
 
     final paymentState = ref.watch(paymentProvider);
@@ -208,6 +231,12 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     final currency = NumberFormat('#,###', 'vi_VN');
     // 오프라인 상태 감지 - RULES.md: 결제는 온라인 필수
     final isOnline = ref.watch(connectivityProvider).asData?.value ?? true;
+    if (!isOnline) {
+      _hasAttemptedProofFlush = false;
+    } else if (storeId != null && !_hasAttemptedProofFlush) {
+      _hasAttemptedProofFlush = true;
+      Future.microtask(() => _flushProofQueueIfNeeded(isOnline));
+    }
 
     return Scaffold(
       key: const Key('cashier_root'),
@@ -223,13 +252,13 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                   decoration: const BoxDecoration(
                     color: AppColors.surface1,
                     border: Border(
-                      right: BorderSide(color: AppColors.surface2),
+                      right: BorderSide(color: AppColors.surface3),
                     ),
                   ),
                   child: Column(
                     children: [
                       Container(
-                        height: 80,
+                        height: 88,
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Row(
                           children: [
@@ -237,11 +266,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                             const SizedBox(width: 10),
                             Text(
                               'CASHIER',
-                              style: GoogleFonts.bebasNeue(
-                                color: AppColors.amber500,
-                                fontSize: 28,
-                                letterSpacing: 1.0,
-                              ),
+                              style: AppTextStyles.operationalTitle(size: 28),
                             ),
                             const Spacer(),
                             IconButton(
@@ -270,14 +295,11 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       ),
                       Expanded(
                         child: paymentState.orders.isEmpty
-                            ? Center(
-                                child: Text(
-                                  'No payable orders',
-                                  style: GoogleFonts.notoSansKr(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 14,
-                                  ),
-                                ),
+                            ? const AppEmptyState(
+                                title: 'No payable orders',
+                                message:
+                                    'Completed table orders will appear here when they are ready for payment.',
+                                icon: Icons.point_of_sale_outlined,
                               )
                             : ListView.separated(
                                 padding: const EdgeInsets.fromLTRB(
@@ -367,14 +389,11 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       Padding(
                         padding: const EdgeInsets.all(24),
                         child: paymentState.selectedOrder == null
-                            ? Center(
-                                child: Text(
-                                  'Select a table to process payment',
-                                  style: GoogleFonts.notoSansKr(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 18,
-                                  ),
-                                ),
+                            ? const AppEmptyState(
+                                title: 'Select a table',
+                                message:
+                                    'Choose a payable order from the left to open the payment workspace.',
+                                icon: Icons.table_bar_outlined,
                               )
                             : _SelectedOrderView(
                                 order: paymentState.selectedOrder!,
@@ -402,7 +421,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                     }
                                   }
 
-                                  await notifier.processPayment(
+                                  final payment = await notifier.processPayment(
                                     storeId,
                                     selectedOrder.orderId,
                                     selectedOrder.totalAmount,
@@ -418,10 +437,69 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                     );
                                     setState(() {
                                       _selectedMethod = null;
-                                      _lastCompletedOrderId = selectedOrder.orderId;
+                                      _lastCompletedOrderId =
+                                          selectedOrder.orderId;
                                     });
+                                    final proofRequired =
+                                        method == 'card' || method == 'pay';
+                                    final paymentId = payment?['id']
+                                        ?.toString();
+
+                                    if (proofRequired &&
+                                        paymentId != null &&
+                                        context.mounted) {
+                                      try {
+                                        await paymentProofService
+                                            .markProofRequired(
+                                              paymentId: paymentId,
+                                              storeId: storeId,
+                                            );
+                                        if (!context.mounted) {
+                                          return;
+                                        }
+
+                                        final proofResult =
+                                            await showDialog<
+                                              PaymentProofSaveResult?
+                                            >(
+                                              context: context,
+                                              barrierDismissible: false,
+                                              builder: (_) => PaymentProofModal(
+                                                paymentId: paymentId,
+                                                storeId: storeId,
+                                                methodLabel: method,
+                                              ),
+                                            );
+
+                                        if (context.mounted &&
+                                            proofResult != null) {
+                                          if (proofResult.queued) {
+                                            showErrorToast(
+                                              context,
+                                              'Proof upload queued locally. It will retry automatically.',
+                                            );
+                                          } else if (proofResult.uploaded) {
+                                            showSuccessToast(
+                                              context,
+                                              'Payment proof saved.',
+                                            );
+                                          }
+                                        }
+                                      } catch (e) {
+                                        if (context.mounted) {
+                                          showErrorToast(
+                                            context,
+                                            'Proof flow failed: $e',
+                                          );
+                                        }
+                                      }
+                                    }
+
                                     // Stage 2: Red Invoice modal
-                                    if (mounted && method != 'service') {
+                                    if (method != 'service') {
+                                      if (!context.mounted) {
+                                        return;
+                                      }
                                       await showDialog<bool>(
                                         context: context,
                                         barrierDismissible: false,
@@ -455,7 +533,10 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                   if (context.mounted &&
                                       ref.read(paymentProvider).error == null) {
                                     setState(() => _selectedMethod = null);
-                                    showSuccessToast(context, 'Order cancelled');
+                                    showSuccessToast(
+                                      context,
+                                      'Order cancelled',
+                                    );
                                   }
                                 },
                                 onReprint: () async {
@@ -572,10 +653,6 @@ class _SelectedOrderView extends StatelessWidget {
           alignment: Alignment.centerRight,
           child: OutlinedButton.icon(
             onPressed: isProcessing ? null : onReprint,
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: AppColors.surface2),
-              foregroundColor: AppColors.textPrimary,
-            ),
             icon: const Icon(Icons.print, size: 16),
             label: Text(
               'Reprint Receipt',
@@ -588,12 +665,7 @@ class _SelectedOrderView extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.surface1,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.surface2),
-            ),
+          child: AppPanel(
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
@@ -601,7 +673,7 @@ class _SelectedOrderView extends StatelessWidget {
                   child: ListView.separated(
                     itemCount: order.items.length,
                     separatorBuilder: (_, _) =>
-                        const Divider(color: AppColors.surface2),
+                        const Divider(color: AppColors.surface3),
                     itemBuilder: (context, index) {
                       final item = order.items[index];
                       final itemName = item.label ?? 'Item';
@@ -629,7 +701,7 @@ class _SelectedOrderView extends StatelessWidget {
                     },
                   ),
                 ),
-                const Divider(color: AppColors.surface2, height: 26),
+                const Divider(color: AppColors.surface3, height: 26),
                 Row(
                   children: [
                     Text(
@@ -761,19 +833,6 @@ class _SelectedOrderView extends StatelessWidget {
                         selectedMethod == null || isProcessing || !isOnline
                         ? null
                         : onProcess,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.amber500,
-                      foregroundColor: AppColors.surface0,
-                      disabledBackgroundColor: AppColors.amber500.withValues(
-                        alpha: 0.4,
-                      ),
-                      disabledForegroundColor: AppColors.surface0.withValues(
-                        alpha: 0.8,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
                     child: isProcessing
                         ? const SizedBox(
                             width: 22,
@@ -784,7 +843,9 @@ class _SelectedOrderView extends StatelessWidget {
                             ),
                           )
                         : Text(
-                            isServiceSelected ? 'Service processed' : 'PROCESS PAYMENT',
+                            isServiceSelected
+                                ? 'Service processed'
+                                : 'PROCESS PAYMENT',
                             style: GoogleFonts.bebasNeue(
                               fontSize: 22,
                               letterSpacing: 1.0,
@@ -954,8 +1015,7 @@ class _CashierTodaySummaryDialog extends ConsumerWidget {
           ),
           const Spacer(),
           InkWell(
-            onTap: () =>
-                ref.refresh(cashierTodaySummaryProvider(storeId)),
+            onTap: () => ref.refresh(cashierTodaySummaryProvider(storeId)),
             borderRadius: BorderRadius.circular(4),
             child: const Padding(
               padding: EdgeInsets.all(4),
@@ -1011,68 +1071,47 @@ class _CashierTodaySummaryDialog extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _summarySection(
-          'Revenue Payment',
-          [
-            _summaryRow(
-              'Payment Count',
-              '${summary.paymentsCount}',
-            ),
-            _summaryRow(
-              'Total',
-              '₫${currency.format(summary.paymentsTotal)}',
-              valueColor: AppColors.amber500,
-              bold: true,
-            ),
-            _summaryRow(
-              'Cash',
-              '₫${currency.format(summary.paymentsCash)}',
-            ),
-            _summaryRow(
-              'Card',
-              '₫${currency.format(summary.paymentsCard)}',
-            ),
-            _summaryRow(
-              'Other (Pay, etc.)',
-              '₫${currency.format(summary.paymentsPay)}',
-            ),
-          ],
-        ),
+        _summarySection('Revenue Payment', [
+          _summaryRow('Payment Count', '${summary.paymentsCount}'),
+          _summaryRow(
+            'Total',
+            '₫${currency.format(summary.paymentsTotal)}',
+            valueColor: AppColors.amber500,
+            bold: true,
+          ),
+          _summaryRow('Cash', '₫${currency.format(summary.paymentsCash)}'),
+          _summaryRow('Card', '₫${currency.format(summary.paymentsCard)}'),
+          _summaryRow(
+            'Other (Pay, etc.)',
+            '₫${currency.format(summary.paymentsPay)}',
+          ),
+        ]),
         const SizedBox(height: 16),
-        _summarySection(
-          'Service (not counted)',
-          [
-            _summaryRow(
-              'Service Count',
-              '${summary.serviceCount}',
-            ),
-            _summaryRow(
-              'Service Total',
-              '₫${currency.format(summary.serviceTotal)}',
-            ),
-          ],
-        ),
+        _summarySection('Service (not counted)', [
+          _summaryRow('Service Count', '${summary.serviceCount}'),
+          _summaryRow(
+            'Service Total',
+            '₫${currency.format(summary.serviceTotal)}',
+          ),
+        ]),
         const SizedBox(height: 16),
-        _summarySection(
-          'Order Status',
-          [
-            _summaryRow(
-              'Done',
-              '${summary.ordersCompleted}',
-              valueColor: AppColors.statusAvailable,
-            ),
-            _summaryRow(
-              'In Progress',
-              '${summary.ordersActive}',
-              valueColor: AppColors.amber500,
-            ),
-            _summaryRow(
-              'Cancel',
-              '${summary.ordersCancelled}',
-              valueColor: AppColors.statusCancelled,
-            ),
-          ],
-        ),
+        _summarySection('Order Status', [
+          _summaryRow(
+            'Done',
+            '${summary.ordersCompleted}',
+            valueColor: AppColors.statusAvailable,
+          ),
+          _summaryRow(
+            'In Progress',
+            '${summary.ordersActive}',
+            valueColor: AppColors.amber500,
+          ),
+          _summaryRow(
+            'Cancel',
+            '${summary.ordersCancelled}',
+            valueColor: AppColors.statusCancelled,
+          ),
+        ]),
       ],
     );
   }

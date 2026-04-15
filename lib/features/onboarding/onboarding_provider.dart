@@ -9,31 +9,30 @@ class OnboardingState {
     this.step = 0,
     this.isLoading = false,
     this.error,
-    this.createdRestaurantId,
-    this.createdRestaurantName,
+    this.createdStoreId,
+    this.createdStoreName,
   });
 
   final int step;
   final bool isLoading;
   final String? error;
-  final String? createdRestaurantId;
-  final String? createdRestaurantName;
+  final String? createdStoreId;
+  final String? createdStoreName;
 
   OnboardingState copyWith({
     int? step,
     bool? isLoading,
     String? error,
-    String? createdRestaurantId,
-    String? createdRestaurantName,
+    String? createdStoreId,
+    String? createdStoreName,
     bool clearError = false,
   }) {
     return OnboardingState(
       step: step ?? this.step,
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
-      createdRestaurantId: createdRestaurantId ?? this.createdRestaurantId,
-      createdRestaurantName:
-          createdRestaurantName ?? this.createdRestaurantName,
+      createdStoreId: createdStoreId ?? this.createdStoreId,
+      createdStoreName: createdStoreName ?? this.createdStoreName,
     );
   }
 }
@@ -43,7 +42,7 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
 
   final Ref ref;
 
-  Future<void> createRestaurant(
+  Future<void> createStore(
     String name,
     String address,
     String operationMode,
@@ -51,12 +50,12 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
   ) async {
     final authState = ref.read(authProvider);
     if (authState.role != 'super_admin') {
-      state = state.copyWith(error: 'Only super_admin can create restaurants');
+      state = state.copyWith(error: 'Only super_admin can create stores');
       return;
     }
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final inserted = await restaurantService.createRestaurant(
+      final inserted = await storeService.createStore(
         name: name,
         slug: '',
         operationMode: operationMode,
@@ -67,14 +66,14 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
       state = state.copyWith(
         isLoading: false,
         step: 1,
-        createdRestaurantId: inserted['id']?.toString(),
-        createdRestaurantName: inserted['name']?.toString(),
+        createdStoreId: inserted['id']?.toString(),
+        createdStoreName: inserted['name']?.toString(),
         clearError: true,
       );
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Failed to create restaurant: $error',
+        error: 'Failed to create store: $error',
       );
     }
   }
@@ -82,10 +81,10 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
   Future<void> createAdminAccount(String fullName, String role) async {
     final authState = ref.read(authProvider);
     final user = authState.user;
-    final storeId = state.createdRestaurantId;
+    final storeId = state.createdStoreId;
     if (user == null || storeId == null) {
       state = state.copyWith(
-        error: 'Missing user or restaurant setup information.',
+        error: 'Missing user or store setup information.',
       );
       return;
     }
@@ -95,7 +94,7 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
       await supabase.rpc(
         'complete_onboarding_account_setup',
         params: {
-          'p_restaurant_id': storeId,
+          'p_store_id': storeId,
           'p_full_name': fullName,
           'p_role': role,
         },

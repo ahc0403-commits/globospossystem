@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../main.dart';
+import '../ui/app_theme.dart';
 
 class SidebarItem {
-  const SidebarItem({required this.icon, required this.label, this.onTap, this.itemKey});
+  const SidebarItem({
+    required this.icon,
+    required this.label,
+    this.onTap,
+    this.itemKey,
+  });
 
   final IconData icon;
   final String label;
@@ -41,17 +46,17 @@ class WebSidebarLayout extends StatelessWidget {
       body: Row(
         children: [
           Container(
-            width: 220,
+            width: 240,
             color: AppColors.surface1,
             child: Column(
               children: [
                 Container(
-                  height: 64,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  height: 72,
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
                   alignment: Alignment.centerLeft,
                   decoration: const BoxDecoration(
                     border: Border(
-                      bottom: BorderSide(color: AppColors.surface2),
+                      bottom: BorderSide(color: AppColors.surface3),
                     ),
                   ),
                   child: Row(
@@ -62,11 +67,7 @@ class WebSidebarLayout extends StatelessWidget {
                       ],
                       Text(
                         title,
-                        style: GoogleFonts.bebasNeue(
-                          color: AppColors.amber500,
-                          fontSize: 22,
-                          letterSpacing: 1.5,
-                        ),
+                        style: AppTextStyles.operationalTitle(size: 24),
                       ),
                     ],
                   ),
@@ -107,12 +108,12 @@ class WebSidebarLayout extends StatelessWidget {
             child: Column(
               children: [
                 Container(
-                  height: 64,
+                  height: 72,
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   decoration: const BoxDecoration(
                     color: AppColors.surface0,
                     border: Border(
-                      bottom: BorderSide(color: AppColors.surface2),
+                      bottom: BorderSide(color: AppColors.surface3),
                     ),
                   ),
                   child: Row(
@@ -121,9 +122,9 @@ class WebSidebarLayout extends StatelessWidget {
                         items.isNotEmpty && selectedIndex < items.length
                             ? items[selectedIndex].label.toUpperCase()
                             : '',
-                        style: GoogleFonts.bebasNeue(
+                        style: AppTextStyles.operationalTitle(
                           color: AppColors.textSecondary,
-                          fontSize: 18,
+                          size: 18,
                           letterSpacing: 2,
                         ),
                       ),
@@ -166,12 +167,12 @@ class _SidebarNavItem extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
           color: isSelected ? AppColors.surface2 : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          border: isSelected
-              ? const Border(
-                  left: BorderSide(color: AppColors.amber500, width: 4),
-                )
-              : null,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.amber500.withValues(alpha: 0.35)
+                : Colors.transparent,
+          ),
         ),
         child: Row(
           children: [

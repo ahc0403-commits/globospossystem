@@ -10,7 +10,7 @@ class QcService {
   Future<List<Map<String, dynamic>>> fetchTemplates(String storeId) async {
     final result = await supabase.rpc(
       'get_qc_templates',
-      params: {'p_restaurant_id': storeId, 'p_scope': 'visible'},
+      params: {'p_store_id': storeId, 'p_scope': 'visible'},
     );
     return List<Map<String, dynamic>>.from(result as List);
   }
@@ -25,7 +25,7 @@ class QcService {
     await supabase.rpc(
       'create_qc_template',
       params: {
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_category': category,
         'p_criteria_text': criteriaText,
         'p_criteria_photo_url': criteriaPhotoUrl,
@@ -44,7 +44,7 @@ class QcService {
     await supabase.rpc(
       'create_qc_template',
       params: {
-        'p_restaurant_id': null,
+        'p_store_id': null,
         'p_category': category,
         'p_criteria_text': criteriaText,
         'p_criteria_photo_url': criteriaPhotoUrl,
@@ -57,7 +57,7 @@ class QcService {
   Future<List<Map<String, dynamic>>> fetchGlobalTemplates() async {
     final result = await supabase.rpc(
       'get_qc_templates',
-      params: {'p_restaurant_id': null, 'p_scope': 'global'},
+      params: {'p_store_id': null, 'p_scope': 'global'},
     );
     return List<Map<String, dynamic>>.from(result as List);
   }
@@ -81,7 +81,7 @@ class QcService {
     final result = await supabase.rpc(
       'get_qc_checks',
       params: {
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_from': from.toIso8601String().substring(0, 10),
         'p_to': to.toIso8601String().substring(0, 10),
       },
@@ -121,7 +121,7 @@ class QcService {
     await supabase.rpc(
       'upsert_qc_check',
       params: {
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_template_id': templateId,
         'p_check_date': checkDate,
         'p_result': result,
@@ -191,7 +191,7 @@ class QcService {
     await supabase.rpc(
       'create_qc_followup',
       params: {
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_source_check_id': sourceCheckId,
         'p_assigned_to_name': assignedToName,
       },
@@ -208,7 +208,7 @@ class QcService {
       'update_qc_followup_status',
       params: {
         'p_followup_id': followupId,
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_status': status,
         'p_resolution_notes': resolutionNotes,
       },
@@ -222,7 +222,7 @@ class QcService {
     final result = await supabase.rpc(
       'get_qc_followups',
       params: {
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_status_filter': statusFilter,
       },
     );
@@ -239,7 +239,7 @@ class QcService {
     final result = await supabase.rpc(
       'get_qc_analytics',
       params: {
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_from': from.toIso8601String().substring(0, 10),
         'p_to': to.toIso8601String().substring(0, 10),
       },

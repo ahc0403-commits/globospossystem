@@ -8,11 +8,7 @@ class OrderService {
   }) async {
     final result = await supabase.rpc(
       'create_order',
-      params: {
-        'p_restaurant_id': storeId,
-        'p_table_id': tableId,
-        'p_items': items,
-      },
+      params: {'p_store_id': storeId, 'p_table_id': tableId, 'p_items': items},
     );
     return Map<String, dynamic>.from(result as Map);
   }
@@ -26,7 +22,7 @@ class OrderService {
     final result = await supabase.rpc(
       'create_buffet_order',
       params: {
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_table_id': tableId,
         'p_guest_count': guestCount,
         'p_extra_items': extraItems,
@@ -42,11 +38,7 @@ class OrderService {
   }) async {
     final result = await supabase.rpc(
       'add_items_to_order',
-      params: {
-        'p_order_id': orderId,
-        'p_restaurant_id': storeId,
-        'p_items': items,
-      },
+      params: {'p_order_id': orderId, 'p_store_id': storeId, 'p_items': items},
     );
     return (result as List)
         .map((e) => Map<String, dynamic>.from(e as Map))
@@ -62,7 +54,7 @@ class OrderService {
       'update_order_item_status',
       params: {
         'p_item_id': itemId,
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_new_status': status,
       },
     );
@@ -74,7 +66,7 @@ class OrderService {
   }) async {
     final result = await supabase.rpc(
       'cancel_order',
-      params: {'p_order_id': orderId, 'p_restaurant_id': storeId},
+      params: {'p_order_id': orderId, 'p_store_id': storeId},
     );
     return Map<String, dynamic>.from(result as Map);
   }
@@ -85,10 +77,7 @@ class OrderService {
   }) async {
     await supabase.rpc(
       'cancel_order_item',
-      params: {
-        'p_item_id': itemId,
-        'p_restaurant_id': storeId,
-      },
+      params: {'p_item_id': itemId, 'p_store_id': storeId},
     );
   }
 
@@ -101,7 +90,7 @@ class OrderService {
       'edit_order_item_quantity',
       params: {
         'p_item_id': itemId,
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_new_quantity': newQuantity,
       },
     );
@@ -116,7 +105,7 @@ class OrderService {
       'transfer_order_table',
       params: {
         'p_order_id': orderId,
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_new_table_id': newTableId,
       },
     );

@@ -15,7 +15,7 @@ class StaffService {
         'password': password,
         'full_name': fullName,
         'role': role,
-        'restaurant_id': storeId,
+        'store_id': storeId,
       },
     );
     if (response.status != 200) {
@@ -46,7 +46,7 @@ class StaffService {
       'admin_update_staff_account',
       params: {
         'p_user_id': userId,
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_full_name': fullName,
         'p_is_active': isActive,
         'p_extra_permissions': extraPermissions,

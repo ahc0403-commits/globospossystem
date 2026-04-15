@@ -33,7 +33,7 @@ class MenuService {
     await supabase.rpc(
       'admin_create_menu_category',
       params: {
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_name': name,
         'p_sort_order': sortOrder,
       },
@@ -50,7 +50,7 @@ class MenuService {
     await supabase.rpc(
       'admin_create_menu_item',
       params: {
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_category_id': categoryId,
         'p_name': name,
         'p_price': price,

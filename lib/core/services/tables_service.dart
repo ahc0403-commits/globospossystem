@@ -20,7 +20,7 @@ class TablesService {
     await supabase.rpc(
       'admin_create_table',
       params: {
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_table_number': tableNumber,
         'p_seat_count': seatCount,
       },

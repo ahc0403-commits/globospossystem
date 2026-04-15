@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../core/services/connectivity_service.dart';
+import '../core/ui/app_primitives.dart';
 import '../features/admin/providers/menu_provider.dart';
 import '../features/order/order_model.dart';
 import '../features/order/order_provider.dart';
@@ -48,12 +49,14 @@ class OrderWorkspace extends StatelessWidget {
   final Future<void> Function() onCancelOrder;
   final Future<void> Function() onSendOrder;
   final bool canManageSentItems;
-  final Future<void> Function(OrderItem item, String nextStatus)? onCycleSentItemStatus;
+  final Future<void> Function(OrderItem item, String nextStatus)?
+  onCycleSentItemStatus;
   final bool showPaymentActions;
   final Future<void> Function(String method)? onProcessPayment;
   final bool isProcessingPayment;
   final Future<void> Function(String itemId)? onCancelOrderItem;
-  final Future<void> Function(String itemId, int newQuantity)? onEditOrderItemQuantity;
+  final Future<void> Function(String itemId, int newQuantity)?
+  onEditOrderItemQuantity;
   final VoidCallback? onTransferTable;
 
   @override
@@ -190,47 +193,35 @@ class _MenuBrowser extends StatelessWidget {
     final currency = NumberFormat('#,###', 'vi_VN');
 
     if (menuLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColors.amber500),
-      );
+      return const AppLoadingView(label: 'Loading menu');
     }
 
     if (menuError) {
-      return Center(
-        child: Text(
-          'Failed to load menu.',
-          style: GoogleFonts.notoSansKr(
-            color: AppColors.statusCancelled,
-            fontSize: 14,
-          ),
-        ),
+      return const AppErrorState(
+        title: 'Failed to load menu',
+        message: 'Categories and sellable items could not be loaded.',
       );
     }
 
-    return Container(
+    return AppPanel(
       key: const Key('menu_root'),
-      color: AppColors.surface0,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Menu',
-            style: GoogleFonts.notoSansKr(
-              color: AppColors.textPrimary,
-              fontSize: 22,
-              fontWeight: FontWeight.w600,
-            ),
+          const AppSectionHeader(
+            title: 'MENU',
+            subtitle: 'Browse categories and add items to the current table.',
           ),
           const SizedBox(height: 12),
           SizedBox(
             height: 42,
             child: categories.isEmpty
-                ? Align(
+                ? const Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
                       'No categories',
-                      style: GoogleFonts.notoSansKr(
+                      style: TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 13,
                       ),
@@ -281,14 +272,10 @@ class _MenuBrowser extends StatelessWidget {
           const SizedBox(height: 16),
           Expanded(
             child: filteredItems.isEmpty
-                ? Center(
-                    child: Text(
-                      'No menu items in this category.',
-                      style: GoogleFonts.notoSansKr(
-                        color: AppColors.textSecondary,
-                        fontSize: 14,
-                      ),
-                    ),
+                ? const AppEmptyState(
+                    title: 'No menu items in this category',
+                    message: 'Switch categories or add menu entries in admin.',
+                    icon: Icons.inventory_2_outlined,
                   )
                 : GridView.builder(
                     itemCount: filteredItems.length,
@@ -417,12 +404,14 @@ class _CurrentOrderPanel extends ConsumerStatefulWidget {
   final Future<void> Function() onCancelOrder;
   final Future<void> Function() onSendOrder;
   final bool canManageSentItems;
-  final Future<void> Function(OrderItem item, String nextStatus)? onCycleSentItemStatus;
+  final Future<void> Function(OrderItem item, String nextStatus)?
+  onCycleSentItemStatus;
   final bool showPaymentActions;
   final Future<void> Function(String method)? onProcessPayment;
   final bool isProcessingPayment;
   final Future<void> Function(String itemId)? onCancelOrderItem;
-  final Future<void> Function(String itemId, int newQuantity)? onEditOrderItemQuantity;
+  final Future<void> Function(String itemId, int newQuantity)?
+  onEditOrderItemQuantity;
   final VoidCallback? onTransferTable;
 
   @override
@@ -508,10 +497,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
     );
     final activeTotal = (widget.state.activeOrder?.items ?? const <OrderItem>[])
         .where((item) => item.status != 'cancelled')
-        .fold<double>(
-          0,
-          (sum, item) => sum + (item.unitPrice * item.quantity),
-        );
+        .fold<double>(0, (sum, item) => sum + (item.unitPrice * item.quantity));
     final activeStatus = widget.state.activeOrder?.status.toLowerCase();
     final canCancelOrder =
         widget.state.activeOrder != null &&
@@ -524,12 +510,8 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
         activeStatus != 'cancelled' &&
         widget.state.cart.isEmpty;
 
-    return Container(
+    return AppPanel(
       key: const Key('orders_root'),
-      decoration: const BoxDecoration(
-        color: AppColors.surface1,
-        border: Border(left: BorderSide(color: AppColors.surface2)),
-      ),
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -592,7 +574,8 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                   ),
                 ],
               ],
-              if (widget.guestCount != null && widget.state.activeOrder == null) ...[
+              if (widget.guestCount != null &&
+                  widget.state.activeOrder == null) ...[
                 const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -615,7 +598,8 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
               ],
             ],
           ),
-          if (widget.state.activeOrder != null && !widget.state.isSubmitting) ...[
+          if (widget.state.activeOrder != null &&
+              !widget.state.isSubmitting) ...[
             const SizedBox(height: 6),
             Container(
               key: const Key('order_create_success_banner'),
@@ -664,11 +648,13 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                   ...widget.state.activeOrder!.items.map((item) {
                     final label = item.label ?? 'Item';
                     final isCancelled = item.status == 'cancelled';
-                    final canCancel = !isCancelled &&
+                    final canCancel =
+                        !isCancelled &&
                         item.status != 'ready' &&
                         item.status != 'served' &&
                         widget.onCancelOrderItem != null;
-                    final canEditQty = item.status == 'pending' &&
+                    final canEditQty =
+                        item.status == 'pending' &&
                         widget.onEditOrderItemQuantity != null;
                     return Opacity(
                       opacity: isCancelled ? 0.45 : 1.0,
@@ -740,14 +726,15 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                               ),
                             const SizedBox(width: 4),
                             InkWell(
-                              onTap: !widget.canManageSentItems ||
+                              onTap:
+                                  !widget.canManageSentItems ||
                                       widget.onCycleSentItemStatus == null ||
                                       isCancelled
                                   ? null
                                   : () => widget.onCycleSentItemStatus!(
-                                        item,
-                                        _cycleStatus(item.status),
-                                      ),
+                                      item,
+                                      _cycleStatus(item.status),
+                                    ),
                               borderRadius: BorderRadius.circular(10),
                               child: _OrderItemStatusChip(status: item.status),
                             ),
@@ -956,7 +943,9 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
               width: double.infinity,
               height: 48,
               child: OutlinedButton.icon(
-                onPressed: widget.state.isSubmitting ? null : widget.onCancelOrder,
+                onPressed: widget.state.isSubmitting
+                    ? null
+                    : widget.onCancelOrder,
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.statusCancelled,
                   side: const BorderSide(color: AppColors.statusCancelled),
@@ -986,38 +975,42 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: const [
-                _PaymentMethodTag(method: 'CASH', label: 'Cash'),
-                _PaymentMethodTag(method: 'CREDITCARD', label: 'Card'),
-                _PaymentMethodTag(method: 'OTHER', label: 'E-Pay'),
-              ].map((tag) {
-                final selected = _selectedPaymentMethod == tag.method;
-                return ChoiceChip(
-                  selected: selected,
-                  onSelected: (_) {
-                    setState(() => _selectedPaymentMethod = tag.method);
-                  },
-                  label: Text(tag.label),
-                  selectedColor: AppColors.amber500.withValues(alpha: 0.3),
-                  labelStyle: GoogleFonts.notoSansKr(
-                    color: selected
-                        ? AppColors.textPrimary
-                        : AppColors.textSecondary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  side: BorderSide(
-                    color: selected ? AppColors.amber500 : AppColors.surface2,
-                  ),
-                  backgroundColor: AppColors.surface2,
-                );
-              }).toList(),
+              children:
+                  const [
+                    _PaymentMethodTag(method: 'CASH', label: 'Cash'),
+                    _PaymentMethodTag(method: 'CREDITCARD', label: 'Card'),
+                    _PaymentMethodTag(method: 'OTHER', label: 'E-Pay'),
+                  ].map((tag) {
+                    final selected = _selectedPaymentMethod == tag.method;
+                    return ChoiceChip(
+                      selected: selected,
+                      onSelected: (_) {
+                        setState(() => _selectedPaymentMethod = tag.method);
+                      },
+                      label: Text(tag.label),
+                      selectedColor: AppColors.amber500.withValues(alpha: 0.3),
+                      labelStyle: GoogleFonts.notoSansKr(
+                        color: selected
+                            ? AppColors.textPrimary
+                            : AppColors.textSecondary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      side: BorderSide(
+                        color: selected
+                            ? AppColors.amber500
+                            : AppColors.surface2,
+                      ),
+                      backgroundColor: AppColors.surface2,
+                    );
+                  }).toList(),
             ),
             const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               height: 48,
               child: FilledButton(
-                onPressed: widget.isProcessingPayment ||
+                onPressed:
+                    widget.isProcessingPayment ||
                         _selectedPaymentMethod == null ||
                         widget.onProcessPayment == null
                     ? null

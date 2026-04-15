@@ -8,6 +8,23 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function normalizeUuidSet(rows: unknown): Set<string> {
+  if (!Array.isArray(rows)) return new Set()
+  return new Set(
+    rows
+      .map((row) => {
+        if (typeof row === 'string') return row
+        if (row && typeof row === 'object') {
+          const values = Object.values(row as Record<string, unknown>)
+          const first = values.find((value) => typeof value === 'string')
+          return typeof first === 'string' ? first : null
+        }
+        return null
+      })
+      .filter((value): value is string => Boolean(value)),
+  )
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -70,13 +87,15 @@ serve(async (req) => {
     }
 
     // 2. Parse request body
-    const { email, password, full_name, role, restaurant_id } = await req.json()
+    const body = await req.json()
+    const { email, password, full_name, role } = body
+    const targetStoreId = body.store_id ?? body.restaurant_id
 
-    if (!email || !password || !full_name || !role || !restaurant_id) {
+    if (!email || !password || !full_name || !role || !targetStoreId) {
       return new Response(
         JSON.stringify({
           error:
-            'Missing required fields: email, password, full_name, role, restaurant_id',
+            'Missing required fields: email, password, full_name, role, store_id',
         }),
         {
           status: 400,
@@ -106,10 +125,34 @@ serve(async (req) => {
       )
     }
 
+    const serviceClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    )
+
+    const [accessibleStoresResult, accessibleBrandsResult] = await Promise.all([
+      serviceClient.rpc('user_accessible_stores', { uid: callerUser.id }),
+      serviceClient.rpc('user_accessible_brands', { uid: callerUser.id }),
+    ])
+
+    if (accessibleStoresResult.error || accessibleBrandsResult.error) {
+      console.error('access scope lookup failed', {
+        accessibleStoresError: accessibleStoresResult.error,
+        accessibleBrandsError: accessibleBrandsResult.error,
+      })
+      return new Response(JSON.stringify({ error: 'Failed to resolve caller scope' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const accessibleStoreIds = normalizeUuidSet(accessibleStoresResult.data)
+    const accessibleBrandIds = normalizeUuidSet(accessibleBrandsResult.data)
+
     const { data: targetStore, error: targetStoreError } = await anonClient
       .from('restaurants')
       .select('id, brand_id, is_active')
-      .eq('id', restaurant_id)
+      .eq('id', targetStoreId)
       .single()
 
     if (targetStoreError || !targetStore) {
@@ -141,16 +184,13 @@ serve(async (req) => {
       )
     }
 
-    const callerStoreId = callerProfile.primary_store_id ?? callerProfile.restaurant_id
-
-    // store-scoped admins can only create staff for their own store
     if (
       ['admin', 'store_admin'].includes(callerProfile.role) &&
-      callerStoreId !== restaurant_id
+      !accessibleStoreIds.has(targetStoreId)
     ) {
       return new Response(
         JSON.stringify({
-          error: 'Forbidden: cannot create staff for another restaurant',
+          error: 'Forbidden: cannot create staff for another store',
         }),
         {
           status: 403,
@@ -161,7 +201,7 @@ serve(async (req) => {
 
     if (
       callerProfile.role === 'brand_admin' &&
-      callerProfile.brand_id !== targetStore.brand_id
+      (!targetStore.brand_id || !accessibleBrandIds.has(targetStore.brand_id))
     ) {
       return new Response(
         JSON.stringify({
@@ -208,12 +248,6 @@ serve(async (req) => {
       )
     }
 
-    // 3. Create auth user using service_role (server-side only)
-    const serviceClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-    )
-
     const { data: newAuthUser, error: authError } =
       await serviceClient.auth.admin.createUser({
         email,
@@ -239,9 +273,9 @@ serve(async (req) => {
       .from('users')
       .insert({
         auth_id: newAuthUser.user.id,
-        restaurant_id,
+        restaurant_id: targetStoreId,
         brand_id: targetStore.brand_id,
-        primary_store_id: restaurant_id,
+        primary_store_id: targetStoreId,
         role,
         full_name,
         is_active: true,
@@ -263,7 +297,7 @@ serve(async (req) => {
       .upsert(
         {
           user_id: newUser.id,
-          store_id: restaurant_id,
+          store_id: targetStoreId,
           is_primary: true,
           is_active: true,
           source_type: 'direct',

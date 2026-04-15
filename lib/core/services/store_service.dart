@@ -1,7 +1,7 @@
 import '../../main.dart';
 
 class StoreService {
-  Future<Map<String, dynamic>> createRestaurant({
+  Future<Map<String, dynamic>> createStore({
     required String name,
     required String slug,
     required String operationMode,
@@ -25,7 +25,27 @@ class StoreService {
     return Map<String, dynamic>.from(result as Map);
   }
 
-  Future<void> updateRestaurant({
+  Future<Map<String, dynamic>> createRestaurant({
+    required String name,
+    required String slug,
+    required String operationMode,
+    String? address,
+    double? perPersonCharge,
+    String? brandId,
+    String storeType = 'direct',
+  }) {
+    return createStore(
+      name: name,
+      slug: slug,
+      operationMode: operationMode,
+      address: address,
+      perPersonCharge: perPersonCharge,
+      brandId: brandId,
+      storeType: storeType,
+    );
+  }
+
+  Future<void> updateStore({
     required String id,
     required String name,
     required String slug,
@@ -38,7 +58,7 @@ class StoreService {
     await supabase.rpc(
       'admin_update_restaurant',
       params: {
-        'p_restaurant_id': id,
+        'p_store_id': id,
         'p_name': name,
         'p_slug': slug,
         'p_operation_mode': operationMode.toLowerCase(),
@@ -50,7 +70,29 @@ class StoreService {
     );
   }
 
-  Future<void> updateRestaurantSettings({
+  Future<void> updateRestaurant({
+    required String id,
+    required String name,
+    required String slug,
+    required String operationMode,
+    String? address,
+    double? perPersonCharge,
+    String? brandId,
+    String storeType = 'direct',
+  }) {
+    return updateStore(
+      id: id,
+      name: name,
+      slug: slug,
+      operationMode: operationMode,
+      address: address,
+      perPersonCharge: perPersonCharge,
+      brandId: brandId,
+      storeType: storeType,
+    );
+  }
+
+  Future<void> updateStoreSettings({
     required String id,
     required String name,
     required String operationMode,
@@ -60,7 +102,7 @@ class StoreService {
     await supabase.rpc(
       'admin_update_restaurant_settings',
       params: {
-        'p_restaurant_id': id,
+        'p_store_id': id,
         'p_name': name,
         'p_operation_mode': operationMode.toLowerCase(),
         'p_address': address,
@@ -69,12 +111,33 @@ class StoreService {
     );
   }
 
-  Future<void> deactivateRestaurant(String id) async {
+  Future<void> updateRestaurantSettings({
+    required String id,
+    required String name,
+    required String operationMode,
+    String? address,
+    double? perPersonCharge,
+  }) {
+    return updateStoreSettings(
+      id: id,
+      name: name,
+      operationMode: operationMode,
+      address: address,
+      perPersonCharge: perPersonCharge,
+    );
+  }
+
+  Future<void> deactivateStore(String id) async {
     await supabase.rpc(
       'admin_deactivate_restaurant',
-      params: {'p_restaurant_id': id},
+      params: {'p_store_id': id},
     );
+  }
+
+  Future<void> deactivateRestaurant(String id) {
+    return deactivateStore(id);
   }
 }
 
-final restaurantService = StoreService();
+final storeService = StoreService();
+final restaurantService = storeService;

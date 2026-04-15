@@ -2,7 +2,7 @@
 title: "Phase 2 Step 4 — Closure Report"
 date: "2026-04-12"
 status: "COMPLETE"
-migration: "20260412190000_phase_2_step_4_wetax_tables.sql"
+migration: "20260412145159_phase_2_step_4_wetax_tables.sql"
 project: "ynriuoomotxuwhuxxmhj (globospossystem)"
 ---
 
@@ -119,8 +119,7 @@ Creation order (dependency-respecting):
 
 | File | Location | Purpose |
 |------|---------|---------|
-| `20260412190000_phase_2_step_4_wetax_tables.sql` | `supabase/migrations/` | Forward migration (in chain) |
-| `20260412190001_rollback_phase_2_step_4_wetax_tables.sql` | `supabase/migrations/` | Manual rollback (not in chain) |
+| `20260412145159_phase_2_step_4_wetax_tables.sql` | `supabase/migrations/` | Forward migration (in chain) |
 | `phase_2_step_4_report.md` | `globos_pos_system/docs/` | This file |
 
 ---

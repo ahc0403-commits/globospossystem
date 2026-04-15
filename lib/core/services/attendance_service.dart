@@ -69,7 +69,7 @@ class AttendanceService {
     await supabase.rpc(
       'record_attendance_event',
       params: {
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_user_id': userId,
         'p_type': type,
         'p_photo_url': photoUrl,
@@ -86,7 +86,7 @@ class AttendanceService {
     final result = await supabase.rpc(
       'get_attendance_log_view',
       params: {
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_from': from.toUtc().toIso8601String(),
         'p_to': to.toUtc().toIso8601String(),
         'p_user_id': null,
@@ -116,7 +116,7 @@ class AttendanceService {
   Future<List<Map<String, dynamic>>> fetchStaffList(String storeId) async {
     final result = await supabase.rpc(
       'get_attendance_staff_directory',
-      params: {'p_restaurant_id': storeId},
+      params: {'p_store_id': storeId},
     );
     return List<Map<String, dynamic>>.from(result as List);
   }

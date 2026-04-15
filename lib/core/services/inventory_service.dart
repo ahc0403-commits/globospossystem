@@ -6,7 +6,7 @@ class InventoryService {
   ) async {
     final r = await supabase.rpc(
       'get_inventory_ingredient_catalog',
-      params: {'p_restaurant_id': storeId},
+      params: {'p_store_id': storeId},
     );
     return List<Map<String, dynamic>>.from(r as List);
   }
@@ -23,7 +23,7 @@ class InventoryService {
     await supabase.rpc(
       'create_inventory_item',
       params: {
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_name': name,
         'p_unit': unit,
         'p_current_stock': currentStock,
@@ -68,7 +68,7 @@ class InventoryService {
       'update_inventory_item',
       params: {
         'p_item_id': id,
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_patch': patch,
       },
     );
@@ -94,7 +94,7 @@ class InventoryService {
     await supabase.rpc(
       'restock_inventory_item',
       params: {
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_ingredient_id': ingredientId,
         'p_quantity_g': quantityG,
         'p_note': note,
@@ -111,7 +111,7 @@ class InventoryService {
     await supabase.rpc(
       'record_inventory_waste',
       params: {
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_ingredient_id': ingredientId,
         'p_quantity_g': quantityG,
         'p_note': note,
@@ -133,7 +133,7 @@ class InventoryService {
   ) async {
     final r = await supabase.rpc(
       'get_inventory_recipe_catalog',
-      params: {'p_restaurant_id': storeId, 'p_menu_item_id': null},
+      params: {'p_store_id': storeId, 'p_menu_item_id': null},
     );
     return List<Map<String, dynamic>>.from(r as List);
   }
@@ -144,7 +144,7 @@ class InventoryService {
   ) async {
     final r = await supabase.rpc(
       'get_inventory_recipe_catalog',
-      params: {'p_restaurant_id': storeId, 'p_menu_item_id': menuItemId},
+      params: {'p_store_id': storeId, 'p_menu_item_id': menuItemId},
     );
     return List<Map<String, dynamic>>.from(r as List);
   }
@@ -158,7 +158,7 @@ class InventoryService {
     await supabase.rpc(
       'upsert_inventory_recipe_line',
       params: {
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_menu_item_id': menuItemId,
         'p_ingredient_id': ingredientId,
         'p_quantity_g': quantityG,
@@ -185,7 +185,7 @@ class InventoryService {
   ) async {
     final r = await supabase.rpc(
       'get_inventory_physical_count_sheet',
-      params: {'p_restaurant_id': storeId, 'p_count_date': countDate},
+      params: {'p_store_id': storeId, 'p_count_date': countDate},
     );
     return List<Map<String, dynamic>>.from(r as List);
   }
@@ -200,7 +200,7 @@ class InventoryService {
     await supabase.rpc(
       'apply_inventory_physical_count_line',
       params: {
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_count_date': countDate,
         'p_ingredient_id': ingredientId,
         'p_actual_quantity_g': actualQty,
@@ -217,7 +217,7 @@ class InventoryService {
     final r = await supabase.rpc(
       'get_inventory_transaction_visibility',
       params: {
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_from': from.toUtc().toIso8601String(),
         'p_to': to.toUtc().toIso8601String(),
       },

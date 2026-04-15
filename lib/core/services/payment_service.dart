@@ -11,7 +11,7 @@ class PaymentService {
       'process_payment',
       params: {
         'p_order_id': orderId,
-        'p_restaurant_id': storeId,
+        'p_store_id': storeId,
         'p_amount': amount,
         'p_method': method,
       },
@@ -24,7 +24,7 @@ class PaymentService {
   }) async {
     final result = await supabase.rpc(
       'get_cashier_today_summary',
-      params: {'p_restaurant_id': storeId},
+      params: {'p_store_id': storeId},
     );
     return Map<String, dynamic>.from(result as Map);
   }

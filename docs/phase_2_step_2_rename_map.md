@@ -3,10 +3,14 @@ title: "Phase 2 Step 2 — Rename Map Spec"
 version: "1.0"
 date: "2026-04-12"
 scope_basis: "stage1_scope_v1.3.md, Appendix A.1"
-status: "baseline"
+status: "historical baseline — not shipped"
 ---
 
 # Phase 2 Step 2 — Rename Map (restaurants → stores)
+
+> Historical note: this file captures the abandoned atomic rename plan. It is retained as an audit artifact only. It is not the current implementation contract.
+>
+> Current shipped rename strategy is the coexistence rollout documented in `/Users/andreahn/globos_pos_system/docs/phase_1_architecture.md` Section 11 and the Phase 2 Step 2 expand/migrate reports.
 
 > This document is the baseline specification for the atomic rename migration. Every action in the forward migration, rollback migration, and Dart codemod MUST trace back to an entry in this map. Any reference discovered during static analysis that is NOT in this map must be added before proceeding.
 

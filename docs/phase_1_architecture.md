@@ -1,14 +1,14 @@
 ---
 title: "Phase 1 — Architecture Design"
-version: "1.0"
-date: "2026-04-12"
+version: "1.1"
+date: "2026-04-14"
 scope_basis: "stage1_scope_v1.1.md"
-status: "draft — awaiting Hyochang review"
+status: "updated to shipped implementation baseline"
 ---
 
 # Phase 1 — Architecture Design
 
-> This document is the architectural blueprint for Stage 1. It contains **no SQL, no TypeScript, no Dart**. All implementation belongs to Phase 2. References to the scope document use "see scope Section X.Y" format.
+> This document records the Stage 1 architecture as it exists after the Phase 2 implementation and verification passes. When earlier design intent differs from shipped behavior, the shipped behavior described here is the source of truth for the repo.
 
 ---
 
@@ -138,10 +138,11 @@ erDiagram
         text data_source "VNPT_EPAY"
         text auth_mode "password_jwt | api_key"
         text user_id "plaintext login ID"
-        bytea password_aes_encrypted "vendor AES256 ciphertext"
-        bytea password_envelope_dek "DEK-encrypted plaintext"
+        bytea password_value "envelope-encrypted credential bytes"
+        text password_format "plaintext | aes256_ciphertext"
         integer kek_version
-        text api_key_encrypted "nullable, future"
+        text current_token "nullable cached WT00 token"
+        timestamptz token_expires_at "nullable cached token expiry"
         timestamptz last_verified_at
         timestamptz created_at
     }
@@ -149,41 +150,45 @@ erDiagram
     partner_credential_access_log {
         uuid id PK
         uuid credential_id FK
-        text accessor_role "e.g. wetax-dispatcher"
-        text operation "decrypt | token_refresh"
-        text ip_address
+        text access_reason "token_refresh_*"
+        text accessed_by_function "wetax-dispatcher | wetax-poller | wetax-onboarding | wetax-daily-close"
+        boolean success
         timestamptz accessed_at
     }
 
     einvoice_jobs {
-        uuid ref_id PK "UUIDv7, immutable"
+        uuid id PK
+        text ref_id UK "UUIDv7, immutable"
         uuid order_id FK
         uuid tax_entity_id FK "snapshot"
         uuid einvoice_shop_id FK "snapshot"
         boolean redinvoice_requested
-        text status "pending|dispatched|reported|issued_by_portal|failed_terminal|stale"
+        text status "pending|dispatched|dispatched_polling_disabled|reported|issued_by_portal|failed_terminal|stale"
         jsonb send_order_payload "immutable snapshot"
         jsonb request_einvoice_payload "nullable"
         text sid "from sendOrderInfo response"
         text cqt_report_status "from WT06"
         text issuance_status "from WT06"
         text lookup_url "from WT06"
-        text cqt_code "from WT06"
         text error_classification
         text error_message
         integer dispatch_attempts
         timestamptz last_dispatch_at
+        timestamptz dispatched_at
         timestamptz polling_next_at
+        integer request_einvoice_retry_count
+        timestamptz request_einvoice_next_retry_at
         timestamptz created_at
     }
 
     einvoice_events {
         uuid id PK
-        uuid job_ref_id FK
-        text event_type "dispatch_attempt|poll_result|status_change|retry|manual_retry"
-        text old_status
-        text new_status
-        jsonb details "request/response snapshots, error info"
+        uuid job_id FK
+        text event_type "send_order_attempt|poll_result|request_einvoice_attempt|status_transition|dispatcher_error"
+        text description
+        integer retry_count
+        jsonb raw_request
+        jsonb raw_response
         timestamptz created_at
     }
 
@@ -302,247 +307,161 @@ erDiagram
 
 ---
 
-## 2. Dual-Axis RLS Plan
+## 2. Current Access Model
 
-### 2.1 Axis definitions
+### 2.1 Current shipped model
 
-| Axis | Scope | JWT claim | Helper function |
-|------|-------|-----------|-----------------|
-| **Operational** | hq → brand_master → brand → store | `accessible_store_ids uuid[]` | `user_accessible_stores(uid)` |
-| **Tax** | tax_entity → einvoice_shop | `accessible_tax_entity_ids uuid[]` | `user_accessible_tax_entities(uid)` |
+Stage 1 now runs with a mixed access model:
 
-### 2.2 Per-table RLS matrix
+- Existing POS tables and many legacy RPCs still use the compatibility helper path built on `users.restaurant_id` and `get_user_store_id()`.
+- Multi-access schema (`users.brand_id`, `users.primary_store_id`, `user_brand_access`, `user_store_access`) and claim refresh are deployed and consumed by Flutter for active-store UX and by selected server-owned write paths.
+- New multi-access write boundaries are implemented for:
+  - `request_red_invoice`
+  - `lookup_b2b_buyer`
+  - `mark_payment_proof_required`
+  - `attach_payment_proof`
+  - `admin_retry_einvoice_job`
+  - `admin_mark_resolved_einvoice_job`
+  - `admin_update_staff_account`
+- Remaining legacy RPCs continue to rely on compatibility helpers during the transition period.
 
-| Table | Axis | Read policy | Write policy | JWT claims used |
-|-------|------|-------------|--------------|-----------------|
-| **hq** | None (super_admin only) | `is_super_admin()` | `is_super_admin()` | role |
-| **brand_master** | Operational | `is_super_admin() OR EXISTS(SELECT 1 FROM brands b JOIN stores s ON s.brand_id = b.id WHERE b.brand_master_id = brand_master.id AND s.id = ANY(jwt_accessible_store_ids()))` | `is_super_admin()` | `accessible_store_ids` |
-| **brand** | Operational | `is_super_admin() OR EXISTS(SELECT 1 FROM stores s WHERE s.brand_id = brand.id AND s.id = ANY(jwt_accessible_store_ids()))` | `is_super_admin()` | `accessible_store_ids` |
-| **store** | Both (OR) | `is_super_admin() OR id = ANY(jwt_accessible_store_ids()) OR tax_entity_id = ANY(jwt_accessible_tax_entity_ids())` | `is_super_admin() OR (id = ANY(jwt_accessible_store_ids()) AND jwt_role() IN ('admin'))` | `accessible_store_ids`, `accessible_tax_entity_ids` |
-| **tax_entity** | Tax | `is_super_admin() OR id = ANY(jwt_accessible_tax_entity_ids())` | `is_super_admin()` | `accessible_tax_entity_ids` |
-| **einvoice_shop** | Tax | `is_super_admin() OR tax_entity_id = ANY(jwt_accessible_tax_entity_ids())` | `is_super_admin()` | `accessible_tax_entity_ids` |
-| **store_tax_entity_history** | Both (OR) | `is_super_admin() OR store_id = ANY(jwt_accessible_store_ids()) OR tax_entity_id = ANY(jwt_accessible_tax_entity_ids())` | `is_super_admin()` (append via RPC only) | both |
-| **partner_credentials** | **Isolated** | DENY ALL (only `wetax_dispatcher` Postgres role) | `is_super_admin()` (initial setup only) | none — role-based |
-| **partner_credential_access_log** | **Isolated** | `is_super_admin()` (audit read only) | DENY ALL (only `wetax_dispatcher` role INSERTs) | role |
-| **einvoice_jobs** | Both (OR) | `is_super_admin() OR store_id_from_order(order_id) = ANY(jwt_accessible_store_ids()) OR tax_entity_id = ANY(jwt_accessible_tax_entity_ids())` | Service role / dispatcher only (INSERT via RPC, UPDATE via dispatcher) | both |
-| **einvoice_events** | Tax | `is_super_admin() OR job_ref_id IN (SELECT ref_id FROM einvoice_jobs WHERE tax_entity_id = ANY(jwt_accessible_tax_entity_ids()))` | DENY ALL (only dispatcher INSERTs) | `accessible_tax_entity_ids` |
-| **orders** | Operational | `is_super_admin() OR store_id = ANY(jwt_accessible_store_ids())` | `is_super_admin() OR (store_id = ANY(jwt_accessible_store_ids()) AND jwt_role() IN ('admin','cashier','waiter'))` | `accessible_store_ids` |
-| **order_items** | Operational | `is_super_admin() OR store_id = ANY(jwt_accessible_store_ids())` | same as orders | `accessible_store_ids` |
-| **payments** | Operational | `is_super_admin() OR store_id = ANY(jwt_accessible_store_ids())` | `is_super_admin() OR (store_id = ANY(jwt_accessible_store_ids()) AND jwt_role() IN ('admin','cashier'))` | `accessible_store_ids` |
-| **menu_items** | Operational | `is_super_admin() OR store_id = ANY(jwt_accessible_store_ids())` | `is_super_admin() OR (store_id = ANY(jwt_accessible_store_ids()) AND jwt_role() IN ('admin'))` | `accessible_store_ids` |
-| **b2b_buyer_cache** | Both (OR) | `is_super_admin() OR store_id = ANY(jwt_accessible_store_ids()) OR tax_entity_id = ANY(jwt_accessible_tax_entity_ids())` | `store_id = ANY(jwt_accessible_store_ids())` | both |
-| **wetax_reference_values** | None | All authenticated users (read-only cache) | Service role only (background sync) | none |
-| **daily_closings** | Operational | `is_super_admin() OR store_id = ANY(jwt_accessible_store_ids())` | SECURITY DEFINER RPC only | `accessible_store_ids` |
-| **users** | Operational | `is_super_admin() OR store_id = ANY(jwt_accessible_store_ids())` | varies by role | `accessible_store_ids` |
-| **tables** | Operational | `is_super_admin() OR store_id = ANY(jwt_accessible_store_ids())` | admin only, store-scoped | `accessible_store_ids` |
-| **menu_categories** | Operational | `is_super_admin() OR store_id = ANY(jwt_accessible_store_ids())` | admin only, store-scoped | `accessible_store_ids` |
-| **attendance_logs** | Operational | `is_super_admin() OR store_id = ANY(jwt_accessible_store_ids())` | store-scoped | `accessible_store_ids` |
-| **inventory_items** | Operational | `is_super_admin() OR store_id = ANY(jwt_accessible_store_ids())` | store-scoped | `accessible_store_ids` |
-| **audit_logs** | None (admin+) | `jwt_role() IN ('admin','super_admin')` | append-only via RPCs | role |
-| **store_settings** | Operational | `is_super_admin() OR store_id = ANY(jwt_accessible_store_ids())` | admin only | `accessible_store_ids` |
+### 2.2 RLS / access enforcement summary
 
-### 2.3 RLS helper function pseudocode
+| Surface | Current enforcement |
+|---------|---------------------|
+| Existing POS tables (`orders`, `payments`, `tables`, `menu_*`, `inventory_*`, `attendance_*`, `qc_*`) | Helper-based store scoping via `get_user_store_id()` compatibility path |
+| WeTax Step 4 tables | RLS enabled on all 11 tables |
+| `partner_credentials` | No authenticated policies; accessed by server-owned edge functions using `service_role` |
+| `partner_credential_access_log` | Append-only from edge functions; read policy for super admin |
+| Admin/onboarding/cashier/general order/buffet order/table-menu create/inventory/attendance/daily-closing/admin-audit/qc/store-settings/delivery-settlement-confirm surfaces migrated in contract start | Active hardened surfaces now use `p_store_id` / `store_id`; older POS RPCs still keep legacy/coexistence naming where not yet migrated |
+| Flutter active store switching | Claims-driven store list + persisted `primary_store_id` / last-selected active store |
 
-```
-FUNCTION jwt_accessible_store_ids() RETURNS uuid[]
-  RETURN (auth.jwt() -> 'app_metadata' ->> 'accessible_store_ids')::uuid[]
+### 2.3 Transition note
 
-FUNCTION jwt_accessible_tax_entity_ids() RETURNS uuid[]
-  RETURN (auth.jwt() -> 'app_metadata' ->> 'accessible_tax_entity_ids')::uuid[]
+The design goal remains “store is the final authorization unit,” but the repo is intentionally in coexistence mode:
 
-FUNCTION jwt_role() RETURNS text
-  RETURN auth.jwt() -> 'app_metadata' ->> 'role'
-
-FUNCTION is_super_admin() RETURNS boolean
-  RETURN jwt_role() = 'super_admin'
-```
-
-These are IMMUTABLE SECURITY DEFINER functions that read from the JWT, not from tables. This eliminates per-query table lookups (resolves Phase 0 concern C-03).
+- `get_user_store_id()` remains a wrapper-compatible path for legacy policies and functions.
+- `custom_access_token_hook` and `refresh_user_claims()` are deployed for the newer brand/store multi-access flow.
+- Harness reports for the rename rollout confirmed that compatibility helpers must stay alive during the Expand → Migrate → Contract sequence.
 
 ---
 
-## 3. JWT Claims Design (Resolves C-03)
+## 3. JWT Claims And Active Store
 
-### 3.1 Claim shape
+### 3.1 Current claim shape
 
 ```json
 {
   "app_metadata": {
-    "role": "admin",
-    "user_id": "uuid-of-public-users-row",
+    "role": "store_admin",
+    "brand_ids": ["uuid-brand-1"],
     "accessible_store_ids": ["uuid-store-1", "uuid-store-2"],
     "accessible_tax_entity_ids": ["uuid-tax-entity-1"],
-    "hq_id": "uuid-of-hq"
+    "primary_store_id": "uuid-store-1"
   }
 }
 ```
 
-| Field | Type | Source | Notes |
-|-------|------|--------|-------|
-| `role` | string | `users.role` | Single role per user |
-| `user_id` | uuid | `users.id` | Public users table PK |
-| `accessible_store_ids` | uuid[] | Computed (see below) | All stores the user can access via operational axis |
-| `accessible_tax_entity_ids` | uuid[] | Computed (see below) | All tax entities the user can access |
-| `hq_id` | uuid | `users.hq_id` or derived | For super_admin: all access; for others: scoping |
+### 3.2 Current auth hook behavior
 
-### 3.2 Auth hook function responsibility
+The shipped hook is `custom_access_token_hook`, not the earlier `compute_user_claims` name. It:
 
-A Supabase auth hook function (`compute_user_claims`) runs at login time. It:
+1. Loads the active `public.users` row for the auth user.
+2. Computes brand scope from `user_brand_access` plus fallback `users.brand_id`.
+3. Computes store scope from `user_store_access` plus fallback `COALESCE(users.primary_store_id, users.restaurant_id)`.
+4. Derives accessible tax entities from the scoped stores.
+5. Writes `role`, `brand_ids`, `accessible_store_ids`, `accessible_tax_entity_ids`, and `primary_store_id` into `auth.users.raw_app_meta_data`.
 
-1. **Queries `users`** for `role`, `store_id` (the user's primary store assignment)
-2. **Computes `accessible_store_ids`:**
-   - For `super_admin`: empty array (RLS `is_super_admin()` short-circuits; no need to enumerate)
-   - For `admin` / `master_admin`: all stores under brands the user can manage (query: `users.store_id` → `store.brand_id` → all stores with that `brand_id`; for master_admin: all brands under the same `brand_master`)
-   - For `cashier` / `waiter` / `kitchen`: single-element array `[users.store_id]`
-3. **Computes `accessible_tax_entity_ids`:**
-   - For roles with tax-axis access (admin, master_admin, super_admin): `SELECT DISTINCT tax_entity_id FROM stores WHERE id = ANY(accessible_store_ids)`
-   - For operational-only roles (cashier, waiter, kitchen): empty array
-4. **Writes to `auth.users.raw_app_meta_data`** via `UPDATE auth.users SET raw_app_meta_data = computed_claims WHERE id = auth_uid`
+### 3.3 Flutter consumption
 
-### 3.3 Performance expectation
+Flutter now uses the claim payload as the primary source for:
 
-| Metric | Before (current) | After (JWT claims) |
-|--------|-------------------|---------------------|
-| Lookups per RLS evaluation | 1 query to `users` table per row check | 0 queries (JWT in-memory) |
-| Auth hook cost at login | None | 2–3 queries (users + stores + brands), ~5ms |
-| Worst case for super_admin | N/A (single check) | N/A (is_super_admin short-circuits) |
+- accessible store list
+- default store selection
+- persisted last-selected active store
+- active-store switching for admin-like and photo-ops flows
+
+The client still falls back to `users.restaurant_id` when needed so that older users and older RPCs continue to work during the coexistence period.
 
 ### 3.4 Refresh strategy
 
-**Primary: logout/login.** When a user's permissions change (e.g., assigned to a new store, role change), the change is written to the `users` table. The user's JWT claims become stale but the change takes effect on next login.
-
-**Hot refresh (recommended for admin actions):** After an admin changes a user's role or store assignment, the admin UI calls a SECURITY DEFINER RPC `refresh_user_claims(target_user_id)` which re-runs the same computation and updates `raw_app_meta_data`. The target user's next API call uses the new claims. Supabase propagates `app_metadata` changes to subsequent JWTs automatically on token refresh.
-
-**Recommendation:** Hot refresh is the default for admin-initiated changes. Logout/login is the fallback for edge cases (e.g., store transfer affecting many users simultaneously).
-
-### 3.5 Migration path for existing users
-
-Existing users have no `app_metadata`. Migration strategy:
-
-1. Deploy the auth hook function
-2. Run a one-time migration script that calls `refresh_user_claims(user_id)` for every active user
-3. After migration, all existing users have populated claims
-4. New users get claims at account creation time (the `create_staff_user` edge function calls the hook after creating the user record)
+- `refresh_user_claims(auth_user_id)` is deployed and is called from hardened admin mutation paths and staff creation.
+- Logout/login remains a valid fallback for any flow still on the legacy path.
 
 ---
 
-## 4. Credential Security L1–L5
+## 4. Current WeTax Credential Model
 
-### 4.1 L1 — Envelope encryption
+### 4.1 Stored credential contract
 
-**Purpose:** Protect the WeTax master credential at rest.
+The shipped `partner_credentials` contract is:
 
-**Architecture:**
+| Column | Current meaning |
+|--------|-----------------|
+| `data_source` | `VNPT_EPAY` singleton |
+| `auth_mode` | `password_jwt` or future `api_key` |
+| `user_id` | WeTax login id |
+| `password_value` | bytea-encoded stored credential bytes |
+| `password_format` | `plaintext` or `aes256_ciphertext` |
+| `kek_version` | credential key version metadata |
+| `current_token` | nullable cached WT00 token |
+| `token_expires_at` | nullable token expiry |
+| `last_verified_at` | last successful WT00 login |
 
-```
-┌─────────────────────────────────────┐
-│  Supabase Vault                     │
-│  ┌───────────────────────────────┐  │
-│  │  KEK (AES-256-GCM key)       │  │
-│  │  secret name: wetax_kek_v1   │  │
-│  └───────────────────────────────┘  │
-└─────────────────────────────────────┘
-         │ encrypts
-         ▼
-┌─────────────────────────────────────┐
-│  partner_credentials row            │
-│  ┌───────────────────────────────┐  │
-│  │  password_envelope_dek        │  │
-│  │  (DEK encrypted by KEK)       │  │
-│  └───────────────────────────────┘  │
-│  ┌───────────────────────────────┐  │
-│  │  password_aes_encrypted       │  │
-│  │  (vendor AES256 ciphertext)   │  │
-│  │  Sent to WT00 verbatim        │  │
-│  └───────────────────────────────┘  │
-│  kek_version = 1                    │
-└─────────────────────────────────────┘
-```
+This is the contract verified in the Phase 2 Step 4 closure report and Phase 3 verification report.
 
-**Column layout:**
+### 4.2 Current access path
 
-| Column | Content | Usage |
-|--------|---------|-------|
-| `user_id` | Plaintext login email | Low sensitivity, sent to WT00 as-is |
-| `password_aes_encrypted` | Vendor-specified AES256 ciphertext of the plaintext password | Sent to WT00 verbatim for authentication. POS never decrypts this. |
-| `password_envelope_dek` | DEK-encrypted copy of the plaintext password (for emergency recovery if vendor AES procedure must be re-applied) | Only accessed during KEK rotation or emergency recovery |
-| `kek_version` | Integer tracking which KEK version encrypted the DEK | Enables rotation without downtime |
+- `partner_credentials` has RLS enabled and zero authenticated-user policies.
+- Edge functions access it through `service_role`.
+- Credential reads currently occur in:
+  - `wetax-dispatcher`
+  - `wetax-poller`
+  - `wetax-onboarding`
+  - `wetax-daily-close`
 
-**DEK/KEK generation:**
+### 4.3 Token handling
 
-1. **KEK:** Generated via `SELECT vault.create_secret('random-256-bit-key', 'wetax_kek_v1')`. Stored entirely within Supabase Vault (never leaves Vault boundary).
-2. **DEK:** Randomly generated per credential row (one row in Stage 1). The DEK encrypts the plaintext password. Then the DEK itself is encrypted by the KEK and stored in `password_envelope_dek`.
-3. **Rotation procedure:**
-   - Generate new KEK: `vault.create_secret(new_key, 'wetax_kek_v2')`
-   - Decrypt DEK with old KEK, re-encrypt DEK with new KEK
-   - Update `password_envelope_dek` and `kek_version` atomically
-   - Delete old KEK from Vault after verification: `vault.update_secret('wetax_kek_v1', ...)`
-   - Zero old KEK material from memory immediately
+Current shipped behavior caches the WeTax token in the same table:
 
-### 4.2 L2 — Access path isolation
+1. Read credential row.
+2. Reuse `current_token` when it is still valid.
+3. Otherwise call WT00 `/auth/login`.
+4. Persist `current_token`, `token_expires_at`, and `last_verified_at`.
 
-**Dedicated Postgres role:** `wetax_dispatcher`
+This DB-backed token cache is part of the verified shipped behavior and is not treated as an unresolved design gap inside this repo.
 
-**Privilege grants:**
-- `GRANT SELECT ON partner_credentials TO wetax_dispatcher` — read only
-- `GRANT INSERT ON partner_credential_access_log TO wetax_dispatcher` — write log only
-- `GRANT SELECT, UPDATE ON einvoice_jobs TO wetax_dispatcher`
-- `GRANT INSERT ON einvoice_events TO wetax_dispatcher`
-- `GRANT USAGE ON SCHEMA vault TO wetax_dispatcher` — for KEK access
+### 4.4 Access logging
 
-**RLS enforcement:**
-- `partner_credentials` has a policy: `USING (current_setting('role') = 'wetax_dispatcher')` — only the dispatcher role can read
-- Even `service_role` cannot bypass this (RLS is FORCE enabled on this table)
-- `anon` and `authenticated` roles have zero grants on `partner_credentials`
-
-### 4.3 L3 — Memory lifetime minimization
-
-**Dispatcher's token caching strategy:**
-
-1. On first dispatch or after token expiry: read `partner_credentials` (triggers L4 log)
-2. Extract `user_id` and `password_aes_encrypted` (no decryption of envelope — the AES ciphertext is used as-is for WT00)
-3. Call WT00 `/auth/login` → receive `access_token` and `expires_in`
-4. Cache `access_token` in a Postgres `unlogged` table or Deno `Map` within the edge function runtime
-5. Set `refresh_at = now() + expires_in - 15 minutes`
-6. Zero the `password_aes_encrypted` value from the local variable immediately after the WT00 call
-7. Subsequent API calls use only the cached `access_token`
-8. On 401 response or `refresh_at` reached: re-read credential, repeat
-
-**Key insight:** The dispatcher never handles the plaintext password. It only handles the vendor-encrypted ciphertext (`password_aes_encrypted`), which is already opaque. The `password_envelope_dek` is never read during normal operation.
-
-### 4.4 L4 — Access logging
-
-**Trigger mechanism:** Explicit INSERT in the dispatcher code, not a database trigger. Rationale: database triggers on SELECT do not exist in PostgreSQL; the log must be written by the accessing code.
-
-**Log row schema:**
+Current shipped `partner_credential_access_log` schema is:
 
 ```
 partner_credential_access_log (
-  id             uuid PK DEFAULT gen_random_uuid(),
-  credential_id  uuid NOT NULL REFERENCES partner_credentials(id),
-  accessor_role  text NOT NULL,          -- 'wetax_dispatcher'
-  operation      text NOT NULL,          -- 'read_for_login', 'read_for_rotation', 'token_refresh'
-  context        jsonb,                  -- { function: 'wetax-dispatcher', trigger: 'pending_job', job_ref_id: '...' }
-  ip_address     text,
-  accessed_at    timestamptz NOT NULL DEFAULT now()
+  id                   uuid PK DEFAULT gen_random_uuid(),
+  credential_id        uuid NOT NULL REFERENCES partner_credentials(id),
+  accessed_at          timestamptz NOT NULL DEFAULT now(),
+  access_reason        text NOT NULL,
+  accessed_by_function text NOT NULL,
+  success              boolean NOT NULL
 )
 ```
 
-**Immutability:** RLS on this table blocks all UPDATE and DELETE. Only INSERT from `wetax_dispatcher` role.
+Typical `access_reason` values in code:
 
-### 4.5 L5 — Revocation
+- `token_refresh`
+- `token_refresh_poller`
+- `onboarding_token_refresh`
+- `daily_close_token_refresh`
 
-**Hard-delete procedure:**
+### 4.5 Security interpretation in this repo
 
-1. Hyochang (super_admin) initiates revocation from admin UI
-2. System calls a SECURITY DEFINER RPC `revoke_wetax_credential(credential_id)`
-3. RPC performs: `DELETE FROM partner_credentials WHERE id = credential_id`
-4. Cascade implications: no FK cascade — `einvoice_jobs` and `einvoice_events` are not FK-linked to `partner_credentials` (they only reference `tax_entity_id`)
-5. After deletion, the dispatcher will fail on next credential read → all pending jobs move to `failed_terminal` with reason `credential_revoked`
-6. The access log rows are NOT deleted (they are the audit trail of past access)
-7. Vault KEK remains (it protects nothing after deletion, but retaining it allows audit reconstruction)
+Within this repo, “L1/L2/L4 pass” means:
 
-**Re-provisioning:** After revocation, a new credential row is inserted (new DEK, same or rotated KEK). All dispatchers pick up the new credential automatically on next read.
+- credential bytes are not stored as plain text columns
+- no authenticated RLS policy grants direct table access
+- append-only access logging exists
+
+It does not imply a dedicated Postgres runtime role beyond the verified `service_role` edge-function boundary used by the shipped implementation.
 
 ---
 
@@ -552,21 +471,19 @@ partner_credential_access_log (
 stateDiagram-v2
     [*] --> pending : order completed, job created
 
-    pending --> dispatched : sendOrderInfo 200 OK\n[store sid, update status]
-    pending --> dispatched : sendOrderInfo 409 Duplicate\n[treat as idempotent success]
-    pending --> failed_terminal : sendOrderInfo 400\n[client error, classified]
-    pending --> failed_terminal : declaration_status != 5\n[guard: I10 violated]
-    pending --> failed_terminal : credential_revoked\n[L5 hard-delete]
-    pending --> pending : 5xx or network error\n[retry, attempt++ <= 3]
-    pending --> failed_terminal : 5xx after 3 attempts\n[max retries exceeded]
-    pending --> pending : 401 response\n[refresh token, retry <= 3]
-    pending --> failed_terminal : 401 after 3 refresh attempts\n[auth failure]
+    pending --> dispatched : sendOrderInfo 200/409 and polling enabled
+    pending --> dispatched_polling_disabled : sendOrderInfo 200/409 and polling disabled
+    pending --> failed_terminal : 4xx client error\n[classified]
+    pending --> pending : 401 or 5xx\n[next scheduled cycle retries]
 
-    dispatched --> reported : WT06 poll: issuance=Issued AND cqt=Issued\n[sendOrderInfo-only job]
-    dispatched --> issued_by_portal : WT06 poll: issuance=Issued AND cqt=Issued\n[redinvoice_requested=TRUE]
-    dispatched --> dispatched : WT06 poll: transient states\n[issuance=Issued, cqt=Not Issued/In Progress/Waiting]
-    dispatched --> failed_terminal : WT06 poll: issuance=Not Issued or Error\n[surface to admin]
-    dispatched --> stale : age > 24 hours\n[stop polling]
+    dispatched --> reported : WT06 says issuance + CQT complete\n[redinvoice_requested = FALSE]
+    dispatched --> issued_by_portal : WT06 says issuance + CQT complete\n[redinvoice_requested = TRUE]
+    dispatched --> failed_terminal : WT06 issuance error
+    dispatched --> stale : dispatched_at older than 24h
+    dispatched --> dispatched : next polling window
+
+    dispatched_polling_disabled --> dispatched : admin enables polling and next cycle runs
+    dispatched_polling_disabled --> failed_terminal : WT05 retry chain exhausts for red invoice branch
 
     failed_terminal --> pending : admin manual retry\n[same ref_id, reset attempts]
 
@@ -576,30 +493,17 @@ stateDiagram-v2
     stale --> [*] : admin marks resolved
 
     note right of pending
-        Token refresh loop:
-        On 401 → acquire advisory lock
-        → read partner_credentials (L4 log)
-        → call WT00 /auth/login
-        → cache new token
-        → release lock
-        → retry original call
-        
-        409 backoff: 100ms → 500ms → 2s → 5s
+        Current shipped mode:
+        sendOrderInfo runs from the dispatcher cron cycle.
+        401/5xx do not immediately hard-fail the job;
+        the next scheduled cycle reuses or refreshes the token.
     end note
 
     note right of dispatched
-        requestEinvoiceInfo sub-flow:
-        After sendOrderInfo succeeds, if
-        redinvoice_requested = TRUE:
-        POST /requestEinvoiceInfo
-        Same error handling as sendOrderInfo
-        
-        Hybrid payment representative value:
-        Largest amount_portion wins.
-        Tie-breaker priority:
-        CASH > CREDITCARD > ATM > BANKTRANSFER
-        > VNPAY > MOMO > ZALOPAY > SHOPEEPAY
-        > VOUCHER > CREDITSALE > OTHER
+        red-invoice WT05 sub-flow:
+        stored WT05 body is retried with
+        configurable backoff 0,3,10,30,60 seconds
+        until success or max retry count.
     end note
 ```
 
@@ -609,6 +513,7 @@ stateDiagram-v2
 |-------|---------|-----------|----------|
 | `pending` | Job created, awaiting dispatch | No | No |
 | `dispatched` | sendOrderInfo accepted by WeTax | No | Yes |
+| `dispatched_polling_disabled` | sendOrderInfo accepted but WT06 is globally disabled by config | No | No |
 | `reported` | CQT report confirmed (no red invoice) | Yes | No |
 | `issued_by_portal` | Red invoice issued and CQT-reported | Yes | No |
 | `failed_terminal` | Unrecoverable error, needs human action | No (retryable) | No |
@@ -618,66 +523,55 @@ stateDiagram-v2
 
 | Classification | Trigger | Retryable? |
 |----------------|---------|------------|
-| `client_error` | 400 response | No (payload issue) |
-| `auth_failure` | 401 after 3 refresh attempts | Yes (after credential fix) |
-| `server_error` | 5xx after 3 retries | Yes |
-| `network_error` | Connection timeout/refused after 3 retries | Yes |
-| `declaration_not_accepted` | I10 guard failed | Yes (after tax_entity update) |
-| `credential_revoked` | No credential row found | Yes (after re-provisioning) |
-| `duplicate_resolved` | 409 with non-duplicate message | No |
-| `issuance_error` | WT06 reports issuance failure | No (portal action needed) |
+| `send_order_client_error` | WT03 4xx payload/client failure | No |
+| `einvoice_request_not_found_after_retries` | Legacy internal name for WT05 retry exhaustion | No |
+| `wetax_issuance_error` | WT06 reported issuance failure | No |
+| `manual_resolved` | Admin reviewed and intentionally closed the job without retry | No |
+| `duplicate_resolved` | Reserved resolved state from admin tooling | No |
 
 ---
 
 ## 6. WT06 Polling Schedule and Batching
 
-### 6.1 Polling interval table (from scope Section 6.5)
+### 6.1 Current operating mode
 
-| Job age | Poll interval | Rationale |
-|---------|---------------|-----------|
-| 0–30 seconds | 10 seconds | Catch fast issuances (most complete within seconds) |
-| 30s–2 minutes | 30 seconds | Allow WeTax processing time |
-| 2–10 minutes | 2 minutes | Reduce load, most jobs resolved by now |
-| 10–30 minutes | 10 minutes | Unusual delay, lower frequency |
-| 30 min–2 hours | 30 minutes | Potential backend queue at WeTax |
-| 2–24 hours | 2 hours | Long-tail, likely needs investigation |
-| >24 hours | Stop polling → `stale` | Human intervention required |
+Current shipped default:
+
+- `wetax_dispatch_enabled = true`
+- `wetax_polling_enabled = false`
+
+This means the normal verified production-like path in this repo is:
+
+1. `pending`
+2. dispatcher runs WT03
+3. job moves to `dispatched_polling_disabled`
+4. poller exits early until the flag is enabled
+
+This is treated as an intentional temporary operating mode because the vendor apitest WT06 path is unstable.
 
 ### 6.2 Batch size limits
 
-The WT06 `/pos/invoices-status` endpoint accepts an array of `ref_id` strings (see truth table Section 4). No explicit batch size limit is documented in the OpenAPI spec.
-
-**Design decision:** Set batch size to **50 ref_ids per request**.
-
-- **Rationale:** Conservative limit that avoids potential undocumented server-side limits. At Vietnam F&B scale (a busy store does ~200 orders/day), 50 covers the realistic maximum of concurrent `dispatched` jobs per store. If validation in Phase 2 shows the endpoint accepts larger batches, this can be increased.
-- **If batch > 50:** Split into multiple sequential requests with 200ms delay between.
+Current poller batch size is `50` ref_ids per request.
 
 ### 6.3 Prioritization rules
 
-When multiple jobs are eligible for polling:
+Current poller behavior:
 
-1. **Youngest jobs first** — newer jobs are more likely to resolve quickly
-2. **Group by `data_source`** — all Stage 1 jobs share `VNPT_EPAY`, so this is a no-op now but future-proofs for multiple data sources
-3. **Group by `tax_entity_id`** — batch ref_ids that belong to the same tax entity (they share the same token)
-4. **Skip jobs whose `polling_next_at > now()`** — respect the interval schedule
+1. read `dispatched` jobs whose `polling_next_at <= now()`
+2. order by `dispatched_at`
+3. limit to one batch
+4. compute the next `polling_next_at` inside the edge function after each WT06 response
 
 ### 6.4 Trigger mechanism: pg_cron
 
-**Recommendation: pg_cron**, not edge function trigger.
+The shipped cron topology is direct `pg_cron` / `pg_net` → edge function invocation:
 
-| Option | Pros | Cons |
-|--------|------|------|
-| **pg_cron** | Runs inside the database, no cold start, reliable scheduling, can access tables directly | Limited to SQL/PL/pgSQL; cannot make HTTP calls directly |
-| **Edge function on schedule** | Can make HTTP calls to WeTax directly | Cold start latency, requires external cron trigger (Supabase cron or external service) |
+- `wetax-dispatcher`: every 1 minute
+- `wetax-poller`: every 2 minutes
+- `wetax-daily-close`: daily at 00:00 Asia/Ho_Chi_Minh
+- `wetax-onboarding` commons refresh: weekly
 
-**Chosen approach:** Hybrid.
-- **pg_cron** runs every 10 seconds: selects eligible jobs (`status = 'dispatched'` AND `polling_next_at <= now()`), groups them into batches, and calls a `net.http_post` (pg_net extension) to the `wetax-poller` edge function with the batch of ref_ids
-- **`wetax-poller` edge function** receives the batch, calls WT06, and writes results back via `service_role` Supabase client
-- This combines pg_cron's reliable scheduling with edge functions' ability to make external HTTP calls
-
-**pg_cron schedule:** `SELECT cron.schedule('wetax-poll', '10 seconds', $$SELECT poll_eligible_jobs()$$)`
-
-Note: pg_cron's minimum interval is 1 minute in standard Supabase. If 10-second granularity is needed, the `poll_eligible_jobs()` function itself batches and dispatches multiple calls within a single invocation, using `pg_net` for async HTTP. Alternatively, the edge function can self-schedule via `setTimeout` patterns. **This is an open question — see Section 13.**
+The poller edge function selects its own due jobs; there is no separate `poll_eligible_jobs()` SQL batching function in the shipped repo.
 
 ---
 
@@ -860,13 +754,13 @@ sequenceDiagram
 | Property | Value |
 |----------|-------|
 | **Name** | `wetax-dispatcher` |
-| **Responsibility** | Dispatch `pending` einvoice_jobs: call sendOrderInfo, optionally requestEinvoiceInfo, handle responses, manage token lifecycle |
-| **Trigger** | pg_cron every 1 minute → calls this function. Also callable on-demand from admin "Retry" button. |
-| **Postgres role** | `wetax_dispatcher` (dedicated, L2 isolation) |
-| **Tables read** | `einvoice_jobs` (pending jobs), `partner_credentials` (token/credential), `tax_entity` (declaration_status check), `einvoice_shop` (template selection), `stores` (store_code), `payments` (representative method selection) |
+| **Responsibility** | Dispatch `pending` einvoice_jobs: call sendOrderInfo, optionally trigger the WT05 red-invoice flow, handle responses, manage token lifecycle |
+| **Trigger** | pg_cron every 1 minute via `net.http_post` |
+| **Runtime auth** | Edge function runs with `service_role` |
+| **Tables read** | `einvoice_jobs` (pending jobs), `partner_credentials` (token/credential), `tax_entity`, `einvoice_shop`, `restaurants`, `payments` |
 | **Tables write** | `einvoice_jobs` (status, sid, attempts), `einvoice_events` (audit), `partner_credential_access_log` (L4) |
-| **External APIs** | `POST /auth/login` (WT00), `POST /pos/sendOrderInfo`, `POST /pos/requestEinvoiceInfo` |
-| **Retry/idempotency** | Same `ref_id` on retry (I8). 409 Duplicate = success. Exponential backoff: 1s → 4s → 16s (3 attempts). |
+| **External APIs** | `POST /auth/login` (WT00), `POST /pos/invoices` (WT03), `POST /pos/invoices-issue` (WT05) |
+| **Retry/idempotency** | Same `ref_id` on retry. 409 is treated as idempotent success. WT05 backoff comes from `system_config`. |
 | **Logging** | Every dispatch attempt → `einvoice_events` row. Token refresh → `partner_credential_access_log` row. Edge function logs to Supabase dashboard. |
 
 ### 9.2 wetax-poller
@@ -875,11 +769,11 @@ sequenceDiagram
 |----------|-------|
 | **Name** | `wetax-poller` |
 | **Responsibility** | Batch-poll WT06 for `dispatched` jobs, update job status based on response |
-| **Trigger** | pg_cron via `pg_net` call (see Section 6.4). Every 10 seconds (or 1 minute with internal batching). |
-| **Postgres role** | `wetax_dispatcher` (shares role for token access) |
+| **Trigger** | pg_cron every 2 minutes via `net.http_post`; exits early when `wetax_polling_enabled=false` |
+| **Runtime auth** | Edge function runs with `service_role` |
 | **Tables read** | `einvoice_jobs` (dispatched jobs, polling_next_at), `partner_credentials` (token) |
-| **Tables write** | `einvoice_jobs` (cqt_report_status, issuance_status, lookup_url, cqt_code, status, polling_next_at), `einvoice_events` |
-| **External APIs** | `POST /pos/invoices-status` (WT06), `POST /auth/login` (WT00, if token expired) |
+| **Tables write** | `einvoice_jobs` (cqt_report_status, issuance_status, lookup_url, status, polling_next_at), `einvoice_events` |
+| **External APIs** | `POST /pos/invoices-status` (WT06), `POST /auth/login` (WT00) |
 | **Retry/idempotency** | Polling is inherently idempotent — same ref_ids return same status. If WT06 fails, jobs retain current state and are re-polled next cycle. |
 | **Logging** | Each poll batch → single `einvoice_events` row per job with status change. |
 
@@ -904,12 +798,12 @@ sequenceDiagram
 | **Name** | `wetax-daily-close` |
 | **Responsibility** | Call WT08 `/pos/shops/inform-closing-store` with day's order count per store |
 | **Trigger** | pg_cron at configured closing time per store (default: 23:00 ICT) |
-| **Postgres role** | `wetax_dispatcher` |
-| **Tables read** | `stores` (active stores), `einvoice_shop` (store_code), `orders` (count for the day), `partner_credentials` (token), `daily_closings` |
-| **Tables write** | `einvoice_events` (log the WT08 call), `daily_closings` (update with WT08 result if discrepancy reported) |
+| **Runtime auth** | Edge function runs with `service_role` |
+| **Tables read** | `restaurants` (active stores), `einvoice_shop` (store_code), `orders` (count for the day), `partner_credentials` (token) |
+| **Tables write** | none in current shipped implementation beyond edge-function logs and credential access log |
 | **External APIs** | `POST /pos/shops/inform-closing-store` (WT08), `POST /auth/login` (WT00 if needed) |
-| **Retry/idempotency** | WT08 with same `closing_date` + `store_code` is naturally idempotent (same count for same day). Retry on failure up to 3 times. |
-| **Logging** | Each WT08 call → `einvoice_events` row. |
+| **Retry/idempotency** | WT08 with same `closing_date` + `store_code` is naturally idempotent. |
+| **Logging** | edge-function logs + `partner_credential_access_log` on token refresh. |
 
 ### 9.5 Existing functions requiring modification
 
@@ -924,7 +818,7 @@ sequenceDiagram
 |----------|-------|
 | **Name** | `wetax-reference-sync` |
 | **Responsibility** | Refresh `wetax_reference_values` cache from commons/* endpoints |
-| **Trigger** | pg_cron weekly (Sunday 03:00 ICT) |
+| **Trigger** | `wetax-onboarding` weekly `commons_refresh` operation |
 | **Postgres role** | `service_role` |
 | **Tables write** | `wetax_reference_values` (UPSERT) |
 | **External APIs** | `GET /commons/payment-methods`, `GET /commons/tax-rates`, `GET /commons/currency` |
@@ -1025,7 +919,7 @@ FailedJobsDashboard
 │       ├── ErrorClassificationBadge
 │       ├── ErrorMessageText (truncated, expandable)
 │       └── ActionButtons
-│           ├── RetryButton (disabled if classification=duplicate_resolved)
+│           ├── RetryButton (disabled if classification in {duplicate_resolved, manual_resolved})
 │           ├── MarkResolvedButton
 │           └── OpenInPortalButton (opens lookup_url)
 └── SummaryBar
@@ -1055,9 +949,9 @@ DailyReconciliationReport
 
 ---
 
-## 11. Migration Sequence Diagram (Phase 2 Step 2 — Rename)
+## 11. Migration Sequence Diagram (Phase 2 Step 2 — Expand / Migrate / Contract)
 
-This is the most dangerous Phase 2 step: renaming `restaurants` → `stores` across the entire codebase.
+The shipped rename strategy is no longer a single big-bang table rename. The repo now uses a coexistence rollout.
 
 ```mermaid
 sequenceDiagram
@@ -1066,59 +960,38 @@ sequenceDiagram
     participant Test as Test Environment
     participant Prod as Production
 
-    Note over Dev: Phase 2 Step 2 — restaurants → stores rename
+    Note over Dev: Phase 2 Step 2 — coexistence rollout
 
-    Dev->>SA: Run static analysis scan
-    SA->>SA: Grep all migrations for 'restaurants' / 'restaurant_id'
-    SA->>SA: Grep all RLS policies referencing 'restaurants'
-    SA->>SA: Grep all views referencing 'restaurants'
-    SA->>SA: Grep all functions/RPCs referencing 'restaurants'
-    SA->>SA: Grep all edge functions for 'restaurant_id'
-    SA->>SA: Grep all Dart code for 'restaurant' (model, provider, service)
-    SA-->>Dev: Complete reference list with file:line for every occurrence
+    Dev->>SA: Build full reference inventory for restaurants/restaurant_id
+    SA-->>Dev: Complete file and object list
 
-    Dev->>Dev: Author forward migration SQL
-    Note right of Dev: Single atomic migration:<br/>1. ALTER TABLE restaurants RENAME TO stores<br/>2. ALTER COLUMN restaurant_id RENAME TO store_id (all tables)<br/>3. DROP + RECREATE all RLS policies<br/>4. DROP + RECREATE all views<br/>5. DROP + RECREATE all affected functions<br/>6. UPDATE restaurant_settings → store_settings
+    Dev->>Test: Apply Expand migration
+    Note right of Test: Create compatibility objects only:<br/>`stores` view<br/>`public_store_profiles` view<br/>`get_user_store_id()` wrapper
 
-    Dev->>Dev: Author rollback migration SQL
-    Note right of Dev: Exact reverse of forward migration:<br/>stores → restaurants, store_id → restaurant_id<br/>All policies/views/functions recreated with old names
+    Test->>Test: Verify coexistence reads and write-through view behavior
+    Test-->>Dev: Expand PASS
 
-    Dev->>Dev: Author Dart codemod
-    Note right of Dev: Find-replace in models, providers, services:<br/>restaurantId → storeId<br/>Restaurant → Store<br/>restaurant_id → store_id
+    Dev->>Test: Apply Migrate migration
+    Note right of Test: Re-point views/functions/policies to coexistence objects<br/>Keep base tables `restaurants` and `restaurant_settings` untouched
 
-    Dev->>Test: Apply forward migration to test DB
-    Test->>Test: Run all existing RPC tests
-    Test->>Test: Run Dart integration tests
-    Test->>Test: Verify all RLS policies function correctly
-    Test->>Test: Verify all views return data
-    Test-->>Dev: Test results
+    Test->>Test: Verify policy count, helper references, key RPC registration
+    Test-->>Dev: Migrate PASS
 
-    alt Tests pass
-        Dev->>Test: Apply rollback migration
-        Test->>Test: Verify rollback restores original state
-        Test-->>Dev: Rollback verified
+    Dev->>Prod: Deploy app and edge functions against coexistence schema
+    Prod->>Prod: Run smoke tests
+    Prod-->>Dev: Production verified
 
-        Dev->>Dev: Request Hyochang approval for production
-        Dev->>Prod: Apply forward migration (during maintenance window)
-        Prod->>Prod: Verify critical paths (order creation, payment, daily closing)
-        Prod-->>Dev: Production verified
-    else Tests fail
-        Dev->>Dev: Fix migration, re-test
-        Note over Dev: Do NOT proceed to production
-    end
-
-    Note over Dev: Rollback trigger conditions:<br/>1. Any RLS policy returns wrong results<br/>2. Any RPC returns error<br/>3. Any view fails to resolve<br/>4. Edge function auth failures<br/>5. Dart app cannot load store data
+    Note over Dev,Prod: Contract phase remains deferred.<br/>Physical base-table/column renames are not part of the shipped state.
 ```
 
 ### Rollback decision criteria
 
 | Signal | Action |
 |--------|--------|
-| RPC errors in first 5 minutes post-deploy | Immediate rollback |
-| RLS denying legitimate access | Immediate rollback |
-| Edge function failures | Investigate first (may be deployment timing); rollback if persistent |
-| Dart app errors (build failures) | Deploy Dart rollback; SQL rollback if Dart cannot be fixed quickly |
-| No errors after 30 minutes | Rollback SQL can be archived (not deleted) |
+| Expand alias objects missing or not updatable | Stop before Migrate |
+| Policy/helper rewrites fail on staging | Stop before production |
+| Flutter/edge functions fail against coexistence schema | Hold Contract phase and keep compatibility layer |
+| No errors after rollout | Keep coexistence objects until later contract work is explicitly scheduled |
 
 ---
 
@@ -1133,63 +1006,60 @@ FUNCTION derive_vat_rate(vat_category text) RETURNS numeric
   RAISE EXCEPTION 'Invalid vat_category: %', vat_category
 ```
 
-This is a SQL IMMUTABLE function. The mapping is:
+This matches the current `process_payment` implementation. The mapping is:
 - `food` → 8% (current Vietnamese reduced rate for food/non-alcoholic beverages)
 - `alcohol` → 10% (standard rate for alcohol and beer)
 
 ### 12.2 Where the calculation happens
 
-Inside the `process_payment` RPC (or its upstream order-creation flow), within the same transaction that creates order_items:
+Inside the `process_payment` RPC, before payment insertion:
 
 ```
 FOR EACH order_item:
   1. Look up menu_item.vat_category
   2. vat_rate = derive_vat_rate(vat_category)
-  3. total_amount_ex_tax = unit_price × quantity  (prices are VAT-inclusive in Vietnam)
-     — CORRECTION: Vietnamese prices are typically VAT-inclusive (giá đã bao gồm VAT)
-     — Therefore: total_amount_ex_tax = (unit_price × quantity) / (1 + vat_rate/100)
-     — Rounded to 2 decimal places (ROUND(..., 2))
-  4. vat_amount = (unit_price × quantity) - total_amount_ex_tax
-  5. paying_amount_inc_tax = unit_price × quantity  (the actual amount charged)
+  3. total_amount_ex_tax = unit_price × quantity
+  4. vat_amount = total_amount_ex_tax × vat_rate / 100
+  5. paying_amount_inc_tax = total_amount_ex_tax + vat_amount
   6. Write vat_rate, vat_amount, total_amount_ex_tax, paying_amount_inc_tax to order_items row
 ```
 
-**Important:** Vietnamese retail pricing convention is VAT-inclusive. The `menu_items.price` field stores the customer-facing price (including VAT). The calculation extracts the tax component, not adds it.
+Current repo behavior treats `menu_items.price` / `order_items.unit_price` as the pre-tax amount for VAT derivation. This section documents the shipped implementation, even if a future finance decision later changes pricing semantics.
 
 ### 12.3 How order_items snapshot fields are populated
 
 | Field | Formula | Immutable after |
 |-------|---------|-----------------|
 | `vat_rate` | `derive_vat_rate(menu_items.vat_category)` | Order creation |
-| `paying_amount_inc_tax` | `unit_price × quantity` | Order creation |
-| `total_amount_ex_tax` | `paying_amount_inc_tax / (1 + vat_rate/100)` | Order creation |
-| `vat_amount` | `paying_amount_inc_tax - total_amount_ex_tax` | Order creation |
+| `total_amount_ex_tax` | `unit_price × quantity` | Payment processing |
+| `vat_amount` | `total_amount_ex_tax × vat_rate / 100` | Payment processing |
+| `paying_amount_inc_tax` | `total_amount_ex_tax + vat_amount` | Payment processing |
 
-These four fields are populated during order creation (when items are added) and become immutable once the order reaches `completed` status (I11).
+These fields are populated or refreshed during `process_payment`, before the order transitions to `completed`.
 
 ### 12.4 What happens when vat_category mapping changes (I11 enforcement)
 
 Scenario: Government changes food VAT from 8% to 10%.
 
 1. Super admin updates the `derive_vat_rate` function (single SQL `CREATE OR REPLACE`)
-2. All **new** orders created after the change use the new rate
-3. All **existing** order_items retain their original `vat_rate` snapshot — I11 guarantees immutability
+2. All **future payments** after the change use the new rate
+3. Previously completed order_items retain their persisted snapshot
 4. Historical `sendOrderInfo` payloads (stored in `einvoice_jobs.send_order_payload`) remain consistent with the order_items they were built from
 5. No retroactive recalculation occurs. Tax reports for past periods remain correct.
 
-**Menu-level change:** If a store owner changes a menu item from `food` to `alcohol` (e.g., classifies a cocktail correctly):
-- Future orders for that item use `alcohol` → 10%
-- Past orders retain whatever rate was snapshotted at order creation time
-- The menu_items row updates `vat_category`; no cascade to order_items
+**Menu-level change:** If a store owner changes a menu item from `food` to `alcohol`:
+- Future paid orders for that item use `alcohol` → 10%
+- Past completed orders retain the stored snapshot
+- The menu_items row updates `vat_category`; no cascade to historical order_items
 
 ### 12.5 Test cases
 
 | Scenario | Items | Expected VAT breakdown |
 |----------|-------|------------------------|
-| **Pure food order** | 2× Phở (50,000đ each, food) | paying=100,000; ex_tax=92,593 (100000/1.08); vat=7,407 at 8% |
-| **Pure alcohol order** | 3× Bia Saigon (30,000đ each, alcohol) | paying=90,000; ex_tax=81,818 (90000/1.10); vat=8,182 at 10% |
-| **Mixed order** | 1× Phở (50,000đ, food) + 1× Bia (30,000đ, alcohol) | food line: paying=50,000; ex_tax=46,296; vat=3,704 at 8%. alcohol line: paying=30,000; ex_tax=27,273; vat=2,727 at 10%. sendOrderInfo: list_product has 2 items, each with own vat_rate. |
-| **Buffet + alcohol** | 1× Buffet base (300,000đ, food) + 1× Soju (80,000đ, alcohol) | food line at 8%, alcohol line at 10%. Two separate list_product entries. |
+| **Pure food order** | 2× Phở (50,000đ each, food) | ex_tax=100,000; vat=8,000; paying=108,000 |
+| **Pure alcohol order** | 3× Bia Saigon (30,000đ each, alcohol) | ex_tax=90,000; vat=9,000; paying=99,000 |
+| **Mixed order** | 1× Phở (50,000đ, food) + 1× Bia (30,000đ, alcohol) | food line: ex_tax=50,000; vat=4,000; paying=54,000. alcohol line: ex_tax=30,000; vat=3,000; paying=33,000 |
+| **Service charge** | Food/alcohol subtotals with brand service charge enabled | synthetic `order_items` rows are added as separate service-charge lines with their own VAT rate |
 
 ### 12.6 Mapping to sendOrderInfo payload
 
@@ -1215,7 +1085,7 @@ For each order_item → one list_product entry:
 | # | Question | Resolution path |
 |---|----------|-----------------|
 | OQ-01 | **Offline payment support.** The POS currently cannot process payments when Supabase is unreachable. Should Stage 1 include a local SQLite fallback for payment recording? | Scope v1.1 does not mention offline payments. Recommendation: defer to Stage 2. Note in failure boundaries (Section 8) as a known limitation. |
-| OQ-02 | **pg_cron minimum interval.** Supabase's standard pg_cron supports 1-minute minimum intervals. The polling schedule in Section 6 requires 10-second granularity for young jobs. | Test in Phase 2: use pg_net within a 1-minute cron job to fire multiple batched requests. Alternative: edge function with Deno.cron or self-scheduling via setTimeout. |
+| OQ-02 | **WT06 enablement timing.** Polling infrastructure is shipped but currently operated with `wetax_polling_enabled=false` because vendor apitest remains unstable. | Operational decision, not implementation blocker. Enable only after vendor validation. |
 | OQ-03 | **`sale_price` field semantics.** sendOrderInfo's `list_product[].sale_price` is undescribed (U-01). How does it relate to `paying_amount` and `total_amount`? | Phase 2 test: send payload with and without `sale_price`, observe behavior. If ignored, omit it. |
 | OQ-04 | **WT06 response `error_message` field.** PDF documents it but OpenAPI does not (DISC-19). | Phase 2: check actual WT06 response for a failed job. |
 | OQ-05 | **WT01 input parameter.** Is `tax_code` a query parameter, or derived from JWT? (DISC-26) | Phase 2: test GET /seller-info with and without `?tax_code=X`. |
@@ -1229,9 +1099,9 @@ For each order_item → one list_product entry:
 
 | # | Question | Context | Recommendation |
 |---|----------|---------|----------------|
-| OQ-11 | **Price storage convention confirmation.** Are `menu_items.price` values VAT-inclusive (giá đã bao gồm VAT) as assumed in Section 12? | This affects all VAT calculations. Vietnamese F&B convention is VAT-inclusive, but the POS codebase has no documentation on this. | Assume VAT-inclusive (Vietnamese standard). If wrong, the VAT extraction formula flips to addition. Ask Hyochang to confirm. |
-| OQ-12 | **Maintenance window for rename migration.** Phase 2 Step 2 (restaurants → stores) requires a maintenance window. What is acceptable downtime? | The migration touches every table, view, function, and policy. Estimate: 2–5 minutes for SQL, plus Dart deploy. | Recommend off-peak hours (e.g., 3–5 AM ICT on a weekday). |
-| OQ-13 | **Daily close timing per store.** WT08 should fire at end-of-business. Is this configurable per store or a global setting? | Scope says "configured per store" but doesn't specify the configuration mechanism. | Add `closing_time` column to `stores` (or `store_settings`), default 23:00 ICT. |
+| OQ-11 | **Pricing semantics confirmation.** Current code treats `menu_items.price` as the pre-tax amount used to derive VAT during payment. | This affects finance interpretation and printed totals. | Keep docs aligned to code for now; if finance policy changes later, update `process_payment` and this section together. |
+| OQ-12 | **Contract phase timing for physical rename cleanup.** The shipped rollout kept coexistence objects and deferred physical base-table/column renames. When should the final cleanup happen? | Contract work is no longer required for current release readiness, but it still affects long-term schema clarity. | Keep deferred. Re-open only when all legacy RPCs, views, and clients no longer depend on `restaurants` / `restaurant_id`. |
+| OQ-13 | **Daily close timing per store.** WT08 should fire at end-of-business. Is this configurable per store or a global setting? | Current shipped cron is daily at 00:00 Asia/Ho_Chi_Minh and the repo does not yet expose per-store closing-time configuration. | If store-specific closing times become required, add configuration on the existing restaurant/store settings layer and update the cron strategy together. |
 | OQ-14 | **Which settlement edge function is canonical?** C-04 flags `generate-settlement` and `generate_delivery_settlement` as duplicates. | Phase 0 audit identified this. Needs explicit deprecation decision. | Keep `generate_delivery_settlement` (newer, VN timezone), deprecate `generate-settlement`. |
 
 ### REQUIRES VENDOR CLARIFICATION
@@ -1247,12 +1117,12 @@ For each order_item → one list_product entry:
 | # | Decision | Rationale |
 |---|----------|-----------|
 | DD-01 | **WT06 batch size: 50 ref_ids.** | Conservative limit; no documented server limit. Can increase after Phase 2 testing. |
-| DD-02 | **Polling trigger: pg_cron + pg_net → edge function (hybrid).** | Combines reliable scheduling with HTTP call capability. See Section 6.4. |
+| DD-02 | **Polling trigger: direct pg_cron / pg_net schedule into edge functions.** | Matches the shipped cron migrations and keeps SQL scheduling thin. |
 | DD-03 | **JWT claims in `app_metadata` (not `raw_user_meta_data`).** | `app_metadata` is server-side only, cannot be modified by client. `raw_user_meta_data` is client-writable — security risk. |
 | DD-04 | **Hot refresh via `refresh_user_claims` RPC.** | Better UX than requiring logout/login after admin changes. |
-| DD-05 | **`wetax_dispatcher` Postgres role shared between dispatcher and poller.** | Both need credential access and job table access. Separate roles would add complexity without security benefit (same trust boundary). |
+| DD-05 | **WeTax edge functions use `service_role` with zero authenticated-user RLS policies on credential tables.** | This is the boundary verified in Phase 3 and reflected in the shipped functions. |
 | DD-06 | **Proof photo storage path: `payment-proofs/{tax_entity_id}/{store_id}/{YYYY-MM-DD}/{payment_id}.jpg`.** | Partitioned by tax entity and store for access control, by date for lifecycle management. |
-| DD-07 | **Vietnamese prices assumed VAT-inclusive.** | Industry standard in Vietnam F&B. Flagged as OQ-11 for Hyochang confirmation. |
+| DD-07 | **Current VAT implementation treats line prices as pre-tax amounts.** | This is what the shipped `process_payment` RPC computes today. |
 | DD-08 | **b2b_buyer_cache autocomplete debounce: 300ms.** | Standard UX pattern for search-as-you-type. |
 | DD-09 | **Offline proof photo retry: 30s initial, backoff to 5min max.** | Aggressive enough to not lose photos, conservative enough to not drain battery. |
 

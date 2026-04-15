@@ -19,7 +19,10 @@ class AdaptiveLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (PlatformInfo.isWebOrDesktop) return desktopLayout;
+    final width = MediaQuery.sizeOf(context).width;
+    if (PlatformInfo.isWebOrDesktop || width >= breakpoint) {
+      return desktopLayout;
+    }
     return mobileLayout;
   }
 }
