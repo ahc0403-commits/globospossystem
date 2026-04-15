@@ -2,7 +2,6 @@
 ALTER TABLE attendance_logs
   ADD COLUMN IF NOT EXISTS photo_url TEXT,
   ADD COLUMN IF NOT EXISTS photo_thumbnail_url TEXT;
-
 -- staff_wage_configs: payroll settings per staff
 CREATE TABLE IF NOT EXISTS staff_wage_configs (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -16,7 +15,6 @@ CREATE TABLE IF NOT EXISTS staff_wage_configs (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (user_id, effective_from)
 );
-
 ALTER TABLE staff_wage_configs ENABLE ROW LEVEL SECURITY;
 DO $$
 BEGIN
@@ -30,7 +28,6 @@ BEGIN
       USING (restaurant_id = get_user_restaurant_id() OR has_any_role(ARRAY['super_admin']));
   END IF;
 END $$;
-
 -- payroll_records: computed payroll cache
 CREATE TABLE IF NOT EXISTS payroll_records (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -45,7 +42,6 @@ CREATE TABLE IF NOT EXISTS payroll_records (
   confirmed_by  UUID REFERENCES auth.users(id),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 ALTER TABLE payroll_records ENABLE ROW LEVEL SECURITY;
 DO $$
 BEGIN
@@ -59,12 +55,10 @@ BEGIN
       USING (restaurant_id = get_user_restaurant_id() OR has_any_role(ARRAY['super_admin']));
   END IF;
 END $$;
-
 -- Supabase Storage bucket
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('attendance-photos', 'attendance-photos', false)
 ON CONFLICT (id) DO NOTHING;
-
 DO $$
 BEGIN
   IF NOT EXISTS (

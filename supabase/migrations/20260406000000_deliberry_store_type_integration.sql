@@ -10,7 +10,6 @@
 -- ============================================================
 
 BEGIN;
-
 -- ============================================================
 -- 1. public_restaurant_profiles: DROP → CREATE (컬럼 추가)
 --    기존 컬럼: id, slug, name, address, operation_mode,
@@ -18,7 +17,6 @@ BEGIN;
 --    추가: store_type, brand_id, brand_name
 -- ============================================================
 DROP VIEW IF EXISTS public_restaurant_profiles;
-
 CREATE VIEW public_restaurant_profiles AS
 SELECT
   r.id,
@@ -35,15 +33,12 @@ SELECT
 FROM restaurants r
 LEFT JOIN brands b ON b.id = r.brand_id
 WHERE r.is_active = TRUE;
-
 GRANT SELECT ON public_restaurant_profiles TO anon;
 GRANT SELECT ON public_restaurant_profiles TO authenticated;
-
 -- ============================================================
 -- 2. public_menu_items: DROP → CREATE (store_type 추가)
 -- ============================================================
 DROP VIEW IF EXISTS public_menu_items;
-
 CREATE VIEW public_menu_items AS
 SELECT
   mi.id AS external_menu_item_id,
@@ -60,8 +55,6 @@ JOIN restaurants r ON r.id = mi.restaurant_id
 LEFT JOIN menu_categories mc ON mc.id = mi.category_id
 WHERE mi.is_available = TRUE
   AND mi.is_visible_public = TRUE;
-
 GRANT SELECT ON public_menu_items TO anon;
 GRANT SELECT ON public_menu_items TO authenticated;
-
 COMMIT;

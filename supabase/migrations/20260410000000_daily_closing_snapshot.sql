@@ -14,7 +14,6 @@
 -- ============================================================
 
 BEGIN;
-
 -- ============================================================
 -- STEP 1: daily_closings table
 -- ============================================================
@@ -47,13 +46,10 @@ CREATE TABLE IF NOT EXISTS daily_closings (
 
   CONSTRAINT unique_daily_closing UNIQUE (restaurant_id, closing_date)
 );
-
 CREATE INDEX IF NOT EXISTS idx_daily_closings_restaurant_date
   ON daily_closings(restaurant_id, closing_date DESC);
-
 -- RLS: no direct client access — all access via SECURITY DEFINER RPCs
 ALTER TABLE daily_closings ENABLE ROW LEVEL SECURITY;
-
 -- ============================================================
 -- STEP 2: create_daily_closing RPC
 -- ============================================================
@@ -202,8 +198,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
-
 -- ============================================================
 -- STEP 3: get_daily_closings RPC
 -- ============================================================
@@ -279,5 +273,4 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 COMMIT;

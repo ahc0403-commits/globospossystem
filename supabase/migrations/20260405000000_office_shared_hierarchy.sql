@@ -15,10 +15,8 @@ CREATE TABLE IF NOT EXISTS companies (
   name       TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 -- RLS: 인증된 사용자만 SELECT
 ALTER TABLE companies ENABLE ROW LEVEL SECURITY;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -31,7 +29,6 @@ BEGIN
       FOR SELECT TO authenticated USING (true);
   END IF;
 END $$;
-
 -- ============================================================
 -- BRANDS (브랜드 그룹)
 -- ============================================================
@@ -43,12 +40,9 @@ CREATE TABLE IF NOT EXISTS brands (
   logo_url   TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_brands_company_id ON brands(company_id);
-
 -- RLS: 인증된 사용자만 SELECT
 ALTER TABLE brands ENABLE ROW LEVEL SECURITY;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -61,7 +55,6 @@ BEGIN
       FOR SELECT TO authenticated USING (true);
   END IF;
 END $$;
-
 -- ============================================================
 -- RESTAURANTS: brand_id FK 추가 (nullable, non-breaking)
 -- ============================================================

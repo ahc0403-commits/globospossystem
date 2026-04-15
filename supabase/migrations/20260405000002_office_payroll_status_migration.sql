@@ -4,21 +4,17 @@
 SELECT COUNT(*) AS confirmed_rows_before_migration
 FROM payroll_records
 WHERE status = 'confirmed';
-
 -- Step 1: Remove existing CHECK constraint
 ALTER TABLE payroll_records
   DROP CONSTRAINT IF EXISTS payroll_records_status_check;
-
 -- Step 2: Migrate data (confirmed → store_submitted)
 UPDATE payroll_records
   SET status = 'store_submitted'
   WHERE status = 'confirmed';
-
 -- Step 3: Add new CHECK constraint with expanded values
 ALTER TABLE payroll_records
   ADD CONSTRAINT payroll_records_status_check
   CHECK (status IN ('draft', 'store_submitted', 'office_confirmed', 'paid'));
-
 -- Post-migration verification
 DO $$
 DECLARE

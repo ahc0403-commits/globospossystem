@@ -11,7 +11,6 @@
 -- 1. Add column to daily_closings
 ALTER TABLE public.daily_closings
   ADD COLUMN IF NOT EXISTS low_stock_count INT NOT NULL DEFAULT 0;
-
 -- 2. Update create_daily_closing to compute and persist low_stock_count
 CREATE OR REPLACE FUNCTION public.create_daily_closing(
   p_restaurant_id UUID,
@@ -169,10 +168,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 -- 3. DROP then recreate get_daily_closings with low_stock_count
 DROP FUNCTION IF EXISTS public.get_daily_closings(uuid, integer);
-
 CREATE OR REPLACE FUNCTION public.get_daily_closings(
   p_restaurant_id UUID,
   p_limit INT DEFAULT 30
@@ -246,7 +243,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 -- 4. Update get_admin_today_summary to include live low_stock_count
 CREATE OR REPLACE FUNCTION public.get_admin_today_summary(
   p_restaurant_id UUID

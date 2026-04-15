@@ -51,7 +51,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.get_attendance_log_view(
   p_restaurant_id UUID,
   p_from TIMESTAMPTZ,
@@ -130,7 +129,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.record_attendance_event(
   p_restaurant_id UUID,
   p_user_id UUID,

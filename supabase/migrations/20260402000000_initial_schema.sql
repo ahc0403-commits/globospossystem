@@ -23,7 +23,6 @@ CREATE TABLE IF NOT EXISTS restaurants (
   is_active         BOOLEAN NOT NULL DEFAULT TRUE,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 -- ============================================================
 -- USERS
 -- ============================================================
@@ -37,7 +36,6 @@ CREATE TABLE IF NOT EXISTS users (
   is_active     BOOLEAN NOT NULL DEFAULT TRUE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 -- ============================================================
 -- TABLES (레스토랑 테이블)
 -- ============================================================
@@ -52,7 +50,6 @@ CREATE TABLE IF NOT EXISTS tables (
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (restaurant_id, table_number)
 );
-
 -- ============================================================
 -- MENU CATEGORIES
 -- ============================================================
@@ -64,7 +61,6 @@ CREATE TABLE IF NOT EXISTS menu_categories (
   is_active     BOOLEAN NOT NULL DEFAULT TRUE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 -- ============================================================
 -- MENU ITEMS
 -- ============================================================
@@ -81,7 +77,6 @@ CREATE TABLE IF NOT EXISTS menu_items (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 -- ============================================================
 -- ORDERS
 -- ============================================================
@@ -99,7 +94,6 @@ CREATE TABLE IF NOT EXISTS orders (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 -- ============================================================
 -- ORDER ITEMS
 -- ============================================================
@@ -118,7 +112,6 @@ CREATE TABLE IF NOT EXISTS order_items (
   notes         TEXT,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 -- ============================================================
 -- PAYMENTS
 -- ============================================================
@@ -138,7 +131,6 @@ CREATE TABLE IF NOT EXISTS payments (
   CONSTRAINT service_payment_not_revenue
     CHECK (method != 'service' OR is_revenue = FALSE)
 );
-
 -- ============================================================
 -- ATTENDANCE LOGS
 -- ============================================================
@@ -150,7 +142,6 @@ CREATE TABLE IF NOT EXISTS attendance_logs (
   logged_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 -- ============================================================
 -- INVENTORY ITEMS
 -- ============================================================
@@ -163,7 +154,6 @@ CREATE TABLE IF NOT EXISTS inventory_items (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 -- ============================================================
 -- EXTERNAL SALES (Deliberry 배달 연동)
 -- ============================================================
@@ -188,7 +178,6 @@ CREATE TABLE IF NOT EXISTS external_sales (
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT unique_external_order UNIQUE (source_system, external_order_id)
 );
-
 -- ============================================================
 -- PUBLIC PROJECTIONS (globos.world 노출용 뷰)
 -- ============================================================
@@ -204,7 +193,6 @@ SELECT
   r.created_at
 FROM restaurants r
 WHERE r.is_active = TRUE;
-
 CREATE OR REPLACE VIEW public_menu_items AS
 SELECT
   mi.id           AS external_menu_item_id,
@@ -220,7 +208,6 @@ JOIN restaurants r ON r.id = mi.restaurant_id
 LEFT JOIN menu_categories mc ON mc.id = mi.category_id
 WHERE mi.is_available = TRUE
   AND mi.is_visible_public = TRUE;
-
 -- ============================================================
 -- RLS HELPER FUNCTIONS
 -- ============================================================
@@ -228,25 +215,21 @@ CREATE OR REPLACE FUNCTION get_user_restaurant_id()
 RETURNS UUID AS $$
   SELECT restaurant_id FROM users WHERE auth_id = auth.uid()
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
-
 CREATE OR REPLACE FUNCTION get_user_role()
 RETURNS TEXT AS $$
   SELECT role FROM users WHERE auth_id = auth.uid()
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
-
 CREATE OR REPLACE FUNCTION has_any_role(required_roles TEXT[])
 RETURNS BOOLEAN AS $$
   SELECT role = ANY(required_roles)
   FROM users WHERE auth_id = auth.uid()
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
-
 CREATE OR REPLACE FUNCTION is_super_admin()
 RETURNS BOOLEAN AS $$
   SELECT EXISTS (
     SELECT 1 FROM users WHERE auth_id = auth.uid() AND role = 'super_admin'
   )
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
-
 -- ============================================================
 -- ROW LEVEL SECURITY
 -- ============================================================
@@ -261,47 +244,34 @@ ALTER TABLE payments       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE attendance_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inventory_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE external_sales ENABLE ROW LEVEL SECURITY;
-
 -- restaurants: super_admin 전체, 나머지 본인 레스토랑만
 CREATE POLICY restaurants_policy ON restaurants
   USING (is_super_admin() OR id = get_user_restaurant_id());
-
 -- users: super_admin 전체, 나머지 같은 레스토랑만
 CREATE POLICY users_policy ON users
   USING (is_super_admin() OR restaurant_id = get_user_restaurant_id());
-
 -- 나머지 테이블: 같은 레스토랑만 접근
 CREATE POLICY tables_policy ON tables
   USING (restaurant_id = get_user_restaurant_id());
-
 CREATE POLICY menu_categories_policy ON menu_categories
   USING (restaurant_id = get_user_restaurant_id());
-
 CREATE POLICY menu_items_policy ON menu_items
   USING (restaurant_id = get_user_restaurant_id());
-
 CREATE POLICY orders_policy ON orders
   USING (restaurant_id = get_user_restaurant_id());
-
 CREATE POLICY order_items_policy ON order_items
   USING (restaurant_id = get_user_restaurant_id());
-
 CREATE POLICY payments_policy ON payments
   USING (restaurant_id = get_user_restaurant_id());
-
 CREATE POLICY attendance_logs_policy ON attendance_logs
   USING (restaurant_id = get_user_restaurant_id());
-
 CREATE POLICY inventory_items_policy ON inventory_items
   USING (restaurant_id = get_user_restaurant_id());
-
 CREATE POLICY external_sales_policy ON external_sales
   USING (restaurant_id = get_user_restaurant_id());
-
 -- public views: anon 읽기 허용
 GRANT SELECT ON public_restaurant_profiles TO anon;
 GRANT SELECT ON public_menu_items TO anon;
-
 -- ============================================================
 -- INDEXES
 -- ============================================================
@@ -318,7 +288,6 @@ CREATE INDEX IF NOT EXISTS idx_payments_restaurant ON payments(restaurant_id);
 CREATE INDEX IF NOT EXISTS idx_payments_order ON payments(order_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_user ON attendance_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_external_sales_restaurant ON external_sales(restaurant_id, completed_at);
-
 -- ============================================================
 -- CORE RPCs
 -- ============================================================
@@ -363,7 +332,6 @@ BEGIN
   RETURN v_order;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 -- create_buffet_order: 신규 주문 (buffet/hybrid)
 CREATE OR REPLACE FUNCTION create_buffet_order(
   p_restaurant_id UUID,
@@ -426,7 +394,6 @@ BEGIN
   RETURN v_order;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 -- add_items_to_order: 추가 주문
 CREATE OR REPLACE FUNCTION add_items_to_order(
   p_order_id      UUID,
@@ -461,7 +428,6 @@ BEGIN
   UPDATE orders SET updated_at = now() WHERE id = p_order_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 -- process_payment: 결제 + 테이블 해제
 CREATE OR REPLACE FUNCTION process_payment(
   p_order_id      UUID,
@@ -498,7 +464,6 @@ BEGIN
   RETURN v_payment;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 -- ============================================================
 -- COMMENTS
 -- ============================================================

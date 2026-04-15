@@ -132,7 +132,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION create_buffet_order(
   p_restaurant_id UUID,
   p_table_id UUID,
@@ -296,7 +295,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION add_items_to_order(
   p_order_id UUID,
   p_restaurant_id UUID,
@@ -408,7 +406,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION process_payment(
   p_order_id UUID,
   p_restaurant_id UUID,
@@ -570,7 +567,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION cancel_order(
   p_order_id UUID,
   p_restaurant_id UUID

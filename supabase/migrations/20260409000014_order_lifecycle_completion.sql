@@ -24,7 +24,6 @@
 -- ============================================================
 
 BEGIN;
-
 -- ============================================================
 -- STEP 1: Extend order_items.status CHECK to include 'cancelled'
 -- ============================================================
@@ -32,7 +31,6 @@ BEGIN;
 ALTER TABLE order_items DROP CONSTRAINT IF EXISTS order_items_status_check;
 ALTER TABLE order_items ADD CONSTRAINT order_items_status_check
   CHECK (status IN ('pending','preparing','ready','served','cancelled'));
-
 -- ============================================================
 -- STEP 2: cancel_order_item RPC
 --
@@ -129,7 +127,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 -- ============================================================
 -- STEP 3: edit_order_item_quantity RPC
 --
@@ -234,7 +231,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 -- ============================================================
 -- STEP 4: transfer_order_table RPC
 --
@@ -349,7 +345,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 -- ============================================================
 -- STEP 5: Update process_payment to exclude cancelled items
 --
@@ -524,7 +519,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 -- ============================================================
 -- STEP 6: Update update_order_item_status
 --
@@ -618,5 +612,4 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 COMMIT;

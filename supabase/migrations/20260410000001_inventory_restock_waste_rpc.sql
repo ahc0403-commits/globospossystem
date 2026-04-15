@@ -93,7 +93,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 -- ─── Waste RPC ──────────────────────────────────
 CREATE OR REPLACE FUNCTION public.record_inventory_waste(
   p_restaurant_id UUID,

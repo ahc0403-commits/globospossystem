@@ -111,8 +111,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
-
 -- ============================================================
 -- Step 2: Read-only today summary RPC
 -- ============================================================

@@ -1,5 +1,4 @@
 DROP POLICY IF EXISTS office_payroll_reviews_admin_update ON office_payroll_reviews;
-
 CREATE POLICY office_payroll_reviews_office_update
 ON office_payroll_reviews
 FOR UPDATE TO authenticated

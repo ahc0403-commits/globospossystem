@@ -15,7 +15,6 @@ INSERT INTO brands (company_id, code, name)
 SELECT c.id, 'modern_k', 'Modern K Brunch & Bakery'
 FROM company_id_resolved c
 ON CONFLICT (code) DO NOTHING;
-
 WITH company_row AS (
   SELECT id FROM companies WHERE name = 'GLOBOSVN Co., Ltd.' LIMIT 1
 )
@@ -23,7 +22,6 @@ INSERT INTO brands (company_id, code, name)
 SELECT c.id, 'k_noodle', 'K-Noodle'
 FROM company_row c
 ON CONFLICT (code) DO NOTHING;
-
 WITH company_row AS (
   SELECT id FROM companies WHERE name = 'GLOBOSVN Co., Ltd.' LIMIT 1
 )
@@ -31,7 +29,13 @@ INSERT INTO brands (company_id, code, name)
 SELECT c.id, 'k_shabu', 'K-Shabu'
 FROM company_row c
 ON CONFLICT (code) DO NOTHING;
-
+WITH company_row AS (
+  SELECT id FROM companies WHERE name = 'GLOBOSVN Co., Ltd.' LIMIT 1
+)
+INSERT INTO brands (company_id, code, name)
+SELECT c.id, 'globos_default', 'GLOBOS Default Brand'
+FROM company_row c
+ON CONFLICT (code) DO NOTHING;
 -- Map existing restaurants to brands by name pattern
 -- Uses case-insensitive ILIKE matching
 -- Restaurants that don't match any pattern remain NULL (manual mapping needed)
@@ -42,21 +46,23 @@ SET brand_id = (
 )
 WHERE brand_id IS NULL
   AND (name ILIKE '%modern%k%' OR name ILIKE '%brunch%' OR name ILIKE '%bakery%');
-
 UPDATE restaurants
 SET brand_id = (
   SELECT id FROM brands WHERE code = 'k_noodle' LIMIT 1
 )
 WHERE brand_id IS NULL
   AND (name ILIKE '%noodle%' OR name ILIKE '%k-noodle%' OR name ILIKE '%knoodle%');
-
 UPDATE restaurants
 SET brand_id = (
   SELECT id FROM brands WHERE code = 'k_shabu' LIMIT 1
 )
 WHERE brand_id IS NULL
   AND (name ILIKE '%shabu%' OR name ILIKE '%k-shabu%' OR name ILIKE '%kshabu%');
-
+UPDATE restaurants
+SET brand_id = (
+  SELECT id FROM brands WHERE code = 'globos_default' LIMIT 1
+)
+WHERE brand_id IS NULL;
 -- Report unmapped restaurants (for manual review)
 DO $$
 DECLARE

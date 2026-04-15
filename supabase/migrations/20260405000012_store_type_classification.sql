@@ -17,7 +17,6 @@
 -- ============================================================
 
 BEGIN;
-
 -- ============================================================
 -- 1. restaurants.store_type 컬럼 추가
 -- ============================================================
@@ -39,16 +38,13 @@ BEGIN
     RAISE NOTICE 'store_type already exists on restaurants';
   END IF;
 END $$;
-
 COMMENT ON COLUMN restaurants.store_type IS
   'direct = 직영(Office 연동), external = 외부(POS super_admin 전용, Office 비노출)';
-
 -- 인덱스: 50+ 외부매장 대규모 확장 대비
 CREATE INDEX IF NOT EXISTS idx_restaurants_store_type
   ON restaurants(store_type);
 CREATE INDEX IF NOT EXISTS idx_restaurants_brand_store_type
   ON restaurants(brand_id, store_type);
-
 -- ============================================================
 -- 2. 연결 뷰 5개 재생성 (store_type = 'direct' 필터 추가)
 -- ============================================================
@@ -70,7 +66,6 @@ LEFT JOIN brands b ON b.id = r.brand_id
 WHERE r.store_type = 'direct'
 GROUP BY r.id, r.brand_id, b.name, r.name,
          DATE(p.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh');
-
 -- v_store_attendance_summary
 CREATE OR REPLACE VIEW v_store_attendance_summary AS
 SELECT
@@ -90,7 +85,6 @@ JOIN users u ON u.id = al.user_id
 WHERE r.store_type = 'direct'
 GROUP BY al.restaurant_id, r.brand_id, al.user_id, COALESCE(u.full_name, u.role), u.role,
          DATE(al.logged_at AT TIME ZONE 'Asia/Ho_Chi_Minh');
-
 -- v_quality_monitoring
 CREATE OR REPLACE VIEW v_quality_monitoring AS
 SELECT
@@ -110,7 +104,6 @@ FROM qc_checks qc
 JOIN qc_templates qt ON qt.id = qc.template_id
 JOIN restaurants r ON r.id = qc.restaurant_id
 WHERE r.store_type = 'direct';
-
 -- v_inventory_status
 CREATE OR REPLACE VIEW v_inventory_status AS
 SELECT
@@ -130,7 +123,6 @@ SELECT
 FROM inventory_items ii
 JOIN restaurants r ON r.id = ii.restaurant_id
 WHERE r.store_type = 'direct';
-
 -- v_brand_kpi
 CREATE OR REPLACE VIEW v_brand_kpi AS
 SELECT
@@ -161,7 +153,6 @@ FROM brands b
 LEFT JOIN restaurants r ON r.brand_id = b.id AND r.store_type = 'direct'
 LEFT JOIN users u ON u.restaurant_id = r.id
 GROUP BY b.id, b.code, b.name;
-
 -- ============================================================
 -- 3. office_get_accessible_store_ids() 수정
 --    Office 사용자가 접근 가능한 매장 목록에서 external 제외
@@ -212,7 +203,6 @@ BEGIN
   RETURN COALESCE(v_store_ids, array[]::uuid[]);
 END;
 $$;
-
 -- ============================================================
 -- 4. POS super_admin 전용: 외부매장 뷰
 -- ============================================================
@@ -234,7 +224,6 @@ LEFT JOIN brands b ON b.id = r.brand_id
 WHERE r.store_type = 'external'
 GROUP BY r.id, r.brand_id, b.name, r.name,
          DATE(p.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh');
-
 -- 외부매장 통합 현황
 CREATE OR REPLACE VIEW v_external_store_overview AS
 SELECT
@@ -257,13 +246,11 @@ SELECT
 FROM restaurants r
 LEFT JOIN brands b ON b.id = r.brand_id
 WHERE r.store_type = 'external';
-
 -- ============================================================
 -- 5. GRANT: 외부매장 뷰는 authenticated만 (POS super_admin이 RLS로 걸러짐)
 -- ============================================================
 GRANT SELECT ON v_external_store_sales TO authenticated;
 GRANT SELECT ON v_external_store_overview TO authenticated;
-
 -- ============================================================
 -- 6. 기존 뷰 GRANT 재확인 (CREATE OR REPLACE 후 유지 확인)
 -- ============================================================
@@ -272,9 +259,7 @@ GRANT SELECT ON v_store_attendance_summary TO authenticated;
 GRANT SELECT ON v_quality_monitoring TO authenticated;
 GRANT SELECT ON v_inventory_status TO authenticated;
 GRANT SELECT ON v_brand_kpi TO authenticated;
-
 COMMIT;
-
 -- ============================================================
 -- ROLLBACK SQL (비상시 수동 실행)
 -- ============================================================
@@ -287,4 +272,4 @@ COMMIT;
 -- ALTER TABLE restaurants DROP COLUMN IF EXISTS store_type;
 -- -- 그 후 20260405000003_office_connection_views.sql 원본으로 뷰 5개 복원
 -- -- 그 후 20260405000009_office_view_rls.sql 원본으로 함수 복원
--- COMMIT;
+-- COMMIT;;

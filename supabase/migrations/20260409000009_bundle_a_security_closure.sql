@@ -12,14 +12,12 @@
 -- users: read remains restaurant-scoped, direct authenticated writes removed
 -- ============================================================
 DROP POLICY IF EXISTS users_policy ON public.users;
-
 CREATE POLICY users_select_policy ON public.users
 FOR SELECT TO authenticated
 USING (
   is_super_admin()
   OR restaurant_id = get_user_restaurant_id()
 );
-
 CREATE OR REPLACE FUNCTION public.update_my_profile_full_name(
   p_full_name TEXT
 ) RETURNS public.users AS $$
@@ -52,7 +50,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.admin_update_staff_account(
   p_user_id UUID,
   p_restaurant_id UUID,
@@ -161,7 +158,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.complete_onboarding_account_setup(
   p_restaurant_id UUID,
   p_full_name TEXT,
@@ -218,25 +214,21 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 -- ============================================================
 -- restaurants: writes limited to admin/super_admin or super_admin only
 -- ============================================================
 DROP POLICY IF EXISTS restaurants_policy ON public.restaurants;
-
 CREATE POLICY restaurants_select_policy ON public.restaurants
 FOR SELECT TO authenticated
 USING (
   is_super_admin()
   OR id = get_user_restaurant_id()
 );
-
 CREATE POLICY restaurants_super_admin_insert_policy ON public.restaurants
 FOR INSERT TO authenticated
 WITH CHECK (
   is_super_admin()
 );
-
 CREATE POLICY restaurants_admin_update_policy ON public.restaurants
 FOR UPDATE TO authenticated
 USING (
@@ -253,21 +245,18 @@ WITH CHECK (
     AND has_any_role(ARRAY['admin'])
   )
 );
-
 -- ============================================================
 -- tables/menu_categories/menu_items: reads remain tenant-scoped, writes admin only
 -- ============================================================
 DROP POLICY IF EXISTS tables_policy ON public.tables;
 DROP POLICY IF EXISTS menu_categories_policy ON public.menu_categories;
 DROP POLICY IF EXISTS menu_items_policy ON public.menu_items;
-
 CREATE POLICY tables_select_policy ON public.tables
 FOR SELECT TO authenticated
 USING (
   is_super_admin()
   OR restaurant_id = get_user_restaurant_id()
 );
-
 CREATE POLICY tables_admin_write_policy ON public.tables
 FOR INSERT TO authenticated
 WITH CHECK (
@@ -277,7 +266,6 @@ WITH CHECK (
     AND has_any_role(ARRAY['admin'])
   )
 );
-
 CREATE POLICY tables_admin_update_policy ON public.tables
 FOR UPDATE TO authenticated
 USING (
@@ -294,7 +282,6 @@ WITH CHECK (
     AND has_any_role(ARRAY['admin'])
   )
 );
-
 CREATE POLICY tables_admin_delete_policy ON public.tables
 FOR DELETE TO authenticated
 USING (
@@ -304,14 +291,12 @@ USING (
     AND has_any_role(ARRAY['admin'])
   )
 );
-
 CREATE POLICY menu_categories_select_policy ON public.menu_categories
 FOR SELECT TO authenticated
 USING (
   is_super_admin()
   OR restaurant_id = get_user_restaurant_id()
 );
-
 CREATE POLICY menu_categories_admin_write_policy ON public.menu_categories
 FOR INSERT TO authenticated
 WITH CHECK (
@@ -321,7 +306,6 @@ WITH CHECK (
     AND has_any_role(ARRAY['admin'])
   )
 );
-
 CREATE POLICY menu_categories_admin_update_policy ON public.menu_categories
 FOR UPDATE TO authenticated
 USING (
@@ -338,7 +322,6 @@ WITH CHECK (
     AND has_any_role(ARRAY['admin'])
   )
 );
-
 CREATE POLICY menu_categories_admin_delete_policy ON public.menu_categories
 FOR DELETE TO authenticated
 USING (
@@ -348,14 +331,12 @@ USING (
     AND has_any_role(ARRAY['admin'])
   )
 );
-
 CREATE POLICY menu_items_select_policy ON public.menu_items
 FOR SELECT TO authenticated
 USING (
   is_super_admin()
   OR restaurant_id = get_user_restaurant_id()
 );
-
 CREATE POLICY menu_items_admin_write_policy ON public.menu_items
 FOR INSERT TO authenticated
 WITH CHECK (
@@ -365,7 +346,6 @@ WITH CHECK (
     AND has_any_role(ARRAY['admin'])
   )
 );
-
 CREATE POLICY menu_items_admin_update_policy ON public.menu_items
 FOR UPDATE TO authenticated
 USING (
@@ -382,7 +362,6 @@ WITH CHECK (
     AND has_any_role(ARRAY['admin'])
   )
 );
-
 CREATE POLICY menu_items_admin_delete_policy ON public.menu_items
 FOR DELETE TO authenticated
 USING (
@@ -392,17 +371,14 @@ USING (
     AND has_any_role(ARRAY['admin'])
   )
 );
-
 -- ============================================================
 -- external_sales / delivery_settlements: authenticated read only
 -- inserts reserved for service-side integrations
 -- ============================================================
 DROP POLICY IF EXISTS external_sales_insert ON public.external_sales;
 DROP POLICY IF EXISTS delivery_settlements_insert ON public.delivery_settlements;
-
 -- ============================================================
 -- fingerprint: dormant feature closure
 -- authenticated app access removed by default
 -- ============================================================
 DROP POLICY IF EXISTS fingerprint_templates_restaurant_policy ON public.fingerprint_templates;
-

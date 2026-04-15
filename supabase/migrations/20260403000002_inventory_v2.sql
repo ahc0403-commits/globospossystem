@@ -4,7 +4,6 @@ ALTER TABLE inventory_items
   ADD COLUMN IF NOT EXISTS reorder_point  DECIMAL(12,3),
   ADD COLUMN IF NOT EXISTS cost_per_unit  DECIMAL(12,2),
   ADD COLUMN IF NOT EXISTS supplier_name  TEXT;
-
 CREATE TABLE IF NOT EXISTS menu_recipes (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   restaurant_id  UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
@@ -26,7 +25,6 @@ BEGIN
       WITH CHECK (restaurant_id = get_user_restaurant_id() OR has_any_role(ARRAY['super_admin']));
   END IF;
 END $$;
-
 CREATE TABLE IF NOT EXISTS inventory_transactions (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   restaurant_id    UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
@@ -51,7 +49,6 @@ BEGIN
       WITH CHECK (restaurant_id = get_user_restaurant_id() OR has_any_role(ARRAY['super_admin']));
   END IF;
 END $$;
-
 CREATE TABLE IF NOT EXISTS inventory_physical_counts (
   id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   restaurant_id           UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
@@ -76,7 +73,6 @@ BEGIN
       WITH CHECK (restaurant_id = get_user_restaurant_id() OR has_any_role(ARRAY['super_admin']));
   END IF;
 END $$;
-
 CREATE OR REPLACE FUNCTION process_payment(
   p_order_id      UUID,
   p_restaurant_id UUID,

@@ -40,25 +40,20 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 -- ============================================================
 -- Remove direct authenticated writes. Reads remain via Bundle A policies.
 -- ============================================================
 DROP POLICY IF EXISTS restaurants_super_admin_insert_policy ON public.restaurants;
 DROP POLICY IF EXISTS restaurants_admin_update_policy ON public.restaurants;
-
 DROP POLICY IF EXISTS tables_admin_write_policy ON public.tables;
 DROP POLICY IF EXISTS tables_admin_update_policy ON public.tables;
 DROP POLICY IF EXISTS tables_admin_delete_policy ON public.tables;
-
 DROP POLICY IF EXISTS menu_categories_admin_write_policy ON public.menu_categories;
 DROP POLICY IF EXISTS menu_categories_admin_update_policy ON public.menu_categories;
 DROP POLICY IF EXISTS menu_categories_admin_delete_policy ON public.menu_categories;
-
 DROP POLICY IF EXISTS menu_items_admin_write_policy ON public.menu_items;
 DROP POLICY IF EXISTS menu_items_admin_update_policy ON public.menu_items;
 DROP POLICY IF EXISTS menu_items_admin_delete_policy ON public.menu_items;
-
 -- ============================================================
 -- restaurants
 -- ============================================================
@@ -144,7 +139,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.admin_update_restaurant(
   p_restaurant_id UUID,
   p_name TEXT,
@@ -265,7 +259,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.admin_deactivate_restaurant(
   p_restaurant_id UUID
 ) RETURNS public.restaurants AS $$
@@ -313,7 +306,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.admin_update_restaurant_settings(
   p_restaurant_id UUID,
   p_name TEXT,
@@ -408,7 +400,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 -- ============================================================
 -- tables
 -- ============================================================
@@ -465,7 +456,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.admin_update_table(
   p_table_id UUID,
   p_table_number TEXT DEFAULT NULL,
@@ -550,7 +540,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.admin_delete_table(
   p_table_id UUID
 ) RETURNS public.tables AS $$
@@ -597,7 +586,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 -- ============================================================
 -- menu_categories
 -- ============================================================
@@ -652,7 +640,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.admin_update_menu_category(
   p_category_id UUID,
   p_name TEXT DEFAULT NULL,
@@ -736,7 +723,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.admin_delete_menu_category(
   p_category_id UUID
 ) RETURNS public.menu_categories AS $$
@@ -783,7 +769,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 -- ============================================================
 -- menu_items
 -- ============================================================
@@ -866,7 +851,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.admin_update_menu_item(
   p_item_id UUID,
   p_category_id UUID DEFAULT NULL,
@@ -996,7 +980,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.admin_delete_menu_item(
   p_item_id UUID
 ) RETURNS public.menu_items AS $$

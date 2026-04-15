@@ -13,7 +13,6 @@
 
 ALTER TABLE public.inventory_physical_counts
   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
 CREATE OR REPLACE FUNCTION public.get_inventory_physical_count_sheet(
   p_restaurant_id UUID,
   p_count_date DATE
@@ -70,7 +69,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.apply_inventory_physical_count_line(
   p_restaurant_id UUID,
   p_count_date DATE,

@@ -11,9 +11,7 @@ CREATE TABLE IF NOT EXISTS public.office_qc_followups (
   created_at timestamptz NOT NULL DEFAULT now(),
   resolved_at timestamptz
 );
-
 ALTER TABLE public.office_qc_followups ENABLE ROW LEVEL SECURITY;
-
 DO $$
 BEGIN
   IF NOT EXISTS (

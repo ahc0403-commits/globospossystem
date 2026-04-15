@@ -25,7 +25,6 @@ JOIN restaurants r ON r.id = p.restaurant_id
 LEFT JOIN brands b ON b.id = r.brand_id
 GROUP BY r.id, r.brand_id, b.name, r.name,
          DATE(p.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh');
-
 -- ============================================================
 -- v_store_attendance_summary: 매장별 직원별 일자별 근태
 -- Consumer: Office Payroll Review
@@ -47,7 +46,6 @@ JOIN restaurants r ON r.id = al.restaurant_id
 JOIN users u ON u.id = al.user_id
 GROUP BY al.restaurant_id, r.brand_id, al.user_id, COALESCE(u.full_name, u.role), u.role,
          DATE(al.logged_at AT TIME ZONE 'Asia/Ho_Chi_Minh');
-
 -- ============================================================
 -- v_quality_monitoring: 품질 점검 결과 + 증빙
 -- Consumer: Office Quality Monitoring
@@ -69,7 +67,6 @@ SELECT
 FROM qc_checks qc
 JOIN qc_templates qt ON qt.id = qc.template_id
 JOIN restaurants r ON r.id = qc.restaurant_id;
-
 -- ============================================================
 -- v_inventory_status: 재고 현황 + 발주 필요 여부
 -- Consumer: Office Inventory Monitoring, Purchase
@@ -91,7 +88,6 @@ SELECT
   ii.updated_at AS last_updated
 FROM inventory_items ii
 JOIN restaurants r ON r.id = ii.restaurant_id;
-
 -- ============================================================
 -- v_brand_kpi: 브랜드별 KPI 요약
 -- Consumer: Office KPI Dashboard, Super Admin
@@ -123,7 +119,6 @@ FROM brands b
 LEFT JOIN restaurants r ON r.brand_id = b.id
 LEFT JOIN users u ON u.restaurant_id = r.id
 GROUP BY b.id, b.code, b.name;
-
 -- ============================================================
 -- Grant SELECT on all views to authenticated users
 -- (RLS on underlying tables still applies)

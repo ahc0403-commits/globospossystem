@@ -15,7 +15,6 @@
 
 ALTER TABLE public.qc_templates
   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
 CREATE OR REPLACE FUNCTION public.get_qc_templates(
   p_restaurant_id UUID DEFAULT NULL,
   p_scope TEXT DEFAULT 'visible'
@@ -93,7 +92,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.create_qc_template(
   p_category TEXT,
   p_criteria_text TEXT,
@@ -187,7 +185,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.update_qc_template(
   p_template_id UUID,
   p_patch JSONB
@@ -338,7 +335,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.deactivate_qc_template(
   p_template_id UUID
 ) RETURNS public.qc_templates AS $$
@@ -400,7 +396,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.get_qc_checks(
   p_restaurant_id UUID,
   p_from DATE,
@@ -480,7 +475,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.upsert_qc_check(
   p_restaurant_id UUID,
   p_template_id UUID,
@@ -616,7 +610,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.get_qc_superadmin_summary(
   p_week_start DATE
 ) RETURNS TABLE (

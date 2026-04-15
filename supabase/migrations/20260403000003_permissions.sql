@@ -1,6 +1,5 @@
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS extra_permissions TEXT[] DEFAULT '{}';
-
 CREATE TABLE IF NOT EXISTS restaurant_settings (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   restaurant_id   UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE UNIQUE,

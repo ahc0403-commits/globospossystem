@@ -9,7 +9,6 @@ CREATE TABLE IF NOT EXISTS qc_templates (
   is_active          BOOLEAN NOT NULL DEFAULT TRUE,
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 ALTER TABLE qc_templates ENABLE ROW LEVEL SECURITY;
 DO $$
 BEGIN
@@ -26,7 +25,6 @@ BEGIN
       );
   END IF;
 END $$;
-
 -- 일별 점검 기록
 CREATE TABLE IF NOT EXISTS qc_checks (
   id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -40,7 +38,6 @@ CREATE TABLE IF NOT EXISTS qc_checks (
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (template_id, check_date)
 );
-
 ALTER TABLE qc_checks ENABLE ROW LEVEL SECURITY;
 DO $$
 BEGIN
@@ -57,12 +54,10 @@ BEGIN
       );
   END IF;
 END $$;
-
 -- Supabase Storage: qc-photos bucket
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('qc-photos', 'qc-photos', false)
 ON CONFLICT (id) DO NOTHING;
-
 DO $$
 BEGIN
   IF NOT EXISTS (

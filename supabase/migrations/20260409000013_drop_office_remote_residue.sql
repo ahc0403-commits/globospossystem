@@ -22,7 +22,6 @@
 -- ============================================================
 
 BEGIN;
-
 -- ============================================================
 -- STEP 1: Drop 12 broken office_read_* policies on POS-core tables
 -- These call get_caller_type() which errors on dropped office_user_profiles
@@ -40,7 +39,6 @@ DROP POLICY IF EXISTS office_read_qc_templates ON qc_templates;
 DROP POLICY IF EXISTS office_read_restaurants ON restaurants;
 DROP POLICY IF EXISTS office_read_wage_configs ON staff_wage_configs;
 DROP POLICY IF EXISTS office_read_users ON users;
-
 -- ============================================================
 -- STEP 2: Drop office-only tables (CASCADE drops their policies too)
 -- Must happen BEFORE dropping get_caller_type() because these tables'
@@ -53,7 +51,6 @@ DROP TABLE IF EXISTS office_document_versions CASCADE;
 DROP TABLE IF EXISTS office_documents CASCADE;
 DROP TABLE IF EXISTS office_expenses CASCADE;
 DROP TABLE IF EXISTS office_payables CASCADE;
-
 -- ============================================================
 -- STEP 3: Drop broken get_caller_type() function
 -- References dropped office_user_profiles, confirmed error at runtime.
@@ -61,7 +58,6 @@ DROP TABLE IF EXISTS office_payables CASCADE;
 -- ============================================================
 
 DROP FUNCTION IF EXISTS get_caller_type();
-
 -- ============================================================
 -- STEP 4: Drop broken office_current_* functions
 -- All reference dropped office_user_profiles in their body
@@ -70,7 +66,6 @@ DROP FUNCTION IF EXISTS get_caller_type();
 DROP FUNCTION IF EXISTS office_current_role();
 DROP FUNCTION IF EXISTS office_current_brand_id();
 DROP FUNCTION IF EXISTS office_current_store_id();
-
 -- ============================================================
 -- STEP 5: Drop broken office identity/permission functions
 -- Reference dropped office_user_profiles
@@ -78,7 +73,6 @@ DROP FUNCTION IF EXISTS office_current_store_id();
 
 DROP FUNCTION IF EXISTS office_create_account(text, text, text, text, text, uuid[], jsonb);
 DROP FUNCTION IF EXISTS office_save_permissions(uuid, text, text, uuid[], jsonb);
-
 -- ============================================================
 -- STEP 6: Drop broken office purchase functions
 -- Reference dropped office_purchases table
@@ -86,7 +80,6 @@ DROP FUNCTION IF EXISTS office_save_permissions(uuid, text, text, uuid[], jsonb)
 
 DROP FUNCTION IF EXISTS office_approve_purchase(uuid);
 DROP FUNCTION IF EXISTS office_reject_purchase(uuid);
-
 -- ============================================================
 -- STEP 7: Drop intact but dead office domain functions
 -- Zero POS dependency, belong to Office system
@@ -96,5 +89,4 @@ DROP FUNCTION IF EXISTS office_approve_expense(uuid);
 DROP FUNCTION IF EXISTS office_reject_payroll(uuid);
 DROP FUNCTION IF EXISTS office_release_document(uuid);
 DROP FUNCTION IF EXISTS office_return_expense(uuid, text);
-
 COMMIT;

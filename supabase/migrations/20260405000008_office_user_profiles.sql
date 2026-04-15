@@ -21,13 +21,11 @@ create table if not exists public.office_user_profiles (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
 create index if not exists idx_office_users_auth_id on public.office_user_profiles(auth_id);
 create index if not exists idx_office_users_company on public.office_user_profiles(company_id);
 create index if not exists idx_office_users_scope on public.office_user_profiles using gin(scope_ids);
-
 alter table public.office_user_profiles enable row level security;
-
+drop policy if exists office_user_profiles_select on public.office_user_profiles;
 create policy office_user_profiles_select
 on public.office_user_profiles
 for select
@@ -39,7 +37,7 @@ using (
     where oup.auth_id = auth.uid()
   )
 );
-
+drop policy if exists office_user_profiles_update on public.office_user_profiles;
 create policy office_user_profiles_update
 on public.office_user_profiles
 for update
@@ -62,7 +60,7 @@ with check (
       and oup.account_level in ('super_admin', 'platform_admin')
   )
 );
-
+drop policy if exists office_user_profiles_insert on public.office_user_profiles;
 create policy office_user_profiles_insert
 on public.office_user_profiles
 for insert

@@ -11,7 +11,6 @@
 -- ============================================================
 ALTER TABLE external_sales
   ADD COLUMN IF NOT EXISTS settlement_id UUID;
-
 -- ============================================================
 -- LAYER 2: DELIVERY SETTLEMENTS (2주 정산 헤더)
 -- Deliberry가 INSERT, POS가 READ + status UPDATE (입금 확인)
@@ -44,7 +43,6 @@ CREATE TABLE IF NOT EXISTS delivery_settlements (
   CONSTRAINT unique_settlement_period
     UNIQUE (restaurant_id, source_system, period_label)
 );
-
 -- ============================================================
 -- LAYER 2-B: DELIVERY SETTLEMENT ITEMS (차감 항목, 무제한 확장)
 -- item_type에 CHECK 없음 = 새 비용 항목 추가 시 migration 불필요
@@ -65,59 +63,48 @@ CREATE TABLE IF NOT EXISTS delivery_settlement_items (
 
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_settlement_items_settlement
   ON delivery_settlement_items(settlement_id);
-
 CREATE INDEX IF NOT EXISTS idx_settlement_items_type
   ON delivery_settlement_items(item_type);
-
 -- ============================================================
 -- FK: external_sales → delivery_settlements
 -- ============================================================
 ALTER TABLE external_sales
   ADD CONSTRAINT fk_external_sales_settlement
   FOREIGN KEY (settlement_id) REFERENCES delivery_settlements(id);
-
 CREATE INDEX IF NOT EXISTS idx_external_sales_settlement
   ON external_sales(settlement_id);
-
 -- ============================================================
 -- RLS POLICIES
 -- ============================================================
 
 -- external_sales: 레스토랑 격리
 ALTER TABLE external_sales ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY external_sales_read ON external_sales
   FOR SELECT
   USING (
     is_super_admin()
     OR restaurant_id = get_user_restaurant_id()
   );
-
 CREATE POLICY external_sales_insert ON external_sales
   FOR INSERT
   WITH CHECK (
     restaurant_id = get_user_restaurant_id()
   );
-
 -- delivery_settlements: 레스토랑 격리
 ALTER TABLE delivery_settlements ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY delivery_settlements_read ON delivery_settlements
   FOR SELECT
   USING (
     is_super_admin()
     OR restaurant_id = get_user_restaurant_id()
   );
-
 CREATE POLICY delivery_settlements_insert ON delivery_settlements
   FOR INSERT
   WITH CHECK (
     restaurant_id = get_user_restaurant_id()
   );
-
 -- POS admin만 입금 확인 가능 (status → received)
 CREATE POLICY delivery_settlements_confirm ON delivery_settlements
   FOR UPDATE
@@ -128,10 +115,8 @@ CREATE POLICY delivery_settlements_confirm ON delivery_settlements
   WITH CHECK (
     restaurant_id = get_user_restaurant_id()
   );
-
 -- delivery_settlement_items: settlement 통해 간접 격리
 ALTER TABLE delivery_settlement_items ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY settlement_items_read ON delivery_settlement_items
   FOR SELECT
   USING (
@@ -141,7 +126,6 @@ CREATE POLICY settlement_items_read ON delivery_settlement_items
         AND (is_super_admin() OR ds.restaurant_id = get_user_restaurant_id())
     )
   );
-
 CREATE POLICY settlement_items_insert ON delivery_settlement_items
   FOR INSERT
   WITH CHECK (
@@ -151,7 +135,6 @@ CREATE POLICY settlement_items_insert ON delivery_settlement_items
         AND ds.restaurant_id = get_user_restaurant_id()
     )
   );
-
 -- ============================================================
 -- HELPER VIEW: 채널별 일매출 (POS 리포트용)
 -- orders.sales_channel + payments.amount 기반
@@ -193,7 +176,6 @@ FULL OUTER JOIN (
   GROUP BY restaurant_id, (completed_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
 ) del
 ON pos.restaurant_id = del.restaurant_id AND pos.sale_date = del.sale_date;
-
 -- ============================================================
 -- HELPER VIEW: 정산 요약 (POS 정산 화면용)
 -- ============================================================
@@ -226,7 +208,6 @@ SELECT
    WHERE es.settlement_id = ds.id AND es.is_revenue = true
   ) AS order_count
 FROM delivery_settlements ds;
-
 -- ============================================================
 -- VIEW RLS (뷰는 기반 테이블 RLS를 상속하므로 별도 불필요)
 -- ============================================================
@@ -235,4 +216,4 @@ FROM delivery_settlements ds;
 
 -- ============================================================
 -- DONE
--- ============================================================
+-- ============================================================;

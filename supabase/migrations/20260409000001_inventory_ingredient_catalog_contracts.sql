@@ -16,7 +16,6 @@
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_items_restaurant_name_ci
   ON public.inventory_items (restaurant_id, lower(btrim(name)));
-
 CREATE OR REPLACE FUNCTION public.get_inventory_ingredient_catalog(
   p_restaurant_id UUID
 ) RETURNS TABLE (
@@ -72,7 +71,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.create_inventory_item(
   p_restaurant_id UUID,
   p_name TEXT,
@@ -182,7 +180,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.update_inventory_item(
   p_item_id UUID,
   p_restaurant_id UUID,

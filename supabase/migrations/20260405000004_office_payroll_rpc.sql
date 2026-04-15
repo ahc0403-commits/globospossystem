@@ -9,12 +9,10 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   details     JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_audit_logs_entity
   ON audit_logs(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at
   ON audit_logs(created_at DESC);
-
 CREATE OR REPLACE FUNCTION office_confirm_payroll(p_payroll_id UUID)
 RETURNS payroll_records AS $$
 DECLARE
@@ -56,7 +54,6 @@ BEGIN
   RETURN v_payroll;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 CREATE OR REPLACE FUNCTION office_return_payroll(p_payroll_id UUID)
 RETURNS payroll_records AS $$
 DECLARE

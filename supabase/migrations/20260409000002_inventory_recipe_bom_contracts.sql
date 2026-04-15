@@ -16,7 +16,6 @@
 
 ALTER TABLE public.menu_recipes
   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
 CREATE OR REPLACE FUNCTION public.get_inventory_recipe_catalog(
   p_restaurant_id UUID,
   p_menu_item_id UUID DEFAULT NULL
@@ -83,7 +82,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 CREATE OR REPLACE FUNCTION public.upsert_inventory_recipe_line(
   p_restaurant_id UUID,
   p_menu_item_id UUID,

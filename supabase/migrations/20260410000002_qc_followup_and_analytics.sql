@@ -27,9 +27,7 @@ CREATE TABLE IF NOT EXISTS public.qc_followups (
   resolved_at      TIMESTAMPTZ,
   UNIQUE (source_check_id)
 );
-
 ALTER TABLE public.qc_followups ENABLE ROW LEVEL SECURITY;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -46,7 +44,6 @@ BEGIN
     );
   END IF;
 END $$;
-
 -- ─── Create Follow-up ───────────────────────────
 CREATE OR REPLACE FUNCTION public.create_qc_followup(
   p_restaurant_id   UUID,
@@ -119,7 +116,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 -- ─── Update Follow-up Status ────────────────────
 CREATE OR REPLACE FUNCTION public.update_qc_followup_status(
   p_followup_id      UUID,
@@ -193,7 +189,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 -- ─── Get Follow-ups ─────────────────────────────
 CREATE OR REPLACE FUNCTION public.get_qc_followups(
   p_restaurant_id UUID,
@@ -262,7 +257,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
-
 -- ─── QC Analytics ───────────────────────────────
 CREATE OR REPLACE FUNCTION public.get_qc_analytics(
   p_restaurant_id UUID,

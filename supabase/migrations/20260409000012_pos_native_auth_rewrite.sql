@@ -20,7 +20,6 @@
 -- ============================================================
 
 BEGIN;
-
 -- ============================================================
 -- STEP 1: Rewrite POS-critical RLS policies to POS-native checks
 -- ============================================================
@@ -37,7 +36,6 @@ USING (
       AND u.role IN ('admin', 'super_admin')
   )
 );
-
 -- 1b. brands: Same pattern
 -- Original: security_hardening.sql M2
 DROP POLICY IF EXISTS brands_scoped_read ON brands;
@@ -50,7 +48,6 @@ USING (
       AND u.role IN ('admin', 'super_admin')
   )
 );
-
 -- 1c. audit_logs: Remove office_user_profiles check
 -- Original: harness_audit_fixes.sql CR1
 DROP POLICY IF EXISTS audit_logs_admin_read ON audit_logs;
@@ -63,7 +60,6 @@ USING (
       AND u.role IN ('admin', 'super_admin')
   )
 );
-
 -- 1d. office_payroll_reviews SELECT: Replace office_get_accessible_store_ids()
 -- Original: harness_audit_fixes.sql HI4
 DROP POLICY IF EXISTS office_payroll_reviews_scoped_select ON office_payroll_reviews;
@@ -73,7 +69,6 @@ USING (
   is_super_admin()
   OR restaurant_id = get_user_restaurant_id()
 );
-
 -- 1e. office_payroll_reviews UPDATE: Replace office_user_profiles check
 -- Original: fix_payroll_review_rls.sql
 DROP POLICY IF EXISTS office_payroll_reviews_office_update ON office_payroll_reviews;
@@ -87,7 +82,6 @@ WITH CHECK (
   has_any_role(ARRAY['admin', 'super_admin'])
   AND (is_super_admin() OR restaurant_id = get_user_restaurant_id())
 );
-
 -- ============================================================
 -- STEP 2: Drop office-only tables (zero Dart/POS runtime dependency)
 -- CASCADE drops their RLS policies, constraints, and indexes
@@ -96,11 +90,9 @@ WITH CHECK (
 -- office_purchases: Created in 20260405000006, RLS hardened in 20260408000000 H1+L2
 -- No Dart code references this table
 DROP TABLE IF EXISTS office_purchases CASCADE;
-
 -- office_qc_followups: Created in 20260405000007, RLS hardened in 20260408000000 H2
 -- No Dart code references this table
 DROP TABLE IF EXISTS office_qc_followups CASCADE;
-
 -- ============================================================
 -- STEP 3: Drop office identity infrastructure
 -- All POS-critical consumers were rewritten in Step 1.
@@ -110,8 +102,6 @@ DROP TABLE IF EXISTS office_qc_followups CASCADE;
 -- Drop scope functions first (they depend on office_user_profiles)
 DROP FUNCTION IF EXISTS office_get_accessible_store_ids();
 DROP FUNCTION IF EXISTS office_get_accessible_brand_ids();
-
 -- Drop office identity table (CASCADE drops its policies and indexes)
 DROP TABLE IF EXISTS office_user_profiles CASCADE;
-
 COMMIT;

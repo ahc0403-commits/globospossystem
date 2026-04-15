@@ -19,16 +19,13 @@ CREATE TABLE IF NOT EXISTS office_payroll_reviews (
   CONSTRAINT uniq_office_payroll_review
     UNIQUE (source_payroll_id, period_start, period_end)
 );
-
 CREATE INDEX IF NOT EXISTS idx_office_payroll_reviews_restaurant
   ON office_payroll_reviews(restaurant_id);
 CREATE INDEX IF NOT EXISTS idx_office_payroll_reviews_brand
   ON office_payroll_reviews(brand_id);
 CREATE INDEX IF NOT EXISTS idx_office_payroll_reviews_status
   ON office_payroll_reviews(status);
-
 ALTER TABLE office_payroll_reviews ENABLE ROW LEVEL SECURITY;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -74,7 +71,6 @@ BEGIN
     );
   END IF;
 END $$;
-
 CREATE OR REPLACE FUNCTION on_payroll_store_submitted()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -106,7 +102,6 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 DROP TRIGGER IF EXISTS trg_payroll_store_submitted ON payroll_records;
 CREATE TRIGGER trg_payroll_store_submitted
 AFTER UPDATE OF status ON payroll_records
