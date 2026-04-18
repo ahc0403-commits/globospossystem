@@ -319,7 +319,7 @@ async function loginAndGetData(page, user, pass, targetDate, downloadDir) {
   return { method: 'html_scrape', rows };
 }
 
-async function processStore(browser, store, targetDate, downloadDir) {
+async function processStore(store, targetDate, downloadDir) {
   const { storeName, user, pass, storeId } = store;
 
   if (!storeId) {
@@ -340,6 +340,16 @@ async function processStore(browser, store, targetDate, downloadDir) {
     fs.mkdirSync(downloadDir, { recursive: true });
   }
 
+  const browser = await puppeteer.launch({
+    headless: true,
+    protocolTimeout: 120000,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+    ],
+  });
   console.log(`  ${storeName}: opening browser page`);
   const page = await browser.newPage();
   page.setDefaultTimeout(15000);
@@ -391,6 +401,7 @@ async function processStore(browser, store, targetDate, downloadDir) {
     return { storeName, success: false, error: err.message };
   } finally {
     await page.close();
+    await browser.close();
   }
 }
 
@@ -421,27 +432,15 @@ async function main() {
   const downloadDir = path.join(__dirname, 'downloads_tmp');
   fs.mkdirSync(downloadDir, { recursive: true });
 
-  const browser = await puppeteer.launch({
-    headless: true,
-    protocolTimeout: 120000,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-    ],
-  });
-
   const results = [];
 
   try {
     for (const store of STORES) {
       console.log(`\nProcessing: ${store.storeName}`);
-      const result = await processStore(browser, store, targetDate, downloadDir);
+      const result = await processStore(store, targetDate, downloadDir);
       results.push(result);
     }
   } finally {
-    await browser.close();
     try {
       fs.rmSync(downloadDir, { recursive: true, force: true });
     } catch {}
