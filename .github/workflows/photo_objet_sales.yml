@@ -1,0 +1,58 @@
+name: Photo Objet Daily Sales Pull
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: 'Date to pull (YYYY-MM-DD), defaults to yesterday'
+        required: false
+
+jobs:
+  pull-sales:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install --no-package-lock
+        working-directory: scripts
+
+      - name: Install Chromium
+        run: npx puppeteer browsers install chrome
+        working-directory: scripts
+
+      - name: Pull Photo Objet sales
+        run: node pull_moers_sales.js
+        working-directory: scripts
+        env:
+          TARGET_DATE: ${{ github.event.inputs.target_date }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          MOERS_D7_USER: tob003
+          MOERS_D7_PASS: ${{ secrets.MOERS_D7_PASS }}
+          PHOTO_OBJET_D7_STORE_ID: ${{ secrets.PHOTO_OBJET_D7_STORE_ID }}
+          MOERS_BIENHOA_USER: tob009
+          MOERS_BIENHOA_PASS: ${{ secrets.MOERS_BIENHOA_PASS }}
+          PHOTO_OBJET_BIENHOA_STORE_ID: ${{ secrets.PHOTO_OBJET_BIENHOA_STORE_ID }}
+          MOERS_DIAN_USER: tob024
+          MOERS_DIAN_PASS: ${{ secrets.MOERS_DIAN_PASS }}
+          PHOTO_OBJET_DIAN_STORE_ID: ${{ secrets.PHOTO_OBJET_DIAN_STORE_ID }}
+          MOERS_LONGTHANH_USER: tob025
+          MOERS_LONGTHANH_PASS: ${{ secrets.MOERS_LONGTHANH_PASS }}
+          PHOTO_OBJET_LONGTHANH_STORE_ID: ${{ secrets.PHOTO_OBJET_LONGTHANH_STORE_ID }}
+          MOERS_THAODIEN_USER: tob029
+          MOERS_THAODIEN_PASS: ${{ secrets.MOERS_THAODIEN_PASS }}
+          PHOTO_OBJET_THAODIEN_STORE_ID: ${{ secrets.PHOTO_OBJET_THAODIEN_STORE_ID }}
+          MOERS_QUANGTRUNG_USER: tob030
+          MOERS_QUANGTRUNG_PASS: ${{ secrets.MOERS_QUANGTRUNG_PASS }}
+          PHOTO_OBJET_QUANGTRUNG_STORE_ID: ${{ secrets.PHOTO_OBJET_QUANGTRUNG_STORE_ID }}
+          MOERS_NOWZONE_USER: tob049
+          MOERS_NOWZONE_PASS: ${{ secrets.MOERS_NOWZONE_PASS }}
+          PHOTO_OBJET_NOWZONE_STORE_ID: ${{ secrets.PHOTO_OBJET_NOWZONE_STORE_ID }}
