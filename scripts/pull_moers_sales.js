@@ -173,7 +173,7 @@ async function loginAndGetData(page, user, pass, targetDate, downloadDir) {
   await page.$eval('#pw', el => (el.value = ''));
   await page.type('#pw', pass);
   await Promise.all([
-    page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 20000 }),
+    page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 45000 }),
     page.click('button, input[type=submit]'),
   ]);
 
