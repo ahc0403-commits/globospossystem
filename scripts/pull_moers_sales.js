@@ -1,5 +1,3 @@
-const puppeteer = require('puppeteer');
-const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');
 
@@ -64,11 +62,6 @@ function parseHtmlXlsTable(htmlContent) {
   return [];
 }
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY,
-);
-
 const STORES = [
   {
     storeName: 'D7',
@@ -113,6 +106,33 @@ const STORES = [
     storeId: process.env.PHOTO_OBJET_NOWZONE_STORE_ID,
   },
 ];
+
+const DEFAULT_STORE_PROFILE = {
+  loginWaitUntil: 'networkidle2',
+  postLoginTimeoutMs: 45000,
+};
+
+const STORE_PROFILES = {
+  'NOW ZONE': {
+    loginWaitUntil: 'domcontentloaded',
+    postLoginTimeoutMs: 90000,
+  },
+};
+
+function getStoreProfile(storeName) {
+  return {
+    ...DEFAULT_STORE_PROFILE,
+    ...(STORE_PROFILES[storeName] || {}),
+  };
+}
+
+function createSupabaseClient() {
+  const { createClient } = require('@supabase/supabase-js');
+  return createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_KEY,
+  );
+}
 
 function getTargetDate() {
   if (process.env.TARGET_DATE) return process.env.TARGET_DATE;
@@ -162,7 +182,32 @@ function aggregateByDevice(rows) {
   return Object.values(devices);
 }
 
-async function loginAndGetData(page, user, pass, targetDate, downloadDir) {
+async function waitForPostLoginReady(page, storeProfile) {
+  await Promise.race([
+    page.waitForNavigation({
+      waitUntil: storeProfile.loginWaitUntil,
+      timeout: storeProfile.postLoginTimeoutMs,
+    }),
+    page.waitForFunction(
+      () => {
+        const loginId = document.querySelector('#id');
+        const loginPw = document.querySelector('#pw');
+        const dateInput = document.querySelector('#selDate');
+        return !loginId || !loginPw || Boolean(dateInput);
+      },
+      { timeout: storeProfile.postLoginTimeoutMs },
+    ),
+  ]);
+}
+
+async function loginAndGetData(
+  page,
+  user,
+  pass,
+  targetDate,
+  downloadDir,
+  storeProfile = DEFAULT_STORE_PROFILE,
+) {
   await page.goto('http://moersinc.com/', {
     waitUntil: 'networkidle2',
     timeout: 30000,
@@ -173,7 +218,7 @@ async function loginAndGetData(page, user, pass, targetDate, downloadDir) {
   await page.$eval('#pw', el => (el.value = ''));
   await page.type('#pw', pass);
   await Promise.all([
-    page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 45000 }),
+    waitForPostLoginReady(page, storeProfile),
     page.click('button, input[type=submit]'),
   ]);
 
@@ -321,6 +366,7 @@ async function loginAndGetData(page, user, pass, targetDate, downloadDir) {
 
 async function processStore(store, targetDate, downloadDir) {
   const { storeName, user, pass, storeId } = store;
+  const storeProfile = getStoreProfile(storeName);
 
   if (!storeId) {
     return {
@@ -340,6 +386,7 @@ async function processStore(store, targetDate, downloadDir) {
     fs.mkdirSync(downloadDir, { recursive: true });
   }
 
+  const puppeteer = require('puppeteer');
   const browser = await puppeteer.launch({
     headless: true,
     protocolTimeout: 120000,
@@ -362,6 +409,7 @@ async function processStore(store, targetDate, downloadDir) {
       pass,
       targetDate,
       downloadDir,
+      storeProfile,
     );
     console.log(`  Method: ${method}, ${rows.length} rows`);
 
@@ -386,6 +434,7 @@ async function processStore(store, targetDate, downloadDir) {
       pull_source: 'scheduled',
     }));
 
+    const supabase = createSupabaseClient();
     const { error } = await supabase
       .from('photo_objet_sales')
       .upsert(payload, { onConflict: 'store_id,sale_date,device_name' });
@@ -460,7 +509,17 @@ async function main() {
   }
 }
 
-main().catch(err => {
-  console.error(err);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  aggregateByDevice,
+  getStoreProfile,
+  parseAmount,
+  parseHtmlXlsTable,
+  waitForPostLoginReady,
+};
