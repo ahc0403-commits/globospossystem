@@ -340,8 +340,10 @@ async function processStore(browser, store, targetDate, downloadDir) {
     fs.mkdirSync(downloadDir, { recursive: true });
   }
 
-  const context = await browser.createBrowserContext();
-  const page = await context.newPage();
+  console.log(`  ${storeName}: opening browser page`);
+  const page = await browser.newPage();
+  page.setDefaultTimeout(15000);
+  page.setDefaultNavigationTimeout(30000);
 
   try {
     const { method, rows } = await loginAndGetData(
@@ -389,7 +391,6 @@ async function processStore(browser, store, targetDate, downloadDir) {
     return { storeName, success: false, error: err.message };
   } finally {
     await page.close();
-    await context.close();
   }
 }
 
@@ -422,11 +423,12 @@ async function main() {
 
   const browser = await puppeteer.launch({
     headless: true,
+    protocolTimeout: 120000,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
-      '--single-process',
+      '--disable-gpu',
     ],
   });
 
