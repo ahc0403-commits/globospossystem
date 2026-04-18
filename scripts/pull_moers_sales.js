@@ -110,12 +110,14 @@ const STORES = [
 const DEFAULT_STORE_PROFILE = {
   loginWaitUntil: 'networkidle2',
   postLoginTimeoutMs: 45000,
+  allowDirectDailyPageFallback: false,
 };
 
 const STORE_PROFILES = {
   'NOW ZONE': {
     loginWaitUntil: 'domcontentloaded',
     postLoginTimeoutMs: 90000,
+    allowDirectDailyPageFallback: true,
   },
 };
 
@@ -200,6 +202,12 @@ async function waitForPostLoginReady(page, storeProfile) {
   ]);
 }
 
+function shouldFallbackToDirectDailyPage(err, storeProfile) {
+  if (!storeProfile.allowDirectDailyPageFallback) return false;
+  const message = String(err && err.message ? err.message : err);
+  return message.includes('Navigation timeout');
+}
+
 async function loginAndGetData(
   page,
   user,
@@ -217,10 +225,14 @@ async function loginAndGetData(
   await page.type('#id', user);
   await page.$eval('#pw', el => (el.value = ''));
   await page.type('#pw', pass);
-  await Promise.all([
-    waitForPostLoginReady(page, storeProfile),
-    page.click('button, input[type=submit]'),
-  ]);
+  await page.click('button, input[type=submit]');
+  try {
+    await waitForPostLoginReady(page, storeProfile);
+  } catch (err) {
+    if (!shouldFallbackToDirectDailyPage(err, storeProfile)) {
+      throw err;
+    }
+  }
 
   if (page.url().includes('login')) {
     throw new Error('Login failed - check credentials');
@@ -521,5 +533,6 @@ module.exports = {
   getStoreProfile,
   parseAmount,
   parseHtmlXlsTable,
+  shouldFallbackToDirectDailyPage,
   waitForPostLoginReady,
 };
