@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../core/ui/toast/toast.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../../widgets/order_workspace.dart';
@@ -41,10 +42,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     });
   }
 
-  Future<void> _onTapTable(
-    Map<String, dynamic> table,
-    String storeId,
-  ) async {
+  Future<void> _onTapTable(Map<String, dynamic> table, String storeId) async {
     final tableId = table['id']?.toString() ?? '';
     final tableNumber = table['table_number']?.toString() ?? '-';
     if (tableId.isEmpty) {
@@ -62,9 +60,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
       _showOrderPanel = true;
     });
 
-    await ref
-        .read(orderProvider.notifier)
-        .loadActiveOrder(tableId, storeId);
+    await ref.read(orderProvider.notifier).loadActiveOrder(tableId, storeId);
   }
 
   void _closeOrderPanel() {
@@ -273,8 +269,8 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     required AsyncValue<List<Map<String, dynamic>>> auditTraceAsync,
   }) {
     if (tablesState.isLoading && tablesState.tables.isEmpty) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColors.amber500),
+      return const ToastOperationalLoadingState(
+        label: PosLoadingCopy.loadingTables,
       );
     }
 
@@ -305,25 +301,9 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     }
 
     if (tablesState.tables.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.table_restaurant,
-              size: 48,
-              color: AppColors.textSecondary,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'No tables. Add your first table.',
-              style: GoogleFonts.notoSansKr(
-                color: AppColors.textSecondary,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
+      return const ToastOperationalEmptyState(
+        headline: PosEmptyStateCopy.tablesEmpty,
+        icon: Icons.table_restaurant,
       );
     }
 
@@ -531,7 +511,10 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                 if (tableNumber.isEmpty ||
                     seatCount == null ||
                     seatCount <= 0) {
-                  showErrorToast(context, 'Enter a valid table number and seat count.');
+                  showErrorToast(
+                    context,
+                    'Enter a valid table number and seat count.',
+                  );
                   return;
                 }
 

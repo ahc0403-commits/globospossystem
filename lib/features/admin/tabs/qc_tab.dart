@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/ui/toast/toast.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
@@ -153,12 +154,7 @@ class _TemplateManagementTab extends ConsumerWidget {
               FilledButton.icon(
                 onPressed: storeId == null
                     ? null
-                    : () => _showTemplateSheet(
-                        context,
-                        ref,
-                        picker,
-                        storeId!,
-                      ),
+                    : () => _showTemplateSheet(context, ref, picker, storeId!),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.amber500,
                   foregroundColor: AppColors.surface0,
@@ -230,7 +226,8 @@ class _TemplateManagementTab extends ConsumerWidget {
                     itemBuilder: (context, index) {
                       final template = state.templates[index];
                       final id = template['id']?.toString() ?? '';
-                      final category = template['category']?.toString() ?? 'Other';
+                      final category =
+                          template['category']?.toString() ?? 'Other';
                       final text = template['criteria_text']?.toString() ?? '-';
                       final photo = template['criteria_photo_url']?.toString();
                       final isGlobal = template['is_global'] == true;
@@ -428,7 +425,9 @@ class _TemplateManagementTab extends ConsumerWidget {
                     minLines: 2,
                     maxLines: 4,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(labelText: 'Criterion (text)'),
+                    decoration: const InputDecoration(
+                      labelText: 'Criterion (text)',
+                    ),
                   ),
                   const SizedBox(height: 10),
                   TextField(
@@ -633,7 +632,10 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
               SegmentedButton<bool>(
                 segments: const [
                   ButtonSegment<bool>(value: false, label: Text('Weekly View')),
-                  ButtonSegment<bool>(value: true, label: Text('Period Search')),
+                  ButtonSegment<bool>(
+                    value: true,
+                    label: Text('Period Search'),
+                  ),
                 ],
                 selected: {_rangeMode},
                 onSelectionChanged: (selection) {
@@ -1284,7 +1286,8 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                         const Divider(color: AppColors.surface2, height: 20),
                         if (existingFollowup != null)
                           _FollowupStatusBadge(
-                            status: existingFollowup['status']?.toString() ??
+                            status:
+                                existingFollowup['status']?.toString() ??
                                 'open',
                           )
                         else
@@ -1292,11 +1295,11 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                             width: double.infinity,
                             child: OutlinedButton.icon(
                               onPressed: () async {
-                                final success =
-                                    await followupNotifier.createFollowup(
-                                  storeId: widget.storeId!,
-                                  sourceCheckId: checkId,
-                                );
+                                final success = await followupNotifier
+                                    .createFollowup(
+                                      storeId: widget.storeId!,
+                                      sourceCheckId: checkId,
+                                    );
                                 if (ctx.mounted) {
                                   Navigator.of(ctx).pop();
                                   if (success) {
@@ -1305,8 +1308,9 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                                       'Follow-up created',
                                     );
                                   } else {
-                                    final error =
-                                        ref.read(qcFollowupProvider).error;
+                                    final error = ref
+                                        .read(qcFollowupProvider)
+                                        .error;
                                     if (error != null) {
                                       showErrorToast(context, error);
                                     }
@@ -1444,8 +1448,7 @@ class _FollowupStatusBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.assignment_turned_in_outlined,
-              size: 14, color: color),
+          Icon(Icons.assignment_turned_in_outlined, size: 14, color: color),
           const SizedBox(width: 4),
           Text(
             'Follow-ups: $label',
@@ -1475,8 +1478,7 @@ class _FollowupTab extends ConsumerStatefulWidget {
 class _FollowupTabState extends ConsumerState<_FollowupTab> {
   String _statusFilter = 'active';
 
-  DateTime _analyticsFrom =
-      DateTime.now().subtract(const Duration(days: 6));
+  DateTime _analyticsFrom = DateTime.now().subtract(const Duration(days: 6));
   DateTime _analyticsTo = DateTime.now();
 
   @override
@@ -1497,14 +1499,15 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
 
     final filtered = _statusFilter == 'active'
         ? followupState.followups
-            .where((f) =>
-                f['status'] == 'open' || f['status'] == 'in_progress')
-            .toList()
+              .where(
+                (f) => f['status'] == 'open' || f['status'] == 'in_progress',
+              )
+              .toList()
         : _statusFilter == 'all'
-            ? followupState.followups
-            : followupState.followups
-                .where((f) => f['status'] == _statusFilter)
-                .toList();
+        ? followupState.followups
+        : followupState.followups
+              .where((f) => f['status'] == _statusFilter)
+              .toList();
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -1526,8 +1529,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
                 context: context,
                 label: 'From',
                 value: _analyticsFrom,
-                onPicked: (picked) =>
-                    setState(() => _analyticsFrom = picked),
+                onPicked: (picked) => setState(() => _analyticsFrom = picked),
               ),
               const SizedBox(width: 8),
               _analyticsDateButton(
@@ -1545,8 +1547,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
               loading: () => const Center(
                 child: Padding(
                   padding: EdgeInsets.all(16),
-                  child:
-                      CircularProgressIndicator(color: AppColors.amber500),
+                  child: CircularProgressIndicator(color: AppColors.amber500),
                 ),
               ),
               error: (e, _) => Text(
@@ -1606,8 +1607,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
             const Center(
               child: Padding(
                 padding: EdgeInsets.all(32),
-                child:
-                    CircularProgressIndicator(color: AppColors.amber500),
+                child: CircularProgressIndicator(color: AppColors.amber500),
               ),
             )
           else if (filtered.isEmpty)
@@ -1616,9 +1616,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
               child: Center(
                 child: Text(
                   'No follow-ups.',
-                  style: GoogleFonts.notoSansKr(
-                    color: AppColors.textSecondary,
-                  ),
+                  style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
                 ),
               ),
             )
@@ -1662,8 +1660,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
     final naCount = (data['na_count'] as num?)?.toInt() ?? 0;
     final passRate = (data['pass_rate'] as num?)?.toDouble() ?? 0;
     final coverage = (data['coverage'] as num?)?.toDouble() ?? 0;
-    final openFollowups =
-        (data['open_followups'] as num?)?.toInt() ?? 0;
+    final openFollowups = (data['open_followups'] as num?)?.toInt() ?? 0;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1772,24 +1769,18 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
       onTap: () => setState(() => _statusFilter = value),
       borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color:
-              isSelected ? AppColors.amber500 : AppColors.surface1,
+          color: isSelected ? AppColors.amber500 : AppColors.surface1,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected
-                ? AppColors.amber500
-                : AppColors.surface2,
+            color: isSelected ? AppColors.amber500 : AppColors.surface2,
           ),
         ),
         child: Text(
           label,
           style: GoogleFonts.notoSansKr(
-            color: isSelected
-                ? AppColors.surface0
-                : AppColors.textPrimary,
+            color: isSelected ? AppColors.surface0 : AppColors.textPrimary,
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
@@ -1889,16 +1880,11 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
               children: [
                 if (status == 'open')
                   OutlinedButton(
-                    onPressed: () => _updateFollowupStatus(
-                      context,
-                      id,
-                      'in_progress',
-                    ),
+                    onPressed: () =>
+                        _updateFollowupStatus(context, id, 'in_progress'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.statusOccupied,
-                      side: const BorderSide(
-                        color: AppColors.statusOccupied,
-                      ),
+                      side: const BorderSide(color: AppColors.statusOccupied),
                     ),
                     child: Text(
                       'Start Progress',
@@ -1910,9 +1896,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
                   onPressed: () => _showResolveDialog(context, id),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.statusAvailable,
-                    side: const BorderSide(
-                      color: AppColors.statusAvailable,
-                    ),
+                    side: const BorderSide(color: AppColors.statusAvailable),
                   ),
                   child: Text(
                     'Resolved',
@@ -1941,11 +1925,9 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
     final storeId = widget.storeId;
     if (storeId == null) return;
 
-    final success = await ref.read(qcFollowupProvider.notifier).updateStatus(
-      followupId: followupId,
-      storeId: storeId,
-      status: status,
-    );
+    final success = await ref
+        .read(qcFollowupProvider.notifier)
+        .updateStatus(followupId: followupId, storeId: storeId, status: status);
 
     if (!context.mounted) return;
     if (success) {
@@ -1962,46 +1944,25 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
   ) async {
     final notesController = TextEditingController();
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await ToastConfirmDialog.withContent(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface1,
-        title: Text(
-          'Resolve Follow-up',
-          style: GoogleFonts.notoSansKr(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w700,
+      title: 'Resolve Follow-up',
+      confirmLabel: 'Resolved',
+      confirmTone: PosActionTone.affirm,
+      content: TextField(
+        controller: notesController,
+        style: const TextStyle(color: AppColors.textPrimary),
+        maxLines: 3,
+        decoration: const InputDecoration(
+          labelText: 'Resolution notes (optional)',
+          labelStyle: TextStyle(color: AppColors.textSecondary),
+          enabledBorder: OutlineInputBorder(
+            borderSide: BorderSide(color: AppColors.surface2),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderSide: BorderSide(color: AppColors.amber500),
           ),
         ),
-        content: TextField(
-          controller: notesController,
-          style: const TextStyle(color: AppColors.textPrimary),
-          maxLines: 3,
-          decoration: const InputDecoration(
-            labelText: 'Resolution notes (optional)',
-            labelStyle: TextStyle(color: AppColors.textSecondary),
-            enabledBorder: OutlineInputBorder(
-              borderSide: BorderSide(color: AppColors.surface2),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderSide: BorderSide(color: AppColors.amber500),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.statusAvailable,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Resolved'),
-          ),
-        ],
       ),
     );
 
@@ -2011,12 +1972,14 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
     if (storeId == null) return;
 
     final notes = notesController.text.trim();
-    final success = await ref.read(qcFollowupProvider.notifier).updateStatus(
-      followupId: followupId,
-      storeId: storeId,
-      status: 'resolved',
-      resolutionNotes: notes.isEmpty ? null : notes,
-    );
+    final success = await ref
+        .read(qcFollowupProvider.notifier)
+        .updateStatus(
+          followupId: followupId,
+          storeId: storeId,
+          status: 'resolved',
+          resolutionNotes: notes.isEmpty ? null : notes,
+        );
 
     notesController.dispose();
 

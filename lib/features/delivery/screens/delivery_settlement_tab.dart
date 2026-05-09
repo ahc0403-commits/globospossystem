@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/ui/toast/toast.dart';
 import '../../../main.dart';
 import '../delivery_models.dart';
 import '../delivery_settlement_provider.dart';
@@ -17,8 +18,7 @@ class DeliverySettlementTab extends ConsumerStatefulWidget {
       _DeliverySettlementTabState();
 }
 
-class _DeliverySettlementTabState
-    extends ConsumerState<DeliverySettlementTab> {
+class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
   String? _statusFilter;
 
   @override
@@ -34,11 +34,9 @@ class _DeliverySettlementTabState
     }
   }
 
-  String _fmtVnd(double v) =>
-      '${NumberFormat('#,###').format(v.round())} ₫';
+  String _fmtVnd(double v) => '${NumberFormat('#,###').format(v.round())} ₫';
 
-  List<DeliverySettlement> _filteredSettlements(
-      List<DeliverySettlement> all) {
+  List<DeliverySettlement> _filteredSettlements(List<DeliverySettlement> all) {
     if (_statusFilter == null) return all;
     return all.where((s) => s.status == _statusFilter).toList();
   }
@@ -58,9 +56,9 @@ class _DeliverySettlementTabState
     }
 
     if (state.isLoading) {
-      return const Center(child: CircularProgressIndicator(
-        color: AppColors.amber500,
-      ));
+      return const ToastOperationalLoadingState(
+        label: PosLoadingCopy.loadingSettlements,
+      );
     }
 
     if (state.error != null) {
@@ -68,13 +66,12 @@ class _DeliverySettlementTabState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(state.error!,
-                style: const TextStyle(color: AppColors.statusCancelled)),
-            const SizedBox(height: 12),
-            ElevatedButton(
-              onPressed: _loadData,
-              child: const Text('Retry'),
+            Text(
+              state.error!,
+              style: const TextStyle(color: AppColors.statusCancelled),
             ),
+            const SizedBox(height: 12),
+            ElevatedButton(onPressed: _loadData, child: const Text('Retry')),
           ],
         ),
       );
@@ -153,15 +150,10 @@ class _DeliverySettlementTabState
           if (filtered.isEmpty)
             Padding(
               padding: const EdgeInsets.all(32),
-              child: Center(
-                child: Text(
-                  _statusFilter != null
-                      ? 'No settlements in this status'
-                      : 'No settlements',
-                  style: GoogleFonts.notoSansKr(
-                    color: AppColors.textSecondary,
-                  ),
-                ),
+              child: ToastOperationalEmptyState(
+                headline: _statusFilter != null
+                    ? PosEmptyStateCopy.settlementsFilterEmpty
+                    : PosEmptyStateCopy.settlementsEmpty,
               ),
             )
           else
@@ -280,11 +272,7 @@ class _DeliverySettlementTabState
       children: [
         _filterChip('All', null, settlements.length),
         for (final entry in statusCounts.entries)
-          _filterChip(
-            _statusLabel(entry.key),
-            entry.key,
-            entry.value,
-          ),
+          _filterChip(_statusLabel(entry.key), entry.key, entry.value),
       ],
     );
   }
@@ -299,28 +287,11 @@ class _DeliverySettlementTabState
   };
 
   Widget _filterChip(String label, String? status, int count) {
-    final isSelected = _statusFilter == status;
-    return InkWell(
-      onTap: () => setState(() => _statusFilter = status),
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.amber500 : AppColors.surface1,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? AppColors.amber500 : AppColors.surface2,
-          ),
-        ),
-        child: Text(
-          '$label ($count)',
-          style: GoogleFonts.notoSansKr(
-            color: isSelected ? AppColors.surface0 : AppColors.textPrimary,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
+    return ToastFilterChip(
+      label: label,
+      count: count,
+      selected: _statusFilter == status,
+      onSelected: () => setState(() => _statusFilter = status),
     );
   }
 
@@ -342,20 +313,30 @@ class _DeliverySettlementTabState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Settlement pending',
-                    style: GoogleFonts.notoSansKr(
-                        color: AppColors.amber500,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500)),
+                Text(
+                  'Settlement pending',
+                  style: GoogleFonts.notoSansKr(
+                    color: AppColors.amber500,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text(_fmtVnd(u.revenue),
-                    style: GoogleFonts.notoSansKr(
-                        color: AppColors.textPrimary,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold)),
-                Text('${u.orderCount}',
-                    style: GoogleFonts.notoSansKr(
-                        color: AppColors.textSecondary, fontSize: 13)),
+                Text(
+                  _fmtVnd(u.revenue),
+                  style: GoogleFonts.notoSansKr(
+                    color: AppColors.textPrimary,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  '${u.orderCount}',
+                  style: GoogleFonts.notoSansKr(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
               ],
             ),
           ),
@@ -384,75 +365,94 @@ class _DeliverySettlementTabState
         collapsedIconColor: AppColors.textSecondary,
         title: Row(
           children: [
-            Text('${s.statusEmoji} ',
-                style: const TextStyle(fontSize: 18)),
+            Text('${s.statusEmoji} ', style: const TextStyle(fontSize: 18)),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('${s.periodLabel}  ($dateRange)',
-                      style: GoogleFonts.notoSansKr(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15)),
+                  Text(
+                    '${s.periodLabel}  ($dateRange)',
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text(s.statusLabel,
-                      style: GoogleFonts.notoSansKr(
-                          color: AppColors.textSecondary,
-                          fontSize: 12)),
+                  Text(
+                    s.statusLabel,
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
                 ],
               ),
             ),
-            Text(_fmtVnd(s.netSettlement),
-                style: GoogleFonts.notoSansKr(
-                    color: AppColors.statusAvailable,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15)),
+            Text(
+              _fmtVnd(s.netSettlement),
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.statusAvailable,
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
+            ),
           ],
         ),
         children: [
           // 매출 총액
-          _detailRow('Delivery Revenue (gross)', _fmtVnd(s.grossTotal),
-              color: AppColors.textPrimary),
+          _detailRow(
+            'Delivery Revenue (gross)',
+            _fmtVnd(s.grossTotal),
+            color: AppColors.textPrimary,
+          ),
           const Divider(color: AppColors.surface2, height: 16),
           // 차감 항목
-          ...s.items.map((item) => _detailRow(
-                item.label,
-                '-${_fmtVnd(item.amount)}',
-                color: AppColors.statusCancelled,
-              )),
+          ...s.items.map(
+            (item) => _detailRow(
+              item.label,
+              '-${_fmtVnd(item.amount)}',
+              color: AppColors.statusCancelled,
+            ),
+          ),
           if (s.items.isNotEmpty)
             const Divider(color: AppColors.surface2, height: 16),
           // 합계
-          _detailRow('Total Deducted', '-${_fmtVnd(s.totalDeductions)}',
-              color: AppColors.statusCancelled, bold: true),
-          _detailRow('Actual Deposit Amount', _fmtVnd(s.netSettlement),
-              color: AppColors.statusAvailable, bold: true),
+          _detailRow(
+            'Total Deducted',
+            '-${_fmtVnd(s.totalDeductions)}',
+            color: AppColors.statusCancelled,
+            bold: true,
+          ),
+          _detailRow(
+            'Actual Deposit Amount',
+            _fmtVnd(s.netSettlement),
+            color: AppColors.statusAvailable,
+            bold: true,
+          ),
           if (s.orderCount > 0)
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: Text('Orders: ${s.orderCount}',
-                  style: GoogleFonts.notoSansKr(
-                      color: AppColors.textSecondary, fontSize: 12)),
+              child: Text(
+                'Orders: ${s.orderCount}',
+                style: GoogleFonts.notoSansKr(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
             ),
           // 입금 확인 버튼
           if (s.canConfirmReceived) ...[
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.statusAvailable,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-                onPressed: ref.watch(deliverySettlementProvider)
-                            .confirmingId ==
-                        s.id
-                    ? null
-                    : () => _confirmReceived(s.id),
-                icon: const Icon(Icons.check_circle_outline, size: 18),
-                label: const Text('Confirm Deposit'),
+            Align(
+              alignment: Alignment.centerRight,
+              child: PosActionButton(
+                label: 'Confirm Deposit',
+                tone: PosActionTone.affirm,
+                icon: Icons.check_circle_outline,
+                loading:
+                    ref.watch(deliverySettlementProvider).confirmingId == s.id,
+                onPressed: () => _confirmReceived(s.id),
               ),
             ),
           ],
@@ -463,25 +463,33 @@ class _DeliverySettlementTabState
 
   // ─── 헬퍼 위젯 ────────────────────────
 
-  Widget _detailRow(String label, String value,
-      {Color? color, bool bold = false}) {
+  Widget _detailRow(
+    String label,
+    String value, {
+    Color? color,
+    bool bold = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: GoogleFonts.notoSansKr(
-                color: AppColors.textSecondary,
-                fontSize: 13,
-                fontWeight: bold ? FontWeight.w600 : FontWeight.normal,
-              )),
-          Text(value,
-              style: GoogleFonts.notoSansKr(
-                color: color ?? AppColors.textPrimary,
-                fontSize: 13,
-                fontWeight: bold ? FontWeight.w600 : FontWeight.normal,
-              )),
+          Text(
+            label,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+              fontWeight: bold ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
+          Text(
+            value,
+            style: GoogleFonts.notoSansKr(
+              color: color ?? AppColors.textPrimary,
+              fontSize: 13,
+              fontWeight: bold ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
         ],
       ),
     );
@@ -491,31 +499,12 @@ class _DeliverySettlementTabState
     final rid = ref.read(authProvider).storeId;
     if (rid == null) return;
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await ToastConfirmDialog.show(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface1,
-        title: Text('Confirm Deposit',
-            style: GoogleFonts.notoSansKr(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w700)),
-        content: Text('Confirmed the deposit on the actual bank account?',
-            style: GoogleFonts.notoSansKr(
-                color: AppColors.textSecondary)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.statusAvailable,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Confirm', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
+      title: 'Confirm Deposit',
+      description: 'Confirmed the deposit on the actual bank account?',
+      confirmLabel: 'Confirm',
+      confirmTone: PosActionTone.affirm,
     );
 
     if (confirmed == true) {

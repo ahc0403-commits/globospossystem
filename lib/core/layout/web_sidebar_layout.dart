@@ -28,6 +28,7 @@ class WebSidebarLayout extends StatelessWidget {
     this.topBarTrailing,
     this.topBarLeading,
     this.bottomItems,
+    this.groupHeaders,
   });
 
   final String title;
@@ -38,6 +39,12 @@ class WebSidebarLayout extends StatelessWidget {
   final Widget? topBarTrailing;
   final Widget? topBarLeading;
   final List<SidebarItem>? bottomItems;
+
+  /// Optional map from item index to a group-header label that should be
+  /// rendered immediately above that item. Non-interactive. Indices that
+  /// are not keys render no header. Selection / [onItemSelected] indexing
+  /// is unaffected.
+  final Map<int, String>? groupHeaders;
 
   @override
   Widget build(BuildContext context) {
@@ -79,12 +86,37 @@ class WebSidebarLayout extends StatelessWidget {
                     itemBuilder: (context, index) {
                       final item = items[index];
                       final isSelected = selectedIndex == index;
-                      return _SidebarNavItem(
+                      final header = groupHeaders?[index];
+                      final nav = _SidebarNavItem(
                         key: item.itemKey,
                         icon: item.icon,
                         label: item.label,
                         isSelected: isSelected,
                         onTap: item.onTap ?? () => onItemSelected(index),
+                      );
+                      if (header == null) return nav;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              16,
+                              index == 0 ? 4 : 14,
+                              16,
+                              6,
+                            ),
+                            child: Text(
+                              header.toUpperCase(),
+                              style: GoogleFonts.notoSansKr(
+                                color: AppColors.textMuted,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                          ),
+                          nav,
+                        ],
                       );
                     },
                   ),
