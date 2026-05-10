@@ -126,6 +126,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     }).toList();
 
     return Scaffold(
+      key: const Key('attendance_root'),
       backgroundColor: AppColors.surface0,
       body: Padding(
         padding: const EdgeInsets.all(16),

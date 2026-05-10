@@ -98,6 +98,7 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
     final flags = ref.watch(_einvoiceOpsFlagsProvider).valueOrNull;
 
     return Column(
+      key: const Key('einvoice_root'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _header(),

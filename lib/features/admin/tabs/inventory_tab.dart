@@ -89,6 +89,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     }
 
     return Scaffold(
+      key: const Key('inventory_root'),
       backgroundColor: AppColors.surface0,
       body: Column(
         children: [

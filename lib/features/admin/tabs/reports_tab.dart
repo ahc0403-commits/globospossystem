@@ -913,11 +913,9 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
     setState(() => _isClosing = true);
     try {
       await dailyClosingService.createDailyClosing(storeId: widget.storeId);
-      debugPrint('DAILY_CLOSING: success');
       ref.invalidate(dailyClosingHistoryProvider);
       if (mounted) {
         setState(() => _closingSucceeded = true);
-        debugPrint('DAILY_CLOSING: _closingSucceeded=true');
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Closing complete.')));
@@ -926,12 +924,8 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
       if (mounted) {
         final errorMsg = mapDailyClosingError(e);
         final isAlreadyClosed = errorMsg.contains('already complete');
-        debugPrint('DAILY_CLOSING: error=$e');
-        debugPrint('DAILY_CLOSING: mapped=$errorMsg');
-        debugPrint('DAILY_CLOSING: isAlreadyClosed=$isAlreadyClosed');
         if (isAlreadyClosed) {
           setState(() => _closingAlreadyClosed = true);
-          debugPrint('DAILY_CLOSING: _closingAlreadyClosed=true');
         }
         ScaffoldMessenger.of(
           context,

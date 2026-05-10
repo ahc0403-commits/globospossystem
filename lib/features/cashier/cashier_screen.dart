@@ -293,7 +293,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                   final selected =
                                       paymentState.selectedOrder?.orderId ==
                                       order.orderId;
-                                  return InkWell(
+                                  return KeyedSubtree(
+                                    key: Key('cashier_order_${order.orderId}'),
+                                    child: InkWell(
                                     key: index == 0
                                         ? const Key('payment_first_candidate')
                                         : null,
@@ -353,6 +355,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                         ],
                                       ),
                                     ),
+                                  ),
                                   );
                                 },
                               ),

@@ -224,7 +224,9 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                           );
                           final elapsed = _elapsedLabel(order.createdAt, _now);
 
-                          return AnimatedContainer(
+                          return KeyedSubtree(
+                            key: Key('kitchen_order_${order.orderId}'),
+                            child: AnimatedContainer(
                             key: index == 0
                                 ? const Key('kitchen_first_order_card')
                                 : null,
@@ -355,6 +357,7 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                                 ),
                               ],
                             ),
+                          ),
                           );
                         },
                       );
