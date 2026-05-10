@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../core/utils/time_utils.dart';
 
 import '../../core/ui/app_primitives.dart';
+import '../../core/ui/toast/toast.dart';
 import '../../main.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
@@ -178,8 +179,8 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                   child: Builder(
                     builder: (context) {
                       if (kitchenState.isLoading) {
-                        return const AppLoadingView(
-                          label: 'Loading kitchen orders',
+                        return const ToastOperationalLoadingState(
+                          label: PosLoadingCopy.loadingKitchen,
                         );
                       }
                       if (kitchenState.error != null) {
@@ -193,10 +194,9 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                         );
                       }
                       if (kitchenState.orders.isEmpty) {
-                        return const AppEmptyState(
-                          title: 'No active orders',
-                          message:
-                              'Incoming tickets will appear here as soon as the dining floor sends them.',
+                        return const ToastOperationalEmptyState(
+                          headline: PosEmptyStateCopy.kitchenQueueClear,
+                          helper: PosEmptyStateCopy.kitchenQueueClearHelper,
                           icon: Icons.restaurant_menu,
                         );
                       }
@@ -453,39 +453,13 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final normalized = status.toLowerCase();
-    Color color;
-    Color textColor;
-    switch (normalized) {
-      case 'preparing':
-        color = AppColors.amber500;
-        textColor = AppColors.surface0;
-      case 'ready':
-        color = AppColors.statusAvailable;
-        textColor = AppColors.surface0;
-      case 'served':
-        color = AppColors.surface2;
-        textColor = AppColors.textSecondary;
-      case 'pending':
-      default:
-        color = Colors.grey.shade600;
-        textColor = AppColors.textPrimary;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Text(
-        normalized.toUpperCase(),
-        style: GoogleFonts.notoSansKr(
-          color: textColor,
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
+    final color = switch (normalized) {
+      'preparing' => AppColors.amber500,
+      'ready' => AppColors.statusAvailable,
+      'served' => AppColors.surface2,
+      _ => const Color(0xFF757575),
+    };
+    return ToastStatusChip(label: normalized, color: color, solid: true);
   }
 }
 

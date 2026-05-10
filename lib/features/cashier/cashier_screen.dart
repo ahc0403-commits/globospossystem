@@ -10,6 +10,7 @@ import '../../core/layout/platform_info.dart';
 import '../../core/hardware/printer_service.dart';
 import '../../core/hardware/receipt_builder.dart';
 import '../../core/ui/app_primitives.dart';
+import '../../core/ui/toast/toast.dart';
 import '../../core/utils/permission_utils.dart';
 import '../../main.dart';
 import '../../widgets/app_nav_bar.dart';
@@ -295,10 +296,10 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       ),
                       Expanded(
                         child: paymentState.orders.isEmpty
-                            ? const AppEmptyState(
-                                title: 'No payable orders',
-                                message:
-                                    'Completed table orders will appear here when they are ready for payment.',
+                            ? const ToastOperationalEmptyState(
+                                headline: PosEmptyStateCopy.cashierQueueClear,
+                                helper:
+                                    PosEmptyStateCopy.cashierQueueClearHelper,
                                 icon: Icons.point_of_sale_outlined,
                               )
                             : ListView.separated(
@@ -389,10 +390,11 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       Padding(
                         padding: const EdgeInsets.all(24),
                         child: paymentState.selectedOrder == null
-                            ? const AppEmptyState(
-                                title: 'Select a table',
-                                message:
-                                    'Choose a payable order from the left to open the payment workspace.',
+                            ? const ToastOperationalEmptyState(
+                                headline:
+                                    PosEmptyStateCopy.cashierNothingSelected,
+                                helper: PosEmptyStateCopy
+                                    .cashierNothingSelectedHelper,
                                 icon: Icons.table_bar_outlined,
                               )
                             : _SelectedOrderView(
@@ -651,16 +653,11 @@ class _SelectedOrderView extends StatelessWidget {
         const SizedBox(height: 6),
         Align(
           alignment: Alignment.centerRight,
-          child: OutlinedButton.icon(
+          child: PosActionButton(
+            label: PosActionVerbs.reprintReceipt,
+            tone: PosActionTone.secondary,
+            icon: PosActionIcons.reprintReceipt,
             onPressed: isProcessing ? null : onReprint,
-            icon: const Icon(Icons.print, size: 16),
-            label: Text(
-              'Reprint Receipt',
-              style: GoogleFonts.notoSansKr(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
           ),
         ),
         const SizedBox(height: 12),
@@ -857,21 +854,11 @@ class _SelectedOrderView extends StatelessWidget {
                   const SizedBox(height: 8),
                   Align(
                     alignment: Alignment.centerRight,
-                    child: TextButton.icon(
+                    child: PosActionButton(
+                      label: PosActionVerbs.cancelOrder,
+                      tone: PosActionTone.destructive,
+                      icon: PosActionIcons.cancelOrder,
                       onPressed: isProcessing ? null : onCancelOrder,
-                      icon: const Icon(
-                        Icons.cancel_outlined,
-                        color: AppColors.statusCancelled,
-                        size: 18,
-                      ),
-                      label: Text(
-                        'Cancel Order',
-                        style: GoogleFonts.notoSansKr(
-                          color: AppColors.statusCancelled,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
                     ),
                   ),
                 ],
@@ -898,26 +885,7 @@ class _OrderStatusBadge extends StatelessWidget {
       'serving' => AppColors.statusAvailable,
       _ => AppColors.surface2,
     };
-    final textColor = normalized == 'confirmed'
-        ? AppColors.surface0
-        : AppColors.textPrimary;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color),
-      ),
-      child: Text(
-        normalized.toUpperCase(),
-        style: GoogleFonts.notoSansKr(
-          color: textColor,
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
+    return ToastStatusChip(label: normalized, color: color);
   }
 }
 

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../core/services/connectivity_service.dart';
 import '../core/ui/app_primitives.dart';
+import '../core/ui/toast/toast.dart';
 import '../features/admin/providers/menu_provider.dart';
 import '../features/order/order_model.dart';
 import '../features/order/order_provider.dart';
@@ -193,7 +194,9 @@ class _MenuBrowser extends StatelessWidget {
     final currency = NumberFormat('#,###', 'vi_VN');
 
     if (menuLoading) {
-      return const AppLoadingView(label: 'Loading menu');
+      return const ToastOperationalLoadingState(
+        label: PosLoadingCopy.loadingMenu,
+      );
     }
 
     if (menuError) {
@@ -220,7 +223,7 @@ class _MenuBrowser extends StatelessWidget {
                 ? const Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      'No categories',
+                      PosEmptyStateCopy.menuNoCategories,
                       style: TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 13,
@@ -272,9 +275,9 @@ class _MenuBrowser extends StatelessWidget {
           const SizedBox(height: 16),
           Expanded(
             child: filteredItems.isEmpty
-                ? const AppEmptyState(
-                    title: 'No menu items in this category',
-                    message: 'Switch categories or add menu entries in admin.',
+                ? const ToastOperationalEmptyState(
+                    headline: PosEmptyStateCopy.menuCategoryEmpty,
+                    helper: 'Switch categories or add menu entries in admin.',
                     icon: Icons.inventory_2_outlined,
                   )
                 : GridView.builder(
@@ -762,7 +765,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      'No items added yet.',
+                      PosEmptyStateCopy.cartEmpty,
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textSecondary,
                         fontSize: 13,
@@ -859,72 +862,43 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
             ],
           ),
           const SizedBox(height: 12),
-          SizedBox(
-            height: 56,
-            child: Row(
-              children: [
-                Expanded(
-                  child: FilledButton(
-                    onPressed: widget.onCancel,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.surface2,
-                      foregroundColor: AppColors.textPrimary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: Text(
-                      'CANCEL',
-                      style: GoogleFonts.notoSansKr(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton(
-                    key: const Key('cart_submit_order'),
-                    onPressed:
-                        widget.state.isSubmitting ||
-                            (!widget.allowSubmitWithoutCart &&
-                                widget.state.cart.isEmpty) ||
-                            !isOnline
-                        ? null
-                        : widget.onSendOrder,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.amber500,
-                      foregroundColor: AppColors.surface0,
-                      disabledBackgroundColor: AppColors.amber500.withValues(
-                        alpha: 0.4,
-                      ),
-                      disabledForegroundColor: AppColors.surface0.withValues(
-                        alpha: 0.8,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: widget.state.isSubmitting
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.3,
-                              color: AppColors.surface0,
-                            ),
-                          )
-                        : Text(
-                            'SEND ORDER',
-                            style: GoogleFonts.notoSansKr(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                  ),
-                ),
-              ],
-            ),
+          ToastActionRail(
+            padding: const EdgeInsets.only(top: 12),
+            actions: [
+              PosActionButton(
+                label: PosActionVerbs.cancel,
+                tone: PosActionTone.secondary,
+                icon: PosActionIcons.cancel,
+                onPressed: widget.onCancel,
+              ),
+              PosActionButton(
+                key: const Key('cart_submit_order'),
+                label: PosActionVerbs.sendOrder,
+                tone: PosActionTone.primary,
+                icon: PosActionIcons.sendOrder,
+                onPressed:
+                    widget.state.isSubmitting ||
+                        (!widget.allowSubmitWithoutCart &&
+                            widget.state.cart.isEmpty) ||
+                        !isOnline
+                    ? null
+                    : widget.onSendOrder,
+                disabledReason: !isOnline
+                    ? PosActionDisabledReason.offline
+                    : (!widget.allowSubmitWithoutCart &&
+                              widget.state.cart.isEmpty
+                          ? PosActionDisabledReason.cartEmpty
+                          : null),
+              ),
+            ],
           ),
+          if (widget.state.isSubmitting)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: ToastOperationalLoadingState(
+                label: PosLoadingCopy.syncing,
+              ),
+            ),
           if (!isOnline)
             Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -939,25 +913,15 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
             ),
           if (canCancelOrder) ...[
             const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: OutlinedButton.icon(
+            Align(
+              alignment: Alignment.centerRight,
+              child: PosActionButton(
+                label: PosActionVerbs.cancelOrder,
+                tone: PosActionTone.destructive,
+                icon: PosActionIcons.cancelOrder,
                 onPressed: widget.state.isSubmitting
                     ? null
                     : widget.onCancelOrder,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.statusCancelled,
-                  side: const BorderSide(color: AppColors.statusCancelled),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                icon: const Icon(Icons.cancel),
-                label: Text(
-                  'Cancel Order',
-                  style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w700),
-                ),
               ),
             ),
           ],
@@ -1005,34 +969,30 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                   }).toList(),
             ),
             const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: FilledButton(
+            Align(
+              alignment: Alignment.centerRight,
+              child: PosActionButton(
+                label: PosActionVerbs.paymentComplete,
+                tone: PosActionTone.primary,
+                icon: PosActionIcons.paymentComplete,
                 onPressed:
                     widget.isProcessingPayment ||
                         _selectedPaymentMethod == null ||
                         widget.onProcessPayment == null
                     ? null
                     : () => widget.onProcessPayment!(_selectedPaymentMethod!),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.amber500,
-                  foregroundColor: AppColors.surface0,
-                ),
-                child: widget.isProcessingPayment
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(
-                        'Payment complete',
-                        style: GoogleFonts.notoSansKr(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                disabledReason: _selectedPaymentMethod == null
+                    ? PosActionDisabledReason.paymentMethodNotSelected
+                    : null,
               ),
             ),
+            if (widget.isProcessingPayment)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: ToastOperationalLoadingState(
+                  label: PosLoadingCopy.syncing,
+                ),
+              ),
           ],
           if (widget.showPaymentActions && widget.state.cart.isNotEmpty)
             Padding(
@@ -1074,22 +1034,6 @@ class _OrderItemStatusChip extends StatelessWidget {
       'cancelled' => (AppColors.statusCancelled, 'CANCELLED'),
       _ => (AppColors.textSecondary, normalized.toUpperCase()),
     };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.7)),
-      ),
-      child: Text(
-        label,
-        style: GoogleFonts.notoSansKr(
-          color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
+    return ToastStatusChip(label: label, color: color);
   }
 }

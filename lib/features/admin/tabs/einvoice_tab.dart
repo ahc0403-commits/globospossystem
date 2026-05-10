@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/ui/toast/toast.dart';
 import '../../../main.dart';
 import '../../auth/auth_provider.dart';
 import '../../../widgets/error_toast.dart';
@@ -106,8 +107,8 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
         Expanded(
           child: jobsAsync.when(
             data: (jobs) => _jobList(jobs),
-            loading: () => const Center(
-              child: CircularProgressIndicator(color: AppColors.amber500),
+            loading: () => const ToastOperationalLoadingState(
+              label: PosLoadingCopy.loadingEinvoiceJobs,
             ),
             error: (e, _) => Center(
               child: Text(
@@ -164,21 +165,10 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
   }
 
   Widget _chip(String value, String label) {
-    final selected = _filter == value;
-    return FilterChip(
-      label: Text(label, style: GoogleFonts.notoSansKr(fontSize: 12)),
-      selected: selected,
-      onSelected: (_) => setState(() => _filter = value),
-      selectedColor: AppColors.amber500.withValues(alpha: 0.2),
-      checkmarkColor: AppColors.amber500,
-      side: BorderSide(
-        color: selected ? AppColors.amber500 : AppColors.surface2,
-      ),
-      backgroundColor: AppColors.surface1,
-      labelStyle: GoogleFonts.notoSansKr(
-        color: selected ? AppColors.amber500 : AppColors.textSecondary,
-        fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-      ),
+    return ToastFilterChip(
+      label: label,
+      selected: _filter == value,
+      onSelected: () => setState(() => _filter = value),
     );
   }
 
@@ -196,14 +186,8 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
     };
 
     if (jobs.isEmpty) {
-      return Center(
-        child: Text(
-          'No jobs',
-          style: GoogleFonts.notoSansKr(
-            color: AppColors.textSecondary,
-            fontSize: 14,
-          ),
-        ),
+      return const ToastOperationalEmptyState(
+        headline: PosEmptyStateCopy.einvoiceJobsEmpty,
       );
     }
 
@@ -441,66 +425,21 @@ class _JobCardState extends State<_JobCard> {
           // Header row
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: _statusColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: _statusColor),
-                ),
-                child: Text(
-                  _statusLabel,
-                  style: GoogleFonts.notoSansKr(
-                    color: _statusColor,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
+              ToastStatusChip(label: _statusLabel, color: _statusColor),
               if (_isPendingPolling) ...[
                 const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.amber500.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: AppColors.amber500),
-                  ),
-                  child: Text(
-                    widget.job['redinvoice_requested'] == true
-                        ? 'RED INV'
-                        : 'BASIC',
-                    style: GoogleFonts.notoSansKr(
-                      color: AppColors.amber500,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                ToastStatusChip(
+                  label: widget.job['redinvoice_requested'] == true
+                      ? 'RED INV'
+                      : 'BASIC',
+                  color: AppColors.amber500,
                 ),
               ],
               if (_isResolved) ...[
                 const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.statusAvailable.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: AppColors.statusAvailable),
-                  ),
-                  child: Text(
-                    'NO ACTION',
-                    style: GoogleFonts.notoSansKr(
-                      color: AppColors.statusAvailable,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                const ToastStatusChip(
+                  label: 'NO ACTION',
+                  color: AppColors.statusAvailable,
                 ),
               ],
               const Spacer(),
@@ -610,35 +549,13 @@ class _JobCardState extends State<_JobCard> {
                 ),
               if (_isFailed && !_isResolved) ...[
                 const SizedBox(width: 8),
-                FilledButton.icon(
-                  onPressed: _isRetrying ? null : _retry,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.amber500,
-                    foregroundColor: AppColors.surface0,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  icon: _isRetrying
-                      ? const SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.5,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.replay, size: 14),
-                  label: Text(
-                    'Retry',
-                    style: GoogleFonts.notoSansKr(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                PosActionButton(
+                  label: 'Retry',
+                  tone: PosActionTone.primary,
+                  icon: Icons.replay,
+                  compact: true,
+                  loading: _isRetrying,
+                  onPressed: _retry,
                 ),
               ],
             ],

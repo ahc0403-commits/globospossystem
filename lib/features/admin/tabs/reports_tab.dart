@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/services/daily_closing_service.dart';
+import '../../../core/ui/toast/toast.dart';
 import '../../../main.dart';
 import '../../auth/auth_provider.dart';
 import '../../report/report_provider.dart';
@@ -48,8 +49,8 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       key: const Key('reports_root'),
       backgroundColor: AppColors.surface0,
       body: reportState.isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.amber500),
+          ? const ToastOperationalLoadingState(
+              label: PosLoadingCopy.loadingReport,
             )
           : reportState.error != null
           ? Center(
@@ -248,8 +249,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                     ),
                   ],
                   const SizedBox(height: 16),
-                  if (storeId != null)
-                    _TodaySummarySection(storeId: storeId),
+                  if (storeId != null) _TodaySummarySection(storeId: storeId),
                   if (storeId != null) ...[
                     const SizedBox(height: 16),
                     _DailyClosingSection(storeId: storeId),
@@ -300,9 +300,9 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     );
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Report saved.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Report saved.')));
     }
   }
 
@@ -462,114 +462,43 @@ class _DailyTable extends StatelessWidget {
       );
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface1,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        children: [
-          _tableHeader(),
-          ...data.dailyBreakdown.asMap().entries.map((entry) {
-            final index = entry.key;
-            final row = entry.value;
-            final rowColor = index.isEven
-                ? AppColors.surface1
-                : AppColors.surface0;
-            return _tableRow(
-              date: DateFormat('dd/MM').format(row.date),
-              dineIn: row.dineIn,
-              delivery: row.delivery,
-              total: row.total,
-              cash: row.cashAmount,
-              card: row.cardAmount,
-              pay: row.payAmount,
-              bgColor: rowColor,
-            );
-          }),
-          _totalsRow(data),
-        ],
-      ),
-    );
-  }
+    String vnd(double v) => '₫${currency.format(v)}';
 
-  Widget _tableHeader() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.surface2)),
-      ),
-      child: Row(
-        children: [
-          _cell('Date', flex: 2, bold: true),
-          _cell('Dine-in', bold: true),
-          _cell('Delivery', bold: true),
-          _cell('Total', bold: true),
-          _cell('Cash', bold: true),
-          _cell('Card', bold: true),
-          _cell('Pay', bold: true),
+    return ToastDenseDataTable(
+      columns: const [
+        ToastDenseColumn(label: 'Date', flex: 2),
+        ToastDenseColumn(label: 'Dine-in'),
+        ToastDenseColumn(label: 'Delivery'),
+        ToastDenseColumn(label: 'Total'),
+        ToastDenseColumn(label: 'Cash'),
+        ToastDenseColumn(label: 'Card'),
+        ToastDenseColumn(label: 'Pay'),
+      ],
+      rows: [
+        for (final row in data.dailyBreakdown)
+          ToastDenseRow(
+            cells: [
+              DateFormat('dd/MM').format(row.date),
+              vnd(row.dineIn),
+              vnd(row.delivery),
+              vnd(row.total),
+              vnd(row.cashAmount),
+              vnd(row.cardAmount),
+              vnd(row.payAmount),
+            ],
+          ),
+      ],
+      totalsRow: ToastDenseRow(
+        bold: true,
+        cells: [
+          'Total',
+          vnd(data.dineInRevenue),
+          vnd(data.deliveryRevenue),
+          vnd(data.totalRevenue),
+          vnd(data.cashTotal),
+          vnd(data.cardTotal),
+          vnd(data.payTotal),
         ],
-      ),
-    );
-  }
-
-  Widget _tableRow({
-    required String date,
-    required double dineIn,
-    required double delivery,
-    required double total,
-    required double cash,
-    required double card,
-    required double pay,
-    required Color bgColor,
-  }) {
-    return Container(
-      color: bgColor,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Row(
-        children: [
-          _cell(date, flex: 2),
-          _cell('₫${currency.format(dineIn)}'),
-          _cell('₫${currency.format(delivery)}'),
-          _cell('₫${currency.format(total)}'),
-          _cell('₫${currency.format(cash)}'),
-          _cell('₫${currency.format(card)}'),
-          _cell('₫${currency.format(pay)}'),
-        ],
-      ),
-    );
-  }
-
-  Widget _totalsRow(ReportSummary summary) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.surface2)),
-      ),
-      child: Row(
-        children: [
-          _cell('Total', flex: 2, bold: true),
-          _cell('₫${currency.format(summary.dineInRevenue)}', bold: true),
-          _cell('₫${currency.format(summary.deliveryRevenue)}', bold: true),
-          _cell('₫${currency.format(summary.totalRevenue)}', bold: true),
-          _cell('₫${currency.format(summary.cashTotal)}', bold: true),
-          _cell('₫${currency.format(summary.cardTotal)}', bold: true),
-          _cell('₫${currency.format(summary.payTotal)}', bold: true),
-        ],
-      ),
-    );
-  }
-
-  Widget _cell(String text, {int flex = 1, bool bold = false}) {
-    return Expanded(
-      flex: flex,
-      child: Text(
-        text,
-        style: GoogleFonts.notoSansKr(
-          color: AppColors.textPrimary,
-          fontSize: 12,
-          fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
-        ),
       ),
     );
   }
@@ -607,7 +536,8 @@ class _OrderCountRow extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
-          if (summary.totalOrders > summary.completedOrders + summary.cancelledOrders) ...[
+          if (summary.totalOrders >
+              summary.completedOrders + summary.cancelledOrders) ...[
             const SizedBox(width: 12),
             Text(
               'In Progress ${summary.totalOrders - summary.completedOrders - summary.cancelledOrders}',
@@ -636,10 +566,7 @@ class _OrderCountRow extends StatelessWidget {
 }
 
 class _PaymentMethodRow extends StatelessWidget {
-  const _PaymentMethodRow({
-    required this.summary,
-    required this.currency,
-  });
+  const _PaymentMethodRow({required this.summary, required this.currency});
 
   final ReportSummary summary;
   final NumberFormat currency;
@@ -742,8 +669,7 @@ class _TodaySummarySection extends ConsumerWidget {
             ),
             const Spacer(),
             InkWell(
-              onTap: () =>
-                  ref.refresh(adminTodaySummaryProvider(storeId)),
+              onTap: () => ref.refresh(adminTodaySummaryProvider(storeId)),
               borderRadius: BorderRadius.circular(4),
               child: const Padding(
                 padding: EdgeInsets.all(4),
@@ -860,10 +786,7 @@ class _TodaySummarySection extends ConsumerWidget {
 }
 
 class _HourlyRevenueSection extends StatelessWidget {
-  const _HourlyRevenueSection({
-    required this.summary,
-    required this.currency,
-  });
+  const _HourlyRevenueSection({required this.summary, required this.currency});
 
   final ReportSummary summary;
   final NumberFormat currency;
@@ -871,8 +794,10 @@ class _HourlyRevenueSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hours = summary.hourlyBreakdown;
-    final maxAmount =
-        hours.fold<double>(0, (m, h) => h.amount > m ? h.amount : m);
+    final maxAmount = hours.fold<double>(
+      0,
+      (m, h) => h.amount > m ? h.amount : m,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -894,8 +819,7 @@ class _HourlyRevenueSection extends StatelessWidget {
           ),
           child: Column(
             children: hours.map((h) {
-              final barFraction =
-                  maxAmount > 0 ? (h.amount / maxAmount) : 0.0;
+              final barFraction = maxAmount > 0 ? (h.amount / maxAmount) : 0.0;
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 3),
                 child: Row(
@@ -977,58 +901,26 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
   bool _closingAlreadyClosed = false;
 
   Future<void> _createClosing() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await ToastConfirmDialog.show(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface1,
-        title: Text(
-          'Close Today',
-          style: GoogleFonts.notoSansKr(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        content: Text(
-          "Save today's operations data as a closing record?",
-          style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              'Cancel',
-              style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
-            ),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.amber500,
-              foregroundColor: AppColors.surface0,
-            ),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
+      title: 'Close Today',
+      description: "Save today's operations data as a closing record?",
+      confirmLabel: 'Close',
     );
 
     if (confirmed != true || !mounted) return;
 
     setState(() => _isClosing = true);
     try {
-      await dailyClosingService.createDailyClosing(
-        storeId: widget.storeId,
-      );
+      await dailyClosingService.createDailyClosing(storeId: widget.storeId);
       debugPrint('DAILY_CLOSING: success');
       ref.invalidate(dailyClosingHistoryProvider);
       if (mounted) {
         setState(() => _closingSucceeded = true);
         debugPrint('DAILY_CLOSING: _closingSucceeded=true');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Closing complete.'),
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Closing complete.')));
       }
     } catch (e) {
       if (mounted) {
@@ -1041,9 +933,9 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
           setState(() => _closingAlreadyClosed = true);
           debugPrint('DAILY_CLOSING: _closingAlreadyClosed=true');
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorMsg)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(errorMsg)));
       }
     } finally {
       if (mounted) setState(() => _isClosing = false);
@@ -1052,9 +944,7 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
 
   @override
   Widget build(BuildContext context) {
-    final historyAsync = ref.watch(
-      dailyClosingHistoryProvider(widget.storeId),
-    );
+    final historyAsync = ref.watch(dailyClosingHistoryProvider(widget.storeId));
     final currency = NumberFormat('#,###', 'vi_VN');
 
     return Column(
@@ -1073,24 +963,13 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
               ),
             ),
             const Spacer(),
-            FilledButton.icon(
+            PosActionButton(
               key: const Key('daily_closing_submit_button'),
-              onPressed: _isClosing ? null : _createClosing,
-              icon: _isClosing
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        color: AppColors.surface0,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : const Icon(Icons.lock_clock, size: 16),
-              label: const Text('Close Today'),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.amber500,
-                foregroundColor: AppColors.surface0,
-              ),
+              label: 'Close Today',
+              tone: PosActionTone.primary,
+              icon: Icons.lock_clock,
+              loading: _isClosing,
+              onPressed: _createClosing,
             ),
           ],
         ),
@@ -1102,13 +981,18 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.check_circle_outline,
-                    color: AppColors.statusAvailable, size: 14),
+                const Icon(
+                  Icons.check_circle_outline,
+                  color: AppColors.statusAvailable,
+                  size: 14,
+                ),
                 const SizedBox(width: 4),
                 Text(
                   'Closing complete.',
                   style: GoogleFonts.notoSansKr(
-                      color: AppColors.statusAvailable, fontSize: 12),
+                    color: AppColors.statusAvailable,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
@@ -1120,7 +1004,9 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
             child: Text(
               'Today is already complete.',
               style: GoogleFonts.notoSansKr(
-                  color: AppColors.amber500, fontSize: 12),
+                color: AppColors.amber500,
+                fontSize: 12,
+              ),
             ),
           ),
         historyAsync.when(
@@ -1225,9 +1111,12 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
-          _dCell(record.closingDate.length >= 10
-              ? record.closingDate.substring(5)
-              : record.closingDate, flex: 2),
+          _dCell(
+            record.closingDate.length >= 10
+                ? record.closingDate.substring(5)
+                : record.closingDate,
+            flex: 2,
+          ),
           _dCell('${record.ordersTotal}'),
           _dCell('${record.ordersCompleted}'),
           _dCell('${record.ordersCancelled}'),
@@ -1278,18 +1167,12 @@ class _ReportsAuditTraceSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final auditTraceAsync = ref.watch(
-      adminAuditTraceProvider(storeId),
-    );
+    final auditTraceAsync = ref.watch(adminAuditTraceProvider(storeId));
 
     return AdminAuditTracePanel(
       auditTraceAsync: auditTraceAsync,
       storeId: storeId,
-      allowedEntityTypes: const {
-        'orders',
-        'order_items',
-        'payments',
-      },
+      allowedEntityTypes: const {'orders', 'order_items', 'payments'},
       maxItems: 10,
       compact: true,
       showRetry: true,

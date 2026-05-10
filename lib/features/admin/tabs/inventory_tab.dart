@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/ui/toast/toast.dart';
 import '../../../core/utils/permission_utils.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
@@ -69,7 +70,12 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       auth.extraPermissions,
     );
 
-    final tabs = <String>['Ingredient Management', 'Recipe Management', if (canCount) 'Physical Count', 'Inventory Report'];
+    final tabs = <String>[
+      'Ingredient Management',
+      'Recipe Management',
+      if (canCount) 'Physical Count',
+      'Inventory Report',
+    ];
     _ensureTabController(tabs.length);
 
     if (storeId != null && _initializedRestaurantId != storeId) {
@@ -135,11 +141,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               FilledButton.icon(
                 onPressed: storeId == null
                     ? null
-                    : () => _showIngredientDialog(
-                        context,
-                        storeId,
-                        notifier,
-                      ),
+                    : () => _showIngredientDialog(context, storeId, notifier),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.amber500,
                   foregroundColor: AppColors.surface0,
@@ -329,20 +331,25 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   onPressed: storeId == null
                       ? null
                       : () => _showRestockWasteDialog(
-                            context,
-                            storeId: storeId,
-                            ingredientId: item['ingredient_id']?.toString() ?? item['id']?.toString() ?? '',
-                            ingredientName: item['name']?.toString() ?? '',
-                            unit: item['unit']?.toString() ?? 'g',
-                            isWaste: false,
-                          ),
+                          context,
+                          storeId: storeId,
+                          ingredientId:
+                              item['ingredient_id']?.toString() ??
+                              item['id']?.toString() ??
+                              '',
+                          ingredientName: item['name']?.toString() ?? '',
+                          unit: item['unit']?.toString() ?? 'g',
+                          isWaste: false,
+                        ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.statusAvailable,
                     side: const BorderSide(color: AppColors.statusAvailable),
                   ),
                   icon: const Icon(Icons.add_circle_outline, size: 16),
-                  label: Text('Stock In',
-                      style: GoogleFonts.notoSansKr(fontSize: 12)),
+                  label: Text(
+                    'Stock In',
+                    style: GoogleFonts.notoSansKr(fontSize: 12),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -351,20 +358,25 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   onPressed: storeId == null
                       ? null
                       : () => _showRestockWasteDialog(
-                            context,
-                            storeId: storeId,
-                            ingredientId: item['ingredient_id']?.toString() ?? item['id']?.toString() ?? '',
-                            ingredientName: item['name']?.toString() ?? '',
-                            unit: item['unit']?.toString() ?? 'g',
-                            isWaste: true,
-                          ),
+                          context,
+                          storeId: storeId,
+                          ingredientId:
+                              item['ingredient_id']?.toString() ??
+                              item['id']?.toString() ??
+                              '',
+                          ingredientName: item['name']?.toString() ?? '',
+                          unit: item['unit']?.toString() ?? 'g',
+                          isWaste: true,
+                        ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.statusCancelled,
                     side: const BorderSide(color: AppColors.statusCancelled),
                   ),
                   icon: const Icon(Icons.remove_circle_outline, size: 16),
-                  label: Text('Waste',
-                      style: GoogleFonts.notoSansKr(fontSize: 12)),
+                  label: Text(
+                    'Waste',
+                    style: GoogleFonts.notoSansKr(fontSize: 12),
+                  ),
                 ),
               ),
             ],
@@ -450,64 +462,45 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     final noteController = TextEditingController();
     final title = isWaste ? 'Waste Record' : 'Stock-In Record';
     final actionLabel = isWaste ? 'Waste' : 'Stock In';
-    final actionColor =
-        isWaste ? AppColors.statusCancelled : AppColors.statusAvailable;
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await ToastConfirmDialog.withContent(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface1,
-        title: Text('$ingredientName — $title',
-            style: GoogleFonts.notoSansKr(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w700,
-                fontSize: 16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: qtyController,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: InputDecoration(
-                labelText: 'Quantity ($unit)',
-                labelStyle:
-                    const TextStyle(color: AppColors.textSecondary),
-                enabledBorder: const UnderlineInputBorder(
-                    borderSide: BorderSide(color: AppColors.surface2)),
-                focusedBorder: const UnderlineInputBorder(
-                    borderSide: BorderSide(color: AppColors.amber500)),
+      title: '$ingredientName — $title',
+      confirmLabel: actionLabel,
+      destructive: isWaste,
+      confirmTone: isWaste ? null : PosActionTone.affirm,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: qtyController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            style: const TextStyle(color: AppColors.textPrimary),
+            decoration: InputDecoration(
+              labelText: 'Quantity ($unit)',
+              labelStyle: const TextStyle(color: AppColors.textSecondary),
+              enabledBorder: const UnderlineInputBorder(
+                borderSide: BorderSide(color: AppColors.surface2),
+              ),
+              focusedBorder: const UnderlineInputBorder(
+                borderSide: BorderSide(color: AppColors.amber500),
               ),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: noteController,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: const InputDecoration(
-                labelText: 'Memo (optional)',
-                labelStyle: TextStyle(color: AppColors.textSecondary),
-                enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: AppColors.surface2)),
-                focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: AppColors.amber500)),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel',
-                style: TextStyle(color: AppColors.textSecondary)),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: actionColor,
-              foregroundColor: Colors.white,
+          const SizedBox(height: 12),
+          TextField(
+            controller: noteController,
+            style: const TextStyle(color: AppColors.textPrimary),
+            decoration: const InputDecoration(
+              labelText: 'Memo (optional)',
+              labelStyle: TextStyle(color: AppColors.textSecondary),
+              enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: AppColors.surface2),
+              ),
+              focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: AppColors.amber500),
+              ),
             ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(actionLabel),
           ),
         ],
       ),
@@ -1427,7 +1420,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
-                        decoration: const InputDecoration(labelText: 'Current Stock'),
+                        decoration: const InputDecoration(
+                          labelText: 'Current Stock',
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
@@ -1435,7 +1430,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
-                        decoration: const InputDecoration(labelText: 'Reorder Threshold'),
+                        decoration: const InputDecoration(
+                          labelText: 'Reorder Threshold',
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
@@ -1443,12 +1440,16 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
-                        decoration: const InputDecoration(labelText: 'Unit Price (VND)'),
+                        decoration: const InputDecoration(
+                          labelText: 'Unit Price (VND)',
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
                         controller: supplierController,
-                        decoration: const InputDecoration(labelText: 'Supplier'),
+                        decoration: const InputDecoration(
+                          labelText: 'Supplier',
+                        ),
                       ),
                     ],
                   ),
@@ -1517,7 +1518,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                         if (context.mounted) {
                           showErrorToast(
                             context,
-                            ref.read(ingredientProvider).error ?? 'Failed to update ingredient',
+                            ref.read(ingredientProvider).error ??
+                                'Failed to update ingredient',
                           );
                         }
                         return;
@@ -1540,7 +1542,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                         if (context.mounted) {
                           showErrorToast(
                             context,
-                            ref.read(ingredientProvider).error ?? 'Failed to add ingredient',
+                            ref.read(ingredientProvider).error ??
+                                'Failed to add ingredient',
                           );
                         }
                         return;
@@ -1634,7 +1637,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     onChanged: isEdit
                         ? null
                         : (v) => setModalState(() => ingredientId = v),
-                    decoration: const InputDecoration(labelText: 'Ingredient (g)'),
+                    decoration: const InputDecoration(
+                      labelText: 'Ingredient (g)',
+                    ),
                   ),
                   const SizedBox(height: 8),
                   TextField(
@@ -1658,7 +1663,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                         ingredientId == null ||
                         qty == null ||
                         qty <= 0) {
-                      showErrorToast(context, 'Check the menu, ingredient, and usage (g).');
+                      showErrorToast(
+                        context,
+                        'Check the menu, ingredient, and usage (g).',
+                      );
                       return;
                     }
                     final success = await notifier.upsert(
@@ -1671,7 +1679,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                       if (context.mounted) {
                         showErrorToast(
                           context,
-                          ref.read(recipeProvider).error ?? 'Failed to save recipe mapping',
+                          ref.read(recipeProvider).error ??
+                              'Failed to save recipe mapping',
                         );
                       }
                       return;
@@ -1679,7 +1688,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     if (!context.mounted) return;
                     showSuccessToast(
                       context,
-                      isEdit ? 'Recipe mapping updated.' : 'Recipe mapping added.',
+                      isEdit
+                          ? 'Recipe mapping updated.'
+                          : 'Recipe mapping added.',
                     );
                     Navigator.of(context).pop();
                   },

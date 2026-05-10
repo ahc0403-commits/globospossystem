@@ -5,7 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/layout/adaptive_layout.dart';
-import '../../core/layout/web_sidebar_layout.dart';
+import '../../core/ui/toast/toast.dart';
 import '../../main.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/offline_banner.dart';
@@ -78,29 +78,85 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     return tabs;
   }
 
-  List<SidebarItem> _sidebarItemsForRole(String? role) {
-    final items = <SidebarItem>[
-      const SidebarItem(icon: Icons.table_restaurant, label: 'Tables', itemKey: Key('nav_tables')),
-      const SidebarItem(icon: Icons.restaurant_menu, label: 'Menu', itemKey: Key('nav_menu')),
-      const SidebarItem(icon: Icons.people, label: 'Staff'),
-      const SidebarItem(icon: Icons.bar_chart, label: 'Reports', itemKey: Key('nav_reports')),
-      const SidebarItem(icon: Icons.access_time, label: 'Attendance'),
-      const SidebarItem(icon: Icons.inventory_2_outlined, label: 'Inventory'),
-      const SidebarItem(icon: Icons.fact_check, label: 'QC'),
-      const SidebarItem(icon: Icons.settings, label: 'Settings'),
+  /// Operational sidebar groups. Order across groups MUST match the
+  /// existing flat tab order (Tables, Menu, Staff, Reports, Attendance,
+  /// Inventory, QC, Settings, [Deliberry], E-Invoice) because the
+  /// selected-index/tab mapping is positional. Grouping is expressive
+  /// only — the `ToastSidebar` adapter flattens groups while preserving
+  /// order, so shell behavior is unchanged.
+  List<ToastSidebarGroup> _sidebarGroupsForRole(String? role) {
+    final liveOps = <ToastSidebarItem>[
+      const ToastSidebarItem(
+        icon: Icons.table_restaurant,
+        label: 'Tables',
+        urgency: ToastSidebarUrgency.live,
+        itemKey: Key('nav_tables'),
+      ),
+      const ToastSidebarItem(
+        icon: Icons.restaurant_menu,
+        label: 'Menu',
+        urgency: ToastSidebarUrgency.live,
+        itemKey: Key('nav_menu'),
+      ),
     ];
 
+    final backOffice = <ToastSidebarItem>[
+      const ToastSidebarItem(
+        icon: Icons.people,
+        label: 'Staff',
+        urgency: ToastSidebarUrgency.backOffice,
+      ),
+      const ToastSidebarItem(
+        icon: Icons.bar_chart,
+        label: 'Reports',
+        urgency: ToastSidebarUrgency.backOffice,
+        itemKey: Key('nav_reports'),
+      ),
+      const ToastSidebarItem(
+        icon: Icons.access_time,
+        label: 'Attendance',
+        urgency: ToastSidebarUrgency.backOffice,
+      ),
+      const ToastSidebarItem(
+        icon: Icons.inventory_2_outlined,
+        label: 'Inventory',
+        urgency: ToastSidebarUrgency.backOffice,
+      ),
+      const ToastSidebarItem(
+        icon: Icons.fact_check,
+        label: 'QC',
+        urgency: ToastSidebarUrgency.backOffice,
+      ),
+      const ToastSidebarItem(
+        icon: Icons.settings,
+        label: 'Settings',
+        urgency: ToastSidebarUrgency.backOffice,
+      ),
+    ];
+
+    final exceptions = <ToastSidebarItem>[];
     if (PermissionUtils.canAccessDeliverySettlement(role)) {
-      items.add(
-        const SidebarItem(
+      exceptions.add(
+        const ToastSidebarItem(
           icon: Icons.delivery_dining,
           label: 'Deliberry Settlement',
+          urgency: ToastSidebarUrgency.exception,
         ),
       );
     }
+    exceptions.add(
+      const ToastSidebarItem(
+        icon: Icons.receipt_long,
+        label: 'E-Invoice',
+        urgency: ToastSidebarUrgency.exception,
+      ),
+    );
 
-    items.add(const SidebarItem(icon: Icons.receipt_long, label: 'E-Invoice'));
-    return items;
+    return [
+      ToastSidebarGroup(title: 'Live Operations', items: liveOps),
+      ToastSidebarGroup(title: 'Back Office', items: backOffice),
+      ToastSidebarGroup(title: 'Exceptions', items: exceptions),
+    ];
   }
 
   List<BottomNavigationBarItem> _mobileNavItemsForRole(String? role) {
@@ -157,13 +213,13 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     String? role,
   ) {
     final tabs = _tabsForRole(role);
-    final items = _sidebarItemsForRole(role);
+    final groups = _sidebarGroupsForRole(role);
     final safeIndex = _currentIndex.clamp(0, tabs.length - 1);
 
-    return WebSidebarLayout(
+    return ToastSidebar(
       key: const Key('admin_root'),
       title: isSuperAdminView ? 'ADMIN VIEW' : 'GLOBOS POS',
-      items: items,
+      groups: groups,
       selectedIndex: safeIndex,
       onItemSelected: (index) => setState(() => _currentIndex = index),
       topBarLeading: isSuperAdminView
@@ -205,9 +261,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       bottomItems: isSuperAdminView
           ? null
           : [
-              SidebarItem(
+              ToastSidebarItem(
                 icon: Icons.logout,
                 label: 'Logout',
+                urgency: ToastSidebarUrgency.backOffice,
                 itemKey: const Key('logout_button'),
                 onTap: () => ref.read(authProvider.notifier).logout(),
               ),
