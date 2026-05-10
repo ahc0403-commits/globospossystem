@@ -41,7 +41,8 @@ class DeliverySettlementItem {
       referenceBase: json['reference_base'] != null
           ? _toDouble(json['reference_base'])
           : null,
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+      createdAt:
+          DateTime.tryParse(json['created_at']?.toString() ?? '') ??
           DateTime.now(),
     );
   }
@@ -113,6 +114,7 @@ class DeliverySettlement {
 
   /// v_settlement_summary 뷰에서 생성
   factory DeliverySettlement.fromJson(Map<String, dynamic> json) {
+    final storeId = json['store_id'] ?? json['restaurant_id'];
     final itemsRaw = json['items'];
     List<DeliverySettlementItem> items = [];
     if (itemsRaw is List) {
@@ -135,14 +137,14 @@ class DeliverySettlement {
 
     return DeliverySettlement(
       id: json['id'].toString(),
-      storeId: json['restaurant_id'].toString(),
+      storeId: storeId.toString(),
       periodLabel: json['period_label']?.toString() ?? '',
-      periodStart: DateTime.tryParse(
-              json['period_start']?.toString() ?? '') ??
+      periodStart:
+          DateTime.tryParse(json['period_start']?.toString() ?? '') ??
           DateTime.now(),
       periodEnd:
           DateTime.tryParse(json['period_end']?.toString() ?? '') ??
-              DateTime.now(),
+          DateTime.now(),
       grossTotal: _toDouble(json['gross_total']),
       totalDeductions: _toDouble(json['total_deductions']),
       netSettlement: _toDouble(json['net_settlement']),
