@@ -105,6 +105,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         icon: Icons.people,
         label: 'Staff',
         urgency: ToastSidebarUrgency.backOffice,
+        itemKey: Key('nav_staff'),
       ),
       const ToastSidebarItem(
         icon: Icons.bar_chart,
@@ -116,21 +117,25 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         icon: Icons.access_time,
         label: 'Attendance',
         urgency: ToastSidebarUrgency.backOffice,
+        itemKey: Key('nav_attendance'),
       ),
       const ToastSidebarItem(
         icon: Icons.inventory_2_outlined,
         label: 'Inventory',
         urgency: ToastSidebarUrgency.backOffice,
+        itemKey: Key('nav_inventory'),
       ),
       const ToastSidebarItem(
         icon: Icons.fact_check,
         label: 'QC',
         urgency: ToastSidebarUrgency.backOffice,
+        itemKey: Key('nav_qc'),
       ),
       const ToastSidebarItem(
         icon: Icons.settings,
         label: 'Settings',
         urgency: ToastSidebarUrgency.backOffice,
+        itemKey: Key('nav_settings'),
       ),
     ];
 
@@ -141,6 +146,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
           icon: Icons.delivery_dining,
           label: 'Deliberry Settlement',
           urgency: ToastSidebarUrgency.exception,
+          itemKey: Key('nav_delivery_settlement'),
         ),
       );
     }
@@ -149,6 +155,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         icon: Icons.receipt_long,
         label: 'E-Invoice',
         urgency: ToastSidebarUrgency.exception,
+        itemKey: Key('nav_einvoice'),
       ),
     );
 

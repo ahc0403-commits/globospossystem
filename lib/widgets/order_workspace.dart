@@ -629,6 +629,13 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                       fontSize: 11,
                     ),
                   ),
+                  Offstage(
+                    offstage: true,
+                    child: Text(
+                      key: const Key('latest_order_id_full_text'),
+                      widget.state.activeOrder!.id,
+                    ),
+                  ),
                 ],
               ),
             ),

@@ -263,6 +263,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     }
 
     return Scaffold(
+      key: const Key('settings_root'),
       backgroundColor: AppColors.surface0,
       body: settingsState.isLoading
           ? const Center(

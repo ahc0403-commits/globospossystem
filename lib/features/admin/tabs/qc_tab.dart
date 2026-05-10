@@ -66,6 +66,7 @@ class _QcTabState extends ConsumerState<QcTab>
     }
 
     return Scaffold(
+      key: const Key('qc_root'),
       backgroundColor: AppColors.surface0,
       body: Column(
         children: [

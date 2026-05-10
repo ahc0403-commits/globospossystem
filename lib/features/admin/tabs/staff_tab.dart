@@ -43,6 +43,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
     }
 
     return Scaffold(
+      key: const Key('staff_root'),
       backgroundColor: AppColors.surface0,
       body: Padding(
         padding: const EdgeInsets.all(16),
