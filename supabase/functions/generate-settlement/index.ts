@@ -7,7 +7,9 @@ serve(async (req: Request) => {
   const cronSecret = Deno.env.get("CRON_SECRET");
   if (!cronSecret) {
     console.error("CRON_SECRET not configured");
-    return new Response(JSON.stringify({ error: "Server misconfigured" }), { status: 500 });
+    return new Response(JSON.stringify({ error: "Server misconfigured" }), {
+      status: 500,
+    });
   }
   if (authHeader !== `Bearer ${cronSecret}`) {
     return new Response("Unauthorized", { status: 401 });
@@ -15,7 +17,7 @@ serve(async (req: Request) => {
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
   const now = new Date();
@@ -71,8 +73,28 @@ serve(async (req: Request) => {
       if (!sales || sales.length === 0) continue;
 
       const grossTotal = sales.reduce(
-        (sum: number, s: any) => sum + Number(s.gross_amount), 0
+        (sum: number, s: any) => sum + Number(s.gross_amount),
+        0,
       );
+
+      const { data: existingSettlement, error: existingError } = await supabase
+        .from("delivery_settlements")
+        .select("id")
+        .eq("restaurant_id", rid)
+        .eq("source_system", "deliberry")
+        .eq("period_label", periodLabel)
+        .maybeSingle();
+
+      if (existingError) throw existingError;
+      if (existingSettlement) {
+        results.push({
+          rid,
+          periodLabel,
+          skipped: true,
+          reason: "SETTLEMENT_ALREADY_EXISTS",
+        });
+        continue;
+      }
 
       const { data: settlement } = await supabase
         .from("delivery_settlements")
@@ -119,7 +141,8 @@ serve(async (req: Request) => {
       }
 
       const totalDeductions = items.reduce(
-        (sum: number, i: any) => sum + Number(i.amount), 0
+        (sum: number, i: any) => sum + Number(i.amount),
+        0,
       );
 
       await supabase
@@ -137,7 +160,10 @@ serve(async (req: Request) => {
         .in("id", saleIds);
 
       results.push({
-        rid, periodLabel, grossTotal, totalDeductions,
+        rid,
+        periodLabel,
+        grossTotal,
+        totalDeductions,
         netSettlement: grossTotal - totalDeductions,
         orderCount: sales.length,
       });
@@ -149,6 +175,6 @@ serve(async (req: Request) => {
 
   return new Response(
     JSON.stringify({ processed: restaurantIds.length, periodLabel, results }),
-    { headers: { "Content-Type": "application/json" } }
+    { headers: { "Content-Type": "application/json" } },
   );
 });

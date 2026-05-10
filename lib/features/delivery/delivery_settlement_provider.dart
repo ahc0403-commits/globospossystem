@@ -71,14 +71,9 @@ class DeliverySettlementNotifier
       }
 
       // 2) 최근 정산 (v_settlement_summary 뷰)
-      final settlementsRes = await supabase
-          .from('v_settlement_summary')
-          .select()
-          .eq('restaurant_id', storeId)
-          .order('period_start', ascending: false)
-          .limit(20);
+      final settlementsRes = await _fetchSettlementSummaries(storeId);
 
-      final settlements = (settlementsRes as List)
+      final settlements = settlementsRes
           .map<DeliverySettlement>(
             (row) =>
                 DeliverySettlement.fromJson(Map<String, dynamic>.from(row)),
@@ -99,6 +94,32 @@ class DeliverySettlementNotifier
         isLoading: false,
         error: 'Failed to load settlement data: $e',
       );
+    }
+  }
+
+  Future<List<dynamic>> _fetchSettlementSummaries(String storeId) async {
+    try {
+      return await supabase
+          .from('v_settlement_summary')
+          .select()
+          .eq('store_id', storeId)
+          .order('period_start', ascending: false)
+          .limit(20);
+    } catch (error) {
+      final message = error.toString();
+      final isLegacyView =
+          message.contains('v_settlement_summary.store_id') ||
+          message.contains('column store_id does not exist');
+      if (!isLegacyView) {
+        rethrow;
+      }
+
+      return await supabase
+          .from('v_settlement_summary')
+          .select()
+          .eq('restaurant_id', storeId)
+          .order('period_start', ascending: false)
+          .limit(20);
     }
   }
 
