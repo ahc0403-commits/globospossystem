@@ -5,6 +5,7 @@ import 'package:image/image.dart' as img;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../main.dart';
+import 'rpc_compat.dart';
 
 class AttendanceService {
   Future<String?> uploadAttendancePhoto({
@@ -66,8 +67,8 @@ class AttendanceService {
     required String type,
     String? photoUrl,
   }) async {
-    await supabase.rpc(
-      'record_attendance_event',
+    await runRpcWithStoreCompat<dynamic>(
+      fnName: 'record_attendance_event',
       params: {
         'p_store_id': storeId,
         'p_user_id': userId,
@@ -75,6 +76,8 @@ class AttendanceService {
         'p_photo_url': photoUrl,
         'p_photo_thumbnail_url': photoUrl,
       },
+      invoke: (params) =>
+          supabase.rpc('record_attendance_event', params: params),
     );
   }
 
@@ -83,14 +86,16 @@ class AttendanceService {
     required DateTime from,
     required DateTime to,
   }) async {
-    final result = await supabase.rpc(
-      'get_attendance_log_view',
+    final result = await runRpcWithStoreCompat<dynamic>(
+      fnName: 'get_attendance_log_view',
       params: {
         'p_store_id': storeId,
         'p_from': from.toUtc().toIso8601String(),
         'p_to': to.toUtc().toIso8601String(),
         'p_user_id': null,
       },
+      invoke: (params) =>
+          supabase.rpc('get_attendance_log_view', params: params),
     );
 
     return List<Map<String, dynamic>>.from(result as List).map((row) {
@@ -114,9 +119,11 @@ class AttendanceService {
   }
 
   Future<List<Map<String, dynamic>>> fetchStaffList(String storeId) async {
-    final result = await supabase.rpc(
-      'get_attendance_staff_directory',
+    final result = await runRpcWithStoreCompat<dynamic>(
+      fnName: 'get_attendance_staff_directory',
       params: {'p_store_id': storeId},
+      invoke: (params) =>
+          supabase.rpc('get_attendance_staff_directory', params: params),
     );
     return List<Map<String, dynamic>>.from(result as List);
   }
@@ -148,18 +155,20 @@ class AttendanceService {
     double? hourlyRate,
     List<Map<String, dynamic>> shiftRates = const [],
   }) async {
-    await supabase.from('staff_wage_configs').upsert({
-      'restaurant_id': storeId,
-      'user_id': userId,
-      'wage_type': wageType,
-      'hourly_rate': hourlyRate,
-      'shift_rates': shiftRates,
-      'effective_from': DateTime.now().toUtc().toIso8601String().substring(
-        0,
-        10,
-      ),
-      'is_active': true,
-    });
+    await supabase.rpc(
+      'upsert_staff_wage_config',
+      params: {
+        'p_store_id': storeId,
+        'p_user_id': userId,
+        'p_wage_type': wageType,
+        'p_hourly_rate': hourlyRate,
+        'p_shift_rates': shiftRates,
+        'p_effective_from': DateTime.now().toUtc().toIso8601String().substring(
+          0,
+          10,
+        ),
+      },
+    );
   }
 }
 
