@@ -287,31 +287,36 @@ class PayrollService {
     required DateTime periodEnd,
     required List<StaffPayroll> payrolls,
   }) async {
-    for (final payroll in payrolls) {
-      final totalHours = payroll.totalHours;
-      final totalAmount = payroll.totalAmount;
-      final breakdown = payroll.dailyRecords
-          .map(
-            (r) => {
-              'date': r.date.toIso8601String().substring(0, 10),
-              'clock_in': r.clockIn?.toIso8601String(),
-              'clock_out': r.clockOut?.toIso8601String(),
-              'hours': r.hours,
-              'amount': r.amount,
-            },
-          )
-          .toList();
+    final payload = payrolls
+        .map(
+          (payroll) => {
+            'user_id': payroll.userId,
+            'total_hours': payroll.totalHours,
+            'total_amount': payroll.totalAmount,
+            'breakdown': payroll.dailyRecords
+                .map(
+                  (record) => {
+                    'date': record.date.toIso8601String().substring(0, 10),
+                    'clock_in': record.clockIn?.toIso8601String(),
+                    'clock_out': record.clockOut?.toIso8601String(),
+                    'hours': record.hours,
+                    'amount': record.amount,
+                  },
+                )
+                .toList(),
+          },
+        )
+        .toList();
 
-      await supabase.from('payroll_records').insert({
-        'restaurant_id': storeId,
-        'user_id': payroll.userId,
-        'period_start': periodStart.toIso8601String().substring(0, 10),
-        'period_end': periodEnd.toIso8601String().substring(0, 10),
-        'total_hours': totalHours,
-        'total_amount': totalAmount,
-        'breakdown': breakdown,
-      });
-    }
+    await supabase.rpc(
+      'save_payroll_cache',
+      params: {
+        'p_store_id': storeId,
+        'p_period_start': periodStart.toIso8601String().substring(0, 10),
+        'p_period_end': periodEnd.toIso8601String().substring(0, 10),
+        'p_payrolls': payload,
+      },
+    );
   }
 }
 

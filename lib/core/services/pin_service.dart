@@ -30,19 +30,14 @@ class PinService {
   }
 
   Future<void> setPin(String storeId, String pin) async {
-    await supabase.from('restaurant_settings').upsert({
-      'restaurant_id': storeId,
-      'payroll_pin': hashPin(pin),
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }, onConflict: 'restaurant_id');
+    await supabase.rpc(
+      'set_payroll_pin',
+      params: {'p_store_id': storeId, 'p_payroll_pin': hashPin(pin)},
+    );
   }
 
   Future<void> clearPin(String storeId) async {
-    await supabase.from('restaurant_settings').upsert({
-      'restaurant_id': storeId,
-      'payroll_pin': null,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }, onConflict: 'restaurant_id');
+    await supabase.rpc('clear_payroll_pin', params: {'p_store_id': storeId});
   }
 }
 

@@ -1,15 +1,41 @@
 import '../../main.dart';
+import 'rpc_compat.dart';
+
+Map<String, dynamic> normalizeInventoryItemPatch(Map<String, dynamic> data) {
+  final patch = <String, dynamic>{};
+
+  if (data.containsKey('name')) {
+    patch['name'] = data['name'];
+  }
+  if (data.containsKey('unit')) {
+    patch['unit'] = data['unit'];
+  }
+  if (data.containsKey('current_stock') && data['current_stock'] != null) {
+    patch['current_stock'] = data['current_stock'];
+  }
+  if (data.containsKey('reorder_point')) {
+    patch['reorder_point'] = data['reorder_point'];
+  }
+  if (data.containsKey('cost_per_unit')) {
+    patch['cost_per_unit'] = data['cost_per_unit'];
+  }
+  if (data.containsKey('supplier_name')) {
+    final supplierName = data['supplier_name'];
+    patch['supplier_name'] =
+        supplierName is String && supplierName.trim().isEmpty
+        ? null
+        : supplierName;
+  }
+
+  return patch;
+}
 
 class InventoryService {
-  Future<List<Map<String, dynamic>>> fetchIngredients(
-    String storeId,
-  ) async {
-    final r = await supabase.rpc(
-      'get_inventory_ingredient_catalog',
-      params: {'p_store_id': storeId},
-    );
-    return List<Map<String, dynamic>>.from(r as List);
-  }
+  Future<List<Map<String, dynamic>>> fetchIngredients(String storeId) =>
+      _rpcList(
+        'get_inventory_ingredient_catalog',
+        params: {'p_store_id': storeId},
+      );
 
   Future<void> createIngredient({
     required String storeId,
@@ -39,50 +65,21 @@ class InventoryService {
     Map<String, dynamic> data, {
     required String storeId,
   }) async {
-    final patch = <String, dynamic>{};
-
-    if (data.containsKey('name')) {
-      patch['name'] = data['name'];
-    }
-    if (data.containsKey('unit')) {
-      patch['unit'] = data['unit'];
-    }
-    if (data.containsKey('current_stock') && data['current_stock'] != null) {
-      patch['current_stock'] = data['current_stock'];
-    }
-    if (data.containsKey('reorder_point')) {
-      patch['reorder_point'] = data['reorder_point'];
-    }
-    if (data.containsKey('cost_per_unit')) {
-      patch['cost_per_unit'] = data['cost_per_unit'];
-    }
-    if (data.containsKey('supplier_name')) {
-      final supplierName = data['supplier_name'];
-      patch['supplier_name'] =
-          supplierName is String && supplierName.trim().isEmpty
-          ? null
-          : supplierName;
-    }
-
     await supabase.rpc(
       'update_inventory_item',
       params: {
         'p_item_id': id,
         'p_store_id': storeId,
-        'p_patch': patch,
+        'p_patch': normalizeInventoryItemPatch(data),
       },
     );
   }
 
-  Future<void> deleteIngredient(
-    String id, {
-    required String storeId,
-  }) async {
-    await supabase
-        .from('inventory_items')
-        .delete()
-        .eq('id', id)
-        .eq('restaurant_id', storeId);
+  Future<void> deleteIngredient(String id, {required String storeId}) async {
+    await supabase.rpc(
+      'delete_inventory_item',
+      params: {'p_store_id': storeId, 'p_item_id': id},
+    );
   }
 
   Future<void> restockIngredient({
@@ -119,35 +116,27 @@ class InventoryService {
     );
   }
 
-  Future<List<Map<String, dynamic>>> fetchMenuItems(String storeId) async {
-    final r = await supabase
-        .from('menu_items')
-        .select('id, name, sort_order')
-        .eq('restaurant_id', storeId)
-        .order('sort_order');
-    return List<Map<String, dynamic>>.from(r as List);
-  }
+  Future<List<Map<String, dynamic>>> fetchMenuItems(String storeId) =>
+      _selectStoreScoped(
+        table: 'menu_items',
+        storeId: storeId,
+        columns: 'id, name, sort_order',
+        orderBy: 'sort_order',
+      );
 
-  Future<List<Map<String, dynamic>>> fetchAllRecipes(
-    String storeId,
-  ) async {
-    final r = await supabase.rpc(
-      'get_inventory_recipe_catalog',
-      params: {'p_store_id': storeId, 'p_menu_item_id': null},
-    );
-    return List<Map<String, dynamic>>.from(r as List);
-  }
+  Future<List<Map<String, dynamic>>> fetchAllRecipes(String storeId) =>
+      _rpcListWithStoreCompat(
+        'get_inventory_recipe_catalog',
+        params: {'p_store_id': storeId, 'p_menu_item_id': null},
+      );
 
   Future<List<Map<String, dynamic>>> fetchRecipesForMenu(
     String storeId,
     String menuItemId,
-  ) async {
-    final r = await supabase.rpc(
-      'get_inventory_recipe_catalog',
-      params: {'p_store_id': storeId, 'p_menu_item_id': menuItemId},
-    );
-    return List<Map<String, dynamic>>.from(r as List);
-  }
+  ) => _rpcListWithStoreCompat(
+    'get_inventory_recipe_catalog',
+    params: {'p_store_id': storeId, 'p_menu_item_id': menuItemId},
+  );
 
   Future<void> upsertRecipe({
     required String storeId,
@@ -171,24 +160,23 @@ class InventoryService {
     String ingredientId, {
     required String storeId,
   }) async {
-    await supabase
-        .from('menu_recipes')
-        .delete()
-        .eq('menu_item_id', menuItemId)
-        .eq('ingredient_id', ingredientId)
-        .eq('restaurant_id', storeId);
+    await supabase.rpc(
+      'delete_inventory_recipe_line_by_keys',
+      params: {
+        'p_store_id': storeId,
+        'p_menu_item_id': menuItemId,
+        'p_ingredient_id': ingredientId,
+      },
+    );
   }
 
   Future<List<Map<String, dynamic>>> fetchPhysicalCounts(
     String storeId,
     String countDate,
-  ) async {
-    final r = await supabase.rpc(
-      'get_inventory_physical_count_sheet',
-      params: {'p_store_id': storeId, 'p_count_date': countDate},
-    );
-    return List<Map<String, dynamic>>.from(r as List);
-  }
+  ) => _rpcList(
+    'get_inventory_physical_count_sheet',
+    params: {'p_store_id': storeId, 'p_count_date': countDate},
+  );
 
   Future<void> submitPhysicalCount({
     required String storeId,
@@ -213,16 +201,50 @@ class InventoryService {
     required String storeId,
     required DateTime from,
     required DateTime to,
+  }) => _rpcList(
+    'get_inventory_transaction_visibility',
+    params: {
+      'p_store_id': storeId,
+      'p_from': from.toUtc().toIso8601String(),
+      'p_to': to.toUtc().toIso8601String(),
+    },
+  );
+
+  Future<List<Map<String, dynamic>>> _rpcList(
+    String functionName, {
+    required Map<String, dynamic> params,
   }) async {
-    final r = await supabase.rpc(
-      'get_inventory_transaction_visibility',
-      params: {
-        'p_store_id': storeId,
-        'p_from': from.toUtc().toIso8601String(),
-        'p_to': to.toUtc().toIso8601String(),
-      },
+    final result = await supabase.rpc(functionName, params: params);
+    return List<Map<String, dynamic>>.from(result as List);
+  }
+
+  Future<List<Map<String, dynamic>>> _rpcListWithStoreCompat(
+    String functionName, {
+    required Map<String, dynamic> params,
+  }) async {
+    final result = await runRpcWithStoreCompat<dynamic>(
+      fnName: functionName,
+      params: params,
+      invoke: (nextParams) => supabase.rpc(functionName, params: nextParams),
     );
-    return List<Map<String, dynamic>>.from(r as List);
+    return List<Map<String, dynamic>>.from(result as List);
+  }
+
+  Future<List<Map<String, dynamic>>> _selectStoreScoped({
+    required String table,
+    required String storeId,
+    required String columns,
+    String? orderBy,
+  }) async {
+    dynamic query = supabase
+        .from(table)
+        .select(columns)
+        .eq('restaurant_id', storeId);
+    if (orderBy != null) {
+      query = query.order(orderBy);
+    }
+    final result = await query;
+    return List<Map<String, dynamic>>.from(result as List);
   }
 }
 
