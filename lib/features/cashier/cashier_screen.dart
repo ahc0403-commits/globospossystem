@@ -134,36 +134,12 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   }
 
   Future<bool> _showServiceConfirmDialog() async {
-    final result = await showDialog<bool>(
+    final result = await ToastConfirmDialog.show(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface1,
-        title: Text(
-          'Service Provision',
-          style: GoogleFonts.notoSansKr(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        content: Text(
+      title: 'Service Provision',
+      description:
           'This order is treated as a service and not counted in revenue.\nUse for staff meals, service drinks, etc.',
-          style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.amber500,
-              foregroundColor: AppColors.surface0,
-            ),
-            child: const Text('Service'),
-          ),
-        ],
-      ),
+      confirmLabel: 'Service',
     );
     return result ?? false;
   }
