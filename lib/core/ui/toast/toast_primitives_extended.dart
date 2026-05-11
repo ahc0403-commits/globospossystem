@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../i18n/locale_extensions.dart';
 import '../app_theme.dart';
 import '../pos_design_tokens.dart';
+import 'toast_vocabulary.dart';
 
 /// Additive Toast-style primitives that are NOT yet defined under
 /// `lib/core/ui/app_primitives.dart` or the existing `toast/` files.
@@ -898,4 +899,155 @@ enum ToastActionDisabledReason {
   actionInProgress,
   noPendingPrep,
   openOrderRequired,
+}
+
+/// Wave 1.6 Phase 3.6 — declarative item for [ToastActionStack].
+///
+/// Pairs with [toastActionVerbLabel] and [toastActionVerbIcon]:
+/// callers describe an action as a [ToastActionVerb] with optional
+/// label/icon overrides; this widget renders the button. The
+/// `disabledReason` / `disabledSeverity` fields are forward-compat
+/// storage — today's renderer applies only the boolean `disabled`
+/// flag (opacity + null `onTap`). A follow-up tick can wire the
+/// reason/severity into an inline status row without API breakage.
+///
+/// Distinct from main's `PosActionButton` in `toast_primitives.dart`
+/// (which uses the simpler legacy taxonomy). Use [ToastActionStackItem]
+/// when you want the Wave 1.6 `ToastActionVerb` shape; keep
+/// `PosActionButton` for the legacy tone/disabledReason flow.
+class ToastActionStackItem extends StatelessWidget {
+  const ToastActionStackItem({
+    super.key,
+    required this.label,
+    required this.verb,
+    this.icon,
+    this.onTap,
+    this.disabled = false,
+    this.disabledReason,
+    this.disabledSeverity,
+  });
+
+  /// Build from a [ToastActionVerb] alone. Label defaults to the
+  /// localized verb label via [toastActionVerbLabel]. Mirrors the
+  /// stash `PosActionButton.verb` factory shape.
+  factory ToastActionStackItem.verb({
+    Key? key,
+    required BuildContext context,
+    required ToastActionVerb verb,
+    required VoidCallback? onTap,
+    IconData? icon,
+    bool disabled = false,
+    ToastActionDisabledReason? disabledReason,
+    PosActionTone? disabledSeverity,
+  }) {
+    return ToastActionStackItem(
+      key: key,
+      label: toastActionVerbLabel(context, verb),
+      verb: verb,
+      icon: icon,
+      onTap: onTap,
+      disabled: disabled,
+      disabledReason: disabledReason,
+      disabledSeverity: disabledSeverity,
+    );
+  }
+
+  final String label;
+  final ToastActionVerb verb;
+  final IconData? icon;
+  final VoidCallback? onTap;
+  final bool disabled;
+  final ToastActionDisabledReason? disabledReason;
+  final PosActionTone? disabledSeverity;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDisabled = disabled || onTap == null;
+    final effectiveIcon = icon ?? toastActionVerbIcon(verb);
+    return Opacity(
+      opacity: isDisabled ? 0.5 : 1.0,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: isDisabled ? null : onTap,
+          borderRadius: ToastRadiusTokens.sm,
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.sm,
+            ),
+            decoration: BoxDecoration(
+              color: PosColors.surface,
+              borderRadius: ToastRadiusTokens.sm,
+              border: Border.all(color: PosColors.border),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(effectiveIcon, size: 16, color: PosColors.text),
+                const SizedBox(width: AppSpacing.xs),
+                Text(
+                  label,
+                  style: GoogleFonts.notoSansKr(
+                    color: PosColors.text,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Wave 1.6 Phase 3.6 — linear sibling of the legacy `ToastActionRail`
+/// in `toast_primitives.dart`.
+///
+/// The two surfaces coexist without overlap:
+/// - `ToastActionRail({actions: List<Widget>, padding:})` — legacy,
+///   used by `order_workspace.dart`. Wraps via `Wrap`.
+/// - `ToastActionStack({children:, axis:, alignment:})` — Wave 1.6.
+///   Linear [Flex] rail with axis control and uniform [AppSpacing.sm]
+///   gaps. Accepts any `Widget` in `children`, including
+///   [ToastActionStackItem] or pre-built `PosActionButton`s.
+///
+/// Mirrors PR #55's `ToastSidebarPanel` precedent: distinct class
+/// name so the legacy widget and its existing callers stay
+/// untouched; consumers pick by use case.
+class ToastActionStack extends StatelessWidget {
+  const ToastActionStack({
+    super.key,
+    required this.children,
+    this.axis = Axis.vertical,
+    this.alignment = MainAxisAlignment.start,
+  });
+
+  final List<Widget> children;
+  final Axis axis;
+  final MainAxisAlignment alignment;
+
+  @override
+  Widget build(BuildContext context) {
+    if (children.isEmpty) return const SizedBox.shrink();
+    final separated = <Widget>[];
+    for (final child in children) {
+      if (separated.isNotEmpty) {
+        separated.add(
+          axis == Axis.vertical
+              ? const SizedBox(height: AppSpacing.sm)
+              : const SizedBox(width: AppSpacing.sm),
+        );
+      }
+      separated.add(child);
+    }
+    return Flex(
+      direction: axis,
+      mainAxisAlignment: alignment,
+      mainAxisSize: MainAxisSize.min,
+      children: separated,
+    );
+  }
 }
