@@ -3,7 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../core/i18n/locale_extensions.dart';
 import '../../core/ui/app_primitives.dart';
+import '../../core/ui/app_theme.dart';
+import '../../core/ui/pos_design_tokens.dart';
+import '../../core/ui/toast/toast_primitives_extended.dart';
 import '../../main.dart';
 import 'onboarding_provider.dart';
 
@@ -36,21 +40,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     final notifier = ref.read(onboardingProvider.notifier);
 
     return Scaffold(
-      backgroundColor: AppColors.surface0,
-      body: AppShell(
-        padding: const EdgeInsets.all(AppSpacing.xl),
+      backgroundColor: PosColors.canvas,
+      body: ToastShell(
+        contentPadding: const EdgeInsets.all(AppSpacing.xl),
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 760),
-            child: AppPanel(
+            child: ToastWorkSurface(
               padding: const EdgeInsets.all(AppSpacing.xl),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const AppSectionHeader(
-                    title: 'SETUP',
-                    subtitle:
-                        'Create the first store and admin profile for this workspace.',
+                  AppSectionHeader(
+                    title: context.l10n.onboardingSectionTitle,
+                    subtitle: context.l10n.onboardingSectionSubtitle,
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   _ProgressDots(step: state.step),
@@ -59,9 +62,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     Padding(
                       padding: const EdgeInsets.only(bottom: AppSpacing.md),
                       child: Text(
-                        state.error!,
+                        _localizedOnboardingError(context, state.error!),
                         style: GoogleFonts.notoSansKr(
-                          color: AppColors.statusCancelled,
+                          color: PosColors.danger,
                           fontSize: 13,
                         ),
                       ),
@@ -91,47 +94,56 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'CREATE YOUR STORE',
+            context.l10n.onboardingCreateStoreTitle,
             style: AppTextStyles.operationalTitle(size: 36),
           ),
           Text(
-            'Set up your first location',
+            context.l10n.onboardingCreateStoreSubtitle,
             style: GoogleFonts.notoSansKr(
-              color: AppColors.textSecondary,
+              color: PosColors.textSecondary,
               fontSize: 14,
             ),
           ),
           const SizedBox(height: 18),
           TextField(
             controller: _storeNameController,
-            style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-            decoration: const InputDecoration(
-              labelText: 'Store Name',
+            style: GoogleFonts.notoSansKr(color: PosColors.textPrimary),
+            decoration: InputDecoration(
+              labelText: context.l10n.onboardingStoreName,
               prefixIcon: Icon(Icons.storefront_outlined),
             ),
           ),
           const SizedBox(height: 10),
           TextField(
             controller: _addressController,
-            style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-            decoration: const InputDecoration(
-              labelText: 'Address',
+            style: GoogleFonts.notoSansKr(color: PosColors.textPrimary),
+            decoration: InputDecoration(
+              labelText: context.l10n.address,
               prefixIcon: Icon(Icons.location_on_outlined),
             ),
           ),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
             initialValue: _operationMode,
-            dropdownColor: AppColors.surface1,
-            style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-            decoration: const InputDecoration(
-              labelText: 'Operation Mode',
+            dropdownColor: PosColors.surface,
+            style: GoogleFonts.notoSansKr(color: PosColors.textPrimary),
+            decoration: InputDecoration(
+              labelText: context.l10n.superAdminOperationMode,
               prefixIcon: Icon(Icons.tune),
             ),
-            items: const [
-              DropdownMenuItem(value: 'standard', child: Text('Standard')),
-              DropdownMenuItem(value: 'buffet', child: Text('Buffet')),
-              DropdownMenuItem(value: 'hybrid', child: Text('Hybrid')),
+            items: [
+              DropdownMenuItem(
+                value: 'standard',
+                child: Text(context.l10n.superAdminOperationModeStandard),
+              ),
+              DropdownMenuItem(
+                value: 'buffet',
+                child: Text(context.l10n.superAdminOperationModeBuffet),
+              ),
+              DropdownMenuItem(
+                value: 'hybrid',
+                child: Text(context.l10n.superAdminOperationModeHybrid),
+              ),
             ],
             onChanged: (value) {
               if (value != null) {
@@ -146,9 +158,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-              decoration: const InputDecoration(
-                labelText: 'Per Person Charge',
+              style: GoogleFonts.notoSansKr(color: PosColors.textPrimary),
+              decoration: InputDecoration(
+                labelText: context.l10n.superAdminPerPersonCharge,
                 prefixIcon: Icon(Icons.payments_outlined),
               ),
             ),
@@ -181,14 +193,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2.4,
-                        color: AppColors.surface0,
+                        color: PosColors.canvas,
                       ),
                     )
                   : Text(
-                      'NEXT',
-                      style: GoogleFonts.bebasNeue(
-                        fontSize: 24,
-                        letterSpacing: 1.0,
+                      context.l10n.onboardingNext,
+                      style: GoogleFonts.notoSansKr(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
             ),
@@ -203,13 +215,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('YOUR PROFILE', style: AppTextStyles.operationalTitle(size: 36)),
+          Text(
+            context.l10n.onboardingProfileTitle,
+            style: AppTextStyles.operationalTitle(size: 36),
+          ),
           const SizedBox(height: 18),
           TextField(
             controller: _fullNameController,
-            style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-            decoration: const InputDecoration(
-              labelText: 'Full Name',
+            style: GoogleFonts.notoSansKr(color: PosColors.textPrimary),
+            decoration: InputDecoration(
+              labelText: context.l10n.onboardingFullName,
               prefixIcon: Icon(Icons.badge_outlined),
             ),
           ),
@@ -217,14 +232,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: AppColors.surface1,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.surface2),
+              color: PosColors.surface,
+              borderRadius: ToastRadiusTokens.xs,
+              border: Border.all(color: PosColors.panelMuted),
             ),
             child: Text(
-              'super_admin',
+              context.l10n.roleSuperAdminDisplay,
               style: GoogleFonts.notoSansKr(
-                color: AppColors.textSecondary,
+                color: PosColors.textSecondary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -252,14 +267,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2.4,
-                        color: AppColors.surface0,
+                        color: PosColors.canvas,
                       ),
                     )
                   : Text(
-                      'COMPLETE SETUP',
-                      style: GoogleFonts.bebasNeue(
-                        fontSize: 24,
-                        letterSpacing: 1.0,
+                      context.l10n.onboardingCompleteSetup,
+                      style: GoogleFonts.notoSansKr(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
             ),
@@ -274,25 +289,21 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.check_circle,
-            color: AppColors.statusAvailable,
-            size: 86,
-          ),
+          const Icon(Icons.check_circle, color: PosColors.success, size: 86),
           const SizedBox(height: 10),
           Text(
-            "YOU'RE ALL SET!",
-            style: GoogleFonts.bebasNeue(
-              color: AppColors.amber500,
-              fontSize: 48,
-              letterSpacing: 1.2,
+            context.l10n.onboardingDoneTitle,
+            style: GoogleFonts.notoSansKr(
+              color: PosColors.accent,
+              fontSize: 28,
+              fontWeight: FontWeight.w900,
             ),
           ),
           if (state.createdStoreName != null)
             Text(
               state.createdStoreName!,
               style: GoogleFonts.notoSansKr(
-                color: AppColors.textSecondary,
+                color: PosColors.textSecondary,
                 fontSize: 16,
               ),
             ),
@@ -311,10 +322,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       context.go('/admin');
                     },
               style: FilledButton.styleFrom(
-                backgroundColor: AppColors.amber500,
-                foregroundColor: AppColors.surface0,
+                backgroundColor: PosColors.accent,
+                foregroundColor: PosColors.canvas,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: ToastRadiusTokens.xs,
                 ),
               ),
               child: state.isLoading
@@ -323,14 +334,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2.4,
-                        color: AppColors.surface0,
+                        color: PosColors.canvas,
                       ),
                     )
                   : Text(
-                      'GO TO DASHBOARD',
-                      style: GoogleFonts.bebasNeue(
-                        fontSize: 24,
-                        letterSpacing: 1.0,
+                      context.l10n.onboardingGoToDashboard,
+                      style: GoogleFonts.notoSansKr(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
             ),
@@ -339,6 +350,31 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       ),
     );
   }
+}
+
+String _localizedOnboardingError(BuildContext context, String error) {
+  if (error == onboardingOnlySuperAdminErrorCode) {
+    return context.l10n.onboardingOnlySuperAdminError;
+  }
+  if (error == onboardingMissingSetupInfoErrorCode) {
+    return context.l10n.onboardingMissingSetupInfo;
+  }
+  if (error.startsWith('$onboardingFailedCreateStoreErrorCode:')) {
+    return context.l10n.onboardingFailedCreateStore(
+      error.substring(onboardingFailedCreateStoreErrorCode.length + 1),
+    );
+  }
+  if (error.startsWith('$onboardingFailedUpdateProfileErrorCode:')) {
+    return context.l10n.onboardingFailedUpdateProfile(
+      error.substring(onboardingFailedUpdateProfileErrorCode.length + 1),
+    );
+  }
+  if (error.startsWith('$onboardingFailedFinalizeErrorCode:')) {
+    return context.l10n.onboardingFailedFinalize(
+      error.substring(onboardingFailedFinalizeErrorCode.length + 1),
+    );
+  }
+  return error;
 }
 
 class _ProgressDots extends StatelessWidget {
@@ -358,8 +394,8 @@ class _ProgressDots extends StatelessWidget {
           width: active ? 24 : 10,
           height: 10,
           decoration: BoxDecoration(
-            color: active ? AppColors.amber500 : AppColors.surface2,
-            borderRadius: BorderRadius.circular(20),
+            color: active ? PosColors.accent : PosColors.panelMuted,
+            borderRadius: AppRadius.pill,
           ),
         );
       }),
