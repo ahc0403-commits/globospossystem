@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,10 +7,13 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/i18n/locale_extensions.dart';
 import '../../core/layout/platform_info.dart';
 import '../../core/utils/permission_utils.dart';
+import '../../core/utils/role_routes.dart';
 import '../../core/utils/time_utils.dart';
-import '../../main.dart';
+import '../../core/ui/pos_design_tokens.dart';
+import '../../core/ui/toast/toast_primitives_extended.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../auth/auth_provider.dart';
@@ -53,10 +56,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
     await ref.read(qcTemplateProvider.notifier).loadTemplates(storeId);
     await ref
         .read(qcCheckProvider.notifier)
-        .loadWeek(
-          storeId: storeId,
-          weekStart: _startOfWeek(_todayVn),
-        );
+        .loadWeek(storeId: storeId, weekStart: _startOfWeek(_todayVn));
   }
 
   void _prepopulateFromExistingChecks(List<Map<String, dynamic>> checks) {
@@ -73,6 +73,11 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
       draft.result = check['result']?.toString();
       draft.noteController.text = check['note']?.toString() ?? '';
       draft.existingPhotoUrl = check['evidence_photo_url']?.toString();
+      draft.submissionStatus = check['submission_status']?.toString();
+      draft.photoUploadedCount = _readInt(check['photo_uploaded_count']);
+      draft.photoRequiredCount = _readInt(check['photo_required_count']);
+      draft.svReviewStatus = check['sv_review_status']?.toString();
+      draft.grade = check['grade']?.toString();
     }
 
     _didPrepopulate = true;
@@ -88,13 +93,22 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
 
       final draft = _drafts.putIfAbsent(templateId, () => _CheckDraft());
       setState(() {
-        draft.photoFile = File(picked.path);
+        draft.photoFiles.add(picked);
         draft.existingPhotoUrl = null;
       });
     } catch (e) {
       if (!mounted) return;
-      showErrorToast(context, 'Photo attachment failed: $e');
+      showErrorToast(context, context.l10n.qcPhotoAttachmentFailed('$e'));
     }
+  }
+
+  void _removeEvidencePhoto(String templateId, int index) {
+    final draft = _drafts[templateId];
+    if (draft == null) return;
+    if (index < 0 || index >= draft.photoFiles.length) return;
+    setState(() {
+      draft.photoFiles.removeAt(index);
+    });
   }
 
   Future<void> _submitAll({
@@ -102,7 +116,14 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
     required String? checkedBy,
   }) async {
     final notifier = ref.read(qcCheckProvider.notifier);
+    final templateState = ref.read(qcTemplateProvider);
     final checkDate = DateFormat('yyyy-MM-dd').format(_todayVn);
+    final submittedAt = DateTime.now();
+    final templatesById = <String, Map<String, dynamic>>{
+      for (final template in templateState.templates)
+        if ((template['id']?.toString() ?? '').isNotEmpty)
+          template['id'].toString(): template,
+    };
 
     final toSubmit = <MapEntry<String, _CheckDraft>>[];
     for (final entry in _drafts.entries) {
@@ -111,31 +132,70 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
     }
 
     if (toSubmit.isEmpty) {
-      showErrorToast(context, 'No inspection items selected');
+      showErrorToast(context, context.l10n.qcNoInspectionItems);
       return;
+    }
+
+    for (final entry in toSubmit) {
+      final template = templatesById[entry.key];
+      final templateName =
+          template?['criteria_text']?.toString() ??
+          context.l10n.qcCategoryOther;
+      final requiresPhoto = template?['requires_photo'] != false;
+      final requiredPhotoCount = template?['required_photo_count'] is num
+          ? (template!['required_photo_count'] as num).toInt()
+          : (requiresPhoto ? 1 : 0);
+      final attachedPhotoCount = entry.value.attachedPhotoCount;
+
+      if (requiresPhoto && attachedPhotoCount < requiredPhotoCount) {
+        showErrorToast(
+          context,
+          '$templateName: photo evidence is required before saving.',
+        );
+        return;
+      }
     }
 
     try {
       for (final entry in toSubmit) {
-        await notifier.submitCheck(
+        final template = templatesById[entry.key];
+        final existingPhotoUrl = entry.value.existingPhotoUrl;
+        final localFiles = entry.value.photoFiles;
+        final uploadedPhotoCount = entry.value.attachedPhotoCount;
+        final requiredPhotoCount = template?['required_photo_count'] is num
+            ? (template!['required_photo_count'] as num).toInt()
+            : null;
+
+        await notifier.submitCheckV2(
           storeId: storeId,
           templateId: entry.key,
           checkDate: checkDate,
           result: entry.value.result!,
-          evidencePhoto: entry.value.photoFile,
+          evidencePhoto: localFiles.isNotEmpty ? localFiles.first : null,
+          evidencePhotos: localFiles.isNotEmpty ? localFiles : null,
+          evidencePhotoUrl: localFiles.isEmpty ? existingPhotoUrl : null,
           note: entry.value.noteController.text.trim().isEmpty
               ? null
               : entry.value.noteController.text.trim(),
           checkedBy: checkedBy,
+          submittedAt: submittedAt,
+          submissionStatus: 'submitted',
+          photoRequiredCount: requiredPhotoCount,
+          photoUploadedCount: uploadedPhotoCount,
         );
       }
 
       if (!mounted) return;
-      showSuccessToast(context, 'Saved');
-      Navigator.of(context).pop();
+      showSuccessToast(context, context.l10n.qcSaved);
+      final navigator = Navigator.of(context);
+      if (navigator.canPop()) {
+        navigator.pop();
+      } else {
+        context.go(homeRouteForRole(ref.read(authProvider).role));
+      }
     } catch (e) {
       if (!mounted) return;
-      showErrorToast(context, 'Save failed: $e');
+      showErrorToast(context, context.l10n.qcSaveFailed('$e'));
     }
   }
 
@@ -147,6 +207,10 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
       auth.role,
       auth.extraPermissions,
     );
+    final canReview = PermissionUtils.canDoQcVisitReview(
+      auth.role,
+      auth.extraPermissions,
+    );
     final templateState = ref.watch(qcTemplateProvider);
     final checkState = ref.watch(qcCheckProvider);
 
@@ -155,26 +219,16 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
         _didHandleUnauthorized = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          showErrorToast(context, 'No permission. Contact your administrator.');
-          final homeRoute = switch (auth.role) {
-            'waiter' => '/waiter',
-            'kitchen' => '/kitchen',
-            'cashier' => '/cashier',
-            'super_admin' => '/super-admin',
-            _ => '/admin',
-          };
-          context.go(homeRoute);
+          showErrorToast(context, context.l10n.qcNoPermission);
+          context.go(homeRouteForRole(auth.role));
         });
       }
       return Scaffold(
-        backgroundColor: AppColors.surface0,
+        backgroundColor: PosColors.canvas,
         body: Center(
           child: Text(
-            'No permission. Contact your administrator.',
-            style: GoogleFonts.notoSansKr(
-              color: AppColors.textPrimary,
-              fontSize: 14,
-            ),
+            context.l10n.qcNoPermission,
+            style: GoogleFonts.notoSansKr(color: PosColors.text, fontSize: 14),
           ),
         ),
       );
@@ -190,17 +244,27 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
 
     final grouped = <String, List<Map<String, dynamic>>>{};
     for (final t in templateState.templates) {
-      final category = t['category']?.toString() ?? 'Other';
+      final category =
+          t['category']?.toString() ?? context.l10n.qcCategoryOther;
       grouped.putIfAbsent(category, () => []).add(t);
     }
 
     return Scaffold(
-      backgroundColor: AppColors.surface0,
+      backgroundColor: PosColors.canvas,
       appBar: AppBar(
-        backgroundColor: AppColors.surface0,
+        backgroundColor: PosColors.canvas,
         elevation: 0,
-        actions: const [
-          Padding(
+        actions: [
+          if (canReview)
+            IconButton(
+              tooltip: context.l10n.qscReview,
+              onPressed: () => context.push('/qc-review'),
+              icon: const Icon(
+                Icons.verified_outlined,
+                color: PosColors.accent,
+              ),
+            ),
+          const Padding(
             padding: EdgeInsets.only(right: 12),
             child: Center(child: AppNavBar()),
           ),
@@ -209,9 +273,9 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "Today's Quality Check",
+              context.l10n.qcTitle,
               style: GoogleFonts.notoSansKr(
-                color: AppColors.textPrimary,
+                color: PosColors.text,
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
               ),
@@ -219,7 +283,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
             Text(
               DateFormat('yyyy-MM-dd').format(_todayVn),
               style: GoogleFonts.notoSansKr(
-                color: AppColors.textSecondary,
+                color: PosColors.textMuted,
                 fontSize: 12,
               ),
             ),
@@ -228,15 +292,15 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
       ),
       body: templateState.isLoading || checkState.isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: AppColors.amber500),
+              child: CircularProgressIndicator(color: PosColors.accent),
             )
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
                 Text(
-                  "QC v1 scope includes only today's inspection records. Template management, overall status, and follow-ups are handled on the admin screen.",
+                  context.l10n.qcScopeHint,
                   style: GoogleFonts.notoSansKr(
-                    color: AppColors.textSecondary,
+                    color: PosColors.textMuted,
                     fontSize: 12,
                   ),
                 ),
@@ -245,7 +309,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                   Text(
                     templateState.error!,
                     style: GoogleFonts.notoSansKr(
-                      color: AppColors.statusCancelled,
+                      color: PosColors.danger,
                       fontSize: 13,
                     ),
                   ),
@@ -255,7 +319,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                   Text(
                     checkState.error!,
                     style: GoogleFonts.notoSansKr(
-                      color: AppColors.statusCancelled,
+                      color: PosColors.danger,
                       fontSize: 13,
                     ),
                   ),
@@ -269,7 +333,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.amber500.withValues(alpha: 0.18),
+                      color: PosColors.accent.withValues(alpha: 0.18),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(
@@ -277,13 +341,13 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                         Container(
                           width: 4,
                           height: 16,
-                          color: AppColors.amber500,
+                          color: PosColors.accent,
                         ),
                         const SizedBox(width: 8),
                         Text(
                           category,
                           style: GoogleFonts.notoSansKr(
-                            color: AppColors.textPrimary,
+                            color: PosColors.text,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -298,14 +362,21 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                     );
                     final criteriaPhotoUrl = template['criteria_photo_url']
                         ?.toString();
+                    final qscDomain = template['qsc_domain']?.toString();
+                    final requiresPhoto = template['requires_photo'] != false;
+                    final requiredPhotoCount =
+                        template['required_photo_count'] is num
+                        ? (template['required_photo_count'] as num).toInt()
+                        : (requiresPhoto ? 1 : 0);
+                    final isSvRequired = template['is_sv_required'] == true;
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.surface1,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.surface2),
+                        color: PosColors.panelStrong,
+                        borderRadius: ToastRadiusTokens.xs,
+                        border: Border.all(color: PosColors.border),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -314,7 +385,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                             children: [
                               const Icon(
                                 Icons.assignment_outlined,
-                                color: AppColors.amber500,
+                                color: PosColors.accent,
                                 size: 16,
                               ),
                               const SizedBox(width: 6),
@@ -322,7 +393,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                                 child: Text(
                                   template['criteria_text']?.toString() ?? '-',
                                   style: GoogleFonts.notoSansKr(
-                                    color: AppColors.textPrimary,
+                                    color: PosColors.text,
                                     fontWeight: FontWeight.w700,
                                     fontSize: 15,
                                   ),
@@ -339,7 +410,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                    color: AppColors.amber500.withValues(
+                                    color: PosColors.accent.withValues(
                                       alpha: 0.5,
                                     ),
                                   ),
@@ -362,9 +433,9 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                                         vertical: 4,
                                       ),
                                       child: Text(
-                                        '📷 Reference Photo (tap to enlarge)',
+                                        context.l10n.qcReferencePhoto,
                                         style: GoogleFonts.notoSansKr(
-                                          color: AppColors.amber500,
+                                          color: PosColors.accent,
                                           fontSize: 11,
                                           fontWeight: FontWeight.w700,
                                         ),
@@ -379,20 +450,49 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                             spacing: 8,
                             runSpacing: 8,
                             children: [
+                              _statusChip(
+                                switch (qscDomain) {
+                                  'service' => 'S',
+                                  'cleanliness' => 'C',
+                                  _ => 'Q',
+                                },
+                                switch (qscDomain) {
+                                  'service' => PosColors.info,
+                                  'cleanliness' => PosColors.warning,
+                                  _ => PosColors.info,
+                                },
+                              ),
+                              _statusChip(
+                                requiresPhoto
+                                    ? 'Photo $requiredPhotoCount'
+                                    : 'No Photo',
+                                requiresPhoto
+                                    ? PosColors.info
+                                    : PosColors.textMuted,
+                              ),
+                              if (isSvRequired)
+                                _statusChip('SV Review', PosColors.accent),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
                               _resultButton(
-                                label: '✅ Pass',
+                                label: context.l10n.qcResultPass,
                                 selected: draft.result == 'pass',
                                 onTap: () =>
                                     setState(() => draft.result = 'pass'),
                               ),
                               _resultButton(
-                                label: '❌ Fail',
+                                label: context.l10n.qcResultFail,
                                 selected: draft.result == 'fail',
                                 onTap: () =>
                                     setState(() => draft.result = 'fail'),
                               ),
                               _resultButton(
-                                label: '— N/A',
+                                label: context.l10n.qcResultNa,
                                 selected: draft.result == 'na',
                                 onTap: () =>
                                     setState(() => draft.result = 'na'),
@@ -405,26 +505,11 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                               OutlinedButton.icon(
                                 onPressed: () => _pickEvidencePhoto(templateId),
                                 icon: const Icon(Icons.photo_camera),
-                                label: const Text('Attach Photo'),
+                                label: Text(context.l10n.qcAttachPhoto),
                               ),
                               const SizedBox(width: 8),
-                              if (draft.photoFile != null)
-                                GestureDetector(
-                                  onTap: () => _showImageDialog(
-                                    draft.photoFile!.path,
-                                    isFile: true,
-                                  ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Image.file(
-                                      draft.photoFile!,
-                                      width: 40,
-                                      height: 40,
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
-                                )
-                              else if (draft.existingPhotoUrl != null)
+                              if (draft.existingPhotoUrl != null &&
+                                  draft.photoFiles.isEmpty)
                                 GestureDetector(
                                   onTap: () =>
                                       _showImageDialog(draft.existingPhotoUrl!),
@@ -440,15 +525,106 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                                 ),
                             ],
                           ),
+                          if (draft.photoFiles.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              height: 56,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: draft.photoFiles.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(width: 8),
+                                itemBuilder: (context, index) {
+                                  final file = draft.photoFiles[index];
+                                  return Stack(
+                                    children: [
+                                      GestureDetector(
+                                        onTap: () =>
+                                            _showPickedImageDialog(file),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          child: _pickedImagePreview(file),
+                                        ),
+                                      ),
+                                      Positioned(
+                                        top: -6,
+                                        right: -6,
+                                        child: IconButton(
+                                          visualDensity: VisualDensity.compact,
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(
+                                            minWidth: 24,
+                                            minHeight: 24,
+                                          ),
+                                          onPressed: () => _removeEvidencePhoto(
+                                            templateId,
+                                            index,
+                                          ),
+                                          icon: const CircleAvatar(
+                                            radius: 10,
+                                            backgroundColor: PosColors.danger,
+                                            child: Icon(
+                                              Icons.close,
+                                              size: 12,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                          if (draft.hasQscStatus) ...[
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                if (draft.submissionStatus != null)
+                                  _statusChip(
+                                    _submissionStatusLabel(
+                                      context,
+                                      draft.submissionStatus!,
+                                    ),
+                                    PosColors.accent,
+                                  ),
+                                if (draft.photoUploadedCount != null ||
+                                    draft.photoRequiredCount != null)
+                                  _statusChip(
+                                    'Photo ${draft.photoUploadedCount ?? 0}/${draft.photoRequiredCount ?? 0}',
+                                    PosColors.textMuted,
+                                  ),
+                                if (draft.svReviewStatus != null)
+                                  _statusChip(
+                                    _svReviewStatusLabel(
+                                      context,
+                                      draft.svReviewStatus!,
+                                    ),
+                                    PosColors.success,
+                                  ),
+                                if (draft.grade != null &&
+                                    draft.grade!.isNotEmpty)
+                                  _statusChip(
+                                    draft.grade!.toUpperCase(),
+                                    _gradeColor(draft.grade!),
+                                  ),
+                              ],
+                            ),
+                          ],
                           const SizedBox(height: 8),
                           TextField(
                             controller: draft.noteController,
                             style: GoogleFonts.notoSansKr(
-                              color: AppColors.textPrimary,
+                              color: PosColors.text,
                               fontSize: 13,
                             ),
-                            decoration: const InputDecoration(
-                              hintText: 'Enter memo (optional)',
+                            decoration: InputDecoration(
+                              hintText: context.l10n.qcMemoHint,
                               border: OutlineInputBorder(),
                             ),
                             maxLines: 2,
@@ -469,11 +645,11 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                             checkedBy: auth.user?.id,
                           ),
                     style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.amber500,
-                      foregroundColor: AppColors.surface0,
+                      backgroundColor: PosColors.accent,
+                      foregroundColor: Colors.white,
                     ),
                     child: Text(
-                      'Saved',
+                      context.l10n.qcSaveButton,
                       style: GoogleFonts.notoSansKr(
                         fontWeight: FontWeight.w700,
                       ),
@@ -498,17 +674,17 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.amber500.withValues(alpha: 0.20)
-              : AppColors.surface0,
+              ? PosColors.accent.withValues(alpha: 0.20)
+              : PosColors.canvas,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: selected ? AppColors.amber500 : AppColors.surface2,
+            color: selected ? PosColors.accent : PosColors.border,
           ),
         ),
         child: Text(
           label,
           style: GoogleFonts.notoSansKr(
-            color: selected ? AppColors.amber500 : AppColors.textSecondary,
+            color: selected ? PosColors.accent : PosColors.textMuted,
             fontSize: 13,
             fontWeight: FontWeight.w700,
           ),
@@ -517,7 +693,56 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
     );
   }
 
-  Future<void> _showImageDialog(String path, {bool isFile = false}) async {
+  Widget _statusChip(String label, Color color) {
+    return ToastStatusBadge(label: label, color: color);
+  }
+
+  String _submissionStatusLabel(BuildContext context, String value) {
+    switch (value) {
+      case 'pending':
+        return '${context.l10n.qcTitle} Pending';
+      case 'overdue':
+        return '${context.l10n.qcTitle} Overdue';
+      case 'submitted':
+      default:
+        return '${context.l10n.qcTitle} Submitted';
+    }
+  }
+
+  String _svReviewStatusLabel(BuildContext context, String value) {
+    switch (value) {
+      case 'pending':
+        return 'SV Pending';
+      case 'reviewed':
+        return 'SV Reviewed';
+      case 'rejected':
+        return 'SV Rejected';
+      case 'not_required':
+      default:
+        return 'SV N/A';
+    }
+  }
+
+  Color _gradeColor(String grade) {
+    switch (grade) {
+      case 'good':
+        return PosColors.success;
+      case 'caution':
+        return PosColors.accent;
+      case 'risk':
+        return PosColors.danger;
+      default:
+        return PosColors.textMuted;
+    }
+  }
+
+  int? _readInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse('${value ?? ''}');
+  }
+
+  Future<void> _showImageDialog(String path) async {
     await showDialog<void>(
       context: context,
       builder: (context) {
@@ -530,9 +755,70 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                 child: InteractiveViewer(
                   minScale: 0.8,
                   maxScale: 4,
-                  child: isFile
-                      ? Image.file(File(path), fit: BoxFit.contain)
-                      : Image.network(path, fit: BoxFit.contain),
+                  child: Image.network(path, fit: BoxFit.contain),
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _pickedImagePreview(XFile file) {
+    return FutureBuilder<Uint8List>(
+      future: file.readAsBytes(),
+      builder: (context, snapshot) {
+        final bytes = snapshot.data;
+        if (bytes == null) {
+          return const SizedBox(
+            width: 56,
+            height: 56,
+            child: Center(
+              child: SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          );
+        }
+        return Image.memory(bytes, width: 56, height: 56, fit: BoxFit.cover);
+      },
+    );
+  }
+
+  Future<void> _showPickedImageDialog(XFile file) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.black,
+          insetPadding: const EdgeInsets.all(20),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: InteractiveViewer(
+                  minScale: 0.8,
+                  maxScale: 4,
+                  child: FutureBuilder<Uint8List>(
+                    future: file.readAsBytes(),
+                    builder: (context, snapshot) {
+                      final bytes = snapshot.data;
+                      if (bytes == null) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      return Image.memory(bytes, fit: BoxFit.contain);
+                    },
+                  ),
                 ),
               ),
               Positioned(
@@ -555,7 +841,26 @@ class _CheckDraft {
   _CheckDraft();
 
   String? result;
-  File? photoFile;
+  final List<XFile> photoFiles = [];
   String? existingPhotoUrl;
+  String? submissionStatus;
+  int? photoUploadedCount;
+  int? photoRequiredCount;
+  String? svReviewStatus;
+  String? grade;
   final TextEditingController noteController = TextEditingController();
+
+  int get attachedPhotoCount {
+    if (photoFiles.isNotEmpty || existingPhotoUrl != null) {
+      return photoFiles.length + (existingPhotoUrl != null ? 1 : 0);
+    }
+    return photoUploadedCount ?? 0;
+  }
+
+  bool get hasQscStatus =>
+      submissionStatus != null ||
+      photoUploadedCount != null ||
+      photoRequiredCount != null ||
+      svReviewStatus != null ||
+      (grade != null && grade!.isNotEmpty);
 }
