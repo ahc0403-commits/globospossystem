@@ -53,3 +53,7 @@ supabase/.temp/
 
 # Claude Code prompt scratchpads
 CLAUDE_PROMPT_*.md
+
+# Local tooling state (Claude Code session, Vercel CLI project link)
+.claude/
+.vercel/
