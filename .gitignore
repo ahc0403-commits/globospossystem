@@ -57,3 +57,7 @@ CLAUDE_PROMPT_*.md
 # Local tooling state (Claude Code session, Vercel CLI project link)
 .claude/
 .vercel/
+
+# Flutter gen-l10n output (generated from lib/l10n/*.arb at flutter pub get time
+# when pubspec `generate: true` is set; do not commit generated dart code)
+lib/l10n/app_localizations*.dart
