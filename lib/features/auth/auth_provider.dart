@@ -7,6 +7,13 @@ import '../../core/services/navigation_history_service.dart';
 import '../../main.dart';
 import 'auth_state.dart';
 
+const authErrorAccountDeactivated = 'auth/account-deactivated';
+const authErrorGenericLogin = 'auth/login-generic';
+const authErrorProfileLoadFailed = 'auth/profile-load-failed';
+const authErrorProfileMissing = 'auth/profile-missing';
+const authErrorProfilePermissionDenied = 'auth/profile-permission-denied';
+const authErrorProfileLookupFailedPrefix = 'auth/profile-lookup-failed:';
+
 class AuthNotifier extends StateNotifier<PosAuthState> {
   AuthNotifier() : super(const PosAuthState()) {
     _init();
@@ -45,9 +52,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
 
       final isActive = data['is_active'] as bool? ?? true;
       if (!isActive) {
-        await _signOutWithError(
-          'Account is deactivated. Contact your administrator.',
-        );
+        await _signOutWithError(authErrorAccountDeactivated);
         return;
       }
 
@@ -99,8 +104,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
       state = state.copyWith(
         isLoading: false,
         clearUser: true,
-        errorMessage:
-            'Login succeeded, but your POS account profile could not be loaded.',
+        errorMessage: authErrorProfileLoadFailed,
       );
     }
   }
@@ -120,7 +124,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     } catch (_) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: 'An error occurred during login.',
+        errorMessage: authErrorGenericLogin,
       );
     }
   }
@@ -133,9 +137,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         message.contains('0 ROWS') ||
         message.contains('NO ROWS') ||
         message.contains('JSON OBJECT REQUESTED')) {
-      await _signOutWithError(
-        'Login succeeded, but this account is not linked to a POS user profile.',
-      );
+      await _signOutWithError(authErrorProfileMissing);
       return;
     }
 
@@ -143,17 +145,14 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         message.contains('PERMISSION') ||
         message.contains('ROW-LEVEL SECURITY') ||
         message.contains('JWT')) {
-      await _signOutWithError(
-        'Login succeeded, but this account does not have permission to load its POS profile.',
-      );
+      await _signOutWithError(authErrorProfilePermissionDenied);
       return;
     }
 
     state = state.copyWith(
       isLoading: false,
       clearUser: true,
-      errorMessage:
-          'Login succeeded, but the POS profile lookup failed: ${error.message}',
+      errorMessage: '$authErrorProfileLookupFailedPrefix ${error.message}',
     );
   }
 
