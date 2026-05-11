@@ -1051,3 +1051,161 @@ class ToastActionStack extends StatelessWidget {
     );
   }
 }
+
+/// Wave 1.6 Phase 3.7 — additive Wave-1.6-shape sibling of the legacy
+/// `PosActionButton` in `toast_primitives.dart`.
+///
+/// The legacy `PosActionButton({required label, required tone, …})`
+/// continues to serve its existing callers and is not modified.
+/// [ToastActionButton] adds the Wave 1.6 taxonomy that the migrating
+/// `payment_detail_screen.dart` expects:
+/// - `verb` for a `ToastActionVerb` (label and icon fallback wiring)
+/// - `leading` for a custom widget that replaces the icon slot (e.g.
+///   an inline spinner)
+/// - `disabledReason` / `disabledVerb` / `disabledSeverity` to capture
+///   why the action is blocked (stored today; renderer applies only
+///   the boolean `disabled` flag — opacity + null `onPressed`)
+/// - `workflowHint` / `nextStateHint` forward-compat strings stored
+///   for a future tooltip or status row pass; not rendered today
+///
+/// Mirrors the PR #55 `ToastSidebarPanel` / PR #61 `ToastActionStack`
+/// precedent: distinct class name so the existing widget's contract
+/// stays untouched.
+class ToastActionButton extends StatelessWidget {
+  const ToastActionButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.leading,
+    this.verb,
+    this.filled,
+    this.compact = false,
+    this.disabled = false,
+    this.disabledReason,
+    this.disabledVerb,
+    this.disabledSeverity,
+    this.workflowHint,
+    this.nextStateHint,
+  });
+
+  /// Build from a [ToastActionVerb] alone. Label defaults to the
+  /// localized verb label via [toastActionVerbLabel]; icon defaults
+  /// to [toastActionVerbIcon] when none is provided.
+  factory ToastActionButton.verb({
+    Key? key,
+    required BuildContext context,
+    required ToastActionVerb verb,
+    required VoidCallback? onPressed,
+    IconData? icon,
+    Widget? leading,
+    bool? filled,
+    bool compact = false,
+    bool disabled = false,
+    ToastActionDisabledReason? disabledReason,
+    ToastActionVerb? disabledVerb,
+    PosActionTone? disabledSeverity,
+    String? workflowHint,
+    String? nextStateHint,
+  }) {
+    return ToastActionButton(
+      key: key,
+      label: toastActionVerbLabel(context, verb),
+      onPressed: onPressed,
+      icon: icon,
+      leading: leading,
+      verb: verb,
+      filled: filled,
+      compact: compact,
+      disabled: disabled,
+      disabledReason: disabledReason,
+      disabledVerb: disabledVerb,
+      disabledSeverity: disabledSeverity,
+      workflowHint: workflowHint,
+      nextStateHint: nextStateHint,
+    );
+  }
+
+  final String label;
+  final VoidCallback? onPressed;
+  final IconData? icon;
+  final Widget? leading;
+  final ToastActionVerb? verb;
+  final bool? filled;
+  final bool compact;
+  final bool disabled;
+  final ToastActionDisabledReason? disabledReason;
+  final ToastActionVerb? disabledVerb;
+
+  /// Disabled severity expressed in main's existing [PosActionTone]
+  /// vocabulary (from `toast_vocabulary.dart`). Stored for a future
+  /// status-row pass; today's renderer does not paint a tone-tinted
+  /// outline.
+  final PosActionTone? disabledSeverity;
+
+  /// Forward-compat: short label that explains where this action sits
+  /// in the workflow. Stored only; not rendered today.
+  final String? workflowHint;
+
+  /// Forward-compat: short label that previews the resulting state
+  /// after this action fires. Stored only; not rendered today.
+  final String? nextStateHint;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDisabled = disabled || onPressed == null;
+    final isFilled = filled ?? false;
+    final effectiveLeading =
+        leading ??
+        ((icon != null || verb != null)
+            ? Icon(
+                icon ?? toastActionVerbIcon(verb!),
+                size: compact ? 14 : 16,
+                color: isFilled ? PosColors.canvas : PosColors.text,
+              )
+            : null);
+
+    final background = isFilled ? PosColors.accent : PosColors.surface;
+    final foreground = isFilled ? PosColors.canvas : PosColors.text;
+    final borderColor = isFilled ? PosColors.accent : PosColors.border;
+
+    return Opacity(
+      opacity: isDisabled ? 0.5 : 1.0,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: isDisabled ? null : onPressed,
+          borderRadius: ToastRadiusTokens.sm,
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 10 : 14,
+              vertical: compact ? 6 : 10,
+            ),
+            decoration: BoxDecoration(
+              color: background,
+              borderRadius: ToastRadiusTokens.sm,
+              border: Border.all(color: borderColor),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (effectiveLeading != null) ...[
+                  effectiveLeading,
+                  SizedBox(width: compact ? AppSpacing.xs : AppSpacing.sm),
+                ],
+                Text(
+                  label,
+                  style: GoogleFonts.notoSansKr(
+                    color: foreground,
+                    fontSize: compact ? 12.5 : 13.5,
+                    fontWeight: compact ? FontWeight.w700 : FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
