@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../core/i18n/locale_extensions.dart';
 import '../../core/ui/app_primitives.dart';
 import '../../main.dart';
 import 'auth_provider.dart';
@@ -189,7 +190,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  authState.errorMessage!,
+                  _localizedAuthError(context, authState.errorMessage!),
                   key: const Key('auth_error_text'),
                   style: GoogleFonts.notoSansKr(
                     fontSize: 13,
@@ -231,6 +232,31 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ),
       ),
     );
+  }
+
+  String _localizedAuthError(BuildContext context, String rawMessage) {
+    final l10n = context.l10n;
+    switch (rawMessage) {
+      case authErrorAccountDeactivated:
+        return l10n.loginAccountDeactivated;
+      case authErrorProfileMissing:
+        return l10n.loginProfileMissing;
+      case authErrorProfilePermissionDenied:
+        return l10n.loginProfilePermissionDenied;
+      case authErrorProfileLoadFailed:
+        return l10n.loginProfileLoadFailed;
+      case authErrorGenericLogin:
+        return l10n.loginGenericError;
+    }
+    if (rawMessage.startsWith(authErrorProfileLookupFailedPrefix)) {
+      final detail = rawMessage
+          .substring(authErrorProfileLookupFailedPrefix.length)
+          .trim();
+      return detail.isEmpty
+          ? l10n.loginProfileLookupFailed
+          : '${l10n.loginProfileLookupFailed} $detail';
+    }
+    return rawMessage;
   }
 
   String _roleRoute(String role) {
