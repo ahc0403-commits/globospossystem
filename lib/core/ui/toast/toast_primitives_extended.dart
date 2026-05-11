@@ -541,3 +541,249 @@ class _ToastMetricCell extends StatelessWidget {
     );
   }
 }
+
+/// Wave 1.6 caller-supplied item for [ToastSidebarPanel].
+///
+/// Distinct from `ToastSidebarItem` in `toast_sidebar.dart` (which is
+/// consumed by the full-shell `ToastSidebar` orchestrator). This item
+/// shape is rail-only and accepts the fields the stash photo-ops
+/// shell passes today: `icon`, `label`, optional `sectionLabel`,
+/// optional `helperLabel`, optional `badge`, optional `onTap`, optional
+/// `itemKey`.
+class ToastSidebarPanelItem {
+  const ToastSidebarPanelItem({
+    required this.icon,
+    required this.label,
+    this.sectionLabel,
+    this.helperLabel,
+    this.badge,
+    this.onTap,
+    this.itemKey,
+  });
+
+  final IconData icon;
+  final String label;
+
+  /// Section header rendered above this item. Stash-era shells use this
+  /// to group navigation entries without a wrapping `ToastSidebarGroup`.
+  final String? sectionLabel;
+
+  /// Secondary helper text rendered under the label. Stored for future
+  /// renderers; today's `_PanelRailItem` does not paint it (kept slim
+  /// for the initial Wave 1.6 unblock).
+  final String? helperLabel;
+
+  /// Provider-backed badge widget (e.g. a count chip). Stored for
+  /// future renderers; today's `_PanelRailItem` does not paint it.
+  final Widget? badge;
+
+  final VoidCallback? onTap;
+  final Key? itemKey;
+}
+
+/// Wave 1.6 rail-only sibling of the full-shell `ToastSidebar` in
+/// `toast_sidebar.dart`.
+///
+/// Use [ToastSidebarPanel] when you need just a sidebar column to slot
+/// into another shell (e.g. `ToastShell.sidebar`); use `ToastSidebar`
+/// when you need the orchestrator that also renders a body and topbar.
+///
+/// Renders a fixed-width `Container` with a title row, an optional
+/// `subtitle`, a scrollable list of items (with optional section
+/// headers above each item), and optional `bottomItems` pinned at the
+/// foot. Rendering style mirrors PR #43's `_SidebarRail` in
+/// `web_sidebar_layout.dart` so the visual surface remains consistent.
+class ToastSidebarPanel extends StatelessWidget {
+  const ToastSidebarPanel({
+    super.key,
+    required this.title,
+    this.subtitle,
+    required this.items,
+    required this.selectedIndex,
+    required this.onItemSelected,
+    this.leading,
+    this.bottomItems,
+  });
+
+  final String title;
+  final String? subtitle;
+  final List<ToastSidebarPanelItem> items;
+  final int selectedIndex;
+  final ValueChanged<int> onItemSelected;
+  final Widget? leading;
+  final List<ToastSidebarPanelItem>? bottomItems;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: ToastShellTokens.sidebarWidth,
+      decoration: BoxDecoration(
+        color: PosColors.surface,
+        border: Border(
+          right: BorderSide(
+            color: PosColors.border,
+            width: ToastShellTokens.borderWidth,
+          ),
+        ),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+            alignment: Alignment.centerLeft,
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: PosColors.border)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    if (leading != null) ...[
+                      leading!,
+                      const SizedBox(width: 8),
+                    ],
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.notoSansKr(
+                          color: PosColors.text,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (subtitle != null && subtitle!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.notoSansKr(
+                      color: PosColors.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                final isSelected = selectedIndex == index;
+                final header = item.sectionLabel;
+                final nav = _PanelRailItem(
+                  key: item.itemKey,
+                  icon: item.icon,
+                  label: item.label,
+                  isSelected: isSelected,
+                  onTap: item.onTap ?? () => onItemSelected(index),
+                );
+                if (header == null || header.isEmpty) return nav;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        index == 0 ? 4 : 14,
+                        16,
+                        6,
+                      ),
+                      child: Text(
+                        header.toUpperCase(),
+                        style: GoogleFonts.notoSansKr(
+                          color: PosColors.textMuted,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ),
+                    nav,
+                  ],
+                );
+              },
+            ),
+          ),
+          if (bottomItems != null && bottomItems!.isNotEmpty) ...[
+            Container(height: 1, color: PosColors.border),
+            ...bottomItems!.map(
+              (item) => _PanelRailItem(
+                icon: item.icon,
+                label: item.label,
+                isSelected: false,
+                onTap: item.onTap ?? () {},
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PanelRailItem extends StatelessWidget {
+  const _PanelRailItem({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 2,
+      ),
+      child: PosListRow(
+        selected: isSelected,
+        minHeight: ToastShellTokens.navItemHeight,
+        onTap: onTap,
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 17,
+              color: isSelected ? PosColors.accent : PosColors.textMuted,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.notoSansKr(
+                  color: isSelected ? PosColors.text : PosColors.textSecondary,
+                  fontSize: 13,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
