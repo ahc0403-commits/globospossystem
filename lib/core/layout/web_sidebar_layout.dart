@@ -9,12 +9,39 @@ class SidebarItem {
     required this.label,
     this.onTap,
     this.itemKey,
+    this.targetIndex = 0,
+    this.workflowKey = '',
+    this.sectionLabel,
+    this.helperLabel,
+    this.badge,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
   final Key? itemKey;
+
+  /// Wave 1.5 shell migration: target index this item resolves to in the
+  /// host workflow grid. Stored but not rendered by the current
+  /// `WebSidebarLayout` build; callers that need it (e.g. the upcoming
+  /// shell-wave web sidebar) read it directly.
+  final int targetIndex;
+
+  /// Wave 1.5 shell migration: workflow grouping key (e.g. "service",
+  /// "back_office"). Stored but not rendered today.
+  final String workflowKey;
+
+  /// Wave 1.5 shell migration: optional section header label inlined
+  /// above this item. Stored but not rendered today.
+  final String? sectionLabel;
+
+  /// Wave 1.5 shell migration: secondary helper string under the label.
+  /// Stored but not rendered today.
+  final String? helperLabel;
+
+  /// Wave 1.5 shell migration: optional provider-backed badge widget
+  /// (e.g. a count chip). Stored but not rendered today.
+  final Widget? badge;
 }
 
 class WebSidebarLayout extends StatelessWidget {
