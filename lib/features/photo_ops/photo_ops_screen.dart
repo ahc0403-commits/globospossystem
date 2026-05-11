@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../core/i18n/locale_extensions.dart';
+import '../../core/ui/app_primitives.dart';
 import '../../core/ui/app_theme.dart';
+import '../../core/ui/pos_design_tokens.dart';
+import '../../core/ui/toast/toast_primitives_extended.dart';
 import '../../features/auth/auth_provider.dart';
 import '../../features/auth/auth_state.dart';
 import '../../widgets/app_nav_bar.dart';
@@ -25,7 +29,8 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
     final state = ref.watch(photoOpsProvider);
     final notifier = ref.read(photoOpsProvider.notifier);
     final activeStoreId = auth.storeId;
-    String activeStoreName = 'No active store';
+    final l10n = context.l10n;
+    String activeStoreName = l10n.photoOpsNoActiveStore;
 
     for (final store in auth.accessibleStores) {
       if (store.id == activeStoreId) {
@@ -39,88 +44,142 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
       Future.microtask(notifier.load);
     }
 
-    return Scaffold(
-      backgroundColor: AppColors.surface0,
-      appBar: AppBar(
-        title: Text(
-          'PHOTO OBJET',
-          style: GoogleFonts.bebasNeue(
-            color: AppColors.amber500,
-            fontSize: 34,
-            letterSpacing: 1.2,
+    return KeyedSubtree(
+      key: const Key('photo_ops_root'),
+      child: ToastShell(
+        sidebar: ToastSidebarPanel(
+          title: l10n.photoOpsBrandName,
+          subtitle: activeStoreName,
+          selectedIndex: 0,
+          onItemSelected: (_) {},
+          items: [
+            ToastSidebarPanelItem(
+              icon: Icons.dashboard_outlined,
+              label: l10n.photoOpsPriorityQueueTitle,
+              sectionLabel: l10n.photoOpsHeroEyebrow,
+            ),
+            ToastSidebarPanelItem(
+              icon: Icons.payments_outlined,
+              label: l10n.photoOpsSalesTitle,
+              sectionLabel: l10n.photoOpsSalesTitle,
+            ),
+            ToastSidebarPanelItem(
+              icon: Icons.schedule_outlined,
+              label: l10n.photoOpsAttendanceTitle,
+              sectionLabel: l10n.photoOpsAttendanceTitle,
+            ),
+            ToastSidebarPanelItem(
+              icon: Icons.inventory_2_outlined,
+              label: l10n.photoOpsInventoryTitle,
+              sectionLabel: l10n.photoOpsInventoryTitle,
+            ),
+            ToastSidebarPanelItem(
+              icon: Icons.group_outlined,
+              label: l10n.photoOpsSalaryTitle,
+              sectionLabel: l10n.photoOpsSalaryTitle,
+            ),
+          ],
+        ),
+        topbar: ToastTopbar(
+          title: l10n.photoOpsBrandName,
+          actions: const [AppNavBar()],
+          trailing: ToastStatusBadge.inventory(
+            label: activeStoreName,
+            status: 'normal',
+            key: const Key('photo_ops_active_store_badge'),
           ),
         ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 16),
-            child: Center(child: AppNavBar()),
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: notifier.load,
-        color: AppColors.amber500,
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            _HeroBanner(
-              role: auth.role,
-              activeStoreName: activeStoreName,
-              storeCount: auth.accessibleStores.length,
-            ),
-            const SizedBox(height: 18),
-            if (state.isLoading && state.data == null)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 80),
-                child: Center(
-                  child: CircularProgressIndicator(color: AppColors.amber500),
+        child: RefreshIndicator(
+          onRefresh: notifier.load,
+          color: PosColors.accent,
+          child: ListView(
+            children: [
+              _HeroBanner(
+                role: auth.role,
+                activeStoreName: activeStoreName,
+                storeCount: auth.accessibleStores.length,
+              ),
+              const SizedBox(height: 18),
+              if (state.isLoading && state.data == null)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 80),
+                  child: Center(
+                    child: CircularProgressIndicator(color: PosColors.accent),
+                  ),
+                )
+              else if (state.error != null && state.data == null)
+                _ErrorCard(message: state.error!, onRetry: notifier.load)
+              else if (state.data != null) ...[
+                if (state.data!.salesWarningCode != null) ...[
+                  _WarningSurface(
+                    message: _localizedSalesWarning(context, state.data!),
+                  ),
+                  const SizedBox(height: 18),
+                ],
+                _KpiGrid(data: state.data!.kpi),
+                const SizedBox(height: 18),
+                _WorkflowSurface(
+                  title: l10n.photoOpsPriorityQueueTitle,
+                  subtitle: l10n.photoOpsPriorityQueueSubtitle,
+                  child: _PriorityList(
+                    items: _buildPriorityItems(context, state.data!.kpi),
+                  ),
                 ),
-              )
-            else if (state.error != null && state.data == null)
-              _ErrorCard(message: state.error!, onRetry: notifier.load)
-            else if (state.data != null) ...[
-              _KpiGrid(data: state.data!.kpi),
-              const SizedBox(height: 18),
-              _SectionCard(
-                title: 'Priority Queue',
-                subtitle: 'What needs attention first in the current office workflow.',
-                child: _PriorityList(
-                  items: _buildPriorityItems(state.data!.kpi),
+                const SizedBox(height: 18),
+                _WorkflowSurface(
+                  title: l10n.photoOpsSalesTitle,
+                  subtitle: l10n.photoOpsSalesSubtitle,
+                  child: _SalesList(rows: state.data!.salesSummary),
                 ),
-              ),
-              const SizedBox(height: 18),
-              _SectionCard(
-                title: 'Attendance',
-                subtitle: 'Recent attendance activity in the active store.',
-                child: _AttendanceList(rows: state.data!.recentAttendance),
-              ),
-              const SizedBox(height: 18),
-              _SectionCard(
-                title: 'Inventory',
-                subtitle: 'Low-stock ingredients that need attention now.',
-                child: _InventoryList(rows: state.data!.inventoryAlerts),
-              ),
-              const SizedBox(height: 18),
-              _SectionCard(
-                title: 'Salary',
-                subtitle: 'Current payroll estimate for the active store.',
-                child: _PayrollList(rows: state.data!.payrollPreview),
-              ),
-              const SizedBox(height: 18),
-              _SectionCard(
-                title: 'Store Scope',
-                subtitle: 'Photo Objet stays on office operations while Deliberry settlement remains in the admin workflow.',
-                child: _StoreScopeList(
-                  stores: auth.accessibleStores,
-                  activeStoreId: activeStoreId,
+                const SizedBox(height: 18),
+                _WorkflowSurface(
+                  title: l10n.photoOpsAttendanceTitle,
+                  subtitle: l10n.photoOpsAttendanceSubtitle,
+                  child: _AttendanceList(rows: state.data!.recentAttendance),
                 ),
-              ),
+                const SizedBox(height: 18),
+                _WorkflowSurface(
+                  title: l10n.photoOpsInventoryTitle,
+                  subtitle: l10n.photoOpsInventorySubtitle,
+                  child: _InventoryList(rows: state.data!.inventoryAlerts),
+                ),
+                const SizedBox(height: 18),
+                _WorkflowSurface(
+                  title: l10n.photoOpsSalaryTitle,
+                  subtitle: l10n.photoOpsSalarySubtitle,
+                  child: _PayrollList(rows: state.data!.payrollPreview),
+                ),
+                const SizedBox(height: 18),
+                _WorkflowSurface(
+                  title: l10n.photoOpsStoreScopeTitle,
+                  subtitle: l10n.photoOpsStoreScopeSubtitle,
+                  child: _StoreScopeList(
+                    stores: auth.accessibleStores,
+                    activeStoreId: activeStoreId,
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
   }
+}
+
+String _localizedSalesWarning(
+  BuildContext context,
+  PhotoOpsDashboardData data,
+) {
+  final detail = data.salesWarningDetail ?? '-';
+  return switch (data.salesWarningCode) {
+    'photo_ops_recent_sales_failed_using_latest' =>
+      context.l10n.photoOpsRecentSalesFailedUsingLatest(detail),
+    'photo_ops_sales_load_failed' => context.l10n.photoOpsSalesLoadFailed(
+      detail,
+    ),
+    _ => context.l10n.photoOpsSalesLoadFailed(detail),
+  };
 }
 
 class _HeroBanner extends StatelessWidget {
@@ -139,31 +198,28 @@ class _HeroBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        borderRadius: AppRadius.lg,
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFF5A623), Color(0xFFD97B11)],
-        ),
+        color: PosColors.surface,
+        borderRadius: AppRadius.sm,
+        border: Border.all(color: PosColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Office-linked operations workspace',
+            context.l10n.photoOpsHeroEyebrow,
             style: GoogleFonts.notoSansKr(
-              color: AppColors.surface0,
+              color: PosColors.textMuted,
               fontSize: 13,
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Manage attendance, inventory, and salary in an office-linked workspace without delivery-settlement or red-invoice tasks.',
+            context.l10n.photoOpsHeroTitle,
             style: GoogleFonts.notoSansKr(
-              color: AppColors.surface0,
+              color: PosColors.textPrimary,
               fontSize: 20,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w900,
               height: 1.3,
             ),
           ),
@@ -172,9 +228,18 @@ class _HeroBanner extends StatelessWidget {
             spacing: 10,
             runSpacing: 10,
             children: [
-              _MetaPill(label: 'Role', value: role ?? '-'),
-              _MetaPill(label: 'Active store', value: activeStoreName),
-              _MetaPill(label: 'Accessible stores', value: '$storeCount'),
+              _MetaPill(
+                label: context.l10n.photoOpsMetaRole,
+                value: role ?? '-',
+              ),
+              _MetaPill(
+                label: context.l10n.photoOpsMetaActiveStore,
+                value: activeStoreName,
+              ),
+              _MetaPill(
+                label: context.l10n.photoOpsMetaAccessibleStores,
+                value: '$storeCount',
+              ),
             ],
           ),
         ],
@@ -183,31 +248,51 @@ class _HeroBanner extends StatelessWidget {
   }
 }
 
-List<String> _buildPriorityItems(PhotoOpsKpi data) {
+List<String> _buildPriorityItems(BuildContext context, PhotoOpsKpi data) {
+  final l10n = context.l10n;
   final items = <String>[];
 
   if (data.activeInventoryAlerts > 0) {
+    items.add(l10n.photoOpsPriorityInventoryAlert(data.activeInventoryAlerts));
+  }
+
+  if (data.activeStoreSales > 0) {
     items.add(
-      '${data.activeInventoryAlerts} inventory items are below reorder level in the active store.',
+      l10n.photoOpsPrioritySalesSummary(
+        data.activeStoreSales.toStringAsFixed(0),
+        data.activeStoreTransactions,
+      ),
     );
+  } else {
+    items.add(l10n.photoOpsPriorityNoSalesSummary);
   }
 
   if (data.activeAttendanceEvents == 0) {
-    items.add('No attendance events are logged for the active store today.');
+    items.add(l10n.photoOpsPriorityNoAttendance);
   } else {
     items.add(
-      '${data.activeAttendanceEvents} attendance events are already logged for the active store today.',
+      l10n.photoOpsPriorityAttendanceLogged(data.activeAttendanceEvents),
     );
   }
 
   if (data.activePayrollEstimate > 0) {
     items.add(
-      'Current payroll estimate is ${data.activePayrollEstimate.toStringAsFixed(0)} VND and should be reviewed before month close.',
+      l10n.photoOpsPriorityPayrollEstimate(
+        data.activePayrollEstimate.toStringAsFixed(0),
+      ),
+    );
+  }
+
+  if (data.lastSalesPulledAt != null) {
+    items.add(
+      l10n.photoOpsPriorityLastSalesPull(
+        data.lastSalesPulledAt!.toLocal().toString(),
+      ),
     );
   }
 
   if (items.isEmpty) {
-    items.add('No urgent office actions are currently flagged.');
+    items.add(l10n.photoOpsPriorityNoUrgentActions);
   }
 
   return items;
@@ -224,13 +309,14 @@ class _MetaPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.surface0.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(999),
+        color: PosColors.panelMuted,
+        borderRadius: AppRadius.pill,
+        border: Border.all(color: PosColors.border),
       ),
       child: Text(
         '$label: $value',
         style: GoogleFonts.notoSansKr(
-          color: AppColors.surface0,
+          color: PosColors.textSecondary,
           fontSize: 12,
           fontWeight: FontWeight.w700,
         ),
@@ -247,67 +333,102 @@ class _KpiGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = [
-      ('Attendance', '${data.activeAttendanceEvents}', 'active store today'),
-      ('Inventory alerts', '${data.activeInventoryAlerts}', 'active store'),
-      ('Payroll est.', _currency(data.activePayrollEstimate), 'active store'),
-      ('All attendance', '${data.allAttendanceEvents}', 'accessible stores today'),
-      ('All alerts', '${data.allInventoryAlerts}', 'accessible stores'),
+      (
+        context.l10n.photoOpsKpiAttendance,
+        '${data.activeAttendanceEvents}',
+        context.l10n.photoOpsKpiAttendanceScope,
+      ),
+      (
+        context.l10n.photoOpsKpiInventoryAlerts,
+        '${data.activeInventoryAlerts}',
+        context.l10n.photoOpsKpiInventoryAlertsScope,
+      ),
+      (
+        context.l10n.photoOpsKpiSales,
+        _currency(data.activeStoreSales),
+        context.l10n.photoOpsKpiSalesScope,
+      ),
+      (
+        context.l10n.photoOpsKpiNetworkSales,
+        _currency(data.networkSales),
+        context.l10n.photoOpsKpiNetworkSalesScope,
+      ),
+      (
+        context.l10n.photoOpsKpiTransactions,
+        '${data.activeStoreTransactions}',
+        context.l10n.photoOpsKpiTransactionsScope,
+      ),
+      (
+        context.l10n.photoOpsKpiPayrollEstimate,
+        _currency(data.activePayrollEstimate),
+        context.l10n.photoOpsKpiPayrollEstimateScope,
+      ),
+      (
+        context.l10n.photoOpsKpiAllAttendance,
+        '${data.allAttendanceEvents}',
+        context.l10n.photoOpsKpiAllAttendanceScope,
+      ),
+      (
+        context.l10n.photoOpsKpiAllAlerts,
+        '${data.allInventoryAlerts}',
+        context.l10n.photoOpsKpiAllAlertsScope,
+      ),
     ];
 
-    return Wrap(
-      spacing: 14,
-      runSpacing: 14,
-      children:
-          items
-              .map(
-                (item) => SizedBox(
-                  width: 220,
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.$1,
-                            style: GoogleFonts.notoSansKr(
-                              color: AppColors.textSecondary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            item.$2,
-                            style: GoogleFonts.bebasNeue(
-                              color: AppColors.amber500,
-                              fontSize: 34,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            item.$3,
-                            style: GoogleFonts.notoSansKr(
-                              color: AppColors.textMuted,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              )
-              .toList(),
+    final metricItems = items
+        .map(
+          (item) => ToastMetricItem(
+            label: [item.$1, item.$3].join(' · '),
+            value: item.$2,
+            color: PosColors.accent,
+          ),
+        )
+        .toList();
+
+    return Column(
+      children: [
+        ToastMetricItemStrip(items: metricItems.take(4).toList()),
+        const SizedBox(height: AppSpacing.sm),
+        ToastMetricItemStrip(items: metricItems.skip(4).take(4).toList()),
+      ],
     );
   }
 
   static String _currency(double value) => '${value.toStringAsFixed(0)} VND';
 }
 
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({
+class _WarningSurface extends StatelessWidget {
+  const _WarningSurface({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return ToastWorkSurface(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: PosColors.warning),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              message,
+              style: GoogleFonts.notoSansKr(
+                color: PosColors.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WorkflowSurface extends StatelessWidget {
+  const _WorkflowSurface({
     required this.title,
     required this.subtitle,
     required this.child,
@@ -319,32 +440,14 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: GoogleFonts.bebasNeue(
-                color: AppColors.amber500,
-                fontSize: 28,
-                letterSpacing: 1.0,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: GoogleFonts.notoSansKr(
-                color: AppColors.textSecondary,
-                fontSize: 13,
-              ),
-            ),
-            const SizedBox(height: 16),
-            child,
-          ],
-        ),
+    return ToastWorkSurface(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AppSectionHeader(title: title, subtitle: subtitle),
+          Padding(padding: const EdgeInsets.all(AppSpacing.md), child: child),
+        ],
       ),
     );
   }
@@ -357,19 +460,51 @@ class _AttendanceList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (rows.isEmpty) return const _EmptyLabel('No attendance activity found.');
+    if (rows.isEmpty) {
+      return _EmptyLabel(context.l10n.photoOpsNoAttendanceActivity);
+    }
     return Column(
-      children:
-          rows
-              .map(
-                (row) => _SimpleRow(
-                  title: row.employeeName,
-                  subtitle:
-                      '${row.type.replaceAll('_', ' ')} · ${row.loggedAt.toLocal()}',
-                  trailing: row.photoUrl == null ? 'No photo' : 'Photo',
-                ),
-              )
-              .toList(),
+      children: rows
+          .map(
+            (row) => _SimpleRow(
+              title: row.employeeName,
+              subtitle:
+                  '${row.type.replaceAll('_', ' ')} · ${row.loggedAt.toLocal()}',
+              trailing: row.photoUrl == null
+                  ? context.l10n.photoOpsNoPhoto
+                  : context.l10n.photoOpsPhoto,
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _SalesList extends StatelessWidget {
+  const _SalesList({required this.rows});
+
+  final List<PhotoOpsSalesRow> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    if (rows.isEmpty) {
+      return _EmptyLabel(context.l10n.photoOpsNoSalesSummary);
+    }
+    return Column(
+      children: rows
+          .map(
+            (row) => _SimpleRow(
+              title:
+                  '${row.storeName} · ${row.saleDate.toIso8601String().substring(0, 10)}',
+              subtitle: context.l10n.photoOpsSalesRowSubtitle(
+                row.totalTransactions,
+                row.serviceAmount.toStringAsFixed(0),
+                row.activeMachines,
+              ),
+              trailing: '${row.grossSales.toStringAsFixed(0)} VND',
+            ),
+          )
+          .toList(),
     );
   }
 }
@@ -381,19 +516,23 @@ class _InventoryList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (rows.isEmpty) return const _EmptyLabel('No low-stock inventory items.');
+    if (rows.isEmpty) {
+      return _EmptyLabel(context.l10n.photoOpsNoInventoryAlerts);
+    }
     return Column(
-      children:
-          rows
-              .map(
-                (row) => _SimpleRow(
-                  title: row.itemName,
-                  subtitle:
-                      'Stock ${row.currentStock.toStringAsFixed(1)} ${row.unit} · Reorder ${row.reorderPoint?.toStringAsFixed(1) ?? '-'}',
-                  trailing: row.supplierName ?? 'Review',
-                ),
-              )
-              .toList(),
+      children: rows
+          .map(
+            (row) => _SimpleRow(
+              title: row.itemName,
+              subtitle: context.l10n.photoOpsInventoryRowSubtitle(
+                row.currentStock.toStringAsFixed(1),
+                row.unit,
+                row.reorderPoint?.toStringAsFixed(1) ?? '-',
+              ),
+              trailing: row.supplierName ?? context.l10n.photoOpsReview,
+            ),
+          )
+          .toList(),
     );
   }
 }
@@ -405,19 +544,22 @@ class _PayrollList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (rows.isEmpty) return const _EmptyLabel('No payroll estimate available.');
+    if (rows.isEmpty) {
+      return _EmptyLabel(context.l10n.photoOpsNoPayrollEstimate);
+    }
     return Column(
-      children:
-          rows
-              .map(
-                (row) => _SimpleRow(
-                  title: row.employeeName,
-                  subtitle:
-                      '${row.shiftCount} shifts · ${row.totalHours.toStringAsFixed(1)} hours',
-                  trailing: '${row.totalAmount.toStringAsFixed(0)} VND',
-                ),
-              )
-              .toList(),
+      children: rows
+          .map(
+            (row) => _SimpleRow(
+              title: row.employeeName,
+              subtitle: context.l10n.photoOpsPayrollRowSubtitle(
+                row.shiftCount,
+                row.totalHours.toStringAsFixed(1),
+              ),
+              trailing: '${row.totalAmount.toStringAsFixed(0)} VND',
+            ),
+          )
+          .toList(),
     );
   }
 }
@@ -430,25 +572,21 @@ class _PriorityList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      children:
-          items
-              .map(
-                (item) => _SimpleRow(
-                  title: 'Action',
-                  subtitle: item,
-                  trailing: 'Review',
-                ),
-              )
-              .toList(),
+      children: items
+          .map(
+            (item) => _SimpleRow(
+              title: context.l10n.photoOpsAction,
+              subtitle: item,
+              trailing: context.l10n.photoOpsReview,
+            ),
+          )
+          .toList(),
     );
   }
 }
 
 class _StoreScopeList extends StatelessWidget {
-  const _StoreScopeList({
-    required this.stores,
-    required this.activeStoreId,
-  });
+  const _StoreScopeList({required this.stores, required this.activeStoreId});
 
   final List<AccessibleStore> stores;
   final String? activeStoreId;
@@ -456,22 +594,23 @@ class _StoreScopeList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (stores.isEmpty) {
-      return const _EmptyLabel('No accessible stores are linked to this role.');
+      return _EmptyLabel(context.l10n.photoOpsNoAccessibleStores);
     }
 
     return Column(
-      children:
-          stores
-              .map(
-                (store) => _SimpleRow(
-                  title: store.name,
-                  subtitle: store.brandName == null
-                      ? 'Office-linked store access'
-                      : 'Brand ${store.brandName}',
-                  trailing: store.id == activeStoreId ? 'Active' : 'Available',
-                ),
-              )
-              .toList(),
+      children: stores
+          .map(
+            (store) => _SimpleRow(
+              title: store.name,
+              subtitle: store.brandName == null
+                  ? context.l10n.photoOpsOfficeLinkedStoreAccess
+                  : context.l10n.photoOpsBrandLabel(store.brandName!),
+              trailing: store.id == activeStoreId
+                  ? context.l10n.photoOpsActive
+                  : context.l10n.photoOpsAvailable,
+            ),
+          )
+          .toList(),
     );
   }
 }
@@ -489,49 +628,45 @@ class _SimpleRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface2,
-        borderRadius: AppRadius.md,
-        border: Border.all(color: AppColors.surface3),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: GoogleFonts.notoSansKr(
-                    color: AppColors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: PosListRow(
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.notoSansKr(
+                      color: PosColors.textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: GoogleFonts.notoSansKr(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.notoSansKr(
+                      color: PosColors.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            trailing,
-            style: GoogleFonts.notoSansKr(
-              color: AppColors.amber500,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
+            const SizedBox(width: 12),
+            Text(
+              trailing,
+              style: GoogleFonts.notoSansKr(
+                color: PosColors.accent,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -549,7 +684,7 @@ class _EmptyLabel extends StatelessWidget {
       child: Text(
         text,
         style: GoogleFonts.notoSansKr(
-          color: AppColors.textSecondary,
+          color: PosColors.textSecondary,
           fontSize: 13,
         ),
       ),
@@ -565,22 +700,19 @@ class _ErrorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          children: [
-            Text(
-              message,
-              style: GoogleFonts.notoSansKr(
-                color: AppColors.textPrimary,
-                fontSize: 14,
-              ),
+    return ToastWorkSurface(
+      child: Column(
+        children: [
+          Text(
+            message,
+            style: GoogleFonts.notoSansKr(
+              color: PosColors.textPrimary,
+              fontSize: 14,
             ),
-            const SizedBox(height: 12),
-            FilledButton(onPressed: onRetry, child: const Text('Retry')),
-          ],
-        ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton(onPressed: onRetry, child: Text(context.l10n.retry)),
+        ],
       ),
     );
   }
