@@ -845,6 +845,33 @@ String toastActionVerbLabel(BuildContext context, ToastActionVerb verb) {
   };
 }
 
+/// Material icon for a [ToastActionVerb]. Sibling of
+/// [toastActionVerbLabel]; pure function with no `context` / `l10n`
+/// dependency. Exhaustive over the enum — no default arm.
+IconData toastActionVerbIcon(ToastActionVerb verb) {
+  return switch (verb) {
+    ToastActionVerb.open => Icons.open_in_new,
+    ToastActionVerb.retry => Icons.refresh,
+    ToastActionVerb.resolved => Icons.check_circle,
+    ToastActionVerb.payNow => Icons.payments,
+    ToastActionVerb.pay => Icons.payments,
+    ToastActionVerb.splitBill => Icons.call_split,
+    ToastActionVerb.sendToKitchen => Icons.send_outlined,
+    ToastActionVerb.hold => Icons.pause_circle,
+    ToastActionVerb.move => Icons.swap_horiz,
+    ToastActionVerb.openPortal => Icons.open_in_browser,
+    ToastActionVerb.resendEmail => Icons.forward_to_inbox,
+    ToastActionVerb.openProof => Icons.receipt_long,
+    ToastActionVerb.reprint => Icons.print,
+    ToastActionVerb.prep => Icons.restaurant,
+    ToastActionVerb.ready => Icons.check_circle,
+    ToastActionVerb.served => Icons.done_all,
+    ToastActionVerb.close => Icons.close,
+    ToastActionVerb.serviceNow => Icons.room_service,
+    ToastActionVerb.excel => Icons.table_view,
+  };
+}
+
 /// Wave 1.6 Bundle B — reasons a Toast action surface can be disabled.
 ///
 /// Consumed today only as enum values (e.g.
