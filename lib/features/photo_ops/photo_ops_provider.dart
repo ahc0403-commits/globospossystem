@@ -40,8 +40,9 @@ class PhotoOpsNotifier extends StateNotifier<PhotoOpsState> {
   Future<void> load() async {
     final auth = _ref.read(authProvider);
     final activeStoreId = auth.storeId;
-    final accessibleStoreIds =
-        auth.accessibleStores.map((store) => store.id).toList();
+    final accessibleStoreIds = auth.accessibleStores
+        .map((store) => store.id)
+        .toList();
 
     if (activeStoreId == null || accessibleStoreIds.isEmpty) {
       state = state.copyWith(
@@ -75,7 +76,6 @@ class PhotoOpsNotifier extends StateNotifier<PhotoOpsState> {
   }
 }
 
-final photoOpsProvider =
-    StateNotifierProvider<PhotoOpsNotifier, PhotoOpsState>(
-      (ref) => PhotoOpsNotifier(ref),
-    );
+final photoOpsProvider = StateNotifierProvider<PhotoOpsNotifier, PhotoOpsState>(
+  (ref) => PhotoOpsNotifier(ref),
+);

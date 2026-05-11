@@ -10,6 +10,10 @@ class PhotoOpsKpi {
     required this.allInventoryAlerts,
     required this.activeInventoryAlerts,
     required this.activePayrollEstimate,
+    this.activeStoreSales = 0,
+    this.networkSales = 0,
+    this.activeStoreTransactions = 0,
+    this.lastSalesPulledAt,
   });
 
   final int allAttendanceEvents;
@@ -17,6 +21,20 @@ class PhotoOpsKpi {
   final int allInventoryAlerts;
   final int activeInventoryAlerts;
   final double activePayrollEstimate;
+
+  /// Wave 1.6 sales-overlay: gross sales for the active store across the
+  /// dashboard window. Stored but not populated by the legacy loader;
+  /// defaults to 0 so existing constructor call sites stay compatible.
+  final double activeStoreSales;
+
+  /// Wave 1.6 sales-overlay: network-wide gross sales aggregate.
+  final double networkSales;
+
+  /// Wave 1.6 sales-overlay: transaction count for the active store.
+  final int activeStoreTransactions;
+
+  /// Wave 1.6 sales-overlay: timestamp of the most recent sales pull.
+  final DateTime? lastSalesPulledAt;
 }
 
 class PhotoOpsAttendanceRow {
@@ -65,18 +83,56 @@ class PhotoOpsPayrollRow {
   final int shiftCount;
 }
 
+class PhotoOpsSalesRow {
+  const PhotoOpsSalesRow({
+    required this.storeId,
+    required this.storeName,
+    required this.saleDate,
+    required this.grossSales,
+    required this.totalTransactions,
+    required this.serviceAmount,
+    required this.activeMachines,
+    this.lastPulledAt,
+  });
+
+  final String storeId;
+  final String storeName;
+  final DateTime saleDate;
+  final double grossSales;
+  final int totalTransactions;
+  final double serviceAmount;
+  final int activeMachines;
+  final DateTime? lastPulledAt;
+}
+
 class PhotoOpsDashboardData {
   const PhotoOpsDashboardData({
     required this.kpi,
     required this.recentAttendance,
     required this.inventoryAlerts,
     required this.payrollPreview,
+    this.salesSummary = const [],
+    this.salesWarningCode,
+    this.salesWarningDetail,
   });
 
   final PhotoOpsKpi kpi;
   final List<PhotoOpsAttendanceRow> recentAttendance;
   final List<PhotoOpsInventoryRow> inventoryAlerts;
   final List<PhotoOpsPayrollRow> payrollPreview;
+
+  /// Wave 1.6 sales-overlay: per-store sales rows. Stored but not
+  /// populated by the legacy loader; defaults to empty so existing
+  /// constructor call sites stay compatible.
+  final List<PhotoOpsSalesRow> salesSummary;
+
+  /// Wave 1.6 sales-overlay: warning code emitted by the sales loader
+  /// when the dashboard window is degraded (e.g. partial pull).
+  final String? salesWarningCode;
+
+  /// Wave 1.6 sales-overlay: human-readable diagnostic for the warning
+  /// code above. Null when no warning is active.
+  final String? salesWarningDetail;
 }
 
 class PhotoOpsService {
@@ -113,47 +169,52 @@ class PhotoOpsService {
       ),
     ]);
 
-    final attendanceSummary = List<Map<String, dynamic>>.from(results[0] as List);
-    final inventorySummary = List<Map<String, dynamic>>.from(results[1] as List);
-    final recentAttendanceRaw = List<Map<String, dynamic>>.from(results[2] as List);
-    final inventoryCatalog = List<Map<String, dynamic>>.from(results[3] as List);
+    final attendanceSummary = List<Map<String, dynamic>>.from(
+      results[0] as List,
+    );
+    final inventorySummary = List<Map<String, dynamic>>.from(
+      results[1] as List,
+    );
+    final recentAttendanceRaw = List<Map<String, dynamic>>.from(
+      results[2] as List,
+    );
+    final inventoryCatalog = List<Map<String, dynamic>>.from(
+      results[3] as List,
+    );
     final payrollPreviewRaw = results[4] as List<StaffPayroll>;
 
-    final recentAttendance =
-        recentAttendanceRaw.take(10).map((row) {
-          final userRaw = row['users'];
-          String employeeName = 'Unknown';
-          if (userRaw is Map<String, dynamic>) {
-            employeeName = userRaw['full_name']?.toString() ?? 'Unknown';
-          }
-          return PhotoOpsAttendanceRow(
-            employeeName: employeeName,
-            type: row['type']?.toString() ?? '',
-            loggedAt:
-                DateTime.tryParse(row['logged_at']?.toString() ?? '') ??
-                DateTime.now(),
-            photoUrl: row['photo_url']?.toString(),
-          );
-        }).toList();
+    final recentAttendance = recentAttendanceRaw.take(10).map((row) {
+      final userRaw = row['users'];
+      String employeeName = 'Unknown';
+      if (userRaw is Map<String, dynamic>) {
+        employeeName = userRaw['full_name']?.toString() ?? 'Unknown';
+      }
+      return PhotoOpsAttendanceRow(
+        employeeName: employeeName,
+        type: row['type']?.toString() ?? '',
+        loggedAt:
+            DateTime.tryParse(row['logged_at']?.toString() ?? '') ??
+            DateTime.now(),
+        photoUrl: row['photo_url']?.toString(),
+      );
+    }).toList();
 
-    final inventoryAlerts =
-        inventoryCatalog
-            .where((row) => (row['needs_reorder'] as bool?) ?? false)
-            .take(10)
-            .map(
-              (row) => PhotoOpsInventoryRow(
-                itemName: row['name']?.toString() ?? 'Unknown Item',
-                currentStock: _toDouble(row['current_stock']),
-                unit: row['unit']?.toString() ?? '-',
-                reorderPoint:
-                    row['reorder_point'] == null
-                        ? null
-                        : _toDouble(row['reorder_point']),
-                needsReorder: (row['needs_reorder'] as bool?) ?? false,
-                supplierName: row['supplier_name']?.toString(),
-              ),
-            )
-            .toList();
+    final inventoryAlerts = inventoryCatalog
+        .where((row) => (row['needs_reorder'] as bool?) ?? false)
+        .take(10)
+        .map(
+          (row) => PhotoOpsInventoryRow(
+            itemName: row['name']?.toString() ?? 'Unknown Item',
+            currentStock: _toDouble(row['current_stock']),
+            unit: row['unit']?.toString() ?? '-',
+            reorderPoint: row['reorder_point'] == null
+                ? null
+                : _toDouble(row['reorder_point']),
+            needsReorder: (row['needs_reorder'] as bool?) ?? false,
+            supplierName: row['supplier_name']?.toString(),
+          ),
+        )
+        .toList();
 
     final payrollPreview =
         payrollPreviewRaw
@@ -171,15 +232,13 @@ class PhotoOpsService {
     return PhotoOpsDashboardData(
       kpi: PhotoOpsKpi(
         allAttendanceEvents: attendanceSummary.length,
-        activeAttendanceEvents:
-            attendanceSummary
-                .where((row) => row['store_id']?.toString() == activeStoreId)
-                .length,
+        activeAttendanceEvents: attendanceSummary
+            .where((row) => row['store_id']?.toString() == activeStoreId)
+            .length,
         allInventoryAlerts: inventorySummary.length,
-        activeInventoryAlerts:
-            inventorySummary
-                .where((row) => row['store_id']?.toString() == activeStoreId)
-                .length,
+        activeInventoryAlerts: inventorySummary
+            .where((row) => row['store_id']?.toString() == activeStoreId)
+            .length,
         activePayrollEstimate: payrollPreviewRaw.fold<double>(
           0,
           (sum, row) => sum + row.totalAmount,
