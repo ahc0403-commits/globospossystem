@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../ui/app_theme.dart';
+import '../ui/pos_design_tokens.dart';
+import '../ui/toast/toast_primitives_extended.dart';
+import '../../widgets/language_switcher.dart';
 
 class SidebarItem {
   const SidebarItem({
@@ -75,135 +78,160 @@ class WebSidebarLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final selectedLabel = items.isNotEmpty && selectedIndex < items.length
+        ? items[selectedIndex].label
+        : '';
+    final trailing = topBarTrailing ?? const LanguageSwitcher(compact: true);
+
     return Scaffold(
-      backgroundColor: AppColors.surface0,
-      body: Row(
+      backgroundColor: PosColors.canvas,
+      body: ToastShell(
+        safeArea: false,
+        contentPadding: EdgeInsets.zero,
+        sidebar: _SidebarRail(
+          title: title,
+          leading: topBarLeading,
+          items: items,
+          selectedIndex: selectedIndex,
+          onItemSelected: onItemSelected,
+          bottomItems: bottomItems,
+          groupHeaders: groupHeaders,
+        ),
+        topbar: ToastTopbar(title: selectedLabel, trailing: trailing),
+        child: ToastWorkSurface(
+          padding: EdgeInsets.zero,
+          backgroundColor: PosColors.canvas,
+          borderColor: Colors.transparent,
+          clip: false,
+          child: body,
+        ),
+      ),
+    );
+  }
+}
+
+class _SidebarRail extends StatelessWidget {
+  const _SidebarRail({
+    required this.title,
+    required this.leading,
+    required this.items,
+    required this.selectedIndex,
+    required this.onItemSelected,
+    required this.bottomItems,
+    required this.groupHeaders,
+  });
+
+  final String title;
+  final Widget? leading;
+  final List<SidebarItem> items;
+  final int selectedIndex;
+  final ValueChanged<int> onItemSelected;
+  final List<SidebarItem>? bottomItems;
+  final Map<int, String>? groupHeaders;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: ToastShellTokens.sidebarWidth,
+      decoration: BoxDecoration(
+        color: PosColors.surface,
+        border: Border(
+          right: BorderSide(
+            color: PosColors.border,
+            width: ToastShellTokens.borderWidth,
+          ),
+        ),
+      ),
+      child: Column(
         children: [
           Container(
-            width: 240,
-            color: AppColors.surface1,
-            child: Column(
+            height: 72,
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            alignment: Alignment.centerLeft,
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: PosColors.border)),
+            ),
+            child: Row(
               children: [
-                Container(
-                  height: 72,
-                  padding: const EdgeInsets.symmetric(horizontal: 18),
-                  alignment: Alignment.centerLeft,
-                  decoration: const BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(color: AppColors.surface3),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      if (topBarLeading != null) ...[
-                        topBarLeading!,
-                        const SizedBox(width: 8),
-                      ],
-                      Text(
-                        title,
-                        style: AppTextStyles.operationalTitle(size: 24),
-                      ),
-                    ],
-                  ),
-                ),
+                if (leading != null) ...[leading!, const SizedBox(width: 8)],
                 Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: items.length,
-                    itemBuilder: (context, index) {
-                      final item = items[index];
-                      final isSelected = selectedIndex == index;
-                      final header = groupHeaders?[index];
-                      final nav = _SidebarNavItem(
-                        key: item.itemKey,
-                        icon: item.icon,
-                        label: item.label,
-                        isSelected: isSelected,
-                        onTap: item.onTap ?? () => onItemSelected(index),
-                      );
-                      if (header == null) return nav;
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Padding(
-                            padding: EdgeInsets.fromLTRB(
-                              16,
-                              index == 0 ? 4 : 14,
-                              16,
-                              6,
-                            ),
-                            child: Text(
-                              header.toUpperCase(),
-                              style: GoogleFonts.notoSansKr(
-                                color: AppColors.textMuted,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.8,
-                              ),
-                            ),
-                          ),
-                          nav,
-                        ],
-                      );
-                    },
-                  ),
-                ),
-                if (bottomItems != null && bottomItems!.isNotEmpty) ...[
-                  const Divider(color: AppColors.surface2, height: 1),
-                  ...bottomItems!.map(
-                    (item) => _SidebarNavItem(
-                      icon: item.icon,
-                      label: item.label,
-                      isSelected: false,
-                      onTap: item.onTap ?? () {},
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.notoSansKr(
+                      color: PosColors.text,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.4,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                ],
+                ),
               ],
             ),
           ),
           Expanded(
-            child: Column(
-              children: [
-                Container(
-                  height: 72,
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  decoration: const BoxDecoration(
-                    color: AppColors.surface0,
-                    border: Border(
-                      bottom: BorderSide(color: AppColors.surface3),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        items.isNotEmpty && selectedIndex < items.length
-                            ? items[selectedIndex].label.toUpperCase()
-                            : '',
-                        style: AppTextStyles.operationalTitle(
-                          color: AppColors.textSecondary,
-                          size: 18,
-                          letterSpacing: 2,
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                final isSelected = selectedIndex == index;
+                final header = groupHeaders?[index];
+                final nav = _SidebarRailItem(
+                  key: item.itemKey,
+                  icon: item.icon,
+                  label: item.label,
+                  isSelected: isSelected,
+                  onTap: item.onTap ?? () => onItemSelected(index),
+                );
+                if (header == null) return nav;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        index == 0 ? 4 : 14,
+                        16,
+                        6,
+                      ),
+                      child: Text(
+                        header.toUpperCase(),
+                        style: GoogleFonts.notoSansKr(
+                          color: PosColors.textMuted,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
                         ),
                       ),
-                      const Spacer(),
-                      if (topBarTrailing != null) topBarTrailing!,
-                    ],
-                  ),
-                ),
-                Expanded(child: body),
-              ],
+                    ),
+                    nav,
+                  ],
+                );
+              },
             ),
           ),
+          if (bottomItems != null && bottomItems!.isNotEmpty) ...[
+            Container(height: 1, color: PosColors.border),
+            ...bottomItems!.map(
+              (item) => _SidebarRailItem(
+                icon: item.icon,
+                label: item.label,
+                isSelected: false,
+                onTap: item.onTap ?? () {},
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
         ],
       ),
     );
   }
 }
 
-class _SidebarNavItem extends StatelessWidget {
-  const _SidebarNavItem({
+class _SidebarRailItem extends StatelessWidget {
+  const _SidebarRailItem({
     super.key,
     required this.icon,
     required this.label,
@@ -218,41 +246,83 @@ class _SidebarNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        height: 48,
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.surface2 : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isSelected
-                ? AppColors.amber500.withValues(alpha: 0.35)
-                : Colors.transparent,
-          ),
-        ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 2,
+      ),
+      child: PosListRow(
+        selected: isSelected,
+        minHeight: ToastShellTokens.navItemHeight,
+        onTap: onTap,
         child: Row(
           children: [
             Icon(
               icon,
-              size: 20,
-              color: isSelected ? AppColors.amber500 : AppColors.textSecondary,
+              size: 17,
+              color: isSelected ? PosColors.accent : PosColors.textMuted,
             ),
-            const SizedBox(width: 12),
-            Text(
-              label,
-              style: GoogleFonts.notoSansKr(
-                color: isSelected
-                    ? AppColors.textPrimary
-                    : AppColors.textSecondary,
-                fontSize: 14,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.notoSansKr(
+                  color: isSelected ? PosColors.text : PosColors.textSecondary,
+                  fontSize: 13,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+@Deprecated('Use ToastSidebar through WebSidebarLayout instead.')
+class LegacySidebarNavItem extends StatelessWidget {
+  const LegacySidebarNavItem({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return PosListRow(
+      selected: isSelected,
+      minHeight: ToastShellTokens.navItemHeight,
+      onTap: onTap,
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            size: 17,
+            color: isSelected ? PosColors.accent : PosColors.textMuted,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: isSelected ? PosColors.text : PosColors.textSecondary,
+                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
