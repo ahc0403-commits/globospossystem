@@ -401,6 +401,80 @@ class QcService {
     }
     return <String, dynamic>{};
   }
+
+  List<Map<String, dynamic>> _asMapList(dynamic value) {
+    if (value is List) {
+      return value
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .toList();
+    }
+    return const [];
+  }
+
+  Future<List<Map<String, dynamic>>> fetchCheckPhotos({
+    required String checkId,
+    String? fallbackPhotoUrl,
+  }) async {
+    try {
+      final result = await supabase
+          .from('qc_check_photos')
+          .select(
+            'id, check_id, photo_url, storage_path, photo_role, is_primary, uploaded_at, taken_at, caption',
+          )
+          .eq('check_id', checkId)
+          .order('is_primary', ascending: false)
+          .order('uploaded_at');
+
+      final rows = _asMapList(result);
+      if (rows.isNotEmpty) {
+        return rows;
+      }
+    } on PostgrestException {
+      // Fall through to legacy single-photo fallback when the QSC v2 table is
+      // not available yet in the active environment.
+    }
+
+    final url = fallbackPhotoUrl?.trim();
+    if (url == null || url.isEmpty) {
+      return const [];
+    }
+
+    return [
+      {
+        'id': 'legacy-$checkId',
+        'check_id': checkId,
+        'photo_url': url,
+        'photo_role': 'staff',
+        'is_primary': true,
+      },
+    ];
+  }
+
+  Future<List<Map<String, dynamic>>> submitVisitReview({
+    required String storeId,
+    required List<String> checkIds,
+    required String svReviewStatus,
+    double? svScore,
+    String? svNote,
+    String? visitSessionId,
+    DateTime? reviewedAt,
+    String? reviewedBy,
+  }) async {
+    final result = await supabase.rpc(
+      'submit_qc_visit_review',
+      params: {
+        'p_store_id': storeId,
+        'p_check_ids': checkIds,
+        'p_sv_review_status': svReviewStatus,
+        'p_sv_score': svScore,
+        'p_sv_note': svNote,
+        'p_visit_session_id': visitSessionId,
+        'p_reviewed_at': reviewedAt?.toIso8601String(),
+        'p_reviewed_by': reviewedBy,
+      },
+    );
+    return _asMapList(result);
+  }
 }
 
 class _QcPhotoUpload {

@@ -382,6 +382,41 @@ class QcCheckNotifier extends StateNotifier<QcCheckState> {
     }
   }
 
+  Future<List<Map<String, dynamic>>> submitVisitReview({
+    required String storeId,
+    required List<String> checkIds,
+    required String svReviewStatus,
+    double? svScore,
+    String? svNote,
+    String? visitSessionId,
+    DateTime? reviewedAt,
+    String? reviewedBy,
+  }) async {
+    try {
+      final saved = await qcService.submitVisitReview(
+        storeId: storeId,
+        checkIds: checkIds,
+        svReviewStatus: svReviewStatus,
+        svScore: svScore,
+        svNote: svNote,
+        visitSessionId: visitSessionId,
+        reviewedAt: reviewedAt,
+        reviewedBy: reviewedBy,
+      );
+
+      if (_restaurantId == storeId && _weekStart != null) {
+        await loadWeek(storeId: storeId, weekStart: _weekStart!);
+      }
+
+      return saved;
+    } catch (e) {
+      state = state.copyWith(
+        error: _mapQcCheckError(e, 'Failed to submit SV visit review.'),
+      );
+      rethrow;
+    }
+  }
+
   Future<void> loadDateRange({
     required String storeId,
     required DateTime from,
