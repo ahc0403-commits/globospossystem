@@ -25,9 +25,11 @@ class ToastSidebarItem {
   const ToastSidebarItem({
     required this.icon,
     required this.label,
-    required this.urgency,
+    this.urgency = ToastSidebarUrgency.backOffice,
     this.helper,
+    this.helperLabel,
     this.badge,
+    this.sectionLabel,
     this.onTap,
     this.itemKey,
   });
@@ -39,9 +41,22 @@ class ToastSidebarItem {
   /// Short hover/help disclosure. Optional.
   final String? helper;
 
+  /// Wave 1.5 caller-supplied helper string (used by shell callers that
+  /// build flat item lists). Kept distinct from [helper] so existing
+  /// call sites are unaffected; today's `_flatten` adapter renders
+  /// neither.
+  final String? helperLabel;
+
   /// Real provider-backed count, never synthesized. Null when no
   /// grounded signal exists.
   final int? badge;
+
+  /// Caller-supplied section label for Wave 1.5 shell callers that
+  /// emit flat item lists with embedded section headers (instead of
+  /// the grouped [ToastSidebarGroup] API). Today's `_flatten` adapter
+  /// reads grouping from [ToastSidebarGroup] only, so this field is
+  /// stored but not rendered.
+  final String? sectionLabel;
 
   final VoidCallback? onTap;
   final Key? itemKey;
