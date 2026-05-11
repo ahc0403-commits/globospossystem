@@ -1,7 +1,8 @@
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../main.dart';
@@ -221,10 +222,7 @@ class QcService {
   }) async {
     final result = await supabase.rpc(
       'get_qc_followups',
-      params: {
-        'p_store_id': storeId,
-        'p_status_filter': statusFilter,
-      },
+      params: {'p_store_id': storeId, 'p_status_filter': statusFilter},
     );
     return List<Map<String, dynamic>>.from(result as List);
   }
@@ -259,6 +257,157 @@ class QcService {
     }
     return Map<String, dynamic>.from(list.first);
   }
+
+  Future<Map<String, dynamic>> upsertCheckV2({
+    required String storeId,
+    required String templateId,
+    required String checkDate,
+    required String result,
+    String? evidencePhotoUrl,
+    String? note,
+    String? checkedBy,
+    DateTime? submittedAt,
+    String? submissionStatus,
+    int? photoRequiredCount,
+    int? photoUploadedCount,
+    double? score,
+    String? grade,
+    String? svReviewStatus,
+    String? svReviewedBy,
+    DateTime? svReviewedAt,
+    double? svScore,
+    String? svNote,
+    String? visitSessionId,
+  }) async {
+    final resultData = await supabase.rpc(
+      'upsert_qc_check',
+      params: {
+        'p_store_id': storeId,
+        'p_template_id': templateId,
+        'p_check_date': checkDate,
+        'p_result': result,
+        'p_evidence_photo_url': evidencePhotoUrl,
+        'p_note': note,
+        'p_checked_by': checkedBy,
+        'p_submitted_at': submittedAt?.toIso8601String(),
+        'p_submission_status': submissionStatus,
+        'p_photo_required_count': photoRequiredCount,
+        'p_photo_uploaded_count': photoUploadedCount,
+        'p_score': score,
+        'p_grade': grade,
+        'p_sv_review_status': svReviewStatus,
+        'p_sv_reviewed_by': svReviewedBy,
+        'p_sv_reviewed_at': svReviewedAt?.toIso8601String(),
+        'p_sv_score': svScore,
+        'p_sv_note': svNote,
+        'p_visit_session_id': visitSessionId,
+      },
+    );
+    return _asMap(resultData);
+  }
+
+  Future<Map<String, dynamic>> upsertCheckPhoto({
+    required String storeId,
+    required String checkId,
+    required String templateId,
+    required XFile file,
+    required String photoRole,
+    bool isPrimary = false,
+    DateTime? takenAt,
+    String? caption,
+    bool syncLegacyPhoto = true,
+  }) async {
+    final upload = await _prepareQcPhotoUpload(file);
+    if (upload == null) {
+      throw const FormatException('QC_CHECK_PHOTO_DECODE_FAILED');
+    }
+
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final path = '$storeId/checks/$checkId/$templateId/$timestamp.jpg';
+
+    await supabase.storage
+        .from('qc-photos')
+        .uploadBinary(
+          path,
+          upload.bytes,
+          fileOptions: FileOptions(
+            contentType: upload.contentType,
+            upsert: false,
+          ),
+        );
+
+    final signedUrl = await supabase.storage
+        .from('qc-photos')
+        .createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+
+    final result = await supabase.rpc(
+      'upsert_qc_check_photo',
+      params: {
+        'p_store_id': storeId,
+        'p_check_id': checkId,
+        'p_template_id': templateId,
+        'p_photo_url': signedUrl,
+        'p_storage_path': path,
+        'p_photo_role': photoRole,
+        'p_taken_at': takenAt?.toIso8601String(),
+        'p_is_primary': isPrimary,
+        'p_caption': caption,
+        'p_sync_legacy_photo': syncLegacyPhoto,
+      },
+    );
+
+    return _asMap(result);
+  }
+
+  Future<_QcPhotoUpload?> _prepareQcPhotoUpload(XFile file) async {
+    final bytes = await file.readAsBytes();
+    if (kIsWeb) {
+      return _QcPhotoUpload(
+        bytes: bytes,
+        contentType: file.mimeType ?? 'image/jpeg',
+      );
+    }
+
+    final original = img.decodeImage(bytes);
+    if (original == null) return null;
+
+    final widthDominant = original.width >= original.height;
+    final resized = img.copyResize(
+      original,
+      width: widthDominant ? 1200 : null,
+      height: widthDominant ? null : 1200,
+    );
+    return _QcPhotoUpload(
+      bytes: Uint8List.fromList(img.encodeJpg(resized, quality: 75)),
+      contentType: 'image/jpeg',
+    );
+  }
+
+  Map<String, dynamic> _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) {
+      return value;
+    }
+    if (value is Map) {
+      return Map<String, dynamic>.from(value);
+    }
+    if (value is List && value.isNotEmpty) {
+      final first = value.first;
+      if (first is Map<String, dynamic>) {
+        return first;
+      }
+      if (first is Map) {
+        return Map<String, dynamic>.from(first);
+      }
+    }
+    return <String, dynamic>{};
+  }
+}
+
+class _QcPhotoUpload {
+  const _QcPhotoUpload({required this.bytes, required this.contentType});
+
+  final Uint8List bytes;
+  final String contentType;
 }
 
 final qcService = QcService();
