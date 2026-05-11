@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../i18n/locale_extensions.dart';
 import '../app_theme.dart';
 import '../pos_design_tokens.dart';
 
@@ -786,4 +787,88 @@ class _PanelRailItem extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Wave 1.6 Bundle B — action verbs surfaced by Toast-action UI
+/// (right-edge action stacks, status badges, disabled tooltips).
+///
+/// This enum is the canonical taxonomy of user-facing action verbs
+/// the Toast shell exposes. Each variant maps 1:1 to a localized
+/// label via [toastActionVerbLabel].
+enum ToastActionVerb {
+  open,
+  retry,
+  resolved,
+  payNow,
+  pay,
+  splitBill,
+  sendToKitchen,
+  hold,
+  move,
+  openPortal,
+  resendEmail,
+  openProof,
+  reprint,
+  prep,
+  ready,
+  served,
+  close,
+  serviceNow,
+  excel,
+}
+
+/// Localized label for a [ToastActionVerb]. Resolves to the active
+/// locale's string via `context.l10n.*` keys. All referenced keys
+/// already exist on main across `app_en.arb` / `app_ko.arb` /
+/// `app_vi.arb`.
+String toastActionVerbLabel(BuildContext context, ToastActionVerb verb) {
+  return switch (verb) {
+    ToastActionVerb.open => context.l10n.open,
+    ToastActionVerb.retry => context.l10n.retry,
+    ToastActionVerb.resolved => context.l10n.resolved,
+    ToastActionVerb.payNow => context.l10n.cashierPayNow,
+    ToastActionVerb.pay => context.l10n.orderWorkspacePay,
+    ToastActionVerb.splitBill => context.l10n.cashierSplitBill,
+    ToastActionVerb.sendToKitchen => context.l10n.orderWorkspaceSendToKitchen,
+    ToastActionVerb.hold => context.l10n.orderWorkspaceHold,
+    ToastActionVerb.move => context.l10n.orderWorkspaceMove,
+    ToastActionVerb.openPortal => context.l10n.paymentDetailOpenPortal,
+    ToastActionVerb.resendEmail => context.l10n.paymentDetailResendEmail,
+    ToastActionVerb.openProof => context.l10n.paymentDetailOpenProof,
+    ToastActionVerb.reprint => context.l10n.cashierReprint,
+    ToastActionVerb.prep => context.l10n.orderStatusPreparingShort,
+    ToastActionVerb.ready => context.l10n.ready,
+    ToastActionVerb.served => context.l10n.orderStatusServed,
+    ToastActionVerb.close => context.l10n.close,
+    ToastActionVerb.serviceNow => context.l10n.cashierServiceNow,
+    ToastActionVerb.excel => context.l10n.excel,
+  };
+}
+
+/// Wave 1.6 Bundle B — reasons a Toast action surface can be disabled.
+///
+/// Consumed today only as enum values (e.g.
+/// `ToastActionDisabledReason.actionInProgress` set as the disabled
+/// state of a button); the label function that maps these to human
+/// strings is deliberately NOT added in this PR (see PR body for
+/// rationale — current callers don't render the reason).
+enum ToastActionDisabledReason {
+  waitingForPayment,
+  waitingForKitchen,
+  kitchenBlocked,
+  invoicePending,
+  settlementIncomplete,
+  missingProof,
+  retryRequiredFirst,
+  noActiveSelection,
+  tableNotReady,
+  actionUnavailableOffline,
+  noRetryableIssue,
+  kitchenNotReady,
+  invoiceUnavailable,
+  paymentMethodRequired,
+  noItemsSelected,
+  actionInProgress,
+  noPendingPrep,
+  openOrderRequired,
 }
