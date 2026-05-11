@@ -32,6 +32,9 @@ class PermissionUtils {
   static bool canDoQcCheck(String? role, List<String> extraPermissions) =>
       hasPermission(role, extraPermissions, 'qc_check');
 
+  static bool canDoQcVisitReview(String? role, List<String> extraPermissions) =>
+      isAdminLike(role) || extraPermissions.contains('qc_check');
+
   static bool canDoInventoryCount(
     String? role,
     List<String> extraPermissions,

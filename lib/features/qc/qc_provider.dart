@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
@@ -290,7 +291,93 @@ class QcCheckNotifier extends StateNotifier<QcCheckState> {
         await loadWeek(storeId: storeId, weekStart: _weekStart!);
       }
     } catch (e) {
-      state = state.copyWith(error: _mapQcCheckError(e, 'Failed to save QC inspection.'));
+      state = state.copyWith(
+        error: _mapQcCheckError(e, 'Failed to save QC inspection.'),
+      );
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> submitCheckV2({
+    required String storeId,
+    required String templateId,
+    required String checkDate,
+    required String result,
+    XFile? evidencePhoto,
+    List<XFile>? evidencePhotos,
+    String? evidencePhotoUrl,
+    String? note,
+    String? checkedBy,
+    DateTime? submittedAt,
+    String? submissionStatus,
+    int? photoRequiredCount,
+    int? photoUploadedCount,
+    double? score,
+    String? grade,
+    String? svReviewStatus,
+    String? svReviewedBy,
+    DateTime? svReviewedAt,
+    double? svScore,
+    String? svNote,
+    String? visitSessionId,
+  }) async {
+    try {
+      final saved = await qcService.upsertCheckV2(
+        storeId: storeId,
+        templateId: templateId,
+        checkDate: checkDate,
+        result: result,
+        evidencePhotoUrl: evidencePhotoUrl,
+        note: note,
+        checkedBy: checkedBy,
+        submittedAt: submittedAt,
+        submissionStatus: submissionStatus,
+        photoRequiredCount: photoRequiredCount,
+        photoUploadedCount: photoUploadedCount,
+        score: score,
+        grade: grade,
+        svReviewStatus: svReviewStatus,
+        svReviewedBy: svReviewedBy,
+        svReviewedAt: svReviewedAt,
+        svScore: svScore,
+        svNote: svNote,
+        visitSessionId: visitSessionId,
+      );
+
+      final checkId =
+          saved['id']?.toString() ??
+          saved['check_id']?.toString() ??
+          saved['qc_check_id']?.toString();
+
+      final filesToUpload = <XFile>[
+        ...?evidencePhotos,
+        if (evidencePhotos == null && evidencePhoto != null) evidencePhoto,
+      ];
+
+      if (checkId != null && checkId.isNotEmpty && filesToUpload.isNotEmpty) {
+        for (var i = 0; i < filesToUpload.length; i++) {
+          await qcService.upsertCheckPhoto(
+            storeId: storeId,
+            checkId: checkId,
+            templateId: templateId,
+            file: filesToUpload[i],
+            photoRole: 'staff',
+            isPrimary: i == 0,
+            takenAt: submittedAt ?? DateTime.now(),
+            syncLegacyPhoto: i == 0,
+          );
+        }
+      }
+
+      if (_restaurantId == storeId && _weekStart != null) {
+        await loadWeek(storeId: storeId, weekStart: _weekStart!);
+      }
+
+      return saved;
+    } catch (e) {
+      state = state.copyWith(
+        error: _mapQcCheckError(e, 'Failed to save QSC inspection.'),
+      );
       rethrow;
     }
   }
@@ -316,7 +403,10 @@ class QcCheckNotifier extends StateNotifier<QcCheckState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: _mapQcCheckError(e, 'Failed to load QC inspection search results.'),
+        error: _mapQcCheckError(
+          e,
+          'Failed to load QC inspection search results.',
+        ),
       );
     }
   }
@@ -523,12 +613,10 @@ class QcAnalyticsParams {
 }
 
 final qcAnalyticsProvider = FutureProvider.family
-    .autoDispose<Map<String, dynamic>, QcAnalyticsParams>(
-      (ref, params) async {
-        return qcService.fetchAnalytics(
-          storeId: params.storeId,
-          from: params.from,
-          to: params.to,
-        );
-      },
-    );
+    .autoDispose<Map<String, dynamic>, QcAnalyticsParams>((ref, params) async {
+      return qcService.fetchAnalytics(
+        storeId: params.storeId,
+        from: params.from,
+        to: params.to,
+      );
+    });
