@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../core/i18n/locale_extensions.dart';
 import '../core/ui/app_theme.dart';
 import '../core/services/navigation_history_service.dart';
 import '../features/auth/auth_provider.dart';
 import '../features/auth/auth_state.dart';
+import 'language_switcher.dart';
 
 class AppNavBar extends ConsumerWidget {
   const AppNavBar({super.key});
@@ -42,13 +44,15 @@ class AppNavBar extends ConsumerWidget {
         break;
       }
     }
+    final l10n = context.l10n;
+    final compactLanguageSwitcher = MediaQuery.sizeOf(context).width < 1100;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         _NavButton(
           icon: Icons.arrow_back_ios_new_rounded,
-          tooltip: 'Back',
+          tooltip: l10n.back,
           enabled: nav.canGoBack,
           onTap: () {
             final prev = nav.goBack();
@@ -60,7 +64,7 @@ class AppNavBar extends ConsumerWidget {
         const SizedBox(width: 4),
         _NavButton(
           icon: Icons.arrow_forward_ios_rounded,
-          tooltip: 'Forward',
+          tooltip: l10n.forward,
           enabled: nav.canGoForward,
           onTap: () {
             final next = nav.goForward();
@@ -72,7 +76,7 @@ class AppNavBar extends ConsumerWidget {
         const SizedBox(width: 4),
         _NavButton(
           icon: Icons.home_rounded,
-          tooltip: 'Home',
+          tooltip: l10n.home,
           enabled: !isHome,
           onTap: () {
             nav.push(homeRoute);
@@ -91,6 +95,8 @@ class AppNavBar extends ConsumerWidget {
           const SizedBox(width: 8),
           _StorePill(store: activeStore),
         ],
+        const SizedBox(width: 8),
+        LanguageSwitcher(compact: compactLanguageSwitcher),
       ],
     );
   }
