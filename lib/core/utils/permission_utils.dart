@@ -5,6 +5,13 @@ class PermissionUtils {
       role == 'brand_admin' ||
       role == 'super_admin';
 
+  static bool isSuperAdmin(String? role) => role == 'super_admin';
+
+  static bool canSwitchActiveStore(String? role) =>
+      role == 'super_admin' ||
+      role == 'brand_admin' ||
+      role == 'photo_objet_master';
+
   static bool isPhotoObjetRole(String? role) =>
       role == 'photo_objet_master' || role == 'photo_objet_store_admin';
 
