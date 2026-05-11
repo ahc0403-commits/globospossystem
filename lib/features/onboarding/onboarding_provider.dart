@@ -1,8 +1,16 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/services/store_service.dart';
+import '../../core/utils/permission_utils.dart';
 import '../../main.dart';
 import '../auth/auth_provider.dart';
+
+const onboardingOnlySuperAdminErrorCode = 'onboarding.only_super_admin';
+const onboardingFailedCreateStoreErrorCode = 'onboarding.failed_create_store';
+const onboardingMissingSetupInfoErrorCode = 'onboarding.missing_setup_info';
+const onboardingFailedUpdateProfileErrorCode =
+    'onboarding.failed_update_profile';
+const onboardingFailedFinalizeErrorCode = 'onboarding.failed_finalize';
 
 class OnboardingState {
   const OnboardingState({
@@ -49,8 +57,8 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
     double? perPersonCharge,
   ) async {
     final authState = ref.read(authProvider);
-    if (authState.role != 'super_admin') {
-      state = state.copyWith(error: 'Only super_admin can create stores');
+    if (!PermissionUtils.isSuperAdmin(authState.role)) {
+      state = state.copyWith(error: onboardingOnlySuperAdminErrorCode);
       return;
     }
     state = state.copyWith(isLoading: true, clearError: true);
@@ -73,7 +81,7 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Failed to create store: $error',
+        error: '$onboardingFailedCreateStoreErrorCode:$error',
       );
     }
   }
@@ -83,9 +91,7 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
     final user = authState.user;
     final storeId = state.createdStoreId;
     if (user == null || storeId == null) {
-      state = state.copyWith(
-        error: 'Missing user or store setup information.',
-      );
+      state = state.copyWith(error: onboardingMissingSetupInfoErrorCode);
       return;
     }
 
@@ -104,7 +110,7 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Failed to update profile: $error',
+        error: '$onboardingFailedUpdateProfileErrorCode:$error',
       );
     }
   }
@@ -117,7 +123,7 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Failed to finalize onboarding: $error',
+        error: '$onboardingFailedFinalizeErrorCode:$error',
       );
     }
   }
