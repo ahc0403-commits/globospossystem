@@ -403,3 +403,141 @@ class PosListRow extends StatelessWidget {
     );
   }
 }
+
+/// Wave 1.6 caller-supplied metric tile. Pairs with [ToastMetricItemStrip].
+///
+/// Distinct from the existing `ToastMetric` / `ToastMetricStrip` in
+/// `toast_primitives.dart` (which uses `metrics:` + `tone`). This shape
+/// carries an optional `status` widget for inline badges and a
+/// per-item `color` for value emphasis.
+class ToastMetricItem {
+  const ToastMetricItem({
+    required this.label,
+    required this.value,
+    this.status,
+    this.color = ToastColorTokens.textPrimary,
+  });
+
+  final String label;
+  final String value;
+  final Widget? status;
+  final Color color;
+}
+
+/// Wave 1.6 sibling of the existing `ToastMetricStrip` in
+/// `toast_primitives.dart`. Renders a row of [ToastMetricItem]s inside
+/// a [ToastWorkSurface] with vertical dividers.
+///
+/// Named with a distinct class so the two strips can coexist:
+/// - `ToastMetricStrip(metrics: List<ToastMetric>)` — legacy, dark-theme,
+///   in `toast_primitives.dart`.
+/// - `ToastMetricItemStrip(items: List<ToastMetricItem>)` — Wave 1.6,
+///   Toast-theme, supports per-item color + inline status widget.
+class ToastMetricItemStrip extends StatelessWidget {
+  const ToastMetricItemStrip({
+    super.key,
+    required this.items,
+    this.compact = false,
+    this.muted = false,
+  });
+
+  final List<ToastMetricItem> items;
+  final bool compact;
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    return ToastWorkSurface(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 10 : AppSpacing.lg,
+        vertical: compact ? 7 : 10,
+      ),
+      backgroundColor: muted
+          ? ToastColorTokens.mutedSurface
+          : ToastColorTokens.surface,
+      borderColor: muted
+          ? ToastColorTokens.border.withValues(alpha: 0.58)
+          : ToastColorTokens.border,
+      child: Row(
+        children: [
+          for (var index = 0; index < items.length; index++) ...[
+            Expanded(
+              child: _ToastMetricCell(
+                item: items[index],
+                compact: compact,
+                muted: muted,
+              ),
+            ),
+            if (index != items.length - 1)
+              SizedBox(
+                height: compact ? 28 : 36,
+                child: VerticalDivider(
+                  color: muted
+                      ? ToastColorTokens.border.withValues(alpha: 0.42)
+                      : ToastColorTokens.border.withValues(alpha: 0.72),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ToastMetricCell extends StatelessWidget {
+  const _ToastMetricCell({
+    required this.item,
+    required this.compact,
+    required this.muted,
+  });
+
+  final ToastMetricItem item;
+  final bool compact;
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final valueColor = muted ? item.color.withValues(alpha: 0.78) : item.color;
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? AppSpacing.xs : AppSpacing.sm,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  item.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.notoSansKr(
+                    color: ToastColorTokens.textMuted,
+                    fontSize: compact ? 9.8 : 10.8,
+                    fontWeight: FontWeight.w700,
+                    height: 1.12,
+                  ),
+                ),
+              ),
+              if (item.status != null) item.status!,
+            ],
+          ),
+          SizedBox(height: compact ? 3 : 5),
+          Text(
+            item.value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.notoSansKr(
+              color: valueColor,
+              fontSize: compact ? 12.5 : 16,
+              fontWeight: compact ? FontWeight.w800 : FontWeight.w900,
+              height: 1.04,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
