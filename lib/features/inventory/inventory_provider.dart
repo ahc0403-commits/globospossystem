@@ -64,7 +64,9 @@ class IngredientNotifier extends StateNotifier<IngredientState> {
       await load(storeId);
       return true;
     } catch (e) {
-      state = state.copyWith(error: _mapIngredientError(e, 'Failed to add ingredient.'));
+      state = state.copyWith(
+        error: _mapIngredientError(e, 'Failed to add ingredient.'),
+      );
       return false;
     }
   }
@@ -76,15 +78,13 @@ class IngredientNotifier extends StateNotifier<IngredientState> {
   ) async {
     state = state.copyWith(clearError: true);
     try {
-      await inventoryService.updateIngredient(
-        id,
-        data,
-        storeId: storeId,
-      );
+      await inventoryService.updateIngredient(id, data, storeId: storeId);
       await load(storeId);
       return true;
     } catch (e) {
-      state = state.copyWith(error: _mapIngredientError(e, 'Failed to update ingredient.'));
+      state = state.copyWith(
+        error: _mapIngredientError(e, 'Failed to update ingredient.'),
+      );
       return false;
     }
   }
@@ -110,7 +110,9 @@ class IngredientNotifier extends StateNotifier<IngredientState> {
       await load(storeId);
       return true;
     } catch (e) {
-      state = state.copyWith(error: _mapRestockWasteError(e, 'Stock-in failed.'));
+      state = state.copyWith(
+        error: _mapRestockWasteError(e, 'Stock-in failed.'),
+      );
       return false;
     }
   }
@@ -131,7 +133,9 @@ class IngredientNotifier extends StateNotifier<IngredientState> {
       await load(storeId);
       return true;
     } catch (e) {
-      state = state.copyWith(error: _mapRestockWasteError(e, 'Waste record failed.'));
+      state = state.copyWith(
+        error: _mapRestockWasteError(e, 'Waste record failed.'),
+      );
       return false;
     }
   }
@@ -264,7 +268,9 @@ class RecipeNotifier extends StateNotifier<RecipeState> {
       await loadAll(storeId);
       return true;
     } catch (e) {
-      state = state.copyWith(error: _mapRecipeError(e, 'Failed to save recipe mapping.'));
+      state = state.copyWith(
+        error: _mapRecipeError(e, 'Failed to save recipe mapping.'),
+      );
       return false;
     }
   }
@@ -354,7 +360,10 @@ class PhysicalCountNotifier extends StateNotifier<PhysicalCountState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: _mapPhysicalCountError(e, 'Failed to load physical count sheet.'),
+        error: _mapPhysicalCountError(
+          e,
+          'Failed to load physical count sheet.',
+        ),
       );
     }
   }
@@ -482,3 +491,64 @@ final inventoryReportProvider =
     StateNotifierProvider<InventoryReportNotifier, InventoryReportState>(
       (ref) => InventoryReportNotifier(),
     );
+
+class InventoryPurchaseOverviewState {
+  final Map<String, dynamic>? dashboard;
+  final bool isLoading;
+  final String? error;
+
+  const InventoryPurchaseOverviewState({
+    this.dashboard,
+    this.isLoading = false,
+    this.error,
+  });
+
+  InventoryPurchaseOverviewState copyWith({
+    Map<String, dynamic>? dashboard,
+    bool? isLoading,
+    String? error,
+    bool clearError = false,
+  }) => InventoryPurchaseOverviewState(
+    dashboard: dashboard ?? this.dashboard,
+    isLoading: isLoading ?? this.isLoading,
+    error: clearError ? null : (error ?? this.error),
+  );
+}
+
+class InventoryPurchaseOverviewNotifier
+    extends StateNotifier<InventoryPurchaseOverviewState> {
+  InventoryPurchaseOverviewNotifier()
+    : super(const InventoryPurchaseOverviewState());
+
+  Future<void> load(String storeId) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final dashboard = await inventoryService.fetchInventoryPurchaseDashboard(
+        storeId: storeId,
+      );
+      state = state.copyWith(dashboard: dashboard, isLoading: false);
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: _mapInventoryPurchaseOverviewError(e),
+      );
+    }
+  }
+
+  String _mapInventoryPurchaseOverviewError(Object error) {
+    final fallback = 'Failed to load purchase overview.';
+    final message = error.toString();
+
+    if (message.contains('INVENTORY_PURCHASE_FORBIDDEN')) {
+      return 'No permission to view inventory purchase overview for this store.';
+    }
+
+    return fallback;
+  }
+}
+
+final inventoryPurchaseOverviewProvider =
+    StateNotifierProvider<
+      InventoryPurchaseOverviewNotifier,
+      InventoryPurchaseOverviewState
+    >((ref) => InventoryPurchaseOverviewNotifier());

@@ -210,6 +210,16 @@ class InventoryService {
     },
   );
 
+  Future<Map<String, dynamic>> fetchInventoryPurchaseDashboard({
+    required String storeId,
+  }) async {
+    final result = await supabase.rpc(
+      'get_inventory_purchase_dashboard',
+      params: {'p_store_id': storeId, 'p_brand_id': null},
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
   Future<List<Map<String, dynamic>>> _rpcList(
     String functionName, {
     required Map<String, dynamic> params,
