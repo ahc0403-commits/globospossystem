@@ -201,17 +201,27 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                         );
                       }
 
-                      return GridView.builder(
-                        padding: const EdgeInsets.all(16),
-                        gridDelegate:
-                            const SliverGridDelegateWithMaxCrossAxisExtent(
-                              maxCrossAxisExtent: 420,
-                              mainAxisSpacing: 14,
-                              crossAxisSpacing: 14,
-                              childAspectRatio: 1.1,
+                      return Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                            child: _KitchenAttentionSection(
+                              orders: kitchenState.orders,
+                              now: _now,
                             ),
-                        itemCount: kitchenState.orders.length,
-                        itemBuilder: (context, index) {
+                          ),
+                          Expanded(
+                            child: GridView.builder(
+                              padding: const EdgeInsets.all(16),
+                              gridDelegate:
+                                  const SliverGridDelegateWithMaxCrossAxisExtent(
+                                    maxCrossAxisExtent: 420,
+                                    mainAxisSpacing: 14,
+                                    crossAxisSpacing: 14,
+                                    childAspectRatio: 1.1,
+                                  ),
+                              itemCount: kitchenState.orders.length,
+                              itemBuilder: (context, index) {
                           final order = kitchenState.orders[index];
                           final hasPending = order.items.any(
                             (item) => item.status == 'pending',
@@ -224,9 +234,9 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                           );
                           final elapsed = _elapsedLabel(order.createdAt, _now);
 
-                          return KeyedSubtree(
-                            key: Key('kitchen_order_${order.orderId}'),
-                            child: AnimatedContainer(
+                                return KeyedSubtree(
+                                  key: Key('kitchen_order_${order.orderId}'),
+                                  child: AnimatedContainer(
                             key: index == 0
                                 ? const Key('kitchen_first_order_card')
                                 : null,
@@ -351,15 +361,18 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                                             ],
                                           ),
                                         ),
-                                      );
-                                    },
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ],
+                                );
+                              },
                             ),
                           ),
-                          );
-                        },
+                        ],
                       );
                     },
                   ),
@@ -370,6 +383,230 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
         ],
       ),
     );
+  }
+}
+
+class _KitchenAttentionSection extends StatelessWidget {
+  const _KitchenAttentionSection({required this.orders, required this.now});
+
+  final List<KitchenOrder> orders;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final pendingItems = orders
+        .expand((order) => order.items)
+        .where((item) => item.status == 'pending')
+        .length;
+    final preparingItems = orders
+        .expand((order) => order.items)
+        .where((item) => item.status == 'preparing')
+        .length;
+    final readyItems = orders
+        .expand((order) => order.items)
+        .where((item) => item.status == 'ready')
+        .length;
+    final longWaitCount = orders.where((order) {
+      final elapsed = now.difference(order.createdAt.toUtc()).inMinutes;
+      return elapsed >= 15;
+    }).length;
+    final followUpCount = [
+      if (pendingItems > 0) true,
+      if (readyItems > 0) true,
+      if (longWaitCount > 0) true,
+    ].length;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Kitchen Attention',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Read-only kitchen readiness layer built from the tracked active order queue.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _attentionMetric(
+                'Follow-up now',
+                '$followUpCount',
+                followUpCount > 0
+                    ? AppColors.amber500
+                    : AppColors.statusAvailable,
+              ),
+              _attentionMetric(
+                'Pending items',
+                '$pendingItems',
+                pendingItems > 0
+                    ? AppColors.statusCancelled
+                    : AppColors.statusAvailable,
+              ),
+              _attentionMetric(
+                'Ready items',
+                '$readyItems',
+                readyItems > 0 ? AppColors.amber500 : AppColors.statusAvailable,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _attentionChip(
+                'Active tables ${orders.length}',
+                AppColors.textPrimary,
+              ),
+              _attentionChip(
+                'Preparing $preparingItems',
+                preparingItems > 0
+                    ? AppColors.statusAvailable
+                    : AppColors.textSecondary,
+              ),
+              _attentionChip(
+                'Long waits $longWaitCount',
+                longWaitCount > 0
+                    ? AppColors.statusCancelled
+                    : AppColors.statusAvailable,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _attentionSupportRow(
+            'Follow-up focus',
+            _followUpCopy(
+              pendingItems: pendingItems,
+              readyItems: readyItems,
+              longWaitCount: longWaitCount,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _attentionSupportRow(
+            'Boundary',
+            'Read-only kitchen readiness surface only. Status advancement remains on the tracked order cards below.',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _attentionMetric(String label, String value, Color color) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 120, maxWidth: 180),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: GoogleFonts.notoSansKr(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _attentionChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.notoSansKr(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _attentionSupportRow(String label, String body) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 108,
+          child: Text(
+            label,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            body,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontSize: 12,
+              height: 1.45,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _followUpCopy({
+    required int pendingItems,
+    required int readyItems,
+    required int longWaitCount,
+  }) {
+    if (longWaitCount > 0) {
+      return 'Long-wait tickets should be checked first because they signal the highest service risk in the active kitchen queue.';
+    }
+    if (readyItems > 0) {
+      return 'Ready items are waiting on the next handoff step, so they are the clearest near-term release point in the queue.';
+    }
+    if (pendingItems > 0) {
+      return 'Pending items still dominate the active queue, so prep throughput is the primary watch item right now.';
+    }
+    return 'No immediate kitchen follow-up signal is ahead of the others for the current board snapshot.';
   }
 }
 
