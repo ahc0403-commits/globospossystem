@@ -37,6 +37,8 @@ void main() {
       expect(tab, contains('Recent unit'));
       expect(tab, contains('Recent order'));
       expect(tab, contains('Recent received'));
+      expect(tab, contains('Current unit'));
+      expect(tab, contains('Price drift'));
       expect(tab, contains('Base factor'));
       expect(tab, contains('Min order'));
       expect(tab, contains('Lead time'));
@@ -60,6 +62,7 @@ void main() {
           'Review recent purchase and receipt history for the same supplier item without opening approval, receipt confirmation, or stock mutation workflows.',
         ),
       );
+      expect(tab, contains('Price drift unavailable'));
       expect(
         tab,
         contains(
