@@ -27,6 +27,10 @@ void main() {
       expect(tab, contains('Latest Purchase Order Creation'));
       expect(tab, contains('Recent Purchase Orders'));
       expect(tab, contains('Purchase Order Detail'));
+      expect(tab, contains('Receipt Visibility'));
+      expect(tab, contains('Receipt status'));
+      expect(tab, contains('Readiness'));
+      expect(tab, contains('Latest receipt'));
       expect(tab, contains('Refresh Selected Order'));
       expect(
         tab,
@@ -82,11 +86,19 @@ void main() {
       expect(service, contains("'create_purchase_orders_from_recommendation'"));
       expect(service, contains("'inventory_purchase_orders'"));
       expect(service, contains("'inventory_purchase_order_lines'"));
+      expect(service, contains("'inventory_receipts'"));
+      expect(service, contains("'inventory_receipt_lines'"));
       expect(service, contains('supplier_item:inventory_supplier_items'));
       expect(
         tab,
         contains(
           'This slice may create recommendation snapshots and supplier-grouped purchase orders, but it still does not approve receipts or mutate stock.',
+        ),
+      );
+      expect(
+        tab,
+        contains(
+          'Track receipt readiness and already recorded inbound quantities without opening receipt confirmation.',
         ),
       );
       expect(tab, isNot(contains('InventoryPurchaseScreen')));
