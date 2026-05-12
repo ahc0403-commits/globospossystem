@@ -1104,6 +1104,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   Widget _buildReportTab(String? storeId) {
     final report = ref.watch(inventoryReportProvider);
     final purchaseOverview = ref.watch(inventoryPurchaseOverviewProvider);
+    final recommendationRun = ref.watch(
+      inventoryPurchaseRecommendationRunProvider,
+    );
 
     final deduct = report.transactions
         .where((t) => t['transaction_type'] == 'deduct')
@@ -1160,6 +1163,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           _buildInventoryPurchaseOverview(
             storeId: storeId,
             overview: purchaseOverview,
+            recommendationRun: recommendationRun,
           ),
           const SizedBox(height: 12),
           Row(
@@ -1325,6 +1329,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   Widget _buildInventoryPurchaseOverview({
     required String? storeId,
     required InventoryPurchaseOverviewState overview,
+    required InventoryPurchaseRecommendationRunState recommendationRun,
   }) {
     final dashboard = overview.dashboard;
     final storeCount = (dashboard?['store_count'] as num?)?.toInt() ?? 0;
@@ -1363,7 +1368,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Read-only inventory purchase snapshot from the tracked purchase dashboard. Recommendation runs and order mutations stay out of this slice.',
+                      'View the tracked purchase dashboard and generate a scoped recommendation snapshot without creating purchase orders or mutating stock.',
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -1373,7 +1378,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 ),
               ),
               IconButton(
-                onPressed: storeId == null || overview.isLoading
+                onPressed:
+                    storeId == null ||
+                        overview.isLoading ||
+                        recommendationRun.isRunning
                     ? null
                     : () => ref
                           .read(inventoryPurchaseOverviewProvider.notifier)
@@ -1387,6 +1395,40 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                       )
                     : const Icon(Icons.refresh),
                 color: AppColors.amber500,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed:
+                      storeId == null ||
+                          overview.isLoading ||
+                          recommendationRun.isRunning
+                      ? null
+                      : () => _showRecommendationRunDialog(
+                          context: context,
+                          storeId: storeId,
+                        ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.amber500,
+                    foregroundColor: AppColors.surface0,
+                  ),
+                  icon: recommendationRun.isRunning
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.auto_graph),
+                  label: Text(
+                    recommendationRun.isRunning
+                        ? 'Generating Recommendation...'
+                        : 'Generate Recommendation Snapshot',
+                  ),
+                ),
               ),
             ],
           ),
@@ -1451,6 +1493,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               lowStockCount: lowStockCount,
               submittedPurchaseAmount: submittedPurchaseAmount,
               approvedPurchaseAmount: approvedPurchaseAmount,
+              recommendationRun: recommendationRun,
             ),
           ],
         ],
@@ -1462,6 +1505,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     required int lowStockCount,
     required double submittedPurchaseAmount,
     required double approvedPurchaseAmount,
+    required InventoryPurchaseRecommendationRunState recommendationRun,
   }) {
     final approvalGap = submittedPurchaseAmount - approvedPurchaseAmount;
     final normalizedGap = approvalGap > 0 ? approvalGap : 0.0;
@@ -1471,6 +1515,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     final approvalStatus = normalizedGap > 0
         ? 'Submitted orders exceed approved orders by ${_formatCurrencyCompact(normalizedGap)}.'
         : 'Approved purchase volume is aligned with or ahead of submitted volume.';
+    final recommendationStatus = recommendationRun.lastRunId == null
+        ? 'No recommendation snapshot has been generated from the tracked POS workspace yet.'
+        : 'Last snapshot ${recommendationRun.lastRunId!.substring(0, 8)} ran for ${recommendationRun.lastTargetStockDays?.toStringAsFixed(0) ?? '-'} day coverage as of ${recommendationRun.lastAsOfDate ?? '-'}.';
 
     return Container(
       width: double.infinity,
@@ -1496,13 +1543,144 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 8),
           _purchaseDetailRow('Review Focus', reviewFocus),
           const SizedBox(height: 8),
+          _purchaseDetailRow('Recommendation Status', recommendationStatus),
+          const SizedBox(height: 8),
           _purchaseDetailRow(
             'Boundary',
-            'This slice remains read-only and does not trigger recommendation runs or purchase mutations.',
+            'This slice may create a recommendation snapshot, but it still does not create purchase orders or mutate stock.',
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _showRecommendationRunDialog({
+    required BuildContext context,
+    required String storeId,
+  }) async {
+    final targetDaysController = TextEditingController(text: '3');
+    var selectedDate = DateTime.now();
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setModalState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface1,
+              title: Text(
+                'Inventory Recommendation Trigger',
+                style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+              ),
+              content: SizedBox(
+                width: 360,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Create a store-scoped recommendation snapshot only. This does not create purchase orders or update stock.',
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: targetDaysController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Target stock days',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: dialogContext,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) {
+                          setModalState(() => selectedDate = picked);
+                        }
+                      },
+                      icon: const Icon(Icons.event),
+                      label: Text(
+                        'As of ${DateFormat('yyyy-MM-dd').format(selectedDate)}',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    final targetStockDays = double.tryParse(
+                      targetDaysController.text.trim(),
+                    );
+                    if (targetStockDays == null || targetStockDays <= 0) {
+                      showErrorToast(
+                        dialogContext,
+                        'Target stock days must be greater than zero.',
+                      );
+                      return;
+                    }
+
+                    final success = await ref
+                        .read(
+                          inventoryPurchaseRecommendationRunProvider.notifier,
+                        )
+                        .run(
+                          storeId: storeId,
+                          targetStockDays: targetStockDays,
+                          asOfDate: selectedDate,
+                        );
+                    if (!dialogContext.mounted) return;
+
+                    final latest = ref.read(
+                      inventoryPurchaseRecommendationRunProvider,
+                    );
+                    if (!success) {
+                      showErrorToast(
+                        dialogContext,
+                        latest.error ??
+                            'Failed to generate recommendation snapshot.',
+                      );
+                      return;
+                    }
+
+                    await ref
+                        .read(inventoryPurchaseOverviewProvider.notifier)
+                        .load(storeId);
+                    if (!dialogContext.mounted) return;
+                    showSuccessToast(
+                      dialogContext,
+                      'Recommendation snapshot created.',
+                    );
+                    Navigator.of(dialogContext).pop();
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.amber500,
+                    foregroundColor: AppColors.surface0,
+                  ),
+                  child: const Text('Run Snapshot'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    targetDaysController.dispose();
   }
 
   String _txTypeLabel(String type) => switch (type) {

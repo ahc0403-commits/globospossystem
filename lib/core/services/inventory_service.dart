@@ -220,6 +220,22 @@ class InventoryService {
     return Map<String, dynamic>.from(result as Map);
   }
 
+  Future<String> runInventoryPurchaseRecommendation({
+    required String storeId,
+    required double targetStockDays,
+    required DateTime asOfDate,
+  }) async {
+    final result = await supabase.rpc(
+      'run_inventory_purchase_recommendation',
+      params: {
+        'p_store_id': storeId,
+        'p_target_stock_days': targetStockDays,
+        'p_as_of_date': asOfDate.toIso8601String().split('T').first,
+      },
+    );
+    return result.toString();
+  }
+
   Future<List<Map<String, dynamic>>> _rpcList(
     String functionName, {
     required Map<String, dynamic> params,
