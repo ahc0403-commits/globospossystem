@@ -274,6 +274,19 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
       selectedIssue ??= queueIssues.first;
     }
 
+    final criticalIssueCount = queueIssues
+        .where((issue) => issue['severity']?.toString() == 'critical')
+        .length;
+    final overdueIssueCount = queueIssues
+        .where((issue) => issue['submission_status']?.toString() == 'overdue')
+        .length;
+    final missingPhotoIssueCount = queueIssues
+        .where((issue) {
+          final status = issue['photo_status']?.toString();
+          return status == 'missing' || status == 'partial';
+        })
+        .length;
+
     return Scaffold(
       backgroundColor: PosColors.canvas,
       appBar: AppBar(
@@ -421,6 +434,59 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                             label: const Text('Refresh Issue Queue'),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _summaryChip(
+                            'Critical $criticalIssueCount',
+                            PosColors.danger,
+                          ),
+                          _summaryChip(
+                            'Overdue $overdueIssueCount',
+                            PosColors.accent,
+                          ),
+                          _summaryChip(
+                            'Photo gap $missingPhotoIssueCount',
+                            PosColors.info,
+                          ),
+                          _summaryChip(
+                            'Queue ${queueIssues.length}',
+                            PosColors.textMuted,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: PosColors.canvas,
+                          borderRadius: ToastRadiusTokens.xs,
+                          border: Border.all(color: PosColors.border),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Review Focus',
+                              style: GoogleFonts.notoSansKr(
+                                color: PosColors.text,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'This queue is exception-first. Prioritize critical severity, overdue submissions, and missing photo evidence before standard review cleanup.',
+                              style: GoogleFonts.notoSansKr(
+                                color: PosColors.textMuted,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 12),
                       Row(
@@ -1408,14 +1474,22 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
           ),
           _issueField(
             'Submitted At',
-            issue['submitted_at']?.toString() ?? 'Not submitted',
+            _formatIssueTimestamp(issue['submitted_at']) ?? 'Not submitted',
+          ),
+          _issueField(
+            'Created At',
+            _formatIssueTimestamp(issue['created_at']) ?? '-',
           ),
           _issueField('Score / Grade', _scoreGradeText(issue)),
           _issueField(
             'Evidence',
             photoUrl != null && photoUrl.isNotEmpty
-                ? 'Photo available'
+                ? 'Photo available via tracked evidence URL'
                 : 'Photo not attached',
+          ),
+          _issueField(
+            'Review Boundary',
+            'Read-only queue surface only. Follow-up and review mutation stay outside this slice.',
           ),
           if (issue['note']?.toString().isNotEmpty == true) ...[
             const SizedBox(height: 8),
@@ -1578,6 +1652,14 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
       return '$score / ${grade.toUpperCase()}';
     }
     return score?.isNotEmpty == true ? score! : grade!.toUpperCase();
+  }
+
+  String? _formatIssueTimestamp(dynamic value) {
+    final text = value?.toString();
+    if (text == null || text.isEmpty) return null;
+    final parsed = DateTime.tryParse(text);
+    if (parsed == null) return text;
+    return DateFormat('MM/dd HH:mm').format(parsed.toLocal());
   }
 
   int? _readInt(dynamic value) {
