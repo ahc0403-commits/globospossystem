@@ -113,6 +113,13 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
             ),
           ),
           const SizedBox(height: 16),
+          if (state.unsettled != null || state.settlements.isNotEmpty)
+            _buildOperationalAttention(
+              unsettled: state.unsettled,
+              settlements: state.settlements,
+            ),
+          if (state.unsettled != null || state.settlements.isNotEmpty)
+            const SizedBox(height: 16),
           // ─── 미정산 카드 ───
           if (state.unsettled != null) _buildUnsettledCard(state.unsettled!),
           const SizedBox(height: 16),
@@ -160,6 +167,200 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
             ...filtered.map(_buildSettlementCard),
         ],
       ),
+    );
+  }
+
+  Widget _buildOperationalAttention({
+    required UnsettledRevenueSummary? unsettled,
+    required List<DeliverySettlement> settlements,
+  }) {
+    final unsettledOrders = unsettled?.orderCount ?? 0;
+    final pendingCount = settlements.where((s) => s.status == 'pending').length;
+    final statementCount = settlements
+        .where((s) => s.status == 'calculated')
+        .length;
+    final disputeCount = settlements.where((s) => s.status == 'disputed').length;
+    final settledCount = settlements.where((s) => s.status == 'received').length;
+    final followUpSignals = [
+      if (unsettledOrders > 0) 'Unsettled Deliberry revenue is still open.',
+      if (statementCount > 0) 'Generated statements still need deposit confirmation.',
+      if (disputeCount > 0) 'Disputed periods need separate financial review.',
+      if (pendingCount > 0) 'Pending settlement periods are still waiting for statement generation.',
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Settlement Attention',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Read-only settlement readiness layer built from tracked Deliberry settlement state.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _attentionMetric(
+                'Follow-up now',
+                '${followUpSignals.length}',
+                followUpSignals.isNotEmpty
+                    ? AppColors.statusCancelled
+                    : AppColors.statusAvailable,
+              ),
+              _attentionMetric(
+                'Statements waiting',
+                '$statementCount',
+                statementCount > 0 ? AppColors.amber500 : AppColors.statusAvailable,
+              ),
+              _attentionMetric(
+                'Settled periods',
+                '$settledCount',
+                AppColors.statusAvailable,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _attentionChip(
+                'Unsettled orders $unsettledOrders',
+                unsettledOrders > 0
+                    ? AppColors.statusCancelled
+                    : AppColors.statusAvailable,
+              ),
+              _attentionChip(
+                'Pending periods $pendingCount',
+                pendingCount > 0 ? AppColors.amber500 : AppColors.statusAvailable,
+              ),
+              _attentionChip(
+                'Statements $statementCount',
+                statementCount > 0 ? AppColors.amber500 : AppColors.statusAvailable,
+              ),
+              _attentionChip(
+                'Disputes $disputeCount',
+                disputeCount > 0
+                    ? AppColors.statusCancelled
+                    : AppColors.statusAvailable,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _attentionSupportRow(
+            'Follow-up focus',
+            followUpSignals.isEmpty
+                ? 'No immediate Deliberry settlement follow-up signal is ahead of the others for the current snapshot.'
+                : followUpSignals.first,
+          ),
+          const SizedBox(height: 8),
+          _attentionSupportRow(
+            'Boundary',
+            'Read-only readiness surface only. Statement generation and deposit confirmation workflows remain in their tracked controls below.',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _attentionMetric(String label, String value, Color color) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 128, maxWidth: 180),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: GoogleFonts.notoSansKr(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _attentionChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.notoSansKr(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _attentionSupportRow(String label, String body) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 108,
+          child: Text(
+            label,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            body,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontSize: 12,
+              height: 1.45,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
