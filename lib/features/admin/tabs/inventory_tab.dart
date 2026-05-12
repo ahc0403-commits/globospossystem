@@ -2063,6 +2063,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     required bool hasOrders,
   }) {
     final order = detail.order;
+    final receipts = detail.receipts;
     final selectedOrderId = detail.selectedOrderId;
     final supplierMap = order?['supplier'] as Map<String, dynamic>?;
     final supplierName = supplierMap?['name']?.toString();
@@ -2073,6 +2074,27 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     final supplyAmount =
         (order?['total_supply_amount'] as num?)?.toDouble() ?? 0;
     final taxAmount = (order?['tax_amount'] as num?)?.toDouble() ?? 0;
+    final totalExpectedBase =
+        (order?['total_expected_quantity_base'] as num?)?.toDouble() ?? 0;
+    final totalReceivedBase =
+        (order?['total_received_quantity_base'] as num?)?.toDouble() ?? 0;
+    final totalAcceptedBase =
+        (order?['total_accepted_quantity_base'] as num?)?.toDouble() ?? 0;
+    final totalRejectedBase =
+        (order?['total_rejected_quantity_base'] as num?)?.toDouble() ?? 0;
+    final totalRemainingBase =
+        (order?['total_remaining_quantity_base'] as num?)?.toDouble() ?? 0;
+    final confirmedReceiptCount =
+        (order?['confirmed_receipt_count'] as num?)?.toInt() ?? 0;
+    final draftReceiptCount =
+        (order?['draft_receipt_count'] as num?)?.toInt() ?? 0;
+    final cancelledReceiptCount =
+        (order?['cancelled_receipt_count'] as num?)?.toInt() ?? 0;
+    final latestReceiptStatus = order?['latest_receipt_status']?.toString();
+    final latestReceiptAtRaw = order?['latest_receipt_at']?.toString();
+    final latestReceiptAt = latestReceiptAtRaw == null
+        ? null
+        : DateTime.tryParse(latestReceiptAtRaw)?.toLocal();
 
     return Container(
       width: double.infinity,
@@ -2203,6 +2225,21 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               ),
             ],
             const SizedBox(height: 12),
+            _buildReceiptVisibilitySection(
+              orderStatus: status,
+              expectedBase: totalExpectedBase,
+              receivedBase: totalReceivedBase,
+              acceptedBase: totalAcceptedBase,
+              rejectedBase: totalRejectedBase,
+              remainingBase: totalRemainingBase,
+              confirmedReceiptCount: confirmedReceiptCount,
+              draftReceiptCount: draftReceiptCount,
+              cancelledReceiptCount: cancelledReceiptCount,
+              latestReceiptStatus: latestReceiptStatus,
+              latestReceiptAt: latestReceiptAt,
+              receipts: receipts,
+            ),
+            const SizedBox(height: 12),
             if (detail.lines.isEmpty)
               Text(
                 'No line items are visible for the selected order.',
@@ -2218,6 +2255,132 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     .toList(),
               ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReceiptVisibilitySection({
+    required String orderStatus,
+    required double expectedBase,
+    required double receivedBase,
+    required double acceptedBase,
+    required double rejectedBase,
+    required double remainingBase,
+    required int confirmedReceiptCount,
+    required int draftReceiptCount,
+    required int cancelledReceiptCount,
+    required String? latestReceiptStatus,
+    required DateTime? latestReceiptAt,
+    required List<Map<String, dynamic>> receipts,
+  }) {
+    final readiness = _inventoryReceiptReadinessLabel(
+      orderStatus: orderStatus,
+      remainingBase: remainingBase,
+      confirmedReceiptCount: confirmedReceiptCount,
+    );
+    final visibilityStatus =
+        latestReceiptStatus ??
+        (confirmedReceiptCount > 0
+            ? 'confirmed'
+            : draftReceiptCount > 0
+            ? 'draft'
+            : 'none');
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Receipt Visibility',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Track receipt readiness and already recorded inbound quantities without opening receipt confirmation.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildIngredientMetaChip(
+                'Receipt status ${visibilityStatus.toUpperCase()}',
+                color: _receiptVisibilityColor(visibilityStatus),
+              ),
+              _buildIngredientMetaChip(
+                'Readiness $readiness',
+                color: _receiptReadinessColor(orderStatus, remainingBase),
+              ),
+              _buildIngredientMetaChip(
+                'Expected ${expectedBase.toStringAsFixed(3)} base',
+              ),
+              _buildIngredientMetaChip(
+                'Received ${receivedBase.toStringAsFixed(3)} base',
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                'Accepted ${acceptedBase.toStringAsFixed(3)} base',
+                color: AppColors.amber500,
+              ),
+              _buildIngredientMetaChip(
+                'Remaining ${remainingBase.toStringAsFixed(3)} base',
+                color: _receiptReadinessColor(orderStatus, remainingBase),
+              ),
+              if (rejectedBase > 0)
+                _buildIngredientMetaChip(
+                  'Rejected ${rejectedBase.toStringAsFixed(3)} base',
+                  color: AppColors.statusOccupied,
+                ),
+              _buildIngredientMetaChip(
+                'Confirmed receipts $confirmedReceiptCount',
+                color: AppColors.statusAvailable,
+              ),
+              if (draftReceiptCount > 0)
+                _buildIngredientMetaChip(
+                  'Draft receipts $draftReceiptCount',
+                  color: AppColors.statusOccupied,
+                ),
+              if (cancelledReceiptCount > 0)
+                _buildIngredientMetaChip(
+                  'Cancelled receipts $cancelledReceiptCount',
+                  color: AppColors.statusCancelled,
+                ),
+              _buildIngredientMetaChip(
+                latestReceiptAt == null
+                    ? 'No receipt timestamp yet'
+                    : 'Latest receipt ${DateFormat('yyyy-MM-dd HH:mm').format(latestReceiptAt)}',
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _inventoryReceiptReadinessNarrative(
+              orderStatus: orderStatus,
+              remainingBase: remainingBase,
+              confirmedReceiptCount: confirmedReceiptCount,
+              hasReceiptHistory: receipts.isNotEmpty,
+            ),
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
         ],
       ),
     );
@@ -2247,6 +2410,16 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     final memo = line['memo']?.toString();
     final orderUnit = line['order_unit']?.toString() ?? 'unit';
     final snapshotRunId = snapshot?['run_id']?.toString();
+    final receivedBase =
+        (line['received_quantity_base'] as num?)?.toDouble() ?? 0;
+    final acceptedBase =
+        (line['accepted_quantity_base'] as num?)?.toDouble() ?? 0;
+    final rejectedBase =
+        (line['rejected_quantity_base'] as num?)?.toDouble() ?? 0;
+    final remainingBase =
+        (line['remaining_quantity_base'] as num?)?.toDouble() ?? 0;
+    final receiptVisibilityStatus =
+        line['receipt_visibility_status']?.toString() ?? 'pending';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -2305,6 +2478,23 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 'Ordered base ${orderedBase.toStringAsFixed(3)}',
               ),
               _buildIngredientMetaChip(
+                'Received ${receivedBase.toStringAsFixed(3)}',
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                'Accepted ${acceptedBase.toStringAsFixed(3)}',
+                color: AppColors.amber500,
+              ),
+              _buildIngredientMetaChip(
+                'Remaining ${remainingBase.toStringAsFixed(3)}',
+                color: _receiptVisibilityColor(receiptVisibilityStatus),
+              ),
+              if (rejectedBase > 0)
+                _buildIngredientMetaChip(
+                  'Rejected ${rejectedBase.toStringAsFixed(3)}',
+                  color: AppColors.statusOccupied,
+                ),
+              _buildIngredientMetaChip(
                 'Recommended ${recommendedBase.toStringAsFixed(3)}',
               ),
               _buildIngredientMetaChip(
@@ -2321,6 +2511,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     ? 'Recommendation provenance unavailable'
                     : 'Recommendation ${snapshotRunId.substring(0, 8)}',
                 color: _recommendationRiskColor(riskStatus),
+              ),
+              _buildIngredientMetaChip(
+                'Receipt ${receiptVisibilityStatus.toUpperCase()}',
+                color: _receiptVisibilityColor(receiptVisibilityStatus),
               ),
             ],
           ),
@@ -2439,6 +2633,69 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     'normal' => AppColors.amber500,
     _ => AppColors.statusAvailable,
   };
+
+  Color _receiptVisibilityColor(String status) => switch (status) {
+    'received' || 'confirmed' => AppColors.statusAvailable,
+    'partially_received' => AppColors.amber500,
+    'draft' => AppColors.statusOccupied,
+    'cancelled' => AppColors.statusCancelled,
+    _ => AppColors.surface2,
+  };
+
+  Color _receiptReadinessColor(String orderStatus, double remainingBase) {
+    if (orderStatus == 'received' || remainingBase <= 0) {
+      return AppColors.statusAvailable;
+    }
+    if (orderStatus == 'office_approved' ||
+        orderStatus == 'ordered' ||
+        orderStatus == 'partially_received') {
+      return AppColors.amber500;
+    }
+    return AppColors.statusOccupied;
+  }
+
+  String _inventoryReceiptReadinessLabel({
+    required String orderStatus,
+    required double remainingBase,
+    required int confirmedReceiptCount,
+  }) {
+    if (orderStatus == 'received' || remainingBase <= 0) {
+      return 'Complete';
+    }
+    if (orderStatus == 'partially_received' || confirmedReceiptCount > 0) {
+      return 'Partial';
+    }
+    if (orderStatus == 'office_approved' || orderStatus == 'ordered') {
+      return 'Ready';
+    }
+    if (orderStatus == 'cancelled' || orderStatus == 'office_rejected') {
+      return 'Blocked';
+    }
+    return 'Hold';
+  }
+
+  String _inventoryReceiptReadinessNarrative({
+    required String orderStatus,
+    required double remainingBase,
+    required int confirmedReceiptCount,
+    required bool hasReceiptHistory,
+  }) {
+    if (orderStatus == 'received' || remainingBase <= 0) {
+      return 'This purchase order is fully received in the tracked POS scope. No receipt confirmation action is exposed here.';
+    }
+    if (orderStatus == 'partially_received' || confirmedReceiptCount > 0) {
+      return 'Confirmed receipts already exist for this order. Use the remaining quantity signal to understand what is still outstanding without mutating stock.';
+    }
+    if (orderStatus == 'office_approved' || orderStatus == 'ordered') {
+      return hasReceiptHistory
+          ? 'Receipt history exists, but confirmed inbound quantity is still incomplete for this order.'
+          : 'This order is receipt-ready once goods arrive, but no receipt history is visible yet.';
+    }
+    if (orderStatus == 'cancelled' || orderStatus == 'office_rejected') {
+      return 'This order is not receipt-ready in its current status. Visibility is read-only and does not open approval or correction flows.';
+    }
+    return 'This order still waits on an earlier workflow step before receipt confirmation becomes relevant. Visibility remains read-only here.';
+  }
 
   Future<void> _showRecommendationRunDialog({
     required BuildContext context,

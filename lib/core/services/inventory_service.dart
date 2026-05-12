@@ -346,10 +346,120 @@ class InventoryService {
         .eq('purchase_order_id', purchaseOrderId)
         .order('supply_amount', ascending: false);
 
-    return {
-      'order': Map<String, dynamic>.from(order),
-      'lines': List<Map<String, dynamic>>.from(lines as List),
-    };
+    final receipts = await supabase
+        .from('inventory_receipts')
+        .select('id, status, received_at, created_at, memo')
+        .eq('purchase_order_id', purchaseOrderId)
+        .order('received_at', ascending: false);
+
+    final receiptList = List<Map<String, dynamic>>.from(receipts as List);
+    final receiptIds = receiptList.map((receipt) => receipt['id']).toList();
+    final receiptLines = receiptIds.isEmpty
+        ? <Map<String, dynamic>>[]
+        : List<Map<String, dynamic>>.from(
+            await supabase
+                    .from('inventory_receipt_lines')
+                    .select(
+                      'receipt_id, purchase_order_line_id, received_quantity_base, accepted_quantity_base, rejected_quantity_base, memo',
+                    )
+                    .inFilter('receipt_id', receiptIds)
+                as List,
+          );
+
+    final receiptStatusById = <String, String>{};
+    var confirmedReceiptCount = 0;
+    var draftReceiptCount = 0;
+    var cancelledReceiptCount = 0;
+    for (final receipt in receiptList) {
+      final receiptId = receipt['id']?.toString();
+      final status = receipt['status']?.toString() ?? 'draft';
+      if (receiptId != null) {
+        receiptStatusById[receiptId] = status;
+      }
+      switch (status) {
+        case 'confirmed':
+          confirmedReceiptCount += 1;
+          break;
+        case 'cancelled':
+          cancelledReceiptCount += 1;
+          break;
+        default:
+          draftReceiptCount += 1;
+      }
+    }
+
+    final receivedByLine = <String, double>{};
+    final acceptedByLine = <String, double>{};
+    final rejectedByLine = <String, double>{};
+    for (final receiptLine in receiptLines) {
+      final lineId = receiptLine['purchase_order_line_id']?.toString();
+      final receiptId = receiptLine['receipt_id']?.toString();
+      if (lineId == null || receiptId == null) continue;
+
+      final status = receiptStatusById[receiptId] ?? 'draft';
+      if (status != 'confirmed') continue;
+
+      receivedByLine[lineId] =
+          (receivedByLine[lineId] ?? 0) +
+          ((receiptLine['received_quantity_base'] as num?)?.toDouble() ?? 0);
+      acceptedByLine[lineId] =
+          (acceptedByLine[lineId] ?? 0) +
+          ((receiptLine['accepted_quantity_base'] as num?)?.toDouble() ?? 0);
+      rejectedByLine[lineId] =
+          (rejectedByLine[lineId] ?? 0) +
+          ((receiptLine['rejected_quantity_base'] as num?)?.toDouble() ?? 0);
+    }
+
+    var totalExpectedBase = 0.0;
+    var totalReceivedBase = 0.0;
+    var totalAcceptedBase = 0.0;
+    var totalRejectedBase = 0.0;
+    final lineList = List<Map<String, dynamic>>.from(lines as List).map((line) {
+      final copy = Map<String, dynamic>.from(line);
+      final lineId = copy['id']?.toString() ?? '';
+      final orderedBase =
+          (copy['ordered_quantity_base'] as num?)?.toDouble() ?? 0;
+      final receivedBase = receivedByLine[lineId] ?? 0;
+      final acceptedBase = acceptedByLine[lineId] ?? 0;
+      final rejectedBase = rejectedByLine[lineId] ?? 0;
+      final remainingBase = orderedBase - acceptedBase;
+
+      totalExpectedBase += orderedBase;
+      totalReceivedBase += receivedBase;
+      totalAcceptedBase += acceptedBase;
+      totalRejectedBase += rejectedBase;
+
+      copy['received_quantity_base'] = receivedBase;
+      copy['accepted_quantity_base'] = acceptedBase;
+      copy['rejected_quantity_base'] = rejectedBase;
+      copy['remaining_quantity_base'] = remainingBase > 0 ? remainingBase : 0;
+      copy['receipt_visibility_status'] =
+          acceptedBase >= orderedBase && orderedBase > 0
+          ? 'received'
+          : acceptedBase > 0
+          ? 'partially_received'
+          : 'pending';
+      return copy;
+    }).toList();
+
+    final latestReceipt = receiptList.isEmpty ? null : receiptList.first;
+    final orderCopy = Map<String, dynamic>.from(order);
+    orderCopy['confirmed_receipt_count'] = confirmedReceiptCount;
+    orderCopy['draft_receipt_count'] = draftReceiptCount;
+    orderCopy['cancelled_receipt_count'] = cancelledReceiptCount;
+    orderCopy['total_expected_quantity_base'] = totalExpectedBase;
+    orderCopy['total_received_quantity_base'] = totalReceivedBase;
+    orderCopy['total_accepted_quantity_base'] = totalAcceptedBase;
+    orderCopy['total_rejected_quantity_base'] = totalRejectedBase;
+    orderCopy['total_remaining_quantity_base'] =
+        totalExpectedBase - totalAcceptedBase > 0
+        ? totalExpectedBase - totalAcceptedBase
+        : 0;
+    orderCopy['latest_receipt_status'] = latestReceipt?['status'];
+    orderCopy['latest_receipt_at'] =
+        latestReceipt?['received_at'] ?? latestReceipt?['created_at'];
+
+    return {'order': orderCopy, 'lines': lineList, 'receipts': receiptList};
   }
 
   Future<List<Map<String, dynamic>>> _rpcList(

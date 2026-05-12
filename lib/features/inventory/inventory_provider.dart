@@ -855,6 +855,7 @@ class InventoryPurchaseOrderDetailState {
   final String? selectedOrderId;
   final Map<String, dynamic>? order;
   final List<Map<String, dynamic>> lines;
+  final List<Map<String, dynamic>> receipts;
   final bool isLoading;
   final String? error;
 
@@ -862,6 +863,7 @@ class InventoryPurchaseOrderDetailState {
     this.selectedOrderId,
     this.order,
     this.lines = const [],
+    this.receipts = const [],
     this.isLoading = false,
     this.error,
   });
@@ -870,6 +872,7 @@ class InventoryPurchaseOrderDetailState {
     String? selectedOrderId,
     Map<String, dynamic>? order,
     List<Map<String, dynamic>>? lines,
+    List<Map<String, dynamic>>? receipts,
     bool? isLoading,
     String? error,
     bool clearError = false,
@@ -877,6 +880,7 @@ class InventoryPurchaseOrderDetailState {
     selectedOrderId: selectedOrderId ?? this.selectedOrderId,
     order: order ?? this.order,
     lines: lines ?? this.lines,
+    receipts: receipts ?? this.receipts,
     isLoading: isLoading ?? this.isLoading,
     error: clearError ? null : (error ?? this.error),
   );
@@ -901,6 +905,7 @@ class InventoryPurchaseOrderDetailNotifier
         state = state.copyWith(
           order: null,
           lines: const [],
+          receipts: const [],
           isLoading: false,
           error: 'The selected purchase order is no longer available.',
         );
@@ -910,6 +915,7 @@ class InventoryPurchaseOrderDetailNotifier
       state = state.copyWith(
         order: Map<String, dynamic>.from(detail['order'] as Map),
         lines: List<Map<String, dynamic>>.from(detail['lines'] as List),
+        receipts: List<Map<String, dynamic>>.from(detail['receipts'] as List),
         isLoading: false,
       );
     } catch (e) {
