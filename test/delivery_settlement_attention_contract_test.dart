@@ -23,7 +23,11 @@ void main() {
     expect(tab, contains('Follow-up now'));
     expect(tab, contains('Statements waiting'));
     expect(tab, contains('Settled periods'));
+    expect(tab, contains('Net at risk'));
+    expect(tab, contains('Ready to confirm'));
     expect(tab, contains('Follow-up focus'));
+    expect(tab, contains('Deposit readiness'));
+    expect(tab, contains('At-risk mix'));
     expect(tab, contains('Boundary'));
 
     expect(provider, contains(".from('v_settlement_summary')"));

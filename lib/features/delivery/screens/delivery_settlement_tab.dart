@@ -175,12 +175,23 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
     required List<DeliverySettlement> settlements,
   }) {
     final unsettledOrders = unsettled?.orderCount ?? 0;
+    final unsettledRevenue = unsettled?.revenue ?? 0;
     final pendingCount = settlements.where((s) => s.status == 'pending').length;
     final statementCount = settlements
         .where((s) => s.status == 'calculated')
         .length;
     final disputeCount = settlements.where((s) => s.status == 'disputed').length;
     final settledCount = settlements.where((s) => s.status == 'received').length;
+    final statementNet = settlements
+        .where((s) => s.status == 'calculated')
+        .fold<double>(0, (sum, s) => sum + s.netSettlement);
+    final pendingNet = settlements
+        .where((s) => s.status == 'pending')
+        .fold<double>(0, (sum, s) => sum + s.netSettlement);
+    final disputedNet = settlements
+        .where((s) => s.status == 'disputed')
+        .fold<double>(0, (sum, s) => sum + s.netSettlement);
+    final atRiskNet = unsettledRevenue + pendingNet + statementNet + disputedNet;
     final followUpSignals = [
       if (unsettledOrders > 0) 'Unsettled Deliberry revenue is still open.',
       if (statementCount > 0) 'Generated statements still need deposit confirmation.',
@@ -236,6 +247,13 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
                 '$settledCount',
                 AppColors.statusAvailable,
               ),
+              _attentionMetric(
+                'Net at risk',
+                _fmtVnd(atRiskNet),
+                atRiskNet > 0
+                    ? AppColors.statusCancelled
+                    : AppColors.statusAvailable,
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -263,6 +281,12 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
                     ? AppColors.statusCancelled
                     : AppColors.statusAvailable,
               ),
+              _attentionChip(
+                'Ready to confirm $statementCount',
+                statementCount > 0
+                    ? AppColors.amber500
+                    : AppColors.statusAvailable,
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -271,6 +295,26 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
             followUpSignals.isEmpty
                 ? 'No immediate Deliberry settlement follow-up signal is ahead of the others for the current snapshot.'
                 : followUpSignals.first,
+          ),
+          const SizedBox(height: 8),
+          _attentionSupportRow(
+            'Deposit readiness',
+            _depositReadinessCopy(
+              statementCount: statementCount,
+              statementNet: statementNet,
+              unsettledOrders: unsettledOrders,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _attentionSupportRow(
+            'At-risk mix',
+            _atRiskMixCopy(
+              pendingCount: pendingCount,
+              disputeCount: disputeCount,
+              unsettledRevenue: unsettledRevenue,
+              pendingNet: pendingNet,
+              disputedNet: disputedNet,
+            ),
           ),
           const SizedBox(height: 8),
           _attentionSupportRow(
@@ -362,6 +406,39 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
         ),
       ],
     );
+  }
+
+  String _depositReadinessCopy({
+    required int statementCount,
+    required double statementNet,
+    required int unsettledOrders,
+  }) {
+    if (statementCount > 0) {
+      return '$statementCount generated statements worth ${_fmtVnd(statementNet)} are ready for the tracked deposit-confirmation step.';
+    }
+    if (unsettledOrders > 0) {
+      return 'There are still unsettled Deliberry orders, so the next financial checkpoint is statement generation rather than deposit confirmation.';
+    }
+    return 'No immediate deposit-confirmation queue is visible in the current settlement snapshot.';
+  }
+
+  String _atRiskMixCopy({
+    required int pendingCount,
+    required int disputeCount,
+    required double unsettledRevenue,
+    required double pendingNet,
+    required double disputedNet,
+  }) {
+    if (disputeCount > 0) {
+      return '$disputeCount disputed periods account for ${_fmtVnd(disputedNet)} of the current at-risk settlement surface.';
+    }
+    if (pendingCount > 0) {
+      return '$pendingCount pending periods still represent ${_fmtVnd(pendingNet)} before final statement confirmation is possible.';
+    }
+    if (unsettledRevenue > 0) {
+      return 'The remaining at-risk exposure is concentrated in open Deliberry revenue: ${_fmtVnd(unsettledRevenue)}.';
+    }
+    return 'No material at-risk settlement mix is visible beyond the already-settled periods.';
   }
 
   // ─── 정산 합계 요약 ──────────────────
