@@ -2366,6 +2366,18 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     final history = List<Map<String, dynamic>>.from(
       line['supplier_history'] as List? ?? const [],
     );
+    final currentUnitPrice = (line['unit_price'] as num?)?.toDouble() ?? 0;
+    final latestHistoryUnitPrice = history.isEmpty
+        ? null
+        : (history.first['unit_price'] as num?)?.toDouble();
+    final unitPriceDriftLabel = _inventoryUnitPriceDriftLabel(
+      currentUnitPrice: currentUnitPrice,
+      previousUnitPrice: latestHistoryUnitPrice,
+    );
+    final unitPriceDriftColor = _inventoryUnitPriceDriftColor(
+      currentUnitPrice: currentUnitPrice,
+      previousUnitPrice: latestHistoryUnitPrice,
+    );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -2394,6 +2406,20 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildIngredientMetaChip(
+                'Current unit ${_formatCurrencyCompact(currentUnitPrice)}',
+              ),
+              _buildIngredientMetaChip(
+                unitPriceDriftLabel,
+                color: unitPriceDriftColor,
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           Column(
@@ -2818,6 +2844,22 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         (line['remaining_quantity_base'] as num?)?.toDouble() ?? 0;
     final receiptVisibilityStatus =
         line['receipt_visibility_status']?.toString() ?? 'pending';
+    final supplierHistory = List<Map<String, dynamic>>.from(
+      line['supplier_history'] as List? ?? const [],
+    );
+    final latestSupplierHistory = supplierHistory.isEmpty
+        ? null
+        : supplierHistory.first;
+    final latestHistoryUnitPrice =
+        (latestSupplierHistory?['unit_price'] as num?)?.toDouble();
+    final unitPriceDriftLabel = _inventoryUnitPriceDriftLabel(
+      currentUnitPrice: unitPrice,
+      previousUnitPrice: latestHistoryUnitPrice,
+    );
+    final unitPriceDriftColor = _inventoryUnitPriceDriftColor(
+      currentUnitPrice: unitPrice,
+      previousUnitPrice: latestHistoryUnitPrice,
+    );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -2897,6 +2939,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               ),
               _buildIngredientMetaChip(
                 'Unit ${_formatCurrencyCompact(unitPrice)}',
+              ),
+              _buildIngredientMetaChip(
+                unitPriceDriftLabel,
+                color: unitPriceDriftColor,
               ),
               _buildIngredientMetaChip(
                 'Supply ${_formatCurrencyCompact(supplyAmount)}',
@@ -3055,6 +3101,45 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     'normal' => AppColors.amber500,
     _ => AppColors.statusAvailable,
   };
+
+  String _inventoryUnitPriceDriftLabel({
+    required double currentUnitPrice,
+    required double? previousUnitPrice,
+  }) {
+    if (previousUnitPrice == null || previousUnitPrice <= 0) {
+      return 'Price drift unavailable';
+    }
+
+    final deltaRatio =
+        (currentUnitPrice - previousUnitPrice) / previousUnitPrice;
+    final percent = (deltaRatio.abs() * 100).toStringAsFixed(1);
+    if (deltaRatio.abs() < 0.02) {
+      return 'Price drift stable ($percent%)';
+    }
+    if (deltaRatio > 0) {
+      return 'Price drift up $percent%';
+    }
+    return 'Price drift down $percent%';
+  }
+
+  Color _inventoryUnitPriceDriftColor({
+    required double currentUnitPrice,
+    required double? previousUnitPrice,
+  }) {
+    if (previousUnitPrice == null || previousUnitPrice <= 0) {
+      return AppColors.surface2;
+    }
+
+    final deltaRatio =
+        (currentUnitPrice - previousUnitPrice) / previousUnitPrice;
+    if (deltaRatio.abs() < 0.02) {
+      return AppColors.statusAvailable;
+    }
+    if (deltaRatio > 0) {
+      return AppColors.statusOccupied;
+    }
+    return AppColors.amber500;
+  }
 
   Color _receiptVisibilityColor(String status) => switch (status) {
     'received' || 'confirmed' => AppColors.statusAvailable,
