@@ -644,6 +644,18 @@ class _OperationalAttentionSection extends StatelessWidget {
     final proofRate = summary.proofCompletePercent.toStringAsFixed(0);
     final healthySignals = _healthySignalCount();
     final followUpSignals = _followUpSignalCount();
+    final proofAttentionColor = summary.missingProofPhotosCount > 0
+        ? AppColors.statusCancelled
+        : summary.proofCompletePercent < 100
+        ? AppColors.amber500
+        : AppColors.statusAvailable;
+    final einvoiceAttentionColor = summary.failedEinvoiceJobsCount > 0
+        ? AppColors.statusCancelled
+        : AppColors.statusAvailable;
+    final wt08AttentionColor =
+        summary.wetaxReportedCount < summary.wt08ComparablePosCount
+        ? AppColors.amber500
+        : AppColors.statusAvailable;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -702,6 +714,44 @@ class _OperationalAttentionSection extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _signalCard(
+                title: l10n.reportsOperationalProofCompletion(proofRate),
+                headline: l10n.reportsOperationalMissingProof(
+                  summary.missingProofPhotosCount,
+                ),
+                body: summary.missingProofPhotosCount > 0
+                    ? l10n.reportsOperationalFocusMissingProof
+                    : l10n.reportsOperationalHealthyAligned,
+                color: proofAttentionColor,
+              ),
+              _signalCard(
+                title: l10n.reportsOperationalFailedEInvoice(
+                  summary.failedEinvoiceJobsCount,
+                ),
+                headline: l10n.reportsOperationalFollowUpFocus,
+                body: summary.failedEinvoiceJobsCount > 0
+                    ? l10n.reportsOperationalFocusFailedEinvoice
+                    : l10n.reportsOperationalFocusNone,
+                color: einvoiceAttentionColor,
+              ),
+              _signalCard(
+                title: l10n.reportsOperationalWt08Readiness,
+                headline: wt08CoverageText,
+                body: summary.wt08ComparablePosCount == 0
+                    ? l10n.reportsOperationalNotApplicable
+                    : summary.wetaxReportedCount <
+                          summary.wt08ComparablePosCount
+                    ? l10n.reportsOperationalFocusWt08
+                    : l10n.reportsOperationalHealthyAligned,
+                color: wt08AttentionColor,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
@@ -732,6 +782,32 @@ class _OperationalAttentionSection extends StatelessWidget {
                 summary.wetaxReportedCount < summary.wt08ComparablePosCount
                     ? AppColors.amber500
                     : AppColors.textPrimary,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _statusStrip(
+            children: [
+              _statusStripBadge(
+                label: l10n.reportsOperationalFollowUpNow,
+                value: '$followUpSignals',
+                color: followUpSignals > 0
+                    ? AppColors.statusCancelled
+                    : AppColors.statusAvailable,
+              ),
+              _statusStripBadge(
+                label: l10n.reportsOperationalHealthySignals,
+                value: '$healthySignals/4',
+                color: healthySignals == 4
+                    ? AppColors.statusAvailable
+                    : AppColors.amber500,
+              ),
+              _statusStripBadge(
+                label: l10n.reportsOperationalBoundary,
+                value: summary.totalOrders == 0
+                    ? l10n.reportsOperationalNotApplicable
+                    : '${summary.completedOrders}/${summary.totalOrders}',
+                color: AppColors.textPrimary,
               ),
             ],
           ),
@@ -813,6 +889,94 @@ class _OperationalAttentionSection extends StatelessWidget {
           color: color,
           fontSize: 12,
           fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _signalCard({
+    required String title,
+    required String headline,
+    required String body,
+    required Color color,
+  }) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 180, maxWidth: 260),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            headline,
+            style: GoogleFonts.notoSansKr(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            body,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusStrip({required List<Widget> children}) {
+    return Wrap(spacing: 10, runSpacing: 10, children: children);
+  }
+
+  Widget _statusStripBadge({
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: RichText(
+        text: TextSpan(
+          style: GoogleFonts.notoSansKr(
+            color: AppColors.textSecondary,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+          children: [
+            TextSpan(text: '$label '),
+            TextSpan(
+              text: value,
+              style: GoogleFonts.notoSansKr(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
         ),
       ),
     );
