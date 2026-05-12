@@ -475,6 +475,56 @@ class InventoryService {
     orderCopy['latest_receipt_at'] =
         latestReceipt?['received_at'] ?? latestReceipt?['created_at'];
 
+    final lineById = <String, Map<String, dynamic>>{};
+    for (final line in lineList) {
+      final lineId = line['id']?.toString();
+      if (lineId != null) {
+        lineById[lineId] = line;
+      }
+    }
+
+    final receiptLineDetailsById = <String, List<Map<String, dynamic>>>{};
+    for (final receiptLine in receiptLines) {
+      final receiptId = receiptLine['receipt_id']?.toString();
+      final purchaseOrderLineId =
+          receiptLine['purchase_order_line_id']?.toString() ?? '';
+      if (receiptId == null) continue;
+
+      final purchaseOrderLine = lineById[purchaseOrderLineId];
+      final snapshot = purchaseOrderLine?['recommendation_snapshot'] is Map
+          ? Map<String, dynamic>.from(
+              purchaseOrderLine!['recommendation_snapshot'] as Map,
+            )
+          : null;
+      final productMap = purchaseOrderLine?['product'] as Map<String, dynamic>?;
+      final detail = <String, dynamic>{
+        'purchase_order_line_id': purchaseOrderLineId,
+        'product_name':
+            productMap?['name']?.toString() ??
+            purchaseOrderLine?['product_id']?.toString() ??
+            receiptLine['product_id']?.toString() ??
+            '-',
+        'ordered_quantity_base':
+            (purchaseOrderLine?['ordered_quantity_base'] as num?)?.toDouble() ??
+            0,
+        'recommended_quantity_base':
+            (purchaseOrderLine?['recommended_quantity_base'] as num?)
+                ?.toDouble() ??
+            0,
+        'received_quantity_base':
+            (receiptLine['received_quantity_base'] as num?)?.toDouble() ?? 0,
+        'accepted_quantity_base':
+            (receiptLine['accepted_quantity_base'] as num?)?.toDouble() ?? 0,
+        'rejected_quantity_base':
+            (receiptLine['rejected_quantity_base'] as num?)?.toDouble() ?? 0,
+        'order_unit': purchaseOrderLine?['order_unit']?.toString() ?? 'unit',
+        'line_memo': receiptLine['memo']?.toString(),
+        'risk_status': snapshot?['risk_status']?.toString() ?? 'stable',
+        'recommendation_run_id': snapshot?['run_id']?.toString(),
+      };
+      receiptLineDetailsById.putIfAbsent(receiptId, () => []).add(detail);
+    }
+
     final enrichedReceipts = receiptList.map((receipt) {
       final copy = Map<String, dynamic>.from(receipt);
       final receiptId = copy['id']?.toString() ?? '';
@@ -482,6 +532,7 @@ class InventoryService {
       copy['received_quantity_base'] = receiptReceivedById[receiptId] ?? 0;
       copy['accepted_quantity_base'] = receiptAcceptedById[receiptId] ?? 0;
       copy['rejected_quantity_base'] = receiptRejectedById[receiptId] ?? 0;
+      copy['line_details'] = receiptLineDetailsById[receiptId] ?? const [];
       return copy;
     }).toList();
 
