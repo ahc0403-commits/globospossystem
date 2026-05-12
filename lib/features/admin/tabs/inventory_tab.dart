@@ -1113,6 +1113,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     final recommendationSnapshot = ref.watch(
       inventoryPurchaseRecommendationSnapshotProvider,
     );
+    final orderCreation = ref.watch(inventoryPurchaseOrderCreationProvider);
 
     final deduct = report.transactions
         .where((t) => t['transaction_type'] == 'deduct')
@@ -1171,6 +1172,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             overview: purchaseOverview,
             recommendationRun: recommendationRun,
             recommendationSnapshot: recommendationSnapshot,
+            orderCreation: orderCreation,
           ),
           const SizedBox(height: 12),
           Row(
@@ -1339,6 +1341,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     required InventoryPurchaseRecommendationRunState recommendationRun,
     required InventoryPurchaseRecommendationSnapshotState
     recommendationSnapshot,
+    required InventoryPurchaseOrderCreationState orderCreation,
   }) {
     final dashboard = overview.dashboard;
     final storeCount = (dashboard?['store_count'] as num?)?.toInt() ?? 0;
@@ -1494,7 +1497,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   _formatCurrencyCompact(approvedPurchaseAmount),
                 ),
                 const SizedBox(width: 8),
-                _purchaseMetricCard('Slice Mode', 'Read-only'),
+                _purchaseMetricCard('Slice Mode', 'Scoped mutation'),
               ],
             ),
             const SizedBox(height: 12),
@@ -1508,6 +1511,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             _buildLatestRecommendationSnapshot(
               storeId: storeId,
               snapshot: recommendationSnapshot,
+              orderCreation: orderCreation,
             ),
           ],
         ],
@@ -1561,7 +1565,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 8),
           _purchaseDetailRow(
             'Boundary',
-            'This slice may create a recommendation snapshot, but it still does not create purchase orders or mutate stock.',
+            'This slice may create recommendation snapshots and supplier-grouped purchase orders, but it still does not approve receipts or mutate stock.',
           ),
         ],
       ),
@@ -1571,6 +1575,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   Widget _buildLatestRecommendationSnapshot({
     required String? storeId,
     required InventoryPurchaseRecommendationSnapshotState snapshot,
+    required InventoryPurchaseOrderCreationState orderCreation,
   }) {
     final run = snapshot.run;
     final lineCount = snapshot.lines.length;
@@ -1659,6 +1664,41 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             ),
           ] else ...[
             const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed:
+                        storeId == null ||
+                            snapshot.isLoading ||
+                            orderCreation.isCreating
+                        ? null
+                        : () => _showCreatePurchaseOrdersDialog(
+                            context: context,
+                            storeId: storeId,
+                            snapshotRun: run,
+                          ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.amber500,
+                      foregroundColor: AppColors.surface0,
+                    ),
+                    icon: orderCreation.isCreating
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.shopping_cart_checkout),
+                    label: Text(
+                      orderCreation.isCreating
+                          ? 'Creating Purchase Orders...'
+                          : 'Create Purchase Orders',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -1679,6 +1719,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 ),
               ],
             ),
+            if (orderCreation.sourceRunId == run['id']?.toString()) ...[
+              const SizedBox(height: 12),
+              _buildPurchaseOrderCreationSummary(orderCreation.createdOrders),
+            ],
             const SizedBox(height: 12),
             if (snapshot.lines.isEmpty)
               Text(
@@ -1694,6 +1738,56 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     .map((line) => _buildRecommendationLineCard(line))
                     .toList(),
               ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPurchaseOrderCreationSummary(List<Map<String, dynamic>> orders) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Latest Purchase Order Creation',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            orders.isEmpty
+                ? 'The latest snapshot did not produce any supplier-qualified purchase orders.'
+                : '${orders.length} submitted purchase order(s) were created from the latest recommendation snapshot.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          if (orders.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: orders.map((order) {
+                final orderNo = order['purchase_order_no']?.toString() ?? '-';
+                final status = order['status']?.toString() ?? 'submitted';
+                return _buildIngredientMetaChip(
+                  '$orderNo · ${status.toUpperCase()}',
+                  color: AppColors.amber500,
+                );
+              }).toList(),
+            ),
           ],
         ],
       ),
@@ -1934,6 +2028,126 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     );
 
     targetDaysController.dispose();
+  }
+
+  Future<void> _showCreatePurchaseOrdersDialog({
+    required BuildContext context,
+    required String storeId,
+    required Map<String, dynamic> snapshotRun,
+  }) async {
+    DateTime? requestedDeliveryDate;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setModalState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface1,
+              title: Text(
+                'Create Purchase Orders',
+                style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+              ),
+              content: SizedBox(
+                width: 380,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Create submitted purchase orders grouped by supplier from the latest recommendation snapshot. This still does not confirm receipts or mutate stock.',
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Snapshot ${snapshotRun['id']?.toString().substring(0, 8) ?? '-'}',
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: dialogContext,
+                          initialDate:
+                              requestedDeliveryDate ??
+                              DateTime.now().add(const Duration(days: 1)),
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime.now().add(
+                            const Duration(days: 365),
+                          ),
+                        );
+                        if (picked != null) {
+                          setModalState(() => requestedDeliveryDate = picked);
+                        }
+                      },
+                      icon: const Icon(Icons.local_shipping_outlined),
+                      label: Text(
+                        requestedDeliveryDate == null
+                            ? 'Requested delivery date (optional)'
+                            : 'Requested ${DateFormat('yyyy-MM-dd').format(requestedDeliveryDate!)}',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    final success = await ref
+                        .read(inventoryPurchaseOrderCreationProvider.notifier)
+                        .createFromRecommendation(
+                          runId: snapshotRun['id'].toString(),
+                          requestedDeliveryDate: requestedDeliveryDate,
+                        );
+                    if (!dialogContext.mounted) return;
+
+                    final latest = ref.read(
+                      inventoryPurchaseOrderCreationProvider,
+                    );
+                    if (!success) {
+                      showErrorToast(
+                        dialogContext,
+                        latest.error ??
+                            'Failed to create supplier-grouped purchase orders.',
+                      );
+                      return;
+                    }
+
+                    await ref
+                        .read(inventoryPurchaseOverviewProvider.notifier)
+                        .load(storeId);
+                    if (!dialogContext.mounted) return;
+                    showSuccessToast(
+                      dialogContext,
+                      latest.createdOrders.isEmpty
+                          ? 'No supplier-qualified purchase orders were created.'
+                          : '${latest.createdOrders.length} purchase order(s) created.',
+                    );
+                    Navigator.of(dialogContext).pop();
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.amber500,
+                    foregroundColor: AppColors.surface0,
+                  ),
+                  child: const Text('Create Orders'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   String _txTypeLabel(String type) => switch (type) {

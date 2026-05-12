@@ -6,7 +6,7 @@ String readRepoFile(String path) => File(path).readAsStringSync();
 
 void main() {
   test(
-    'tracked inventory workspace exposes a bounded recommendation trigger and latest snapshot detail',
+    'tracked inventory workspace exposes a bounded recommendation workflow surface',
     () {
       final tab = readRepoFile('lib/features/admin/tabs/inventory_tab.dart');
       final provider = readRepoFile(
@@ -23,9 +23,12 @@ void main() {
       expect(tab, contains('Recommendation Status'));
       expect(tab, contains('Latest Recommendation Snapshot'));
       expect(tab, contains('Refresh Recommendation Snapshot'));
+      expect(tab, contains('Create Purchase Orders'));
+      expect(tab, contains('Latest Purchase Order Creation'));
       expect(tab, contains('inventoryPurchaseOverviewProvider'));
       expect(tab, contains('inventoryPurchaseRecommendationRunProvider'));
       expect(tab, contains('inventoryPurchaseRecommendationSnapshotProvider'));
+      expect(tab, contains('inventoryPurchaseOrderCreationProvider'));
       expect(tab, contains('Refresh Purchase Overview'));
 
       expect(provider, contains('class InventoryPurchaseOverviewState'));
@@ -43,6 +46,8 @@ void main() {
         provider,
         contains('inventoryPurchaseRecommendationSnapshotProvider'),
       );
+      expect(provider, contains('class InventoryPurchaseOrderCreationState'));
+      expect(provider, contains('inventoryPurchaseOrderCreationProvider'));
 
       expect(service, contains('fetchInventoryPurchaseDashboard'));
       expect(service, contains("'get_inventory_purchase_dashboard'"));
@@ -53,19 +58,18 @@ void main() {
         contains('fetchLatestInventoryPurchaseRecommendationRun'),
       );
       expect(service, contains('fetchInventoryPurchaseRecommendationLines'));
+      expect(service, contains('createPurchaseOrdersFromRecommendation'));
       expect(service, contains("'inventory_recommendation_runs'"));
       expect(service, contains("'inventory_recommendation_lines'"));
+      expect(service, contains("'create_purchase_orders_from_recommendation'"));
       expect(
         tab,
         contains(
-          'This slice may create a recommendation snapshot, but it still does not create purchase orders or mutate stock.',
+          'This slice may create recommendation snapshots and supplier-grouped purchase orders, but it still does not approve receipts or mutate stock.',
         ),
       );
-      expect(
-        tab,
-        isNot(contains('create_purchase_orders_from_recommendation')),
-      );
       expect(tab, isNot(contains('InventoryPurchaseScreen')));
+      expect(tab, isNot(contains('office_approve_inventory_purchase_order')));
     },
   );
 }

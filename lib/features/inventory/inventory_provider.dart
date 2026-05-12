@@ -710,3 +710,82 @@ final inventoryPurchaseRecommendationSnapshotProvider =
       InventoryPurchaseRecommendationSnapshotNotifier,
       InventoryPurchaseRecommendationSnapshotState
     >((ref) => InventoryPurchaseRecommendationSnapshotNotifier());
+
+class InventoryPurchaseOrderCreationState {
+  final bool isCreating;
+  final String? error;
+  final List<Map<String, dynamic>> createdOrders;
+  final String? sourceRunId;
+
+  const InventoryPurchaseOrderCreationState({
+    this.isCreating = false,
+    this.error,
+    this.createdOrders = const [],
+    this.sourceRunId,
+  });
+
+  InventoryPurchaseOrderCreationState copyWith({
+    bool? isCreating,
+    String? error,
+    bool clearError = false,
+    List<Map<String, dynamic>>? createdOrders,
+    String? sourceRunId,
+  }) => InventoryPurchaseOrderCreationState(
+    isCreating: isCreating ?? this.isCreating,
+    error: clearError ? null : (error ?? this.error),
+    createdOrders: createdOrders ?? this.createdOrders,
+    sourceRunId: sourceRunId ?? this.sourceRunId,
+  );
+}
+
+class InventoryPurchaseOrderCreationNotifier
+    extends StateNotifier<InventoryPurchaseOrderCreationState> {
+  InventoryPurchaseOrderCreationNotifier()
+    : super(const InventoryPurchaseOrderCreationState());
+
+  Future<bool> createFromRecommendation({
+    required String runId,
+    DateTime? requestedDeliveryDate,
+  }) async {
+    state = state.copyWith(isCreating: true, clearError: true);
+    try {
+      final orders = await inventoryService
+          .createPurchaseOrdersFromRecommendation(
+            runId: runId,
+            requestedDeliveryDate: requestedDeliveryDate,
+          );
+      state = state.copyWith(
+        isCreating: false,
+        createdOrders: orders,
+        sourceRunId: runId,
+      );
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isCreating: false,
+        error: _mapInventoryPurchaseOrderCreationError(e),
+      );
+      return false;
+    }
+  }
+
+  String _mapInventoryPurchaseOrderCreationError(Object error) {
+    final fallback = 'Failed to create supplier-grouped purchase orders.';
+    final message = error.toString();
+
+    if (message.contains('INVENTORY_RECOMMENDATION_RUN_NOT_FOUND')) {
+      return 'The selected recommendation snapshot is no longer available.';
+    }
+    if (message.contains('INVENTORY_PURCHASE_FORBIDDEN')) {
+      return 'No permission to create purchase orders for this store.';
+    }
+
+    return fallback;
+  }
+}
+
+final inventoryPurchaseOrderCreationProvider =
+    StateNotifierProvider<
+      InventoryPurchaseOrderCreationNotifier,
+      InventoryPurchaseOrderCreationState
+    >((ref) => InventoryPurchaseOrderCreationNotifier());
