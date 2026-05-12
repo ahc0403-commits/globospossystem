@@ -370,6 +370,10 @@ class InventoryService {
     var confirmedReceiptCount = 0;
     var draftReceiptCount = 0;
     var cancelledReceiptCount = 0;
+    final receiptLineCountById = <String, int>{};
+    final receiptReceivedById = <String, double>{};
+    final receiptAcceptedById = <String, double>{};
+    final receiptRejectedById = <String, double>{};
     for (final receipt in receiptList) {
       final receiptId = receipt['id']?.toString();
       final status = receipt['status']?.toString() ?? 'draft';
@@ -395,6 +399,18 @@ class InventoryService {
       final lineId = receiptLine['purchase_order_line_id']?.toString();
       final receiptId = receiptLine['receipt_id']?.toString();
       if (lineId == null || receiptId == null) continue;
+
+      receiptLineCountById[receiptId] =
+          (receiptLineCountById[receiptId] ?? 0) + 1;
+      receiptReceivedById[receiptId] =
+          (receiptReceivedById[receiptId] ?? 0) +
+          ((receiptLine['received_quantity_base'] as num?)?.toDouble() ?? 0);
+      receiptAcceptedById[receiptId] =
+          (receiptAcceptedById[receiptId] ?? 0) +
+          ((receiptLine['accepted_quantity_base'] as num?)?.toDouble() ?? 0);
+      receiptRejectedById[receiptId] =
+          (receiptRejectedById[receiptId] ?? 0) +
+          ((receiptLine['rejected_quantity_base'] as num?)?.toDouble() ?? 0);
 
       final status = receiptStatusById[receiptId] ?? 'draft';
       if (status != 'confirmed') continue;
@@ -459,7 +475,21 @@ class InventoryService {
     orderCopy['latest_receipt_at'] =
         latestReceipt?['received_at'] ?? latestReceipt?['created_at'];
 
-    return {'order': orderCopy, 'lines': lineList, 'receipts': receiptList};
+    final enrichedReceipts = receiptList.map((receipt) {
+      final copy = Map<String, dynamic>.from(receipt);
+      final receiptId = copy['id']?.toString() ?? '';
+      copy['line_count'] = receiptLineCountById[receiptId] ?? 0;
+      copy['received_quantity_base'] = receiptReceivedById[receiptId] ?? 0;
+      copy['accepted_quantity_base'] = receiptAcceptedById[receiptId] ?? 0;
+      copy['rejected_quantity_base'] = receiptRejectedById[receiptId] ?? 0;
+      return copy;
+    }).toList();
+
+    return {
+      'order': orderCopy,
+      'lines': lineList,
+      'receipts': enrichedReceipts,
+    };
   }
 
   Future<List<Map<String, dynamic>>> _rpcList(

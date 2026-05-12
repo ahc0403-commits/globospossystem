@@ -2240,6 +2240,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               receipts: receipts,
             ),
             const SizedBox(height: 12),
+            _buildRecentReceiptsTimeline(receipts),
+            const SizedBox(height: 12),
             if (detail.lines.isEmpty)
               Text(
                 'No line items are visible for the selected order.',
@@ -2254,6 +2256,139 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     .map((line) => _buildPurchaseOrderLineCard(line))
                     .toList(),
               ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecentReceiptsTimeline(List<Map<String, dynamic>> receipts) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Recent Receipts',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Review receipt history in timeline form without opening receipt confirmation or stock mutation workflows.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (receipts.isEmpty)
+            Text(
+              'No receipt records are visible for this purchase order yet.',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            )
+          else
+            Column(
+              children: receipts
+                  .map((receipt) => _buildReceiptTimelineCard(receipt))
+                  .toList(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReceiptTimelineCard(Map<String, dynamic> receipt) {
+    final status = receipt['status']?.toString() ?? 'draft';
+    final memo = receipt['memo']?.toString();
+    final lineCount = (receipt['line_count'] as num?)?.toInt() ?? 0;
+    final receivedBase =
+        (receipt['received_quantity_base'] as num?)?.toDouble() ?? 0;
+    final acceptedBase =
+        (receipt['accepted_quantity_base'] as num?)?.toDouble() ?? 0;
+    final rejectedBase =
+        (receipt['rejected_quantity_base'] as num?)?.toDouble() ?? 0;
+    final receivedAtRaw =
+        receipt['received_at']?.toString() ?? receipt['created_at']?.toString();
+    final receivedAt = receivedAtRaw == null
+        ? null
+        : DateTime.tryParse(receivedAtRaw)?.toLocal();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _receiptVisibilityColor(status)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  receivedAt == null
+                      ? 'Receipt time unavailable'
+                      : 'Receipt ${DateFormat('yyyy-MM-dd HH:mm').format(receivedAt)}',
+                  style: GoogleFonts.notoSansKr(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              _buildIngredientMetaChip(
+                status.toUpperCase(),
+                color: _receiptVisibilityColor(status),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildIngredientMetaChip(
+                'Lines $lineCount',
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                'Received ${receivedBase.toStringAsFixed(3)} base',
+              ),
+              _buildIngredientMetaChip(
+                'Accepted ${acceptedBase.toStringAsFixed(3)} base',
+                color: AppColors.amber500,
+              ),
+              _buildIngredientMetaChip(
+                'Rejected ${rejectedBase.toStringAsFixed(3)} base',
+                color: rejectedBase > 0
+                    ? AppColors.statusOccupied
+                    : AppColors.surface2,
+              ),
+            ],
+          ),
+          if (memo != null && memo.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Receipt memo: $memo',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
           ],
         ],
       ),
