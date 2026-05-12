@@ -655,3 +655,66 @@ final qcAnalyticsProvider = FutureProvider.family
         to: params.to,
       );
     });
+
+class QcIssueQueueState {
+  const QcIssueQueueState({
+    this.issues = const [],
+    this.isLoading = false,
+    this.error,
+  });
+
+  final List<Map<String, dynamic>> issues;
+  final bool isLoading;
+  final String? error;
+
+  QcIssueQueueState copyWith({
+    List<Map<String, dynamic>>? issues,
+    bool? isLoading,
+    String? error,
+    bool clearError = false,
+  }) {
+    return QcIssueQueueState(
+      issues: issues ?? this.issues,
+      isLoading: isLoading ?? this.isLoading,
+      error: clearError ? null : (error ?? this.error),
+    );
+  }
+}
+
+class QcIssueQueueNotifier extends StateNotifier<QcIssueQueueState> {
+  QcIssueQueueNotifier() : super(const QcIssueQueueState());
+
+  Future<void> load(String storeId) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final issues = await qcService.fetchIssueQueue(storeId: storeId);
+      state = state.copyWith(
+        issues: issues,
+        isLoading: false,
+        clearError: true,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: _mapIssueQueueError(e, 'Failed to load QSC issue queue.'),
+      );
+    }
+  }
+
+  String _mapIssueQueueError(Object error, String fallback) {
+    final message = error is PostgrestException ? error.message : '$error';
+
+    if (message.contains('permission') ||
+        message.contains('forbidden') ||
+        message.contains('not allowed')) {
+      return 'No permission to view the QSC issue queue.';
+    }
+
+    return fallback;
+  }
+}
+
+final qcIssueQueueProvider =
+    StateNotifierProvider<QcIssueQueueNotifier, QcIssueQueueState>(
+      (ref) => QcIssueQueueNotifier(),
+    );
