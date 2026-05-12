@@ -637,6 +637,8 @@ class _OperationalAttentionSection extends StatelessWidget {
         ? 'No WT08-comparable POS orders in the selected period'
         : '${summary.wetaxReportedCount}/${summary.wt08ComparablePosCount} WT08-comparable POS orders reported';
     final proofRate = summary.proofCompletePercent.toStringAsFixed(0);
+    final healthySignals = _healthySignalCount();
+    final followUpSignals = _followUpSignalCount();
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -662,6 +664,34 @@ class _OperationalAttentionSection extends StatelessWidget {
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _supportMetric(
+                'Follow-up now',
+                '$followUpSignals',
+                followUpSignals > 0
+                    ? AppColors.statusCancelled
+                    : AppColors.statusAvailable,
+              ),
+              _supportMetric(
+                'Healthy signals',
+                '$healthySignals/4',
+                healthySignals == 4
+                    ? AppColors.statusAvailable
+                    : AppColors.amber500,
+              ),
+              _supportMetric(
+                'WT08 readiness',
+                summary.wt08ComparablePosCount == 0 ? 'N/A' : wt08CoverageText,
+                summary.wetaxReportedCount < summary.wt08ComparablePosCount
+                    ? AppColors.amber500
+                    : AppColors.textPrimary,
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -695,12 +725,62 @@ class _OperationalAttentionSection extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
+          _attentionSupportRow(
+            'Follow-up focus',
+            _followUpFocusCopy(),
+          ),
+          const SizedBox(height: 8),
+          _attentionSupportRow(
+            'Healthy baseline',
+            _healthyBaselineCopy(),
+          ),
+          const SizedBox(height: 8),
+          _attentionSupportRow(
+            'Boundary',
+            'Read-only operational readiness surface. Retry, dispatch, and close workflows stay outside this slice.',
+          ),
+          const SizedBox(height: 12),
           Text(
             _attentionNarrative(),
             style: GoogleFonts.notoSansKr(
               color: AppColors.textPrimary,
               fontSize: 12,
               height: 1.45,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _supportMetric(String label, String value, Color color) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 132, maxWidth: 220),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: GoogleFonts.notoSansKr(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              height: 1.35,
             ),
           ),
         ],
@@ -725,6 +805,69 @@ class _OperationalAttentionSection extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _attentionSupportRow(String label, String body) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 108,
+          child: Text(
+            label,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            body,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontSize: 12,
+              height: 1.45,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  int _followUpSignalCount() {
+    var count = 0;
+    if (summary.failedEinvoiceJobsCount > 0) count += 1;
+    if (summary.missingProofPhotosCount > 0) count += 1;
+    if (summary.wetaxReportedCount < summary.wt08ComparablePosCount) count += 1;
+    if (summary.proofCompletePercent < 100) count += 1;
+    return count;
+  }
+
+  int _healthySignalCount() => 4 - _followUpSignalCount();
+
+  String _followUpFocusCopy() {
+    if (summary.failedEinvoiceJobsCount > 0) {
+      return 'Failed e-invoice jobs are the first operational follow-up because settlement visibility is already available elsewhere in Reports.';
+    }
+    if (summary.missingProofPhotosCount > 0) {
+      return 'Missing proof photos are the highest follow-up item because they directly weaken audit completeness for the selected period.';
+    }
+    if (summary.wetaxReportedCount < summary.wt08ComparablePosCount) {
+      return 'WT08 coverage is the next review point because comparable POS volume is ahead of reported volume.';
+    }
+    if (summary.proofCompletePercent < 100) {
+      return 'Proof completion is close but not fully closed, so this remains a watch item rather than an all-clear signal.';
+    }
+    return 'No immediate operational follow-up signal is currently ahead of the others for this reporting window.';
+  }
+
+  String _healthyBaselineCopy() {
+    if (_healthySignalCount() == 4) {
+      return 'Proof, e-invoice, and WT08 readiness are aligned across the tracked summary fields for this period.';
+    }
+    return 'Healthy signals still exist, but they should be read together with the follow-up count before treating the period as fully closed.';
   }
 
   String _attentionNarrative() {

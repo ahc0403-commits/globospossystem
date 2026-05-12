@@ -20,6 +20,12 @@ void main() {
     expect(reportsTab, contains('Failed e-invoice'));
     expect(reportsTab, contains('Proof completion'));
     expect(reportsTab, contains('WT08-comparable POS orders reported'));
+    expect(reportsTab, contains('Follow-up now'));
+    expect(reportsTab, contains('Healthy signals'));
+    expect(reportsTab, contains('WT08 readiness'));
+    expect(reportsTab, contains('Follow-up focus'));
+    expect(reportsTab, contains('Healthy baseline'));
+    expect(reportsTab, contains('Boundary'));
 
     expect(reportProvider, contains('missingProofPhotosCount'));
     expect(reportProvider, contains('failedEinvoiceJobsCount'));
