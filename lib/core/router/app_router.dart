@@ -11,6 +11,7 @@ import '../../features/cashier/cashier_screen.dart';
 import '../../features/kitchen/kitchen_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
 import '../../features/photo_ops/photo_ops_screen.dart';
+import '../../features/payment/payment_detail_screen.dart';
 import '../../features/attendance/attendance_kiosk_screen.dart';
 import '../../features/qc/qc_check_screen.dart';
 import '../../features/super_admin/super_admin_screen.dart';
@@ -162,6 +163,12 @@ GoRouter buildAppRouter(ProviderContainer container) {
       ),
       GoRoute(path: '/qc-check', builder: (_, __) => const QcCheckScreen()),
       GoRoute(path: '/photo-ops', builder: (_, __) => const PhotoOpsScreen()),
+      GoRoute(
+        path: '/payments/:paymentId',
+        builder: (_, state) => PaymentDetailScreen(
+          paymentId: state.pathParameters['paymentId'] ?? '',
+        ),
+      ),
       GoRoute(
         path: '/super-admin',
         builder: (_, __) => const SuperAdminScreen(),
