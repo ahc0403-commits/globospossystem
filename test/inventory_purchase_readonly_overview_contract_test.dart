@@ -13,6 +13,9 @@ void main() {
     final service = readRepoFile('lib/core/services/inventory_service.dart');
 
     expect(tab, contains('Purchase Overview'));
+    expect(tab, contains('Purchase Review Detail'));
+    expect(tab, contains('Approval Gap'));
+    expect(tab, contains('Review Focus'));
     expect(tab, contains('Read-only'));
     expect(tab, contains('inventoryPurchaseOverviewProvider'));
     expect(tab, contains('Refresh Purchase Overview'));
@@ -23,6 +26,7 @@ void main() {
     expect(service, contains('fetchInventoryPurchaseDashboard'));
     expect(service, contains("'get_inventory_purchase_dashboard'"));
     expect(service, isNot(contains('runInventoryPurchaseRecommendation')));
+    expect(tab, isNot(contains('run_inventory_purchase_recommendation')));
     expect(tab, isNot(contains('InventoryPurchaseScreen')));
   });
 }
