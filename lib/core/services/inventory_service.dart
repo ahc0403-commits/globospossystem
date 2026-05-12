@@ -341,7 +341,7 @@ class InventoryService {
     final lines = await supabase
         .from('inventory_purchase_order_lines')
         .select(
-          'id, product_id, supplier_item_id, recommended_quantity_base, ordered_quantity_base, ordered_quantity_unit, order_unit, unit_price, supply_amount, tax_amount, memo, recommendation_snapshot, product:inventory_products(name), supplier_item:inventory_supplier_items(supplier_sku, order_unit_quantity_base, min_order_quantity)',
+          'id, product_id, supplier_item_id, recommended_quantity_base, ordered_quantity_base, ordered_quantity_unit, order_unit, unit_price, supply_amount, tax_amount, memo, recommendation_snapshot, product:inventory_products(name), supplier_item:inventory_supplier_items(supplier_sku, order_unit_quantity_base, min_order_quantity, lead_time_days, is_preferred)',
         )
         .eq('purchase_order_id', purchaseOrderId)
         .order('supply_amount', ascending: false);
@@ -497,6 +497,8 @@ class InventoryService {
             )
           : null;
       final productMap = purchaseOrderLine?['product'] as Map<String, dynamic>?;
+      final supplierItemMap =
+          purchaseOrderLine?['supplier_item'] as Map<String, dynamic>?;
       final detail = <String, dynamic>{
         'purchase_order_line_id': purchaseOrderLineId,
         'product_name':
@@ -521,6 +523,16 @@ class InventoryService {
         'line_memo': receiptLine['memo']?.toString(),
         'risk_status': snapshot?['risk_status']?.toString() ?? 'stable',
         'recommendation_run_id': snapshot?['run_id']?.toString(),
+        'supplier_sku': supplierItemMap?['supplier_sku']?.toString(),
+        'order_unit_quantity_base':
+            (supplierItemMap?['order_unit_quantity_base'] as num?)
+                ?.toDouble() ??
+            0,
+        'min_order_quantity':
+            (supplierItemMap?['min_order_quantity'] as num?)?.toDouble() ?? 0,
+        'lead_time_days':
+            (supplierItemMap?['lead_time_days'] as num?)?.toInt() ?? 0,
+        'is_preferred': supplierItemMap?['is_preferred'] == true,
       };
       receiptLineDetailsById.putIfAbsent(receiptId, () => []).add(detail);
     }

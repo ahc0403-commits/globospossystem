@@ -2589,6 +2589,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         line['product_id']?.toString() ??
         '-';
     final supplierSku = supplierItemMap?['supplier_sku']?.toString();
+    final supplierBaseFactor =
+        (supplierItemMap?['order_unit_quantity_base'] as num?)?.toDouble() ?? 0;
+    final supplierMinOrder =
+        (supplierItemMap?['min_order_quantity'] as num?)?.toDouble() ?? 0;
+    final supplierLeadTimeDays =
+        (supplierItemMap?['lead_time_days'] as num?)?.toInt() ?? 0;
+    final supplierPreferred = supplierItemMap?['is_preferred'] == true;
     final riskStatus = snapshot?['risk_status']?.toString() ?? 'stable';
     final orderedUnits =
         (line['ordered_quantity_unit'] as num?)?.toDouble() ?? 0;
@@ -2707,6 +2714,30 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               _buildIngredientMetaChip(
                 'Receipt ${receiptVisibilityStatus.toUpperCase()}',
                 color: _receiptVisibilityColor(receiptVisibilityStatus),
+              ),
+              _buildIngredientMetaChip(
+                supplierBaseFactor > 0
+                    ? 'Base factor ${supplierBaseFactor.toStringAsFixed(3)}'
+                    : 'Base factor unavailable',
+              ),
+              _buildIngredientMetaChip(
+                supplierMinOrder > 0
+                    ? 'Min order ${supplierMinOrder.toStringAsFixed(3)}'
+                    : 'Min order unavailable',
+              ),
+              _buildIngredientMetaChip(
+                supplierLeadTimeDays > 0
+                    ? 'Lead time $supplierLeadTimeDays day(s)'
+                    : 'Lead time unavailable',
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                supplierPreferred
+                    ? 'Preferred supplier item'
+                    : 'Fallback supplier item',
+                color: supplierPreferred
+                    ? AppColors.statusAvailable
+                    : AppColors.surface2,
               ),
             ],
           ),
@@ -3301,6 +3332,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     final lineMemo = line['line_memo']?.toString();
     final riskStatus = line['risk_status']?.toString() ?? 'stable';
     final recommendationRunId = line['recommendation_run_id']?.toString();
+    final supplierSku = line['supplier_sku']?.toString();
+    final supplierBaseFactor =
+        (line['order_unit_quantity_base'] as num?)?.toDouble() ?? 0;
+    final supplierMinOrder =
+        (line['min_order_quantity'] as num?)?.toDouble() ?? 0;
+    final supplierLeadTimeDays = (line['lead_time_days'] as num?)?.toInt() ?? 0;
+    final supplierPreferred = line['is_preferred'] == true;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -3362,6 +3400,35 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     ? 'Recommendation provenance unavailable'
                     : 'Recommendation ${recommendationRunId.substring(0, 8)}',
                 color: _recommendationRiskColor(riskStatus),
+              ),
+              _buildIngredientMetaChip(
+                supplierSku == null || supplierSku.isEmpty
+                    ? 'Supplier SKU unavailable'
+                    : 'Supplier SKU $supplierSku',
+              ),
+              _buildIngredientMetaChip(
+                supplierBaseFactor > 0
+                    ? 'Base factor ${supplierBaseFactor.toStringAsFixed(3)}'
+                    : 'Base factor unavailable',
+              ),
+              _buildIngredientMetaChip(
+                supplierMinOrder > 0
+                    ? 'Min order ${supplierMinOrder.toStringAsFixed(3)}'
+                    : 'Min order unavailable',
+              ),
+              _buildIngredientMetaChip(
+                supplierLeadTimeDays > 0
+                    ? 'Lead time $supplierLeadTimeDays day(s)'
+                    : 'Lead time unavailable',
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                supplierPreferred
+                    ? 'Preferred supplier item'
+                    : 'Fallback supplier item',
+                color: supplierPreferred
+                    ? AppColors.statusAvailable
+                    : AppColors.surface2,
               ),
             ],
           ),
