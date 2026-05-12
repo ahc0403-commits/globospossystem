@@ -33,6 +33,11 @@ void main() {
       expect(tab, contains('Receipt status'));
       expect(tab, contains('Readiness'));
       expect(tab, contains('Latest receipt'));
+      expect(tab, contains('Base factor'));
+      expect(tab, contains('Min order'));
+      expect(tab, contains('Lead time'));
+      expect(tab, contains('Preferred supplier item'));
+      expect(tab, contains('Fallback supplier item'));
       expect(
         tab,
         contains(
@@ -111,6 +116,8 @@ void main() {
       expect(service, contains("copy['line_details']"));
       expect(service, contains("'recommendation_run_id'"));
       expect(service, contains('supplier_item:inventory_supplier_items'));
+      expect(service, contains("'lead_time_days'"));
+      expect(service, contains("'is_preferred'"));
       expect(
         tab,
         contains(
