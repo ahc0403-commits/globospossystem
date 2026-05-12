@@ -21,9 +21,14 @@ void main() {
     expect(screen, contains('Issue Queue'));
     expect(screen, contains('Queue Detail'));
     expect(screen, contains('Refresh Issue Queue'));
+    expect(screen, contains('Review Focus'));
+    expect(screen, contains('Critical \$criticalIssueCount'));
+    expect(screen, contains('Photo gap \$missingPhotoIssueCount'));
+    expect(screen, contains('Read-only queue surface only.'));
     expect(screen, contains('qcIssueQueueProvider'));
     expect(screen, contains('_issueSeverityFilter'));
     expect(screen, contains('_issueSubmissionFilter'));
+    expect(screen, contains('_formatIssueTimestamp('));
 
     expect(screen, isNot(contains("path: '/qsc-issues'")));
     expect(screen, isNot(contains('createFollowup(')));
