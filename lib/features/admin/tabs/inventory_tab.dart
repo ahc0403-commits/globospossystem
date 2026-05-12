@@ -26,6 +26,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   DateTime _reportFrom = DateTime.now().subtract(const Duration(days: 6));
   DateTime _reportTo = DateTime.now();
   String? _selectedPurchaseOrderId;
+  String? _selectedReceiptId;
   final Map<String, TextEditingController> _actualControllers = {};
   final Map<String, TextEditingController> _noteControllers = {};
 
@@ -90,6 +91,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     }
 
     if (nextOrderId == null) {
+      if (_selectedReceiptId != null) {
+        setState(() => _selectedReceiptId = null);
+      }
       ref.read(inventoryPurchaseOrderDetailProvider.notifier).clear();
       return;
     }
@@ -97,13 +101,44 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     await ref
         .read(inventoryPurchaseOrderDetailProvider.notifier)
         .load(nextOrderId);
+    _syncSelectedReceipt();
   }
 
   Future<void> _selectPurchaseOrder({required String orderId}) async {
     if (_selectedPurchaseOrderId != orderId && mounted) {
-      setState(() => _selectedPurchaseOrderId = orderId);
+      setState(() {
+        _selectedPurchaseOrderId = orderId;
+        _selectedReceiptId = null;
+      });
     }
     await ref.read(inventoryPurchaseOrderDetailProvider.notifier).load(orderId);
+    _syncSelectedReceipt();
+  }
+
+  void _syncSelectedReceipt() {
+    final detail = ref.read(inventoryPurchaseOrderDetailProvider);
+    final receipts = detail.receipts;
+
+    String? nextReceiptId = _selectedReceiptId;
+    if (nextReceiptId != null &&
+        !receipts.any(
+          (receipt) => receipt['id']?.toString() == nextReceiptId,
+        )) {
+      nextReceiptId = null;
+    }
+    nextReceiptId ??= receipts.isNotEmpty
+        ? receipts.first['id']?.toString()
+        : null;
+
+    if (mounted && _selectedReceiptId != nextReceiptId) {
+      setState(() => _selectedReceiptId = nextReceiptId);
+    }
+  }
+
+  void _selectReceipt(String receiptId) {
+    if (mounted && _selectedReceiptId != receiptId) {
+      setState(() => _selectedReceiptId = receiptId);
+    }
   }
 
   @override
@@ -2242,6 +2277,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             const SizedBox(height: 12),
             _buildRecentReceiptsTimeline(receipts),
             const SizedBox(height: 12),
+            _buildReceiptLineProvenanceSection(receipts),
+            const SizedBox(height: 12),
             if (detail.lines.isEmpty)
               Text(
                 'No line items are visible for the selected order.',
@@ -2302,7 +2339,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           else
             Column(
               children: receipts
-                  .map((receipt) => _buildReceiptTimelineCard(receipt))
+                  .map(
+                    (receipt) => _buildReceiptTimelineCard(
+                      receipt,
+                      isSelected:
+                          receipt['id']?.toString() == _selectedReceiptId,
+                    ),
+                  )
                   .toList(),
             ),
         ],
@@ -2310,7 +2353,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     );
   }
 
-  Widget _buildReceiptTimelineCard(Map<String, dynamic> receipt) {
+  Widget _buildReceiptTimelineCard(
+    Map<String, dynamic> receipt, {
+    required bool isSelected,
+  }) {
     final status = receipt['status']?.toString() ?? 'draft';
     final memo = receipt['memo']?.toString();
     final lineCount = (receipt['line_count'] as num?)?.toInt() ?? 0;
@@ -2326,71 +2372,82 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         ? null
         : DateTime.tryParse(receivedAtRaw)?.toLocal();
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.surface0,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _receiptVisibilityColor(status)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  receivedAt == null
-                      ? 'Receipt time unavailable'
-                      : 'Receipt ${DateFormat('yyyy-MM-dd HH:mm').format(receivedAt)}',
-                  style: GoogleFonts.notoSansKr(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w700,
+    return InkWell(
+      onTap: receipt['id'] == null
+          ? null
+          : () => _selectReceipt(receipt['id'].toString()),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.surface0,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected
+                ? AppColors.amber500
+                : _receiptVisibilityColor(status),
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    receivedAt == null
+                        ? 'Receipt time unavailable'
+                        : 'Receipt ${DateFormat('yyyy-MM-dd HH:mm').format(receivedAt)}',
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-              ),
-              _buildIngredientMetaChip(
-                status.toUpperCase(),
-                color: _receiptVisibilityColor(status),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildIngredientMetaChip(
-                'Lines $lineCount',
-                color: AppColors.statusAvailable,
-              ),
-              _buildIngredientMetaChip(
-                'Received ${receivedBase.toStringAsFixed(3)} base',
-              ),
-              _buildIngredientMetaChip(
-                'Accepted ${acceptedBase.toStringAsFixed(3)} base',
-                color: AppColors.amber500,
-              ),
-              _buildIngredientMetaChip(
-                'Rejected ${rejectedBase.toStringAsFixed(3)} base',
-                color: rejectedBase > 0
-                    ? AppColors.statusOccupied
-                    : AppColors.surface2,
-              ),
-            ],
-          ),
-          if (memo != null && memo.trim().isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Receipt memo: $memo',
-              style: GoogleFonts.notoSansKr(
-                color: AppColors.textSecondary,
-                fontSize: 12,
-              ),
+                _buildIngredientMetaChip(
+                  status.toUpperCase(),
+                  color: _receiptVisibilityColor(status),
+                ),
+              ],
             ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildIngredientMetaChip(
+                  'Lines $lineCount',
+                  color: AppColors.statusAvailable,
+                ),
+                _buildIngredientMetaChip(
+                  'Received ${receivedBase.toStringAsFixed(3)} base',
+                ),
+                _buildIngredientMetaChip(
+                  'Accepted ${acceptedBase.toStringAsFixed(3)} base',
+                  color: AppColors.amber500,
+                ),
+                _buildIngredientMetaChip(
+                  'Rejected ${rejectedBase.toStringAsFixed(3)} base',
+                  color: rejectedBase > 0
+                      ? AppColors.statusOccupied
+                      : AppColors.surface2,
+                ),
+              ],
+            ),
+            if (memo != null && memo.trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Receipt memo: $memo',
+                style: GoogleFonts.notoSansKr(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -3132,6 +3189,193 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildReceiptLineProvenanceSection(
+    List<Map<String, dynamic>> receipts,
+  ) {
+    Map<String, dynamic>? selectedReceipt;
+    if (_selectedReceiptId != null) {
+      for (final receipt in receipts) {
+        if (receipt['id']?.toString() == _selectedReceiptId) {
+          selectedReceipt = receipt;
+          break;
+        }
+      }
+    }
+    selectedReceipt ??= receipts.isNotEmpty ? receipts.first : null;
+    final lineDetails = selectedReceipt == null
+        ? const <Map<String, dynamic>>[]
+        : List<Map<String, dynamic>>.from(
+            selectedReceipt['line_details'] as List? ?? const [],
+          );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Receipt Line Provenance',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Inspect the selected receipt line-by-line to understand ordered quantity, accepted quantity, rejected quantity, and recommendation provenance without opening any mutation workflow.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (selectedReceipt == null)
+            Text(
+              'Select a receipt above to inspect receipt line provenance.',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            )
+          else ...[
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildIngredientMetaChip(
+                  'Selected receipt ${selectedReceipt['status']?.toString().toUpperCase() ?? 'DRAFT'}',
+                  color: _receiptVisibilityColor(
+                    selectedReceipt['status']?.toString() ?? 'draft',
+                  ),
+                ),
+                _buildIngredientMetaChip(
+                  'Receipt lines ${lineDetails.length}',
+                  color: AppColors.statusAvailable,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (lineDetails.isEmpty)
+              Text(
+                'No receipt line detail is visible for the selected receipt.',
+                style: GoogleFonts.notoSansKr(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              )
+            else
+              Column(
+                children: lineDetails
+                    .map((line) => _buildReceiptLineProvenanceCard(line))
+                    .toList(),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReceiptLineProvenanceCard(Map<String, dynamic> line) {
+    final productName = line['product_name']?.toString() ?? '-';
+    final orderedBase =
+        (line['ordered_quantity_base'] as num?)?.toDouble() ?? 0;
+    final recommendedBase =
+        (line['recommended_quantity_base'] as num?)?.toDouble() ?? 0;
+    final receivedBase =
+        (line['received_quantity_base'] as num?)?.toDouble() ?? 0;
+    final acceptedBase =
+        (line['accepted_quantity_base'] as num?)?.toDouble() ?? 0;
+    final rejectedBase =
+        (line['rejected_quantity_base'] as num?)?.toDouble() ?? 0;
+    final lineMemo = line['line_memo']?.toString();
+    final riskStatus = line['risk_status']?.toString() ?? 'stable';
+    final recommendationRunId = line['recommendation_run_id']?.toString();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _recommendationRiskColor(riskStatus)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  productName,
+                  style: GoogleFonts.notoSansKr(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              _buildIngredientMetaChip(
+                riskStatus.toUpperCase(),
+                color: _recommendationRiskColor(riskStatus),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildIngredientMetaChip(
+                'Ordered ${orderedBase.toStringAsFixed(3)} base',
+              ),
+              _buildIngredientMetaChip(
+                'Recommended ${recommendedBase.toStringAsFixed(3)} base',
+                color: AppColors.amber500,
+              ),
+              _buildIngredientMetaChip(
+                'Received ${receivedBase.toStringAsFixed(3)} base',
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                'Accepted ${acceptedBase.toStringAsFixed(3)} base',
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                'Rejected ${rejectedBase.toStringAsFixed(3)} base',
+                color: rejectedBase > 0
+                    ? AppColors.statusOccupied
+                    : AppColors.surface2,
+              ),
+              _buildIngredientMetaChip(
+                recommendationRunId == null
+                    ? 'Recommendation provenance unavailable'
+                    : 'Recommendation ${recommendationRunId.substring(0, 8)}',
+                color: _recommendationRiskColor(riskStatus),
+              ),
+            ],
+          ),
+          if (lineMemo != null && lineMemo.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Receipt line memo: $lineMemo',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

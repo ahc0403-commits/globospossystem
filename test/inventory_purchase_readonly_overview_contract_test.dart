@@ -29,6 +29,7 @@ void main() {
       expect(tab, contains('Purchase Order Detail'));
       expect(tab, contains('Receipt Visibility'));
       expect(tab, contains('Recent Receipts'));
+      expect(tab, contains('Receipt Line Provenance'));
       expect(tab, contains('Receipt status'));
       expect(tab, contains('Readiness'));
       expect(tab, contains('Latest receipt'));
@@ -37,6 +38,16 @@ void main() {
         contains(
           'Review receipt history in timeline form without opening receipt confirmation or stock mutation workflows.',
         ),
+      );
+      expect(
+        tab,
+        contains(
+          'Inspect the selected receipt line-by-line to understand ordered quantity, accepted quantity, rejected quantity, and recommendation provenance without opening any mutation workflow.',
+        ),
+      );
+      expect(
+        tab,
+        contains('Select a receipt above to inspect receipt line provenance.'),
       );
       expect(tab, contains('Refresh Selected Order'));
       expect(
@@ -97,6 +108,8 @@ void main() {
       expect(service, contains("'inventory_receipt_lines'"));
       expect(service, contains("copy['line_count']"));
       expect(service, contains("copy['accepted_quantity_base']"));
+      expect(service, contains("copy['line_details']"));
+      expect(service, contains("'recommendation_run_id'"));
       expect(service, contains('supplier_item:inventory_supplier_items'));
       expect(
         tab,
