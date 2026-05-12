@@ -458,6 +458,143 @@ class InventoryService {
       return copy;
     }).toList();
 
+    final supplierItemIds = lineList
+        .map((line) => line['supplier_item_id']?.toString())
+        .whereType<String>()
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+
+    final supplierHistoryLines = supplierItemIds.isEmpty
+        ? <Map<String, dynamic>>[]
+        : List<Map<String, dynamic>>.from(
+            await supabase
+                    .from('inventory_purchase_order_lines')
+                    .select(
+                      'id, purchase_order_id, supplier_item_id, ordered_quantity_base, ordered_quantity_unit, order_unit, unit_price, created_at, product:inventory_products(name), purchase_order:inventory_purchase_orders!inner(id, purchase_order_no, status, created_at)',
+                    )
+                    .inFilter('supplier_item_id', supplierItemIds)
+                    .neq('purchase_order_id', purchaseOrderId)
+                    .order('created_at', ascending: false)
+                as List,
+          );
+
+    final supplierHistoryLineIds = supplierHistoryLines
+        .map((line) => line['id']?.toString())
+        .whereType<String>()
+        .where((id) => id.isNotEmpty)
+        .toList();
+
+    final supplierHistoryReceiptLines = supplierHistoryLineIds.isEmpty
+        ? <Map<String, dynamic>>[]
+        : List<Map<String, dynamic>>.from(
+            await supabase
+                    .from('inventory_receipt_lines')
+                    .select(
+                      'purchase_order_line_id, received_quantity_base, accepted_quantity_base, rejected_quantity_base, receipt:inventory_receipts!inner(status, received_at, created_at)',
+                    )
+                    .inFilter('purchase_order_line_id', supplierHistoryLineIds)
+                as List,
+          );
+
+    final supplierHistoryReceiptByLineId = <String, Map<String, dynamic>>{};
+    for (final receiptLine in supplierHistoryReceiptLines) {
+      final lineId = receiptLine['purchase_order_line_id']?.toString();
+      if (lineId == null || lineId.isEmpty) continue;
+      final summary = supplierHistoryReceiptByLineId.putIfAbsent(
+        lineId,
+        () => <String, dynamic>{
+          'received_quantity_base': 0.0,
+          'accepted_quantity_base': 0.0,
+          'rejected_quantity_base': 0.0,
+          'last_receipt_status': null,
+          'last_receipt_at': null,
+        },
+      );
+      summary['received_quantity_base'] =
+          (summary['received_quantity_base'] as double) +
+          ((receiptLine['received_quantity_base'] as num?)?.toDouble() ?? 0);
+      summary['accepted_quantity_base'] =
+          (summary['accepted_quantity_base'] as double) +
+          ((receiptLine['accepted_quantity_base'] as num?)?.toDouble() ?? 0);
+      summary['rejected_quantity_base'] =
+          (summary['rejected_quantity_base'] as double) +
+          ((receiptLine['rejected_quantity_base'] as num?)?.toDouble() ?? 0);
+
+      final receiptMap = receiptLine['receipt'] as Map<String, dynamic>?;
+      final receiptStatus = receiptMap?['status']?.toString();
+      final receiptAt =
+          receiptMap?['received_at']?.toString() ??
+          receiptMap?['created_at']?.toString();
+      final currentLast = summary['last_receipt_at']?.toString();
+      if (currentLast == null ||
+          (receiptAt != null && receiptAt.compareTo(currentLast) > 0)) {
+        summary['last_receipt_at'] = receiptAt;
+        summary['last_receipt_status'] = receiptStatus;
+      }
+    }
+
+    final supplierHistoryBySupplierItemId =
+        <String, List<Map<String, dynamic>>>{};
+    for (final historyLine in supplierHistoryLines) {
+      final supplierItemId = historyLine['supplier_item_id']?.toString();
+      final historyLineId = historyLine['id']?.toString();
+      if (supplierItemId == null ||
+          supplierItemId.isEmpty ||
+          historyLineId == null ||
+          historyLineId.isEmpty) {
+        continue;
+      }
+
+      final productMap = historyLine['product'] as Map<String, dynamic>?;
+      final purchaseOrderMap =
+          historyLine['purchase_order'] as Map<String, dynamic>?;
+      final receiptSummary = supplierHistoryReceiptByLineId[historyLineId];
+      final entry = <String, dynamic>{
+        'purchase_order_id': purchaseOrderMap?['id']?.toString(),
+        'purchase_order_no': purchaseOrderMap?['purchase_order_no']?.toString(),
+        'order_status': purchaseOrderMap?['status']?.toString() ?? 'submitted',
+        'ordered_at':
+            purchaseOrderMap?['created_at']?.toString() ??
+            historyLine['created_at']?.toString(),
+        'product_name':
+            productMap?['name']?.toString() ??
+            historyLine['product_id']?.toString() ??
+            '-',
+        'ordered_quantity_base':
+            (historyLine['ordered_quantity_base'] as num?)?.toDouble() ?? 0,
+        'ordered_quantity_unit':
+            (historyLine['ordered_quantity_unit'] as num?)?.toDouble() ?? 0,
+        'order_unit': historyLine['order_unit']?.toString() ?? 'unit',
+        'unit_price': (historyLine['unit_price'] as num?)?.toDouble() ?? 0,
+        'received_quantity_base':
+            (receiptSummary?['received_quantity_base'] as num?)?.toDouble() ??
+            0,
+        'accepted_quantity_base':
+            (receiptSummary?['accepted_quantity_base'] as num?)?.toDouble() ??
+            0,
+        'rejected_quantity_base':
+            (receiptSummary?['rejected_quantity_base'] as num?)?.toDouble() ??
+            0,
+        'last_receipt_status': receiptSummary?['last_receipt_status']
+            ?.toString(),
+        'last_receipt_at': receiptSummary?['last_receipt_at']?.toString(),
+      };
+      final bucket = supplierHistoryBySupplierItemId.putIfAbsent(
+        supplierItemId,
+        () => [],
+      );
+      if (bucket.length < 3) {
+        bucket.add(entry);
+      }
+    }
+
+    for (final line in lineList) {
+      final supplierItemId = line['supplier_item_id']?.toString() ?? '';
+      line['supplier_history'] =
+          supplierHistoryBySupplierItemId[supplierItemId] ?? const [];
+    }
+
     final latestReceipt = receiptList.isEmpty ? null : receiptList.first;
     final orderCopy = Map<String, dynamic>.from(order);
     orderCopy['confirmed_receipt_count'] = confirmedReceiptCount;
