@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/i18n/locale_extensions.dart';
 import '../../../core/ui/toast/toast.dart';
 import '../../../main.dart';
 import '../delivery_models.dart';
@@ -174,6 +175,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
     required UnsettledRevenueSummary? unsettled,
     required List<DeliverySettlement> settlements,
   }) {
+    final l10n = context.l10n;
     final unsettledOrders = unsettled?.orderCount ?? 0;
     final unsettledRevenue = unsettled?.revenue ?? 0;
     final pendingCount = settlements.where((s) => s.status == 'pending').length;
@@ -193,10 +195,23 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
         .fold<double>(0, (sum, s) => sum + s.netSettlement);
     final atRiskNet = unsettledRevenue + pendingNet + statementNet + disputedNet;
     final followUpSignals = [
-      if (unsettledOrders > 0) 'Unsettled Deliberry revenue is still open.',
-      if (statementCount > 0) 'Generated statements still need deposit confirmation.',
-      if (disputeCount > 0) 'Disputed periods need separate financial review.',
-      if (pendingCount > 0) 'Pending settlement periods are still waiting for statement generation.',
+      if (unsettledOrders > 0)
+        l10n.deliverySettlementAtRiskOpenRevenue(_fmtVnd(unsettledRevenue)),
+      if (statementCount > 0)
+        l10n.deliverySettlementDepositReady(
+          statementCount,
+          _fmtVnd(statementNet),
+        ),
+      if (disputeCount > 0)
+        l10n.deliverySettlementAtRiskDisputed(
+          disputeCount,
+          _fmtVnd(disputedNet),
+        ),
+      if (pendingCount > 0)
+        l10n.deliverySettlementAtRiskPending(
+          pendingCount,
+          _fmtVnd(pendingNet),
+        ),
     ];
 
     return Container(
@@ -210,7 +225,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Settlement Attention',
+            l10n.deliverySettlementAttentionTitle,
             style: GoogleFonts.notoSansKr(
               color: AppColors.textPrimary,
               fontSize: 14,
@@ -219,7 +234,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Read-only settlement readiness layer built from tracked Deliberry settlement state.',
+            l10n.deliverySettlementAttentionSubtitle,
             style: GoogleFonts.notoSansKr(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -231,24 +246,24 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
             runSpacing: 12,
             children: [
               _attentionMetric(
-                'Follow-up now',
+                l10n.deliverySettlementFollowUpNow,
                 '${followUpSignals.length}',
                 followUpSignals.isNotEmpty
                     ? AppColors.statusCancelled
                     : AppColors.statusAvailable,
               ),
               _attentionMetric(
-                'Statements waiting',
+                l10n.deliverySettlementStatementsWaiting,
                 '$statementCount',
                 statementCount > 0 ? AppColors.amber500 : AppColors.statusAvailable,
               ),
               _attentionMetric(
-                'Settled periods',
+                l10n.deliverySettlementSettledPeriods,
                 '$settledCount',
                 AppColors.statusAvailable,
               ),
               _attentionMetric(
-                'Net at risk',
+                l10n.deliverySettlementNetAtRisk,
                 _fmtVnd(atRiskNet),
                 atRiskNet > 0
                     ? AppColors.statusCancelled
@@ -262,27 +277,27 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
             runSpacing: 8,
             children: [
               _attentionChip(
-                'Unsettled orders $unsettledOrders',
+                l10n.deliverySettlementUnsettledOrders(unsettledOrders),
                 unsettledOrders > 0
                     ? AppColors.statusCancelled
                     : AppColors.statusAvailable,
               ),
               _attentionChip(
-                'Pending periods $pendingCount',
+                l10n.deliverySettlementPendingPeriods(pendingCount),
                 pendingCount > 0 ? AppColors.amber500 : AppColors.statusAvailable,
               ),
               _attentionChip(
-                'Statements $statementCount',
+                l10n.deliverySettlementStatements(statementCount),
                 statementCount > 0 ? AppColors.amber500 : AppColors.statusAvailable,
               ),
               _attentionChip(
-                'Disputes $disputeCount',
+                l10n.deliverySettlementDisputes(disputeCount),
                 disputeCount > 0
                     ? AppColors.statusCancelled
                     : AppColors.statusAvailable,
               ),
               _attentionChip(
-                'Ready to confirm $statementCount',
+                l10n.deliverySettlementReadyToConfirm(statementCount),
                 statementCount > 0
                     ? AppColors.amber500
                     : AppColors.statusAvailable,
@@ -291,15 +306,16 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
           ),
           const SizedBox(height: 12),
           _attentionSupportRow(
-            'Follow-up focus',
+            l10n.deliverySettlementFollowUpFocus,
             followUpSignals.isEmpty
-                ? 'No immediate Deliberry settlement follow-up signal is ahead of the others for the current snapshot.'
+                ? l10n.deliverySettlementFocusNone
                 : followUpSignals.first,
           ),
           const SizedBox(height: 8),
           _attentionSupportRow(
-            'Deposit readiness',
+            l10n.deliverySettlementDepositReadiness,
             _depositReadinessCopy(
+              context: context,
               statementCount: statementCount,
               statementNet: statementNet,
               unsettledOrders: unsettledOrders,
@@ -307,8 +323,9 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
           ),
           const SizedBox(height: 8),
           _attentionSupportRow(
-            'At-risk mix',
+            l10n.deliverySettlementAtRiskMix,
             _atRiskMixCopy(
+              context: context,
               pendingCount: pendingCount,
               disputeCount: disputeCount,
               unsettledRevenue: unsettledRevenue,
@@ -318,8 +335,8 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
           ),
           const SizedBox(height: 8),
           _attentionSupportRow(
-            'Boundary',
-            'Read-only readiness surface only. Statement generation and deposit confirmation workflows remain in their tracked controls below.',
+            l10n.deliverySettlementBoundary,
+            l10n.deliverySettlementBoundaryBody,
           ),
         ],
       ),
@@ -409,36 +426,51 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
   }
 
   String _depositReadinessCopy({
+    required BuildContext context,
     required int statementCount,
     required double statementNet,
     required int unsettledOrders,
   }) {
+    final l10n = context.l10n;
     if (statementCount > 0) {
-      return '$statementCount generated statements worth ${_fmtVnd(statementNet)} are ready for the tracked deposit-confirmation step.';
+      return l10n.deliverySettlementDepositReady(
+        statementCount,
+        _fmtVnd(statementNet),
+      );
     }
     if (unsettledOrders > 0) {
-      return 'There are still unsettled Deliberry orders, so the next financial checkpoint is statement generation rather than deposit confirmation.';
+      return l10n.deliverySettlementDepositNeedsStatementGeneration;
     }
-    return 'No immediate deposit-confirmation queue is visible in the current settlement snapshot.';
+    return l10n.deliverySettlementDepositNoQueue;
   }
 
   String _atRiskMixCopy({
+    required BuildContext context,
     required int pendingCount,
     required int disputeCount,
     required double unsettledRevenue,
     required double pendingNet,
     required double disputedNet,
   }) {
+    final l10n = context.l10n;
     if (disputeCount > 0) {
-      return '$disputeCount disputed periods account for ${_fmtVnd(disputedNet)} of the current at-risk settlement surface.';
+      return l10n.deliverySettlementAtRiskDisputed(
+        disputeCount,
+        _fmtVnd(disputedNet),
+      );
     }
     if (pendingCount > 0) {
-      return '$pendingCount pending periods still represent ${_fmtVnd(pendingNet)} before final statement confirmation is possible.';
+      return l10n.deliverySettlementAtRiskPending(
+        pendingCount,
+        _fmtVnd(pendingNet),
+      );
     }
     if (unsettledRevenue > 0) {
-      return 'The remaining at-risk exposure is concentrated in open Deliberry revenue: ${_fmtVnd(unsettledRevenue)}.';
+      return l10n.deliverySettlementAtRiskOpenRevenue(
+        _fmtVnd(unsettledRevenue),
+      );
     }
-    return 'No material at-risk settlement mix is visible beyond the already-settled periods.';
+    return l10n.deliverySettlementAtRiskNone;
   }
 
   // ─── 정산 합계 요약 ──────────────────

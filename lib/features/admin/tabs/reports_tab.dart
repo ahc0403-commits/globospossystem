@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/i18n/locale_extensions.dart';
 import '../../../core/services/daily_closing_service.dart';
 import '../../../core/ui/toast/toast.dart';
 import '../../../main.dart';
@@ -633,9 +634,13 @@ class _OperationalAttentionSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final wt08CoverageText = summary.wt08ComparablePosCount == 0
-        ? 'No WT08-comparable POS orders in the selected period'
-        : '${summary.wetaxReportedCount}/${summary.wt08ComparablePosCount} WT08-comparable POS orders reported';
+        ? l10n.reportsOperationalWt08ComparableNone
+        : l10n.reportsOperationalWt08ComparableReported(
+            summary.wetaxReportedCount,
+            summary.wt08ComparablePosCount,
+          );
     final proofRate = summary.proofCompletePercent.toStringAsFixed(0);
     final healthySignals = _healthySignalCount();
     final followUpSignals = _followUpSignalCount();
@@ -650,7 +655,7 @@ class _OperationalAttentionSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Operational Attention',
+            l10n.reportsOperationalAttentionTitle,
             style: GoogleFonts.notoSansKr(
               color: AppColors.textPrimary,
               fontSize: 14,
@@ -659,7 +664,7 @@ class _OperationalAttentionSection extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Read-only readiness layer built from tracked report summary fields.',
+            l10n.reportsOperationalAttentionSubtitle,
             style: GoogleFonts.notoSansKr(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -671,22 +676,24 @@ class _OperationalAttentionSection extends StatelessWidget {
             runSpacing: 12,
             children: [
               _supportMetric(
-                'Follow-up now',
+                l10n.reportsOperationalFollowUpNow,
                 '$followUpSignals',
                 followUpSignals > 0
                     ? AppColors.statusCancelled
                     : AppColors.statusAvailable,
               ),
               _supportMetric(
-                'Healthy signals',
+                l10n.reportsOperationalHealthySignals,
                 '$healthySignals/4',
                 healthySignals == 4
                     ? AppColors.statusAvailable
                     : AppColors.amber500,
               ),
               _supportMetric(
-                'WT08 readiness',
-                summary.wt08ComparablePosCount == 0 ? 'N/A' : wt08CoverageText,
+                l10n.reportsOperationalWt08Readiness,
+                summary.wt08ComparablePosCount == 0
+                    ? l10n.reportsOperationalNotApplicable
+                    : wt08CoverageText,
                 summary.wetaxReportedCount < summary.wt08ComparablePosCount
                     ? AppColors.amber500
                     : AppColors.textPrimary,
@@ -699,19 +706,23 @@ class _OperationalAttentionSection extends StatelessWidget {
             runSpacing: 8,
             children: [
               _attentionChip(
-                'Missing proof ${summary.missingProofPhotosCount}',
+                l10n.reportsOperationalMissingProof(
+                  summary.missingProofPhotosCount,
+                ),
                 summary.missingProofPhotosCount > 0
                     ? AppColors.statusCancelled
                     : AppColors.statusAvailable,
               ),
               _attentionChip(
-                'Failed e-invoice ${summary.failedEinvoiceJobsCount}',
+                l10n.reportsOperationalFailedEInvoice(
+                  summary.failedEinvoiceJobsCount,
+                ),
                 summary.failedEinvoiceJobsCount > 0
                     ? AppColors.statusCancelled
                     : AppColors.statusAvailable,
               ),
               _attentionChip(
-                'Proof completion $proofRate%',
+                l10n.reportsOperationalProofCompletion(proofRate),
                 summary.proofCompletePercent < 100
                     ? AppColors.amber500
                     : AppColors.statusAvailable,
@@ -726,22 +737,22 @@ class _OperationalAttentionSection extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _attentionSupportRow(
-            'Follow-up focus',
-            _followUpFocusCopy(),
+            l10n.reportsOperationalFollowUpFocus,
+            _followUpFocusCopy(context),
           ),
           const SizedBox(height: 8),
           _attentionSupportRow(
-            'Healthy baseline',
-            _healthyBaselineCopy(),
+            l10n.reportsOperationalHealthyBaseline,
+            _healthyBaselineCopy(context),
           ),
           const SizedBox(height: 8),
           _attentionSupportRow(
-            'Boundary',
-            'Read-only operational readiness surface. Retry, dispatch, and close workflows stay outside this slice.',
+            l10n.reportsOperationalBoundary,
+            l10n.reportsOperationalBoundaryBody,
           ),
           const SizedBox(height: 12),
           Text(
-            _attentionNarrative(),
+            _attentionNarrative(context),
             style: GoogleFonts.notoSansKr(
               color: AppColors.textPrimary,
               fontSize: 12,
@@ -847,43 +858,46 @@ class _OperationalAttentionSection extends StatelessWidget {
 
   int _healthySignalCount() => 4 - _followUpSignalCount();
 
-  String _followUpFocusCopy() {
+  String _followUpFocusCopy(BuildContext context) {
+    final l10n = context.l10n;
     if (summary.failedEinvoiceJobsCount > 0) {
-      return 'Failed e-invoice jobs are the first operational follow-up because settlement visibility is already available elsewhere in Reports.';
+      return l10n.reportsOperationalFocusFailedEinvoice;
     }
     if (summary.missingProofPhotosCount > 0) {
-      return 'Missing proof photos are the highest follow-up item because they directly weaken audit completeness for the selected period.';
+      return l10n.reportsOperationalFocusMissingProof;
     }
     if (summary.wetaxReportedCount < summary.wt08ComparablePosCount) {
-      return 'WT08 coverage is the next review point because comparable POS volume is ahead of reported volume.';
+      return l10n.reportsOperationalFocusWt08;
     }
     if (summary.proofCompletePercent < 100) {
-      return 'Proof completion is close but not fully closed, so this remains a watch item rather than an all-clear signal.';
+      return l10n.reportsOperationalFocusProofCompletion;
     }
-    return 'No immediate operational follow-up signal is currently ahead of the others for this reporting window.';
+    return l10n.reportsOperationalFocusNone;
   }
 
-  String _healthyBaselineCopy() {
+  String _healthyBaselineCopy(BuildContext context) {
+    final l10n = context.l10n;
     if (_healthySignalCount() == 4) {
-      return 'Proof, e-invoice, and WT08 readiness are aligned across the tracked summary fields for this period.';
+      return l10n.reportsOperationalHealthyAligned;
     }
-    return 'Healthy signals still exist, but they should be read together with the follow-up count before treating the period as fully closed.';
+    return l10n.reportsOperationalHealthyMixed;
   }
 
-  String _attentionNarrative() {
+  String _attentionNarrative(BuildContext context) {
+    final l10n = context.l10n;
     if (summary.failedEinvoiceJobsCount > 0) {
-      return 'Immediate follow-up: resolve failed e-invoice jobs before routine report cleanup.';
+      return l10n.reportsOperationalNarrativeFailedEinvoice;
     }
     if (summary.missingProofPhotosCount > 0) {
-      return 'Immediate follow-up: close missing payment proof gaps before the next audit pass.';
+      return l10n.reportsOperationalNarrativeMissingProof;
     }
     if (summary.wetaxReportedCount < summary.wt08ComparablePosCount) {
-      return 'Watchlist: WT08 reporting coverage is behind comparable POS order volume for this period.';
+      return l10n.reportsOperationalNarrativeWt08;
     }
     if (summary.proofCompletePercent < 100) {
-      return 'Watchlist: payment proof completion is improving, but still not fully closed for the selected range.';
+      return l10n.reportsOperationalNarrativeProofCompletion;
     }
-    return 'Healthy period: operational proof, e-invoice, and WT08 summary signals are currently aligned.';
+    return l10n.reportsOperationalNarrativeHealthy;
   }
 }
 

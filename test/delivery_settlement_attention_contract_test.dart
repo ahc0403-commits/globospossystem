@@ -13,22 +13,19 @@ void main() {
       'lib/features/delivery/delivery_settlement_provider.dart',
     );
 
-    expect(tab, contains('Settlement Attention'));
-    expect(
-      tab,
-      contains(
-        'Read-only settlement readiness layer built from tracked Deliberry settlement state.',
-      ),
-    );
-    expect(tab, contains('Follow-up now'));
-    expect(tab, contains('Statements waiting'));
-    expect(tab, contains('Settled periods'));
-    expect(tab, contains('Net at risk'));
-    expect(tab, contains('Ready to confirm'));
-    expect(tab, contains('Follow-up focus'));
-    expect(tab, contains('Deposit readiness'));
-    expect(tab, contains('At-risk mix'));
-    expect(tab, contains('Boundary'));
+    expect(tab, contains("import '../../../core/i18n/locale_extensions.dart';"));
+    expect(tab, contains('context.l10n'));
+    expect(tab, contains('l10n.deliverySettlementAttentionTitle'));
+    expect(tab, contains('l10n.deliverySettlementAttentionSubtitle'));
+    expect(tab, contains('l10n.deliverySettlementFollowUpNow'));
+    expect(tab, contains('l10n.deliverySettlementStatementsWaiting'));
+    expect(tab, contains('l10n.deliverySettlementSettledPeriods'));
+    expect(tab, contains('l10n.deliverySettlementNetAtRisk'));
+    expect(tab, contains('l10n.deliverySettlementReadyToConfirm'));
+    expect(tab, contains('l10n.deliverySettlementFollowUpFocus'));
+    expect(tab, contains('l10n.deliverySettlementDepositReadiness'));
+    expect(tab, contains('l10n.deliverySettlementAtRiskMix'));
+    expect(tab, contains('l10n.deliverySettlementBoundary'));
 
     expect(provider, contains(".from('v_settlement_summary')"));
     expect(provider, contains('confirm_delivery_settlement_received'));

@@ -9,22 +9,22 @@ void main() {
     final screen = readRepoFile('lib/features/kitchen/kitchen_screen.dart');
     final provider = readRepoFile('lib/features/kitchen/kitchen_provider.dart');
 
-    expect(screen, contains('Kitchen Attention'));
-    expect(
-      screen,
-      contains(
-        'Read-only kitchen readiness layer built from the tracked active order queue.',
-      ),
-    );
-    expect(screen, contains('Follow-up now'));
-    expect(screen, contains('Pending items'));
-    expect(screen, contains('Ready items'));
-    expect(screen, contains('Oldest wait'));
-    expect(screen, contains('Long waits'));
-    expect(screen, contains('Ready tables'));
-    expect(screen, contains('Follow-up focus'));
-    expect(screen, contains('Handoff readiness'));
-    expect(screen, contains('Boundary'));
+    expect(screen, contains("import '../../core/i18n/locale_extensions.dart';"));
+    expect(screen, contains('context.l10n'));
+    expect(screen, contains('l10n.kitchenAttentionTitle'));
+    expect(screen, contains('l10n.kitchenAttentionSubtitle'));
+    expect(screen, contains('l10n.kitchenAttentionFollowUpNow'));
+    expect(screen, contains('l10n.kitchenAttentionPendingItems'));
+    expect(screen, contains('l10n.kitchenAttentionReadyItems'));
+    expect(screen, contains('l10n.kitchenAttentionOldestWait'));
+    expect(screen, contains('l10n.kitchenAttentionLongWaits'));
+    expect(screen, contains('l10n.kitchenAttentionReadyTables'));
+    expect(screen, contains('l10n.kitchenAttentionFollowUpFocus'));
+    expect(screen, contains('l10n.kitchenAttentionHandoffReadiness'));
+    expect(screen, contains('l10n.kitchenAttentionBoundary'));
+    expect(screen, contains('l10n.kitchenSecondsAgo'));
+    expect(screen, contains('l10n.kitchenMinutesAgo'));
+    expect(screen, contains('l10n.kitchenHoursAgo'));
 
     expect(provider, contains(".inFilter('status', ['pending', 'confirmed', 'serving'])"));
     expect(provider, contains(".channel('public:kitchen_orders:\$storeId')"));
