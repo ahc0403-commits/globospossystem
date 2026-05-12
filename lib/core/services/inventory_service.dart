@@ -268,6 +268,24 @@ class InventoryService {
     return List<Map<String, dynamic>>.from(result as List);
   }
 
+  Future<List<Map<String, dynamic>>> createPurchaseOrdersFromRecommendation({
+    required String runId,
+    DateTime? requestedDeliveryDate,
+  }) async {
+    final result = await supabase.rpc(
+      'create_purchase_orders_from_recommendation',
+      params: {
+        'p_run_id': runId,
+        'p_requested_delivery_date': requestedDeliveryDate
+            ?.toIso8601String()
+            .split('T')
+            .first,
+      },
+    );
+
+    return List<Map<String, dynamic>>.from(result as List);
+  }
+
   Future<List<Map<String, dynamic>>> _rpcList(
     String functionName, {
     required Map<String, dynamic> params,
