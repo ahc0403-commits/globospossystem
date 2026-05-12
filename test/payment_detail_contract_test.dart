@@ -9,43 +9,87 @@ void main() {
     final router = readRepoFile('lib/core/router/app_router.dart');
     final roleRoutes = readRepoFile('lib/core/utils/role_routes.dart');
 
-    expect(router, contains("import '../../features/payment/payment_detail_screen.dart';"));
+    expect(
+      router,
+      contains("import '../../features/payment/payment_detail_screen.dart';"),
+    );
     expect(router, contains("path: '/payments/:paymentId'"));
     expect(router, contains('PaymentDetailScreen('));
     expect(router, contains("state.pathParameters['paymentId']"));
 
     expect(roleRoutes, contains("location.startsWith('/payments/')"));
-    expect(roleRoutes, contains("'cashier' => location == '/cashier' || location.startsWith('/payments/')"));
-    expect(roleRoutes, contains("'admin' => location == '/admin' || location.startsWith('/payments/')"));
+    expect(
+      roleRoutes,
+      contains(
+        "'cashier' => location == '/cashier' || location.startsWith('/payments/')",
+      ),
+    );
+    expect(
+      roleRoutes,
+      contains(
+        "'admin' => location == '/admin' || location.startsWith('/payments/')",
+      ),
+    );
   });
 
-  test('cashier success flow hands off to payment detail after tracked post-payment steps', () {
-    final cashier = readRepoFile('lib/features/cashier/cashier_screen.dart');
+  test(
+    'cashier success flow hands off to payment detail after tracked post-payment steps',
+    () {
+      final cashier = readRepoFile('lib/features/cashier/cashier_screen.dart');
 
-    expect(cashier, contains("final paymentId = payment?['id']"));
-    expect(cashier, contains('PaymentProofModal('));
-    expect(cashier, contains('RedInvoiceModal('));
-    expect(cashier, contains("context.go('/payments/\$paymentId')"));
-  });
+      expect(cashier, contains("final paymentId = payment?['id']"));
+      expect(cashier, contains('PaymentProofModal('));
+      expect(cashier, contains('RedInvoiceModal('));
+      expect(cashier, contains("context.go('/payments/\$paymentId')"));
+    },
+  );
 
-  test('payment detail screen stays read-only and uses tracked payment detail service', () {
-    final screen = readRepoFile('lib/features/payment/payment_detail_screen.dart');
-    final paymentService = readRepoFile('lib/core/services/payment_service.dart');
-    final einvoiceService = readRepoFile('lib/core/services/einvoice_service.dart');
+  test(
+    'payment detail screen stays read-only and uses tracked payment detail service',
+    () {
+      final screen = readRepoFile(
+        'lib/features/payment/payment_detail_screen.dart',
+      );
+      final paymentService = readRepoFile(
+        'lib/core/services/payment_service.dart',
+      );
+      final einvoiceService = readRepoFile(
+        'lib/core/services/einvoice_service.dart',
+      );
 
-    expect(screen, contains('paymentService.fetchPaymentDetail(widget.paymentId)'));
-    expect(screen, contains("import '../../core/i18n/locale_extensions.dart';"));
-    expect(screen, contains('context.l10n'));
-    expect(screen, contains('l10n.paymentDetailPaymentSummary'));
-    expect(screen, contains('l10n.paymentDetailOrderSummary'));
-    expect(screen, contains('l10n.paymentDetailEInvoiceSummary'));
-    expect(screen, contains('l10n.paymentDetailProofSummary'));
-    expect(screen, contains('l10n.paymentDetailOperationalSnapshot'));
-    expect(screen, contains('l10n.paymentDetailOpenPortal'));
+      expect(
+        screen,
+        contains('paymentService.fetchPaymentDetail(widget.paymentId)'),
+      );
+      expect(
+        screen,
+        contains("import '../../core/i18n/locale_extensions.dart';"),
+      );
+      expect(screen, contains('context.l10n'));
+      expect(screen, contains('l10n.paymentDetailPaymentSummary'));
+      expect(screen, contains('l10n.paymentDetailOrderSummary'));
+      expect(screen, contains('l10n.paymentDetailEInvoiceSummary'));
+      expect(screen, contains('l10n.paymentDetailProofSummary'));
+      expect(screen, contains('l10n.paymentDetailOperationalSnapshot'));
+      expect(screen, contains('l10n.paymentDetailPortalPendingTitle'));
+      expect(screen, contains('l10n.paymentDetailPortalPendingBody'));
+      expect(screen, contains('l10n.paymentDetailPortalPendingFooter'));
+      expect(screen, contains('l10n.paymentDetailPortalPendingFooterWithAge'));
+      expect(screen, contains('l10n.paymentDetailOpenPortal'));
+      expect(screen, contains('l10n.paymentDetailJobStatus'));
+      expect(screen, contains('l10n.paymentDetailRefId'));
+      expect(screen, contains('l10n.paymentDetailSid'));
 
-    expect(paymentService, contains('Future<Map<String, dynamic>?> fetchPaymentDetail(String paymentId)'));
-    expect(einvoiceService, isNot(contains('resendInvoiceEmail')));
-    expect(screen, isNot(contains('requestRedInvoice(')));
-    expect(screen, isNot(contains('inventory_purchase')));
-  });
+      expect(
+        paymentService,
+        contains(
+          'Future<Map<String, dynamic>?> fetchPaymentDetail(String paymentId)',
+        ),
+      );
+      expect(einvoiceService, isNot(contains('resendInvoiceEmail')));
+      expect(screen, isNot(contains('requestRedInvoice(')));
+      expect(screen, isNot(contains('resendInvoiceEmail')));
+      expect(screen, isNot(contains('inventory_purchase')));
+    },
+  );
 }
