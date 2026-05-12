@@ -323,6 +323,35 @@ class InventoryService {
     }).toList();
   }
 
+  Future<Map<String, dynamic>?> fetchInventoryPurchaseOrderDetail({
+    required String purchaseOrderId,
+  }) async {
+    final order = await supabase
+        .from('inventory_purchase_orders')
+        .select(
+          'id, purchase_order_no, status, requested_delivery_date, total_amount, total_supply_amount, tax_amount, memo, created_at, supplier:inventory_suppliers(name)',
+        )
+        .eq('id', purchaseOrderId)
+        .maybeSingle();
+
+    if (order == null) {
+      return null;
+    }
+
+    final lines = await supabase
+        .from('inventory_purchase_order_lines')
+        .select(
+          'id, product_id, supplier_item_id, recommended_quantity_base, ordered_quantity_base, ordered_quantity_unit, order_unit, unit_price, supply_amount, tax_amount, memo, recommendation_snapshot, product:inventory_products(name), supplier_item:inventory_supplier_items(supplier_sku, order_unit_quantity_base, min_order_quantity)',
+        )
+        .eq('purchase_order_id', purchaseOrderId)
+        .order('supply_amount', ascending: false);
+
+    return {
+      'order': Map<String, dynamic>.from(order),
+      'lines': List<Map<String, dynamic>>.from(lines as List),
+    };
+  }
+
   Future<List<Map<String, dynamic>>> _rpcList(
     String functionName, {
     required Map<String, dynamic> params,

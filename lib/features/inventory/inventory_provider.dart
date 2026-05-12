@@ -850,3 +850,94 @@ final inventoryPurchaseOrderSummaryProvider =
       InventoryPurchaseOrderSummaryNotifier,
       InventoryPurchaseOrderSummaryState
     >((ref) => InventoryPurchaseOrderSummaryNotifier());
+
+class InventoryPurchaseOrderDetailState {
+  final String? selectedOrderId;
+  final Map<String, dynamic>? order;
+  final List<Map<String, dynamic>> lines;
+  final bool isLoading;
+  final String? error;
+
+  const InventoryPurchaseOrderDetailState({
+    this.selectedOrderId,
+    this.order,
+    this.lines = const [],
+    this.isLoading = false,
+    this.error,
+  });
+
+  InventoryPurchaseOrderDetailState copyWith({
+    String? selectedOrderId,
+    Map<String, dynamic>? order,
+    List<Map<String, dynamic>>? lines,
+    bool? isLoading,
+    String? error,
+    bool clearError = false,
+  }) => InventoryPurchaseOrderDetailState(
+    selectedOrderId: selectedOrderId ?? this.selectedOrderId,
+    order: order ?? this.order,
+    lines: lines ?? this.lines,
+    isLoading: isLoading ?? this.isLoading,
+    error: clearError ? null : (error ?? this.error),
+  );
+}
+
+class InventoryPurchaseOrderDetailNotifier
+    extends StateNotifier<InventoryPurchaseOrderDetailState> {
+  InventoryPurchaseOrderDetailNotifier()
+    : super(const InventoryPurchaseOrderDetailState());
+
+  Future<void> load(String orderId) async {
+    state = state.copyWith(
+      selectedOrderId: orderId,
+      isLoading: true,
+      clearError: true,
+    );
+    try {
+      final detail = await inventoryService.fetchInventoryPurchaseOrderDetail(
+        purchaseOrderId: orderId,
+      );
+      if (detail == null) {
+        state = state.copyWith(
+          order: null,
+          lines: const [],
+          isLoading: false,
+          error: 'The selected purchase order is no longer available.',
+        );
+        return;
+      }
+
+      state = state.copyWith(
+        order: Map<String, dynamic>.from(detail['order'] as Map),
+        lines: List<Map<String, dynamic>>.from(detail['lines'] as List),
+        isLoading: false,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: _mapInventoryPurchaseOrderDetailError(e),
+      );
+    }
+  }
+
+  void clear() {
+    state = const InventoryPurchaseOrderDetailState();
+  }
+
+  String _mapInventoryPurchaseOrderDetailError(Object error) {
+    final fallback = 'Failed to load purchase order detail.';
+    final message = error.toString();
+
+    if (message.contains('INVENTORY_PURCHASE_FORBIDDEN')) {
+      return 'No permission to view this purchase order detail.';
+    }
+
+    return fallback;
+  }
+}
+
+final inventoryPurchaseOrderDetailProvider =
+    StateNotifierProvider<
+      InventoryPurchaseOrderDetailNotifier,
+      InventoryPurchaseOrderDetailState
+    >((ref) => InventoryPurchaseOrderDetailNotifier());
