@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/layout/platform_info.dart';
 import '../../core/hardware/printer_service.dart';
@@ -52,7 +53,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
           ref.read(paymentProvider.notifier).resetPaymentSuccess();
         });
         if (mounted) {
-          showSuccessToast(context, 'Payment processed successfully');
+          showSuccessToast(context, context.l10n.cashierPaymentProcessed);
         }
       }
       final error = next.error;
@@ -74,7 +75,10 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     try {
       final uploaded = await paymentProofService.flushPendingUploads();
       if (mounted && uploaded > 0) {
-        showSuccessToast(context, '$uploaded queued proof photo(s) uploaded.');
+        showSuccessToast(
+          context,
+          context.l10n.cashierQueuedProofUploaded(uploaded),
+        );
       }
     } finally {
       _isFlushingProofQueue = false;
@@ -99,25 +103,26 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   }
 
   Future<bool> _showCancelOrderDialog({required String tableNumber}) async {
+    final l10n = context.l10n;
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surface1,
         title: Text(
-          'Cancel this order?',
+          l10n.cashierCancelOrderTitle,
           style: GoogleFonts.notoSansKr(
             color: AppColors.textPrimary,
             fontWeight: FontWeight.w700,
           ),
         ),
         content: Text(
-          'Table T$tableNumber order will be cancelled and the table cleared.',
+          l10n.cashierCancelOrderMessage(tableNumber),
           style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Back'),
+            child: Text(l10n.waiterBack),
           ),
           FilledButton.icon(
             onPressed: () => Navigator.of(context).pop(true),
@@ -126,7 +131,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
               foregroundColor: Colors.white,
             ),
             icon: const Icon(Icons.cancel),
-            label: const Text('Cancel Order'),
+            label: Text(l10n.waiterCancelOrderAction),
           ),
         ],
       ),
@@ -135,12 +140,12 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   }
 
   Future<bool> _showServiceConfirmDialog() async {
+    final l10n = context.l10n;
     final result = await ToastConfirmDialog.show(
       context: context,
-      title: 'Service Provision',
-      description:
-          'This order is treated as a service and not counted in revenue.\nUse for staff meals, service drinks, etc.',
-      confirmLabel: 'Service',
+      title: l10n.cashierServiceProvisionTitle,
+      description: l10n.cashierServiceProvisionMessage,
+      confirmLabel: l10n.cashierServiceAction,
     );
     return result ?? false;
   }
@@ -156,8 +161,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     required CashierOrder order,
     required String method,
   }) async {
+    final l10n = context.l10n;
     if (!PlatformInfo.isPrinterSupported) {
-      showErrorToast(context, 'Printer is only supported on the app.');
+      showErrorToast(context, l10n.cashierPrinterAppOnly);
       return;
     }
 
@@ -189,15 +195,13 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       return;
     }
     if (result != PrintResult.success) {
-      showErrorToast(
-        context,
-        'Payment complete. Receipt print failed — check the printer.',
-      );
+      showErrorToast(context, l10n.cashierReceiptPrintFailed);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final authState = ref.watch(authProvider);
     final storeId = authState.storeId;
     final role = authState.role ?? '';
@@ -243,16 +247,28 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                             const AppNavBar(),
                             const SizedBox(width: 10),
                             Text(
-                              'CASHIER',
+                              l10n.cashierTitle,
                               style: AppTextStyles.operationalTitle(size: 28),
                             ),
-                            const Spacer(),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                l10n.cashierSubtitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.notoSansKr(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
                             IconButton(
                               icon: const Icon(
                                 Icons.summarize,
                                 color: AppColors.textSecondary,
                               ),
-                              tooltip: "Today's Settlement",
+                              tooltip: l10n.cashierTodaySettlement,
                               onPressed: storeId == null
                                   ? null
                                   : () => _showTodaySummaryDialog(storeId),
@@ -263,7 +279,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                 Icons.logout,
                                 color: AppColors.textSecondary,
                               ),
-                              tooltip: 'Log Out',
+                              tooltip: l10n.logout,
                               onPressed: () async {
                                 await ref.read(authProvider.notifier).logout();
                               },
@@ -273,10 +289,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       ),
                       Expanded(
                         child: paymentState.orders.isEmpty
-                            ? const ToastOperationalEmptyState(
-                                headline: PosEmptyStateCopy.cashierQueueClear,
-                                helper:
-                                    PosEmptyStateCopy.cashierQueueClearHelper,
+                            ? ToastOperationalEmptyState(
+                                headline: l10n.cashierNoPayableOrdersTitle,
+                                helper: l10n.cashierNoPayableOrdersMessage,
                                 icon: Icons.point_of_sale_outlined,
                               )
                             : ListView.separated(
@@ -343,7 +358,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                           ),
                                           const SizedBox(height: 6),
                                           Text(
-                                            '${order.items.length} items',
+                                            l10n.cashierItemsCount(
+                                              order.items.length,
+                                            ),
                                             style: GoogleFonts.notoSansKr(
                                               color: AppColors.textSecondary,
                                               fontSize: 12,
@@ -370,11 +387,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       Padding(
                         padding: const EdgeInsets.all(24),
                         child: paymentState.selectedOrder == null
-                            ? const ToastOperationalEmptyState(
-                                headline:
-                                    PosEmptyStateCopy.cashierNothingSelected,
-                                helper: PosEmptyStateCopy
-                                    .cashierNothingSelectedHelper,
+                            ? ToastOperationalEmptyState(
+                                headline: l10n.cashierSelectTableTitle,
+                                helper: l10n.cashierSelectTableMessage,
                                 icon: Icons.table_bar_outlined,
                               )
                             : _SelectedOrderView(
@@ -521,7 +536,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                     setState(() => _selectedMethod = null);
                                     showSuccessToast(
                                       context,
-                                      'Order cancelled',
+                                      l10n.cashierOrderCancelled,
                                     );
                                   }
                                 },
@@ -614,6 +629,7 @@ class _SelectedOrderView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final currency = NumberFormat('#,###', 'vi_VN');
     final regularMethods = <_PaymentMethod>[
       const _PaymentMethod('cash', 'CASH', Color(0xFF2E7D32)),
@@ -686,7 +702,7 @@ class _SelectedOrderView extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      'TOTAL',
+                      l10n.cashierPaymentDue,
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textSecondary,
                         fontSize: 14,
@@ -763,7 +779,7 @@ class _SelectedOrderView extends StatelessWidget {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              'Service Provision (not counted in revenue)',
+                              l10n.cashierServiceProvisionTitle,
                               style: GoogleFonts.notoSansKr(
                                 color: isServiceSelected
                                     ? AppColors.textPrimary
@@ -794,7 +810,7 @@ class _SelectedOrderView extends StatelessWidget {
                       ),
                     ),
                     child: Text(
-                      '⚠️ Service provision is not counted in revenue',
+                      '⚠️ ${l10n.cashierServiceProvisionRevenueHint}',
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textPrimary,
                         fontSize: 12,
@@ -825,8 +841,8 @@ class _SelectedOrderView extends StatelessWidget {
                           )
                         : Text(
                             isServiceSelected
-                                ? 'Service processed'
-                                : 'PROCESS PAYMENT',
+                                ? l10n.cashierServiceNow
+                                : l10n.cashierPayNow,
                             style: GoogleFonts.bebasNeue(
                               fontSize: 22,
                               letterSpacing: 1.0,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../core/i18n/locale_extensions.dart';
 import '../../main.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
@@ -22,7 +23,7 @@ final restaurantNameProvider = FutureProvider.family<String, String>((
       .select('name')
       .eq('id', storeId)
       .maybeSingle();
-  return response?['name']?.toString() ?? 'Store';
+  return response?['name']?.toString() ?? '';
 });
 
 class StoreSettings {
@@ -133,6 +134,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
   }
 
   Future<int?> _showGuestCountDialog() async {
+    final l10n = context.l10n;
     final controller = TextEditingController(
       text: _selectedGuestCount?.toString() ?? '',
     );
@@ -142,19 +144,19 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
         return AlertDialog(
           backgroundColor: AppColors.surface1,
           title: Text(
-            'How many guests?',
+            l10n.waiterGuestCountTitle,
             style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
           ),
           content: TextField(
             controller: controller,
             keyboardType: TextInputType.number,
             style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-            decoration: const InputDecoration(labelText: 'Guest count'),
+            decoration: InputDecoration(labelText: l10n.waiterGuestCountField),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: Text(l10n.cancel),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
@@ -168,7 +170,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                 }
                 Navigator.of(context).pop(guestCount);
               },
-              child: const Text('Confirm'),
+              child: Text(l10n.confirm),
             ),
           ],
         );
@@ -179,25 +181,26 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
   }
 
   Future<bool> _showCancelOrderDialog({required String tableNumber}) async {
+    final l10n = context.l10n;
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surface1,
         title: Text(
-          'Cancel this order?',
+          l10n.waiterCancelOrderTitle,
           style: GoogleFonts.notoSansKr(
             color: AppColors.textPrimary,
             fontWeight: FontWeight.w700,
           ),
         ),
         content: Text(
-          'Table T$tableNumber order will be cancelled and the table cleared.',
+          l10n.waiterCancelOrderMessage(tableNumber),
           style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Back'),
+            child: Text(l10n.waiterBack),
           ),
           FilledButton.icon(
             onPressed: () => Navigator.of(context).pop(true),
@@ -206,7 +209,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
               foregroundColor: Colors.white,
             ),
             icon: const Icon(Icons.cancel),
-            label: const Text('Cancel Order'),
+            label: Text(l10n.waiterCancelOrderAction),
           ),
         ],
       ),
@@ -215,6 +218,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
   }
 
   Future<PosTable?> _showTransferTableDialog(String storeId) async {
+    final l10n = context.l10n;
     final tableState = ref.read(waiterTableProvider);
     final currentTableId = _selectedTable?.id;
     final availableTables = tableState.tables
@@ -223,7 +227,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
 
     if (availableTables.isEmpty) {
       if (mounted) {
-        showErrorToast(context, 'No empty tables available to move to.');
+        showErrorToast(context, l10n.waiterNoEmptyTables);
       }
       return null;
     }
@@ -233,7 +237,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surface1,
         title: Text(
-          'Move Table',
+          l10n.waiterMoveTableTitle,
           style: GoogleFonts.notoSansKr(
             color: AppColors.textPrimary,
             fontWeight: FontWeight.w700,
@@ -253,14 +257,14 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                 ),
                 tileColor: AppColors.surface2,
                 title: Text(
-                  'Table ${table.tableNumber}',
+                  l10n.waiterTableLabel(table.tableNumber),
                   style: GoogleFonts.notoSansKr(
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 subtitle: Text(
-                  '${table.seatCount ?? 0} seats',
+                  l10n.waiterSeatCount(table.seatCount ?? 0),
                   style: GoogleFonts.notoSansKr(
                     color: AppColors.textSecondary,
                     fontSize: 12,
@@ -274,7 +278,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
         ],
       ),
@@ -282,10 +286,11 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
   }
 
   void _showOrderCancelledSnackBar() {
+    final l10n = context.l10n;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Order cancelled',
+          l10n.waiterOrderCancelled,
           style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
         ),
         backgroundColor: AppColors.statusOccupied,
@@ -519,8 +524,9 @@ class _WaiterTopBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final restaurantName = storeId == null
-        ? const AsyncValue<String>.data('Store')
+        ? AsyncValue<String>.data(l10n.store)
         : ref.watch(restaurantNameProvider(storeId!));
 
     return Container(
@@ -544,31 +550,42 @@ class _WaiterTopBar extends ConsumerWidget {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Center(
-              child: restaurantName.when(
-                data: (name) => Text(
-                  name,
-                  style: GoogleFonts.notoSansKr(
-                    color: AppColors.textPrimary,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  l10n.waiterDiningFloor,
+                  style: GoogleFonts.bebasNeue(
+                    color: AppColors.textSecondary,
                     fontSize: 18,
-                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.8,
                   ),
                 ),
-                loading: () => Text(
-                  'Loading...',
-                  style: GoogleFonts.notoSansKr(
-                    color: AppColors.textSecondary,
-                    fontSize: 14,
+                restaurantName.when(
+                  data: (name) => Text(
+                    name.isEmpty ? l10n.store : name,
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  loading: () => Text(
+                    l10n.waiterLoading,
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.textSecondary,
+                      fontSize: 14,
+                    ),
+                  ),
+                  error: (_, _) => Text(
+                    l10n.store,
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.textSecondary,
+                      fontSize: 14,
+                    ),
                   ),
                 ),
-                error: (_, _) => Text(
-                  'Store',
-                  style: GoogleFonts.notoSansKr(
-                    color: AppColors.textSecondary,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
+              ],
             ),
           ),
           IconButton(
@@ -597,6 +614,7 @@ class _TableGridView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     if (state.isLoading) {
       return const Center(
         child: CircularProgressIndicator(color: AppColors.amber500),
@@ -623,7 +641,7 @@ class _TableGridView extends StatelessWidget {
                 backgroundColor: AppColors.amber500,
                 foregroundColor: AppColors.surface0,
               ),
-              child: const Text('Retry'),
+              child: Text(l10n.retry),
             ),
           ],
         ),
@@ -633,7 +651,7 @@ class _TableGridView extends StatelessWidget {
     if (state.tables.isEmpty) {
       return Center(
         child: Text(
-          'No tables found.',
+          l10n.waiterNoTablesFound,
           style: GoogleFonts.notoSansKr(
             color: AppColors.textSecondary,
             fontSize: 14,
@@ -645,120 +663,160 @@ class _TableGridView extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final crossAxisCount = constraints.maxWidth < 1024 ? 3 : 4;
-
-        return GridView.builder(
-          padding: const EdgeInsets.all(20),
-          itemCount: state.tables.length,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            mainAxisSpacing: 16,
-            crossAxisSpacing: 16,
-            childAspectRatio: 1,
-          ),
-          itemBuilder: (context, index) {
-            final table = state.tables[index];
-            final isOccupied = table.isOccupied;
-
-            return InkWell(
-              key: index == 0 ? const Key('table_first_card') : null,
-              borderRadius: BorderRadius.circular(16),
-              onTap: () => onTapTable(table),
-              child: Container(
-                constraints: const BoxConstraints(
-                  minWidth: 120,
-                  minHeight: 120,
-                ),
-                decoration: BoxDecoration(
-                  color: isOccupied
-                      ? AppColors.surface1.withValues(alpha: 0.95)
-                      : AppColors.surface1,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border(
-                    left: isOccupied
-                        ? const BorderSide(color: AppColors.amber500, width: 4)
-                        : const BorderSide(color: AppColors.surface2, width: 1),
-                    top: isOccupied
-                        ? BorderSide(
-                            color: AppColors.statusOccupied.withValues(
-                              alpha: 0.4,
-                            ),
-                          )
-                        : BorderSide.none,
-                    right: isOccupied
-                        ? BorderSide(
-                            color: AppColors.statusOccupied.withValues(
-                              alpha: 0.4,
-                            ),
-                          )
-                        : BorderSide.none,
-                    bottom: isOccupied
-                        ? BorderSide(
-                            color: AppColors.statusOccupied.withValues(
-                              alpha: 0.4,
-                            ),
-                          )
-                        : BorderSide.none,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.waiterDiningFloor,
+                    style: GoogleFonts.bebasNeue(
+                      color: AppColors.textPrimary,
+                      fontSize: 28,
+                      letterSpacing: 1.0,
+                    ),
                   ),
-                  gradient: isOccupied
-                      ? LinearGradient(
-                          colors: [
-                            AppColors.statusOccupied.withValues(alpha: 0.22),
-                            AppColors.surface1,
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        )
-                      : null,
-                ),
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  children: [
-                    const Spacer(),
-                    Text(
-                      table.tableNumber,
-                      style: GoogleFonts.bebasNeue(
-                        color: AppColors.textPrimary,
-                        fontSize: 40,
-                        letterSpacing: 1.2,
-                      ),
+                  const SizedBox(height: 4),
+                  Text(
+                    l10n.waiterTapTableToStart,
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${table.seatCount ?? 0} seats',
-                      style: GoogleFonts.notoSansKr(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const Spacer(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: isOccupied
-                                ? AppColors.statusOccupied
-                                : AppColors.statusAvailable,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          isOccupied ? 'Occupied' : 'Available',
-                          style: GoogleFonts.notoSansKr(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            );
-          },
+            ),
+            Expanded(
+              child: GridView.builder(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                itemCount: state.tables.length,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  mainAxisSpacing: 16,
+                  crossAxisSpacing: 16,
+                  childAspectRatio: 1,
+                ),
+                itemBuilder: (context, index) {
+                  final table = state.tables[index];
+                  final isOccupied = table.isOccupied;
+
+                  return InkWell(
+                    key: index == 0 ? const Key('table_first_card') : null,
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () => onTapTable(table),
+                    child: Container(
+                      constraints: const BoxConstraints(
+                        minWidth: 120,
+                        minHeight: 120,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isOccupied
+                            ? AppColors.surface1.withValues(alpha: 0.95)
+                            : AppColors.surface1,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border(
+                          left: isOccupied
+                              ? const BorderSide(
+                                  color: AppColors.amber500,
+                                  width: 4,
+                                )
+                              : const BorderSide(
+                                  color: AppColors.surface2,
+                                  width: 1,
+                                ),
+                          top: isOccupied
+                              ? BorderSide(
+                                  color: AppColors.statusOccupied.withValues(
+                                    alpha: 0.4,
+                                  ),
+                                )
+                              : BorderSide.none,
+                          right: isOccupied
+                              ? BorderSide(
+                                  color: AppColors.statusOccupied.withValues(
+                                    alpha: 0.4,
+                                  ),
+                                )
+                              : BorderSide.none,
+                          bottom: isOccupied
+                              ? BorderSide(
+                                  color: AppColors.statusOccupied.withValues(
+                                    alpha: 0.4,
+                                  ),
+                                )
+                              : BorderSide.none,
+                        ),
+                        gradient: isOccupied
+                            ? LinearGradient(
+                                colors: [
+                                  AppColors.statusOccupied.withValues(
+                                    alpha: 0.22,
+                                  ),
+                                  AppColors.surface1,
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              )
+                            : null,
+                      ),
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        children: [
+                          const Spacer(),
+                          Text(
+                            table.tableNumber,
+                            style: GoogleFonts.bebasNeue(
+                              color: AppColors.textPrimary,
+                              fontSize: 40,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            l10n.waiterSeatCount(table.seatCount ?? 0),
+                            style: GoogleFonts.notoSansKr(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const Spacer(),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: isOccupied
+                                      ? AppColors.statusOccupied
+                                      : AppColors.statusAvailable,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                isOccupied
+                                    ? l10n.waiterStatusOccupied
+                                    : l10n.waiterStatusAvailable,
+                                style: GoogleFonts.notoSansKr(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
     );
