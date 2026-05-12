@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
@@ -489,6 +490,10 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                           storeId: storeId,
                                         ),
                                       );
+                                    }
+
+                                    if (paymentId != null && context.mounted) {
+                                      context.go('/payments/$paymentId');
                                     }
                                   }
                                 },
