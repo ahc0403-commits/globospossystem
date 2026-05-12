@@ -6,7 +6,7 @@ String readRepoFile(String path) => File(path).readAsStringSync();
 
 void main() {
   test(
-    'tracked inventory workspace exposes a bounded recommendation trigger',
+    'tracked inventory workspace exposes a bounded recommendation trigger and latest snapshot detail',
     () {
       final tab = readRepoFile('lib/features/admin/tabs/inventory_tab.dart');
       final provider = readRepoFile(
@@ -21,8 +21,11 @@ void main() {
       expect(tab, contains('Inventory Recommendation Trigger'));
       expect(tab, contains('Generate Recommendation Snapshot'));
       expect(tab, contains('Recommendation Status'));
+      expect(tab, contains('Latest Recommendation Snapshot'));
+      expect(tab, contains('Refresh Recommendation Snapshot'));
       expect(tab, contains('inventoryPurchaseOverviewProvider'));
       expect(tab, contains('inventoryPurchaseRecommendationRunProvider'));
+      expect(tab, contains('inventoryPurchaseRecommendationSnapshotProvider'));
       expect(tab, contains('Refresh Purchase Overview'));
 
       expect(provider, contains('class InventoryPurchaseOverviewState'));
@@ -32,11 +35,26 @@ void main() {
         contains('class InventoryPurchaseRecommendationRunState'),
       );
       expect(provider, contains('inventoryPurchaseRecommendationRunProvider'));
+      expect(
+        provider,
+        contains('class InventoryPurchaseRecommendationSnapshotState'),
+      );
+      expect(
+        provider,
+        contains('inventoryPurchaseRecommendationSnapshotProvider'),
+      );
 
       expect(service, contains('fetchInventoryPurchaseDashboard'));
       expect(service, contains("'get_inventory_purchase_dashboard'"));
       expect(service, contains('runInventoryPurchaseRecommendation'));
       expect(service, contains("'run_inventory_purchase_recommendation'"));
+      expect(
+        service,
+        contains('fetchLatestInventoryPurchaseRecommendationRun'),
+      );
+      expect(service, contains('fetchInventoryPurchaseRecommendationLines'));
+      expect(service, contains("'inventory_recommendation_runs'"));
+      expect(service, contains("'inventory_recommendation_lines'"));
       expect(
         tab,
         contains(

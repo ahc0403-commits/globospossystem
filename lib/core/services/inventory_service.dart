@@ -236,6 +236,38 @@ class InventoryService {
     return result.toString();
   }
 
+  Future<Map<String, dynamic>?> fetchLatestInventoryPurchaseRecommendationRun({
+    required String storeId,
+  }) async {
+    final result = await supabase
+        .from('inventory_recommendation_runs')
+        .select('id, restaurant_id, run_date, target_stock_days, created_at')
+        .eq('restaurant_id', storeId)
+        .order('created_at', ascending: false)
+        .limit(1)
+        .maybeSingle();
+
+    if (result == null) {
+      return null;
+    }
+    return Map<String, dynamic>.from(result);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchInventoryPurchaseRecommendationLines({
+    required String runId,
+  }) async {
+    final result = await supabase
+        .from('inventory_recommendation_lines')
+        .select(
+          'id, product_id, supplier_id, current_stock_base, avg_daily_consumption_base, target_stock_days, recommended_quantity_base, recommended_order_units, estimated_days_remaining, risk_status, created_at, product:inventory_products(name), supplier:inventory_suppliers(name)',
+        )
+        .eq('run_id', runId)
+        .order('recommended_order_units', ascending: false)
+        .limit(8);
+
+    return List<Map<String, dynamic>>.from(result as List);
+  }
+
   Future<List<Map<String, dynamic>>> _rpcList(
     String functionName, {
     required Map<String, dynamic> params,
