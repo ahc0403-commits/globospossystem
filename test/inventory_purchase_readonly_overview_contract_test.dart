@@ -30,9 +30,13 @@ void main() {
       expect(tab, contains('Receipt Visibility'));
       expect(tab, contains('Recent Receipts'));
       expect(tab, contains('Receipt Line Provenance'));
+      expect(tab, contains('Supplier Context History'));
       expect(tab, contains('Receipt status'));
       expect(tab, contains('Readiness'));
       expect(tab, contains('Latest receipt'));
+      expect(tab, contains('Recent unit'));
+      expect(tab, contains('Recent order'));
+      expect(tab, contains('Recent received'));
       expect(tab, contains('Base factor'));
       expect(tab, contains('Min order'));
       expect(tab, contains('Lead time'));
@@ -48,6 +52,18 @@ void main() {
         tab,
         contains(
           'Inspect the selected receipt line-by-line to understand ordered quantity, accepted quantity, rejected quantity, and recommendation provenance without opening any mutation workflow.',
+        ),
+      );
+      expect(
+        tab,
+        contains(
+          'Review recent purchase and receipt history for the same supplier item without opening approval, receipt confirmation, or stock mutation workflows.',
+        ),
+      );
+      expect(
+        tab,
+        contains(
+          'No prior supplier history is visible for the current purchase-order lines.',
         ),
       );
       expect(
@@ -114,8 +130,14 @@ void main() {
       expect(service, contains("copy['line_count']"));
       expect(service, contains("copy['accepted_quantity_base']"));
       expect(service, contains("copy['line_details']"));
+      expect(service, contains("line['supplier_history']"));
       expect(service, contains("'recommendation_run_id'"));
       expect(service, contains('supplier_item:inventory_supplier_items'));
+      expect(
+        service,
+        contains('purchase_order:inventory_purchase_orders!inner('),
+      );
+      expect(service, contains("'last_receipt_at'"));
       expect(service, contains("'lead_time_days'"));
       expect(service, contains("'is_preferred'"));
       expect(

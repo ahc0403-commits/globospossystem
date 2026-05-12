@@ -2279,6 +2279,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             const SizedBox(height: 12),
             _buildReceiptLineProvenanceSection(receipts),
             const SizedBox(height: 12),
+            _buildSupplierContextHistorySection(detail.lines),
+            const SizedBox(height: 12),
             if (detail.lines.isEmpty)
               Text(
                 'No line items are visible for the selected order.',
@@ -2294,6 +2296,203 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     .toList(),
               ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSupplierContextHistorySection(List<Map<String, dynamic>> lines) {
+    final linesWithHistory = lines
+        .where(
+          (line) => (line['supplier_history'] as List? ?? const []).isNotEmpty,
+        )
+        .toList();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Supplier Context History',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Review recent purchase and receipt history for the same supplier item without opening approval, receipt confirmation, or stock mutation workflows.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (linesWithHistory.isEmpty)
+            Text(
+              'No prior supplier history is visible for the current purchase-order lines.',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            )
+          else
+            Column(
+              children: linesWithHistory
+                  .map((line) => _buildSupplierHistoryCard(line))
+                  .toList(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSupplierHistoryCard(Map<String, dynamic> line) {
+    final productMap = line['product'] as Map<String, dynamic>?;
+    final supplierItemMap = line['supplier_item'] as Map<String, dynamic>?;
+    final productName =
+        productMap?['name']?.toString() ??
+        line['product_id']?.toString() ??
+        '-';
+    final supplierSku = supplierItemMap?['supplier_sku']?.toString();
+    final history = List<Map<String, dynamic>>.from(
+      line['supplier_history'] as List? ?? const [],
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            productName,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            supplierSku == null || supplierSku.isEmpty
+                ? 'Supplier SKU unavailable'
+                : 'Supplier SKU $supplierSku',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Column(
+            children: history.map(_buildSupplierHistoryEntryCard).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSupplierHistoryEntryCard(Map<String, dynamic> entry) {
+    final purchaseOrderNo = entry['purchase_order_no']?.toString() ?? '-';
+    final orderStatus = entry['order_status']?.toString() ?? 'submitted';
+    final orderedAtRaw = entry['ordered_at']?.toString();
+    final orderedAt = orderedAtRaw == null
+        ? null
+        : DateTime.tryParse(orderedAtRaw)?.toLocal();
+    final lastReceiptAtRaw = entry['last_receipt_at']?.toString();
+    final lastReceiptAt = lastReceiptAtRaw == null
+        ? null
+        : DateTime.tryParse(lastReceiptAtRaw)?.toLocal();
+    final orderedBase =
+        (entry['ordered_quantity_base'] as num?)?.toDouble() ?? 0;
+    final orderedUnits =
+        (entry['ordered_quantity_unit'] as num?)?.toDouble() ?? 0;
+    final orderUnit = entry['order_unit']?.toString() ?? 'unit';
+    final unitPrice = (entry['unit_price'] as num?)?.toDouble() ?? 0;
+    final receivedBase =
+        (entry['received_quantity_base'] as num?)?.toDouble() ?? 0;
+    final acceptedBase =
+        (entry['accepted_quantity_base'] as num?)?.toDouble() ?? 0;
+    final rejectedBase =
+        (entry['rejected_quantity_base'] as num?)?.toDouble() ?? 0;
+    final lastReceiptStatus = entry['last_receipt_status']?.toString();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildIngredientMetaChip(
+                purchaseOrderNo,
+                color: AppColors.amber500,
+              ),
+              _buildIngredientMetaChip(
+                orderStatus.toUpperCase(),
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                orderedAt == null
+                    ? 'Ordered date unavailable'
+                    : 'Ordered ${DateFormat('yyyy-MM-dd').format(orderedAt)}',
+              ),
+              _buildIngredientMetaChip(
+                'Recent unit ${_formatCurrencyCompact(unitPrice)}',
+              ),
+              _buildIngredientMetaChip(
+                'Recent order ${orderedUnits.toStringAsFixed(3)} $orderUnit',
+              ),
+              _buildIngredientMetaChip(
+                'Recent order base ${orderedBase.toStringAsFixed(3)}',
+              ),
+              _buildIngredientMetaChip(
+                'Recent received ${receivedBase.toStringAsFixed(3)}',
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                'Recent accepted ${acceptedBase.toStringAsFixed(3)}',
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                'Recent rejected ${rejectedBase.toStringAsFixed(3)}',
+                color: rejectedBase > 0
+                    ? AppColors.statusOccupied
+                    : AppColors.surface2,
+              ),
+              _buildIngredientMetaChip(
+                lastReceiptStatus == null
+                    ? 'Receipt status unavailable'
+                    : 'Receipt ${lastReceiptStatus.toUpperCase()}',
+                color: _receiptVisibilityColor(lastReceiptStatus ?? 'draft'),
+              ),
+              _buildIngredientMetaChip(
+                lastReceiptAt == null
+                    ? 'Latest receipt unavailable'
+                    : 'Latest receipt ${DateFormat('yyyy-MM-dd').format(lastReceiptAt)}',
+              ),
+            ],
+          ),
         ],
       ),
     );
