@@ -2292,7 +2292,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             else
               Column(
                 children: detail.lines
-                    .map((line) => _buildPurchaseOrderLineCard(line))
+                    .map(
+                      (line) => _buildPurchaseOrderLineCard(
+                        line,
+                        requestedDate: requestedDate,
+                        orderStatus: status,
+                      ),
+                    )
                     .toList(),
               ),
           ],
@@ -2803,7 +2809,11 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     );
   }
 
-  Widget _buildPurchaseOrderLineCard(Map<String, dynamic> line) {
+  Widget _buildPurchaseOrderLineCard(
+    Map<String, dynamic> line, {
+    required String? requestedDate,
+    required String orderStatus,
+  }) {
     final productMap = line['product'] as Map<String, dynamic>?;
     final supplierItemMap = line['supplier_item'] as Map<String, dynamic>?;
     final snapshot = line['recommendation_snapshot'] is Map
@@ -2859,6 +2869,18 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     final unitPriceDriftColor = _inventoryUnitPriceDriftColor(
       currentUnitPrice: unitPrice,
       previousUnitPrice: latestHistoryUnitPrice,
+    );
+    final leadTimeRiskLabel = _inventoryLeadTimeRiskLabel(
+      requestedDate: requestedDate,
+      supplierLeadTimeDays: supplierLeadTimeDays,
+      remainingBase: remainingBase,
+      orderStatus: orderStatus,
+    );
+    final leadTimeRiskColor = _inventoryLeadTimeRiskColor(
+      requestedDate: requestedDate,
+      supplierLeadTimeDays: supplierLeadTimeDays,
+      remainingBase: remainingBase,
+      orderStatus: orderStatus,
     );
 
     return Container(
@@ -2975,6 +2997,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     ? 'Lead time $supplierLeadTimeDays day(s)'
                     : 'Lead time unavailable',
                 color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                leadTimeRiskLabel,
+                color: leadTimeRiskColor,
               ),
               _buildIngredientMetaChip(
                 supplierPreferred
@@ -3139,6 +3165,68 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       return AppColors.statusOccupied;
     }
     return AppColors.amber500;
+  }
+
+  String _inventoryLeadTimeRiskLabel({
+    required String? requestedDate,
+    required int supplierLeadTimeDays,
+    required double remainingBase,
+    required String orderStatus,
+  }) {
+    if (remainingBase <= 0 || orderStatus == 'received') {
+      return 'Lead-time risk complete';
+    }
+    if (requestedDate == null ||
+        requestedDate.isEmpty ||
+        supplierLeadTimeDays <= 0) {
+      return 'Lead-time risk unavailable';
+    }
+
+    final requestedAt = DateTime.tryParse(requestedDate);
+    if (requestedAt == null) {
+      return 'Lead-time risk unavailable';
+    }
+
+    final today = DateTime.now();
+    final requestedLocal = DateTime(
+      requestedAt.year,
+      requestedAt.month,
+      requestedAt.day,
+    );
+    final currentLocal = DateTime(today.year, today.month, today.day);
+    final daysUntilRequested = requestedLocal.difference(currentLocal).inDays;
+
+    if (daysUntilRequested < 0) {
+      return 'Lead-time risk overdue';
+    }
+    if (daysUntilRequested < supplierLeadTimeDays) {
+      return 'Lead-time risk tight';
+    }
+    return 'Lead-time risk on track';
+  }
+
+  Color _inventoryLeadTimeRiskColor({
+    required String? requestedDate,
+    required int supplierLeadTimeDays,
+    required double remainingBase,
+    required String orderStatus,
+  }) {
+    final label = _inventoryLeadTimeRiskLabel(
+      requestedDate: requestedDate,
+      supplierLeadTimeDays: supplierLeadTimeDays,
+      remainingBase: remainingBase,
+      orderStatus: orderStatus,
+    );
+    if (label.endsWith('complete') || label.endsWith('on track')) {
+      return AppColors.statusAvailable;
+    }
+    if (label.endsWith('tight')) {
+      return AppColors.amber500;
+    }
+    if (label.endsWith('overdue')) {
+      return AppColors.statusOccupied;
+    }
+    return AppColors.surface2;
   }
 
   Color _receiptVisibilityColor(String status) => switch (status) {

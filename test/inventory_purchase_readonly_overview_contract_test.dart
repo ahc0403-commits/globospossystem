@@ -42,6 +42,7 @@ void main() {
       expect(tab, contains('Base factor'));
       expect(tab, contains('Min order'));
       expect(tab, contains('Lead time'));
+      expect(tab, contains('Lead-time risk'));
       expect(tab, contains('Preferred supplier item'));
       expect(tab, contains('Fallback supplier item'));
       expect(
@@ -63,6 +64,7 @@ void main() {
         ),
       );
       expect(tab, contains('Price drift unavailable'));
+      expect(tab, contains('Lead-time risk unavailable'));
       expect(
         tab,
         contains(
