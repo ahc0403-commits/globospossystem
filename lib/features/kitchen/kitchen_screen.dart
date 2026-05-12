@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../../core/i18n/locale_extensions.dart';
 import '../../core/utils/time_utils.dart';
 
 import '../../core/ui/app_primitives.dart';
@@ -24,7 +25,7 @@ final kitchenRestaurantNameProvider = FutureProvider.family<String, String>((
       .select('name')
       .eq('id', storeId)
       .maybeSingle();
-  return response?['name']?.toString() ?? 'Store';
+  return response?['name']?.toString() ?? '';
 });
 
 class KitchenScreen extends ConsumerStatefulWidget {
@@ -232,7 +233,11 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                           final completedFlashing = _completedOrderIds.contains(
                             order.orderId,
                           );
-                          final elapsed = _elapsedLabel(order.createdAt, _now);
+                          final elapsed = _elapsedLabel(
+                            context,
+                            order.createdAt,
+                            _now,
+                          );
 
                                 return KeyedSubtree(
                                   key: Key('kitchen_order_${order.orderId}'),
@@ -394,6 +399,7 @@ class _KitchenAttentionSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final pendingItems = orders
         .expand((order) => order.items)
         .where((item) => item.status == 'pending')
@@ -435,7 +441,7 @@ class _KitchenAttentionSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Kitchen Attention',
+            l10n.kitchenAttentionTitle,
             style: GoogleFonts.notoSansKr(
               color: AppColors.textPrimary,
               fontSize: 14,
@@ -444,7 +450,7 @@ class _KitchenAttentionSection extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Read-only kitchen readiness layer built from the tracked active order queue.',
+            l10n.kitchenAttentionSubtitle,
             style: GoogleFonts.notoSansKr(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -456,26 +462,26 @@ class _KitchenAttentionSection extends StatelessWidget {
             runSpacing: 12,
             children: [
               _attentionMetric(
-                'Follow-up now',
+                l10n.kitchenAttentionFollowUpNow,
                 '$followUpCount',
                 followUpCount > 0
                     ? AppColors.amber500
                     : AppColors.statusAvailable,
               ),
               _attentionMetric(
-                'Pending items',
+                l10n.kitchenAttentionPendingItems,
                 '$pendingItems',
                 pendingItems > 0
                     ? AppColors.statusCancelled
                     : AppColors.statusAvailable,
               ),
               _attentionMetric(
-                'Ready items',
+                l10n.kitchenAttentionReadyItems,
                 '$readyItems',
                 readyItems > 0 ? AppColors.amber500 : AppColors.statusAvailable,
               ),
               _attentionMetric(
-                'Oldest wait',
+                l10n.kitchenAttentionOldestWait,
                 '${oldestWaitMinutes}m',
                 oldestWaitMinutes >= 15
                     ? AppColors.statusCancelled
@@ -489,31 +495,32 @@ class _KitchenAttentionSection extends StatelessWidget {
             runSpacing: 8,
             children: [
               _attentionChip(
-                'Active tables ${orders.length}',
+                l10n.kitchenAttentionActiveTables(orders.length),
                 AppColors.textPrimary,
               ),
               _attentionChip(
-                'Preparing $preparingItems',
+                l10n.kitchenAttentionPreparing(preparingItems),
                 preparingItems > 0
                     ? AppColors.statusAvailable
                     : AppColors.textSecondary,
               ),
               _attentionChip(
-                'Long waits $longWaitCount',
+                l10n.kitchenAttentionLongWaits(longWaitCount),
                 longWaitCount > 0
                     ? AppColors.statusCancelled
                     : AppColors.statusAvailable,
               ),
               _attentionChip(
-                'Ready tables $readyTables',
+                l10n.kitchenAttentionReadyTables(readyTables),
                 readyTables > 0 ? AppColors.amber500 : AppColors.statusAvailable,
               ),
             ],
           ),
           const SizedBox(height: 12),
           _attentionSupportRow(
-            'Follow-up focus',
+            l10n.kitchenAttentionFollowUpFocus,
             _followUpCopy(
+              context: context,
               pendingItems: pendingItems,
               readyItems: readyItems,
               longWaitCount: longWaitCount,
@@ -521,8 +528,9 @@ class _KitchenAttentionSection extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           _attentionSupportRow(
-            'Handoff readiness',
+            l10n.kitchenAttentionHandoffReadiness,
             _handoffReadinessCopy(
+              context: context,
               readyItems: readyItems,
               readyTables: readyTables,
               oldestWaitMinutes: oldestWaitMinutes,
@@ -530,8 +538,8 @@ class _KitchenAttentionSection extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           _attentionSupportRow(
-            'Boundary',
-            'Read-only kitchen readiness surface only. Status advancement remains on the tracked order cards below.',
+            l10n.kitchenAttentionBoundary,
+            l10n.kitchenAttentionBoundaryBody,
           ),
         ],
       ),
@@ -621,34 +629,41 @@ class _KitchenAttentionSection extends StatelessWidget {
   }
 
   String _followUpCopy({
+    required BuildContext context,
     required int pendingItems,
     required int readyItems,
     required int longWaitCount,
   }) {
+    final l10n = context.l10n;
     if (longWaitCount > 0) {
-      return 'Long-wait tickets should be checked first because they signal the highest service risk in the active kitchen queue.';
+      return l10n.kitchenAttentionFocusLongWait;
     }
     if (readyItems > 0) {
-      return 'Ready items are waiting on the next handoff step, so they are the clearest near-term release point in the queue.';
+      return l10n.kitchenAttentionFocusReadyItems;
     }
     if (pendingItems > 0) {
-      return 'Pending items still dominate the active queue, so prep throughput is the primary watch item right now.';
+      return l10n.kitchenAttentionFocusPendingItems;
     }
-    return 'No immediate kitchen follow-up signal is ahead of the others for the current board snapshot.';
+    return l10n.kitchenAttentionFocusNone;
   }
 
   String _handoffReadinessCopy({
+    required BuildContext context,
     required int readyItems,
     required int readyTables,
     required int oldestWaitMinutes,
   }) {
+    final l10n = context.l10n;
     if (readyItems > 0) {
-      return '$readyItems ready items across $readyTables tables are waiting on the next handoff step.';
+      return l10n.kitchenAttentionHandoffReadyItems(
+        readyItems,
+        readyTables,
+      );
     }
     if (oldestWaitMinutes >= 15) {
-      return 'No items are marked ready yet, but aging tickets suggest the next service release point should be checked closely.';
+      return l10n.kitchenAttentionHandoffAgingTickets;
     }
-    return 'No immediate handoff queue is visible right now, so the board is still prep-dominant rather than release-dominant.';
+    return l10n.kitchenAttentionHandoffNone;
   }
 }
 
@@ -660,8 +675,9 @@ class _KitchenTopBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final restaurantName = storeId == null
-        ? const AsyncValue<String>.data('Store')
+        ? AsyncValue<String>.data(l10n.store)
         : ref.watch(kitchenRestaurantNameProvider(storeId!));
 
     return Container(
@@ -674,13 +690,16 @@ class _KitchenTopBar extends ConsumerWidget {
         children: [
           const AppNavBar(),
           const SizedBox(width: 12),
-          Text('KITCHEN', style: AppTextStyles.operationalTitle(size: 28)),
+          Text(
+            l10n.kitchenTitle.toUpperCase(),
+            style: AppTextStyles.operationalTitle(size: 28),
+          ),
           const SizedBox(width: 16),
           Expanded(
             child: Center(
               child: restaurantName.when(
                 data: (name) => Text(
-                  name,
+                  name.isEmpty ? l10n.store : name,
                   style: GoogleFonts.notoSansKr(
                     color: AppColors.textPrimary,
                     fontSize: 18,
@@ -688,14 +707,14 @@ class _KitchenTopBar extends ConsumerWidget {
                   ),
                 ),
                 loading: () => Text(
-                  'Loading...',
+                  l10n.loading,
                   style: GoogleFonts.notoSansKr(
                     color: AppColors.textSecondary,
                     fontSize: 14,
                   ),
                 ),
                 error: (_, _) => Text(
-                  'Store',
+                  l10n.store,
                   style: GoogleFonts.notoSansKr(
                     color: AppColors.textSecondary,
                     fontSize: 14,
@@ -716,7 +735,7 @@ class _KitchenTopBar extends ConsumerWidget {
           IconButton(
             key: const Key('logout_button'),
             icon: const Icon(Icons.logout, color: AppColors.textSecondary),
-            tooltip: 'Log Out',
+            tooltip: l10n.logOut,
             onPressed: () async {
               await ref.read(authProvider.notifier).logout();
             },
@@ -745,13 +764,13 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
-String _elapsedLabel(DateTime createdAt, DateTime now) {
+String _elapsedLabel(BuildContext context, DateTime createdAt, DateTime now) {
   final diff = now.difference(createdAt);
   if (diff.inSeconds < 60) {
-    return '${diff.inSeconds}s ago';
+    return context.l10n.kitchenSecondsAgo(diff.inSeconds);
   }
   if (diff.inMinutes < 60) {
-    return '${diff.inMinutes} min ago';
+    return context.l10n.kitchenMinutesAgo(diff.inMinutes);
   }
-  return '${diff.inHours}h ago';
+  return context.l10n.kitchenHoursAgo(diff.inHours);
 }

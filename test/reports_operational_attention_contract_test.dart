@@ -11,21 +11,20 @@ void main() {
       'lib/features/report/report_provider.dart',
     );
 
-    expect(reportsTab, contains('Operational Attention'));
-    expect(
-      reportsTab,
-      contains('Read-only readiness layer built from tracked report summary fields.'),
-    );
-    expect(reportsTab, contains('Missing proof'));
-    expect(reportsTab, contains('Failed e-invoice'));
-    expect(reportsTab, contains('Proof completion'));
-    expect(reportsTab, contains('WT08-comparable POS orders reported'));
-    expect(reportsTab, contains('Follow-up now'));
-    expect(reportsTab, contains('Healthy signals'));
-    expect(reportsTab, contains('WT08 readiness'));
-    expect(reportsTab, contains('Follow-up focus'));
-    expect(reportsTab, contains('Healthy baseline'));
-    expect(reportsTab, contains('Boundary'));
+    expect(reportsTab, contains("import '../../../core/i18n/locale_extensions.dart';"));
+    expect(reportsTab, contains('context.l10n'));
+    expect(reportsTab, contains('l10n.reportsOperationalAttentionTitle'));
+    expect(reportsTab, contains('l10n.reportsOperationalAttentionSubtitle'));
+    expect(reportsTab, contains('l10n.reportsOperationalMissingProof'));
+    expect(reportsTab, contains('l10n.reportsOperationalFailedEInvoice'));
+    expect(reportsTab, contains('l10n.reportsOperationalProofCompletion'));
+    expect(reportsTab, contains('l10n.reportsOperationalWt08ComparableReported'));
+    expect(reportsTab, contains('l10n.reportsOperationalFollowUpNow'));
+    expect(reportsTab, contains('l10n.reportsOperationalHealthySignals'));
+    expect(reportsTab, contains('l10n.reportsOperationalWt08Readiness'));
+    expect(reportsTab, contains('l10n.reportsOperationalFollowUpFocus'));
+    expect(reportsTab, contains('l10n.reportsOperationalHealthyBaseline'));
+    expect(reportsTab, contains('l10n.reportsOperationalBoundary'));
 
     expect(reportProvider, contains('missingProofPhotosCount'));
     expect(reportProvider, contains('failedEinvoiceJobsCount'));

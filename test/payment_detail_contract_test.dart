@@ -34,10 +34,14 @@ void main() {
     final einvoiceService = readRepoFile('lib/core/services/einvoice_service.dart');
 
     expect(screen, contains('paymentService.fetchPaymentDetail(widget.paymentId)'));
-    expect(screen, contains('Payment Summary'));
-    expect(screen, contains('Order Summary'));
-    expect(screen, contains('E-Invoice Summary'));
-    expect(screen, contains('Proof Summary'));
+    expect(screen, contains("import '../../core/i18n/locale_extensions.dart';"));
+    expect(screen, contains('context.l10n'));
+    expect(screen, contains('l10n.paymentDetailPaymentSummary'));
+    expect(screen, contains('l10n.paymentDetailOrderSummary'));
+    expect(screen, contains('l10n.paymentDetailEInvoiceSummary'));
+    expect(screen, contains('l10n.paymentDetailProofSummary'));
+    expect(screen, contains('l10n.paymentDetailOperationalSnapshot'));
+    expect(screen, contains('l10n.paymentDetailOpenPortal'));
 
     expect(paymentService, contains('Future<Map<String, dynamic>?> fetchPaymentDetail(String paymentId)'));
     expect(einvoiceService, isNot(contains('resendInvoiceEmail')));
