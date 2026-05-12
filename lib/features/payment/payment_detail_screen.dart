@@ -78,6 +78,23 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
               einvoiceJob['issuance_status'] ?? einvoiceJob['status'],
             );
             final proofStatus = _proofStatus(payment);
+            final showPortalPending = _showPortalPending(
+              einvoiceJob: einvoiceJob,
+              issuanceStatus: einvoiceStatus,
+              lookupUrl: lookupUrl,
+            );
+            final portalPendingAge = _elapsedLabel(
+              context,
+              einvoiceJob['created_at'],
+            );
+            final paymentAmount = _formatCurrency(
+              payment['amount'] ??
+                  payment['paid_amount'] ??
+                  payment['settled_amount'],
+            );
+            final paymentMethod = _stringOrDash(
+              payment['method'] ?? payment['payment_method'],
+            );
 
             return RefreshIndicator(
               onRefresh: _reload,
@@ -118,17 +135,11 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
                           children: [
                             _MetricCard(
                               label: l10n.paymentDetailAmount,
-                              value: _formatCurrency(
-                                payment['amount'] ??
-                                    payment['paid_amount'] ??
-                                    payment['settled_amount'],
-                              ),
+                              value: paymentAmount,
                             ),
                             _MetricCard(
                               label: l10n.paymentDetailMethod,
-                              value: _stringOrDash(
-                                payment['method'] ?? payment['payment_method'],
-                              ),
+                              value: paymentMethod,
                             ),
                             _MetricCard(
                               label: l10n.paymentDetailMetricTable,
@@ -137,6 +148,35 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
                             _MetricCard(
                               label: l10n.paymentDetailMetricItems,
                               value: itemCount.toString(),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        Wrap(
+                          spacing: AppSpacing.md,
+                          runSpacing: AppSpacing.md,
+                          children: [
+                            _SignalCard(
+                              title: l10n.paymentDetailSectionPayment,
+                              value: paymentStatus.toUpperCase(),
+                              detail:
+                                  '${l10n.paymentDetailCreated}: ${_formatDateTime(payment['created_at'])}',
+                              color: _statusColor(paymentStatus),
+                            ),
+                            _SignalCard(
+                              title: l10n.paymentDetailSectionEInvoice,
+                              value: einvoiceStatus.toUpperCase(),
+                              detail:
+                                  '${l10n.paymentDetailJobStatus}: ${_stringOrDash(einvoiceJob['status'])}',
+                              color: _statusColor(einvoiceStatus),
+                            ),
+                            _SignalCard(
+                              title: l10n.paymentDetailSectionProof,
+                              value: proofStatus.toUpperCase(),
+                              detail: proofStatus == 'captured'
+                                  ? '${l10n.paymentDetailProofCaptured}: ${_formatDateTime(payment['proof_photo_taken_at'])}'
+                                  : '${l10n.paymentDetailProofRequired}: ${_boolLabel(context, payment['proof_required'])}',
+                              color: _statusColor(proofStatus),
                             ),
                           ],
                         ),
@@ -165,6 +205,18 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
                             ),
                           ],
                         ),
+                        if (showPortalPending) ...[
+                          const SizedBox(height: AppSpacing.lg),
+                          _PortalPendingPanel(
+                            title: l10n.paymentDetailPortalPendingTitle,
+                            body: l10n.paymentDetailPortalPendingBody,
+                            footer: portalPendingAge == null
+                                ? l10n.paymentDetailPortalPendingFooter
+                                : l10n.paymentDetailPortalPendingFooterWithAge(
+                                    portalPendingAge,
+                                  ),
+                          ),
+                        ],
                         if (lookupUrl != '-') ...[
                           const SizedBox(height: AppSpacing.lg),
                           Row(
@@ -188,101 +240,124 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.lg),
-                  _InfoPanel(
-                    title: l10n.paymentDetailPaymentSummary,
-                    rows: [
-                      _InfoRow(l10n.paymentDetailPaymentId, widget.paymentId),
-                      _InfoRow(
-                        l10n.paymentDetailAmount,
-                        _formatCurrency(
-                          payment['amount'] ??
-                              payment['paid_amount'] ??
-                              payment['settled_amount'],
-                        ),
+                  _ResponsivePanelGrid(
+                    children: [
+                      _InfoPanel(
+                        title: l10n.paymentDetailPaymentSummary,
+                        rows: [
+                          _InfoRow(
+                            l10n.paymentDetailPaymentId,
+                            widget.paymentId,
+                          ),
+                          _InfoRow(l10n.paymentDetailAmount, paymentAmount),
+                          _InfoRow(l10n.paymentDetailMethod, paymentMethod),
+                          _InfoRow(
+                            l10n.paymentDetailStatus,
+                            _stringOrDash(
+                              payment['status'] ?? payment['payment_status'],
+                            ),
+                          ),
+                          _InfoRow(
+                            l10n.paymentDetailCreated,
+                            _formatDateTime(payment['created_at']),
+                          ),
+                          _InfoRow(
+                            l10n.paymentDetailUpdated,
+                            _formatDateTime(payment['updated_at']),
+                          ),
+                        ],
                       ),
-                      _InfoRow(
-                        l10n.paymentDetailMethod,
-                        _stringOrDash(payment['method'] ?? payment['payment_method']),
+                      _InfoPanel(
+                        title: l10n.paymentDetailOrderSummary,
+                        rows: [
+                          _InfoRow(
+                            l10n.paymentDetailOrderId,
+                            _stringOrDash(order['id']),
+                          ),
+                          _InfoRow(l10n.paymentDetailMetricTable, tableNumber),
+                          _InfoRow(
+                            l10n.paymentDetailStatus,
+                            _stringOrDash(order['status']),
+                          ),
+                          _InfoRow(
+                            l10n.paymentDetailActiveItems,
+                            itemCount.toString(),
+                          ),
+                          _InfoRow(
+                            l10n.paymentDetailOrderTotal,
+                            _formatCurrency(order['order_total_amount']),
+                          ),
+                          _InfoRow(
+                            l10n.paymentDetailOrderCreated,
+                            _formatDateTime(order['created_at']),
+                          ),
+                        ],
                       ),
-                      _InfoRow(
-                        l10n.paymentDetailStatus,
-                        _stringOrDash(
-                          payment['status'] ?? payment['payment_status'],
-                        ),
+                      _InfoPanel(
+                        title: l10n.paymentDetailEInvoiceSummary,
+                        rows: [
+                          _InfoRow(
+                            l10n.paymentDetailJobId,
+                            _stringOrDash(einvoiceJob['id']),
+                          ),
+                          _InfoRow(
+                            l10n.paymentDetailJobStatus,
+                            _stringOrDash(einvoiceJob['status']),
+                          ),
+                          _InfoRow(
+                            l10n.paymentDetailIssuanceStatus,
+                            _stringOrDash(einvoiceJob['issuance_status']),
+                          ),
+                          _InfoRow(
+                            l10n.paymentDetailRefId,
+                            _stringOrDash(einvoiceJob['ref_id']),
+                          ),
+                          _InfoRow(
+                            l10n.paymentDetailSid,
+                            _stringOrDash(einvoiceJob['sid']),
+                          ),
+                          _InfoRow(
+                            l10n.paymentDetailCqtReportStatus,
+                            _stringOrDash(einvoiceJob['cqt_report_status']),
+                          ),
+                          _InfoRow(
+                            l10n.paymentDetailRedInvoiceRequested,
+                            _boolLabel(
+                              context,
+                              einvoiceJob['redinvoice_requested'],
+                            ),
+                          ),
+                          _InfoRow(
+                            l10n.paymentDetailLookupUrl,
+                            _stringOrDash(einvoiceJob['lookup_url']),
+                          ),
+                          _InfoRow(
+                            l10n.paymentDetailCreated,
+                            _formatDateTime(einvoiceJob['created_at']),
+                          ),
+                          _InfoRow(
+                            l10n.paymentDetailUpdated,
+                            _formatDateTime(einvoiceJob['updated_at']),
+                          ),
+                        ],
                       ),
-                      _InfoRow(
-                        l10n.paymentDetailCreated,
-                        _formatDateTime(payment['created_at']),
-                      ),
-                      _InfoRow(
-                        l10n.paymentDetailUpdated,
-                        _formatDateTime(payment['updated_at']),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  _InfoPanel(
-                    title: l10n.paymentDetailOrderSummary,
-                    rows: [
-                      _InfoRow(l10n.paymentDetailOrderId, _stringOrDash(order['id'])),
-                      _InfoRow(l10n.paymentDetailMetricTable, tableNumber),
-                      _InfoRow(
-                        l10n.paymentDetailStatus,
-                        _stringOrDash(order['status']),
-                      ),
-                      _InfoRow(l10n.paymentDetailActiveItems, itemCount.toString()),
-                      _InfoRow(
-                        l10n.paymentDetailOrderTotal,
-                        _formatCurrency(order['order_total_amount']),
-                      ),
-                      _InfoRow(
-                        l10n.paymentDetailOrderCreated,
-                        _formatDateTime(order['created_at']),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  _InfoPanel(
-                    title: l10n.paymentDetailEInvoiceSummary,
-                    rows: [
-                      _InfoRow(l10n.paymentDetailJobId, _stringOrDash(einvoiceJob['id'])),
-                      _InfoRow(
-                        l10n.paymentDetailStatus,
-                        _stringOrDash(einvoiceJob['status']),
-                      ),
-                      _InfoRow(
-                        l10n.paymentDetailIssuanceStatus,
-                        _stringOrDash(einvoiceJob['issuance_status']),
-                      ),
-                      _InfoRow(
-                        l10n.paymentDetailCqtReportStatus,
-                        _stringOrDash(einvoiceJob['cqt_report_status']),
-                      ),
-                      _InfoRow(
-                        l10n.paymentDetailRedInvoiceRequested,
-                        _boolLabel(context, einvoiceJob['redinvoice_requested']),
-                      ),
-                      _InfoRow(
-                        l10n.paymentDetailLookupUrl,
-                        _stringOrDash(einvoiceJob['lookup_url']),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  _InfoPanel(
-                    title: l10n.paymentDetailProofSummary,
-                    rows: [
-                      _InfoRow(
-                        l10n.paymentDetailProofRequired,
-                        _boolLabel(context, payment['proof_required']),
-                      ),
-                      _InfoRow(
-                        l10n.paymentDetailProofPhotoUrl,
-                        _stringOrDash(payment['proof_photo_url']),
-                      ),
-                      _InfoRow(
-                        l10n.paymentDetailProofCaptured,
-                        _formatDateTime(payment['proof_photo_taken_at']),
+                      _InfoPanel(
+                        title: l10n.paymentDetailProofSummary,
+                        rows: [
+                          _InfoRow(
+                            l10n.paymentDetailProofRequired,
+                            _boolLabel(context, payment['proof_required']),
+                          ),
+                          _InfoRow(l10n.paymentDetailStatus, proofStatus),
+                          _InfoRow(
+                            l10n.paymentDetailProofPhotoUrl,
+                            _stringOrDash(payment['proof_photo_url']),
+                          ),
+                          _InfoRow(
+                            l10n.paymentDetailProofCaptured,
+                            _formatDateTime(payment['proof_photo_taken_at']),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -351,6 +426,54 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
     return 'required';
   }
 
+  bool _showPortalPending({
+    required Map<String, dynamic> einvoiceJob,
+    required String issuanceStatus,
+    required String lookupUrl,
+  }) {
+    if (lookupUrl == '-') return false;
+    if (einvoiceJob['redinvoice_requested'] != true) return false;
+
+    final normalized = issuanceStatus.toLowerCase();
+    return normalized.contains('pending') ||
+        normalized.contains('queued') ||
+        normalized.contains('processing') ||
+        normalized == '-';
+  }
+
+  String? _elapsedLabel(BuildContext context, dynamic value) {
+    final text = value?.toString();
+    if (text == null || text.isEmpty) return null;
+
+    final parsed = DateTime.tryParse(text);
+    if (parsed == null) return null;
+
+    final diff = DateTime.now().difference(parsed.toLocal());
+    if (diff.inSeconds < 60) {
+      return context.l10n.paymentDetailElapsedUnderMinute;
+    }
+    if (diff.inMinutes < 60) {
+      return context.l10n.paymentDetailElapsedMinutes(diff.inMinutes);
+    }
+    if (diff.inHours < 24) {
+      final minutes = diff.inMinutes % 60;
+      if (minutes == 0) {
+        return context.l10n.paymentDetailElapsedHours(diff.inHours);
+      }
+      return context.l10n.paymentDetailElapsedHoursMinutes(
+        diff.inHours,
+        minutes,
+      );
+    }
+
+    final days = diff.inDays;
+    final hours = diff.inHours % 24;
+    if (hours == 0) {
+      return context.l10n.paymentDetailElapsedDays(days);
+    }
+    return context.l10n.paymentDetailElapsedDaysHours(days, hours);
+  }
+
   String _formatCurrency(dynamic value) {
     if (value is num) {
       return '${_currency.format(value)} VND';
@@ -416,6 +539,32 @@ class _InfoPanel extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+class _ResponsivePanelGrid extends StatelessWidget {
+  const _ResponsivePanelGrid({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final panelWidth = constraints.maxWidth >= 1180
+            ? (constraints.maxWidth - AppSpacing.lg) / 2
+            : constraints.maxWidth;
+
+        return Wrap(
+          spacing: AppSpacing.lg,
+          runSpacing: AppSpacing.lg,
+          children: [
+            for (final child in children)
+              SizedBox(width: panelWidth, child: child),
+          ],
+        );
+      },
     );
   }
 }
@@ -491,6 +640,101 @@ class _MetricCard extends StatelessWidget {
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SignalCard extends StatelessWidget {
+  const _SignalCard({
+    required this.title,
+    required this.value,
+    required this.detail,
+    required this.color,
+  });
+
+  final String title;
+  final String value;
+  final String detail;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 220,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: AppRadius.sm,
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(detail, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
+}
+
+class _PortalPendingPanel extends StatelessWidget {
+  const _PortalPendingPanel({
+    required this.title,
+    required this.body,
+    required this.footer,
+  });
+
+  final String title;
+  final String body;
+  final String footer;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppPanel(
+      backgroundColor: AppColors.statusReady.withValues(alpha: 0.1),
+      borderColor: AppColors.statusReady.withValues(alpha: 0.35),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.pending_actions_outlined,
+            color: AppColors.statusReady,
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: AppSpacing.xs),
+                Text(body, style: Theme.of(context).textTheme.bodyMedium),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  footer,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: AppColors.textPrimary),
+                ),
+              ],
             ),
           ),
         ],
