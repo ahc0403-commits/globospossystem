@@ -58,6 +58,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         .load(storeId, DateFormat('yyyy-MM-dd').format(_countDate));
     await ref.read(inventoryPurchaseOverviewProvider.notifier).load(storeId);
     await ref
+        .read(inventoryPurchaseRecommendationSnapshotProvider.notifier)
+        .loadLatest(storeId);
+    await ref
         .read(inventoryReportProvider.notifier)
         .load(storeId: storeId, from: _reportFrom, to: _reportTo);
   }
@@ -1107,6 +1110,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     final recommendationRun = ref.watch(
       inventoryPurchaseRecommendationRunProvider,
     );
+    final recommendationSnapshot = ref.watch(
+      inventoryPurchaseRecommendationSnapshotProvider,
+    );
 
     final deduct = report.transactions
         .where((t) => t['transaction_type'] == 'deduct')
@@ -1164,6 +1170,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             storeId: storeId,
             overview: purchaseOverview,
             recommendationRun: recommendationRun,
+            recommendationSnapshot: recommendationSnapshot,
           ),
           const SizedBox(height: 12),
           Row(
@@ -1330,6 +1337,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     required String? storeId,
     required InventoryPurchaseOverviewState overview,
     required InventoryPurchaseRecommendationRunState recommendationRun,
+    required InventoryPurchaseRecommendationSnapshotState
+    recommendationSnapshot,
   }) {
     final dashboard = overview.dashboard;
     final storeCount = (dashboard?['store_count'] as num?)?.toInt() ?? 0;
@@ -1495,6 +1504,11 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               approvedPurchaseAmount: approvedPurchaseAmount,
               recommendationRun: recommendationRun,
             ),
+            const SizedBox(height: 12),
+            _buildLatestRecommendationSnapshot(
+              storeId: storeId,
+              snapshot: recommendationSnapshot,
+            ),
           ],
         ],
       ),
@@ -1553,6 +1567,239 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       ),
     );
   }
+
+  Widget _buildLatestRecommendationSnapshot({
+    required String? storeId,
+    required InventoryPurchaseRecommendationSnapshotState snapshot,
+  }) {
+    final run = snapshot.run;
+    final lineCount = snapshot.lines.length;
+    final runDate = run?['run_date']?.toString() ?? '-';
+    final targetDays = (run?['target_stock_days'] as num?)?.toDouble();
+    final createdAtRaw = run?['created_at']?.toString();
+    final createdAt = createdAtRaw == null
+        ? null
+        : DateTime.tryParse(createdAtRaw)?.toLocal();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Latest Recommendation Snapshot',
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Read the most recent recommendation run before deciding whether the next tracked slice should create purchase orders.',
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: storeId == null || snapshot.isLoading
+                    ? null
+                    : () => ref
+                          .read(
+                            inventoryPurchaseRecommendationSnapshotProvider
+                                .notifier,
+                          )
+                          .loadLatest(storeId),
+                tooltip: 'Refresh Recommendation Snapshot',
+                icon: snapshot.isLoading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh),
+                color: AppColors.amber500,
+              ),
+            ],
+          ),
+          if (snapshot.error != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              snapshot.error!,
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.statusOccupied,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ] else if (run == null) ...[
+            const SizedBox(height: 12),
+            Text(
+              'No recommendation snapshot detail has been generated for this store yet.',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildIngredientMetaChip('Run Date $runDate'),
+                _buildIngredientMetaChip(
+                  'Target ${targetDays?.toStringAsFixed(0) ?? '-'} day(s)',
+                  color: AppColors.amber500,
+                ),
+                _buildIngredientMetaChip(
+                  'Visible Lines $lineCount',
+                  color: AppColors.statusAvailable,
+                ),
+                _buildIngredientMetaChip(
+                  createdAt == null
+                      ? 'Created time unavailable'
+                      : 'Created ${DateFormat('yyyy-MM-dd HH:mm').format(createdAt)}',
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (snapshot.lines.isEmpty)
+              Text(
+                'This snapshot exists, but no recommendation lines are currently visible in the tracked POS scope.',
+                style: GoogleFonts.notoSansKr(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              )
+            else
+              Column(
+                children: snapshot.lines
+                    .map((line) => _buildRecommendationLineCard(line))
+                    .toList(),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecommendationLineCard(Map<String, dynamic> line) {
+    final productMap = line['product'] as Map<String, dynamic>?;
+    final supplierMap = line['supplier'] as Map<String, dynamic>?;
+    final productName =
+        productMap?['name']?.toString() ??
+        line['product_id']?.toString() ??
+        '-';
+    final supplierName = supplierMap?['name']?.toString();
+    final riskStatus = line['risk_status']?.toString() ?? 'stable';
+    final recommendedUnits =
+        (line['recommended_order_units'] as num?)?.toDouble() ?? 0;
+    final recommendedQuantity =
+        (line['recommended_quantity_base'] as num?)?.toDouble() ?? 0;
+    final currentStock = (line['current_stock_base'] as num?)?.toDouble() ?? 0;
+    final avgDailyConsumption =
+        (line['avg_daily_consumption_base'] as num?)?.toDouble() ?? 0;
+    final daysRemaining = (line['estimated_days_remaining'] as num?)
+        ?.toDouble();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _recommendationRiskColor(riskStatus)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      productName,
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      supplierName == null || supplierName.isEmpty
+                          ? 'Supplier not assigned'
+                          : 'Supplier $supplierName',
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _buildIngredientMetaChip(
+                riskStatus.toUpperCase(),
+                color: _recommendationRiskColor(riskStatus),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildIngredientMetaChip(
+                'Order ${recommendedUnits.toStringAsFixed(0)} unit(s)',
+                color: AppColors.amber500,
+              ),
+              _buildIngredientMetaChip(
+                'Need ${recommendedQuantity.toStringAsFixed(3)} base',
+              ),
+              _buildIngredientMetaChip(
+                'Stock ${currentStock.toStringAsFixed(3)} base',
+              ),
+              _buildIngredientMetaChip(
+                'Daily ${avgDailyConsumption.toStringAsFixed(3)} base',
+              ),
+              _buildIngredientMetaChip(
+                daysRemaining == null
+                    ? 'Days remaining unavailable'
+                    : 'Days left ${daysRemaining.toStringAsFixed(1)}',
+                color: _recommendationRiskColor(riskStatus),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _recommendationRiskColor(String riskStatus) => switch (riskStatus) {
+    'danger' => AppColors.statusCancelled,
+    'warning' => AppColors.statusOccupied,
+    'normal' => AppColors.amber500,
+    _ => AppColors.statusAvailable,
+  };
 
   Future<void> _showRecommendationRunDialog({
     required BuildContext context,
@@ -1660,6 +1907,12 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     await ref
                         .read(inventoryPurchaseOverviewProvider.notifier)
                         .load(storeId);
+                    await ref
+                        .read(
+                          inventoryPurchaseRecommendationSnapshotProvider
+                              .notifier,
+                        )
+                        .loadLatest(storeId);
                     if (!dialogContext.mounted) return;
                     showSuccessToast(
                       dialogContext,

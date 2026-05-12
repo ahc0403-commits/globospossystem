@@ -637,3 +637,76 @@ final inventoryPurchaseRecommendationRunProvider =
       InventoryPurchaseRecommendationRunNotifier,
       InventoryPurchaseRecommendationRunState
     >((ref) => InventoryPurchaseRecommendationRunNotifier());
+
+class InventoryPurchaseRecommendationSnapshotState {
+  final Map<String, dynamic>? run;
+  final List<Map<String, dynamic>> lines;
+  final bool isLoading;
+  final String? error;
+
+  const InventoryPurchaseRecommendationSnapshotState({
+    this.run,
+    this.lines = const [],
+    this.isLoading = false,
+    this.error,
+  });
+
+  InventoryPurchaseRecommendationSnapshotState copyWith({
+    Map<String, dynamic>? run,
+    List<Map<String, dynamic>>? lines,
+    bool? isLoading,
+    String? error,
+    bool clearError = false,
+  }) => InventoryPurchaseRecommendationSnapshotState(
+    run: run ?? this.run,
+    lines: lines ?? this.lines,
+    isLoading: isLoading ?? this.isLoading,
+    error: clearError ? null : (error ?? this.error),
+  );
+}
+
+class InventoryPurchaseRecommendationSnapshotNotifier
+    extends StateNotifier<InventoryPurchaseRecommendationSnapshotState> {
+  InventoryPurchaseRecommendationSnapshotNotifier()
+    : super(const InventoryPurchaseRecommendationSnapshotState());
+
+  Future<void> loadLatest(String storeId) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final run = await inventoryService
+          .fetchLatestInventoryPurchaseRecommendationRun(storeId: storeId);
+      if (run == null) {
+        state = state.copyWith(run: null, lines: const [], isLoading: false);
+        return;
+      }
+
+      final lines = await inventoryService
+          .fetchInventoryPurchaseRecommendationLines(
+            runId: run['id'].toString(),
+          );
+      state = state.copyWith(run: run, lines: lines, isLoading: false);
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: _mapInventoryPurchaseRecommendationSnapshotError(e),
+      );
+    }
+  }
+
+  String _mapInventoryPurchaseRecommendationSnapshotError(Object error) {
+    final fallback = 'Failed to load recommendation snapshot detail.';
+    final message = error.toString();
+
+    if (message.contains('INVENTORY_PURCHASE_FORBIDDEN')) {
+      return 'No permission to view recommendation snapshots for this store.';
+    }
+
+    return fallback;
+  }
+}
+
+final inventoryPurchaseRecommendationSnapshotProvider =
+    StateNotifierProvider<
+      InventoryPurchaseRecommendationSnapshotNotifier,
+      InventoryPurchaseRecommendationSnapshotState
+    >((ref) => InventoryPurchaseRecommendationSnapshotNotifier());
