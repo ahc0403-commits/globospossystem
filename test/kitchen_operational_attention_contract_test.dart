@@ -19,8 +19,11 @@ void main() {
     expect(screen, contains('Follow-up now'));
     expect(screen, contains('Pending items'));
     expect(screen, contains('Ready items'));
+    expect(screen, contains('Oldest wait'));
     expect(screen, contains('Long waits'));
+    expect(screen, contains('Ready tables'));
     expect(screen, contains('Follow-up focus'));
+    expect(screen, contains('Handoff readiness'));
     expect(screen, contains('Boundary'));
 
     expect(provider, contains(".inFilter('status', ['pending', 'confirmed', 'serving'])"));

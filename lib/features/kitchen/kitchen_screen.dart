@@ -410,6 +410,14 @@ class _KitchenAttentionSection extends StatelessWidget {
       final elapsed = now.difference(order.createdAt.toUtc()).inMinutes;
       return elapsed >= 15;
     }).length;
+    final readyTables = orders.where(
+      (order) => order.items.any((item) => item.status == 'ready'),
+    ).length;
+    final oldestWaitMinutes = orders.isEmpty
+        ? 0
+        : orders
+              .map((order) => now.difference(order.createdAt.toUtc()).inMinutes)
+              .reduce((a, b) => a > b ? a : b);
     final followUpCount = [
       if (pendingItems > 0) true,
       if (readyItems > 0) true,
@@ -466,6 +474,13 @@ class _KitchenAttentionSection extends StatelessWidget {
                 '$readyItems',
                 readyItems > 0 ? AppColors.amber500 : AppColors.statusAvailable,
               ),
+              _attentionMetric(
+                'Oldest wait',
+                '${oldestWaitMinutes}m',
+                oldestWaitMinutes >= 15
+                    ? AppColors.statusCancelled
+                    : AppColors.textPrimary,
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -489,6 +504,10 @@ class _KitchenAttentionSection extends StatelessWidget {
                     ? AppColors.statusCancelled
                     : AppColors.statusAvailable,
               ),
+              _attentionChip(
+                'Ready tables $readyTables',
+                readyTables > 0 ? AppColors.amber500 : AppColors.statusAvailable,
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -498,6 +517,15 @@ class _KitchenAttentionSection extends StatelessWidget {
               pendingItems: pendingItems,
               readyItems: readyItems,
               longWaitCount: longWaitCount,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _attentionSupportRow(
+            'Handoff readiness',
+            _handoffReadinessCopy(
+              readyItems: readyItems,
+              readyTables: readyTables,
+              oldestWaitMinutes: oldestWaitMinutes,
             ),
           ),
           const SizedBox(height: 8),
@@ -607,6 +635,20 @@ class _KitchenAttentionSection extends StatelessWidget {
       return 'Pending items still dominate the active queue, so prep throughput is the primary watch item right now.';
     }
     return 'No immediate kitchen follow-up signal is ahead of the others for the current board snapshot.';
+  }
+
+  String _handoffReadinessCopy({
+    required int readyItems,
+    required int readyTables,
+    required int oldestWaitMinutes,
+  }) {
+    if (readyItems > 0) {
+      return '$readyItems ready items across $readyTables tables are waiting on the next handoff step.';
+    }
+    if (oldestWaitMinutes >= 15) {
+      return 'No items are marked ready yet, but aging tickets suggest the next service release point should be checked closely.';
+    }
+    return 'No immediate handoff queue is visible right now, so the board is still prep-dominant rather than release-dominant.';
   }
 }
 
