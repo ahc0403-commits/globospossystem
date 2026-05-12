@@ -224,44 +224,44 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
       groupedByDate.putIfAbsent(date, () => []).add(check);
     }
 
-    final queueIssues = issueQueueState.issues.where((issue) {
-      final severity = issue['severity']?.toString() ?? 'info';
-      final domain = issue['qsc_domain']?.toString() ?? 'quality';
-      final photoStatus = issue['photo_status']?.toString() ?? 'na';
-      final submissionStatus =
-          issue['submission_status']?.toString() ?? 'pending';
+    final queueIssues =
+        issueQueueState.issues.where((issue) {
+          final severity = issue['severity']?.toString() ?? 'info';
+          final domain = issue['qsc_domain']?.toString() ?? 'quality';
+          final photoStatus = issue['photo_status']?.toString() ?? 'na';
+          final submissionStatus =
+              issue['submission_status']?.toString() ?? 'pending';
 
-      final matchesSeverity =
-          _issueSeverityFilter == 'all' || severity == _issueSeverityFilter;
-      final matchesDomain =
-          _domainFilter == 'all' || domain == _domainFilter;
-      final matchesPhoto = switch (_photoFilter) {
-        'missing' => photoStatus == 'missing' || photoStatus == 'partial',
-        'complete' => photoStatus == 'complete',
-        'not_required' => photoStatus == 'na',
-        _ => true,
-      };
-      final matchesSubmission =
-          _issueSubmissionFilter == 'all' ||
-          submissionStatus == _issueSubmissionFilter;
+          final matchesSeverity =
+              _issueSeverityFilter == 'all' || severity == _issueSeverityFilter;
+          final matchesDomain =
+              _domainFilter == 'all' || domain == _domainFilter;
+          final matchesPhoto = switch (_photoFilter) {
+            'missing' => photoStatus == 'missing' || photoStatus == 'partial',
+            'complete' => photoStatus == 'complete',
+            'not_required' => photoStatus == 'na',
+            _ => true,
+          };
+          final matchesSubmission =
+              _issueSubmissionFilter == 'all' ||
+              submissionStatus == _issueSubmissionFilter;
 
-      return matchesSeverity &&
-          matchesDomain &&
-          matchesPhoto &&
-          matchesSubmission;
-    }).toList()
-      ..sort((a, b) {
-        final aSeverity = _issueSeverityRank(a['severity']?.toString());
-        final bSeverity = _issueSeverityRank(b['severity']?.toString());
-        if (aSeverity != bSeverity) return aSeverity.compareTo(bSeverity);
-        final aDate = a['check_date']?.toString() ?? '';
-        final bDate = b['check_date']?.toString() ?? '';
-        final dateCompare = bDate.compareTo(aDate);
-        if (dateCompare != 0) return dateCompare;
-        final aCreated = a['created_at']?.toString() ?? '';
-        final bCreated = b['created_at']?.toString() ?? '';
-        return bCreated.compareTo(aCreated);
-      });
+          return matchesSeverity &&
+              matchesDomain &&
+              matchesPhoto &&
+              matchesSubmission;
+        }).toList()..sort((a, b) {
+          final aSeverity = _issueSeverityRank(a['severity']?.toString());
+          final bSeverity = _issueSeverityRank(b['severity']?.toString());
+          if (aSeverity != bSeverity) return aSeverity.compareTo(bSeverity);
+          final aDate = a['check_date']?.toString() ?? '';
+          final bDate = b['check_date']?.toString() ?? '';
+          final dateCompare = bDate.compareTo(aDate);
+          if (dateCompare != 0) return dateCompare;
+          final aCreated = a['created_at']?.toString() ?? '';
+          final bCreated = b['created_at']?.toString() ?? '';
+          return bCreated.compareTo(aCreated);
+        });
 
     Map<String, dynamic>? selectedIssue;
     if (queueIssues.isNotEmpty) {
@@ -280,12 +280,10 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
     final overdueIssueCount = queueIssues
         .where((issue) => issue['submission_status']?.toString() == 'overdue')
         .length;
-    final missingPhotoIssueCount = queueIssues
-        .where((issue) {
-          final status = issue['photo_status']?.toString();
-          return status == 'missing' || status == 'partial';
-        })
-        .length;
+    final missingPhotoIssueCount = queueIssues.where((issue) {
+      final status = issue['photo_status']?.toString();
+      return status == 'missing' || status == 'partial';
+    }).length;
 
     return Scaffold(
       backgroundColor: PosColors.canvas,
@@ -489,6 +487,61 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          _queueMetricCard(
+                            label: 'Visible queue',
+                            value: '${queueIssues.length}',
+                            color: queueIssues.isNotEmpty
+                                ? PosColors.text
+                                : PosColors.textMuted,
+                          ),
+                          _queueMetricCard(
+                            label: 'Follow-up now',
+                            value:
+                                '$criticalIssueCount critical · $overdueIssueCount overdue',
+                            color: criticalIssueCount > 0
+                                ? PosColors.danger
+                                : overdueIssueCount > 0
+                                ? PosColors.accent
+                                : PosColors.success,
+                          ),
+                          _queueMetricCard(
+                            label: 'Evidence gap',
+                            value: '$missingPhotoIssueCount photo gaps',
+                            color: missingPhotoIssueCount > 0
+                                ? PosColors.info
+                                : PosColors.success,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _queueSupportRow(
+                        'Queue focus',
+                        _queueFocusCopy(
+                          criticalIssueCount: criticalIssueCount,
+                          overdueIssueCount: overdueIssueCount,
+                          missingPhotoIssueCount: missingPhotoIssueCount,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _queueSupportRow(
+                        'Healthy baseline',
+                        _queueHealthyCopy(
+                          totalIssues: queueIssues.length,
+                          criticalIssueCount: criticalIssueCount,
+                          overdueIssueCount: overdueIssueCount,
+                          missingPhotoIssueCount: missingPhotoIssueCount,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _queueSupportRow(
+                        'Filter context',
+                        _queueFilterContext(queueIssues.length),
+                      ),
+                      const SizedBox(height: 12),
                       Row(
                         children: [
                           Expanded(
@@ -573,7 +626,8 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                         ),
                         const SizedBox(height: 10),
                       ],
-                      if (issueQueueState.isLoading && issueQueueState.issues.isEmpty)
+                      if (issueQueueState.isLoading &&
+                          issueQueueState.issues.isEmpty)
                         const Center(
                           child: Padding(
                             padding: EdgeInsets.symmetric(vertical: 24),
@@ -609,7 +663,10 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                             return Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(flex: 5, child: SizedBox(height: 360, child: listPane)),
+                                Expanded(
+                                  flex: 5,
+                                  child: SizedBox(height: 360, child: listPane),
+                                ),
                                 const SizedBox(width: 12),
                                 Expanded(flex: 4, child: detailPane),
                               ],
@@ -1388,7 +1445,13 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                     ),
                     _statusChip(
                       issue['sv_review_status']?.toString() ?? 'pending',
-                      _svStatusColor(issue['sv_review_status']?.toString() ?? 'pending'),
+                      _svStatusColor(
+                        issue['sv_review_status']?.toString() ?? 'pending',
+                      ),
+                    ),
+                    _statusChip(
+                      _scoreGradeText(issue),
+                      _gradeColor(issue['grade']?.toString()),
                     ),
                   ],
                 ),
@@ -1398,6 +1461,15 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                   style: GoogleFonts.notoSansKr(
                     color: PosColors.textMuted,
                     fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _queueRowNarrative(issue),
+                  style: GoogleFonts.notoSansKr(
+                    color: PosColors.textMuted,
+                    fontSize: 12,
+                    height: 1.35,
                   ),
                 ),
               ],
@@ -1487,6 +1559,27 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                 ? 'Photo available via tracked evidence URL'
                 : 'Photo not attached',
           ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _summaryChip(
+                issue['submission_status']?.toString() ?? 'pending',
+                _issueSubmissionColor(issue['submission_status']?.toString()),
+              ),
+              _summaryChip(
+                issue['photo_status']?.toString() ?? 'na',
+                _issuePhotoColor(issue['photo_status']?.toString()),
+              ),
+              _summaryChip(
+                issue['qsc_domain']?.toString() ?? 'quality',
+                PosColors.textMuted,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _issueField('Queue Signal', _queueRowNarrative(issue)),
           _issueField(
             'Review Boundary',
             'Read-only queue surface only. Follow-up and review mutation stay outside this slice.',
@@ -1689,6 +1782,165 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
         ),
       ),
     );
+  }
+
+  Widget _queueMetricCard({
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 150, maxWidth: 220),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: PosColors.canvas,
+        borderRadius: ToastRadiusTokens.xs,
+        border: Border.all(color: PosColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.notoSansKr(
+              color: PosColors.textMuted,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: GoogleFonts.notoSansKr(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _queueSupportRow(String label, String body) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 108,
+          child: Text(
+            label,
+            style: GoogleFonts.notoSansKr(
+              color: PosColors.textMuted,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            body,
+            style: GoogleFonts.notoSansKr(
+              color: PosColors.text,
+              fontSize: 12,
+              height: 1.45,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _queueFocusCopy({
+    required int criticalIssueCount,
+    required int overdueIssueCount,
+    required int missingPhotoIssueCount,
+  }) {
+    if (criticalIssueCount > 0) {
+      return '$criticalIssueCount critical issues are leading the queue and should be reviewed before lower-severity cleanup.';
+    }
+    if (overdueIssueCount > 0) {
+      return '$overdueIssueCount overdue submissions are now the next review point inside the tracked issue queue.';
+    }
+    if (missingPhotoIssueCount > 0) {
+      return '$missingPhotoIssueCount items still show missing or partial photo evidence and should be clarified during review.';
+    }
+    return 'The current queue has no immediate critical, overdue, or photo-gap signal ahead of the others.';
+  }
+
+  String _queueHealthyCopy({
+    required int totalIssues,
+    required int criticalIssueCount,
+    required int overdueIssueCount,
+    required int missingPhotoIssueCount,
+  }) {
+    if (totalIssues == 0) {
+      return 'No tracked QSC issues are visible for the current filters, so the queue is currently clear.';
+    }
+    final stableCount =
+        totalIssues -
+        criticalIssueCount -
+        overdueIssueCount -
+        missingPhotoIssueCount;
+    if (stableCount > 0) {
+      return '$stableCount queue items are still visible, but they sit behind the current exception-first follow-up signals.';
+    }
+    return 'Every visible queue item currently belongs to an active exception category, so operators should stay in queue-first triage mode.';
+  }
+
+  String _queueFilterContext(int visibleCount) {
+    final severity = _issueSeverityFilter == 'all'
+        ? 'all severities'
+        : _issueSeverityFilter;
+    final submission = _issueSubmissionFilter == 'all'
+        ? 'all submissions'
+        : _issueSubmissionFilter;
+    return '$visibleCount issue rows match the current severity filter ($severity) and submission filter ($submission).';
+  }
+
+  String _queueRowNarrative(Map<String, dynamic> issue) {
+    final severity = issue['severity']?.toString() ?? 'info';
+    final photoStatus = issue['photo_status']?.toString() ?? 'na';
+    final submissionStatus =
+        issue['submission_status']?.toString() ?? 'pending';
+
+    if (severity == 'critical') {
+      return 'Critical issue in the tracked queue. Review this before lower-severity cleanup.';
+    }
+    if (submissionStatus == 'overdue') {
+      return 'Submission is overdue, so this issue should stay visible until the tracked review path catches up.';
+    }
+    if (photoStatus == 'missing' || photoStatus == 'partial') {
+      return 'Evidence is incomplete, so this issue stays in the queue as a photo-gap exception.';
+    }
+    return 'Tracked queue item is still visible, but it is not currently leading the exception-first review order.';
+  }
+
+  Color _issueSubmissionColor(String? status) {
+    switch (status) {
+      case 'overdue':
+        return PosColors.danger;
+      case 'submitted':
+        return PosColors.success;
+      case 'pending':
+      default:
+        return PosColors.accent;
+    }
+  }
+
+  Color _issuePhotoColor(String? status) {
+    switch (status) {
+      case 'missing':
+        return PosColors.danger;
+      case 'partial':
+        return PosColors.info;
+      case 'complete':
+        return PosColors.success;
+      case 'na':
+      default:
+        return PosColors.textMuted;
+    }
   }
 
   Future<void> _showImageDialog(String path) async {
