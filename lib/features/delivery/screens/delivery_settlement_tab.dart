@@ -128,6 +128,13 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
           if (state.settlements.isNotEmpty)
             _buildAggregateSummary(state.settlements),
           const SizedBox(height: 16),
+          if (state.settlements.isNotEmpty)
+            _buildHistoryFocus(
+              all: state.settlements,
+              filtered: filtered,
+              unsettled: state.unsettled,
+            ),
+          if (state.settlements.isNotEmpty) const SizedBox(height: 16),
           // ─── 필터 + 이력 헤더 ───
           Row(
             children: [
@@ -150,6 +157,19 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
                 ),
             ],
           ),
+          if (state.settlements.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              _historySummaryCopy(
+                filteredCount: filtered.length,
+                totalCount: state.settlements.length,
+              ),
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           // ─── 상태 필터 칩 ───
           if (state.settlements.isNotEmpty)
@@ -182,8 +202,12 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
     final statementCount = settlements
         .where((s) => s.status == 'calculated')
         .length;
-    final disputeCount = settlements.where((s) => s.status == 'disputed').length;
-    final settledCount = settlements.where((s) => s.status == 'received').length;
+    final disputeCount = settlements
+        .where((s) => s.status == 'disputed')
+        .length;
+    final settledCount = settlements
+        .where((s) => s.status == 'received')
+        .length;
     final statementNet = settlements
         .where((s) => s.status == 'calculated')
         .fold<double>(0, (sum, s) => sum + s.netSettlement);
@@ -193,7 +217,8 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
     final disputedNet = settlements
         .where((s) => s.status == 'disputed')
         .fold<double>(0, (sum, s) => sum + s.netSettlement);
-    final atRiskNet = unsettledRevenue + pendingNet + statementNet + disputedNet;
+    final atRiskNet =
+        unsettledRevenue + pendingNet + statementNet + disputedNet;
     final followUpSignals = [
       if (unsettledOrders > 0)
         l10n.deliverySettlementAtRiskOpenRevenue(_fmtVnd(unsettledRevenue)),
@@ -208,10 +233,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
           _fmtVnd(disputedNet),
         ),
       if (pendingCount > 0)
-        l10n.deliverySettlementAtRiskPending(
-          pendingCount,
-          _fmtVnd(pendingNet),
-        ),
+        l10n.deliverySettlementAtRiskPending(pendingCount, _fmtVnd(pendingNet)),
     ];
 
     return Container(
@@ -255,7 +277,9 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
               _attentionMetric(
                 l10n.deliverySettlementStatementsWaiting,
                 '$statementCount',
-                statementCount > 0 ? AppColors.amber500 : AppColors.statusAvailable,
+                statementCount > 0
+                    ? AppColors.amber500
+                    : AppColors.statusAvailable,
               ),
               _attentionMetric(
                 l10n.deliverySettlementSettledPeriods,
@@ -284,11 +308,15 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
               ),
               _attentionChip(
                 l10n.deliverySettlementPendingPeriods(pendingCount),
-                pendingCount > 0 ? AppColors.amber500 : AppColors.statusAvailable,
+                pendingCount > 0
+                    ? AppColors.amber500
+                    : AppColors.statusAvailable,
               ),
               _attentionChip(
                 l10n.deliverySettlementStatements(statementCount),
-                statementCount > 0 ? AppColors.amber500 : AppColors.statusAvailable,
+                statementCount > 0
+                    ? AppColors.amber500
+                    : AppColors.statusAvailable,
               ),
               _attentionChip(
                 l10n.deliverySettlementDisputes(disputeCount),
@@ -486,6 +514,18 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
       totalNet += s.netSettlement;
       totalOrders += s.orderCount;
     }
+    final averageNet = settlements.isEmpty
+        ? 0.0
+        : totalNet / settlements.length;
+    final averageOrders = settlements.isEmpty
+        ? 0.0
+        : totalOrders / settlements.length;
+    final receivedCount = settlements
+        .where((s) => s.status == 'received')
+        .length;
+    final followUpCount = settlements
+        .where((s) => s.status != 'received')
+        .length;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -506,23 +546,28 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
             ),
           ),
           const SizedBox(height: 8),
-          Row(
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
             children: [
-              Expanded(
+              SizedBox(
+                width: 180,
                 child: _summaryMetric(
                   'Total Revenue',
                   _fmtVnd(totalGross),
                   AppColors.textPrimary,
                 ),
               ),
-              Expanded(
+              SizedBox(
+                width: 180,
                 child: _summaryMetric(
                   'Total Deducted',
                   '-${_fmtVnd(totalDeductions)}',
                   AppColors.statusCancelled,
                 ),
               ),
-              Expanded(
+              SizedBox(
+                width: 180,
                 child: _summaryMetric(
                   'Actual Deposit',
                   _fmtVnd(totalNet),
@@ -531,13 +576,44 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            '${settlements.length} settlements · $totalOrders orders',
-            style: GoogleFonts.notoSansKr(
-              color: AppColors.textSecondary,
-              fontSize: 11,
-            ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _summarySupportMetric(
+                'Periods',
+                '${settlements.length}',
+                AppColors.textPrimary,
+              ),
+              _summarySupportMetric(
+                'Orders',
+                '$totalOrders',
+                AppColors.textPrimary,
+              ),
+              _summarySupportMetric(
+                'Avg deposit / period',
+                _fmtVnd(averageNet),
+                AppColors.statusAvailable,
+              ),
+              _summarySupportMetric(
+                'Avg orders / period',
+                averageOrders.toStringAsFixed(1),
+                AppColors.textSecondary,
+              ),
+              _summarySupportMetric(
+                'Settled',
+                '$receivedCount',
+                AppColors.statusAvailable,
+              ),
+              _summarySupportMetric(
+                'Need follow-up',
+                '$followUpCount',
+                followUpCount > 0
+                    ? AppColors.amber500
+                    : AppColors.statusAvailable,
+              ),
+            ],
           ),
         ],
       ),
@@ -565,6 +641,38 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _summarySupportMetric(String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 11,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: GoogleFonts.notoSansKr(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -657,6 +765,111 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
 
   // ─── 정산 카드 ────────────────────────
 
+  Widget _buildHistoryFocus({
+    required List<DeliverySettlement> all,
+    required List<DeliverySettlement> filtered,
+    required UnsettledRevenueSummary? unsettled,
+  }) {
+    final l10n = context.l10n;
+    final pendingCount = all.where((s) => s.status == 'pending').length;
+    final statementCount = all.where((s) => s.status == 'calculated').length;
+    final disputeCount = all.where((s) => s.status == 'disputed').length;
+    final receivedCount = all.where((s) => s.status == 'received').length;
+    final unsettledRevenue = unsettled?.revenue ?? 0;
+    final pendingNet = all
+        .where((s) => s.status == 'pending')
+        .fold<double>(0, (sum, s) => sum + s.netSettlement);
+    final disputedNet = all
+        .where((s) => s.status == 'disputed')
+        .fold<double>(0, (sum, s) => sum + s.netSettlement);
+    final statementNet = all
+        .where((s) => s.status == 'calculated')
+        .fold<double>(0, (sum, s) => sum + s.netSettlement);
+
+    final focusCopy = statementCount > 0
+        ? l10n.deliverySettlementDepositReady(
+            statementCount,
+            _fmtVnd(statementNet),
+          )
+        : disputeCount > 0
+        ? l10n.deliverySettlementAtRiskDisputed(
+            disputeCount,
+            _fmtVnd(disputedNet),
+          )
+        : pendingCount > 0
+        ? l10n.deliverySettlementAtRiskPending(
+            pendingCount,
+            _fmtVnd(pendingNet),
+          )
+        : unsettledRevenue > 0
+        ? l10n.deliverySettlementAtRiskOpenRevenue(_fmtVnd(unsettledRevenue))
+        : l10n.deliverySettlementFocusNone;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'History Focus',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Use the current filter to inspect the tracked settlement queue without leaving the admin shell.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _summarySupportMetric(
+                'Filtered view',
+                _activeFilterLabel(),
+                AppColors.textPrimary,
+              ),
+              _summarySupportMetric(
+                'Visible periods',
+                '${filtered.length}/${all.length}',
+                AppColors.textPrimary,
+              ),
+              _summarySupportMetric(
+                'Healthy coverage',
+                '$receivedCount/${all.length}',
+                receivedCount == all.length
+                    ? AppColors.statusAvailable
+                    : AppColors.amber500,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _attentionSupportRow(l10n.deliverySettlementFollowUpFocus, focusCopy),
+          const SizedBox(height: 8),
+          _attentionSupportRow(
+            l10n.deliverySettlementBoundary,
+            filtered.isEmpty
+                ? 'No periods match the current filter. Clear the filter to return to the full tracked settlement queue.'
+                : 'Filtered history remains read-only. Deposit confirmation stays inside the tracked control on each eligible settlement card.',
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSettlementCard(DeliverySettlement s) {
     final dateRange =
         '${DateFormat('M/d').format(s.periodStart)}~${DateFormat('M/d').format(s.periodEnd)}';
@@ -696,6 +909,24 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
                       fontSize: 12,
                     ),
                   ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _statusBadge(s.statusLabel, _statusColor(s.status)),
+                      _statusBadge(
+                        'Orders ${s.orderCount}',
+                        AppColors.statusInfo,
+                      ),
+                      _statusBadge(
+                        '${s.items.length} deductions',
+                        s.items.isNotEmpty
+                            ? AppColors.statusCancelled
+                            : AppColors.statusAvailable,
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -710,6 +941,45 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
           ],
         ),
         children: [
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _settlementMiniMetric(
+                'Gross',
+                _fmtVnd(s.grossTotal),
+                AppColors.textPrimary,
+              ),
+              _settlementMiniMetric(
+                'Deducted',
+                '-${_fmtVnd(s.totalDeductions)}',
+                AppColors.statusCancelled,
+              ),
+              _settlementMiniMetric(
+                'Deposit',
+                _fmtVnd(s.netSettlement),
+                AppColors.statusAvailable,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _detailRow('Status', s.statusLabel, color: _statusColor(s.status)),
+          _detailRow('Settlement window', dateRange),
+          _detailRow(
+            'Received at',
+            _formatDateTime(s.receivedAt),
+            color: s.receivedAt != null
+                ? AppColors.statusAvailable
+                : AppColors.textSecondary,
+          ),
+          _detailRow(
+            'Notes',
+            _stringOrDash(s.notes),
+            color: s.notes?.trim().isNotEmpty == true
+                ? AppColors.textPrimary
+                : AppColors.textSecondary,
+          ),
+          const Divider(color: AppColors.surface2, height: 16),
           // 매출 총액
           _detailRow(
             'Delivery Revenue (gross)',
@@ -718,13 +988,20 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
           ),
           const Divider(color: AppColors.surface2, height: 16),
           // 차감 항목
-          ...s.items.map(
-            (item) => _detailRow(
-              item.label,
-              '-${_fmtVnd(item.amount)}',
-              color: AppColors.statusCancelled,
+          if (s.items.isEmpty)
+            _detailRow(
+              'Deductions',
+              'No tracked deduction lines',
+              color: AppColors.textSecondary,
+            )
+          else
+            ...s.items.map(
+              (item) => _detailRow(
+                item.label,
+                '-${_fmtVnd(item.amount)}',
+                color: AppColors.statusCancelled,
+              ),
             ),
-          ),
           if (s.items.isNotEmpty)
             const Divider(color: AppColors.surface2, height: 16),
           // 합계
@@ -804,6 +1081,93 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
       ),
     );
   }
+
+  Widget _settlementMiniMetric(String label, String value, Color color) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 120, maxWidth: 170),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 11,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: GoogleFonts.notoSansKr(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.notoSansKr(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  String _historySummaryCopy({
+    required int filteredCount,
+    required int totalCount,
+  }) {
+    if (_statusFilter == null) {
+      return '$totalCount tracked settlement periods are visible in the current history queue.';
+    }
+    return '$filteredCount of $totalCount periods match the current ${_statusLabel(_statusFilter!)} filter.';
+  }
+
+  String _activeFilterLabel() {
+    if (_statusFilter == null) return 'All periods';
+    return _statusLabel(_statusFilter!);
+  }
+
+  String _formatDateTime(DateTime? value) {
+    if (value == null) return '-';
+    return DateFormat('yyyy-MM-dd HH:mm').format(value.toLocal());
+  }
+
+  String _stringOrDash(String? value) {
+    final text = value?.trim();
+    if (text == null || text.isEmpty) return '-';
+    return text;
+  }
+
+  Color _statusColor(String status) => switch (status) {
+    'received' => AppColors.statusAvailable,
+    'calculated' => AppColors.amber500,
+    'pending' => AppColors.statusInfo,
+    'disputed' => AppColors.statusCancelled,
+    'adjusted' => AppColors.statusReady,
+    _ => AppColors.textSecondary,
+  };
 
   Future<void> _confirmReceived(String settlementId) async {
     final rid = ref.read(authProvider).storeId;
