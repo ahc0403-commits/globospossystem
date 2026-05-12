@@ -789,3 +789,64 @@ final inventoryPurchaseOrderCreationProvider =
       InventoryPurchaseOrderCreationNotifier,
       InventoryPurchaseOrderCreationState
     >((ref) => InventoryPurchaseOrderCreationNotifier());
+
+class InventoryPurchaseOrderSummaryState {
+  final List<Map<String, dynamic>> orders;
+  final bool isLoading;
+  final String? error;
+
+  const InventoryPurchaseOrderSummaryState({
+    this.orders = const [],
+    this.isLoading = false,
+    this.error,
+  });
+
+  InventoryPurchaseOrderSummaryState copyWith({
+    List<Map<String, dynamic>>? orders,
+    bool? isLoading,
+    String? error,
+    bool clearError = false,
+  }) => InventoryPurchaseOrderSummaryState(
+    orders: orders ?? this.orders,
+    isLoading: isLoading ?? this.isLoading,
+    error: clearError ? null : (error ?? this.error),
+  );
+}
+
+class InventoryPurchaseOrderSummaryNotifier
+    extends StateNotifier<InventoryPurchaseOrderSummaryState> {
+  InventoryPurchaseOrderSummaryNotifier()
+    : super(const InventoryPurchaseOrderSummaryState());
+
+  Future<void> load(String storeId) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final orders = await inventoryService.fetchRecentInventoryPurchaseOrders(
+        storeId: storeId,
+      );
+      state = state.copyWith(orders: orders, isLoading: false);
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: _mapInventoryPurchaseOrderSummaryError(e),
+      );
+    }
+  }
+
+  String _mapInventoryPurchaseOrderSummaryError(Object error) {
+    final fallback = 'Failed to load recent purchase orders.';
+    final message = error.toString();
+
+    if (message.contains('INVENTORY_PURCHASE_FORBIDDEN')) {
+      return 'No permission to view purchase orders for this store.';
+    }
+
+    return fallback;
+  }
+}
+
+final inventoryPurchaseOrderSummaryProvider =
+    StateNotifierProvider<
+      InventoryPurchaseOrderSummaryNotifier,
+      InventoryPurchaseOrderSummaryState
+    >((ref) => InventoryPurchaseOrderSummaryNotifier());
