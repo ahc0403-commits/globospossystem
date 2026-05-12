@@ -258,6 +258,23 @@ class QcService {
     return Map<String, dynamic>.from(list.first);
   }
 
+  Future<List<Map<String, dynamic>>> fetchIssueQueue({
+    required String storeId,
+  }) async {
+    final result = await supabase
+        .from('v_office_qsc_issue_queue')
+        .select(
+          'check_id,restaurant_id,store_id,brand_id,store_name,category,qsc_domain,criteria_text,check_date,result,photo_status,submission_status,sv_review_status,followup_status,severity,evidence_photo_url,note,checked_by,created_at,submitted_at,score,grade',
+        )
+        .eq('store_id', storeId)
+        .order('check_date', ascending: false)
+        .order('created_at', ascending: false);
+
+    return List<Map<String, dynamic>>.from(result as List)
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList();
+  }
+
   Future<Map<String, dynamic>> upsertCheckV2({
     required String storeId,
     required String templateId,

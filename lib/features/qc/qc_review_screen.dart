@@ -32,8 +32,11 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
   String _domainFilter = 'all';
   String _photoFilter = 'all';
   String _svRequirementFilter = 'required';
+  String _issueSeverityFilter = 'all';
+  String _issueSubmissionFilter = 'all';
   DateTime _weekStart = _startOfWeek(TimeUtils.nowVietnam());
   final Set<String> _selectedCheckIds = <String>{};
+  String? _selectedIssueId;
 
   static DateTime _startOfWeek(DateTime now) {
     final day = DateTime(now.year, now.month, now.day);
@@ -45,6 +48,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
     await ref
         .read(qcCheckProvider.notifier)
         .loadWeek(storeId: storeId, weekStart: _weekStart);
+    await ref.read(qcIssueQueueProvider.notifier).load(storeId);
   }
 
   Future<void> _loadWeek(String storeId, DateTime start) async {
@@ -88,6 +92,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
       auth.extraPermissions,
     );
     final checkState = ref.watch(qcCheckProvider);
+    final issueQueueState = ref.watch(qcIssueQueueProvider);
 
     if (!canReview) {
       if (!_didHandleUnauthorized) {
@@ -219,6 +224,56 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
       groupedByDate.putIfAbsent(date, () => []).add(check);
     }
 
+    final queueIssues = issueQueueState.issues.where((issue) {
+      final severity = issue['severity']?.toString() ?? 'info';
+      final domain = issue['qsc_domain']?.toString() ?? 'quality';
+      final photoStatus = issue['photo_status']?.toString() ?? 'na';
+      final submissionStatus =
+          issue['submission_status']?.toString() ?? 'pending';
+
+      final matchesSeverity =
+          _issueSeverityFilter == 'all' || severity == _issueSeverityFilter;
+      final matchesDomain =
+          _domainFilter == 'all' || domain == _domainFilter;
+      final matchesPhoto = switch (_photoFilter) {
+        'missing' => photoStatus == 'missing' || photoStatus == 'partial',
+        'complete' => photoStatus == 'complete',
+        'not_required' => photoStatus == 'na',
+        _ => true,
+      };
+      final matchesSubmission =
+          _issueSubmissionFilter == 'all' ||
+          submissionStatus == _issueSubmissionFilter;
+
+      return matchesSeverity &&
+          matchesDomain &&
+          matchesPhoto &&
+          matchesSubmission;
+    }).toList()
+      ..sort((a, b) {
+        final aSeverity = _issueSeverityRank(a['severity']?.toString());
+        final bSeverity = _issueSeverityRank(b['severity']?.toString());
+        if (aSeverity != bSeverity) return aSeverity.compareTo(bSeverity);
+        final aDate = a['check_date']?.toString() ?? '';
+        final bDate = b['check_date']?.toString() ?? '';
+        final dateCompare = bDate.compareTo(aDate);
+        if (dateCompare != 0) return dateCompare;
+        final aCreated = a['created_at']?.toString() ?? '';
+        final bCreated = b['created_at']?.toString() ?? '';
+        return bCreated.compareTo(aCreated);
+      });
+
+    Map<String, dynamic>? selectedIssue;
+    if (queueIssues.isNotEmpty) {
+      for (final issue in queueIssues) {
+        if (issue['check_id']?.toString() == _selectedIssueId) {
+          selectedIssue = issue;
+          break;
+        }
+      }
+      selectedIssue ??= queueIssues.first;
+    }
+
     return Scaffold(
       backgroundColor: PosColors.canvas,
       appBar: AppBar(
@@ -319,6 +374,184 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                       PosColors.info,
                     ),
                   ],
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: PosColors.panelStrong,
+                    borderRadius: ToastRadiusTokens.xs,
+                    border: Border.all(color: PosColors.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Issue Queue',
+                                  style: GoogleFonts.notoSansKr(
+                                    color: PosColors.text,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Read-only exception queue from the tracked QSC issue view.',
+                                  style: GoogleFonts.notoSansKr(
+                                    color: PosColors.textMuted,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: storeId == null
+                                ? null
+                                : () => ref
+                                      .read(qcIssueQueueProvider.notifier)
+                                      .load(storeId),
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Refresh Issue Queue'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              initialValue: _issueSeverityFilter,
+                              decoration: const InputDecoration(
+                                labelText: 'Severity',
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'all',
+                                  child: Text('All severities'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'critical',
+                                  child: Text('Critical'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'high',
+                                  child: Text('High'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'medium',
+                                  child: Text('Medium'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'low',
+                                  child: Text('Low'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'info',
+                                  child: Text('Info'),
+                                ),
+                              ],
+                              onChanged: (value) {
+                                if (value == null) return;
+                                setState(() => _issueSeverityFilter = value);
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              initialValue: _issueSubmissionFilter,
+                              decoration: const InputDecoration(
+                                labelText: 'Submission',
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'all',
+                                  child: Text('All submissions'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'pending',
+                                  child: Text('Pending'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'overdue',
+                                  child: Text('Overdue'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'submitted',
+                                  child: Text('Submitted'),
+                                ),
+                              ],
+                              onChanged: (value) {
+                                if (value == null) return;
+                                setState(() => _issueSubmissionFilter = value);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (issueQueueState.error != null) ...[
+                        Text(
+                          issueQueueState.error!,
+                          style: GoogleFonts.notoSansKr(
+                            color: PosColors.danger,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                      if (issueQueueState.isLoading && issueQueueState.issues.isEmpty)
+                        const Center(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24),
+                            child: CircularProgressIndicator(
+                              color: PosColors.accent,
+                            ),
+                          ),
+                        )
+                      else if (queueIssues.isEmpty)
+                        Text(
+                          'No issue queue items match the current filters.',
+                          style: GoogleFonts.notoSansKr(
+                            color: PosColors.textMuted,
+                          ),
+                        )
+                      else
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final vertical = constraints.maxWidth < 960;
+                            final listPane = _issueQueueList(queueIssues);
+                            final detailPane = _issueQueueDetail(selectedIssue);
+
+                            if (vertical) {
+                              return Column(
+                                children: [
+                                  SizedBox(height: 260, child: listPane),
+                                  const SizedBox(height: 12),
+                                  detailPane,
+                                ],
+                              );
+                            }
+
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(flex: 5, child: SizedBox(height: 360, child: listPane)),
+                                const SizedBox(width: 12),
+                                Expanded(flex: 4, child: detailPane),
+                              ],
+                            );
+                          },
+                        ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -1021,6 +1254,218 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
     noteController.dispose();
   }
 
+  Widget _issueQueueList(List<Map<String, dynamic>> issues) {
+    return ListView.separated(
+      itemCount: issues.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final issue = issues[index];
+        final checkId = issue['check_id']?.toString() ?? '';
+        final selected =
+            (checkId.isNotEmpty && checkId == _selectedIssueId) ||
+            (_selectedIssueId == null && index == 0);
+        final severity = issue['severity']?.toString();
+
+        return InkWell(
+          onTap: () => setState(() => _selectedIssueId = checkId),
+          borderRadius: ToastRadiusTokens.xs,
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: selected
+                  ? PosColors.accent.withValues(alpha: 0.10)
+                  : PosColors.canvas,
+              borderRadius: ToastRadiusTokens.xs,
+              border: Border.all(
+                color: selected ? PosColors.accent : PosColors.border,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        issue['criteria_text']?.toString() ?? '-',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.notoSansKr(
+                          color: PosColors.text,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _statusChip(
+                      (severity ?? 'info').toUpperCase(),
+                      _issueSeverityColor(severity),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _statusChip(
+                      issue['category']?.toString() ?? 'Other',
+                      PosColors.textMuted,
+                    ),
+                    _statusChip(
+                      issue['photo_status']?.toString() ?? 'na',
+                      PosColors.info,
+                    ),
+                    _statusChip(
+                      issue['submission_status']?.toString() ?? 'pending',
+                      PosColors.accent,
+                    ),
+                    _statusChip(
+                      issue['sv_review_status']?.toString() ?? 'pending',
+                      _svStatusColor(issue['sv_review_status']?.toString() ?? 'pending'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${issue['store_name'] ?? '-'} · ${issue['check_date'] ?? '-'}',
+                  style: GoogleFonts.notoSansKr(
+                    color: PosColors.textMuted,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _issueQueueDetail(Map<String, dynamic>? issue) {
+    if (issue == null) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: PosColors.canvas,
+          borderRadius: ToastRadiusTokens.xs,
+          border: Border.all(color: PosColors.border),
+        ),
+        child: Text(
+          'Queue Detail appears when you select an issue.',
+          style: GoogleFonts.notoSansKr(color: PosColors.textMuted),
+        ),
+      );
+    }
+
+    final photoUrl = issue['evidence_photo_url']?.toString();
+    final severity = issue['severity']?.toString();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: PosColors.canvas,
+        borderRadius: ToastRadiusTokens.xs,
+        border: Border.all(color: PosColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Queue Detail',
+                  style: GoogleFonts.notoSansKr(
+                    color: PosColors.text,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              _statusChip(
+                (severity ?? 'info').toUpperCase(),
+                _issueSeverityColor(severity),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            issue['criteria_text']?.toString() ?? '-',
+            style: GoogleFonts.notoSansKr(
+              color: PosColors.text,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _issueField('Store', issue['store_name']?.toString() ?? '-'),
+          _issueField('Domain', issue['qsc_domain']?.toString() ?? '-'),
+          _issueField('Check Date', issue['check_date']?.toString() ?? '-'),
+          _issueField('Result', issue['result']?.toString() ?? '-'),
+          _issueField(
+            'Follow-up Status',
+            issue['followup_status']?.toString() ?? '-',
+          ),
+          _issueField(
+            'Submitted At',
+            issue['submitted_at']?.toString() ?? 'Not submitted',
+          ),
+          _issueField('Score / Grade', _scoreGradeText(issue)),
+          _issueField(
+            'Evidence',
+            photoUrl != null && photoUrl.isNotEmpty
+                ? 'Photo available'
+                : 'Photo not attached',
+          ),
+          if (issue['note']?.toString().isNotEmpty == true) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Note',
+              style: GoogleFonts.notoSansKr(
+                color: PosColors.textMuted,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              issue['note'].toString(),
+              style: GoogleFonts.notoSansKr(color: PosColors.text),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _issueField(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 108,
+            child: Text(
+              label,
+              style: GoogleFonts.notoSansKr(
+                color: PosColors.textMuted,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: GoogleFonts.notoSansKr(color: PosColors.text),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _weekLabel() {
     final end = _weekStart.add(const Duration(days: 6));
     return '${DateFormat('MM/dd').format(_weekStart)} - ${DateFormat('MM/dd').format(end)}';
@@ -1086,6 +1531,53 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
       default:
         return PosColors.textMuted;
     }
+  }
+
+  int _issueSeverityRank(String? severity) {
+    switch (severity) {
+      case 'critical':
+        return 0;
+      case 'high':
+        return 1;
+      case 'medium':
+        return 2;
+      case 'low':
+        return 3;
+      case 'info':
+      default:
+        return 4;
+    }
+  }
+
+  Color _issueSeverityColor(String? severity) {
+    switch (severity) {
+      case 'critical':
+        return PosColors.danger;
+      case 'high':
+        return Colors.deepOrangeAccent;
+      case 'medium':
+        return PosColors.accent;
+      case 'low':
+        return PosColors.info;
+      case 'info':
+      default:
+        return PosColors.textMuted;
+    }
+  }
+
+  String _scoreGradeText(Map<String, dynamic> issue) {
+    final score = issue['score']?.toString();
+    final grade = issue['grade']?.toString();
+    if ((score == null || score.isEmpty) && (grade == null || grade.isEmpty)) {
+      return '-';
+    }
+    if (score != null &&
+        score.isNotEmpty &&
+        grade != null &&
+        grade.isNotEmpty) {
+      return '$score / ${grade.toUpperCase()}';
+    }
+    return score?.isNotEmpty == true ? score! : grade!.toUpperCase();
   }
 
   int? _readInt(dynamic value) {
