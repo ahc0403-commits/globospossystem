@@ -56,6 +56,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     await ref
         .read(physicalCountProvider.notifier)
         .load(storeId, DateFormat('yyyy-MM-dd').format(_countDate));
+    await ref.read(inventoryPurchaseOverviewProvider.notifier).load(storeId);
     await ref
         .read(inventoryReportProvider.notifier)
         .load(storeId: storeId, from: _reportFrom, to: _reportTo);
@@ -1102,6 +1103,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
 
   Widget _buildReportTab(String? storeId) {
     final report = ref.watch(inventoryReportProvider);
+    final purchaseOverview = ref.watch(inventoryPurchaseOverviewProvider);
 
     final deduct = report.transactions
         .where((t) => t['transaction_type'] == 'deduct')
@@ -1153,6 +1155,11 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 fontSize: 12,
               ),
             ),
+          ),
+          const SizedBox(height: 12),
+          _buildInventoryPurchaseOverview(
+            storeId: storeId,
+            overview: purchaseOverview,
           ),
           const SizedBox(height: 12),
           Row(
@@ -1315,6 +1322,136 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     );
   }
 
+  Widget _buildInventoryPurchaseOverview({
+    required String? storeId,
+    required InventoryPurchaseOverviewState overview,
+  }) {
+    final dashboard = overview.dashboard;
+    final storeCount = (dashboard?['store_count'] as num?)?.toInt() ?? 0;
+    final lowStockCount = (dashboard?['low_stock_count'] as num?)?.toInt() ?? 0;
+    final totalInventoryAmount =
+        (dashboard?['total_inventory_amount'] as num?)?.toDouble() ?? 0;
+    final submittedPurchaseAmount =
+        (dashboard?['submitted_purchase_amount'] as num?)?.toDouble() ?? 0;
+    final approvedPurchaseAmount =
+        (dashboard?['approved_purchase_amount'] as num?)?.toDouble() ?? 0;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Purchase Overview',
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Read-only inventory purchase snapshot from the tracked purchase dashboard. Recommendation runs and order mutations stay out of this slice.',
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: storeId == null || overview.isLoading
+                    ? null
+                    : () => ref
+                          .read(inventoryPurchaseOverviewProvider.notifier)
+                          .load(storeId),
+                tooltip: 'Refresh Purchase Overview',
+                icon: overview.isLoading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh),
+                color: AppColors.amber500,
+              ),
+            ],
+          ),
+          if (overview.error != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              overview.error!,
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.statusOccupied,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ] else if (dashboard == null) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Purchase overview will appear after a store-scoped dashboard load.',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _purchaseMetricCard('Store Scope', '$storeCount store(s)'),
+                const SizedBox(width: 8),
+                _purchaseMetricCard(
+                  'Low Stock Alerts',
+                  '$lowStockCount item(s)',
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _purchaseMetricCard(
+                  'Inventory Value',
+                  _formatCurrencyCompact(totalInventoryAmount),
+                ),
+                const SizedBox(width: 8),
+                _purchaseMetricCard(
+                  'Submitted Orders',
+                  _formatCurrencyCompact(submittedPurchaseAmount),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _purchaseMetricCard(
+                  'Approved Orders',
+                  _formatCurrencyCompact(approvedPurchaseAmount),
+                ),
+                const SizedBox(width: 8),
+                _purchaseMetricCard('Slice Mode', 'Read-only'),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   String _txTypeLabel(String type) => switch (type) {
     'deduct' => 'Deduction',
     'restock' => 'Stock In',
@@ -1322,6 +1459,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     'adjust' => 'Adjustment',
     _ => type,
   };
+
+  String _formatCurrencyCompact(double value) =>
+      '${NumberFormat('#,###', 'vi_VN').format(value.round())} VND';
 
   Widget _summaryCard(String label, double value) {
     return Expanded(
@@ -1347,6 +1487,40 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               style: GoogleFonts.bebasNeue(
                 color: AppColors.amber500,
                 fontSize: 26,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _purchaseMetricCard(String label, String value) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: AppColors.surface0,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.surface2),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 11,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],
