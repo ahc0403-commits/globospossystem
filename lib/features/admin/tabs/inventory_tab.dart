@@ -1446,7 +1446,60 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 _purchaseMetricCard('Slice Mode', 'Read-only'),
               ],
             ),
+            const SizedBox(height: 12),
+            _buildPurchaseOverviewDetail(
+              lowStockCount: lowStockCount,
+              submittedPurchaseAmount: submittedPurchaseAmount,
+              approvedPurchaseAmount: approvedPurchaseAmount,
+            ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPurchaseOverviewDetail({
+    required int lowStockCount,
+    required double submittedPurchaseAmount,
+    required double approvedPurchaseAmount,
+  }) {
+    final approvalGap = submittedPurchaseAmount - approvedPurchaseAmount;
+    final normalizedGap = approvalGap > 0 ? approvalGap : 0.0;
+    final reviewFocus = lowStockCount > 0
+        ? 'Review low-stock items before creating any new purchase workflow.'
+        : 'No low-stock alerts in the current scoped dashboard snapshot.';
+    final approvalStatus = normalizedGap > 0
+        ? 'Submitted orders exceed approved orders by ${_formatCurrencyCompact(normalizedGap)}.'
+        : 'Approved purchase volume is aligned with or ahead of submitted volume.';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Purchase Review Detail',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _purchaseDetailRow('Approval Gap', approvalStatus),
+          const SizedBox(height: 8),
+          _purchaseDetailRow('Review Focus', reviewFocus),
+          const SizedBox(height: 8),
+          _purchaseDetailRow(
+            'Boundary',
+            'This slice remains read-only and does not trigger recommendation runs or purchase mutations.',
+          ),
         ],
       ),
     );
@@ -1526,6 +1579,34 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ],
         ),
       ),
+    );
+  }
+
+  Widget _purchaseDetailRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 110,
+          child: Text(
+            label,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontSize: 12,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
