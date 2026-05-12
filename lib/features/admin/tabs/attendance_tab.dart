@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/attendance_service.dart';
 import '../../../core/services/payroll_service.dart';
+import '../../../core/services/pin_service.dart';
 import '../../../core/utils/time_utils.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
@@ -32,8 +33,10 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
   bool _isLogsLoading = false;
   bool _isPayrollLoading = false;
   bool _hasLoadedPayroll = false;
+  bool _payrollUnlocked = false;
   String? _logsError;
   String? _payrollError;
+  bool? _hasPayrollPin;
 
   static DateTime _startOfWeek(DateTime now) {
     final weekday = now.weekday;
@@ -57,12 +60,15 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         from: _logFrom,
         to: _logTo,
       );
+      final pinHash = await pinService.fetchPinHash(storeId);
 
       if (!mounted) return;
       setState(() {
         _staffList = staff;
         _logs = logs;
         _isLogsLoading = false;
+        _hasPayrollPin = pinHash != null && pinHash.isNotEmpty;
+        _payrollUnlocked = pinHash == null || pinHash.isEmpty;
       });
     } catch (e) {
       if (!mounted) return;
@@ -155,6 +161,84 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     ).showSnackBar(const SnackBar(content: Text('Payroll preview saved.')));
   }
 
+  Future<void> _unlockPayroll(String storeId) async {
+    final controller = TextEditingController();
+    String? validationError;
+
+    final unlocked = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Unlock Payroll Preview'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Enter the payroll PIN to reveal preview totals and staff breakdown.',
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    obscureText: true,
+                    maxLength: 4,
+                    decoration: InputDecoration(
+                      labelText: 'Payroll PIN',
+                      errorText: validationError,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    final pin = controller.text.trim();
+                    if (pin.length != 4) {
+                      setDialogState(
+                        () => validationError = 'PIN must be 4 digits.',
+                      );
+                      return;
+                    }
+                    final verified = await pinService.verifyPin(storeId, pin);
+                    if (!verified) {
+                      setDialogState(
+                        () => validationError = 'Incorrect payroll PIN.',
+                      );
+                      return;
+                    }
+                    if (!dialogContext.mounted) return;
+                    Navigator.of(dialogContext).pop(true);
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.amber500,
+                    foregroundColor: AppColors.surface0,
+                  ),
+                  child: const Text('Unlock'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    controller.dispose();
+
+    if (unlocked == true && mounted) {
+      setState(() => _payrollUnlocked = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Payroll preview unlocked.')),
+      );
+    }
+  }
+
   String _mapAttendanceError(Object error, String fallback) {
     final message = error is PostgrestException ? error.message : '$error';
 
@@ -207,6 +291,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
       if (_selectedStaffFilter == 'all') return true;
       return payroll.userId == _selectedStaffFilter;
     }).toList();
+    final payrollRequiresUnlock = _hasPayrollPin == true && !_payrollUnlocked;
 
     return Scaffold(
       key: const Key('attendance_root'),
@@ -335,7 +420,9 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                 if (filteredPayrolls.isNotEmpty) ...[
                   const SizedBox(width: 10),
                   OutlinedButton.icon(
-                    onPressed: () => _exportPayrollPreview(filteredPayrolls),
+                    onPressed: payrollRequiresUnlock
+                        ? null
+                        : () => _exportPayrollPreview(filteredPayrolls),
                     icon: const Icon(Icons.download, size: 18),
                     label: const Text('Export Payroll'),
                     style: OutlinedButton.styleFrom(
@@ -362,7 +449,11 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                 _payrollError != null ||
                 filteredPayrolls.isNotEmpty ||
                 _hasLoadedPayroll) ...[
-              _buildPayrollPreview(filteredPayrolls),
+              _buildPayrollPreview(
+                filteredPayrolls,
+                storeId: storeId,
+                payrollRequiresUnlock: payrollRequiresUnlock,
+              ),
               const SizedBox(height: 14),
             ],
             Expanded(
@@ -431,7 +522,11 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     );
   }
 
-  Widget _buildPayrollPreview(List<StaffPayroll> payrolls) {
+  Widget _buildPayrollPreview(
+    List<StaffPayroll> payrolls, {
+    required String? storeId,
+    required bool payrollRequiresUnlock,
+  }) {
     final totalHours = payrolls.fold<double>(
       0,
       (sum, payroll) => sum + payroll.totalHours,
@@ -508,6 +603,30 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
             const Center(
               child: CircularProgressIndicator(color: AppColors.amber500),
             ),
+          ] else if (payrollRequiresUnlock) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Payroll preview is locked by the current payroll PIN.',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.icon(
+                onPressed: storeId == null
+                    ? null
+                    : () => _unlockPayroll(storeId),
+                icon: const Icon(Icons.lock_open),
+                label: const Text('Unlock Payroll'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.amber500,
+                  foregroundColor: AppColors.surface0,
+                ),
+              ),
+            ),
           ] else if (payrolls.isEmpty) ...[
             const SizedBox(height: 10),
             Text(
@@ -533,8 +652,11 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                   final shiftCount = payroll.dailyRecords
                       .where((record) => !record.isUnpaired)
                       .length;
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
+                  return ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: const EdgeInsets.only(bottom: 8),
+                    collapsedIconColor: AppColors.textSecondary,
+                    iconColor: AppColors.amber500,
                     title: Text(
                       payroll.userName,
                       style: GoogleFonts.notoSansKr(
@@ -556,6 +678,62 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
+                    children: payroll.dailyRecords.map((record) {
+                      final statusLabel = record.isUnpaired
+                          ? 'Unpaired shift'
+                          : 'Paired shift';
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 4, 0, 4),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: Text(
+                                DateFormat('yyyy-MM-dd').format(record.date),
+                                style: GoogleFonts.notoSansKr(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 3,
+                              child: Text(
+                                statusLabel,
+                                style: GoogleFonts.notoSansKr(
+                                  color: record.isUnpaired
+                                      ? AppColors.statusCancelled
+                                      : AppColors.textSecondary,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                '${record.hours.toStringAsFixed(2)} h',
+                                style: GoogleFonts.notoSansKr(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                '₫${currency.format(record.amount)}',
+                                textAlign: TextAlign.right,
+                                style: GoogleFonts.notoSansKr(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
                   );
                 },
               ),
