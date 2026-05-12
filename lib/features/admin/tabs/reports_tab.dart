@@ -247,6 +247,8 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                       summary: reportState.summary!,
                       currency: currency,
                     ),
+                    const SizedBox(height: 8),
+                    _OperationalAttentionSection(summary: reportState.summary!),
                   ],
                   const SizedBox(height: 16),
                   if (storeId != null) _TodaySummarySection(storeId: storeId),
@@ -621,6 +623,124 @@ class _PaymentMethodRow extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _OperationalAttentionSection extends StatelessWidget {
+  const _OperationalAttentionSection({required this.summary});
+
+  final ReportSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final wt08CoverageText = summary.wt08ComparablePosCount == 0
+        ? 'No WT08-comparable POS orders in the selected period'
+        : '${summary.wetaxReportedCount}/${summary.wt08ComparablePosCount} WT08-comparable POS orders reported';
+    final proofRate = summary.proofCompletePercent.toStringAsFixed(0);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Operational Attention',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Read-only readiness layer built from tracked report summary fields.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _attentionChip(
+                'Missing proof ${summary.missingProofPhotosCount}',
+                summary.missingProofPhotosCount > 0
+                    ? AppColors.statusCancelled
+                    : AppColors.statusAvailable,
+              ),
+              _attentionChip(
+                'Failed e-invoice ${summary.failedEinvoiceJobsCount}',
+                summary.failedEinvoiceJobsCount > 0
+                    ? AppColors.statusCancelled
+                    : AppColors.statusAvailable,
+              ),
+              _attentionChip(
+                'Proof completion $proofRate%',
+                summary.proofCompletePercent < 100
+                    ? AppColors.amber500
+                    : AppColors.statusAvailable,
+              ),
+              _attentionChip(
+                wt08CoverageText,
+                summary.wetaxReportedCount < summary.wt08ComparablePosCount
+                    ? AppColors.amber500
+                    : AppColors.textPrimary,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _attentionNarrative(),
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontSize: 12,
+              height: 1.45,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _attentionChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.notoSansKr(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  String _attentionNarrative() {
+    if (summary.failedEinvoiceJobsCount > 0) {
+      return 'Immediate follow-up: resolve failed e-invoice jobs before routine report cleanup.';
+    }
+    if (summary.missingProofPhotosCount > 0) {
+      return 'Immediate follow-up: close missing payment proof gaps before the next audit pass.';
+    }
+    if (summary.wetaxReportedCount < summary.wt08ComparablePosCount) {
+      return 'Watchlist: WT08 reporting coverage is behind comparable POS order volume for this period.';
+    }
+    if (summary.proofCompletePercent < 100) {
+      return 'Watchlist: payment proof completion is improving, but still not fully closed for the selected range.';
+    }
+    return 'Healthy period: operational proof, e-invoice, and WT08 summary signals are currently aligned.';
   }
 }
 
