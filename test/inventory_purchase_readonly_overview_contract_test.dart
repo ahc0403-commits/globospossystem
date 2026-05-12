@@ -6,7 +6,7 @@ String readRepoFile(String path) => File(path).readAsStringSync();
 
 void main() {
   test(
-    'tracked inventory workspace exposes a bounded recommendation workflow surface',
+    'tracked inventory workspace exposes a bounded recommendation and purchase-order workflow surface',
     () {
       final tab = readRepoFile('lib/features/admin/tabs/inventory_tab.dart');
       final provider = readRepoFile(
@@ -25,10 +25,13 @@ void main() {
       expect(tab, contains('Refresh Recommendation Snapshot'));
       expect(tab, contains('Create Purchase Orders'));
       expect(tab, contains('Latest Purchase Order Creation'));
+      expect(tab, contains('Recent Purchase Orders'));
+      expect(tab, contains('Refresh Purchase Orders'));
       expect(tab, contains('inventoryPurchaseOverviewProvider'));
       expect(tab, contains('inventoryPurchaseRecommendationRunProvider'));
       expect(tab, contains('inventoryPurchaseRecommendationSnapshotProvider'));
       expect(tab, contains('inventoryPurchaseOrderCreationProvider'));
+      expect(tab, contains('inventoryPurchaseOrderSummaryProvider'));
       expect(tab, contains('Refresh Purchase Overview'));
 
       expect(provider, contains('class InventoryPurchaseOverviewState'));
@@ -48,6 +51,8 @@ void main() {
       );
       expect(provider, contains('class InventoryPurchaseOrderCreationState'));
       expect(provider, contains('inventoryPurchaseOrderCreationProvider'));
+      expect(provider, contains('class InventoryPurchaseOrderSummaryState'));
+      expect(provider, contains('inventoryPurchaseOrderSummaryProvider'));
 
       expect(service, contains('fetchInventoryPurchaseDashboard'));
       expect(service, contains("'get_inventory_purchase_dashboard'"));
@@ -59,9 +64,12 @@ void main() {
       );
       expect(service, contains('fetchInventoryPurchaseRecommendationLines'));
       expect(service, contains('createPurchaseOrdersFromRecommendation'));
+      expect(service, contains('fetchRecentInventoryPurchaseOrders'));
       expect(service, contains("'inventory_recommendation_runs'"));
       expect(service, contains("'inventory_recommendation_lines'"));
       expect(service, contains("'create_purchase_orders_from_recommendation'"));
+      expect(service, contains("'inventory_purchase_orders'"));
+      expect(service, contains("'inventory_purchase_order_lines'"));
       expect(
         tab,
         contains(
@@ -70,6 +78,7 @@ void main() {
       );
       expect(tab, isNot(contains('InventoryPurchaseScreen')));
       expect(tab, isNot(contains('office_approve_inventory_purchase_order')));
+      expect(tab, isNot(contains('confirmInventoryPurchaseReceipt')));
     },
   );
 }
