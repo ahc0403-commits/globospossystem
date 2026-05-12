@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../core/i18n/locale_extensions.dart';
 import '../core/services/connectivity_service.dart';
 import '../core/ui/app_primitives.dart';
 import '../core/ui/toast/toast.dart';
@@ -191,6 +192,7 @@ class _MenuBrowser extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final currency = NumberFormat('#,###', 'vi_VN');
 
     if (menuLoading) {
@@ -200,9 +202,9 @@ class _MenuBrowser extends StatelessWidget {
     }
 
     if (menuError) {
-      return const AppErrorState(
-        title: 'Failed to load menu',
-        message: 'Categories and sellable items could not be loaded.',
+      return AppErrorState(
+        title: l10n.orderWorkspaceMenuOfflineTitle,
+        message: l10n.orderWorkspaceMenuOfflineMessage,
       );
     }
 
@@ -212,9 +214,9 @@ class _MenuBrowser extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const AppSectionHeader(
-            title: 'MENU',
-            subtitle: 'Browse categories and add items to the current table.',
+          AppSectionHeader(
+            title: l10n.orderWorkspaceMenus,
+            subtitle: l10n.orderWorkspaceTapItemToAdd,
           ),
           const SizedBox(height: 12),
           SizedBox(
@@ -492,6 +494,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final isOnline = ref.watch(connectivityProvider).asData?.value ?? true;
     final formatter = NumberFormat('#,###', 'vi_VN');
     final total = widget.state.cart.fold<double>(
@@ -541,7 +544,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Text(
-                    'OPEN ORDER',
+                    l10n.orderWorkspaceCurrentCheck,
                     style: GoogleFonts.notoSansKr(
                       color: AppColors.textSecondary,
                       fontSize: 11,
@@ -567,7 +570,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                       ),
                       icon: const Icon(Icons.swap_horiz, size: 14),
                       label: Text(
-                        'Move',
+                        l10n.orderWorkspaceMove,
                         style: GoogleFonts.notoSansKr(
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
@@ -590,7 +593,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Text(
-                    '${widget.guestCount} guests',
+                    l10n.orderWorkspaceGuestCount(widget.guestCount!),
                     style: GoogleFonts.notoSansKr(
                       color: AppColors.textSecondary,
                       fontSize: 11,
@@ -621,9 +624,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                   const SizedBox(width: 4),
                   Text(
                     key: const Key('latest_order_number_text'),
-                    widget.state.activeOrder!.id.length >= 8
-                        ? widget.state.activeOrder!.id.substring(0, 8)
-                        : widget.state.activeOrder!.id,
+                    '${l10n.orderWorkspaceKitchenTicketSent} · ${widget.state.activeOrder!.id.length >= 8 ? widget.state.activeOrder!.id.substring(0, 8) : widget.state.activeOrder!.id}',
                     style: GoogleFonts.notoSansKr(
                       color: AppColors.statusAvailable,
                       fontSize: 11,
@@ -647,7 +648,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                 if (widget.state.activeOrder != null &&
                     widget.state.activeOrder!.items.isNotEmpty) ...[
                   Text(
-                    'Already Sent',
+                    l10n.orderWorkspaceSentToKitchen,
                     style: GoogleFonts.notoSansKr(
                       color: AppColors.textSecondary,
                       fontSize: 13,
@@ -756,7 +757,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                   const SizedBox(height: 14),
                 ],
                 Text(
-                  'New Items',
+                  l10n.orderWorkspaceNewItems,
                   style: GoogleFonts.notoSansKr(
                     color: AppColors.textPrimary,
                     fontSize: 14,
@@ -850,7 +851,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
           Row(
             children: [
               Text(
-                'TOTAL',
+                l10n.orderWorkspacePaymentDue,
                 style: GoogleFonts.notoSansKr(
                   color: AppColors.textSecondary,
                   fontSize: 13,
@@ -880,7 +881,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
               ),
               PosActionButton(
                 key: const Key('cart_submit_order'),
-                label: PosActionVerbs.sendOrder,
+                label: l10n.orderWorkspaceSendToKitchen,
                 tone: PosActionTone.primary,
                 icon: PosActionIcons.sendOrder,
                 onPressed:
@@ -910,7 +911,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                'Internet connection required',
+                l10n.orderWorkspaceInternetRequired,
                 style: GoogleFonts.notoSansKr(
                   color: AppColors.statusOccupied,
                   fontSize: 12,
@@ -935,7 +936,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
           if (canProcessPayment) ...[
             const SizedBox(height: 12),
             Text(
-              'Process Payment (₫${formatter.format(activeTotal)})',
+              '${l10n.orderWorkspacePaymentDue} (₫${formatter.format(activeTotal)})',
               style: GoogleFonts.notoSansKr(
                 color: AppColors.textSecondary,
                 fontSize: 12,
@@ -947,10 +948,19 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
               spacing: 8,
               runSpacing: 8,
               children:
-                  const [
-                    _PaymentMethodTag(method: 'CASH', label: 'Cash'),
-                    _PaymentMethodTag(method: 'CREDITCARD', label: 'Card'),
-                    _PaymentMethodTag(method: 'OTHER', label: 'E-Pay'),
+                  [
+                    _PaymentMethodTag(
+                      method: 'CASH',
+                      label: l10n.orderWorkspaceCash,
+                    ),
+                    _PaymentMethodTag(
+                      method: 'CREDITCARD',
+                      label: l10n.orderWorkspaceCard,
+                    ),
+                    _PaymentMethodTag(
+                      method: 'OTHER',
+                      label: l10n.orderWorkspaceEPay,
+                    ),
                   ].map((tag) {
                     final selected = _selectedPaymentMethod == tag.method;
                     return ChoiceChip(
@@ -979,7 +989,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
             Align(
               alignment: Alignment.centerRight,
               child: PosActionButton(
-                label: PosActionVerbs.paymentComplete,
+                label: l10n.orderWorkspacePay,
                 tone: PosActionTone.primary,
                 icon: PosActionIcons.paymentComplete,
                 onPressed:
@@ -1005,7 +1015,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                'Send newly added items before payment.',
+                l10n.orderWorkspaceSendBeforePayment,
                 style: GoogleFonts.notoSansKr(
                   color: AppColors.statusOccupied,
                   fontSize: 12,
