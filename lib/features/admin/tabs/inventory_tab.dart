@@ -25,6 +25,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   DateTime _countDate = DateTime.now();
   DateTime _reportFrom = DateTime.now().subtract(const Duration(days: 6));
   DateTime _reportTo = DateTime.now();
+  String? _selectedPurchaseOrderId;
   final Map<String, TextEditingController> _actualControllers = {};
   final Map<String, TextEditingController> _noteControllers = {};
 
@@ -60,12 +61,49 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     await ref
         .read(inventoryPurchaseRecommendationSnapshotProvider.notifier)
         .loadLatest(storeId);
-    await ref
-        .read(inventoryPurchaseOrderSummaryProvider.notifier)
-        .load(storeId);
+    await _loadPurchaseOrderSummaryAndDetail(storeId);
     await ref
         .read(inventoryReportProvider.notifier)
         .load(storeId: storeId, from: _reportFrom, to: _reportTo);
+  }
+
+  Future<void> _loadPurchaseOrderSummaryAndDetail(
+    String storeId, {
+    String? preferredOrderId,
+  }) async {
+    await ref
+        .read(inventoryPurchaseOrderSummaryProvider.notifier)
+        .load(storeId);
+    final summary = ref.read(inventoryPurchaseOrderSummaryProvider);
+    final orders = summary.orders;
+
+    String? nextOrderId = preferredOrderId ?? _selectedPurchaseOrderId;
+    if (nextOrderId != null &&
+        !orders.any((order) => order['id']?.toString() == nextOrderId)) {
+      nextOrderId = null;
+    }
+    nextOrderId ??= orders.isNotEmpty ? orders.first['id']?.toString() : null;
+
+    if (!mounted) return;
+    if (_selectedPurchaseOrderId != nextOrderId) {
+      setState(() => _selectedPurchaseOrderId = nextOrderId);
+    }
+
+    if (nextOrderId == null) {
+      ref.read(inventoryPurchaseOrderDetailProvider.notifier).clear();
+      return;
+    }
+
+    await ref
+        .read(inventoryPurchaseOrderDetailProvider.notifier)
+        .load(nextOrderId);
+  }
+
+  Future<void> _selectPurchaseOrder({required String orderId}) async {
+    if (_selectedPurchaseOrderId != orderId && mounted) {
+      setState(() => _selectedPurchaseOrderId = orderId);
+    }
+    await ref.read(inventoryPurchaseOrderDetailProvider.notifier).load(orderId);
   }
 
   @override
@@ -1118,6 +1156,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     );
     final orderCreation = ref.watch(inventoryPurchaseOrderCreationProvider);
     final orderSummary = ref.watch(inventoryPurchaseOrderSummaryProvider);
+    final orderDetail = ref.watch(inventoryPurchaseOrderDetailProvider);
 
     final deduct = report.transactions
         .where((t) => t['transaction_type'] == 'deduct')
@@ -1178,6 +1217,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             recommendationSnapshot: recommendationSnapshot,
             orderCreation: orderCreation,
             orderSummary: orderSummary,
+            orderDetail: orderDetail,
           ),
           const SizedBox(height: 12),
           Row(
@@ -1348,6 +1388,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     recommendationSnapshot,
     required InventoryPurchaseOrderCreationState orderCreation,
     required InventoryPurchaseOrderSummaryState orderSummary,
+    required InventoryPurchaseOrderDetailState orderDetail,
   }) {
     final dashboard = overview.dashboard;
     final storeCount = (dashboard?['store_count'] as num?)?.toInt() ?? 0;
@@ -1519,6 +1560,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               snapshot: recommendationSnapshot,
               orderCreation: orderCreation,
               orderSummary: orderSummary,
+              orderDetail: orderDetail,
             ),
           ],
         ],
@@ -1584,6 +1626,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     required InventoryPurchaseRecommendationSnapshotState snapshot,
     required InventoryPurchaseOrderCreationState orderCreation,
     required InventoryPurchaseOrderSummaryState orderSummary,
+    required InventoryPurchaseOrderDetailState orderDetail,
   }) {
     final run = snapshot.run;
     final lineCount = snapshot.lines.length;
@@ -1643,11 +1686,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                                   .notifier,
                             )
                             .loadLatest(storeId);
-                        await ref
-                            .read(
-                              inventoryPurchaseOrderSummaryProvider.notifier,
-                            )
-                            .load(storeId);
+                        await _loadPurchaseOrderSummaryAndDetail(storeId);
                       },
                 tooltip: 'Refresh Recommendation Snapshot',
                 icon: snapshot.isLoading || orderSummary.isLoading
@@ -1745,6 +1784,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             _buildRecentPurchaseOrdersSection(
               storeId: storeId,
               summary: orderSummary,
+              detail: orderDetail,
             ),
             const SizedBox(height: 12),
             if (snapshot.lines.isEmpty)
@@ -1820,6 +1860,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   Widget _buildRecentPurchaseOrdersSection({
     required String? storeId,
     required InventoryPurchaseOrderSummaryState summary,
+    required InventoryPurchaseOrderDetailState detail,
   }) {
     return Container(
       width: double.infinity,
@@ -1860,9 +1901,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               IconButton(
                 onPressed: storeId == null || summary.isLoading
                     ? null
-                    : () => ref
-                          .read(inventoryPurchaseOrderSummaryProvider.notifier)
-                          .load(storeId),
+                    : () => _loadPurchaseOrderSummaryAndDetail(storeId),
                 tooltip: 'Refresh Purchase Orders',
                 icon: summary.isLoading
                     ? const SizedBox(
@@ -1898,8 +1937,20 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             const SizedBox(height: 12),
             Column(
               children: summary.orders
-                  .map((order) => _buildRecentPurchaseOrderCard(order))
+                  .map(
+                    (order) => _buildRecentPurchaseOrderCard(
+                      storeId: storeId,
+                      order: order,
+                      isSelected:
+                          order['id']?.toString() == detail.selectedOrderId,
+                    ),
+                  )
                   .toList(),
+            ),
+            const SizedBox(height: 12),
+            _buildPurchaseOrderDetailSection(
+              detail: detail,
+              hasOrders: summary.orders.isNotEmpty,
             ),
           ],
         ],
@@ -1907,7 +1958,11 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     );
   }
 
-  Widget _buildRecentPurchaseOrderCard(Map<String, dynamic> order) {
+  Widget _buildRecentPurchaseOrderCard({
+    required String? storeId,
+    required Map<String, dynamic> order,
+    required bool isSelected,
+  }) {
     final supplierMap = order['supplier'] as Map<String, dynamic>?;
     final supplierName = supplierMap?['name']?.toString();
     final orderNo = order['purchase_order_no']?.toString() ?? '-';
@@ -1920,13 +1975,286 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         ? null
         : DateTime.tryParse(createdAtRaw)?.toLocal();
 
+    return InkWell(
+      onTap: storeId == null || order['id'] == null
+          ? null
+          : () => _selectPurchaseOrder(orderId: order['id'].toString()),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.surface0,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? AppColors.amber500 : AppColors.surface2,
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        orderNo,
+                        style: GoogleFonts.notoSansKr(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        supplierName == null || supplierName.isEmpty
+                            ? 'Supplier unavailable'
+                            : 'Supplier $supplierName',
+                        style: GoogleFonts.notoSansKr(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _buildIngredientMetaChip(
+                  status.toUpperCase(),
+                  color: AppColors.amber500,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildIngredientMetaChip(
+                  'Lines $lineCount',
+                  color: AppColors.statusAvailable,
+                ),
+                _buildIngredientMetaChip(
+                  'Total ${_formatCurrencyCompact(totalAmount)}',
+                  color: AppColors.amber500,
+                ),
+                _buildIngredientMetaChip(
+                  requestedDate == null || requestedDate.isEmpty
+                      ? 'Requested date not set'
+                      : 'Requested $requestedDate',
+                ),
+                _buildIngredientMetaChip(
+                  createdAt == null
+                      ? 'Created time unavailable'
+                      : 'Created ${DateFormat('yyyy-MM-dd HH:mm').format(createdAt)}',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPurchaseOrderDetailSection({
+    required InventoryPurchaseOrderDetailState detail,
+    required bool hasOrders,
+  }) {
+    final order = detail.order;
+    final selectedOrderId = detail.selectedOrderId;
+    final supplierMap = order?['supplier'] as Map<String, dynamic>?;
+    final supplierName = supplierMap?['name']?.toString();
+    final memo = order?['memo']?.toString();
+    final status = order?['status']?.toString() ?? 'submitted';
+    final requestedDate = order?['requested_delivery_date']?.toString();
+    final totalAmount = (order?['total_amount'] as num?)?.toDouble() ?? 0;
+    final supplyAmount =
+        (order?['total_supply_amount'] as num?)?.toDouble() ?? 0;
+    final taxAmount = (order?['tax_amount'] as num?)?.toDouble() ?? 0;
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppColors.surface0,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Purchase Order Detail',
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Inspect the selected order line-by-line without opening approval, edit, or receipt confirmation workflows.',
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: selectedOrderId == null || detail.isLoading
+                    ? null
+                    : () => ref
+                          .read(inventoryPurchaseOrderDetailProvider.notifier)
+                          .load(selectedOrderId),
+                tooltip: 'Refresh Selected Order',
+                icon: detail.isLoading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh),
+                color: AppColors.amber500,
+              ),
+            ],
+          ),
+          if (detail.error != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              detail.error!,
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.statusOccupied,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ] else if (!hasOrders) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Select a purchase order to inspect line-level detail once orders exist in the tracked POS scope.',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ] else if (order == null) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Select a recent purchase order card above to inspect line-level detail.',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildIngredientMetaChip(
+                  order['purchase_order_no']?.toString() ?? '-',
+                  color: AppColors.amber500,
+                ),
+                _buildIngredientMetaChip(
+                  status.toUpperCase(),
+                  color: AppColors.statusAvailable,
+                ),
+                _buildIngredientMetaChip(
+                  supplierName == null || supplierName.isEmpty
+                      ? 'Supplier unavailable'
+                      : 'Supplier $supplierName',
+                ),
+                _buildIngredientMetaChip(
+                  requestedDate == null || requestedDate.isEmpty
+                      ? 'Requested date not set'
+                      : 'Requested $requestedDate',
+                ),
+                _buildIngredientMetaChip(
+                  'Supply ${_formatCurrencyCompact(supplyAmount)}',
+                ),
+                _buildIngredientMetaChip(
+                  'Tax ${_formatCurrencyCompact(taxAmount)}',
+                ),
+                _buildIngredientMetaChip(
+                  'Total ${_formatCurrencyCompact(totalAmount)}',
+                  color: AppColors.amber500,
+                ),
+              ],
+            ),
+            if (memo != null && memo.trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Order memo: $memo',
+                style: GoogleFonts.notoSansKr(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            if (detail.lines.isEmpty)
+              Text(
+                'No line items are visible for the selected order.',
+                style: GoogleFonts.notoSansKr(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              )
+            else
+              Column(
+                children: detail.lines
+                    .map((line) => _buildPurchaseOrderLineCard(line))
+                    .toList(),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPurchaseOrderLineCard(Map<String, dynamic> line) {
+    final productMap = line['product'] as Map<String, dynamic>?;
+    final supplierItemMap = line['supplier_item'] as Map<String, dynamic>?;
+    final snapshot = line['recommendation_snapshot'] is Map
+        ? Map<String, dynamic>.from(line['recommendation_snapshot'] as Map)
+        : null;
+    final productName =
+        productMap?['name']?.toString() ??
+        line['product_id']?.toString() ??
+        '-';
+    final supplierSku = supplierItemMap?['supplier_sku']?.toString();
+    final riskStatus = snapshot?['risk_status']?.toString() ?? 'stable';
+    final orderedUnits =
+        (line['ordered_quantity_unit'] as num?)?.toDouble() ?? 0;
+    final orderedBase =
+        (line['ordered_quantity_base'] as num?)?.toDouble() ?? 0;
+    final recommendedBase =
+        (line['recommended_quantity_base'] as num?)?.toDouble() ?? 0;
+    final unitPrice = (line['unit_price'] as num?)?.toDouble() ?? 0;
+    final supplyAmount = (line['supply_amount'] as num?)?.toDouble() ?? 0;
+    final taxAmount = (line['tax_amount'] as num?)?.toDouble() ?? 0;
+    final memo = line['memo']?.toString();
+    final orderUnit = line['order_unit']?.toString() ?? 'unit';
+    final snapshotRunId = snapshot?['run_id']?.toString();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _recommendationRiskColor(riskStatus)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1939,7 +2267,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      orderNo,
+                      productName,
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
@@ -1947,9 +2275,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      supplierName == null || supplierName.isEmpty
-                          ? 'Supplier unavailable'
-                          : 'Supplier $supplierName',
+                      supplierSku == null || supplierSku.isEmpty
+                          ? 'Supplier SKU unavailable'
+                          : 'Supplier SKU $supplierSku',
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -1959,8 +2287,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 ),
               ),
               _buildIngredientMetaChip(
-                status.toUpperCase(),
-                color: AppColors.amber500,
+                riskStatus.toUpperCase(),
+                color: _recommendationRiskColor(riskStatus),
               ),
             ],
           ),
@@ -1970,25 +2298,42 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             runSpacing: 8,
             children: [
               _buildIngredientMetaChip(
-                'Lines $lineCount',
-                color: AppColors.statusAvailable,
-              ),
-              _buildIngredientMetaChip(
-                'Total ${_formatCurrencyCompact(totalAmount)}',
+                'Ordered ${orderedUnits.toStringAsFixed(3)} $orderUnit',
                 color: AppColors.amber500,
               ),
               _buildIngredientMetaChip(
-                requestedDate == null || requestedDate.isEmpty
-                    ? 'Requested date not set'
-                    : 'Requested $requestedDate',
+                'Ordered base ${orderedBase.toStringAsFixed(3)}',
               ),
               _buildIngredientMetaChip(
-                createdAt == null
-                    ? 'Created time unavailable'
-                    : 'Created ${DateFormat('yyyy-MM-dd HH:mm').format(createdAt)}',
+                'Recommended ${recommendedBase.toStringAsFixed(3)}',
+              ),
+              _buildIngredientMetaChip(
+                'Unit ${_formatCurrencyCompact(unitPrice)}',
+              ),
+              _buildIngredientMetaChip(
+                'Supply ${_formatCurrencyCompact(supplyAmount)}',
+              ),
+              _buildIngredientMetaChip(
+                'Tax ${_formatCurrencyCompact(taxAmount)}',
+              ),
+              _buildIngredientMetaChip(
+                snapshotRunId == null
+                    ? 'Recommendation provenance unavailable'
+                    : 'Recommendation ${snapshotRunId.substring(0, 8)}',
+                color: _recommendationRiskColor(riskStatus),
               ),
             ],
           ),
+          if (memo != null && memo.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Line memo: $memo',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -2327,9 +2672,12 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     await ref
                         .read(inventoryPurchaseOverviewProvider.notifier)
                         .load(storeId);
-                    await ref
-                        .read(inventoryPurchaseOrderSummaryProvider.notifier)
-                        .load(storeId);
+                    await _loadPurchaseOrderSummaryAndDetail(
+                      storeId,
+                      preferredOrderId: latest.createdOrders.isNotEmpty
+                          ? latest.createdOrders.first['id']?.toString()
+                          : null,
+                    );
                     if (!dialogContext.mounted) return;
                     showSuccessToast(
                       dialogContext,
