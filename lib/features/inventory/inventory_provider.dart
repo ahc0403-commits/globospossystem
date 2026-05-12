@@ -552,3 +552,88 @@ final inventoryPurchaseOverviewProvider =
       InventoryPurchaseOverviewNotifier,
       InventoryPurchaseOverviewState
     >((ref) => InventoryPurchaseOverviewNotifier());
+
+class InventoryPurchaseRecommendationRunState {
+  final bool isRunning;
+  final String? error;
+  final String? lastRunId;
+  final double? lastTargetStockDays;
+  final String? lastAsOfDate;
+
+  const InventoryPurchaseRecommendationRunState({
+    this.isRunning = false,
+    this.error,
+    this.lastRunId,
+    this.lastTargetStockDays,
+    this.lastAsOfDate,
+  });
+
+  InventoryPurchaseRecommendationRunState copyWith({
+    bool? isRunning,
+    String? error,
+    bool clearError = false,
+    String? lastRunId,
+    double? lastTargetStockDays,
+    String? lastAsOfDate,
+  }) => InventoryPurchaseRecommendationRunState(
+    isRunning: isRunning ?? this.isRunning,
+    error: clearError ? null : (error ?? this.error),
+    lastRunId: lastRunId ?? this.lastRunId,
+    lastTargetStockDays: lastTargetStockDays ?? this.lastTargetStockDays,
+    lastAsOfDate: lastAsOfDate ?? this.lastAsOfDate,
+  );
+}
+
+class InventoryPurchaseRecommendationRunNotifier
+    extends StateNotifier<InventoryPurchaseRecommendationRunState> {
+  InventoryPurchaseRecommendationRunNotifier()
+    : super(const InventoryPurchaseRecommendationRunState());
+
+  Future<bool> run({
+    required String storeId,
+    required double targetStockDays,
+    required DateTime asOfDate,
+  }) async {
+    state = state.copyWith(isRunning: true, clearError: true);
+    try {
+      final runId = await inventoryService.runInventoryPurchaseRecommendation(
+        storeId: storeId,
+        targetStockDays: targetStockDays,
+        asOfDate: asOfDate,
+      );
+      state = state.copyWith(
+        isRunning: false,
+        lastRunId: runId,
+        lastTargetStockDays: targetStockDays,
+        lastAsOfDate: asOfDate.toIso8601String().split('T').first,
+      );
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isRunning: false,
+        error: _mapInventoryPurchaseRecommendationError(e),
+      );
+      return false;
+    }
+  }
+
+  String _mapInventoryPurchaseRecommendationError(Object error) {
+    final fallback = 'Failed to generate recommendation snapshot.';
+    final message = error.toString();
+
+    if (message.contains('INVENTORY_PURCHASE_FORBIDDEN')) {
+      return 'No permission to generate a purchase recommendation for this store.';
+    }
+    if (message.contains('INVENTORY_PURCHASE_TARGET_DAYS_INVALID')) {
+      return 'Target stock days must be greater than zero.';
+    }
+
+    return fallback;
+  }
+}
+
+final inventoryPurchaseRecommendationRunProvider =
+    StateNotifierProvider<
+      InventoryPurchaseRecommendationRunNotifier,
+      InventoryPurchaseRecommendationRunState
+    >((ref) => InventoryPurchaseRecommendationRunNotifier());
