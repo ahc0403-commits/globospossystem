@@ -2882,6 +2882,16 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       remainingBase: remainingBase,
       orderStatus: orderStatus,
     );
+    final combinedRiskSummary = _inventorySupplierRiskSummaryLabel(
+      receiptVisibilityStatus: receiptVisibilityStatus,
+      unitPriceDriftLabel: unitPriceDriftLabel,
+      leadTimeRiskLabel: leadTimeRiskLabel,
+    );
+    final combinedRiskColor = _inventorySupplierRiskSummaryColor(
+      receiptVisibilityStatus: receiptVisibilityStatus,
+      unitPriceDriftLabel: unitPriceDriftLabel,
+      leadTimeRiskLabel: leadTimeRiskLabel,
+    );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -2926,6 +2936,11 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 color: _recommendationRiskColor(riskStatus),
               ),
             ],
+          ),
+          const SizedBox(height: 8),
+          _buildIngredientMetaChip(
+            combinedRiskSummary,
+            color: combinedRiskColor,
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -3225,6 +3240,69 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     }
     if (label.endsWith('overdue')) {
       return AppColors.statusOccupied;
+    }
+    return AppColors.surface2;
+  }
+
+  String _inventorySupplierRiskSummaryLabel({
+    required String receiptVisibilityStatus,
+    required String unitPriceDriftLabel,
+    required String leadTimeRiskLabel,
+  }) {
+    final summaryParts = <String>[];
+
+    if (receiptVisibilityStatus == 'pending' ||
+        receiptVisibilityStatus == 'draft') {
+      summaryParts.add('receipt pending');
+    } else if (receiptVisibilityStatus == 'partially_received') {
+      summaryParts.add('receipt partial');
+    } else if (receiptVisibilityStatus == 'received' ||
+        receiptVisibilityStatus == 'confirmed') {
+      summaryParts.add('receipt complete');
+    }
+
+    if (unitPriceDriftLabel.contains('up')) {
+      summaryParts.add('price up');
+    } else if (unitPriceDriftLabel.contains('down')) {
+      summaryParts.add('price down');
+    } else if (unitPriceDriftLabel.contains('stable')) {
+      summaryParts.add('price stable');
+    }
+
+    if (leadTimeRiskLabel.contains('overdue')) {
+      summaryParts.add('lead overdue');
+    } else if (leadTimeRiskLabel.contains('tight')) {
+      summaryParts.add('lead tight');
+    } else if (leadTimeRiskLabel.contains('on track')) {
+      summaryParts.add('lead on track');
+    } else if (leadTimeRiskLabel.contains('complete')) {
+      summaryParts.add('lead complete');
+    }
+
+    if (summaryParts.isEmpty) {
+      return 'Supplier risk summary unavailable';
+    }
+    return 'Supplier risk ${summaryParts.join(' / ')}';
+  }
+
+  Color _inventorySupplierRiskSummaryColor({
+    required String receiptVisibilityStatus,
+    required String unitPriceDriftLabel,
+    required String leadTimeRiskLabel,
+  }) {
+    if (leadTimeRiskLabel.contains('overdue') ||
+        unitPriceDriftLabel.contains('up')) {
+      return AppColors.statusOccupied;
+    }
+    if (leadTimeRiskLabel.contains('tight') ||
+        receiptVisibilityStatus == 'partially_received') {
+      return AppColors.amber500;
+    }
+    if (receiptVisibilityStatus == 'received' ||
+        receiptVisibilityStatus == 'confirmed' ||
+        leadTimeRiskLabel.contains('on track') ||
+        leadTimeRiskLabel.contains('complete')) {
+      return AppColors.statusAvailable;
     }
     return AppColors.surface2;
   }
