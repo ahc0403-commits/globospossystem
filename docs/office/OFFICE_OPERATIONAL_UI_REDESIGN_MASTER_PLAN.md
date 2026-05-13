@@ -27,6 +27,7 @@ Audit prerequisite:
 
 - keep the source of truth single and explicit
 - keep deprecated standard documents non-authoritative
+- treat pre-lock redesign/recovery slice docs as archival context only
 - ensure feature plans link back to the active Office source-of-truth document
 
 Exit condition:

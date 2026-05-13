@@ -1,4 +1,19 @@
-# QSC Issue Queue Design Slice — 2026-05-12
+# ARCHIVE — QSC Issue Queue Design Slice — 2026-05-12
+
+This file is preserved as pre-lock redesign planning only.
+
+Do not use it as the current UI standard or redesign entry point.
+
+Use these documents instead:
+
+- [Toast Operational UI Source of Truth](office/TOAST_OPERATIONAL_UI_SOURCE_OF_TRUTH.md)
+- [Office Operational UI Redesign Master Plan](office/OFFICE_OPERATIONAL_UI_REDESIGN_MASTER_PLAN.md)
+- [Legacy UI Standards Re-Audit](office/LEGACY_UI_STANDARDS_REAUDIT.md)
+
+Historical note:
+
+- keep this file for feature-scope provenance from the 2026-05-12 redesign
+  planning batch
 
 ## Verdict
 

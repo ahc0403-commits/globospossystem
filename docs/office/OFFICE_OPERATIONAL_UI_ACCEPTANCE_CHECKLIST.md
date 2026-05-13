@@ -46,12 +46,15 @@ Primary authority:
 - [ ] Repo search does not leave dashboard/KPI/card-heavy/AppShell/dark/admin
       shell/CRUD-first standards active outside deprecated or historical
       context.
+- [ ] Any remaining non-archive keyword hit is either an explicit anti-baseline
+      warning or a retained implementation symbol, not a source-of-truth file.
 - [ ] `source of truth` for Office UI resolves back to the Office source-of-
       truth document, not to an older standard file.
 
 ## Verdict Rule
 
 - PASS only when legacy UI standards remain in deprecated/history/archive
-  context and the active redesign guidance is singular.
+  context, or are called out only as forbidden patterns / retained
+  implementation symbols, and the active redesign guidance is singular.
 - FAIL when any active file still instructs UI work through dashboard/KPI/card-
   heavy/AppShell/dark/admin-shell/CRUD-first baseline rules.
