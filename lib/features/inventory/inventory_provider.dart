@@ -1033,12 +1033,43 @@ class InventoryPurchaseRuntimeSurfaceState {
   final String orderStatus;
   final String? requestedDate;
   final double remainingBase;
+  final double expectedBase;
+  final double receivedBase;
+  final double acceptedBase;
+  final double rejectedBase;
   final int confirmedReceiptCount;
+  final int draftReceiptCount;
+  final int cancelledReceiptCount;
   final int receivedLineCount;
   final int blockedLineCount;
   final int pendingLineCount;
   final int attentionLineCount;
+  final String? latestReceiptStatus;
+  final DateTime? latestReceiptAt;
+  final String operationalPhaseLabel;
+  final String operationalPhaseTone;
+  final String operationalPhaseNarrative;
+  final String approvalStateTone;
+  final String approvalNarrative;
+  final String receivingStateTone;
+  final String receivingNarrative;
+  final String receivingReadinessLabel;
+  final String receivingReadinessTone;
+  final String receivingReadinessNarrative;
+  final String receiptVisibilityStatusLabel;
+  final String receiptVisibilityStatusTone;
+  final String receiptVisibilityNarrative;
+  final String readyStateLabel;
+  final String readyStateTone;
+  final String blockedStateLabel;
+  final String blockedStateTone;
+  final String staleStateLabel;
+  final String staleStateTone;
+  final String nextBestOperatorAction;
+  final String receivedLineSummaryLabel;
+  final String remainingLineSummaryLabel;
   final List<Map<String, dynamic>> blockerRows;
+  final List<InventoryPurchaseRuntimeLineContextState> lineContexts;
   final InventoryPurchaseRuntimeClosureSnapshot runtimeClosure;
 
   const InventoryPurchaseRuntimeSurfaceState({
@@ -1046,13 +1077,68 @@ class InventoryPurchaseRuntimeSurfaceState {
     required this.orderStatus,
     required this.requestedDate,
     required this.remainingBase,
+    required this.expectedBase,
+    required this.receivedBase,
+    required this.acceptedBase,
+    required this.rejectedBase,
     required this.confirmedReceiptCount,
+    required this.draftReceiptCount,
+    required this.cancelledReceiptCount,
     required this.receivedLineCount,
     required this.blockedLineCount,
     required this.pendingLineCount,
     required this.attentionLineCount,
+    required this.latestReceiptStatus,
+    required this.latestReceiptAt,
+    required this.operationalPhaseLabel,
+    required this.operationalPhaseTone,
+    required this.operationalPhaseNarrative,
+    required this.approvalStateTone,
+    required this.approvalNarrative,
+    required this.receivingStateTone,
+    required this.receivingNarrative,
+    required this.receivingReadinessLabel,
+    required this.receivingReadinessTone,
+    required this.receivingReadinessNarrative,
+    required this.receiptVisibilityStatusLabel,
+    required this.receiptVisibilityStatusTone,
+    required this.receiptVisibilityNarrative,
+    required this.readyStateLabel,
+    required this.readyStateTone,
+    required this.blockedStateLabel,
+    required this.blockedStateTone,
+    required this.staleStateLabel,
+    required this.staleStateTone,
+    required this.nextBestOperatorAction,
+    required this.receivedLineSummaryLabel,
+    required this.remainingLineSummaryLabel,
     required this.blockerRows,
+    required this.lineContexts,
     required this.runtimeClosure,
+  });
+}
+
+class InventoryPurchaseRuntimeLineContextState {
+  final String productName;
+  final double orderedBase;
+  final double expectedBase;
+  final double receivedBase;
+  final double remainingBase;
+  final String statusLabel;
+  final String statusTone;
+  final String riskSummary;
+  final String narrative;
+
+  const InventoryPurchaseRuntimeLineContextState({
+    required this.productName,
+    required this.orderedBase,
+    required this.expectedBase,
+    required this.receivedBase,
+    required this.remainingBase,
+    required this.statusLabel,
+    required this.statusTone,
+    required this.riskSummary,
+    required this.narrative,
   });
 }
 
@@ -1194,7 +1280,7 @@ InventoryPurchaseOperatingSummary buildInventoryPurchaseOperatingSummary({
   required InventoryPurchaseOrderCreationState orderCreation,
   required InventoryPurchaseOrderSummaryState orderSummary,
   required InventoryPurchaseOrderDetailState orderDetail,
-  required InventoryPurchaseRuntimeClosureSnapshot runtimeClosure,
+  required InventoryPurchaseRuntimeSurfaceState runtimeSurface,
 }) {
   final recommendationRuntimeStateLabel = recommendationRun.isRunning
       ? 'Recommendation running'
@@ -1226,13 +1312,13 @@ InventoryPurchaseOperatingSummary buildInventoryPurchaseOperatingSummary({
 
   final approvalHandoffReadinessLabel = orderDetail.order == null
       ? 'Approval handoff waiting selected PO'
-      : runtimeClosure.approvalStateLabel;
+      : runtimeSurface.runtimeClosure.approvalStateLabel;
   final receivingReadinessLabel = orderDetail.order == null
       ? 'Receiving waiting selected PO'
-      : runtimeClosure.receivingStateLabel;
+      : runtimeSurface.receivingReadinessLabel;
   final selectedPurchaseOrderRuntimeLabel = orderDetail.order == null
       ? 'Selected PO runtime pending'
-      : runtimeClosure.lastRuntimeStateLabel;
+      : runtimeSurface.runtimeClosure.lastRuntimeStateLabel;
 
   final blockedReasons = <String>[
     if (overview.error != null) overview.error!,
@@ -1248,7 +1334,7 @@ InventoryPurchaseOperatingSummary buildInventoryPurchaseOperatingSummary({
       'The latest recommendation snapshot is visible, but no supplier-qualified lines are currently available for purchase-order preparation.',
     if (orderSummary.orders.isNotEmpty && orderDetail.order == null)
       'Recent purchase orders are visible, but operators still need to select one to inspect the runtime closure and receiving path.',
-    ...runtimeClosure.blockedReasons,
+    ...runtimeSurface.runtimeClosure.blockedReasons,
   ].where((reason) => reason.trim().isNotEmpty).toSet().toList();
 
   final nextOperatorAction = () {
@@ -1270,19 +1356,7 @@ InventoryPurchaseOperatingSummary buildInventoryPurchaseOperatingSummary({
     if (orderDetail.order == null) {
       return 'Select a recent purchase order to inspect approval handoff, receiving readiness, and blocked reasons together.';
     }
-    if (runtimeClosure.approvalStateLabel == 'Ready to approve') {
-      return 'Hand off the selected purchase order to the Office approval owner and keep POS on visibility-only duty.';
-    }
-    if (runtimeClosure.canConfirmReceipt) {
-      return 'Physically verify the inbound goods, then use the tracked POS receipt confirmation contract for the remaining quantity.';
-    }
-    if (runtimeClosure.receivingStateLabel == 'Received / closed') {
-      return 'Use receipt history and line context to verify the final received state without opening more runtime actions.';
-    }
-    if (blockedReasons.isNotEmpty) {
-      return 'Review the blocked reasons first, then follow the handoff target before attempting any next workflow step.';
-    }
-    return 'Continue monitoring the selected purchase order from the unified runtime operating summary.';
+    return runtimeSurface.nextBestOperatorAction;
   }();
 
   final operatingNarrative = orderDetail.order == null
@@ -1298,13 +1372,13 @@ InventoryPurchaseOperatingSummary buildInventoryPurchaseOperatingSummary({
     selectedPurchaseOrderRuntimeLabel: selectedPurchaseOrderRuntimeLabel,
     nextOperatorAction: nextOperatorAction,
     operatingNarrative: operatingNarrative,
-    handoffTarget: runtimeClosure.handoffTarget,
+    handoffTarget: runtimeSurface.runtimeClosure.handoffTarget,
     blockedReasons: blockedReasons,
     visibleRecommendationLineCount: recommendationSnapshot.lines.length,
     visiblePurchaseOrderCount: orderSummary.orders.length,
     visibleBlockedReasonCount: blockedReasons.length,
     hasSelectedPurchaseOrder: orderDetail.order != null,
-    canConfirmReceipt: runtimeClosure.canConfirmReceipt,
+    canConfirmReceipt: runtimeSurface.runtimeClosure.canConfirmReceipt,
   );
 }
 
@@ -1332,6 +1406,438 @@ bool _inventoryPurchaseLineHighAttention(Map<String, dynamic> line) {
       supplierRisk.contains('lead overdue') ||
       supplierRisk.contains('lead tight') ||
       supplierRisk.contains('risk');
+}
+
+String _inventoryPurchaseApprovalStateTone(String label) {
+  if (label == 'Ready to approve') return 'ready';
+  if (label == 'Approved') return 'complete';
+  if (label == 'Approval blocked') return 'blocked';
+  return 'neutral';
+}
+
+String _inventoryPurchaseReceivingStateTone(String label) {
+  if (label == 'Ready to receive') return 'ready';
+  if (label == 'Received / closed') return 'complete';
+  if (label == 'Receiving blocked') return 'blocked';
+  return 'neutral';
+}
+
+String _inventoryPurchaseApprovalRuntimeNarrative(String orderStatus) {
+  switch (orderStatus) {
+    case 'submitted':
+    case 'office_returned':
+      return 'The purchase order is ready for Office review, but POS does not execute approval. Operators can verify readiness and hand off the order to the Office-owned workflow only.';
+    case 'office_approved':
+    case 'ordered':
+    case 'partially_received':
+    case 'received':
+      return 'Backend truth already shows this order beyond the approval gate. POS keeps the approved state visible and does not replay Office approval execution.';
+    case 'office_rejected':
+      return 'Office review rejected this order. POS leaves the rejection visible and does not override the Office decision.';
+    case 'cancelled':
+      return 'This order is cancelled in backend truth, so approval execution stays unavailable from POS.';
+    default:
+      return 'The order has not reached a stable approval handoff state yet. POS keeps the boundary visible only.';
+  }
+}
+
+String _inventoryPurchaseReceivingRuntimeNarrative({
+  required String orderStatus,
+  required double remainingBase,
+  required int confirmedReceiptCount,
+}) {
+  if (orderStatus == 'received' || remainingBase <= 0) {
+    return 'Backend truth already shows this order as fully received. POS keeps the final state visible without sending another receipt confirmation.';
+  }
+  if (_inventoryPurchaseCanConfirmReceipt(
+    orderStatus: orderStatus,
+    remainingBase: remainingBase,
+  )) {
+    return 'The receipt confirmation contract exists and can update stock truthfully for the remaining quantity. Use the runtime action only when the inbound goods are physically verified.';
+  }
+  if (orderStatus == 'submitted' || orderStatus == 'office_returned') {
+    return 'Receiving stays blocked until Office approval completes. POS must not mutate stock or create confirmed receipts before that backend state exists.';
+  }
+  if (orderStatus == 'office_rejected' || orderStatus == 'cancelled') {
+    return 'This order is no longer receivable in backend truth, so POS keeps the receiving state blocked.';
+  }
+  if (confirmedReceiptCount > 0 || orderStatus == 'partially_received') {
+    return 'Receipt history already exists, but the current order status still needs backend-truth eligibility before POS can confirm more receiving.';
+  }
+  return 'Receiving is currently blocked because the backend order state is not receivable.';
+}
+
+bool _inventoryPurchaseCanConfirmReceipt({
+  required String orderStatus,
+  required double remainingBase,
+}) {
+  if (remainingBase <= 0) {
+    return false;
+  }
+  return orderStatus == 'office_approved' ||
+      orderStatus == 'ordered' ||
+      orderStatus == 'partially_received';
+}
+
+String _inventoryPurchaseReceiptReadinessLabel({
+  required String orderStatus,
+  required double remainingBase,
+  required int confirmedReceiptCount,
+}) {
+  if (orderStatus == 'received' || remainingBase <= 0) {
+    return 'Complete';
+  }
+  if (orderStatus == 'partially_received' || confirmedReceiptCount > 0) {
+    return 'Partial';
+  }
+  if (orderStatus == 'office_approved' || orderStatus == 'ordered') {
+    return 'Ready';
+  }
+  if (orderStatus == 'cancelled' || orderStatus == 'office_rejected') {
+    return 'Blocked';
+  }
+  return 'Hold';
+}
+
+String _inventoryPurchaseReceiptReadinessTone(String label) {
+  switch (label) {
+    case 'Ready':
+      return 'ready';
+    case 'Complete':
+      return 'complete';
+    case 'Blocked':
+      return 'blocked';
+    case 'Partial':
+      return 'watch';
+    default:
+      return 'neutral';
+  }
+}
+
+String _inventoryPurchaseReceiptReadinessNarrative({
+  required String orderStatus,
+  required double remainingBase,
+  required int confirmedReceiptCount,
+  required bool hasReceiptHistory,
+}) {
+  if (orderStatus == 'received' || remainingBase <= 0) {
+    return 'This purchase order is fully received in the tracked POS scope. No receipt confirmation action is exposed here.';
+  }
+  if (orderStatus == 'partially_received' || confirmedReceiptCount > 0) {
+    return 'Confirmed receipts already exist for this order. Use the remaining quantity signal to understand what is still outstanding without mutating stock.';
+  }
+  if (orderStatus == 'office_approved' || orderStatus == 'ordered') {
+    return hasReceiptHistory
+        ? 'Receipt history exists, but confirmed inbound quantity is still incomplete for this order.'
+        : 'This order is receipt-ready once goods arrive, but no receipt history is visible yet.';
+  }
+  if (orderStatus == 'cancelled' || orderStatus == 'office_rejected') {
+    return 'This order is not receipt-ready in its current status. Visibility is read-only and does not open approval or correction flows.';
+  }
+  return 'This order still waits on an earlier workflow step before receipt confirmation becomes relevant. Visibility remains read-only here.';
+}
+
+String _inventoryPurchaseReceiptVisibilityStatusLabel({
+  required String? latestReceiptStatus,
+  required int confirmedReceiptCount,
+  required int draftReceiptCount,
+}) {
+  return (latestReceiptStatus ??
+          (confirmedReceiptCount > 0
+              ? 'confirmed'
+              : draftReceiptCount > 0
+              ? 'draft'
+              : 'none'))
+      .toUpperCase();
+}
+
+String _inventoryPurchaseReceiptVisibilityTone(String statusLabel) {
+  switch (statusLabel) {
+    case 'RECEIVED':
+    case 'CONFIRMED':
+      return 'complete';
+    case 'PARTIALLY_RECEIVED':
+      return 'watch';
+    case 'DRAFT':
+      return 'blocked';
+    case 'CANCELLED':
+      return 'critical';
+    default:
+      return 'neutral';
+  }
+}
+
+String _inventoryPurchaseUnitPriceDriftLabel({
+  required double currentUnitPrice,
+  required double? previousUnitPrice,
+}) {
+  if (previousUnitPrice == null || previousUnitPrice <= 0) {
+    return 'Price drift unavailable';
+  }
+
+  final deltaRatio = (currentUnitPrice - previousUnitPrice) / previousUnitPrice;
+  final percent = (deltaRatio.abs() * 100).toStringAsFixed(1);
+  if (deltaRatio.abs() < 0.02) {
+    return 'Price drift stable ($percent%)';
+  }
+  if (deltaRatio > 0) {
+    return 'Price drift up $percent%';
+  }
+  return 'Price drift down $percent%';
+}
+
+String _inventoryPurchaseLeadTimeRiskLabel({
+  required String? requestedDate,
+  required int supplierLeadTimeDays,
+  required double remainingBase,
+  required String orderStatus,
+}) {
+  if (remainingBase <= 0 || orderStatus == 'received') {
+    return 'Lead-time risk complete';
+  }
+  if (requestedDate == null ||
+      requestedDate.isEmpty ||
+      supplierLeadTimeDays <= 0) {
+    return 'Lead-time risk unavailable';
+  }
+
+  final requestedAt = DateTime.tryParse(requestedDate);
+  if (requestedAt == null) {
+    return 'Lead-time risk unavailable';
+  }
+
+  final today = DateTime.now();
+  final requestedLocal = DateTime(
+    requestedAt.year,
+    requestedAt.month,
+    requestedAt.day,
+  );
+  final currentLocal = DateTime(today.year, today.month, today.day);
+  final daysUntilRequested = requestedLocal.difference(currentLocal).inDays;
+
+  if (daysUntilRequested < 0) {
+    return 'Lead-time risk overdue';
+  }
+  if (daysUntilRequested < supplierLeadTimeDays) {
+    return 'Lead-time risk tight';
+  }
+  return 'Lead-time risk on track';
+}
+
+String _inventoryPurchaseSupplierRiskSummaryLabel({
+  required String receiptVisibilityStatus,
+  required String unitPriceDriftLabel,
+  required String leadTimeRiskLabel,
+}) {
+  final summaryParts = <String>[];
+
+  if (receiptVisibilityStatus == 'pending' ||
+      receiptVisibilityStatus == 'draft') {
+    summaryParts.add('receipt pending');
+  } else if (receiptVisibilityStatus == 'partially_received') {
+    summaryParts.add('receipt partial');
+  } else if (receiptVisibilityStatus == 'received' ||
+      receiptVisibilityStatus == 'confirmed') {
+    summaryParts.add('receipt complete');
+  }
+
+  if (unitPriceDriftLabel.contains('up')) {
+    summaryParts.add('price up');
+  } else if (unitPriceDriftLabel.contains('down')) {
+    summaryParts.add('price down');
+  } else if (unitPriceDriftLabel.contains('stable')) {
+    summaryParts.add('price stable');
+  }
+
+  if (leadTimeRiskLabel.contains('overdue')) {
+    summaryParts.add('lead overdue');
+  } else if (leadTimeRiskLabel.contains('tight')) {
+    summaryParts.add('lead tight');
+  } else if (leadTimeRiskLabel.contains('on track')) {
+    summaryParts.add('lead on track');
+  } else if (leadTimeRiskLabel.contains('complete')) {
+    summaryParts.add('lead complete');
+  }
+
+  if (summaryParts.isEmpty) {
+    return 'Supplier risk summary unavailable';
+  }
+  return 'Supplier risk ${summaryParts.join(' / ')}';
+}
+
+int _inventoryPurchaseRuntimeLinePriority(
+  Map<String, dynamic> line, {
+  required String? requestedDate,
+  required String orderStatus,
+}) {
+  final receiptVisibilityStatus =
+      line['receipt_visibility_status']?.toString() ?? 'pending';
+  final supplierHistory = List<Map<String, dynamic>>.from(
+    line['supplier_history'] as List? ?? const [],
+  );
+  final latestSupplierHistory = supplierHistory.isEmpty
+      ? null
+      : supplierHistory.first;
+  final currentUnitPrice = (line['unit_price'] as num?)?.toDouble() ?? 0;
+  final previousUnitPrice = (latestSupplierHistory?['unit_price'] as num?)
+      ?.toDouble();
+  final supplierLeadTimeDays =
+      ((line['supplier_item'] as Map<String, dynamic>?)?['lead_time_days']
+              as num?)
+          ?.toInt() ??
+      0;
+  final remainingBase =
+      (line['remaining_quantity_base'] as num?)?.toDouble() ?? 0;
+  final unitPriceDriftLabel = _inventoryPurchaseUnitPriceDriftLabel(
+    currentUnitPrice: currentUnitPrice,
+    previousUnitPrice: previousUnitPrice,
+  );
+  final leadTimeRiskLabel = _inventoryPurchaseLeadTimeRiskLabel(
+    requestedDate: requestedDate,
+    supplierLeadTimeDays: supplierLeadTimeDays,
+    remainingBase: remainingBase,
+    orderStatus: orderStatus,
+  );
+
+  if (leadTimeRiskLabel.contains('overdue') ||
+      unitPriceDriftLabel.contains('up')) {
+    return 4;
+  }
+  if (receiptVisibilityStatus == 'pending' ||
+      leadTimeRiskLabel.contains('tight')) {
+    return 3;
+  }
+  if (receiptVisibilityStatus == 'draft' ||
+      unitPriceDriftLabel.contains('down')) {
+    return 2;
+  }
+  if (receiptVisibilityStatus == 'confirmed' ||
+      receiptVisibilityStatus == 'received') {
+    return 1;
+  }
+  return 0;
+}
+
+List<InventoryPurchaseRuntimeLineContextState>
+buildInventoryPurchaseRuntimeLineContexts({
+  required List<Map<String, dynamic>> lines,
+  required String? requestedDate,
+  required String orderStatus,
+}) {
+  final sorted = List<Map<String, dynamic>>.from(lines);
+  sorted.sort((a, b) {
+    final priorityCompare =
+        _inventoryPurchaseRuntimeLinePriority(
+          b,
+          requestedDate: requestedDate,
+          orderStatus: orderStatus,
+        ).compareTo(
+          _inventoryPurchaseRuntimeLinePriority(
+            a,
+            requestedDate: requestedDate,
+            orderStatus: orderStatus,
+          ),
+        );
+    if (priorityCompare != 0) {
+      return priorityCompare;
+    }
+    return ((b['remaining_quantity_base'] as num?)?.toDouble() ?? 0).compareTo(
+      (a['remaining_quantity_base'] as num?)?.toDouble() ?? 0,
+    );
+  });
+
+  return sorted.take(3).map((line) {
+    final productMap = line['product'] as Map<String, dynamic>?;
+    final productName =
+        productMap?['name']?.toString() ??
+        line['product_id']?.toString() ??
+        line['id']?.toString() ??
+        '-';
+    final orderedBase =
+        (line['ordered_quantity_base'] as num?)?.toDouble() ?? 0;
+    final expectedBase =
+        (line['recommended_quantity_base'] as num?)?.toDouble() ?? 0;
+    final receivedBase =
+        (line['received_quantity_base'] as num?)?.toDouble() ?? 0;
+    final remainingBase =
+        (line['remaining_quantity_base'] as num?)?.toDouble() ?? 0;
+    final receiptVisibilityStatus =
+        line['receipt_visibility_status']?.toString() ?? 'pending';
+    final supplierHistory = List<Map<String, dynamic>>.from(
+      line['supplier_history'] as List? ?? const [],
+    );
+    final latestSupplierHistory = supplierHistory.isEmpty
+        ? null
+        : supplierHistory.first;
+    final currentUnitPrice = (line['unit_price'] as num?)?.toDouble() ?? 0;
+    final previousUnitPrice = (latestSupplierHistory?['unit_price'] as num?)
+        ?.toDouble();
+    final supplierLeadTimeDays =
+        ((line['supplier_item'] as Map<String, dynamic>?)?['lead_time_days']
+                as num?)
+            ?.toInt() ??
+        0;
+    final unitPriceDriftLabel = _inventoryPurchaseUnitPriceDriftLabel(
+      currentUnitPrice: currentUnitPrice,
+      previousUnitPrice: previousUnitPrice,
+    );
+    final leadTimeRiskLabel = _inventoryPurchaseLeadTimeRiskLabel(
+      requestedDate: requestedDate,
+      supplierLeadTimeDays: supplierLeadTimeDays,
+      remainingBase: remainingBase,
+      orderStatus: orderStatus,
+    );
+    final riskSummary =
+        line['supplier_risk_summary']?.toString() ??
+        _inventoryPurchaseSupplierRiskSummaryLabel(
+          receiptVisibilityStatus: receiptVisibilityStatus,
+          unitPriceDriftLabel: unitPriceDriftLabel,
+          leadTimeRiskLabel: leadTimeRiskLabel,
+        );
+    final priority = _inventoryPurchaseRuntimeLinePriority(
+      line,
+      requestedDate: requestedDate,
+      orderStatus: orderStatus,
+    );
+    final statusLabel = switch (priority) {
+      4 => 'Critical follow-up',
+      3 => 'Attention pending',
+      2 => 'Watch receiving',
+      _ when remainingBase <= 0 => 'Received complete',
+      _ => 'Monitoring',
+    };
+    final statusTone = switch (priority) {
+      4 => 'critical',
+      3 => 'blocked',
+      2 => 'watch',
+      _ when remainingBase <= 0 => 'complete',
+      _ => 'neutral',
+    };
+    final narrative = switch (statusLabel) {
+      'Critical follow-up' =>
+        'This line combines receiving pressure with supplier or lead-time risk and should be reviewed before routine verification.',
+      'Attention pending' =>
+        'This line is still pending receipt or supplier follow-up, so operators should keep it in the active receiving queue.',
+      'Watch receiving' =>
+        'This line is moving, but it still needs watch-level review before operators treat it as stable.',
+      'Received complete' =>
+        'This line already looks complete from backend truth and remains visible for verification only.',
+      _ =>
+        'This line is currently visible for monitoring, but it does not carry the strongest operational runtime pressure.',
+    };
+
+    return InventoryPurchaseRuntimeLineContextState(
+      productName: productName,
+      orderedBase: orderedBase,
+      expectedBase: expectedBase,
+      receivedBase: receivedBase,
+      remainingBase: remainingBase,
+      statusLabel: statusLabel,
+      statusTone: statusTone,
+      riskSummary: riskSummary,
+      narrative: narrative,
+    );
+  }).toList();
 }
 
 int _inventoryPurchaseSupplierImpactCount(List<Map<String, dynamic>> lines) {
@@ -1468,6 +1974,184 @@ List<Map<String, dynamic>> buildInventoryPurchaseRuntimeBlockerRows({
   return rows;
 }
 
+String _inventoryPurchaseOperationalPhaseLabel({
+  required Map<String, dynamic>? order,
+  required String orderStatus,
+  required double remainingBase,
+  required int pendingLineCount,
+  required bool canConfirmReceipt,
+}) {
+  if (order == null) {
+    return 'Operational phase selection pending';
+  }
+  if (orderStatus == 'submitted' || orderStatus == 'office_returned') {
+    return 'Operational phase approval handoff';
+  }
+  if (orderStatus == 'office_rejected' || orderStatus == 'cancelled') {
+    return 'Operational phase blocked';
+  }
+  if (canConfirmReceipt) {
+    return 'Operational phase receiving execution';
+  }
+  if (orderStatus == 'received' || remainingBase <= 0) {
+    return 'Operational phase verification';
+  }
+  if (pendingLineCount > 0) {
+    return 'Operational phase receiving follow-up';
+  }
+  return 'Operational phase runtime review';
+}
+
+String _inventoryPurchaseOperationalPhaseTone(String label) {
+  if (label.endsWith('execution')) return 'ready';
+  if (label.endsWith('handoff')) return 'watch';
+  if (label.endsWith('verification')) return 'complete';
+  if (label.endsWith('blocked')) return 'blocked';
+  if (label.endsWith('follow-up')) return 'watch';
+  return 'neutral';
+}
+
+String _inventoryPurchaseOperationalPhaseNarrative({
+  required String phaseLabel,
+  required InventoryPurchaseRuntimeClosureSnapshot runtimeClosure,
+}) {
+  if (phaseLabel.endsWith('approval handoff')) {
+    return 'POS is at the approval-handoff phase. Operators should confirm readiness, review blockers, and hand the order to the Office-owned approval queue.';
+  }
+  if (phaseLabel.endsWith('receiving execution')) {
+    return 'POS is at the receiving-execution phase. Approval truth already exists, so operators can verify inbound goods and use the tracked receipt contract if the remaining quantity is still open.';
+  }
+  if (phaseLabel.endsWith('verification')) {
+    return 'POS is at the verification phase. Runtime execution is effectively closed, and operators should use history and line context to verify the final state.';
+  }
+  if (phaseLabel.endsWith('blocked')) {
+    return 'POS remains in a blocked phase for this order. Operators should use the handoff target and blocked reasons instead of attempting execution.';
+  }
+  if (phaseLabel.endsWith('follow-up')) {
+    return 'POS is in a follow-up phase. Approval may already exist, but operators still need to resolve receiving blockers or pending lines before the order is stable.';
+  }
+  return runtimeClosure.operatorSummary;
+}
+
+String _inventoryPurchaseBlockedStateLabel({
+  required Map<String, dynamic>? order,
+  required String orderStatus,
+  required List<Map<String, dynamic>> blockerRows,
+}) {
+  if (order == null) {
+    return 'Blocked selection pending';
+  }
+  if (orderStatus == 'office_rejected' || orderStatus == 'cancelled') {
+    return 'Blocked hard stop';
+  }
+  if (blockerRows.any(
+    (row) => (row['severity']?.toString() ?? 'healthy') == 'critical',
+  )) {
+    return 'Blocked escalation open';
+  }
+  if (blockerRows.any(
+    (row) => (row['severity']?.toString() ?? 'healthy') == 'risk',
+  )) {
+    return 'Blocked follow-up open';
+  }
+  return 'Blocked none';
+}
+
+String _inventoryPurchaseBlockedStateTone(String label) {
+  if (label.endsWith('hard stop')) return 'critical';
+  if (label.endsWith('escalation open')) return 'blocked';
+  if (label.endsWith('follow-up open')) return 'watch';
+  if (label.endsWith('selection pending')) return 'neutral';
+  return 'complete';
+}
+
+String _inventoryPurchaseReadyStateLabel({
+  required Map<String, dynamic>? order,
+  required InventoryPurchaseRuntimeClosureSnapshot runtimeClosure,
+}) {
+  if (order == null) {
+    return 'Ready no selected order';
+  }
+  if (runtimeClosure.canConfirmReceipt) {
+    return 'Ready confirm receipt';
+  }
+  if (runtimeClosure.approvalStateLabel == 'Ready to approve') {
+    return 'Ready Office handoff';
+  }
+  if (runtimeClosure.receivingStateLabel == 'Received / closed') {
+    return 'Ready verification only';
+  }
+  return 'Ready waiting backend';
+}
+
+String _inventoryPurchaseReadyStateTone(String label) {
+  if (label.endsWith('confirm receipt') || label.endsWith('Office handoff')) {
+    return 'ready';
+  }
+  if (label.endsWith('verification only')) return 'complete';
+  if (label.endsWith('waiting backend')) return 'watch';
+  return 'neutral';
+}
+
+String _inventoryPurchaseStaleStateLabel({
+  required Map<String, dynamic>? order,
+  required String? requestedDate,
+  required int pendingLineCount,
+  required String? latestReceiptStatus,
+}) {
+  if (order == null) {
+    return 'Stale selection pending';
+  }
+  if (_inventoryPurchaseRequestedDateOverdue(requestedDate) &&
+      pendingLineCount > 0) {
+    return 'Stale overdue inbound';
+  }
+  if ((requestedDate == null || requestedDate.isEmpty) &&
+      pendingLineCount > 0) {
+    return 'Stale arrival window unknown';
+  }
+  if (latestReceiptStatus == 'draft' && pendingLineCount > 0) {
+    return 'Stale draft receipt open';
+  }
+  return 'Stale none';
+}
+
+String _inventoryPurchaseStaleStateTone(String label) {
+  if (label.endsWith('overdue inbound')) return 'critical';
+  if (label.endsWith('unknown') || label.endsWith('open')) return 'watch';
+  if (label.endsWith('selection pending')) return 'neutral';
+  return 'complete';
+}
+
+String _inventoryPurchaseNextBestOperatorAction({
+  required Map<String, dynamic>? order,
+  required InventoryPurchaseRuntimeClosureSnapshot runtimeClosure,
+  required List<Map<String, dynamic>> blockerRows,
+  required int attentionLineCount,
+}) {
+  if (order == null) {
+    return 'Select a recent purchase order to unlock approval handoff, receiving readiness, blockers, and runtime closure in one operating pass.';
+  }
+  if (runtimeClosure.approvalStateLabel == 'Ready to approve') {
+    return 'Hand off the selected purchase order to Office and keep POS on readiness, blockers, and checklist duty only.';
+  }
+  if (runtimeClosure.canConfirmReceipt) {
+    return 'Physically verify inbound goods, then use Confirm Remaining Receipt only if the tracked receipt contract still matches the remaining quantity.';
+  }
+  if (blockerRows.any(
+    (row) => (row['severity']?.toString() ?? 'healthy') != 'healthy',
+  )) {
+    return 'Resolve the open receiving blockers first so operators know whether the next step is follow-up, escalation, or verification.';
+  }
+  if (attentionLineCount > 0) {
+    return 'Review the top attention lines before treating the purchase order as stable.';
+  }
+  if (runtimeClosure.receivingStateLabel == 'Received / closed') {
+    return 'Use receipt history and runtime line context to verify the final received state without opening new execution paths.';
+  }
+  return 'Continue monitoring the current purchase order from the unified runtime surface and follow the handoff target shown by backend truth.';
+}
+
 final inventoryPurchaseRuntimeSurfaceProvider =
     Provider<InventoryPurchaseRuntimeSurfaceState>((ref) {
       final orderDetail = ref.watch(inventoryPurchaseOrderDetailProvider);
@@ -1480,10 +2164,34 @@ final inventoryPurchaseRuntimeSurfaceProvider =
       final order = orderDetail.order;
       final orderStatus = order?['status']?.toString() ?? 'submitted';
       final requestedDate = order?['requested_delivery_date']?.toString();
+      final expectedBase =
+          (order?['total_expected_quantity_base'] as num?)?.toDouble() ?? 0;
+      final receivedBase =
+          (order?['total_received_quantity_base'] as num?)?.toDouble() ?? 0;
+      final acceptedBase =
+          (order?['total_accepted_quantity_base'] as num?)?.toDouble() ?? 0;
+      final rejectedBase =
+          (order?['total_rejected_quantity_base'] as num?)?.toDouble() ?? 0;
       final remainingBase =
           (order?['total_remaining_quantity_base'] as num?)?.toDouble() ?? 0;
       final confirmedReceiptCount =
           (order?['confirmed_receipt_count'] as num?)?.toInt() ?? 0;
+      final draftReceiptCount =
+          (order?['draft_receipt_count'] as num?)?.toInt() ?? 0;
+      final cancelledReceiptCount =
+          (order?['cancelled_receipt_count'] as num?)?.toInt() ?? 0;
+      final latestReceipt = orderDetail.receipts.isEmpty
+          ? null
+          : orderDetail.receipts.first;
+      final latestReceiptStatus =
+          order?['latest_receipt_status']?.toString() ??
+          latestReceipt?['status']?.toString();
+      final latestReceiptAt = DateTime.tryParse(
+        order?['latest_receipt_at']?.toString() ??
+            latestReceipt?['received_at']?.toString() ??
+            latestReceipt?['created_at']?.toString() ??
+            '',
+      )?.toLocal();
       final receivedLineCount = orderDetail.lines
           .where(_inventoryPurchaseLineReceived)
           .length;
@@ -1507,18 +2215,140 @@ final inventoryPurchaseRuntimeSurfaceProvider =
         pendingLineCount: pendingLineCount,
         attentionLineCount: attentionLineCount,
       );
+      final receivingReadinessLabel = _inventoryPurchaseReceiptReadinessLabel(
+        orderStatus: orderStatus,
+        remainingBase: remainingBase,
+        confirmedReceiptCount: confirmedReceiptCount,
+      );
+      final lineContexts = buildInventoryPurchaseRuntimeLineContexts(
+        lines: orderDetail.lines,
+        requestedDate: requestedDate,
+        orderStatus: orderStatus,
+      );
+      final operationalPhaseLabel = _inventoryPurchaseOperationalPhaseLabel(
+        order: order,
+        orderStatus: orderStatus,
+        remainingBase: remainingBase,
+        pendingLineCount: pendingLineCount,
+        canConfirmReceipt: runtimeClosure.canConfirmReceipt,
+      );
+      final receiptVisibilityStatusLabel =
+          _inventoryPurchaseReceiptVisibilityStatusLabel(
+            latestReceiptStatus: latestReceiptStatus,
+            confirmedReceiptCount: confirmedReceiptCount,
+            draftReceiptCount: draftReceiptCount,
+          );
+      final receiptVisibilityNarrative =
+          'Receipt visibility remains ${receiptVisibilityStatusLabel.toLowerCase()} in POS. Use the readiness and blocker signals to decide whether operators should monitor, hand off, or use the tracked receipt confirmation path.';
+      final receivedLineSummaryLabel = receivedLineCount <= 0
+          ? 'Received lines 0'
+          : 'Received lines $receivedLineCount / ${orderDetail.lines.length}';
+      final remainingLineSummaryLabel = pendingLineCount <= 0
+          ? 'Remaining lines clear'
+          : 'Remaining lines $pendingLineCount / ${remainingBase.toStringAsFixed(3)} base';
 
       return InventoryPurchaseRuntimeSurfaceState(
         order: order,
         orderStatus: orderStatus,
         requestedDate: requestedDate,
         remainingBase: remainingBase,
+        expectedBase: expectedBase,
+        receivedBase: receivedBase,
+        acceptedBase: acceptedBase,
+        rejectedBase: rejectedBase,
         confirmedReceiptCount: confirmedReceiptCount,
+        draftReceiptCount: draftReceiptCount,
+        cancelledReceiptCount: cancelledReceiptCount,
         receivedLineCount: receivedLineCount,
         blockedLineCount: blockedLineCount,
         pendingLineCount: pendingLineCount,
         attentionLineCount: attentionLineCount,
+        latestReceiptStatus: latestReceiptStatus,
+        latestReceiptAt: latestReceiptAt,
+        operationalPhaseLabel: operationalPhaseLabel,
+        operationalPhaseTone: _inventoryPurchaseOperationalPhaseTone(
+          operationalPhaseLabel,
+        ),
+        operationalPhaseNarrative: _inventoryPurchaseOperationalPhaseNarrative(
+          phaseLabel: operationalPhaseLabel,
+          runtimeClosure: runtimeClosure,
+        ),
+        approvalStateTone: _inventoryPurchaseApprovalStateTone(
+          runtimeClosure.approvalStateLabel,
+        ),
+        approvalNarrative: _inventoryPurchaseApprovalRuntimeNarrative(
+          orderStatus,
+        ),
+        receivingStateTone: _inventoryPurchaseReceivingStateTone(
+          runtimeClosure.receivingStateLabel,
+        ),
+        receivingNarrative: _inventoryPurchaseReceivingRuntimeNarrative(
+          orderStatus: orderStatus,
+          remainingBase: remainingBase,
+          confirmedReceiptCount: confirmedReceiptCount,
+        ),
+        receivingReadinessLabel: receivingReadinessLabel,
+        receivingReadinessTone: _inventoryPurchaseReceiptReadinessTone(
+          receivingReadinessLabel,
+        ),
+        receivingReadinessNarrative:
+            _inventoryPurchaseReceiptReadinessNarrative(
+              orderStatus: orderStatus,
+              remainingBase: remainingBase,
+              confirmedReceiptCount: confirmedReceiptCount,
+              hasReceiptHistory: orderDetail.receipts.isNotEmpty,
+            ),
+        receiptVisibilityStatusLabel: receiptVisibilityStatusLabel,
+        receiptVisibilityStatusTone: _inventoryPurchaseReceiptVisibilityTone(
+          receiptVisibilityStatusLabel,
+        ),
+        receiptVisibilityNarrative: receiptVisibilityNarrative,
+        readyStateLabel: _inventoryPurchaseReadyStateLabel(
+          order: order,
+          runtimeClosure: runtimeClosure,
+        ),
+        readyStateTone: _inventoryPurchaseReadyStateTone(
+          _inventoryPurchaseReadyStateLabel(
+            order: order,
+            runtimeClosure: runtimeClosure,
+          ),
+        ),
+        blockedStateLabel: _inventoryPurchaseBlockedStateLabel(
+          order: order,
+          orderStatus: orderStatus,
+          blockerRows: blockerRows,
+        ),
+        blockedStateTone: _inventoryPurchaseBlockedStateTone(
+          _inventoryPurchaseBlockedStateLabel(
+            order: order,
+            orderStatus: orderStatus,
+            blockerRows: blockerRows,
+          ),
+        ),
+        staleStateLabel: _inventoryPurchaseStaleStateLabel(
+          order: order,
+          requestedDate: requestedDate,
+          pendingLineCount: pendingLineCount,
+          latestReceiptStatus: latestReceiptStatus,
+        ),
+        staleStateTone: _inventoryPurchaseStaleStateTone(
+          _inventoryPurchaseStaleStateLabel(
+            order: order,
+            requestedDate: requestedDate,
+            pendingLineCount: pendingLineCount,
+            latestReceiptStatus: latestReceiptStatus,
+          ),
+        ),
+        nextBestOperatorAction: _inventoryPurchaseNextBestOperatorAction(
+          order: order,
+          runtimeClosure: runtimeClosure,
+          blockerRows: blockerRows,
+          attentionLineCount: attentionLineCount,
+        ),
+        receivedLineSummaryLabel: receivedLineSummaryLabel,
+        remainingLineSummaryLabel: remainingLineSummaryLabel,
         blockerRows: blockerRows,
+        lineContexts: lineContexts,
         runtimeClosure: runtimeClosure,
       );
     });
@@ -1544,7 +2374,7 @@ final inventoryPurchaseOperatingSummaryProvider =
         orderCreation: orderCreation,
         orderSummary: orderSummary,
         orderDetail: orderDetail,
-        runtimeClosure: runtimeSurface.runtimeClosure,
+        runtimeSurface: runtimeSurface,
       );
     });
 

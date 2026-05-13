@@ -2304,25 +2304,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     final supplyAmount =
         (order?['total_supply_amount'] as num?)?.toDouble() ?? 0;
     final taxAmount = (order?['tax_amount'] as num?)?.toDouble() ?? 0;
-    final totalExpectedBase =
-        (order?['total_expected_quantity_base'] as num?)?.toDouble() ?? 0;
-    final totalReceivedBase =
-        (order?['total_received_quantity_base'] as num?)?.toDouble() ?? 0;
-    final totalAcceptedBase =
-        (order?['total_accepted_quantity_base'] as num?)?.toDouble() ?? 0;
-    final totalRejectedBase =
-        (order?['total_rejected_quantity_base'] as num?)?.toDouble() ?? 0;
     final totalRemainingBase = runtimeSurface.remainingBase;
-    final confirmedReceiptCount = runtimeSurface.confirmedReceiptCount;
-    final draftReceiptCount =
-        (order?['draft_receipt_count'] as num?)?.toInt() ?? 0;
-    final cancelledReceiptCount =
-        (order?['cancelled_receipt_count'] as num?)?.toInt() ?? 0;
     final latestReceiptStatus = order?['latest_receipt_status']?.toString();
-    final latestReceiptAtRaw = order?['latest_receipt_at']?.toString();
-    final latestReceiptAt = latestReceiptAtRaw == null
-        ? null
-        : DateTime.tryParse(latestReceiptAtRaw)?.toLocal();
     final sortedLines = _sortedPurchaseOrderLinesForAttention(
       detail.lines,
       requestedDate: requestedDate,
@@ -2482,31 +2465,16 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             const SizedBox(height: 12),
             _buildInventoryMutationReadinessPhaseSection(
               runtimeSurface: runtimeSurface,
-              latestReceiptStatus: latestReceiptStatus,
             ),
             const SizedBox(height: 12),
             _buildInventoryRuntimePathSection(
               storeId: storeId,
               runtimeSurface: runtimeSurface,
-              lineItems: sortedLines,
               approvalRuntime: approvalRuntime,
               receivingRuntime: receivingRuntime,
             ),
             const SizedBox(height: 12),
-            _buildReceiptVisibilitySection(
-              orderStatus: status,
-              expectedBase: totalExpectedBase,
-              receivedBase: totalReceivedBase,
-              acceptedBase: totalAcceptedBase,
-              rejectedBase: totalRejectedBase,
-              remainingBase: totalRemainingBase,
-              confirmedReceiptCount: confirmedReceiptCount,
-              draftReceiptCount: draftReceiptCount,
-              cancelledReceiptCount: cancelledReceiptCount,
-              latestReceiptStatus: latestReceiptStatus,
-              latestReceiptAt: latestReceiptAt,
-              receipts: receipts,
-            ),
+            _buildReceiptVisibilitySection(runtimeSurface: runtimeSurface),
             const SizedBox(height: 12),
             _buildRecentReceiptsTimeline(receipts),
             const SizedBox(height: 12),
@@ -2546,7 +2514,6 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   Widget _buildReceivingReadinessSummarySection({
     required InventoryPurchaseRuntimeSurfaceState runtimeSurface,
   }) {
-    final readinessState = runtimeSurface.runtimeClosure.receivingStateLabel;
     final receivedLineCount = runtimeSurface.receivedLineCount;
     final pendingLineCount = runtimeSurface.pendingLineCount;
     final attentionLineCount = runtimeSurface.attentionLineCount;
@@ -2558,7 +2525,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         color: AppColors.surface1,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: _inventoryReceivingRuntimeStateColor(readinessState),
+          color: _inventoryOperationalToneColor(
+            runtimeSurface.receivingReadinessTone,
+          ),
         ),
       ),
       child: Column(
@@ -2586,17 +2555,19 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             runSpacing: 8,
             children: [
               _buildIngredientMetaChip(
-                'Receiving readiness $readinessState',
-                color: _inventoryReceivingRuntimeStateColor(readinessState),
+                'Receiving readiness ${runtimeSurface.receivingReadinessLabel}',
+                color: _inventoryOperationalToneColor(
+                  runtimeSurface.receivingReadinessTone,
+                ),
               ),
               _buildIngredientMetaChip(
-                'Received lines $receivedLineCount',
+                runtimeSurface.receivedLineSummaryLabel,
                 color: receivedLineCount > 0
                     ? AppColors.statusAvailable
                     : AppColors.surface2,
               ),
               _buildIngredientMetaChip(
-                'Pending lines $pendingLineCount',
+                runtimeSurface.remainingLineSummaryLabel,
                 color: pendingLineCount > 0
                     ? AppColors.amber500
                     : AppColors.statusAvailable,
@@ -2611,11 +2582,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 8),
           Text(
-            _inventoryReceivingReadinessOperatorNarrative(
-              receivedLineCount: receivedLineCount,
-              pendingLineCount: pendingLineCount,
-              attentionLineCount: attentionLineCount,
-            ),
+            runtimeSurface.receivingReadinessNarrative,
             style: GoogleFonts.notoSansKr(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -2745,23 +2712,19 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
 
   Widget _buildInventoryMutationReadinessPhaseSection({
     required InventoryPurchaseRuntimeSurfaceState runtimeSurface,
-    required String? latestReceiptStatus,
   }) {
     final blockerRows = runtimeSurface.blockerRows;
     final receivedLineCount = runtimeSurface.receivedLineCount;
     final pendingLineCount = runtimeSurface.pendingLineCount;
     final attentionLineCount = runtimeSurface.attentionLineCount;
-    final remainingBase = runtimeSurface.remainingBase;
-    final confirmedReceiptCount = runtimeSurface.confirmedReceiptCount;
-    final readinessState = runtimeSurface.runtimeClosure.receivingStateLabel;
     final approvalHandoffLabel =
         runtimeSurface.runtimeClosure.approvalStateLabel;
-    final approvalHandoffColor = _inventoryApprovalRuntimeStateColor(
-      approvalHandoffLabel,
+    final approvalHandoffColor = _inventoryOperationalToneColor(
+      runtimeSurface.approvalStateTone,
     );
-    final latestReceiptLabel = latestReceiptStatus == null
+    final latestReceiptLabel = runtimeSurface.latestReceiptStatus == null
         ? 'Latest receipt unavailable'
-        : 'Latest receipt ${latestReceiptStatus.toUpperCase()}';
+        : 'Latest receipt ${runtimeSurface.receiptVisibilityStatusLabel}';
 
     return Container(
       width: double.infinity,
@@ -2808,32 +2771,41 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 color: AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
+                runtimeSurface.readyStateLabel,
+                color: _inventoryOperationalToneColor(
+                  runtimeSurface.readyStateTone,
+                ),
+              ),
+              _buildIngredientMetaChip(
                 'Open blockers ${blockerRows.length}',
                 color: blockerRows.isNotEmpty
                     ? AppColors.amber500
                     : AppColors.statusAvailable,
               ),
             ],
-            narrative:
-                'POS keeps the approval handoff visible only. Office remains the execution owner for purchase-order approval, and this surface does not expose approval actions or supplier-response mutations.',
+            narrative: runtimeSurface.approvalNarrative,
           ),
           const SizedBox(height: 8),
           _buildInventoryMutationReadinessCard(
             title: 'Receiving Confirmation Readiness',
-            borderColor: _inventoryReceivingRuntimeStateColor(readinessState),
+            borderColor: _inventoryOperationalToneColor(
+              runtimeSurface.receivingReadinessTone,
+            ),
             chips: [
               _buildIngredientMetaChip(
-                'Readiness $readinessState',
-                color: _inventoryReceivingRuntimeStateColor(readinessState),
+                'Readiness ${runtimeSurface.receivingReadinessLabel}',
+                color: _inventoryOperationalToneColor(
+                  runtimeSurface.receivingReadinessTone,
+                ),
               ),
               _buildIngredientMetaChip(
-                'Received lines $receivedLineCount',
+                runtimeSurface.receivedLineSummaryLabel,
                 color: receivedLineCount > 0
                     ? AppColors.statusAvailable
                     : AppColors.surface2,
               ),
               _buildIngredientMetaChip(
-                'Pending lines $pendingLineCount',
+                runtimeSurface.remainingLineSummaryLabel,
                 color: pendingLineCount > 0
                     ? AppColors.amber500
                     : AppColors.statusAvailable,
@@ -2845,8 +2817,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     : AppColors.statusAvailable,
               ),
             ],
-            narrative:
-                '${runtimeSurface.runtimeClosure.operatorSummary} Receipt history and blocker detail remain review-only here, so operators can assess readiness without opening receipt execution.',
+            narrative: runtimeSurface.receivingReadinessNarrative,
           ),
           const SizedBox(height: 8),
           _buildInventoryMutationReadinessCard(
@@ -2854,18 +2825,20 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             borderColor: AppColors.surface2,
             chips: [
               _buildIngredientMetaChip(
-                'Stock mutation unavailable',
-                color: AppColors.statusCancelled,
+                runtimeSurface.blockedStateLabel,
+                color: _inventoryOperationalToneColor(
+                  runtimeSurface.blockedStateTone,
+                ),
               ),
               _buildIngredientMetaChip(
-                'Remaining base ${remainingBase.toStringAsFixed(3)}',
-                color: remainingBase > 0
-                    ? AppColors.amber500
-                    : AppColors.statusAvailable,
+                runtimeSurface.staleStateLabel,
+                color: _inventoryOperationalToneColor(
+                  runtimeSurface.staleStateTone,
+                ),
               ),
               _buildIngredientMetaChip(
-                'Confirmed receipts $confirmedReceiptCount',
-                color: confirmedReceiptCount > 0
+                'Confirmed receipts ${runtimeSurface.confirmedReceiptCount}',
+                color: runtimeSurface.confirmedReceiptCount > 0
                     ? AppColors.statusAvailable
                     : AppColors.surface2,
               ),
@@ -2876,7 +2849,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               ),
             ],
             narrative:
-                'Tracked inbound quantities stay operator-facing signals only. This phase does not mutate stock, does not connect payment, order, or menu mutation flows, and does not transfer Office-owned execution into POS.',
+                '${runtimeSurface.operationalPhaseNarrative} Tracked inbound quantities stay operator-facing signals only. This phase does not mutate stock, does not connect payment, order, or menu mutation flows, and does not transfer Office-owned execution into POS.',
           ),
         ],
       ),
@@ -3048,33 +3021,11 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   Widget _buildInventoryRuntimePathSection({
     required String? storeId,
     required InventoryPurchaseRuntimeSurfaceState runtimeSurface,
-    required List<Map<String, dynamic>> lineItems,
     required InventoryPurchaseApprovalRuntimeState approvalRuntime,
     required InventoryPurchaseReceivingRuntimeState receivingRuntime,
   }) {
     final order = runtimeSurface.order;
-    final orderStatus = runtimeSurface.orderStatus;
-    final remainingBase = runtimeSurface.remainingBase;
-    final confirmedReceiptCount = runtimeSurface.confirmedReceiptCount;
     final runtimeClosure = runtimeSurface.runtimeClosure;
-    final approvalStateLabel = _inventoryApprovalRuntimeStateLabel(orderStatus);
-    final approvalStateColor = _inventoryApprovalRuntimeStateColor(
-      approvalStateLabel,
-    );
-    final approvalNarrative = _inventoryApprovalRuntimeNarrative(orderStatus);
-    final receivingStateLabel = _inventoryReceivingRuntimeStateLabel(
-      orderStatus: orderStatus,
-      remainingBase: remainingBase,
-      confirmedReceiptCount: confirmedReceiptCount,
-    );
-    final receivingStateColor = _inventoryReceivingRuntimeStateColor(
-      receivingStateLabel,
-    );
-    final receivingNarrative = _inventoryReceivingRuntimeNarrative(
-      orderStatus: orderStatus,
-      remainingBase: remainingBase,
-      confirmedReceiptCount: confirmedReceiptCount,
-    );
     final blockedLineCount = runtimeSurface.blockedLineCount;
     final canConfirmReceipt =
         storeId != null && runtimeClosure.canConfirmReceipt;
@@ -3107,16 +3058,15 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             ),
           ),
           const SizedBox(height: 8),
-          _buildInventoryRuntimeClosureSection(
-            runtimeSurface: runtimeSurface,
-            lineItems: lineItems,
-          ),
+          _buildInventoryRuntimeClosureSection(runtimeSurface: runtimeSurface),
           const SizedBox(height: 8),
           _buildInventoryRuntimePathCard(
             title: 'Approval Runtime Path',
-            statusLabel: approvalStateLabel,
-            statusColor: approvalStateColor,
-            narrative: approvalNarrative,
+            statusLabel: runtimeClosure.approvalStateLabel,
+            statusColor: _inventoryOperationalToneColor(
+              runtimeSurface.approvalStateTone,
+            ),
+            narrative: runtimeSurface.approvalNarrative,
             metrics: [
               _buildIngredientMetaChip(
                 'Blocked lines $blockedLineCount',
@@ -3148,19 +3098,21 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 8),
           _buildInventoryRuntimePathCard(
             title: 'Receiving Runtime Path',
-            statusLabel: receivingStateLabel,
-            statusColor: receivingStateColor,
-            narrative: receivingNarrative,
+            statusLabel: runtimeClosure.receivingStateLabel,
+            statusColor: _inventoryOperationalToneColor(
+              runtimeSurface.receivingStateTone,
+            ),
+            narrative: runtimeSurface.receivingNarrative,
             metrics: [
               _buildIngredientMetaChip(
-                'Confirmed receipts $confirmedReceiptCount',
-                color: confirmedReceiptCount > 0
+                'Confirmed receipts ${runtimeSurface.confirmedReceiptCount}',
+                color: runtimeSurface.confirmedReceiptCount > 0
                     ? AppColors.statusAvailable
                     : AppColors.surface2,
               ),
               _buildIngredientMetaChip(
-                'Remaining base ${remainingBase.toStringAsFixed(3)}',
-                color: remainingBase > 0
+                'Remaining base ${runtimeSurface.remainingBase.toStringAsFixed(3)}',
+                color: runtimeSurface.remainingBase > 0
                     ? AppColors.amber500
                     : AppColors.statusAvailable,
               ),
@@ -3201,10 +3153,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
 
   Widget _buildInventoryRuntimeClosureSection({
     required InventoryPurchaseRuntimeSurfaceState runtimeSurface,
-    required List<Map<String, dynamic>> lineItems,
   }) {
     final runtimeClosure = runtimeSurface.runtimeClosure;
-    final topRuntimeLines = lineItems.take(3).toList();
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(10),
@@ -3238,20 +3188,28 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             runSpacing: 8,
             children: [
               _buildIngredientMetaChip(
-                runtimeClosure.approvalStateLabel,
-                color: _inventoryApprovalRuntimeStateColor(
-                  runtimeClosure.approvalStateLabel,
+                runtimeSurface.operationalPhaseLabel,
+                color: _inventoryOperationalToneColor(
+                  runtimeSurface.operationalPhaseTone,
                 ),
               ),
               _buildIngredientMetaChip(
-                runtimeClosure.receivingStateLabel,
-                color: _inventoryReceivingRuntimeStateColor(
-                  runtimeClosure.receivingStateLabel,
+                runtimeSurface.readyStateLabel,
+                color: _inventoryOperationalToneColor(
+                  runtimeSurface.readyStateTone,
                 ),
               ),
               _buildIngredientMetaChip(
-                runtimeClosure.handoffTarget,
-                color: AppColors.statusAvailable,
+                runtimeSurface.blockedStateLabel,
+                color: _inventoryOperationalToneColor(
+                  runtimeSurface.blockedStateTone,
+                ),
+              ),
+              _buildIngredientMetaChip(
+                runtimeSurface.staleStateLabel,
+                color: _inventoryOperationalToneColor(
+                  runtimeSurface.staleStateTone,
+                ),
               ),
               _buildIngredientMetaChip(
                 runtimeClosure.lastRuntimeStateLabel,
@@ -3261,11 +3219,23 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                         runtimeClosure.lastRuntimeResult!.kind,
                       ),
               ),
+              _buildIngredientMetaChip(
+                runtimeClosure.handoffTarget,
+                color: AppColors.statusAvailable,
+              ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
             runtimeClosure.operatorSummary,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Next best operator action: ${runtimeSurface.nextBestOperatorAction}',
             style: GoogleFonts.notoSansKr(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -3305,7 +3275,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             ),
           ),
           const SizedBox(height: 6),
-          if (topRuntimeLines.isEmpty)
+          if (runtimeSurface.lineContexts.isEmpty)
             Text(
               'No line-level runtime context is visible for the selected order.',
               style: GoogleFonts.notoSansKr(
@@ -3315,14 +3285,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             )
           else
             Column(
-              children: topRuntimeLines
-                  .map(
-                    (line) => _buildInventoryRuntimeLineContextRow(
-                      line,
-                      requestedDate: runtimeSurface.requestedDate,
-                      orderStatus: runtimeSurface.orderStatus,
-                    ),
-                  )
+              children: runtimeSurface.lineContexts
+                  .map(_buildInventoryRuntimeLineContextRow)
                   .toList(),
             ),
         ],
@@ -3351,52 +3315,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   }
 
   Widget _buildInventoryRuntimeLineContextRow(
-    Map<String, dynamic> line, {
-    required String? requestedDate,
-    required String orderStatus,
-  }) {
-    final productMap = line['product'] as Map<String, dynamic>?;
-    final productName =
-        productMap?['name']?.toString() ??
-        line['product_id']?.toString() ??
-        line['id']?.toString() ??
-        '-';
-    final orderedBase =
-        (line['ordered_quantity_base'] as num?)?.toDouble() ?? 0;
-    final expectedBase =
-        (line['recommended_quantity_base'] as num?)?.toDouble() ?? 0;
-    final receivedBase =
-        (line['received_quantity_base'] as num?)?.toDouble() ?? 0;
-    final remainingBase =
-        (line['remaining_quantity_base'] as num?)?.toDouble() ?? 0;
-    final riskSummary =
-        line['supplier_risk_summary']?.toString() ??
-        _inventorySupplierRiskSummaryLabel(
-          receiptVisibilityStatus:
-              line['receipt_visibility_status']?.toString() ?? 'pending',
-          unitPriceDriftLabel: _inventoryUnitPriceDriftLabel(
-            currentUnitPrice: (line['unit_price'] as num?)?.toDouble() ?? 0,
-            previousUnitPrice:
-                ((line['supplier_history'] as List?)?.isNotEmpty ?? false)
-                ? ((((line['supplier_history'] as List).first
-                              as Map<String, dynamic>)['unit_price']
-                          as num?)
-                      ?.toDouble())
-                : null,
-          ),
-          leadTimeRiskLabel: _inventoryLeadTimeRiskLabel(
-            requestedDate: requestedDate,
-            supplierLeadTimeDays:
-                ((line['supplier_item']
-                            as Map<String, dynamic>?)?['lead_time_days']
-                        as num?)
-                    ?.toInt() ??
-                0,
-            remainingBase: remainingBase,
-            orderStatus: orderStatus,
-          ),
-        );
-
+    InventoryPurchaseRuntimeLineContextState lineContext,
+  ) {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 8),
@@ -3410,7 +3330,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            productName,
+            lineContext.productName,
             style: GoogleFonts.notoSansKr(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
@@ -3423,26 +3343,30 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             runSpacing: 8,
             children: [
               _buildIngredientMetaChip(
-                'Expected ${expectedBase.toStringAsFixed(3)}',
+                lineContext.statusLabel,
+                color: _inventoryOperationalToneColor(lineContext.statusTone),
               ),
               _buildIngredientMetaChip(
-                'Received ${receivedBase.toStringAsFixed(3)}',
+                'Expected ${lineContext.expectedBase.toStringAsFixed(3)}',
+              ),
+              _buildIngredientMetaChip(
+                'Received ${lineContext.receivedBase.toStringAsFixed(3)}',
                 color: AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                'Remaining ${remainingBase.toStringAsFixed(3)}',
-                color: remainingBase > 0
+                'Remaining ${lineContext.remainingBase.toStringAsFixed(3)}',
+                color: lineContext.remainingBase > 0
                     ? AppColors.amber500
                     : AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                'Ordered ${orderedBase.toStringAsFixed(3)}',
+                'Ordered ${lineContext.orderedBase.toStringAsFixed(3)}',
               ),
             ],
           ),
           const SizedBox(height: 6),
           Text(
-            'Line-level risk / quantity / expected / received context: $riskSummary.',
+            'Line-level risk / quantity / expected / received context: ${lineContext.riskSummary}. ${lineContext.narrative}',
             style: GoogleFonts.notoSansKr(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -4102,32 +4026,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   }
 
   Widget _buildReceiptVisibilitySection({
-    required String orderStatus,
-    required double expectedBase,
-    required double receivedBase,
-    required double acceptedBase,
-    required double rejectedBase,
-    required double remainingBase,
-    required int confirmedReceiptCount,
-    required int draftReceiptCount,
-    required int cancelledReceiptCount,
-    required String? latestReceiptStatus,
-    required DateTime? latestReceiptAt,
-    required List<Map<String, dynamic>> receipts,
+    required InventoryPurchaseRuntimeSurfaceState runtimeSurface,
   }) {
-    final readiness = _inventoryReceiptReadinessLabel(
-      orderStatus: orderStatus,
-      remainingBase: remainingBase,
-      confirmedReceiptCount: confirmedReceiptCount,
-    );
-    final visibilityStatus =
-        latestReceiptStatus ??
-        (confirmedReceiptCount > 0
-            ? 'confirmed'
-            : draftReceiptCount > 0
-            ? 'draft'
-            : 'none');
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -4161,62 +4061,63 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             runSpacing: 8,
             children: [
               _buildIngredientMetaChip(
-                'Receipt status ${visibilityStatus.toUpperCase()}',
-                color: _receiptVisibilityColor(visibilityStatus),
+                'Receipt status ${runtimeSurface.receiptVisibilityStatusLabel}',
+                color: _inventoryOperationalToneColor(
+                  runtimeSurface.receiptVisibilityStatusTone,
+                ),
               ),
               _buildIngredientMetaChip(
-                'Readiness $readiness',
-                color: _receiptReadinessColor(orderStatus, remainingBase),
+                'Readiness ${runtimeSurface.receivingReadinessLabel}',
+                color: _inventoryOperationalToneColor(
+                  runtimeSurface.receivingReadinessTone,
+                ),
               ),
               _buildIngredientMetaChip(
-                'Expected ${expectedBase.toStringAsFixed(3)} base',
+                'Expected ${runtimeSurface.expectedBase.toStringAsFixed(3)} base',
               ),
               _buildIngredientMetaChip(
-                'Received ${receivedBase.toStringAsFixed(3)} base',
+                'Received ${runtimeSurface.receivedBase.toStringAsFixed(3)} base',
                 color: AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                'Accepted ${acceptedBase.toStringAsFixed(3)} base',
+                'Accepted ${runtimeSurface.acceptedBase.toStringAsFixed(3)} base',
                 color: AppColors.amber500,
               ),
               _buildIngredientMetaChip(
-                'Remaining ${remainingBase.toStringAsFixed(3)} base',
-                color: _receiptReadinessColor(orderStatus, remainingBase),
+                'Remaining ${runtimeSurface.remainingBase.toStringAsFixed(3)} base',
+                color: _inventoryOperationalToneColor(
+                  runtimeSurface.receivingReadinessTone,
+                ),
               ),
-              if (rejectedBase > 0)
+              if (runtimeSurface.rejectedBase > 0)
                 _buildIngredientMetaChip(
-                  'Rejected ${rejectedBase.toStringAsFixed(3)} base',
+                  'Rejected ${runtimeSurface.rejectedBase.toStringAsFixed(3)} base',
                   color: AppColors.statusOccupied,
                 ),
               _buildIngredientMetaChip(
-                'Confirmed receipts $confirmedReceiptCount',
+                'Confirmed receipts ${runtimeSurface.confirmedReceiptCount}',
                 color: AppColors.statusAvailable,
               ),
-              if (draftReceiptCount > 0)
+              if (runtimeSurface.draftReceiptCount > 0)
                 _buildIngredientMetaChip(
-                  'Draft receipts $draftReceiptCount',
+                  'Draft receipts ${runtimeSurface.draftReceiptCount}',
                   color: AppColors.statusOccupied,
                 ),
-              if (cancelledReceiptCount > 0)
+              if (runtimeSurface.cancelledReceiptCount > 0)
                 _buildIngredientMetaChip(
-                  'Cancelled receipts $cancelledReceiptCount',
+                  'Cancelled receipts ${runtimeSurface.cancelledReceiptCount}',
                   color: AppColors.statusCancelled,
                 ),
               _buildIngredientMetaChip(
-                latestReceiptAt == null
+                runtimeSurface.latestReceiptAt == null
                     ? 'No receipt timestamp yet'
-                    : 'Latest receipt ${DateFormat('yyyy-MM-dd HH:mm').format(latestReceiptAt)}',
+                    : 'Latest receipt ${DateFormat('yyyy-MM-dd HH:mm').format(runtimeSurface.latestReceiptAt!)}',
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            _inventoryReceiptReadinessNarrative(
-              orderStatus: orderStatus,
-              remainingBase: remainingBase,
-              confirmedReceiptCount: confirmedReceiptCount,
-              hasReceiptHistory: receipts.isNotEmpty,
-            ),
+            runtimeSurface.receiptVisibilityNarrative,
             style: GoogleFonts.notoSansKr(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -4828,23 +4729,6 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     return 0;
   }
 
-  String _inventoryReceivingReadinessOperatorNarrative({
-    required int receivedLineCount,
-    required int pendingLineCount,
-    required int attentionLineCount,
-  }) {
-    if (attentionLineCount > 0) {
-      return 'Operators should review attention lines first; this summary remains read-only and does not confirm receipts or mutate stock.';
-    }
-    if (pendingLineCount > 0) {
-      return 'Pending lines remain visible for receiving follow-up, but this surface does not open approval or receipt confirmation actions.';
-    }
-    if (receivedLineCount > 0) {
-      return 'All visible lines already look received from the tracked POS read model, so operators can use receipt history only for verification.';
-    }
-    return 'Receiving posture is currently unavailable from the tracked read model, so operators should rely on the existing receipt visibility surfaces only.';
-  }
-
   Color _inventoryReceivingBlockerSeverityColor(String severity) =>
       switch (severity) {
         'healthy' => AppColors.statusAvailable,
@@ -4853,6 +4737,15 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         'critical' => AppColors.statusCancelled,
         _ => AppColors.surface2,
       };
+
+  Color _inventoryOperationalToneColor(String tone) => switch (tone) {
+    'complete' => AppColors.statusAvailable,
+    'ready' => AppColors.amber500,
+    'watch' => AppColors.amber500,
+    'blocked' => AppColors.statusOccupied,
+    'critical' => AppColors.statusCancelled,
+    _ => AppColors.surface2,
+  };
 
   List<String> _inventoryTopAttentionHighlights(
     List<Map<String, dynamic>> lineItems, {
@@ -4935,79 +4828,6 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     _ => AppColors.surface2,
   };
 
-  Color _receiptReadinessColor(String orderStatus, double remainingBase) {
-    if (orderStatus == 'received' || remainingBase <= 0) {
-      return AppColors.statusAvailable;
-    }
-    if (orderStatus == 'office_approved' ||
-        orderStatus == 'ordered' ||
-        orderStatus == 'partially_received') {
-      return AppColors.amber500;
-    }
-    return AppColors.statusOccupied;
-  }
-
-  String _inventoryReceiptReadinessLabel({
-    required String orderStatus,
-    required double remainingBase,
-    required int confirmedReceiptCount,
-  }) {
-    if (orderStatus == 'received' || remainingBase <= 0) {
-      return 'Complete';
-    }
-    if (orderStatus == 'partially_received' || confirmedReceiptCount > 0) {
-      return 'Partial';
-    }
-    if (orderStatus == 'office_approved' || orderStatus == 'ordered') {
-      return 'Ready';
-    }
-    if (orderStatus == 'cancelled' || orderStatus == 'office_rejected') {
-      return 'Blocked';
-    }
-    return 'Hold';
-  }
-
-  String _inventoryReceiptReadinessNarrative({
-    required String orderStatus,
-    required double remainingBase,
-    required int confirmedReceiptCount,
-    required bool hasReceiptHistory,
-  }) {
-    if (orderStatus == 'received' || remainingBase <= 0) {
-      return 'This purchase order is fully received in the tracked POS scope. No receipt confirmation action is exposed here.';
-    }
-    if (orderStatus == 'partially_received' || confirmedReceiptCount > 0) {
-      return 'Confirmed receipts already exist for this order. Use the remaining quantity signal to understand what is still outstanding without mutating stock.';
-    }
-    if (orderStatus == 'office_approved' || orderStatus == 'ordered') {
-      return hasReceiptHistory
-          ? 'Receipt history exists, but confirmed inbound quantity is still incomplete for this order.'
-          : 'This order is receipt-ready once goods arrive, but no receipt history is visible yet.';
-    }
-    if (orderStatus == 'cancelled' || orderStatus == 'office_rejected') {
-      return 'This order is not receipt-ready in its current status. Visibility is read-only and does not open approval or correction flows.';
-    }
-    return 'This order still waits on an earlier workflow step before receipt confirmation becomes relevant. Visibility remains read-only here.';
-  }
-
-  String _inventoryApprovalRuntimeStateLabel(String orderStatus) {
-    switch (orderStatus) {
-      case 'submitted':
-      case 'office_returned':
-        return 'Ready to approve';
-      case 'office_approved':
-      case 'ordered':
-      case 'partially_received':
-      case 'received':
-        return 'Approved';
-      case 'office_rejected':
-      case 'cancelled':
-        return 'Approval blocked';
-      default:
-        return 'Approval pending';
-    }
-  }
-
   Color _inventoryApprovalRuntimeStateColor(String label) {
     if (label == 'Ready to approve') {
       return AppColors.amber500;
@@ -5021,45 +4841,6 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     return AppColors.surface2;
   }
 
-  String _inventoryApprovalRuntimeNarrative(String orderStatus) {
-    switch (orderStatus) {
-      case 'submitted':
-      case 'office_returned':
-        return 'The purchase order is ready for Office review, but POS does not execute approval. Operators can verify readiness and hand off the order to the Office-owned workflow only.';
-      case 'office_approved':
-      case 'ordered':
-      case 'partially_received':
-      case 'received':
-        return 'Backend truth already shows this order beyond the approval gate. POS keeps the approved state visible and does not replay Office approval execution.';
-      case 'office_rejected':
-        return 'Office review rejected this order. POS leaves the rejection visible and does not override the Office decision.';
-      case 'cancelled':
-        return 'This order is cancelled in backend truth, so approval execution stays unavailable from POS.';
-      default:
-        return 'The order has not reached a stable approval handoff state yet. POS keeps the boundary visible only.';
-    }
-  }
-
-  String _inventoryReceivingRuntimeStateLabel({
-    required String orderStatus,
-    required double remainingBase,
-    required int confirmedReceiptCount,
-  }) {
-    if (orderStatus == 'received' || remainingBase <= 0) {
-      return 'Received / closed';
-    }
-    if (_canConfirmInventoryReceipt(
-      orderStatus: orderStatus,
-      remainingBase: remainingBase,
-    )) {
-      return 'Ready to receive';
-    }
-    if (confirmedReceiptCount > 0 || orderStatus == 'partially_received') {
-      return 'Receiving blocked';
-    }
-    return 'Receiving blocked';
-  }
-
   Color _inventoryReceivingRuntimeStateColor(String label) {
     if (label == 'Ready to receive') {
       return AppColors.amber500;
@@ -5071,44 +4852,6 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       return AppColors.statusOccupied;
     }
     return AppColors.surface2;
-  }
-
-  String _inventoryReceivingRuntimeNarrative({
-    required String orderStatus,
-    required double remainingBase,
-    required int confirmedReceiptCount,
-  }) {
-    if (orderStatus == 'received' || remainingBase <= 0) {
-      return 'Backend truth already shows this order as fully received. POS keeps the final state visible without sending another receipt confirmation.';
-    }
-    if (_canConfirmInventoryReceipt(
-      orderStatus: orderStatus,
-      remainingBase: remainingBase,
-    )) {
-      return 'The receipt confirmation contract exists and can update stock truthfully for the remaining quantity. Use the runtime action only when the inbound goods are physically verified.';
-    }
-    if (orderStatus == 'submitted' || orderStatus == 'office_returned') {
-      return 'Receiving stays blocked until Office approval completes. POS must not mutate stock or create confirmed receipts before that backend state exists.';
-    }
-    if (orderStatus == 'office_rejected' || orderStatus == 'cancelled') {
-      return 'This order is no longer receivable in backend truth, so POS keeps the receiving state blocked.';
-    }
-    if (confirmedReceiptCount > 0 || orderStatus == 'partially_received') {
-      return 'Receipt history already exists, but the current order status still needs backend-truth eligibility before POS can confirm more receiving.';
-    }
-    return 'Receiving is currently blocked because the backend order state is not receivable.';
-  }
-
-  bool _canConfirmInventoryReceipt({
-    required String orderStatus,
-    required double remainingBase,
-  }) {
-    if (remainingBase <= 0) {
-      return false;
-    }
-    return orderStatus == 'office_approved' ||
-        orderStatus == 'ordered' ||
-        orderStatus == 'partially_received';
   }
 
   Color _inventoryRuntimeResultColor(InventoryPurchaseRuntimeResultKind kind) {
