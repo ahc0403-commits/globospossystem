@@ -27,6 +27,8 @@ void main() {
         'CREATE TABLE IF NOT EXISTS public.pos_client_mutation_attempts',
       ),
     );
+    expect(sql, contains('actor_id UUID NOT NULL REFERENCES auth.users(id)'));
+    expect(sql, contains('CLIENT_MUTATION_ACTOR_REQUIRED'));
     expect(sql, contains('UNIQUE (store_id, actor_id, client_mutation_id)'));
     expect(
       sql,

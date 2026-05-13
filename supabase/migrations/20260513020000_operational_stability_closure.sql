@@ -11,7 +11,7 @@
 CREATE TABLE IF NOT EXISTS public.pos_client_mutation_attempts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   store_id UUID NOT NULL REFERENCES public.restaurants(id) ON DELETE CASCADE,
-  actor_id UUID NULL REFERENCES auth.users(id),
+  actor_id UUID NOT NULL REFERENCES auth.users(id),
   client_mutation_id TEXT NOT NULL,
   mutation_type TEXT NOT NULL CHECK (
     mutation_type IN ('create_order', 'add_items_to_order')
@@ -67,6 +67,10 @@ BEGIN
 
   IF v_client_mutation_id IS NULL THEN
     RAISE EXCEPTION 'CLIENT_MUTATION_ID_REQUIRED';
+  END IF;
+
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'CLIENT_MUTATION_ACTOR_REQUIRED';
   END IF;
 
   PERFORM pg_advisory_xact_lock(
@@ -152,6 +156,10 @@ BEGIN
 
   IF v_client_mutation_id IS NULL THEN
     RAISE EXCEPTION 'CLIENT_MUTATION_ID_REQUIRED';
+  END IF;
+
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'CLIENT_MUTATION_ACTOR_REQUIRED';
   END IF;
 
   PERFORM pg_advisory_xact_lock(
