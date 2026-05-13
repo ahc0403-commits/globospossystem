@@ -71,6 +71,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   Future<void> _loadPurchaseOrderSummaryAndDetail(
     String storeId, {
     String? preferredOrderId,
+    bool clearRuntimeStates = true,
   }) async {
     await ref
         .read(inventoryPurchaseOrderSummaryProvider.notifier)
@@ -94,10 +95,16 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       if (_selectedReceiptId != null) {
         setState(() => _selectedReceiptId = null);
       }
+      if (clearRuntimeStates) {
+        _clearInventoryPurchaseRuntimeStates();
+      }
       ref.read(inventoryPurchaseOrderDetailProvider.notifier).clear();
       return;
     }
 
+    if (clearRuntimeStates) {
+      _clearInventoryPurchaseRuntimeStates();
+    }
     await ref
         .read(inventoryPurchaseOrderDetailProvider.notifier)
         .load(nextOrderId);
@@ -111,6 +118,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         _selectedReceiptId = null;
       });
     }
+    _clearInventoryPurchaseRuntimeStates();
     await ref.read(inventoryPurchaseOrderDetailProvider.notifier).load(orderId);
     _syncSelectedReceipt();
   }
@@ -139,6 +147,11 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     if (mounted && _selectedReceiptId != receiptId) {
       setState(() => _selectedReceiptId = receiptId);
     }
+  }
+
+  void _clearInventoryPurchaseRuntimeStates() {
+    ref.read(inventoryPurchaseApprovalRuntimeProvider.notifier).clear();
+    ref.read(inventoryPurchaseReceivingRuntimeProvider.notifier).clear();
   }
 
   @override
@@ -1192,7 +1205,6 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     final orderCreation = ref.watch(inventoryPurchaseOrderCreationProvider);
     final orderSummary = ref.watch(inventoryPurchaseOrderSummaryProvider);
     final orderDetail = ref.watch(inventoryPurchaseOrderDetailProvider);
-
     final deduct = report.transactions
         .where((t) => t['transaction_type'] == 'deduct')
         .fold<double>(
@@ -1649,7 +1661,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 8),
           _purchaseDetailRow(
             'Boundary',
-            'This slice may create recommendation snapshots and supplier-grouped purchase orders, but it still does not approve receipts or mutate stock.',
+            'This slice may create recommendation snapshots and supplier-grouped purchase orders, but approval stays Office-owned and receiving runs only through the tracked backend receipt contract.',
           ),
         ],
       ),
@@ -1663,6 +1675,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     required InventoryPurchaseOrderSummaryState orderSummary,
     required InventoryPurchaseOrderDetailState orderDetail,
   }) {
+    final approvalRuntime = ref.watch(inventoryPurchaseApprovalRuntimeProvider);
+    final receivingRuntime = ref.watch(
+      inventoryPurchaseReceivingRuntimeProvider,
+    );
     final run = snapshot.run;
     final lineCount = snapshot.lines.length;
     final runDate = run?['run_date']?.toString() ?? '-';
@@ -1820,6 +1836,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               storeId: storeId,
               summary: orderSummary,
               detail: orderDetail,
+              approvalRuntime: approvalRuntime,
+              receivingRuntime: receivingRuntime,
             ),
             const SizedBox(height: 12),
             if (snapshot.lines.isEmpty)
@@ -1896,6 +1914,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     required String? storeId,
     required InventoryPurchaseOrderSummaryState summary,
     required InventoryPurchaseOrderDetailState detail,
+    required InventoryPurchaseApprovalRuntimeState approvalRuntime,
+    required InventoryPurchaseReceivingRuntimeState receivingRuntime,
   }) {
     return Container(
       width: double.infinity,
@@ -1924,7 +1944,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Read the latest POS-created purchase orders without opening Office approval or receipt workflows.',
+                      'Read the latest POS-created purchase orders, then use only the runtime actions that backend truth currently supports.',
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -1984,8 +2004,11 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             ),
             const SizedBox(height: 12),
             _buildPurchaseOrderDetailSection(
+              storeId: storeId,
               detail: detail,
               hasOrders: summary.orders.isNotEmpty,
+              approvalRuntime: approvalRuntime,
+              receivingRuntime: receivingRuntime,
             ),
           ],
         ],
@@ -2094,8 +2117,11 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   }
 
   Widget _buildPurchaseOrderDetailSection({
+    required String? storeId,
     required InventoryPurchaseOrderDetailState detail,
     required bool hasOrders,
+    required InventoryPurchaseApprovalRuntimeState approvalRuntime,
+    required InventoryPurchaseReceivingRuntimeState receivingRuntime,
   }) {
     final order = detail.order;
     final receipts = detail.receipts;
@@ -2163,7 +2189,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Inspect the selected order line-by-line without opening approval, edit, or receipt confirmation workflows.',
+                      'Inspect the selected order line-by-line, keep approval inside the Office-owned boundary, and open receiving only when backend truth supports it.',
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -2300,6 +2326,18 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               remainingBase: totalRemainingBase,
               confirmedReceiptCount: confirmedReceiptCount,
               latestReceiptStatus: latestReceiptStatus,
+            ),
+            const SizedBox(height: 12),
+            _buildInventoryRuntimePathSection(
+              storeId: storeId,
+              order: order,
+              lineItems: sortedLines,
+              requestedDate: requestedDate,
+              orderStatus: status,
+              remainingBase: totalRemainingBase,
+              confirmedReceiptCount: confirmedReceiptCount,
+              approvalRuntime: approvalRuntime,
+              receivingRuntime: receivingRuntime,
             ),
             const SizedBox(height: 12),
             _buildReceiptVisibilitySection(
@@ -2783,6 +2821,381 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               fontSize: 12,
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _runInventoryApprovalHandoffCheck(
+    BuildContext context, {
+    required Map<String, dynamic>? order,
+  }) async {
+    await ref
+        .read(inventoryPurchaseApprovalRuntimeProvider.notifier)
+        .evaluate(order);
+    if (!context.mounted) return;
+
+    final result = ref.read(inventoryPurchaseApprovalRuntimeProvider).result;
+    if (result == null) return;
+
+    if (result.kind == InventoryPurchaseRuntimeResultKind.success) {
+      showSuccessToast(context, result.message);
+      return;
+    }
+
+    showErrorToast(context, result.message);
+  }
+
+  Future<void> _showConfirmInventoryPurchaseReceiptDialog(
+    BuildContext context, {
+    required String storeId,
+    required Map<String, dynamic>? order,
+  }) async {
+    if (order == null) {
+      await ref
+          .read(inventoryPurchaseReceivingRuntimeProvider.notifier)
+          .confirmRemainingReceipt(order: order);
+      if (!context.mounted) return;
+      final result = ref.read(inventoryPurchaseReceivingRuntimeProvider).result;
+      if (result != null) {
+        showErrorToast(context, result.message);
+      }
+      return;
+    }
+
+    final noteController = TextEditingController();
+    final purchaseOrderNo = order['purchase_order_no']?.toString() ?? '-';
+    final confirmed = await ToastConfirmDialog.withContent(
+      context: context,
+      title: '$purchaseOrderNo — Confirm Remaining Receipt',
+      confirmLabel: 'Confirm Remaining Receipt',
+      confirmTone: PosActionTone.affirm,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Confirm the currently remaining inbound quantity from backend truth. This will create confirmed receipt records and update stock only through the tracked inventory receipt contract.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: noteController,
+            style: const TextStyle(color: AppColors.textPrimary),
+            decoration: const InputDecoration(
+              labelText: 'Memo (optional)',
+              labelStyle: TextStyle(color: AppColors.textSecondary),
+              enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: AppColors.surface2),
+              ),
+              focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: AppColors.amber500),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) {
+      noteController.dispose();
+      ref
+          .read(inventoryPurchaseReceivingRuntimeProvider.notifier)
+          .markCancelled();
+      return;
+    }
+
+    final success = await ref
+        .read(inventoryPurchaseReceivingRuntimeProvider.notifier)
+        .confirmRemainingReceipt(
+          order: order,
+          memo: noteController.text.trim().isEmpty
+              ? null
+              : noteController.text.trim(),
+        );
+
+    if (!context.mounted) {
+      noteController.dispose();
+      return;
+    }
+
+    final result = ref.read(inventoryPurchaseReceivingRuntimeProvider).result;
+    if (!success) {
+      noteController.dispose();
+      if (result != null) {
+        showErrorToast(context, result.message);
+      }
+      return;
+    }
+
+    await ref.read(inventoryPurchaseOverviewProvider.notifier).load(storeId);
+    await _loadPurchaseOrderSummaryAndDetail(
+      storeId,
+      preferredOrderId: order['id']?.toString(),
+      clearRuntimeStates: false,
+    );
+    if (!context.mounted) {
+      noteController.dispose();
+      return;
+    }
+
+    if (result != null) {
+      showSuccessToast(context, result.message);
+    }
+    noteController.dispose();
+  }
+
+  Widget _buildInventoryRuntimePathSection({
+    required String? storeId,
+    required Map<String, dynamic>? order,
+    required List<Map<String, dynamic>> lineItems,
+    required String? requestedDate,
+    required String orderStatus,
+    required double remainingBase,
+    required int confirmedReceiptCount,
+    required InventoryPurchaseApprovalRuntimeState approvalRuntime,
+    required InventoryPurchaseReceivingRuntimeState receivingRuntime,
+  }) {
+    final approvalStateLabel = _inventoryApprovalRuntimeStateLabel(orderStatus);
+    final approvalStateColor = _inventoryApprovalRuntimeStateColor(
+      approvalStateLabel,
+    );
+    final approvalNarrative = _inventoryApprovalRuntimeNarrative(orderStatus);
+    final receivingStateLabel = _inventoryReceivingRuntimeStateLabel(
+      orderStatus: orderStatus,
+      remainingBase: remainingBase,
+      confirmedReceiptCount: confirmedReceiptCount,
+    );
+    final receivingStateColor = _inventoryReceivingRuntimeStateColor(
+      receivingStateLabel,
+    );
+    final receivingNarrative = _inventoryReceivingRuntimeNarrative(
+      orderStatus: orderStatus,
+      remainingBase: remainingBase,
+      confirmedReceiptCount: confirmedReceiptCount,
+    );
+    final blockedLineCount = lineItems
+        .where(
+          (line) =>
+              _inventorySupplierAttentionPriority(
+                line,
+                requestedDate: requestedDate,
+                orderStatus: orderStatus,
+              ) >=
+              3,
+        )
+        .length;
+    final canConfirmReceipt =
+        storeId != null &&
+        _canConfirmInventoryReceipt(
+          orderStatus: orderStatus,
+          remainingBase: remainingBase,
+        ) &&
+        !receivingRuntime.isSubmitting;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Inventory Runtime Path',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Open only the action states that the current POS runtime can support truthfully. Approval remains Office-owned, while receiving is enabled only when the backend receipt contract can safely update stock.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _buildInventoryRuntimePathCard(
+            title: 'Approval Runtime Path',
+            statusLabel: approvalStateLabel,
+            statusColor: approvalStateColor,
+            narrative: approvalNarrative,
+            metrics: [
+              _buildIngredientMetaChip(
+                'Blocked lines $blockedLineCount',
+                color: blockedLineCount > 0
+                    ? AppColors.amber500
+                    : AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                'Office-owned execution',
+                color: AppColors.statusOccupied,
+              ),
+            ],
+            action: FilledButton.tonalIcon(
+              onPressed: approvalRuntime.isEvaluating
+                  ? null
+                  : () => _runInventoryApprovalHandoffCheck(
+                      context,
+                      order: order,
+                    ),
+              icon: approvalRuntime.isEvaluating
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.rule_folder_outlined),
+              label: const Text('Check Approval Handoff'),
+            ),
+            result: approvalRuntime.result,
+          ),
+          const SizedBox(height: 8),
+          _buildInventoryRuntimePathCard(
+            title: 'Receiving Runtime Path',
+            statusLabel: receivingStateLabel,
+            statusColor: receivingStateColor,
+            narrative: receivingNarrative,
+            metrics: [
+              _buildIngredientMetaChip(
+                'Confirmed receipts $confirmedReceiptCount',
+                color: confirmedReceiptCount > 0
+                    ? AppColors.statusAvailable
+                    : AppColors.surface2,
+              ),
+              _buildIngredientMetaChip(
+                'Remaining base ${remainingBase.toStringAsFixed(3)}',
+                color: remainingBase > 0
+                    ? AppColors.amber500
+                    : AppColors.statusAvailable,
+              ),
+            ],
+            action: FilledButton.icon(
+              onPressed: canConfirmReceipt
+                  ? () => _showConfirmInventoryPurchaseReceiptDialog(
+                      context,
+                      storeId: storeId,
+                      order: order,
+                    )
+                  : null,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.amber500,
+                foregroundColor: AppColors.surface0,
+                disabledBackgroundColor: AppColors.surface2,
+                disabledForegroundColor: AppColors.textSecondary,
+              ),
+              icon: receivingRuntime.isSubmitting
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.inventory_2_outlined),
+              label: Text(
+                receivingRuntime.isSubmitting
+                    ? 'Confirming Receipt...'
+                    : 'Confirm Remaining Receipt',
+              ),
+            ),
+            result: receivingRuntime.result,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInventoryRuntimePathCard({
+    required String title,
+    required String statusLabel,
+    required Color statusColor,
+    required String narrative,
+    required List<Widget> metrics,
+    required Widget action,
+    required InventoryPurchaseRuntimeResult? result,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: statusColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: GoogleFonts.notoSansKr(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              _buildIngredientMetaChip(statusLabel, color: statusColor),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: metrics),
+          const SizedBox(height: 8),
+          Text(
+            narrative,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 10),
+          action,
+          if (result != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.surface1,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: _inventoryRuntimeResultColor(result.kind),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    result.title,
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    result.message,
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -3396,7 +3809,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 4),
           Text(
-            'Track receipt readiness and already recorded inbound quantities without opening receipt confirmation.',
+            'Track receipt readiness and already recorded inbound quantities before deciding whether the backend receipt contract is ready to run.',
             style: GoogleFonts.notoSansKr(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -4432,6 +4845,142 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       return AppColors.statusOccupied;
     }
     return AppColors.surface2;
+  }
+
+  String _inventoryApprovalRuntimeStateLabel(String orderStatus) {
+    switch (orderStatus) {
+      case 'submitted':
+      case 'office_returned':
+        return 'Ready to approve';
+      case 'office_approved':
+      case 'ordered':
+      case 'partially_received':
+      case 'received':
+        return 'Approved';
+      case 'office_rejected':
+      case 'cancelled':
+        return 'Approval blocked';
+      default:
+        return 'Approval pending';
+    }
+  }
+
+  Color _inventoryApprovalRuntimeStateColor(String label) {
+    if (label == 'Ready to approve') {
+      return AppColors.amber500;
+    }
+    if (label == 'Approved') {
+      return AppColors.statusAvailable;
+    }
+    if (label == 'Approval blocked') {
+      return AppColors.statusOccupied;
+    }
+    return AppColors.surface2;
+  }
+
+  String _inventoryApprovalRuntimeNarrative(String orderStatus) {
+    switch (orderStatus) {
+      case 'submitted':
+      case 'office_returned':
+        return 'The purchase order is ready for Office review, but POS does not execute approval. Operators can verify readiness and hand off the order to the Office-owned workflow only.';
+      case 'office_approved':
+      case 'ordered':
+      case 'partially_received':
+      case 'received':
+        return 'Backend truth already shows this order beyond the approval gate. POS keeps the approved state visible and does not replay Office approval execution.';
+      case 'office_rejected':
+        return 'Office review rejected this order. POS leaves the rejection visible and does not override the Office decision.';
+      case 'cancelled':
+        return 'This order is cancelled in backend truth, so approval execution stays unavailable from POS.';
+      default:
+        return 'The order has not reached a stable approval handoff state yet. POS keeps the boundary visible only.';
+    }
+  }
+
+  String _inventoryReceivingRuntimeStateLabel({
+    required String orderStatus,
+    required double remainingBase,
+    required int confirmedReceiptCount,
+  }) {
+    if (orderStatus == 'received' || remainingBase <= 0) {
+      return 'Received / closed';
+    }
+    if (_canConfirmInventoryReceipt(
+      orderStatus: orderStatus,
+      remainingBase: remainingBase,
+    )) {
+      return 'Ready to receive';
+    }
+    if (confirmedReceiptCount > 0 || orderStatus == 'partially_received') {
+      return 'Receiving blocked';
+    }
+    return 'Receiving blocked';
+  }
+
+  Color _inventoryReceivingRuntimeStateColor(String label) {
+    if (label == 'Ready to receive') {
+      return AppColors.amber500;
+    }
+    if (label == 'Received / closed') {
+      return AppColors.statusAvailable;
+    }
+    if (label == 'Receiving blocked') {
+      return AppColors.statusOccupied;
+    }
+    return AppColors.surface2;
+  }
+
+  String _inventoryReceivingRuntimeNarrative({
+    required String orderStatus,
+    required double remainingBase,
+    required int confirmedReceiptCount,
+  }) {
+    if (orderStatus == 'received' || remainingBase <= 0) {
+      return 'Backend truth already shows this order as fully received. POS keeps the final state visible without sending another receipt confirmation.';
+    }
+    if (_canConfirmInventoryReceipt(
+      orderStatus: orderStatus,
+      remainingBase: remainingBase,
+    )) {
+      return 'The receipt confirmation contract exists and can update stock truthfully for the remaining quantity. Use the runtime action only when the inbound goods are physically verified.';
+    }
+    if (orderStatus == 'submitted' || orderStatus == 'office_returned') {
+      return 'Receiving stays blocked until Office approval completes. POS must not mutate stock or create confirmed receipts before that backend state exists.';
+    }
+    if (orderStatus == 'office_rejected' || orderStatus == 'cancelled') {
+      return 'This order is no longer receivable in backend truth, so POS keeps the receiving state blocked.';
+    }
+    if (confirmedReceiptCount > 0 || orderStatus == 'partially_received') {
+      return 'Receipt history already exists, but the current order status still needs backend-truth eligibility before POS can confirm more receiving.';
+    }
+    return 'Receiving is currently blocked because the backend order state is not receivable.';
+  }
+
+  bool _canConfirmInventoryReceipt({
+    required String orderStatus,
+    required double remainingBase,
+  }) {
+    if (remainingBase <= 0) {
+      return false;
+    }
+    return orderStatus == 'office_approved' ||
+        orderStatus == 'ordered' ||
+        orderStatus == 'partially_received';
+  }
+
+  Color _inventoryRuntimeResultColor(InventoryPurchaseRuntimeResultKind kind) {
+    switch (kind) {
+      case InventoryPurchaseRuntimeResultKind.success:
+        return AppColors.statusAvailable;
+      case InventoryPurchaseRuntimeResultKind.failure:
+        return AppColors.statusCancelled;
+      case InventoryPurchaseRuntimeResultKind.blocked:
+        return AppColors.statusOccupied;
+      case InventoryPurchaseRuntimeResultKind.cancelled:
+        return AppColors.amber500;
+      case InventoryPurchaseRuntimeResultKind.idle:
+        return AppColors.surface2;
+    }
   }
 
   Future<void> _showRecommendationRunDialog({
