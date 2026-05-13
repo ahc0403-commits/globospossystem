@@ -968,6 +968,161 @@ class InventoryPurchaseRuntimeResult {
   });
 }
 
+class InventoryPurchaseRuntimeClosureSnapshot {
+  final String approvalStateLabel;
+  final String receivingStateLabel;
+  final String handoffTarget;
+  final String operatorSummary;
+  final String lastRuntimeStateLabel;
+  final InventoryPurchaseRuntimeResult? lastRuntimeResult;
+  final List<String> blockedReasons;
+  final bool canCheckApproval;
+  final bool canConfirmReceipt;
+
+  const InventoryPurchaseRuntimeClosureSnapshot({
+    required this.approvalStateLabel,
+    required this.receivingStateLabel,
+    required this.handoffTarget,
+    required this.operatorSummary,
+    required this.lastRuntimeStateLabel,
+    required this.lastRuntimeResult,
+    required this.blockedReasons,
+    required this.canCheckApproval,
+    required this.canConfirmReceipt,
+  });
+}
+
+InventoryPurchaseRuntimeClosureSnapshot
+buildInventoryPurchaseRuntimeClosureSnapshot({
+  required Map<String, dynamic>? order,
+  required InventoryPurchaseApprovalRuntimeState approvalRuntime,
+  required InventoryPurchaseReceivingRuntimeState receivingRuntime,
+  required int blockedLineCount,
+  required int pendingLineCount,
+  required int attentionLineCount,
+}) {
+  final status = order?['status']?.toString() ?? 'unknown';
+  final remainingBase =
+      (order?['total_remaining_quantity_base'] as num?)?.toDouble() ?? 0;
+  final hasApprovedTruth =
+      status == 'office_approved' ||
+      status == 'ordered' ||
+      status == 'partially_received' ||
+      status == 'received';
+  final canConfirmReceipt =
+      remainingBase > 0 &&
+      (status == 'office_approved' ||
+          status == 'ordered' ||
+          status == 'partially_received') &&
+      !receivingRuntime.isSubmitting;
+  final lastRuntimeResult = receivingRuntime.result ?? approvalRuntime.result;
+
+  final approvalStateLabel = switch (status) {
+    'submitted' || 'office_returned' => 'Ready to approve',
+    'office_approved' ||
+    'ordered' ||
+    'partially_received' ||
+    'received' => 'Approved',
+    'office_rejected' || 'cancelled' => 'Approval blocked',
+    _ => 'Approval pending',
+  };
+  final receivingStateLabel = switch (status) {
+    'received' => 'Received / closed',
+    'office_approved' ||
+    'ordered' ||
+    'partially_received' when remainingBase > 0 => 'Ready to receive',
+    'office_approved' ||
+    'ordered' ||
+    'partially_received' => 'Received / closed',
+    _ => 'Receiving blocked',
+  };
+  final handoffTarget = switch (status) {
+    'submitted' || 'office_returned' => 'Handoff target Office approval queue',
+    'office_approved' ||
+    'ordered' ||
+    'partially_received' => 'Handoff target POS receiving contract',
+    'received' => 'Handoff target Verification only',
+    'office_rejected' => 'Handoff target Office rejection follow-up',
+    'cancelled' => 'Handoff target Closed cancellation record',
+    _ => 'Handoff target Runtime boundary review',
+  };
+
+  final blockedReasons = <String>[];
+  if (order == null) {
+    blockedReasons.add(
+      'Load a tracked purchase order first so POS can evaluate approval handoff and receiving readiness.',
+    );
+  } else {
+    if (status == 'submitted' || status == 'office_returned') {
+      blockedReasons.add(
+        'Office approval truth is still missing, so receiving stays blocked until the Office-owned gate is complete.',
+      );
+    }
+    if (status == 'office_rejected') {
+      blockedReasons.add(
+        'Office rejected the purchase order, so POS must keep both approval execution and receiving blocked.',
+      );
+    }
+    if (status == 'cancelled') {
+      blockedReasons.add(
+        'Backend truth already cancelled this purchase order, so runtime actions stay unavailable.',
+      );
+    }
+    if (remainingBase <= 0 && hasApprovedTruth) {
+      blockedReasons.add(
+        'No remaining inbound quantity is visible, so POS keeps the order in verification-only mode.',
+      );
+    }
+    if (blockedLineCount > 0) {
+      blockedReasons.add(
+        '$blockedLineCount blocker line(s) still require supplier or arrival follow-up before operators should treat the order as stable.',
+      );
+    }
+    if (attentionLineCount > 0) {
+      blockedReasons.add(
+        '$attentionLineCount high-attention line(s) still carry supplier, price, or lead-time risk that operators should review first.',
+      );
+    }
+    if (pendingLineCount > 0 && !canConfirmReceipt && status != 'received') {
+      blockedReasons.add(
+        '$pendingLineCount line(s) remain pending while the current backend status does not allow POS receipt confirmation yet.',
+      );
+    }
+  }
+
+  final operatorSummary = switch (status) {
+    'submitted' || 'office_returned' =>
+      'POS can prepare the purchase order for handoff, but Office still owns approval execution and the backend does not yet allow receipt confirmation.',
+    'office_approved' || 'ordered' || 'partially_received'
+        when remainingBase > 0 =>
+      'Approval truth already exists, so POS can use the tracked receipt contract after physical inbound verification while keeping approval execution outside POS.',
+    'received' =>
+      'Runtime closure is complete for this order. Operators can verify receipts, line context, and stock-facing outcomes without opening more runtime actions.',
+    'office_rejected' =>
+      'This order is blocked by Office review outcome, so POS keeps only the visibility, blocker, and handoff narrative available.',
+    'cancelled' =>
+      'This order is closed by cancellation, so POS keeps the final runtime boundary visible without opening approval or receiving paths.',
+    _ =>
+      'POS keeps the runtime boundary visible, but the current backend state still needs review before any operator action becomes meaningful.',
+  };
+
+  final lastRuntimeStateLabel = lastRuntimeResult == null
+      ? 'Last runtime state none yet'
+      : 'Last runtime state ${lastRuntimeResult.title}';
+
+  return InventoryPurchaseRuntimeClosureSnapshot(
+    approvalStateLabel: approvalStateLabel,
+    receivingStateLabel: receivingStateLabel,
+    handoffTarget: handoffTarget,
+    operatorSummary: operatorSummary,
+    lastRuntimeStateLabel: lastRuntimeStateLabel,
+    lastRuntimeResult: lastRuntimeResult,
+    blockedReasons: blockedReasons,
+    canCheckApproval: order != null && !approvalRuntime.isEvaluating,
+    canConfirmReceipt: canConfirmReceipt,
+  );
+}
+
 class InventoryPurchaseApprovalRuntimeState {
   final bool isEvaluating;
   final InventoryPurchaseRuntimeResult? result;

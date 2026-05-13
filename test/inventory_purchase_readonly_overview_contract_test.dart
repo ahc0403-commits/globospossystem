@@ -32,6 +32,7 @@ void main() {
     expect(tab, contains('Receiving Blockers Detail'));
     expect(tab, contains('Inventory Mutation Readiness Phase'));
     expect(tab, contains('Inventory Runtime Path'));
+    expect(tab, contains('Inventory Runtime Closure'));
     expect(tab, contains('Approval Runtime Path'));
     expect(tab, contains('Receiving Runtime Path'));
     expect(tab, contains('Approval Handoff'));
@@ -150,6 +151,12 @@ void main() {
     expect(
       tab,
       contains(
+        'Keep the remaining purchase-order runtime understandable in one operational pass: approval handoff, receiving readiness, blockers, handoff target, and the last known runtime state all stay visible without leaving the POS inventory surface.',
+      ),
+    );
+    expect(
+      tab,
+      contains(
         'The purchase order is ready for Office review, but POS does not execute approval. Operators can verify readiness and hand off the order to the Office-owned workflow only.',
       ),
     );
@@ -159,12 +166,23 @@ void main() {
         'The receipt confirmation contract exists and can update stock truthfully for the remaining quantity. Use the runtime action only when the inbound goods are physically verified.',
       ),
     );
+    expect(
+      tab,
+      contains('Line-level risk / quantity / expected / received context:'),
+    );
     expect(tab, contains('Ready to approve'));
     expect(tab, contains('Approved'));
     expect(tab, contains('Ready to receive'));
     expect(tab, contains('Received / closed'));
     expect(tab, contains('Check Approval Handoff'));
     expect(tab, contains('Confirm Remaining Receipt'));
+    expect(tab, contains('onPressed: runtimeClosure.canCheckApproval'));
+    expect(
+      tab,
+      contains(
+        'onPressed: canConfirmReceipt && runtimeClosure.canConfirmReceipt',
+      ),
+    );
     expect(tab, contains('Office-owned execution'));
     expect(
       tab,
@@ -174,6 +192,8 @@ void main() {
     );
     expect(tab, contains('Execution owner Office'));
     expect(tab, contains('POS role Visibility and checklist only'));
+    expect(tab, contains('Blocked reasons'));
+    expect(tab, contains('Runtime line context'));
     expect(tab, contains('Approval handoff'));
     expect(tab, contains('Stock mutation unavailable'));
     expect(tab, contains('Domain boundary Payment / order / menu untouched'));
@@ -232,8 +252,27 @@ void main() {
     expect(provider, contains('inventoryPurchaseApprovalRuntimeProvider'));
     expect(provider, contains('class InventoryPurchaseReceivingRuntimeState'));
     expect(provider, contains('inventoryPurchaseReceivingRuntimeProvider'));
+    expect(provider, contains('class InventoryPurchaseRuntimeClosureSnapshot'));
+    expect(provider, contains('buildInventoryPurchaseRuntimeClosureSnapshot'));
+    expect(provider, contains('Handoff target'));
+    expect(provider, contains('Last runtime state'));
     expect(provider, contains('confirmRemainingReceipt'));
     expect(provider, contains('markCancelled'));
+    expect(provider, contains('Handoff target Office approval queue'));
+    expect(provider, contains('Handoff target POS receiving contract'));
+    expect(provider, contains('Last runtime state none yet'));
+    expect(
+      provider,
+      contains(
+        'POS can prepare the purchase order for handoff, but Office still owns approval execution and the backend does not yet allow receipt confirmation.',
+      ),
+    );
+    expect(
+      provider,
+      contains(
+        'Approval truth already exists, so POS can use the tracked receipt contract after physical inbound verification while keeping approval execution outside POS.',
+      ),
+    );
     expect(
       provider,
       contains(
@@ -298,6 +337,13 @@ void main() {
     );
     expect(tab, isNot(contains('InventoryPurchaseScreen')));
     expect(tab, isNot(contains('office_approve_inventory_purchase_order')));
+    expect(
+      tab,
+      isNot(contains("rpc('office_approve_inventory_purchase_order'")),
+    );
+    expect(tab, isNot(contains("from('payments')")));
+    expect(tab, isNot(contains("from('orders')")));
+    expect(tab, isNot(contains("from('tables')")));
     expect(tab, isNot(contains('Confirm Receipt')));
     expect(tab, isNot(contains('Approve Purchase Order')));
     expect(tab, isNot(contains('Run Supplier Approval')));
@@ -309,5 +355,16 @@ void main() {
       isNot(contains('office_get_inventory_purchase_order_detail')),
     );
     expect(service, isNot(contains('office_approve_inventory_purchase_order')));
+    expect(
+      service,
+      isNot(contains("rpc('office_approve_inventory_purchase_order'")),
+    );
+    expect(
+      provider,
+      isNot(contains('office_approve_inventory_purchase_order')),
+    );
+    expect(provider, isNot(contains("from('payments')")));
+    expect(provider, isNot(contains("from('orders')")));
+    expect(provider, isNot(contains("from('tables')")));
   });
 }

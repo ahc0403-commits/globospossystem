@@ -2988,6 +2988,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               3,
         )
         .length;
+    final pendingLineCount = lineItems.where(_isReceivingLinePending).length;
     final canConfirmReceipt =
         storeId != null &&
         _canConfirmInventoryReceipt(
@@ -2995,6 +2996,14 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           remainingBase: remainingBase,
         ) &&
         !receivingRuntime.isSubmitting;
+    final runtimeClosure = buildInventoryPurchaseRuntimeClosureSnapshot(
+      order: order,
+      approvalRuntime: approvalRuntime,
+      receivingRuntime: receivingRuntime,
+      blockedLineCount: blockedLineCount,
+      pendingLineCount: pendingLineCount,
+      attentionLineCount: blockedLineCount,
+    );
 
     return Container(
       width: double.infinity,
@@ -3024,6 +3033,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             ),
           ),
           const SizedBox(height: 8),
+          _buildInventoryRuntimeClosureSection(
+            runtimeClosure: runtimeClosure,
+            lineItems: lineItems,
+            requestedDate: requestedDate,
+            orderStatus: orderStatus,
+          ),
+          const SizedBox(height: 8),
           _buildInventoryRuntimePathCard(
             title: 'Approval Runtime Path',
             statusLabel: approvalStateLabel,
@@ -3042,12 +3058,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               ),
             ],
             action: FilledButton.tonalIcon(
-              onPressed: approvalRuntime.isEvaluating
-                  ? null
-                  : () => _runInventoryApprovalHandoffCheck(
-                      context,
-                      order: order,
-                    ),
+              onPressed: runtimeClosure.canCheckApproval
+                  ? () =>
+                        _runInventoryApprovalHandoffCheck(context, order: order)
+                  : null,
               icon: approvalRuntime.isEvaluating
                   ? const SizedBox(
                       width: 14,
@@ -3080,7 +3094,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               ),
             ],
             action: FilledButton.icon(
-              onPressed: canConfirmReceipt
+              onPressed: canConfirmReceipt && runtimeClosure.canConfirmReceipt
                   ? () => _showConfirmInventoryPurchaseReceiptDialog(
                       context,
                       storeId: storeId,
@@ -3107,6 +3121,261 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               ),
             ),
             result: receivingRuntime.result,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInventoryRuntimeClosureSection({
+    required InventoryPurchaseRuntimeClosureSnapshot runtimeClosure,
+    required List<Map<String, dynamic>> lineItems,
+    required String? requestedDate,
+    required String orderStatus,
+  }) {
+    final topRuntimeLines = lineItems.take(3).toList();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Inventory Runtime Closure',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Keep the remaining purchase-order runtime understandable in one operational pass: approval handoff, receiving readiness, blockers, handoff target, and the last known runtime state all stay visible without leaving the POS inventory surface.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildIngredientMetaChip(
+                runtimeClosure.approvalStateLabel,
+                color: _inventoryApprovalRuntimeStateColor(
+                  runtimeClosure.approvalStateLabel,
+                ),
+              ),
+              _buildIngredientMetaChip(
+                runtimeClosure.receivingStateLabel,
+                color: _inventoryReceivingRuntimeStateColor(
+                  runtimeClosure.receivingStateLabel,
+                ),
+              ),
+              _buildIngredientMetaChip(
+                runtimeClosure.handoffTarget,
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                runtimeClosure.lastRuntimeStateLabel,
+                color: runtimeClosure.lastRuntimeResult == null
+                    ? AppColors.surface2
+                    : _inventoryRuntimeResultColor(
+                        runtimeClosure.lastRuntimeResult!.kind,
+                      ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            runtimeClosure.operatorSummary,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Blocked reasons',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 6),
+          if (runtimeClosure.blockedReasons.isEmpty)
+            Text(
+              'No extra blocked reason is visible beyond the tracked runtime labels.',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            )
+          else
+            Column(
+              children: runtimeClosure.blockedReasons
+                  .map(_buildInventoryRuntimeBlockedReasonRow)
+                  .toList(),
+            ),
+          const SizedBox(height: 10),
+          Text(
+            'Runtime line context',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 6),
+          if (topRuntimeLines.isEmpty)
+            Text(
+              'No line-level runtime context is visible for the selected order.',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            )
+          else
+            Column(
+              children: topRuntimeLines
+                  .map(
+                    (line) => _buildInventoryRuntimeLineContextRow(
+                      line,
+                      requestedDate: requestedDate,
+                      orderStatus: orderStatus,
+                    ),
+                  )
+                  .toList(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInventoryRuntimeBlockedReasonRow(String reason) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Text(
+        reason,
+        style: GoogleFonts.notoSansKr(
+          color: AppColors.textSecondary,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInventoryRuntimeLineContextRow(
+    Map<String, dynamic> line, {
+    required String? requestedDate,
+    required String orderStatus,
+  }) {
+    final productMap = line['product'] as Map<String, dynamic>?;
+    final productName =
+        productMap?['name']?.toString() ??
+        line['product_id']?.toString() ??
+        line['id']?.toString() ??
+        '-';
+    final orderedBase =
+        (line['ordered_quantity_base'] as num?)?.toDouble() ?? 0;
+    final expectedBase =
+        (line['recommended_quantity_base'] as num?)?.toDouble() ?? 0;
+    final receivedBase =
+        (line['received_quantity_base'] as num?)?.toDouble() ?? 0;
+    final remainingBase =
+        (line['remaining_quantity_base'] as num?)?.toDouble() ?? 0;
+    final riskSummary =
+        line['supplier_risk_summary']?.toString() ??
+        _inventorySupplierRiskSummaryLabel(
+          receiptVisibilityStatus:
+              line['receipt_visibility_status']?.toString() ?? 'pending',
+          unitPriceDriftLabel: _inventoryUnitPriceDriftLabel(
+            currentUnitPrice: (line['unit_price'] as num?)?.toDouble() ?? 0,
+            previousUnitPrice:
+                ((line['supplier_history'] as List?)?.isNotEmpty ?? false)
+                ? ((((line['supplier_history'] as List).first
+                              as Map<String, dynamic>)['unit_price']
+                          as num?)
+                      ?.toDouble())
+                : null,
+          ),
+          leadTimeRiskLabel: _inventoryLeadTimeRiskLabel(
+            requestedDate: requestedDate,
+            supplierLeadTimeDays:
+                ((line['supplier_item']
+                            as Map<String, dynamic>?)?['lead_time_days']
+                        as num?)
+                    ?.toInt() ??
+                0,
+            remainingBase: remainingBase,
+            orderStatus: orderStatus,
+          ),
+        );
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            productName,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildIngredientMetaChip(
+                'Expected ${expectedBase.toStringAsFixed(3)}',
+              ),
+              _buildIngredientMetaChip(
+                'Received ${receivedBase.toStringAsFixed(3)}',
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                'Remaining ${remainingBase.toStringAsFixed(3)}',
+                color: remainingBase > 0
+                    ? AppColors.amber500
+                    : AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                'Ordered ${orderedBase.toStringAsFixed(3)}',
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Line-level risk / quantity / expected / received context: $riskSummary.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
           ),
         ],
       ),
