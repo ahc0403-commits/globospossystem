@@ -32,6 +32,10 @@ void main() {
       expect(tab, contains('Supplier Attention Ordering'));
       expect(tab, contains('Receiving Readiness Summary'));
       expect(tab, contains('Receiving Blockers Detail'));
+      expect(tab, contains('Inventory Mutation Readiness Phase'));
+      expect(tab, contains('Approval Handoff'));
+      expect(tab, contains('Receiving Confirmation Readiness'));
+      expect(tab, contains('Stock Mutation Guardrail'));
       expect(tab, contains('Receipt Visibility'));
       expect(tab, contains('Recent Receipts'));
       expect(tab, contains('Receipt Line Provenance'));
@@ -118,6 +122,29 @@ void main() {
           'Read the current receiving blockers without opening receipt confirmation, supplier approval, or stock mutation workflows.',
         ),
       );
+      expect(
+        tab,
+        contains(
+          'Use these guardrails to confirm POS remains responsible for visibility, readiness, and operator checklist coverage before any Office-owned approval, receipt confirmation, or stock mutation workflow is considered.',
+        ),
+      );
+      expect(
+        tab,
+        contains(
+          'POS keeps the approval handoff visible only. Office remains the execution owner for purchase-order approval, and this surface does not expose approval actions or supplier-response mutations.',
+        ),
+      );
+      expect(
+        tab,
+        contains(
+          'Tracked inbound quantities stay operator-facing signals only. This phase does not mutate stock, does not connect payment, order, or menu mutation flows, and does not transfer Office-owned execution into POS.',
+        ),
+      );
+      expect(tab, contains('Execution owner Office'));
+      expect(tab, contains('POS role Visibility and checklist only'));
+      expect(tab, contains('Approval handoff'));
+      expect(tab, contains('Stock mutation unavailable'));
+      expect(tab, contains('Domain boundary Payment / order / menu untouched'));
       expect(
         tab,
         contains('Receiving delayed beyond expected arrival window.'),
@@ -225,6 +252,9 @@ void main() {
       expect(tab, isNot(contains('Approve Purchase Order')));
       expect(tab, isNot(contains('Run Supplier Approval')));
       expect(tab, isNot(contains('Update Stock Now')));
+      expect(tab, isNot(contains('Execute Approval')));
+      expect(tab, isNot(contains('Confirm Receiving Now')));
+      expect(tab, isNot(contains('Run Stock Mutation')));
       expect(
         service,
         isNot(contains('office_get_inventory_purchase_order_detail')),

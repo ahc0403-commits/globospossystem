@@ -2293,6 +2293,15 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               orderStatus: status,
             ),
             const SizedBox(height: 12),
+            _buildInventoryMutationReadinessPhaseSection(
+              lineItems: sortedLines,
+              requestedDate: requestedDate,
+              orderStatus: status,
+              remainingBase: totalRemainingBase,
+              confirmedReceiptCount: confirmedReceiptCount,
+              latestReceiptStatus: latestReceiptStatus,
+            ),
+            const SizedBox(height: 12),
             _buildReceiptVisibilitySection(
               orderStatus: status,
               expectedBase: totalExpectedBase,
@@ -2567,6 +2576,212 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 color: AppColors.statusAvailable,
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInventoryMutationReadinessPhaseSection({
+    required List<Map<String, dynamic>> lineItems,
+    required String? requestedDate,
+    required String orderStatus,
+    required double remainingBase,
+    required int confirmedReceiptCount,
+    required String? latestReceiptStatus,
+  }) {
+    final blockerRows = _inventoryReceivingBlockerRows(
+      lineItems,
+      requestedDate: requestedDate,
+      orderStatus: orderStatus,
+    );
+    final receivedLineCount = lineItems
+        .where((line) => _isReceivingLineReceived(line))
+        .length;
+    final pendingLineCount = lineItems
+        .where((line) => _isReceivingLinePending(line))
+        .length;
+    final attentionLineCount = lineItems
+        .where(
+          (line) =>
+              _inventorySupplierAttentionPriority(
+                line,
+                requestedDate: requestedDate,
+                orderStatus: orderStatus,
+              ) >=
+              3,
+        )
+        .length;
+    final readinessState = _inventoryReceiptReadinessLabel(
+      orderStatus: orderStatus,
+      remainingBase: remainingBase,
+      confirmedReceiptCount: confirmedReceiptCount,
+    );
+    final approvalHandoffLabel = _inventoryApprovalHandoffLabel(
+      orderStatus: orderStatus,
+      blockerRows: blockerRows,
+    );
+    final approvalHandoffColor = _inventoryApprovalHandoffColor(
+      approvalHandoffLabel,
+    );
+    final latestReceiptLabel = latestReceiptStatus == null
+        ? 'Latest receipt unavailable'
+        : 'Latest receipt ${latestReceiptStatus.toUpperCase()}';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Inventory Mutation Readiness Phase',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Use these guardrails to confirm POS remains responsible for visibility, readiness, and operator checklist coverage before any Office-owned approval, receipt confirmation, or stock mutation workflow is considered.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _buildInventoryMutationReadinessCard(
+            title: 'Approval Handoff',
+            borderColor: approvalHandoffColor,
+            chips: [
+              _buildIngredientMetaChip(
+                approvalHandoffLabel,
+                color: approvalHandoffColor,
+              ),
+              _buildIngredientMetaChip(
+                'Execution owner Office',
+                color: AppColors.statusOccupied,
+              ),
+              _buildIngredientMetaChip(
+                'POS role Visibility and checklist only',
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                'Open blockers ${blockerRows.length}',
+                color: blockerRows.isNotEmpty
+                    ? AppColors.amber500
+                    : AppColors.statusAvailable,
+              ),
+            ],
+            narrative:
+                'POS keeps the approval handoff visible only. Office remains the execution owner for purchase-order approval, and this surface does not expose approval actions or supplier-response mutations.',
+          ),
+          const SizedBox(height: 8),
+          _buildInventoryMutationReadinessCard(
+            title: 'Receiving Confirmation Readiness',
+            borderColor: _receiptReadinessColor(orderStatus, remainingBase),
+            chips: [
+              _buildIngredientMetaChip(
+                'Readiness $readinessState',
+                color: _receiptReadinessColor(orderStatus, remainingBase),
+              ),
+              _buildIngredientMetaChip(
+                'Received lines $receivedLineCount',
+                color: receivedLineCount > 0
+                    ? AppColors.statusAvailable
+                    : AppColors.surface2,
+              ),
+              _buildIngredientMetaChip(
+                'Pending lines $pendingLineCount',
+                color: pendingLineCount > 0
+                    ? AppColors.amber500
+                    : AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                'Attention lines $attentionLineCount',
+                color: attentionLineCount > 0
+                    ? AppColors.statusOccupied
+                    : AppColors.statusAvailable,
+              ),
+            ],
+            narrative:
+                '${_inventoryReceiptReadinessNarrative(orderStatus: orderStatus, remainingBase: remainingBase, confirmedReceiptCount: confirmedReceiptCount, hasReceiptHistory: latestReceiptStatus != null)} Receipt history and blocker detail remain review-only here, so operators can assess readiness without opening receipt execution.',
+          ),
+          const SizedBox(height: 8),
+          _buildInventoryMutationReadinessCard(
+            title: 'Stock Mutation Guardrail',
+            borderColor: AppColors.surface2,
+            chips: [
+              _buildIngredientMetaChip(
+                'Stock mutation unavailable',
+                color: AppColors.statusCancelled,
+              ),
+              _buildIngredientMetaChip(
+                'Remaining base ${remainingBase.toStringAsFixed(3)}',
+                color: remainingBase > 0
+                    ? AppColors.amber500
+                    : AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                'Confirmed receipts $confirmedReceiptCount',
+                color: confirmedReceiptCount > 0
+                    ? AppColors.statusAvailable
+                    : AppColors.surface2,
+              ),
+              _buildIngredientMetaChip(latestReceiptLabel),
+              _buildIngredientMetaChip(
+                'Domain boundary Payment / order / menu untouched',
+                color: AppColors.statusAvailable,
+              ),
+            ],
+            narrative:
+                'Tracked inbound quantities stay operator-facing signals only. This phase does not mutate stock, does not connect payment, order, or menu mutation flows, and does not transfer Office-owned execution into POS.',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInventoryMutationReadinessCard({
+    required String title,
+    required Color borderColor,
+    required List<Widget> chips,
+    required String narrative,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(spacing: 8, runSpacing: 8, children: chips),
+          const SizedBox(height: 8),
+          Text(
+            narrative,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
           ),
         ],
       ),
@@ -4183,6 +4398,40 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       return 'This order is not receipt-ready in its current status. Visibility is read-only and does not open approval or correction flows.';
     }
     return 'This order still waits on an earlier workflow step before receipt confirmation becomes relevant. Visibility remains read-only here.';
+  }
+
+  String _inventoryApprovalHandoffLabel({
+    required String orderStatus,
+    required List<Map<String, dynamic>> blockerRows,
+  }) {
+    if (orderStatus == 'office_approved' ||
+        orderStatus == 'ordered' ||
+        orderStatus == 'partially_received' ||
+        orderStatus == 'received') {
+      return 'Approval handoff acknowledged';
+    }
+    if (orderStatus == 'office_rejected' || orderStatus == 'cancelled') {
+      return 'Approval handoff blocked';
+    }
+    if (blockerRows.any(
+      (row) => (row['severity']?.toString() ?? 'healthy') == 'critical',
+    )) {
+      return 'Approval handoff escalated';
+    }
+    return 'Approval handoff pending';
+  }
+
+  Color _inventoryApprovalHandoffColor(String label) {
+    if (label.endsWith('acknowledged')) {
+      return AppColors.statusAvailable;
+    }
+    if (label.endsWith('pending')) {
+      return AppColors.amber500;
+    }
+    if (label.endsWith('escalated') || label.endsWith('blocked')) {
+      return AppColors.statusOccupied;
+    }
+    return AppColors.surface2;
   }
 
   Future<void> _showRecommendationRunDialog({
