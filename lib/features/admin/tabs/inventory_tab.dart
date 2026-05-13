@@ -2287,6 +2287,12 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               confirmedReceiptCount: confirmedReceiptCount,
             ),
             const SizedBox(height: 12),
+            _buildReceivingBlockersDetailSection(
+              lineItems: sortedLines,
+              requestedDate: requestedDate,
+              orderStatus: status,
+            ),
+            const SizedBox(height: 12),
             _buildReceiptVisibilitySection(
               orderStatus: status,
               expectedBase: totalExpectedBase,
@@ -2436,6 +2442,131 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReceivingBlockersDetailSection({
+    required List<Map<String, dynamic>> lineItems,
+    required String? requestedDate,
+    required String orderStatus,
+  }) {
+    final blockerRows = _inventoryReceivingBlockerRows(
+      lineItems,
+      requestedDate: requestedDate,
+      orderStatus: orderStatus,
+    );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Receiving Blockers Detail',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Read the current receiving blockers without opening receipt confirmation, supplier approval, or stock mutation workflows.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Column(
+            children: blockerRows
+                .map((row) => _buildReceivingBlockerRow(row))
+                .toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReceivingBlockerRow(Map<String, dynamic> row) {
+    final severity = row['severity']?.toString() ?? 'healthy';
+    final title = row['title']?.toString() ?? 'Receiving blocker';
+    final narrative = row['narrative']?.toString() ?? '';
+    final nextHint = row['next_hint']?.toString() ?? '';
+    final affectedPurchaseOrders = row['affected_po_count']?.toString() ?? '0';
+    final impactedSuppliers = row['impacted_supplier_count']?.toString() ?? '0';
+    final oldestWaitingAge = row['oldest_waiting_age']?.toString() ?? '0d';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: _inventoryReceivingBlockerSeverityColor(severity),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      narrative,
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _buildIngredientMetaChip(
+                severity.toUpperCase(),
+                color: _inventoryReceivingBlockerSeverityColor(severity),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildIngredientMetaChip('Affected PO $affectedPurchaseOrders'),
+              _buildIngredientMetaChip(
+                'Impacted suppliers $impactedSuppliers',
+                color: AppColors.amber500,
+              ),
+              _buildIngredientMetaChip('Oldest wait $oldestWaitingAge'),
+              _buildIngredientMetaChip(
+                'Next hint $nextHint',
+                color: AppColors.statusAvailable,
+              ),
+            ],
           ),
         ],
       ),
@@ -3767,6 +3898,156 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     }
     return 'Receiving posture is currently unavailable from the tracked read model, so operators should rely on the existing receipt visibility surfaces only.';
   }
+
+  List<Map<String, dynamic>> _inventoryReceivingBlockerRows(
+    List<Map<String, dynamic>> lineItems, {
+    required String? requestedDate,
+    required String orderStatus,
+  }) {
+    final pendingLines = lineItems.where(_isReceivingLinePending).toList();
+    final overdueLines = pendingLines
+        .where(
+          (line) => _inventoryLeadTimeRiskLabel(
+            requestedDate: requestedDate,
+            supplierLeadTimeDays:
+                ((line['supplier_item']
+                            as Map<String, dynamic>?)?['lead_time_days']
+                        as num?)
+                    ?.toInt() ??
+                0,
+            remainingBase:
+                (line['remaining_quantity_base'] as num?)?.toDouble() ?? 0,
+            orderStatus: orderStatus,
+          ).contains('overdue'),
+        )
+        .toList();
+    final criticalLines = lineItems
+        .where(
+          (line) =>
+              _inventorySupplierAttentionPriority(
+                line,
+                requestedDate: requestedDate,
+                orderStatus: orderStatus,
+              ) >=
+              4,
+        )
+        .toList();
+
+    final rows = <Map<String, dynamic>>[];
+
+    if (pendingLines.isNotEmpty) {
+      rows.add({
+        'title': 'Supplier follow-up pending',
+        'severity': overdueLines.isNotEmpty ? 'risk' : 'watch',
+        'affected_po_count': 1,
+        'impacted_supplier_count': _inventoryImpactedSupplierCount(
+          pendingLines,
+        ),
+        'oldest_waiting_age': _inventoryOldestWaitingAge(
+          requestedDate: requestedDate,
+        ),
+        'narrative':
+            '${pendingLines.length} purchase order line(s) still waiting supplier confirmation or receipt progress.',
+        'next_hint': overdueLines.isNotEmpty
+            ? 'Check overdue supplier responses'
+            : 'Monitor inbound confirmation',
+      });
+    }
+
+    if (overdueLines.isNotEmpty) {
+      rows.add({
+        'title': 'Arrival window delayed',
+        'severity': 'critical',
+        'affected_po_count': 1,
+        'impacted_supplier_count': _inventoryImpactedSupplierCount(
+          overdueLines,
+        ),
+        'oldest_waiting_age': _inventoryOldestWaitingAge(
+          requestedDate: requestedDate,
+        ),
+        'narrative': 'Receiving delayed beyond expected arrival window.',
+        'next_hint': 'Escalate delayed deliveries',
+      });
+    }
+
+    if (criticalLines.isNotEmpty) {
+      rows.add({
+        'title': 'High-risk supplier lines',
+        'severity': 'risk',
+        'affected_po_count': 1,
+        'impacted_supplier_count': _inventoryImpactedSupplierCount(
+          criticalLines,
+        ),
+        'oldest_waiting_age': _inventoryOldestWaitingAge(
+          requestedDate: requestedDate,
+        ),
+        'narrative':
+            '${criticalLines.length} purchase order line(s) combine receipt pressure with supplier or lead-time risk.',
+        'next_hint': 'Review top attention items',
+      });
+    }
+
+    if (rows.isEmpty) {
+      rows.add({
+        'title': 'No active receiving blockers',
+        'severity': 'healthy',
+        'affected_po_count': 0,
+        'impacted_supplier_count': 0,
+        'oldest_waiting_age': '0d',
+        'narrative':
+            'Current receiving posture looks healthy from the tracked POS read model.',
+        'next_hint': 'Continue read-only monitoring',
+      });
+    }
+
+    return rows;
+  }
+
+  int _inventoryImpactedSupplierCount(List<Map<String, dynamic>> lines) {
+    final supplierKeys = lines
+        .map((line) {
+          final supplierItem = line['supplier_item'] as Map<String, dynamic>?;
+          return supplierItem?['id']?.toString() ??
+              supplierItem?['supplier_sku']?.toString() ??
+              line['product_id']?.toString() ??
+              line['id']?.toString();
+        })
+        .whereType<String>()
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    return supplierKeys.length;
+  }
+
+  String _inventoryOldestWaitingAge({required String? requestedDate}) {
+    if (requestedDate == null || requestedDate.isEmpty) {
+      return 'unavailable';
+    }
+    final requestedAt = DateTime.tryParse(requestedDate);
+    if (requestedAt == null) {
+      return 'unavailable';
+    }
+    final today = DateTime.now();
+    final requestedLocal = DateTime(
+      requestedAt.year,
+      requestedAt.month,
+      requestedAt.day,
+    );
+    final currentLocal = DateTime(today.year, today.month, today.day);
+    final days = currentLocal.difference(requestedLocal).inDays;
+    if (days <= 0) {
+      return '0d';
+    }
+    return '${days}d';
+  }
+
+  Color _inventoryReceivingBlockerSeverityColor(String severity) =>
+      switch (severity) {
+        'healthy' => AppColors.statusAvailable,
+        'watch' => AppColors.amber500,
+        'risk' => AppColors.statusOccupied,
+        'critical' => AppColors.statusCancelled,
+        _ => AppColors.surface2,
+      };
 
   List<String> _inventoryTopAttentionHighlights(
     List<Map<String, dynamic>> lineItems, {
