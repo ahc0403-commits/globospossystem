@@ -14,6 +14,9 @@ void main() {
 
     expect(tab, contains('Purchase Overview'));
     expect(tab, contains('Inventory Operating Runtime Summary'));
+    expect(tab, contains('Open PO Reconciliation Summary'));
+    expect(tab, contains('Store-Level Inventory Action Queue'));
+    expect(tab, contains('Supplier Receiving Bottleneck View'));
     expect(tab, contains('Purchase Review Detail'));
     expect(tab, contains('Approval Gap'));
     expect(tab, contains('Review Focus'));
@@ -34,6 +37,7 @@ void main() {
     expect(tab, contains('Inventory Mutation Readiness Phase'));
     expect(tab, contains('Inventory Runtime Path'));
     expect(tab, contains('Inventory Runtime Closure'));
+    expect(tab, contains('Receiving Execution Safety Layer'));
     expect(tab, contains('Approval Runtime Path'));
     expect(tab, contains('Receiving Runtime Path'));
     expect(tab, contains('Approval Handoff'));
@@ -231,14 +235,60 @@ void main() {
     expect(tab, contains('runtimeSurface.receivingReadinessLabel'));
     expect(tab, contains('runtimeSurface.receiptVisibilityStatusLabel'));
     expect(tab, contains('runtimeSurface.lineContexts'));
+    expect(tab, contains('runtimeSurface.receivingSafety'));
+    expect(tab, contains('summary.reconciliationSummary'));
+    expect(tab, contains('summary.actionQueue'));
+    expect(tab, contains('summary.supplierBottlenecks'));
     expect(tab, contains('Visible snapshot lines'));
     expect(tab, contains('Visible purchase orders'));
     expect(tab, contains('Blocked reasons '));
+    expect(tab, contains('Recommended '));
+    expect(tab, contains('Ordered '));
+    expect(tab, contains('Received '));
+    expect(tab, contains('Remaining '));
+    expect(tab, contains('Delayed '));
+    expect(tab, contains('summary.mismatchIndicatorLabel'));
+    expect(tab, contains('Queue next action:'));
+    expect(
+      tab,
+      contains(
+        'Reduce duplicate receiving fear by showing the last runtime result, retry discipline, unknown outcome handling, and the next safe recovery step from provider truth.',
+      ),
+    );
+    expect(
+      tab,
+      contains(
+        'Use the provider-owned queue to see which open purchase orders need Office handoff, receiving, follow-up, or escalation first.',
+      ),
+    );
+    expect(
+      tab,
+      contains(
+        'Review supplier-grouped queue pressure so follow-up happens at the supplier bottleneck level, not only one line at a time.',
+      ),
+    );
+    expect(
+      tab,
+      contains(
+        'Review the current store-scoped recommendation-to-receiving posture before drilling into one purchase order.',
+      ),
+    );
 
     expect(provider, contains('class InventoryPurchaseOverviewState'));
     expect(provider, contains('class InventoryPurchaseOperatingSummary'));
+    expect(provider, contains('class InventoryPurchaseActionQueueEntry'));
+    expect(provider, contains('class InventoryPurchaseReconciliationSummary'));
+    expect(
+      provider,
+      contains('class InventoryPurchaseSupplierBottleneckState'),
+    );
+    expect(provider, contains('class InventoryPurchaseReceivingSafetyState'));
     expect(provider, contains('class InventoryPurchaseRuntimeSurfaceState'));
     expect(provider, contains('buildInventoryPurchaseOperatingSummary'));
+    expect(provider, contains('buildInventoryPurchaseActionQueue'));
+    expect(provider, contains('buildInventoryPurchaseReconciliationSummary'));
+    expect(provider, contains('buildInventoryPurchaseSupplierBottlenecks'));
+    expect(provider, contains('buildInventoryPurchaseReceivingSafetyState'));
     expect(provider, contains('buildInventoryPurchaseRuntimeBlockerRows'));
     expect(provider, contains('inventoryPurchaseOverviewProvider'));
     expect(provider, contains('class InventoryPurchaseRecommendationRunState'));
@@ -267,6 +317,9 @@ void main() {
     expect(provider, contains('buildInventoryPurchaseRuntimeClosureSnapshot'));
     expect(provider, contains('inventoryPurchaseRuntimeSurfaceProvider'));
     expect(provider, contains('inventoryPurchaseOperatingSummaryProvider'));
+    expect(provider, contains('reconciliationSummary'));
+    expect(provider, contains('actionQueue'));
+    expect(provider, contains('supplierBottlenecks'));
     expect(provider, contains('receivedLineCount'));
     expect(provider, contains('blockedLineCount'));
     expect(provider, contains('pendingLineCount'));
@@ -307,6 +360,7 @@ void main() {
       contains('class InventoryPurchaseRuntimeLineContextState'),
     );
     expect(provider, contains('lineContexts'));
+    expect(provider, contains('receivingSafety'));
     expect(provider, contains('runtimeClosure'));
     expect(provider, contains('Handoff target'));
     expect(provider, contains('Last runtime state'));
@@ -315,6 +369,20 @@ void main() {
     expect(provider, contains('Handoff target Office approval queue'));
     expect(provider, contains('Handoff target POS receiving contract'));
     expect(provider, contains('Last runtime state none yet'));
+    expect(provider, contains('Office handoff now'));
+    expect(provider, contains('Ready to receive now'));
+    expect(provider, contains('Blocked / supplier follow-up'));
+    expect(provider, contains('Overdue / escalation'));
+    expect(provider, contains('Mismatch delayed inbound'));
+    expect(provider, contains('Mismatch recommendation not converted'));
+    expect(provider, contains('Mismatch approval queue'));
+    expect(provider, contains('Mismatch receiving backlog'));
+    expect(provider, contains('Delayed inbound cluster'));
+    expect(provider, contains('Approval handoff cluster'));
+    expect(provider, contains('Receiving follow-up cluster'));
+    expect(provider, contains('Retry discipline'));
+    expect(provider, contains('Unknown outcome'));
+    expect(provider, contains('Follow-up'));
     expect(provider, contains('Recommendation running'));
     expect(provider, contains('Latest snapshot visible'));
     expect(provider, contains('PO creation ready'));
@@ -440,6 +508,13 @@ void main() {
     expect(tab, isNot(contains('_inventoryReceivingRuntimeNarrative(')));
     expect(tab, isNot(contains('_inventoryReceiptReadinessLabel(')));
     expect(tab, isNot(contains('_inventoryReceiptReadinessNarrative(')));
+    expect(tab, isNot(contains('buildInventoryPurchaseActionQueue(')));
+    expect(
+      tab,
+      isNot(contains('buildInventoryPurchaseReconciliationSummary(')),
+    );
+    expect(tab, isNot(contains('buildInventoryPurchaseSupplierBottlenecks(')));
+    expect(tab, isNot(contains('buildInventoryPurchaseReceivingSafetyState(')));
     expect(tab, isNot(contains('Confirm Receipt')));
     expect(tab, isNot(contains('Approve Purchase Order')));
     expect(tab, isNot(contains('Run Supplier Approval')));
