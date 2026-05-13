@@ -28,6 +28,7 @@ void main() {
       expect(tab, contains('Recent Purchase Orders'));
       expect(tab, contains('Purchase Order Detail'));
       expect(tab, contains('Order Attention Banner'));
+      expect(tab, contains('Top attention items'));
       expect(tab, contains('Supplier Attention Ordering'));
       expect(tab, contains('Receipt Visibility'));
       expect(tab, contains('Recent Receipts'));

@@ -2343,6 +2343,11 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       lineItems: lineItems,
     );
     final attentionColor = _inventoryOrderAttentionColor(attentionLabel);
+    final topHighlights = _inventoryTopAttentionHighlights(
+      lineItems,
+      requestedDate: requestedDate,
+      orderStatus: status,
+    );
     final highlightedLines = lineItems
         .where(
           (line) =>
@@ -2396,6 +2401,30 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               ),
             ],
           ),
+          if (topHighlights.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Top attention items',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: topHighlights
+                  .map(
+                    (highlight) => _buildIngredientMetaChip(
+                      highlight,
+                      color: AppColors.statusOccupied,
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
         ],
       ),
     );
@@ -3585,6 +3614,34 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       return 1;
     }
     return 0;
+  }
+
+  List<String> _inventoryTopAttentionHighlights(
+    List<Map<String, dynamic>> lineItems, {
+    required String? requestedDate,
+    required String orderStatus,
+  }) {
+    return lineItems
+        .where(
+          (line) =>
+              _inventorySupplierAttentionPriority(
+                line,
+                requestedDate: requestedDate,
+                orderStatus: orderStatus,
+              ) >=
+              3,
+        )
+        .take(3)
+        .map((line) {
+          final productName =
+              (line['product'] as Map<String, dynamic>?)?['name']?.toString() ??
+              line['product_id']?.toString() ??
+              '-';
+          final riskSummary =
+              line['supplier_risk_summary']?.toString() ?? 'risk unavailable';
+          return '$productName · $riskSummary';
+        })
+        .toList();
   }
 
   String _inventoryOrderAttentionLabel({
