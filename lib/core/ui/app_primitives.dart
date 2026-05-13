@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'app_theme.dart';
+import 'pos_design_tokens.dart';
 
+/// Legacy `App*` primitives retained for current tracked runtime paths.
+///
+/// They are implementation carriers, not redesign source-of-truth widgets.
+/// See `docs/office/TOAST_OPERATIONAL_UI_SOURCE_OF_TRUTH.md`.
 class AppPanel extends StatelessWidget {
   const AppPanel({
     super.key,
@@ -24,6 +29,7 @@ class AppPanel extends StatelessWidget {
         color: backgroundColor,
         borderRadius: AppRadius.md,
         border: Border.all(color: borderColor),
+        boxShadow: PosShadows.low,
       ),
       padding: padding,
       child: child,
@@ -55,7 +61,12 @@ class AppSectionHeader extends StatelessWidget {
               Text(title, style: AppTextStyles.operationalTitle(size: 28)),
               if (subtitle != null) ...[
                 const SizedBox(height: AppSpacing.xs),
-                Text(subtitle!, style: Theme.of(context).textTheme.bodySmall),
+                Text(
+                  subtitle!,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+                ),
               ],
             ],
           ),
@@ -82,11 +93,11 @@ class AppStatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final textColor = foregroundColor ?? color;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.14),
         borderRadius: AppRadius.pill,
-        border: Border.all(color: color.withValues(alpha: 0.45)),
+        border: Border.all(color: color.withValues(alpha: 0.32)),
       ),
       child: Text(
         label,
@@ -213,14 +224,8 @@ class AppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.surface0, Color(0xFF171915)],
-        ),
-      ),
+    return ColoredBox(
+      color: AppColors.surface0,
       child: SafeArea(
         child: Padding(padding: padding, child: child),
       ),

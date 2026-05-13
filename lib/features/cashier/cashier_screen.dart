@@ -644,11 +644,7 @@ class _SelectedOrderView extends StatelessWidget {
       children: [
         Text(
           'Table ${order.tableNumber}',
-          style: GoogleFonts.bebasNeue(
-            color: AppColors.textPrimary,
-            fontSize: 48,
-            letterSpacing: 1.2,
-          ),
+          style: AppTextStyles.operationalTitle(size: 34),
         ),
         const SizedBox(height: 6),
         Align(

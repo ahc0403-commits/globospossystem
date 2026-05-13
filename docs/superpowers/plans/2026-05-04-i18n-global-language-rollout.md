@@ -3,12 +3,13 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > [NEW UI SOURCE OF TRUTH]
-> The current UI source of truth is the Toast-style operating platform standard.
-> Toast-style is not limited to OrderWorkspace.
-> All Office, POS, and Admin operational surfaces must follow one light-first Toast-style operations shell.
-> Legacy dark/admin-template visual language, tablet-first/kiosk POS visual language, card-heavy dashboards, panel-heavy layouts, browser-like POS navigation, and old menu grouping are deprecated.
-> Preserve business logic, permissions, auth, route paths where possible, i18n, and data contracts.
-> Redesign UX, menu IA, shell, navigation, visual system, and shared components according to the Toast-style operating platform standard.
+> The current UI source of truth is
+> [docs/office/TOAST_OPERATIONAL_UI_SOURCE_OF_TRUTH.md](../../office/TOAST_OPERATIONAL_UI_SOURCE_OF_TRUTH.md).
+> Follow the Queue -> Select -> Act -> Optional Detail model.
+> Preserve business logic, permissions, auth, route paths where possible,
+> i18n, and data contracts.
+> Do not use dashboard-first, KPI-first, card-heavy, panel-heavy, dark-admin,
+> browser-like POS, or CRUD-first standards as the baseline.
 
 **Goal:** Rebuild the POS UI so every user-facing screen supports English, Korean, and Vietnamese, and allow language switching from anywhere in the app with immediate UI updates.
 
