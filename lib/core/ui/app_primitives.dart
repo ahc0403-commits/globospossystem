@@ -3,6 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'app_theme.dart';
 
+/// Legacy `App*` primitives retained for current tracked runtime paths.
+///
+/// They are implementation carriers, not redesign source-of-truth widgets.
+/// See `docs/office/TOAST_OPERATIONAL_UI_SOURCE_OF_TRUTH.md`.
 class AppPanel extends StatelessWidget {
   const AppPanel({
     super.key,

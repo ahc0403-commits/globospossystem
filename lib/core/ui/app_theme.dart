@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+/// Legacy dark-theme tokens retained for current tracked runtime paths.
+///
+/// They are implementation details, not redesign source-of-truth tokens.
+/// See `docs/office/TOAST_OPERATIONAL_UI_SOURCE_OF_TRUTH.md`.
 class AppColors {
   static const surface0 = Color(0xFF111210);
   static const surface1 = Color(0xFF1C1D1A);

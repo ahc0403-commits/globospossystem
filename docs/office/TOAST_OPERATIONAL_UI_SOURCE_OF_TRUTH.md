@@ -14,6 +14,10 @@ deprecated only:
 - `docs/ui_ux_operational_refresh_plan.md`
 - `docs/TOAST_SHELL_TRUTH_UP_2026_05_10.md`
 
+Pre-lock redesign and recovery slice documents from `2026-05-12` remain
+archival provenance only. They may inform scope history, but they do not define
+today's UI baseline.
+
 Companion documents:
 
 - [Legacy UI Standards Re-Audit](LEGACY_UI_STANDARDS_REAUDIT.md)
