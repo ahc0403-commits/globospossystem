@@ -36,28 +36,26 @@ class StoreSettings {
   final double? perPersonCharge;
 }
 
-final restaurantSettingsProvider =
-    FutureProvider.family<StoreSettings, String>((
-      ref,
-      storeId,
-    ) async {
-      final response = await supabase
-          .from('restaurants')
-          .select('operation_mode, per_person_charge')
-          .eq('id', storeId)
-          .single();
+final restaurantSettingsProvider = FutureProvider.family<StoreSettings, String>(
+  (ref, storeId) async {
+    final response = await supabase
+        .from('restaurants')
+        .select('operation_mode, per_person_charge')
+        .eq('id', storeId)
+        .single();
 
-      final mode =
-          response['operation_mode']?.toString().toLowerCase() ?? 'standard';
-      final rawCharge = response['per_person_charge'];
-      final charge = switch (rawCharge) {
-        num value => value.toDouble(),
-        String value => double.tryParse(value),
-        _ => null,
-      };
+    final mode =
+        response['operation_mode']?.toString().toLowerCase() ?? 'standard';
+    final rawCharge = response['per_person_charge'];
+    final charge = switch (rawCharge) {
+      num value => value.toDouble(),
+      String value => double.tryParse(value),
+      _ => null,
+    };
 
-      return StoreSettings(operationMode: mode, perPersonCharge: charge);
-    });
+    return StoreSettings(operationMode: mode, perPersonCharge: charge);
+  },
+);
 
 class WaiterScreen extends ConsumerStatefulWidget {
   const WaiterScreen({super.key});
@@ -119,9 +117,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
       _showOrderPanel = true;
       _orderPanelNonce = DateTime.now().millisecondsSinceEpoch;
     });
-    await ref
-        .read(orderProvider.notifier)
-        .loadActiveOrder(table.id, storeId);
+    await ref.read(orderProvider.notifier).loadActiveOrder(table.id, storeId);
   }
 
   void _onCancelOrderPanel() {
@@ -332,10 +328,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     final orderState = ref.watch(orderProvider);
     final restaurantSettings = storeId == null
         ? const AsyncValue<StoreSettings>.data(
-            StoreSettings(
-              operationMode: 'standard',
-              perPersonCharge: null,
-            ),
+            StoreSettings(operationMode: 'standard', perPersonCharge: null),
           )
         : ref.watch(restaurantSettingsProvider(storeId));
     final menuState = storeId == null
@@ -403,25 +396,24 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                             onCancelOrderItem: storeId == null
                                 ? null
                                 : (itemId) => orderNotifier.cancelOrderItem(
-                                      itemId,
-                                      storeId,
-                                    ),
+                                    itemId,
+                                    storeId,
+                                  ),
                             onEditOrderItemQuantity: storeId == null
                                 ? null
                                 : (itemId, qty) =>
-                                    orderNotifier.editOrderItemQuantity(
-                                      itemId,
-                                      storeId,
-                                      qty,
-                                    ),
-                            onTransferTable: storeId == null ||
+                                      orderNotifier.editOrderItemQuantity(
+                                        itemId,
+                                        storeId,
+                                        qty,
+                                      ),
+                            onTransferTable:
+                                storeId == null ||
                                     orderState.activeOrder == null
                                 ? null
                                 : () async {
                                     final newTable =
-                                        await _showTransferTableDialog(
-                                          storeId,
-                                        );
+                                        await _showTransferTableDialog(storeId);
                                     if (newTable == null) return;
                                     await orderNotifier.transferOrderTable(
                                       orderState.activeOrder!.id,
@@ -498,11 +490,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                             },
                             onTapTable: (table) {
                               if (storeId != null) {
-                                _onSelectTable(
-                                  table,
-                                  storeId,
-                                  isBuffetMode,
-                                );
+                                _onSelectTable(table, storeId, isBuffetMode);
                               }
                             },
                           ),
@@ -765,10 +753,9 @@ class _TableGridView extends StatelessWidget {
                           const Spacer(),
                           Text(
                             table.tableNumber,
-                            style: GoogleFonts.bebasNeue(
+                            style: AppTextStyles.operationalTitle(
+                              size: 32,
                               color: AppColors.textPrimary,
-                              fontSize: 40,
-                              letterSpacing: 1.2,
                             ),
                           ),
                           const SizedBox(height: 4),

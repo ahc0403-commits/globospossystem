@@ -223,149 +223,171 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                                   ),
                               itemCount: kitchenState.orders.length,
                               itemBuilder: (context, index) {
-                          final order = kitchenState.orders[index];
-                          final hasPending = order.items.any(
-                            (item) => item.status == 'pending',
-                          );
-                          final flashing = _flashingOrderIds.contains(
-                            order.orderId,
-                          );
-                          final completedFlashing = _completedOrderIds.contains(
-                            order.orderId,
-                          );
-                          final elapsed = _elapsedLabel(
-                            context,
-                            order.createdAt,
-                            _now,
-                          );
+                                final order = kitchenState.orders[index];
+                                final hasPending = order.items.any(
+                                  (item) => item.status == 'pending',
+                                );
+                                final flashing = _flashingOrderIds.contains(
+                                  order.orderId,
+                                );
+                                final completedFlashing = _completedOrderIds
+                                    .contains(order.orderId);
+                                final elapsed = _elapsedLabel(
+                                  context,
+                                  order.createdAt,
+                                  _now,
+                                );
 
                                 return KeyedSubtree(
                                   key: Key('kitchen_order_${order.orderId}'),
                                   child: AnimatedContainer(
-                            key: index == 0
-                                ? const Key('kitchen_first_order_card')
-                                : null,
-                            duration: const Duration(milliseconds: 260),
-                            decoration: BoxDecoration(
-                              color: AppColors.surface1,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: completedFlashing
-                                    ? AppColors.statusAvailable
-                                    : flashing
-                                    ? AppColors.amber500
-                                    : AppColors.surface2,
-                                width: flashing ? 2.5 : 1,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.4),
-                                  blurRadius: 16,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              children: [
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 10,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: hasPending
-                                        ? AppColors.amber500
-                                        : AppColors.surface2,
-                                    borderRadius: const BorderRadius.vertical(
-                                      top: Radius.circular(16),
+                                    key: index == 0
+                                        ? const Key('kitchen_first_order_card')
+                                        : null,
+                                    duration: const Duration(milliseconds: 260),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surface1,
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: completedFlashing
+                                            ? AppColors.statusAvailable
+                                            : flashing
+                                            ? AppColors.amber500
+                                            : AppColors.surface2,
+                                        width: flashing ? 2.5 : 1,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.4,
+                                          ),
+                                          blurRadius: 16,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Text(
-                                        'T${order.tableNumber}',
-                                        style: GoogleFonts.bebasNeue(
-                                          color: hasPending
-                                              ? AppColors.surface0
-                                              : AppColors.textPrimary,
-                                          fontSize: 32,
-                                          letterSpacing: 1.0,
-                                        ),
-                                      ),
-                                      const Spacer(),
-                                      Text(
-                                        elapsed,
-                                        style: GoogleFonts.notoSansKr(
-                                          color: hasPending
-                                              ? AppColors.surface0
-                                              : AppColors.textSecondary,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Expanded(
-                                  child: ListView.separated(
-                                    padding: const EdgeInsets.all(12),
-                                    itemCount: order.items.length,
-                                    separatorBuilder: (_, _) =>
-                                        const SizedBox(height: 8),
-                                    itemBuilder: (context, itemIndex) {
-                                      final item = order.items[itemIndex];
-                                      return InkWell(
-                                        key: (index == 0 && itemIndex == 0)
-                                            ? const Key(
-                                                'kitchen_advance_status_button',
-                                              )
-                                            : null,
-                                        onTap: () => _handleItemTap(
-                                          notifier,
-                                          order,
-                                          item,
-                                        ),
-                                        borderRadius: BorderRadius.circular(10),
-                                        child: Container(
+                                    child: Column(
+                                      children: [
+                                        Container(
+                                          width: double.infinity,
                                           padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 8,
+                                            horizontal: 12,
+                                            vertical: 10,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: AppColors.surface0,
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
-                                            border: Border.all(
-                                              color: AppColors.surface2,
-                                            ),
+                                            color: hasPending
+                                                ? AppColors.amber500
+                                                : AppColors.surface2,
+                                            borderRadius:
+                                                const BorderRadius.vertical(
+                                                  top: Radius.circular(16),
+                                                ),
                                           ),
                                           child: Row(
                                             children: [
                                               Text(
-                                                '${item.quantity}x',
-                                                style: GoogleFonts.bebasNeue(
-                                                  color: AppColors.amber500,
-                                                  fontSize: 24,
+                                                'T${order.tableNumber}',
+                                                style:
+                                                    AppTextStyles.operationalTitle(
+                                                      size: 28,
+                                                      color: hasPending
+                                                          ? AppColors.surface0
+                                                          : AppColors
+                                                                .textPrimary,
+                                                    ),
+                                              ),
+                                              const Spacer(),
+                                              Text(
+                                                elapsed,
+                                                style: GoogleFonts.notoSansKr(
+                                                  color: hasPending
+                                                      ? AppColors.surface0
+                                                      : AppColors.textSecondary,
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w700,
                                                 ),
                                               ),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                child: Text(
-                                                  item.label,
-                                                  style: GoogleFonts.notoSansKr(
-                                                    color:
-                                                        AppColors.textPrimary,
-                                                    fontSize: 14,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                              ),
-                                              _StatusChip(status: item.status),
                                             ],
                                           ),
                                         ),
+                                        Expanded(
+                                          child: ListView.separated(
+                                            padding: const EdgeInsets.all(12),
+                                            itemCount: order.items.length,
+                                            separatorBuilder: (_, _) =>
+                                                const SizedBox(height: 8),
+                                            itemBuilder: (context, itemIndex) {
+                                              final item =
+                                                  order.items[itemIndex];
+                                              return InkWell(
+                                                key:
+                                                    (index == 0 &&
+                                                        itemIndex == 0)
+                                                    ? const Key(
+                                                        'kitchen_advance_status_button',
+                                                      )
+                                                    : null,
+                                                onTap: () => _handleItemTap(
+                                                  notifier,
+                                                  order,
+                                                  item,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 10,
+                                                        vertical: 8,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color: AppColors.surface0,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          10,
+                                                        ),
+                                                    border: Border.all(
+                                                      color: AppColors.surface2,
+                                                    ),
+                                                  ),
+                                                  child: Row(
+                                                    children: [
+                                                      Text(
+                                                        '${item.quantity}x',
+                                                        style: Theme.of(context)
+                                                            .textTheme
+                                                            .titleMedium
+                                                            ?.copyWith(
+                                                              color: AppColors
+                                                                  .amber500,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w800,
+                                                              letterSpacing:
+                                                                  -0.2,
+                                                            ),
+                                                      ),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                        child: Text(
+                                                          item.label,
+                                                          style:
+                                                              GoogleFonts.notoSansKr(
+                                                                color: AppColors
+                                                                    .textPrimary,
+                                                                fontSize: 14,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                      _StatusChip(
+                                                        status: item.status,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
                                               );
                                             },
                                           ),
@@ -416,9 +438,9 @@ class _KitchenAttentionSection extends StatelessWidget {
       final elapsed = now.difference(order.createdAt.toUtc()).inMinutes;
       return elapsed >= 15;
     }).length;
-    final readyTables = orders.where(
-      (order) => order.items.any((item) => item.status == 'ready'),
-    ).length;
+    final readyTables = orders
+        .where((order) => order.items.any((item) => item.status == 'ready'))
+        .length;
     final oldestWaitMinutes = orders.isEmpty
         ? 0
         : orders
@@ -512,7 +534,9 @@ class _KitchenAttentionSection extends StatelessWidget {
               ),
               _attentionChip(
                 l10n.kitchenAttentionReadyTables(readyTables),
-                readyTables > 0 ? AppColors.amber500 : AppColors.statusAvailable,
+                readyTables > 0
+                    ? AppColors.amber500
+                    : AppColors.statusAvailable,
               ),
             ],
           ),
@@ -655,10 +679,7 @@ class _KitchenAttentionSection extends StatelessWidget {
   }) {
     final l10n = context.l10n;
     if (readyItems > 0) {
-      return l10n.kitchenAttentionHandoffReadyItems(
-        readyItems,
-        readyTables,
-      );
+      return l10n.kitchenAttentionHandoffReadyItems(readyItems, readyTables);
     }
     if (oldestWaitMinutes >= 15) {
       return l10n.kitchenAttentionHandoffAgingTickets;
@@ -725,10 +746,9 @@ class _KitchenTopBar extends ConsumerWidget {
           ),
           Text(
             DateFormat('HH:mm:ss').format(TimeUtils.toVietnam(now)), // UTC→VN
-            style: GoogleFonts.bebasNeue(
+            style: AppTextStyles.operationalTitle(
+              size: 26,
               color: AppColors.textPrimary,
-              fontSize: 30,
-              letterSpacing: 1.0,
             ),
           ),
           const SizedBox(width: 12),
