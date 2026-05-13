@@ -31,6 +31,7 @@ void main() {
       expect(tab, contains('Top attention items'));
       expect(tab, contains('Supplier Attention Ordering'));
       expect(tab, contains('Receiving Readiness Summary'));
+      expect(tab, contains('Receiving Blockers Detail'));
       expect(tab, contains('Receipt Visibility'));
       expect(tab, contains('Recent Receipts'));
       expect(tab, contains('Receipt Line Provenance'));
@@ -85,6 +86,14 @@ void main() {
       expect(tab, contains('Received lines'));
       expect(tab, contains('Pending lines'));
       expect(tab, contains('Attention lines'));
+      expect(tab, contains('Affected PO'));
+      expect(tab, contains('Impacted suppliers'));
+      expect(tab, contains('Oldest wait'));
+      expect(tab, contains('Next hint'));
+      expect(tab, contains("'healthy'"));
+      expect(tab, contains("'watch'"));
+      expect(tab, contains("'risk'"));
+      expect(tab, contains("'critical'"));
       expect(
         tab,
         contains(
@@ -102,6 +111,20 @@ void main() {
         contains(
           'Operators should review attention lines first; this summary remains read-only and does not confirm receipts or mutate stock.',
         ),
+      );
+      expect(
+        tab,
+        contains(
+          'Read the current receiving blockers without opening receipt confirmation, supplier approval, or stock mutation workflows.',
+        ),
+      );
+      expect(
+        tab,
+        contains('Receiving delayed beyond expected arrival window.'),
+      );
+      expect(
+        tab,
+        contains('purchase order line(s) still waiting supplier confirmation'),
       );
       expect(
         tab,
@@ -200,6 +223,8 @@ void main() {
       expect(tab, isNot(contains('confirmInventoryPurchaseReceipt')));
       expect(tab, isNot(contains('Confirm Receipt')));
       expect(tab, isNot(contains('Approve Purchase Order')));
+      expect(tab, isNot(contains('Run Supplier Approval')));
+      expect(tab, isNot(contains('Update Stock Now')));
       expect(
         service,
         isNot(contains('office_get_inventory_purchase_order_detail')),
