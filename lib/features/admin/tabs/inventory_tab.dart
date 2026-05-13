@@ -2279,6 +2279,14 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               orderStatus: status,
             ),
             const SizedBox(height: 12),
+            _buildReceivingReadinessSummarySection(
+              lineItems: sortedLines,
+              requestedDate: requestedDate,
+              orderStatus: status,
+              remainingBase: totalRemainingBase,
+              confirmedReceiptCount: confirmedReceiptCount,
+            ),
+            const SizedBox(height: 12),
             _buildReceiptVisibilitySection(
               orderStatus: status,
               expectedBase: totalExpectedBase,
@@ -2324,6 +2332,111 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     .toList(),
               ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReceivingReadinessSummarySection({
+    required List<Map<String, dynamic>> lineItems,
+    required String? requestedDate,
+    required String orderStatus,
+    required double remainingBase,
+    required int confirmedReceiptCount,
+  }) {
+    final readinessState = _inventoryReceiptReadinessLabel(
+      orderStatus: orderStatus,
+      remainingBase: remainingBase,
+      confirmedReceiptCount: confirmedReceiptCount,
+    );
+    final receivedLineCount = lineItems
+        .where((line) => _isReceivingLineReceived(line))
+        .length;
+    final pendingLineCount = lineItems
+        .where((line) => _isReceivingLinePending(line))
+        .length;
+    final attentionLineCount = lineItems
+        .where(
+          (line) =>
+              _inventorySupplierAttentionPriority(
+                line,
+                requestedDate: requestedDate,
+                orderStatus: orderStatus,
+              ) >=
+              3,
+        )
+        .length;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: _receiptReadinessColor(orderStatus, remainingBase),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Receiving Readiness Summary',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Review inbound receiving posture before opening receipt history or line provenance detail.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildIngredientMetaChip(
+                'Receiving readiness $readinessState',
+                color: _receiptReadinessColor(orderStatus, remainingBase),
+              ),
+              _buildIngredientMetaChip(
+                'Received lines $receivedLineCount',
+                color: receivedLineCount > 0
+                    ? AppColors.statusAvailable
+                    : AppColors.surface2,
+              ),
+              _buildIngredientMetaChip(
+                'Pending lines $pendingLineCount',
+                color: pendingLineCount > 0
+                    ? AppColors.amber500
+                    : AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                'Attention lines $attentionLineCount',
+                color: attentionLineCount > 0
+                    ? AppColors.statusOccupied
+                    : AppColors.statusAvailable,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _inventoryReceivingReadinessOperatorNarrative(
+              receivedLineCount: receivedLineCount,
+              pendingLineCount: pendingLineCount,
+              attentionLineCount: attentionLineCount,
+            ),
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
         ],
       ),
     );
@@ -3614,6 +3727,45 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       return 1;
     }
     return 0;
+  }
+
+  bool _isReceivingLineReceived(Map<String, dynamic> line) {
+    final receiptVisibilityStatus =
+        line['receipt_visibility_status']?.toString() ?? 'pending';
+    final remainingBase =
+        (line['remaining_quantity_base'] as num?)?.toDouble() ?? 0;
+    return remainingBase <= 0 ||
+        receiptVisibilityStatus == 'received' ||
+        receiptVisibilityStatus == 'confirmed';
+  }
+
+  bool _isReceivingLinePending(Map<String, dynamic> line) {
+    if (_isReceivingLineReceived(line)) {
+      return false;
+    }
+    final receiptVisibilityStatus =
+        line['receipt_visibility_status']?.toString() ?? 'pending';
+    return receiptVisibilityStatus == 'pending' ||
+        receiptVisibilityStatus == 'draft' ||
+        receiptVisibilityStatus == 'none' ||
+        receiptVisibilityStatus == 'partially_received';
+  }
+
+  String _inventoryReceivingReadinessOperatorNarrative({
+    required int receivedLineCount,
+    required int pendingLineCount,
+    required int attentionLineCount,
+  }) {
+    if (attentionLineCount > 0) {
+      return 'Operators should review attention lines first; this summary remains read-only and does not confirm receipts or mutate stock.';
+    }
+    if (pendingLineCount > 0) {
+      return 'Pending lines remain visible for receiving follow-up, but this surface does not open approval or receipt confirmation actions.';
+    }
+    if (receivedLineCount > 0) {
+      return 'All visible lines already look received from the tracked POS read model, so operators can use receipt history only for verification.';
+    }
+    return 'Receiving posture is currently unavailable from the tracked read model, so operators should rely on the existing receipt visibility surfaces only.';
   }
 
   List<String> _inventoryTopAttentionHighlights(

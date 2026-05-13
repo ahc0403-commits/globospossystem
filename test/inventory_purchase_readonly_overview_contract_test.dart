@@ -30,6 +30,7 @@ void main() {
       expect(tab, contains('Order Attention Banner'));
       expect(tab, contains('Top attention items'));
       expect(tab, contains('Supplier Attention Ordering'));
+      expect(tab, contains('Receiving Readiness Summary'));
       expect(tab, contains('Receipt Visibility'));
       expect(tab, contains('Recent Receipts'));
       expect(tab, contains('Receipt Line Provenance'));
@@ -80,10 +81,26 @@ void main() {
       expect(tab, contains('Attention rank'));
       expect(tab, contains('Escalation lines'));
       expect(tab, contains('Watch lines'));
+      expect(tab, contains('Receiving readiness'));
+      expect(tab, contains('Received lines'));
+      expect(tab, contains('Pending lines'));
+      expect(tab, contains('Attention lines'));
       expect(
         tab,
         contains(
           'Higher-risk supplier lines are shown first so receipt pending, price-up, or overdue lead-time items surface before stable lines.',
+        ),
+      );
+      expect(
+        tab,
+        contains(
+          'Review inbound receiving posture before opening receipt history or line provenance detail.',
+        ),
+      );
+      expect(
+        tab,
+        contains(
+          'Operators should review attention lines first; this summary remains read-only and does not confirm receipts or mutate stock.',
         ),
       );
       expect(
@@ -181,6 +198,8 @@ void main() {
       expect(tab, isNot(contains('InventoryPurchaseScreen')));
       expect(tab, isNot(contains('office_approve_inventory_purchase_order')));
       expect(tab, isNot(contains('confirmInventoryPurchaseReceipt')));
+      expect(tab, isNot(contains('Confirm Receipt')));
+      expect(tab, isNot(contains('Approve Purchase Order')));
       expect(
         service,
         isNot(contains('office_get_inventory_purchase_order_detail')),
