@@ -195,14 +195,9 @@ void main() {
     expect(tab, contains('POS role Visibility and checklist only'));
     expect(tab, contains('Blocked reasons'));
     expect(tab, contains('Runtime line context'));
-    expect(tab, contains('Approval handoff'));
+    expect(tab, contains('Approval Handoff'));
     expect(tab, contains('Stock mutation unavailable'));
     expect(tab, contains('Domain boundary Payment / order / menu untouched'));
-    expect(tab, contains('Receiving delayed beyond expected arrival window.'));
-    expect(
-      tab,
-      contains('purchase order line(s) still waiting supplier confirmation'),
-    );
     expect(
       tab,
       contains(
@@ -227,6 +222,8 @@ void main() {
     expect(tab, contains('inventoryPurchaseOrderCreationProvider'));
     expect(tab, contains('inventoryPurchaseOrderSummaryProvider'));
     expect(tab, contains('inventoryPurchaseOrderDetailProvider'));
+    expect(tab, contains('inventoryPurchaseRuntimeSurfaceProvider'));
+    expect(tab, contains('inventoryPurchaseOperatingSummaryProvider'));
     expect(tab, contains('Refresh Purchase Overview'));
     expect(tab, contains('Next Operator Action'));
     expect(tab, contains('Operating blocked reasons'));
@@ -242,7 +239,9 @@ void main() {
 
     expect(provider, contains('class InventoryPurchaseOverviewState'));
     expect(provider, contains('class InventoryPurchaseOperatingSummary'));
+    expect(provider, contains('class InventoryPurchaseRuntimeSurfaceState'));
     expect(provider, contains('buildInventoryPurchaseOperatingSummary'));
+    expect(provider, contains('buildInventoryPurchaseRuntimeBlockerRows'));
     expect(provider, contains('inventoryPurchaseOverviewProvider'));
     expect(provider, contains('class InventoryPurchaseRecommendationRunState'));
     expect(provider, contains('inventoryPurchaseRecommendationRunProvider'));
@@ -268,6 +267,14 @@ void main() {
     expect(provider, contains('inventoryPurchaseReceivingRuntimeProvider'));
     expect(provider, contains('class InventoryPurchaseRuntimeClosureSnapshot'));
     expect(provider, contains('buildInventoryPurchaseRuntimeClosureSnapshot'));
+    expect(provider, contains('inventoryPurchaseRuntimeSurfaceProvider'));
+    expect(provider, contains('inventoryPurchaseOperatingSummaryProvider'));
+    expect(provider, contains('receivedLineCount'));
+    expect(provider, contains('blockedLineCount'));
+    expect(provider, contains('pendingLineCount'));
+    expect(provider, contains('attentionLineCount'));
+    expect(provider, contains('blockerRows'));
+    expect(provider, contains('runtimeClosure'));
     expect(provider, contains('Handoff target'));
     expect(provider, contains('Last runtime state'));
     expect(provider, contains('confirmRemainingReceipt'));
@@ -326,6 +333,14 @@ void main() {
         'POS cannot confirm receipt or mutate stock before the backend order reaches an approved or ordered state.',
       ),
     );
+    expect(
+      provider,
+      contains('Receiving delayed beyond expected arrival window.'),
+    );
+    expect(
+      provider,
+      contains('purchase order line(s) still waiting supplier confirmation'),
+    );
 
     expect(service, contains('fetchInventoryPurchaseDashboard'));
     expect(service, contains("'get_inventory_purchase_dashboard'"));
@@ -381,6 +396,11 @@ void main() {
     expect(tab, isNot(contains("from('tables')")));
     expect(tab, isNot(contains('supabase.')));
     expect(tab, isNot(contains('.rpc(')));
+    expect(
+      tab,
+      isNot(contains('buildInventoryPurchaseRuntimeClosureSnapshot(')),
+    );
+    expect(tab, isNot(contains('buildInventoryPurchaseOperatingSummary(')));
     expect(tab, isNot(contains('Confirm Receipt')));
     expect(tab, isNot(contains('Approve Purchase Order')));
     expect(tab, isNot(contains('Run Supplier Approval')));
