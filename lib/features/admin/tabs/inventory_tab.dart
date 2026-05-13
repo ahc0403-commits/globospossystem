@@ -1676,6 +1676,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   Widget _buildInventoryOperatingSummarySection(
     InventoryPurchaseOperatingSummary summary,
   ) {
+    final reconciliation = summary.reconciliationSummary;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -1771,6 +1772,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             ),
           ),
           const SizedBox(height: 10),
+          _buildInventoryReconciliationSummarySection(reconciliation),
+          const SizedBox(height: 10),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(10),
@@ -1802,6 +1805,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             ),
           ),
           const SizedBox(height: 10),
+          _buildInventoryActionQueueSection(summary.actionQueue),
+          const SizedBox(height: 10),
+          _buildInventorySupplierBottleneckSection(summary.supplierBottlenecks),
+          const SizedBox(height: 10),
           Text(
             'Operating blocked reasons',
             style: GoogleFonts.notoSansKr(
@@ -1832,6 +1839,340 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     );
   }
 
+  Widget _buildInventoryReconciliationSummarySection(
+    InventoryPurchaseReconciliationSummary summary,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: _inventoryOperationalToneColor(summary.mismatchIndicatorTone),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Open PO Reconciliation Summary',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Review the current store-scoped recommendation-to-receiving posture before drilling into one purchase order.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildIngredientMetaChip(
+                'Recommended ${summary.recommendedCount}',
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip('Ordered ${summary.orderedCount}'),
+              _buildIngredientMetaChip(
+                'Received ${summary.receivedCount}',
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                'Remaining ${summary.remainingCount}',
+                color: summary.remainingCount > 0
+                    ? AppColors.amber500
+                    : AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                'Delayed ${summary.delayedCount}',
+                color: summary.delayedCount > 0
+                    ? AppColors.statusOccupied
+                    : AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                summary.mismatchIndicatorLabel,
+                color: _inventoryOperationalToneColor(
+                  summary.mismatchIndicatorTone,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            summary.narrative,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInventoryActionQueueSection(
+    List<InventoryPurchaseActionQueueEntry> actionQueue,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Store-Level Inventory Action Queue',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Use the provider-owned queue to see which open purchase orders need Office handoff, receiving, follow-up, or escalation first.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (actionQueue.isEmpty)
+            Text(
+              'No open purchase orders are currently visible in the tracked POS runtime queue.',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            )
+          else
+            Column(
+              children: actionQueue
+                  .map((queueItem) => _buildInventoryActionQueueRow(queueItem))
+                  .toList(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInventoryActionQueueRow(
+    InventoryPurchaseActionQueueEntry queueItem,
+  ) {
+    final severityColor = _inventoryReceivingBlockerSeverityColor(
+      queueItem.blockerSeverity,
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: queueItem.isSelected ? AppColors.surface0 : AppColors.surface1,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: queueItem.isSelected ? AppColors.amber500 : severityColor,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${queueItem.purchaseOrderNo} · ${queueItem.supplierLabel}',
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      queueItem.operatorReason,
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _buildIngredientMetaChip(
+                queueItem.priorityBucket,
+                color: severityColor,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildIngredientMetaChip(queueItem.staleLabel),
+              _buildIngredientMetaChip(
+                queueItem.handoffTarget,
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                queueItem.blockerSeverity.toUpperCase(),
+                color: severityColor,
+              ),
+              if (queueItem.isSelected)
+                _buildIngredientMetaChip(
+                  'Selected PO',
+                  color: AppColors.amber500,
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Next action: ${queueItem.nextAction}',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInventorySupplierBottleneckSection(
+    List<InventoryPurchaseSupplierBottleneckState> bottlenecks,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Supplier Receiving Bottleneck View',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Review supplier-grouped queue pressure so follow-up happens at the supplier bottleneck level, not only one line at a time.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Column(
+            children: bottlenecks
+                .map(
+                  (bottleneck) =>
+                      _buildInventorySupplierBottleneckRow(bottleneck),
+                )
+                .toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInventorySupplierBottleneckRow(
+    InventoryPurchaseSupplierBottleneckState bottleneck,
+  ) {
+    final severityColor = _inventoryReceivingBlockerSeverityColor(
+      bottleneck.severity,
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: severityColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      bottleneck.supplierLabel,
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      bottleneck.narrative,
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _buildIngredientMetaChip(
+                bottleneck.severity.toUpperCase(),
+                color: severityColor,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildIngredientMetaChip(
+                'Affected PO ${bottleneck.affectedPoCount}',
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(bottleneck.blockedReasonCluster),
+              _buildIngredientMetaChip(
+                'Oldest wait ${bottleneck.oldestWaitingAge}',
+                color: AppColors.amber500,
+              ),
+              _buildIngredientMetaChip(
+                bottleneck.nextFollowUpTarget,
+                color: severityColor,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLatestRecommendationSnapshot({
     required String? storeId,
     required InventoryPurchaseRecommendationSnapshotState snapshot,
@@ -1844,6 +2185,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       inventoryPurchaseReceivingRuntimeProvider,
     );
     final runtimeSurface = ref.watch(inventoryPurchaseRuntimeSurfaceProvider);
+    final operatingSummary = ref.watch(
+      inventoryPurchaseOperatingSummaryProvider,
+    );
     final run = snapshot.run;
     final lineCount = snapshot.lines.length;
     final runDate = run?['run_date']?.toString() ?? '-';
@@ -2000,6 +2344,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             _buildRecentPurchaseOrdersSection(
               storeId: storeId,
               summary: orderSummary,
+              operatingSummary: operatingSummary,
               detail: orderDetail,
               runtimeSurface: runtimeSurface,
               approvalRuntime: approvalRuntime,
@@ -2079,11 +2424,30 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   Widget _buildRecentPurchaseOrdersSection({
     required String? storeId,
     required InventoryPurchaseOrderSummaryState summary,
+    required InventoryPurchaseOperatingSummary operatingSummary,
     required InventoryPurchaseOrderDetailState detail,
     required InventoryPurchaseRuntimeSurfaceState runtimeSurface,
     required InventoryPurchaseApprovalRuntimeState approvalRuntime,
     required InventoryPurchaseReceivingRuntimeState receivingRuntime,
   }) {
+    final queueEntriesByOrderId = {
+      for (final queueItem in operatingSummary.actionQueue)
+        queueItem.orderId: queueItem,
+    };
+    final queueOrderedIds = operatingSummary.actionQueue
+        .map((queueItem) => queueItem.orderId)
+        .toList();
+    final ordersById = {
+      for (final order in summary.orders) order['id']?.toString() ?? '': order,
+    };
+    final orderedCards = <Map<String, dynamic>>[
+      for (final orderId in queueOrderedIds)
+        if (ordersById.containsKey(orderId)) ordersById[orderId]!,
+      ...summary.orders.where(
+        (order) => !queueOrderedIds.contains(order['id']?.toString() ?? ''),
+      ),
+    ];
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -2158,11 +2522,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ] else ...[
             const SizedBox(height: 12),
             Column(
-              children: summary.orders
+              children: orderedCards
                   .map(
                     (order) => _buildRecentPurchaseOrderCard(
                       storeId: storeId,
                       order: order,
+                      queueEntry:
+                          queueEntriesByOrderId[order['id']?.toString() ?? ''],
                       isSelected:
                           order['id']?.toString() == detail.selectedOrderId,
                     ),
@@ -2187,6 +2553,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   Widget _buildRecentPurchaseOrderCard({
     required String? storeId,
     required Map<String, dynamic> order,
+    required InventoryPurchaseActionQueueEntry? queueEntry,
     required bool isSelected,
   }) {
     final supplierMap = order['supplier'] as Map<String, dynamic>?;
@@ -2276,8 +2643,27 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                       ? 'Created time unavailable'
                       : 'Created ${DateFormat('yyyy-MM-dd HH:mm').format(createdAt)}',
                 ),
+                if (queueEntry != null)
+                  _buildIngredientMetaChip(
+                    queueEntry.priorityBucket,
+                    color: _inventoryReceivingBlockerSeverityColor(
+                      queueEntry.blockerSeverity,
+                    ),
+                  ),
+                if (queueEntry != null)
+                  _buildIngredientMetaChip(queueEntry.staleLabel),
               ],
             ),
+            if (queueEntry != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Queue next action: ${queueEntry.nextAction}',
+                style: GoogleFonts.notoSansKr(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -2472,6 +2858,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               runtimeSurface: runtimeSurface,
               approvalRuntime: approvalRuntime,
               receivingRuntime: receivingRuntime,
+            ),
+            const SizedBox(height: 12),
+            _buildInventoryReceivingSafetySection(
+              runtimeSurface.receivingSafety,
             ),
             const SizedBox(height: 12),
             _buildReceiptVisibilitySection(runtimeSurface: runtimeSurface),
@@ -3145,6 +3535,71 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               ),
             ),
             result: receivingRuntime.result,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInventoryReceivingSafetySection(
+    InventoryPurchaseReceivingSafetyState receivingSafety,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: _inventoryOperationalToneColor(receivingSafety.tone),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Receiving Execution Safety Layer',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Reduce duplicate receiving fear by showing the last runtime result, retry discipline, unknown outcome handling, and the next safe recovery step from provider truth.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildIngredientMetaChip(
+                receivingSafety.lastAttemptLabel,
+                color: _inventoryOperationalToneColor(receivingSafety.tone),
+              ),
+              _buildIngredientMetaChip(receivingSafety.retryDisciplineLabel),
+              _buildIngredientMetaChip(
+                receivingSafety.unknownOutcomeLabel,
+                color: AppColors.amber500,
+              ),
+              _buildIngredientMetaChip(
+                receivingSafety.followUpGuidanceLabel,
+                color: AppColors.statusAvailable,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            receivingSafety.narrative,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
           ),
         ],
       ),
