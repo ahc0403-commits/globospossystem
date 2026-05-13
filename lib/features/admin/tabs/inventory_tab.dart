@@ -1446,6 +1446,46 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         (dashboard?['submitted_purchase_amount'] as num?)?.toDouble() ?? 0;
     final approvedPurchaseAmount =
         (dashboard?['approved_purchase_amount'] as num?)?.toDouble() ?? 0;
+    final order = orderDetail.order;
+    final orderStatus = order?['status']?.toString() ?? 'submitted';
+    final requestedDate = order?['requested_delivery_date']?.toString();
+    final blockedLineCount = order == null
+        ? 0
+        : orderDetail.lines
+              .where(
+                (line) =>
+                    _inventorySupplierAttentionPriority(
+                      line,
+                      requestedDate: requestedDate,
+                      orderStatus: orderStatus,
+                    ) >=
+                    3,
+              )
+              .length;
+    final pendingLineCount = orderDetail.lines
+        .where(_isReceivingLinePending)
+        .length;
+    final approvalRuntime = ref.watch(inventoryPurchaseApprovalRuntimeProvider);
+    final receivingRuntime = ref.watch(
+      inventoryPurchaseReceivingRuntimeProvider,
+    );
+    final runtimeClosure = buildInventoryPurchaseRuntimeClosureSnapshot(
+      order: order,
+      approvalRuntime: approvalRuntime,
+      receivingRuntime: receivingRuntime,
+      blockedLineCount: blockedLineCount,
+      pendingLineCount: pendingLineCount,
+      attentionLineCount: blockedLineCount,
+    );
+    final operatingSummary = buildInventoryPurchaseOperatingSummary(
+      overview: overview,
+      recommendationRun: recommendationRun,
+      recommendationSnapshot: recommendationSnapshot,
+      orderCreation: orderCreation,
+      orderSummary: orderSummary,
+      orderDetail: orderDetail,
+      runtimeClosure: runtimeClosure,
+    );
 
     return Container(
       width: double.infinity,
@@ -1602,6 +1642,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               recommendationRun: recommendationRun,
             ),
             const SizedBox(height: 12),
+            _buildInventoryOperatingSummarySection(operatingSummary),
+            const SizedBox(height: 12),
             _buildLatestRecommendationSnapshot(
               storeId: storeId,
               snapshot: recommendationSnapshot,
@@ -1663,6 +1705,165 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             'Boundary',
             'This slice may create recommendation snapshots and supplier-grouped purchase orders, but approval stays Office-owned and receiving runs only through the tracked backend receipt contract.',
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInventoryOperatingSummarySection(
+    InventoryPurchaseOperatingSummary summary,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Inventory Operating Runtime Summary',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Read the full inventory operating flow from one POS surface: recommendation runtime, latest snapshot state, purchase-order creation readiness, approval handoff, receiving readiness, selected purchase-order closure, blocked reasons, and the next operator action.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildIngredientMetaChip(
+                summary.recommendationRuntimeStateLabel,
+                color:
+                    summary.recommendationRuntimeStateLabel.endsWith('blocked')
+                    ? AppColors.statusOccupied
+                    : summary.recommendationRuntimeStateLabel.endsWith('ready')
+                    ? AppColors.statusAvailable
+                    : AppColors.amber500,
+              ),
+              _buildIngredientMetaChip(summary.latestSnapshotStateLabel),
+              _buildIngredientMetaChip(
+                summary.purchaseOrderCreationReadinessLabel,
+                color:
+                    summary.purchaseOrderCreationReadinessLabel.contains(
+                      'ready',
+                    )
+                    ? AppColors.statusAvailable
+                    : summary.purchaseOrderCreationReadinessLabel.contains(
+                        'blocked',
+                      )
+                    ? AppColors.statusOccupied
+                    : AppColors.amber500,
+              ),
+              _buildIngredientMetaChip(
+                summary.approvalHandoffReadinessLabel,
+                color: _inventoryApprovalRuntimeStateColor(
+                  summary.approvalHandoffReadinessLabel,
+                ),
+              ),
+              _buildIngredientMetaChip(
+                summary.receivingReadinessLabel,
+                color: _inventoryReceivingRuntimeStateColor(
+                  summary.receivingReadinessLabel,
+                ),
+              ),
+              _buildIngredientMetaChip(
+                summary.selectedPurchaseOrderRuntimeLabel,
+              ),
+              _buildIngredientMetaChip(summary.handoffTarget),
+              _buildIngredientMetaChip(
+                'Visible snapshot lines ${summary.visibleRecommendationLineCount}',
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                'Visible purchase orders ${summary.visiblePurchaseOrderCount}',
+              ),
+              _buildIngredientMetaChip(
+                'Blocked reasons ${summary.visibleBlockedReasonCount}',
+                color: summary.visibleBlockedReasonCount > 0
+                    ? AppColors.statusOccupied
+                    : AppColors.statusAvailable,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            summary.operatingNarrative,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.surface1,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.amber500),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Next Operator Action',
+                  style: GoogleFonts.notoSansKr(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  summary.nextOperatorAction,
+                  style: GoogleFonts.notoSansKr(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Operating blocked reasons',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 6),
+          if (summary.blockedReasons.isEmpty)
+            Text(
+              'No operating blocker is currently visible beyond the tracked runtime labels.',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            )
+          else
+            Column(
+              children: summary.blockedReasons
+                  .map(
+                    (reason) => _buildInventoryRuntimeBlockedReasonRow(reason),
+                  )
+                  .toList(),
+            ),
         ],
       ),
     );
