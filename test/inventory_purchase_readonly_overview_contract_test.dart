@@ -90,8 +90,8 @@ void main() {
     expect(tab, contains('Escalation lines'));
     expect(tab, contains('Watch lines'));
     expect(tab, contains('Receiving readiness'));
-    expect(tab, contains('Received lines'));
-    expect(tab, contains('Pending lines'));
+    expect(provider, contains('Received lines'));
+    expect(provider, contains('Remaining lines'));
     expect(tab, contains('Attention lines'));
     expect(tab, contains('Affected PO'));
     expect(tab, contains('Impacted suppliers'));
@@ -116,12 +116,6 @@ void main() {
     expect(
       tab,
       contains(
-        'Operators should review attention lines first; this summary remains read-only and does not confirm receipts or mutate stock.',
-      ),
-    );
-    expect(
-      tab,
-      contains(
         'Read the current receiving blockers without opening receipt confirmation, supplier approval, or stock mutation workflows.',
       ),
     );
@@ -129,12 +123,6 @@ void main() {
       tab,
       contains(
         'Use these guardrails to confirm POS remains responsible for visibility, readiness, and operator checklist coverage before any Office-owned approval, receipt confirmation, or stock mutation workflow is considered.',
-      ),
-    );
-    expect(
-      tab,
-      contains(
-        'POS keeps the approval handoff visible only. Office remains the execution owner for purchase-order approval, and this surface does not expose approval actions or supplier-response mutations.',
       ),
     );
     expect(
@@ -156,13 +144,13 @@ void main() {
       ),
     );
     expect(
-      tab,
+      provider,
       contains(
         'The purchase order is ready for Office review, but POS does not execute approval. Operators can verify readiness and hand off the order to the Office-owned workflow only.',
       ),
     );
     expect(
-      tab,
+      provider,
       contains(
         'The receipt confirmation contract exists and can update stock truthfully for the remaining quantity. Use the runtime action only when the inbound goods are physically verified.',
       ),
@@ -171,10 +159,10 @@ void main() {
       tab,
       contains('Line-level risk / quantity / expected / received context:'),
     );
-    expect(tab, contains('Ready to approve'));
-    expect(tab, contains('Approved'));
-    expect(tab, contains('Ready to receive'));
-    expect(tab, contains('Received / closed'));
+    expect(provider, contains('Ready to approve'));
+    expect(provider, contains('Approved'));
+    expect(provider, contains('Ready to receive'));
+    expect(provider, contains('Received / closed'));
     expect(tab, contains('Check Approval Handoff'));
     expect(tab, contains('Confirm Remaining Receipt'));
     expect(tab, contains('onPressed: runtimeClosure.canCheckApproval'));
@@ -186,7 +174,7 @@ void main() {
     );
     expect(tab, contains('Office-owned execution'));
     expect(
-      tab,
+      provider,
       contains(
         'Backend truth already shows this order as fully received. POS keeps the final state visible without sending another receipt confirmation.',
       ),
@@ -196,7 +184,7 @@ void main() {
     expect(tab, contains('Blocked reasons'));
     expect(tab, contains('Runtime line context'));
     expect(tab, contains('Approval Handoff'));
-    expect(tab, contains('Stock mutation unavailable'));
+    expect(tab, contains('runtimeSurface.blockedStateLabel'));
     expect(tab, contains('Domain boundary Payment / order / menu untouched'));
     expect(
       tab,
@@ -233,6 +221,16 @@ void main() {
         'Read the full inventory operating flow from one POS surface: recommendation runtime, latest snapshot state, purchase-order creation readiness, approval handoff, receiving readiness, selected purchase-order closure, blocked reasons, and the next operator action.',
       ),
     );
+    expect(tab, contains('runtimeSurface.operationalPhaseLabel'));
+    expect(tab, contains('runtimeSurface.readyStateLabel'));
+    expect(tab, contains('runtimeSurface.blockedStateLabel'));
+    expect(tab, contains('runtimeSurface.staleStateLabel'));
+    expect(tab, contains('runtimeSurface.nextBestOperatorAction'));
+    expect(tab, contains('runtimeSurface.receivedLineSummaryLabel'));
+    expect(tab, contains('runtimeSurface.remainingLineSummaryLabel'));
+    expect(tab, contains('runtimeSurface.receivingReadinessLabel'));
+    expect(tab, contains('runtimeSurface.receiptVisibilityStatusLabel'));
+    expect(tab, contains('runtimeSurface.lineContexts'));
     expect(tab, contains('Visible snapshot lines'));
     expect(tab, contains('Visible purchase orders'));
     expect(tab, contains('Blocked reasons '));
@@ -273,7 +271,42 @@ void main() {
     expect(provider, contains('blockedLineCount'));
     expect(provider, contains('pendingLineCount'));
     expect(provider, contains('attentionLineCount'));
+    expect(provider, contains('expectedBase'));
+    expect(provider, contains('receivedBase'));
+    expect(provider, contains('acceptedBase'));
+    expect(provider, contains('rejectedBase'));
+    expect(provider, contains('draftReceiptCount'));
+    expect(provider, contains('cancelledReceiptCount'));
+    expect(provider, contains('latestReceiptStatus'));
+    expect(provider, contains('latestReceiptAt'));
+    expect(provider, contains('operationalPhaseLabel'));
+    expect(provider, contains('operationalPhaseTone'));
+    expect(provider, contains('operationalPhaseNarrative'));
+    expect(provider, contains('approvalStateTone'));
+    expect(provider, contains('approvalNarrative'));
+    expect(provider, contains('receivingStateTone'));
+    expect(provider, contains('receivingNarrative'));
+    expect(provider, contains('receivingReadinessLabel'));
+    expect(provider, contains('receivingReadinessTone'));
+    expect(provider, contains('receivingReadinessNarrative'));
+    expect(provider, contains('receiptVisibilityStatusLabel'));
+    expect(provider, contains('receiptVisibilityStatusTone'));
+    expect(provider, contains('receiptVisibilityNarrative'));
+    expect(provider, contains('readyStateLabel'));
+    expect(provider, contains('readyStateTone'));
+    expect(provider, contains('blockedStateLabel'));
+    expect(provider, contains('blockedStateTone'));
+    expect(provider, contains('staleStateLabel'));
+    expect(provider, contains('staleStateTone'));
+    expect(provider, contains('nextBestOperatorAction'));
+    expect(provider, contains('receivedLineSummaryLabel'));
+    expect(provider, contains('remainingLineSummaryLabel'));
     expect(provider, contains('blockerRows'));
+    expect(
+      provider,
+      contains('class InventoryPurchaseRuntimeLineContextState'),
+    );
+    expect(provider, contains('lineContexts'));
     expect(provider, contains('runtimeClosure'));
     expect(provider, contains('Handoff target'));
     expect(provider, contains('Last runtime state'));
@@ -294,13 +327,13 @@ void main() {
     expect(
       provider,
       contains(
-        'Hand off the selected purchase order to the Office approval owner and keep POS on visibility-only duty.',
+        'Hand off the selected purchase order to Office and keep POS on readiness, blockers, and checklist duty only.',
       ),
     );
     expect(
       provider,
       contains(
-        'Physically verify the inbound goods, then use the tracked POS receipt confirmation contract for the remaining quantity.',
+        'Physically verify inbound goods, then use Confirm Remaining Receipt only if the tracked receipt contract still matches the remaining quantity.',
       ),
     );
     expect(
@@ -401,6 +434,12 @@ void main() {
       isNot(contains('buildInventoryPurchaseRuntimeClosureSnapshot(')),
     );
     expect(tab, isNot(contains('buildInventoryPurchaseOperatingSummary(')));
+    expect(tab, isNot(contains('_inventoryApprovalRuntimeStateLabel(')));
+    expect(tab, isNot(contains('_inventoryApprovalRuntimeNarrative(')));
+    expect(tab, isNot(contains('_inventoryReceivingRuntimeStateLabel(')));
+    expect(tab, isNot(contains('_inventoryReceivingRuntimeNarrative(')));
+    expect(tab, isNot(contains('_inventoryReceiptReadinessLabel(')));
+    expect(tab, isNot(contains('_inventoryReceiptReadinessNarrative(')));
     expect(tab, isNot(contains('Confirm Receipt')));
     expect(tab, isNot(contains('Approve Purchase Order')));
     expect(tab, isNot(contains('Run Supplier Approval')));
