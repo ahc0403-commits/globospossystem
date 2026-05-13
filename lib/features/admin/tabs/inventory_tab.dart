@@ -2130,6 +2130,11 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     final latestReceiptAt = latestReceiptAtRaw == null
         ? null
         : DateTime.tryParse(latestReceiptAtRaw)?.toLocal();
+    final sortedLines = _sortedPurchaseOrderLinesForAttention(
+      detail.lines,
+      requestedDate: requestedDate,
+      orderStatus: status,
+    );
 
     return Container(
       width: double.infinity,
@@ -2262,9 +2267,16 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             const SizedBox(height: 12),
             _buildInventoryOrderAttentionBanner(
               status: status,
+              requestedDate: requestedDate,
               remainingBase: totalRemainingBase,
               latestReceiptStatus: latestReceiptStatus,
-              lineItems: detail.lines,
+              lineItems: sortedLines,
+            ),
+            const SizedBox(height: 12),
+            _buildSupplierAttentionOrderingSection(
+              lineItems: sortedLines,
+              requestedDate: requestedDate,
+              orderStatus: status,
             ),
             const SizedBox(height: 12),
             _buildReceiptVisibilitySection(
@@ -2288,7 +2300,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             const SizedBox(height: 12),
             _buildSupplierContextHistorySection(detail.lines),
             const SizedBox(height: 12),
-            if (detail.lines.isEmpty)
+            if (sortedLines.isEmpty)
               Text(
                 'No line items are visible for the selected order.',
                 style: GoogleFonts.notoSansKr(
@@ -2298,12 +2310,15 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               )
             else
               Column(
-                children: detail.lines
+                children: sortedLines
+                    .asMap()
+                    .entries
                     .map(
-                      (line) => _buildPurchaseOrderLineCard(
-                        line,
+                      (entry) => _buildPurchaseOrderLineCard(
+                        entry.value,
                         requestedDate: requestedDate,
                         orderStatus: status,
+                        attentionRank: entry.key + 1,
                       ),
                     )
                     .toList(),
@@ -2316,6 +2331,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
 
   Widget _buildInventoryOrderAttentionBanner({
     required String status,
+    required String? requestedDate,
     required double remainingBase,
     required String? latestReceiptStatus,
     required List<Map<String, dynamic>> lineItems,
@@ -2327,16 +2343,17 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       lineItems: lineItems,
     );
     final attentionColor = _inventoryOrderAttentionColor(attentionLabel);
-    final highlightedLines = lineItems.where((line) {
-      final riskLabel = line['supplier_risk_summary']?.toString();
-      if (riskLabel != null && riskLabel.isNotEmpty) {
-        return riskLabel.contains('price up') ||
-            riskLabel.contains('lead tight') ||
-            riskLabel.contains('lead overdue') ||
-            riskLabel.contains('receipt pending');
-      }
-      return false;
-    }).length;
+    final highlightedLines = lineItems
+        .where(
+          (line) =>
+              _inventorySupplierAttentionPriority(
+                line,
+                requestedDate: requestedDate,
+                orderStatus: status,
+              ) >=
+              3,
+        )
+        .length;
 
     return Container(
       width: double.infinity,
@@ -2376,6 +2393,89 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 color: highlightedLines > 0
                     ? AppColors.amber500
                     : AppColors.statusAvailable,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSupplierAttentionOrderingSection({
+    required List<Map<String, dynamic>> lineItems,
+    required String? requestedDate,
+    required String orderStatus,
+  }) {
+    final escalations = lineItems
+        .where(
+          (line) =>
+              _inventorySupplierAttentionPriority(
+                line,
+                requestedDate: requestedDate,
+                orderStatus: orderStatus,
+              ) >=
+              4,
+        )
+        .length;
+    final watchLines = lineItems
+        .where(
+          (line) =>
+              _inventorySupplierAttentionPriority(
+                line,
+                requestedDate: requestedDate,
+                orderStatus: orderStatus,
+              ) ==
+              3,
+        )
+        .length;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Supplier Attention Ordering',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Higher-risk supplier lines are shown first so receipt pending, price-up, or overdue lead-time items surface before stable lines.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildIngredientMetaChip(
+                'Escalation lines $escalations',
+                color: escalations > 0
+                    ? AppColors.statusOccupied
+                    : AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                'Watch lines $watchLines',
+                color: watchLines > 0
+                    ? AppColors.amber500
+                    : AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                'Stable lines ${lineItems.length - escalations - watchLines}',
+                color: AppColors.statusAvailable,
               ),
             ],
           ),
@@ -2890,6 +2990,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     Map<String, dynamic> line, {
     required String? requestedDate,
     required String orderStatus,
+    required int attentionRank,
   }) {
     final productMap = line['product'] as Map<String, dynamic>?;
     final supplierItemMap = line['supplier_item'] as Map<String, dynamic>?;
@@ -3025,6 +3126,14 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             spacing: 8,
             runSpacing: 8,
             children: [
+              _buildIngredientMetaChip(
+                'Attention rank $attentionRank',
+                color: attentionRank == 1
+                    ? AppColors.statusOccupied
+                    : attentionRank <= 3
+                    ? AppColors.amber500
+                    : AppColors.statusAvailable,
+              ),
               _buildIngredientMetaChip(
                 'Ordered ${orderedUnits.toStringAsFixed(3)} $orderUnit',
                 color: AppColors.amber500,
@@ -3383,6 +3492,99 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       return AppColors.statusAvailable;
     }
     return AppColors.surface2;
+  }
+
+  List<Map<String, dynamic>> _sortedPurchaseOrderLinesForAttention(
+    List<Map<String, dynamic>> lines, {
+    required String? requestedDate,
+    required String orderStatus,
+  }) {
+    final sorted = List<Map<String, dynamic>>.from(lines);
+    sorted.sort((a, b) {
+      final priorityCompare =
+          _inventorySupplierAttentionPriority(
+            b,
+            requestedDate: requestedDate,
+            orderStatus: orderStatus,
+          ).compareTo(
+            _inventorySupplierAttentionPriority(
+              a,
+              requestedDate: requestedDate,
+              orderStatus: orderStatus,
+            ),
+          );
+      if (priorityCompare != 0) {
+        return priorityCompare;
+      }
+
+      final remainingCompare =
+          ((b['remaining_quantity_base'] as num?)?.toDouble() ?? 0).compareTo(
+            (a['remaining_quantity_base'] as num?)?.toDouble() ?? 0,
+          );
+      if (remainingCompare != 0) {
+        return remainingCompare;
+      }
+
+      final nameA =
+          (a['product'] as Map<String, dynamic>?)?['name']?.toString() ?? '';
+      final nameB =
+          (b['product'] as Map<String, dynamic>?)?['name']?.toString() ?? '';
+      return nameA.compareTo(nameB);
+    });
+    return sorted;
+  }
+
+  int _inventorySupplierAttentionPriority(
+    Map<String, dynamic> line, {
+    required String? requestedDate,
+    required String orderStatus,
+  }) {
+    final receiptVisibilityStatus =
+        line['receipt_visibility_status']?.toString() ?? 'pending';
+    final supplierHistory = List<Map<String, dynamic>>.from(
+      line['supplier_history'] as List? ?? const [],
+    );
+    final latestSupplierHistory = supplierHistory.isEmpty
+        ? null
+        : supplierHistory.first;
+    final currentUnitPrice = (line['unit_price'] as num?)?.toDouble() ?? 0;
+    final previousUnitPrice = (latestSupplierHistory?['unit_price'] as num?)
+        ?.toDouble();
+    final supplierLeadTimeDays =
+        ((line['supplier_item'] as Map<String, dynamic>?)?['lead_time_days']
+                as num?)
+            ?.toInt() ??
+        0;
+    final remainingBase =
+        (line['remaining_quantity_base'] as num?)?.toDouble() ?? 0;
+    final unitPriceDriftLabel = _inventoryUnitPriceDriftLabel(
+      currentUnitPrice: currentUnitPrice,
+      previousUnitPrice: previousUnitPrice,
+    );
+    final leadTimeRiskLabel = _inventoryLeadTimeRiskLabel(
+      requestedDate: requestedDate,
+      supplierLeadTimeDays: supplierLeadTimeDays,
+      remainingBase: remainingBase,
+      orderStatus: orderStatus,
+    );
+
+    if (leadTimeRiskLabel.contains('overdue') ||
+        unitPriceDriftLabel.contains('up')) {
+      return 4;
+    }
+    if (receiptVisibilityStatus == 'pending' ||
+        leadTimeRiskLabel.contains('tight')) {
+      return 3;
+    }
+    if (receiptVisibilityStatus == 'draft' ||
+        unitPriceDriftLabel.contains('down')) {
+      return 2;
+    }
+    if (receiptVisibilityStatus == 'confirmed' ||
+        receiptVisibilityStatus == 'received') {
+      return 1;
+    }
+    return 0;
   }
 
   String _inventoryOrderAttentionLabel({
