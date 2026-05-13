@@ -27,6 +27,7 @@ void main() {
       expect(tab, contains('Latest Purchase Order Creation'));
       expect(tab, contains('Recent Purchase Orders'));
       expect(tab, contains('Purchase Order Detail'));
+      expect(tab, contains('Order Attention Banner'));
       expect(tab, contains('Receipt Visibility'));
       expect(tab, contains('Recent Receipts'));
       expect(tab, contains('Receipt Line Provenance'));
@@ -67,6 +68,13 @@ void main() {
       expect(tab, contains('Price drift unavailable'));
       expect(tab, contains('Lead-time risk unavailable'));
       expect(tab, contains('Supplier risk summary unavailable'));
+      expect(tab, contains('Order attention'));
+      expect(
+        tab,
+        contains(
+          'Review the current order-level risk posture before scanning individual line supplier signals.',
+        ),
+      );
       expect(
         tab,
         contains(
