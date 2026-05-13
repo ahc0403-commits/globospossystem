@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../core/i18n/locale_extensions.dart';
 import '../core/ui/app_theme.dart';
+import '../core/ui/pos_design_tokens.dart';
 import '../core/services/navigation_history_service.dart';
 import '../features/auth/auth_provider.dart';
 import '../features/auth/auth_state.dart';
@@ -121,25 +122,25 @@ class _NavButton extends StatelessWidget {
       message: tooltip,
       child: InkWell(
         onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: AppRadius.sm,
         child: Container(
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: enabled ? AppColors.surface2 : AppColors.surface1,
-            borderRadius: BorderRadius.circular(8),
+            color: enabled ? PosColors.mutedSurface : PosColors.surface,
+            borderRadius: AppRadius.sm,
             border: Border.all(
               color: enabled
-                  ? AppColors.surface3
-                  : AppColors.surface3.withValues(alpha: 0.45),
+                  ? PosColors.borderStrong
+                  : PosColors.border.withValues(alpha: 0.7),
             ),
           ),
           child: Icon(
             icon,
             size: 18,
             color: enabled
-                ? AppColors.textPrimary
-                : AppColors.textSecondary.withValues(alpha: 0.4),
+                ? PosColors.textPrimary
+                : PosColors.textMuted.withValues(alpha: 0.72),
           ),
         ),
       ),
@@ -163,19 +164,19 @@ class _StoreSwitcher extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: AppColors.surface1,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.surface3),
+        color: PosColors.surface,
+        borderRadius: AppRadius.sm,
+        border: Border.all(color: PosColors.border),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: value != null && stores.any((store) => store.id == value)
               ? value
               : stores.first.id,
-          dropdownColor: AppColors.surface1,
-          iconEnabledColor: AppColors.amber500,
+          dropdownColor: PosColors.surface,
+          iconEnabledColor: PosColors.accent,
           style: GoogleFonts.notoSansKr(
-            color: AppColors.textPrimary,
+            color: PosColors.textPrimary,
             fontSize: 12,
             fontWeight: FontWeight.w700,
           ),
@@ -214,14 +215,14 @@ class _StorePill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
-        color: AppColors.surface1,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.surface3),
+        color: PosColors.surface,
+        borderRadius: AppRadius.sm,
+        border: Border.all(color: PosColors.border),
       ),
       child: Text(
         label,
         style: GoogleFonts.notoSansKr(
-          color: AppColors.textPrimary,
+          color: PosColors.textPrimary,
           fontSize: 12,
           fontWeight: FontWeight.w700,
         ),

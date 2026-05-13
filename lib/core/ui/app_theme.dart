@@ -1,25 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Legacy dark-theme tokens retained for current tracked runtime paths.
+import 'pos_design_tokens.dart';
+
+/// Compatibility aliases retained for current tracked runtime paths.
 ///
-/// They are implementation details, not redesign source-of-truth tokens.
+/// They now resolve onto the active light-first operational token set rather
+/// than defining a separate legacy visual baseline.
 /// See `docs/office/TOAST_OPERATIONAL_UI_SOURCE_OF_TRUTH.md`.
 class AppColors {
-  static const surface0 = Color(0xFF111210);
-  static const surface1 = Color(0xFF1C1D1A);
-  static const surface2 = Color(0xFF252621);
-  static const surface3 = Color(0xFF31322D);
-  static const textPrimary = Color(0xFFF0EDE6);
-  static const textSecondary = Color(0xFF9E9B92);
-  static const textMuted = Color(0xFF7A776F);
-  static const amber500 = Color(0xFFF5A623);
-  static const amber600 = Color(0xFFE08E0B);
-  static const statusAvailable = Color(0xFF4CAF7D);
-  static const statusOccupied = Color(0xFFE8935A);
-  static const statusReady = Color(0xFFF5A623);
-  static const statusCancelled = Color(0xFFC0392B);
-  static const statusInfo = Color(0xFF6EA8FE);
+  static const surface0 = ToastColorTokens.canvas;
+  static const surface1 = ToastColorTokens.surface;
+  static const surface2 = ToastColorTokens.mutedSurface;
+  static const surface3 = ToastColorTokens.border;
+  static const textPrimary = ToastColorTokens.textPrimary;
+  static const textSecondary = ToastColorTokens.textSecondary;
+  static const textMuted = ToastColorTokens.textMuted;
+  static const amber500 = ToastColorTokens.accent;
+  static const amber600 = ToastColorTokens.accentStrong;
+  static const statusAvailable = ToastColorTokens.success;
+  static const statusOccupied = ToastColorTokens.warning;
+  static const statusReady = ToastColorTokens.warning;
+  static const statusCancelled = ToastColorTokens.danger;
+  static const statusInfo = ToastColorTokens.info;
 }
 
 class AppSpacing {
@@ -32,51 +35,52 @@ class AppSpacing {
 }
 
 class AppRadius {
-  static const BorderRadius sm = BorderRadius.all(Radius.circular(10));
-  static const BorderRadius md = BorderRadius.all(Radius.circular(14));
-  static const BorderRadius lg = BorderRadius.all(Radius.circular(18));
-  static const BorderRadius pill = BorderRadius.all(Radius.circular(999));
+  static const BorderRadius sm = ToastRadiusTokens.sm;
+  static const BorderRadius md = ToastRadiusTokens.md;
+  static const BorderRadius lg = ToastRadiusTokens.lg;
+  static const BorderRadius pill = ToastRadiusTokens.pill;
 }
 
 class AppTheme {
   static ThemeData build() {
     final baseTextTheme = GoogleFonts.notoSansKrTextTheme();
-    final displayFont = GoogleFonts.bebasNeueTextTheme(baseTextTheme);
 
     return ThemeData(
-      brightness: Brightness.dark,
+      brightness: Brightness.light,
       useMaterial3: true,
       scaffoldBackgroundColor: AppColors.surface0,
-      colorScheme: const ColorScheme.dark(
+      colorScheme: const ColorScheme.light(
         primary: AppColors.amber500,
         secondary: AppColors.statusInfo,
         surface: AppColors.surface1,
         error: AppColors.statusCancelled,
-        onPrimary: AppColors.surface0,
-        onSecondary: AppColors.surface0,
+        onPrimary: Colors.white,
+        onSecondary: Colors.white,
         onSurface: AppColors.textPrimary,
         onError: Colors.white,
       ),
       textTheme: baseTextTheme.copyWith(
-        displayLarge: displayFont.displayLarge?.copyWith(
-          color: AppColors.amber500,
-          letterSpacing: 2,
+        displayLarge: baseTextTheme.displayLarge?.copyWith(
+          color: AppColors.textPrimary,
+          fontWeight: FontWeight.w900,
+          letterSpacing: -0.4,
         ),
-        displayMedium: displayFont.displayMedium?.copyWith(
-          color: AppColors.amber500,
-          letterSpacing: 1.6,
+        displayMedium: baseTextTheme.displayMedium?.copyWith(
+          color: AppColors.textPrimary,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.3,
         ),
         headlineMedium: baseTextTheme.headlineMedium?.copyWith(
           color: AppColors.textPrimary,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
         ),
         titleLarge: baseTextTheme.titleLarge?.copyWith(
           color: AppColors.textPrimary,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
         ),
         titleMedium: baseTextTheme.titleMedium?.copyWith(
           color: AppColors.textPrimary,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
         ),
         bodyLarge: baseTextTheme.bodyLarge?.copyWith(
           color: AppColors.textPrimary,
@@ -97,14 +101,14 @@ class AppTheme {
       ),
       dividerColor: AppColors.surface3,
       appBarTheme: AppBarTheme(
-        backgroundColor: AppColors.surface0,
+        backgroundColor: AppColors.surface1,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
         centerTitle: false,
-        titleTextStyle: GoogleFonts.bebasNeue(
-          color: AppColors.amber500,
-          fontSize: 32,
-          letterSpacing: 1.4,
+        titleTextStyle: GoogleFonts.notoSansKr(
+          color: AppColors.textPrimary,
+          fontSize: 18,
+          fontWeight: FontWeight.w800,
         ),
       ),
       cardTheme: CardThemeData(
@@ -129,12 +133,12 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surface1,
+        fillColor: AppColors.surface2,
         labelStyle: const TextStyle(color: AppColors.textSecondary),
         hintStyle: const TextStyle(color: AppColors.textMuted),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
-          vertical: 16,
+          vertical: 14,
         ),
         border: OutlineInputBorder(
           borderRadius: AppRadius.md,
@@ -189,7 +193,7 @@ class AppTheme {
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
         backgroundColor: AppColors.amber500,
-        foregroundColor: AppColors.surface0,
+        foregroundColor: Colors.white,
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: AppColors.surface1,
@@ -207,10 +211,10 @@ class AppTheme {
   static ButtonStyle _filledButtonStyle() {
     return FilledButton.styleFrom(
       backgroundColor: AppColors.amber500,
-      foregroundColor: AppColors.surface0,
+      foregroundColor: Colors.white,
       disabledBackgroundColor: AppColors.amber500.withValues(alpha: 0.4),
-      disabledForegroundColor: AppColors.surface0.withValues(alpha: 0.7),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      disabledForegroundColor: Colors.white.withValues(alpha: 0.75),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       textStyle: GoogleFonts.notoSansKr(
         fontSize: 14,
         fontWeight: FontWeight.w800,
@@ -222,14 +226,15 @@ class AppTheme {
 
 class AppTextStyles {
   static TextStyle operationalTitle({
-    Color color = AppColors.amber500,
-    double size = 34,
-    double letterSpacing = 1.4,
+    Color color = AppColors.textPrimary,
+    double size = 28,
+    double letterSpacing = -0.2,
   }) {
-    return GoogleFonts.bebasNeue(
+    return GoogleFonts.notoSansKr(
       color: color,
       fontSize: size,
       letterSpacing: letterSpacing,
+      fontWeight: FontWeight.w900,
     );
   }
 

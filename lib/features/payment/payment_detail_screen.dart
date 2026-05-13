@@ -6,6 +6,7 @@ import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/payment_service.dart';
 import '../../core/ui/app_primitives.dart';
 import '../../core/ui/app_theme.dart';
+import '../../core/ui/toast/toast.dart';
 import '../../widgets/app_nav_bar.dart';
 
 class PaymentDetailScreen extends StatefulWidget {
@@ -40,7 +41,18 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
     final l10n = context.l10n;
     return Scaffold(
       backgroundColor: AppColors.surface0,
-      body: AppShell(
+      body: ToastShell(
+        topbar: ToastTopbar(
+          title: l10n.paymentDetailTitle,
+          actions: [
+            IconButton(
+              tooltip: l10n.retry,
+              onPressed: _reload,
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
+          trailing: const AppNavBar(),
+        ),
         child: FutureBuilder<Map<String, dynamic>?>(
           future: _detailFuture,
           builder: (context, snapshot) {
@@ -99,59 +111,75 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
             return RefreshIndicator(
               onRefresh: _reload,
               child: ListView(
-                padding: EdgeInsets.zero,
+                padding: const EdgeInsets.all(AppSpacing.lg),
                 children: [
-                  Row(
-                    children: [
-                      const AppNavBar(),
-                      const SizedBox(width: AppSpacing.md),
-                      Expanded(
-                        child: AppSectionHeader(
-                          title: l10n.paymentDetailTitle.toUpperCase(),
-                          subtitle: l10n.paymentDetailReadOnlySubtitle(
-                            widget.paymentId,
-                          ),
-                          trailing: AppStatusBadge(
-                            label: paymentStatus.toUpperCase(),
-                            color: _statusColor(paymentStatus),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
-                  AppPanel(
+                  ToastWorkSurface(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          l10n.paymentDetailOperationalSnapshot,
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: AppSpacing.md),
-                        Wrap(
-                          spacing: AppSpacing.md,
-                          runSpacing: AppSpacing.md,
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _MetricCard(
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    l10n.paymentDetailOperationalSnapshot,
+                                    style: Theme.of(context).textTheme.labelLarge
+                                        ?.copyWith(
+                                          color: AppColors.textSecondary,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 0.2,
+                                        ),
+                                  ),
+                                  const SizedBox(height: AppSpacing.xs),
+                                  Text(
+                                    l10n.paymentDetailTitle,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.headlineMedium,
+                                  ),
+                                  const SizedBox(height: AppSpacing.xs),
+                                  Text(
+                                    l10n.paymentDetailReadOnlySubtitle(
+                                      widget.paymentId,
+                                    ),
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.md),
+                            ToastStatusBadge(
+                              label: paymentStatus.toUpperCase(),
+                              color: _statusColor(paymentStatus),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        ToastMetricItemStrip(
+                          items: [
+                            ToastMetricItem(
                               label: l10n.paymentDetailAmount,
                               value: paymentAmount,
+                              color: AppColors.amber500,
                             ),
-                            _MetricCard(
+                            ToastMetricItem(
                               label: l10n.paymentDetailMethod,
                               value: paymentMethod,
                             ),
-                            _MetricCard(
+                            ToastMetricItem(
                               label: l10n.paymentDetailMetricTable,
                               value: tableNumber,
                             ),
-                            _MetricCard(
+                            ToastMetricItem(
                               label: l10n.paymentDetailMetricItems,
                               value: itemCount.toString(),
                             ),
                           ],
                         ),
-                        const SizedBox(height: AppSpacing.md),
+                        const SizedBox(height: AppSpacing.lg),
                         Wrap(
                           spacing: AppSpacing.md,
                           runSpacing: AppSpacing.md,
@@ -185,23 +213,26 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
                           spacing: AppSpacing.sm,
                           runSpacing: AppSpacing.sm,
                           children: [
-                            AppStatusBadge(
+                            ToastStatusBadge(
                               label: l10n.paymentDetailBadgePayment(
                                 paymentStatus.toUpperCase(),
                               ),
                               color: _statusColor(paymentStatus),
+                              compact: true,
                             ),
-                            AppStatusBadge(
+                            ToastStatusBadge(
                               label: l10n.paymentDetailBadgeEInvoice(
                                 einvoiceStatus.toUpperCase(),
                               ),
                               color: _statusColor(einvoiceStatus),
+                              compact: true,
                             ),
-                            AppStatusBadge(
+                            ToastStatusBadge(
                               label: l10n.paymentDetailBadgeProof(
                                 proofStatus.toUpperCase(),
                               ),
                               color: _statusColor(proofStatus),
+                              compact: true,
                             ),
                           ],
                         ),
@@ -228,10 +259,11 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
                                 ),
                               ),
                               const SizedBox(width: AppSpacing.md),
-                              OutlinedButton.icon(
+                              PosActionButton(
+                                label: l10n.paymentDetailOpenPortal,
+                                tone: PosActionTone.secondary,
+                                icon: Icons.open_in_new,
                                 onPressed: () => _openLookupUrl(lookupUrl),
-                                icon: const Icon(Icons.open_in_new),
-                                label: Text(l10n.paymentDetailOpenPortal),
                               ),
                             ],
                           ),
@@ -523,7 +555,7 @@ class _InfoPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppPanel(
+    return ToastWorkSurface(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -609,45 +641,6 @@ class _InfoRowView extends StatelessWidget {
   }
 }
 
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 170,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.surface2,
-        borderRadius: AppRadius.sm,
-        border: Border.all(color: AppColors.surface3),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _SignalCard extends StatelessWidget {
   const _SignalCard({
     required this.title,
@@ -667,9 +660,9 @@ class _SignalCard extends StatelessWidget {
       width: 220,
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: color.withValues(alpha: 0.1),
         borderRadius: AppRadius.sm,
-        border: Border.all(color: color.withValues(alpha: 0.35)),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -709,7 +702,7 @@ class _PortalPendingPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppPanel(
+    return ToastWorkSurface(
       backgroundColor: AppColors.statusReady.withValues(alpha: 0.1),
       borderColor: AppColors.statusReady.withValues(alpha: 0.35),
       child: Row(

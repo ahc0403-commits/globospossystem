@@ -542,10 +542,9 @@ class _WaiterTopBar extends ConsumerWidget {
           const SizedBox(width: 12),
           Text(
             'GLOBOS POS',
-            style: GoogleFonts.bebasNeue(
+            style: AppTextStyles.operationalTitle(
+              size: 24,
               color: AppColors.amber500,
-              fontSize: 30,
-              letterSpacing: 1.1,
             ),
           ),
           const SizedBox(width: 12),
@@ -555,10 +554,11 @@ class _WaiterTopBar extends ConsumerWidget {
               children: [
                 Text(
                   l10n.waiterDiningFloor,
-                  style: GoogleFonts.bebasNeue(
+                  style: GoogleFonts.notoSansKr(
                     color: AppColors.textSecondary,
-                    fontSize: 18,
-                    letterSpacing: 0.8,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.3,
                   ),
                 ),
                 restaurantName.when(
@@ -673,11 +673,7 @@ class _TableGridView extends StatelessWidget {
                 children: [
                   Text(
                     l10n.waiterDiningFloor,
-                    style: GoogleFonts.bebasNeue(
-                      color: AppColors.textPrimary,
-                      fontSize: 28,
-                      letterSpacing: 1.0,
-                    ),
+                    style: AppTextStyles.operationalTitle(size: 24),
                   ),
                   const SizedBox(height: 4),
                   Text(

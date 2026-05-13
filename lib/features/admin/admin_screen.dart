@@ -311,10 +311,9 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
             : null,
         title: Text(
           isSuperAdminView ? 'ADMIN VIEW' : 'GLOBOS POS',
-          style: GoogleFonts.bebasNeue(
+          style: AppTextStyles.operationalTitle(
+            size: 24,
             color: AppColors.amber500,
-            fontSize: 34,
-            letterSpacing: 1.2,
           ),
         ),
         actions: [
