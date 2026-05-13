@@ -692,6 +692,22 @@ class InventoryService {
     };
   }
 
+  Future<Map<String, dynamic>> confirmInventoryPurchaseReceipt({
+    required String purchaseOrderId,
+    String? memo,
+    List<Map<String, dynamic>> lines = const [],
+  }) async {
+    final result = await supabase.rpc(
+      'confirm_inventory_purchase_receipt',
+      params: {
+        'p_purchase_order_id': purchaseOrderId,
+        'p_memo': memo,
+        'p_lines': lines,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
   Future<List<Map<String, dynamic>>> _rpcList(
     String functionName, {
     required Map<String, dynamic> params,

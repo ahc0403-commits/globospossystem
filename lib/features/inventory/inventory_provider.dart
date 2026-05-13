@@ -947,3 +947,301 @@ final inventoryPurchaseOrderDetailProvider =
       InventoryPurchaseOrderDetailNotifier,
       InventoryPurchaseOrderDetailState
     >((ref) => InventoryPurchaseOrderDetailNotifier());
+
+enum InventoryPurchaseRuntimeResultKind {
+  idle,
+  success,
+  failure,
+  blocked,
+  cancelled,
+}
+
+class InventoryPurchaseRuntimeResult {
+  final InventoryPurchaseRuntimeResultKind kind;
+  final String title;
+  final String message;
+
+  const InventoryPurchaseRuntimeResult({
+    required this.kind,
+    required this.title,
+    required this.message,
+  });
+}
+
+class InventoryPurchaseApprovalRuntimeState {
+  final bool isEvaluating;
+  final InventoryPurchaseRuntimeResult? result;
+
+  const InventoryPurchaseApprovalRuntimeState({
+    this.isEvaluating = false,
+    this.result,
+  });
+
+  InventoryPurchaseApprovalRuntimeState copyWith({
+    bool? isEvaluating,
+    InventoryPurchaseRuntimeResult? result,
+    bool clearResult = false,
+  }) => InventoryPurchaseApprovalRuntimeState(
+    isEvaluating: isEvaluating ?? this.isEvaluating,
+    result: clearResult ? null : (result ?? this.result),
+  );
+}
+
+class InventoryPurchaseApprovalRuntimeNotifier
+    extends StateNotifier<InventoryPurchaseApprovalRuntimeState> {
+  InventoryPurchaseApprovalRuntimeNotifier()
+    : super(const InventoryPurchaseApprovalRuntimeState());
+
+  Future<void> evaluate(Map<String, dynamic>? order) async {
+    state = state.copyWith(isEvaluating: true, clearResult: true);
+    state = state.copyWith(
+      isEvaluating: false,
+      result: _buildInventoryPurchaseApprovalRuntimeResult(order),
+    );
+  }
+
+  void clear() {
+    state = const InventoryPurchaseApprovalRuntimeState();
+  }
+
+  InventoryPurchaseRuntimeResult _buildInventoryPurchaseApprovalRuntimeResult(
+    Map<String, dynamic>? order,
+  ) {
+    if (order == null) {
+      return const InventoryPurchaseRuntimeResult(
+        kind: InventoryPurchaseRuntimeResultKind.blocked,
+        title: 'Approval handoff unavailable',
+        message:
+            'Select a purchase order first. POS can only evaluate Office-owned approval readiness after a tracked order is loaded.',
+      );
+    }
+
+    final status = order['status']?.toString() ?? 'submitted';
+    switch (status) {
+      case 'submitted':
+      case 'office_returned':
+        return const InventoryPurchaseRuntimeResult(
+          kind: InventoryPurchaseRuntimeResultKind.blocked,
+          title: 'Ready to approve',
+          message:
+              'This purchase order is ready for Office review, but approval execution stays Office-owned. POS records the handoff boundary and does not call Office approval mutation here.',
+        );
+      case 'office_approved':
+      case 'ordered':
+      case 'partially_received':
+      case 'received':
+        return const InventoryPurchaseRuntimeResult(
+          kind: InventoryPurchaseRuntimeResultKind.success,
+          title: 'Approved',
+          message:
+              'Backend truth already shows this purchase order beyond the Office approval gate, so POS keeps the state visible without re-running any approval action.',
+        );
+      case 'office_rejected':
+        return const InventoryPurchaseRuntimeResult(
+          kind: InventoryPurchaseRuntimeResultKind.blocked,
+          title: 'Approval blocked',
+          message:
+              'Office review rejected this purchase order. POS cannot override the Office-owned decision from the inventory runtime surface.',
+        );
+      case 'cancelled':
+        return const InventoryPurchaseRuntimeResult(
+          kind: InventoryPurchaseRuntimeResultKind.blocked,
+          title: 'Approval cancelled',
+          message:
+              'This purchase order is cancelled in backend truth. POS does not reopen or re-approve cancelled inventory purchase orders.',
+        );
+      default:
+        return const InventoryPurchaseRuntimeResult(
+          kind: InventoryPurchaseRuntimeResultKind.blocked,
+          title: 'Approval handoff pending',
+          message:
+              'This purchase order has not reached an Office-approvable state yet. POS keeps the workflow boundary visible only.',
+        );
+    }
+  }
+}
+
+final inventoryPurchaseApprovalRuntimeProvider =
+    StateNotifierProvider<
+      InventoryPurchaseApprovalRuntimeNotifier,
+      InventoryPurchaseApprovalRuntimeState
+    >((ref) => InventoryPurchaseApprovalRuntimeNotifier());
+
+class InventoryPurchaseReceivingRuntimeState {
+  final bool isSubmitting;
+  final InventoryPurchaseRuntimeResult? result;
+
+  const InventoryPurchaseReceivingRuntimeState({
+    this.isSubmitting = false,
+    this.result,
+  });
+
+  InventoryPurchaseReceivingRuntimeState copyWith({
+    bool? isSubmitting,
+    InventoryPurchaseRuntimeResult? result,
+    bool clearResult = false,
+  }) => InventoryPurchaseReceivingRuntimeState(
+    isSubmitting: isSubmitting ?? this.isSubmitting,
+    result: clearResult ? null : (result ?? this.result),
+  );
+}
+
+class InventoryPurchaseReceivingRuntimeNotifier
+    extends StateNotifier<InventoryPurchaseReceivingRuntimeState> {
+  InventoryPurchaseReceivingRuntimeNotifier()
+    : super(const InventoryPurchaseReceivingRuntimeState());
+
+  Future<bool> confirmRemainingReceipt({
+    required Map<String, dynamic>? order,
+    String? memo,
+  }) async {
+    final blockedResult = _blockedReceivingResult(order);
+    if (blockedResult != null) {
+      state = state.copyWith(result: blockedResult, isSubmitting: false);
+      return false;
+    }
+
+    state = state.copyWith(isSubmitting: true, clearResult: true);
+    try {
+      final updatedOrder = await inventoryService
+          .confirmInventoryPurchaseReceipt(
+            purchaseOrderId: order!['id'].toString(),
+            memo: memo,
+          );
+      final updatedStatus = updatedOrder['status']?.toString() ?? 'received';
+      final title = updatedStatus == 'received'
+          ? 'Received and closed'
+          : 'Receiving confirmed';
+      final message = updatedStatus == 'received'
+          ? 'Backend truth confirmed the remaining receipt quantity and closed this purchase order as received.'
+          : 'Backend truth confirmed receipt progress for this purchase order. Remaining quantity is still open for later receiving.';
+
+      state = state.copyWith(
+        isSubmitting: false,
+        result: InventoryPurchaseRuntimeResult(
+          kind: InventoryPurchaseRuntimeResultKind.success,
+          title: title,
+          message: message,
+        ),
+      );
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isSubmitting: false,
+        result: InventoryPurchaseRuntimeResult(
+          kind: InventoryPurchaseRuntimeResultKind.failure,
+          title: 'Receiving failed',
+          message: _mapInventoryPurchaseReceivingError(e),
+        ),
+      );
+      return false;
+    }
+  }
+
+  void markCancelled() {
+    state = state.copyWith(
+      result: const InventoryPurchaseRuntimeResult(
+        kind: InventoryPurchaseRuntimeResultKind.cancelled,
+        title: 'Receiving cancelled',
+        message:
+            'Receipt confirmation was cancelled before any backend mutation was sent.',
+      ),
+    );
+  }
+
+  void clear() {
+    state = const InventoryPurchaseReceivingRuntimeState();
+  }
+
+  InventoryPurchaseRuntimeResult? _blockedReceivingResult(
+    Map<String, dynamic>? order,
+  ) {
+    if (order == null) {
+      return const InventoryPurchaseRuntimeResult(
+        kind: InventoryPurchaseRuntimeResultKind.blocked,
+        title: 'Receiving blocked',
+        message:
+            'Select a purchase order first. POS can only evaluate receiving readiness after a tracked order is loaded.',
+      );
+    }
+
+    final status = order['status']?.toString() ?? 'submitted';
+    final remainingBase =
+        (order['total_remaining_quantity_base'] as num?)?.toDouble() ?? 0;
+
+    if (status == 'received' || remainingBase <= 0) {
+      return const InventoryPurchaseRuntimeResult(
+        kind: InventoryPurchaseRuntimeResultKind.success,
+        title: 'Received and closed',
+        message:
+            'Backend truth already shows this purchase order as fully received, so POS does not send another receipt confirmation.',
+      );
+    }
+
+    if (status == 'office_rejected') {
+      return const InventoryPurchaseRuntimeResult(
+        kind: InventoryPurchaseRuntimeResultKind.blocked,
+        title: 'Receiving blocked',
+        message:
+            'Office rejected this purchase order, so receipt confirmation cannot run from POS.',
+      );
+    }
+
+    if (status == 'cancelled') {
+      return const InventoryPurchaseRuntimeResult(
+        kind: InventoryPurchaseRuntimeResultKind.blocked,
+        title: 'Receiving blocked',
+        message:
+            'This purchase order is cancelled in backend truth, so receipt confirmation and stock mutation stay unavailable.',
+      );
+    }
+
+    if (status == 'submitted' || status == 'office_returned') {
+      return const InventoryPurchaseRuntimeResult(
+        kind: InventoryPurchaseRuntimeResultKind.blocked,
+        title: 'Receiving blocked',
+        message:
+            'Office approval is still missing. POS cannot confirm receipt or mutate stock before the backend order reaches an approved or ordered state.',
+      );
+    }
+
+    if (status != 'office_approved' &&
+        status != 'ordered' &&
+        status != 'partially_received') {
+      return InventoryPurchaseRuntimeResult(
+        kind: InventoryPurchaseRuntimeResultKind.blocked,
+        title: 'Receiving blocked',
+        message:
+            'This purchase order is currently in status $status, which the backend does not treat as receivable.',
+      );
+    }
+
+    return null;
+  }
+
+  String _mapInventoryPurchaseReceivingError(Object error) {
+    final fallback = 'Failed to confirm receiving from backend truth.';
+    final message = error.toString();
+
+    if (message.contains('INVENTORY_PURCHASE_NOT_FOUND')) {
+      return 'The selected purchase order no longer exists in backend truth.';
+    }
+    if (message.contains('INVENTORY_PURCHASE_FORBIDDEN')) {
+      return 'No permission to confirm receiving for this store.';
+    }
+    if (message.contains('INVENTORY_PURCHASE_NOT_RECEIVABLE')) {
+      return 'The backend does not currently allow receiving for this purchase-order status.';
+    }
+    if (message.contains('INVENTORY_PURCHASE_LINE_NOT_FOUND')) {
+      return 'One or more purchase-order lines are no longer available for receiving.';
+    }
+
+    return fallback;
+  }
+}
+
+final inventoryPurchaseReceivingRuntimeProvider =
+    StateNotifierProvider<
+      InventoryPurchaseReceivingRuntimeNotifier,
+      InventoryPurchaseReceivingRuntimeState
+    >((ref) => InventoryPurchaseReceivingRuntimeNotifier());
