@@ -28,6 +28,7 @@ void main() {
       expect(tab, contains('Recent Purchase Orders'));
       expect(tab, contains('Purchase Order Detail'));
       expect(tab, contains('Order Attention Banner'));
+      expect(tab, contains('Supplier Attention Ordering'));
       expect(tab, contains('Receipt Visibility'));
       expect(tab, contains('Recent Receipts'));
       expect(tab, contains('Receipt Line Provenance'));
@@ -73,6 +74,15 @@ void main() {
         tab,
         contains(
           'Review the current order-level risk posture before scanning individual line supplier signals.',
+        ),
+      );
+      expect(tab, contains('Attention rank'));
+      expect(tab, contains('Escalation lines'));
+      expect(tab, contains('Watch lines'));
+      expect(
+        tab,
+        contains(
+          'Higher-risk supplier lines are shown first so receipt pending, price-up, or overdue lead-time items surface before stable lines.',
         ),
       );
       expect(
