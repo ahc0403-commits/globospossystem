@@ -103,10 +103,12 @@ Examples confirmed during this re-audit:
   `lib/features/auth/login_screen.dart`,
   `lib/features/onboarding/onboarding_screen.dart`,
   `lib/core/layout/web_sidebar_layout.dart`, and
-  `lib/features/photo_ops/photo_ops_screen.dart`.
-- `ToastSidebar` plus `WebSidebarLayout` still define the tracked admin shell.
-- `AppShell` still exists in `lib/core/ui/app_primitives.dart` and is used by
+  `lib/features/photo_ops/photo_ops_screen.dart`, and
   `lib/features/payment/payment_detail_screen.dart`.
+- `ToastSidebar` plus `WebSidebarLayout` still define the tracked admin shell.
+- `AppShell` still exists in `lib/core/ui/app_primitives.dart` as a retained
+  compatibility primitive for tracked runtime paths. It is not the active
+  shell for `lib/features/payment/payment_detail_screen.dart`.
 
 None of the above symbols, by themselves, define the redesign standard.
 

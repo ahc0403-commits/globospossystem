@@ -330,11 +330,14 @@ class _MenuBrowser extends StatelessWidget {
                                   const SizedBox(height: 6),
                                   Text(
                                     '₫${currency.format(price)}',
-                                    style: GoogleFonts.bebasNeue(
-                                      color: AppColors.amber500,
-                                      fontSize: 24,
-                                      letterSpacing: 0.8,
-                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(
+                                          color: AppColors.amber500,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: -0.2,
+                                        ),
                                   ),
                                 ],
                               ),
@@ -526,10 +529,9 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
             children: [
               Text(
                 'Table ${widget.table.tableNumber}',
-                style: GoogleFonts.bebasNeue(
+                style: AppTextStyles.operationalTitle(
+                  size: 30,
                   color: AppColors.amber500,
-                  fontSize: 36,
-                  letterSpacing: 1.2,
                 ),
               ),
               const Spacer(),
@@ -806,11 +808,12 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                               const SizedBox(height: 2),
                               Text(
                                 '₫${formatter.format(item.price)}',
-                                style: GoogleFonts.bebasNeue(
-                                  color: AppColors.amber500,
-                                  fontSize: 22,
-                                  letterSpacing: 0.7,
-                                ),
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(
+                                      color: AppColors.amber500,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.2,
+                                    ),
                               ),
                             ],
                           ),
@@ -861,10 +864,9 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
               const Spacer(),
               Text(
                 '₫${formatter.format(total)}',
-                style: GoogleFonts.bebasNeue(
+                style: AppTextStyles.operationalTitle(
+                  size: 28,
                   color: AppColors.amber500,
-                  fontSize: 34,
-                  letterSpacing: 1.0,
                 ),
               ),
             ],

@@ -1205,6 +1205,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     final orderCreation = ref.watch(inventoryPurchaseOrderCreationProvider);
     final orderSummary = ref.watch(inventoryPurchaseOrderSummaryProvider);
     final orderDetail = ref.watch(inventoryPurchaseOrderDetailProvider);
+    final operatingSummary = ref.watch(
+      inventoryPurchaseOperatingSummaryProvider,
+    );
     final deduct = report.transactions
         .where((t) => t['transaction_type'] == 'deduct')
         .fold<double>(
@@ -1256,6 +1259,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          _buildInventoryOperatingSummarySection(operatingSummary),
           const SizedBox(height: 12),
           _buildInventoryPurchaseOverview(
             storeId: storeId,
@@ -1446,9 +1451,6 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         (dashboard?['submitted_purchase_amount'] as num?)?.toDouble() ?? 0;
     final approvedPurchaseAmount =
         (dashboard?['approved_purchase_amount'] as num?)?.toDouble() ?? 0;
-    final operatingSummary = ref.watch(
-      inventoryPurchaseOperatingSummaryProvider,
-    );
 
     return Container(
       width: double.infinity,
@@ -1477,7 +1479,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'View the tracked purchase dashboard and generate a scoped recommendation snapshot without creating purchase orders or mutating stock.',
+                      'Review supporting purchase metrics and generate a scoped recommendation snapshot after working the visible queue, selected runtime state, and next operator action above.',
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -1594,7 +1596,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   _formatCurrencyCompact(approvedPurchaseAmount),
                 ),
                 const SizedBox(width: 8),
-                _purchaseMetricCard('Slice Mode', 'Scoped mutation'),
+                _purchaseMetricCard('Slice Mode', 'Supporting context'),
               ],
             ),
             const SizedBox(height: 12),
@@ -1604,8 +1606,6 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               approvedPurchaseAmount: approvedPurchaseAmount,
               recommendationRun: recommendationRun,
             ),
-            const SizedBox(height: 12),
-            _buildInventoryOperatingSummarySection(operatingSummary),
             const SizedBox(height: 12),
             _buildLatestRecommendationSnapshot(
               storeId: storeId,
@@ -1677,6 +1677,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     InventoryPurchaseOperatingSummary summary,
   ) {
     final reconciliation = summary.reconciliationSummary;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -1704,75 +1705,16 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               fontSize: 12,
             ),
           ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildIngredientMetaChip(
-                summary.recommendationRuntimeStateLabel,
-                color:
-                    summary.recommendationRuntimeStateLabel.endsWith('blocked')
-                    ? AppColors.statusOccupied
-                    : summary.recommendationRuntimeStateLabel.endsWith('ready')
-                    ? AppColors.statusAvailable
-                    : AppColors.amber500,
-              ),
-              _buildIngredientMetaChip(summary.latestSnapshotStateLabel),
-              _buildIngredientMetaChip(
-                summary.purchaseOrderCreationReadinessLabel,
-                color:
-                    summary.purchaseOrderCreationReadinessLabel.contains(
-                      'ready',
-                    )
-                    ? AppColors.statusAvailable
-                    : summary.purchaseOrderCreationReadinessLabel.contains(
-                        'blocked',
-                      )
-                    ? AppColors.statusOccupied
-                    : AppColors.amber500,
-              ),
-              _buildIngredientMetaChip(
-                summary.approvalHandoffReadinessLabel,
-                color: _inventoryApprovalRuntimeStateColor(
-                  summary.approvalHandoffReadinessLabel,
-                ),
-              ),
-              _buildIngredientMetaChip(
-                summary.receivingReadinessLabel,
-                color: _inventoryReceivingRuntimeStateColor(
-                  summary.receivingReadinessLabel,
-                ),
-              ),
-              _buildIngredientMetaChip(
-                summary.selectedPurchaseOrderRuntimeLabel,
-              ),
-              _buildIngredientMetaChip(summary.handoffTarget),
-              _buildIngredientMetaChip(
-                'Visible snapshot lines ${summary.visibleRecommendationLineCount}',
-                color: AppColors.statusAvailable,
-              ),
-              _buildIngredientMetaChip(
-                'Visible purchase orders ${summary.visiblePurchaseOrderCount}',
-              ),
-              _buildIngredientMetaChip(
-                'Blocked reasons ${summary.visibleBlockedReasonCount}',
-                color: summary.visibleBlockedReasonCount > 0
-                    ? AppColors.statusOccupied
-                    : AppColors.statusAvailable,
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 4),
           Text(
-            summary.operatingNarrative,
+            'Work the queue first, keep the selected purchase-order and handoff state visible, and use the supporting dashboard context only after the current action path is clear.',
             style: GoogleFonts.notoSansKr(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
           ),
           const SizedBox(height: 10),
-          _buildInventoryReconciliationSummarySection(reconciliation),
+          _buildInventoryActionQueueSection(summary.actionQueue),
           const SizedBox(height: 10),
           Container(
             width: double.infinity,
@@ -1805,9 +1747,76 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             ),
           ),
           const SizedBox(height: 10),
-          _buildInventoryActionQueueSection(summary.actionQueue),
-          const SizedBox(height: 10),
-          _buildInventorySupplierBottleneckSection(summary.supplierBottlenecks),
+          Text(
+            'Selected Runtime And Handoff State',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildIngredientMetaChip(
+                summary.selectedPurchaseOrderRuntimeLabel,
+              ),
+              _buildIngredientMetaChip(
+                summary.handoffTarget,
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                summary.approvalHandoffReadinessLabel,
+                color: _inventoryApprovalRuntimeStateColor(
+                  summary.approvalHandoffReadinessLabel,
+                ),
+              ),
+              _buildIngredientMetaChip(
+                summary.receivingReadinessLabel,
+                color: _inventoryReceivingRuntimeStateColor(
+                  summary.receivingReadinessLabel,
+                ),
+              ),
+              _buildIngredientMetaChip(
+                summary.recommendationRuntimeStateLabel,
+                color:
+                    summary.recommendationRuntimeStateLabel.endsWith('blocked')
+                    ? AppColors.statusOccupied
+                    : summary.recommendationRuntimeStateLabel.endsWith('ready')
+                    ? AppColors.statusAvailable
+                    : AppColors.amber500,
+              ),
+              _buildIngredientMetaChip(summary.latestSnapshotStateLabel),
+              _buildIngredientMetaChip(
+                summary.purchaseOrderCreationReadinessLabel,
+                color:
+                    summary.purchaseOrderCreationReadinessLabel.contains(
+                      'ready',
+                    )
+                    ? AppColors.statusAvailable
+                    : summary.purchaseOrderCreationReadinessLabel.contains(
+                        'blocked',
+                      )
+                    ? AppColors.statusOccupied
+                    : AppColors.amber500,
+              ),
+              _buildIngredientMetaChip(
+                'Visible snapshot lines ${summary.visibleRecommendationLineCount}',
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                'Visible purchase orders ${summary.visiblePurchaseOrderCount}',
+              ),
+              _buildIngredientMetaChip(
+                'Blocked reasons ${summary.visibleBlockedReasonCount}',
+                color: summary.visibleBlockedReasonCount > 0
+                    ? AppColors.statusOccupied
+                    : AppColors.statusAvailable,
+              ),
+            ],
+          ),
           const SizedBox(height: 10),
           Text(
             'Operating blocked reasons',
@@ -1834,6 +1843,18 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   )
                   .toList(),
             ),
+          const SizedBox(height: 10),
+          _buildInventorySupplierBottleneckSection(summary.supplierBottlenecks),
+          const SizedBox(height: 10),
+          _buildInventoryReconciliationSummarySection(reconciliation),
+          const SizedBox(height: 10),
+          Text(
+            summary.operatingNarrative,
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
         ],
       ),
     );

@@ -81,10 +81,9 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
           const SizedBox(width: 8),
           Text(
             'Payment Proof',
-            style: GoogleFonts.bebasNeue(
+            style: AppTextStyles.operationalTitle(
+              size: 24,
               color: AppColors.textPrimary,
-              fontSize: 28,
-              letterSpacing: 0.8,
             ),
           ),
         ],

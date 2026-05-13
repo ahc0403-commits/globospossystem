@@ -312,68 +312,74 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                   return KeyedSubtree(
                                     key: Key('cashier_order_${order.orderId}'),
                                     child: InkWell(
-                                    key: index == 0
-                                        ? const Key('payment_first_candidate')
-                                        : null,
-                                    onTap: () {
-                                      setState(() => _selectedMethod = null);
-                                      notifier.selectOrder(order);
-                                    },
-                                    borderRadius: BorderRadius.circular(14),
-                                    child: AnimatedContainer(
-                                      duration: const Duration(
-                                        milliseconds: 220,
-                                      ),
-                                      padding: const EdgeInsets.all(14),
-                                      decoration: BoxDecoration(
-                                        color: selected
-                                            ? AppColors.surface0
-                                            : AppColors.surface1,
-                                        borderRadius: BorderRadius.circular(14),
-                                        border: Border.all(
+                                      key: index == 0
+                                          ? const Key('payment_first_candidate')
+                                          : null,
+                                      onTap: () {
+                                        setState(() => _selectedMethod = null);
+                                        notifier.selectOrder(order);
+                                      },
+                                      borderRadius: BorderRadius.circular(14),
+                                      child: AnimatedContainer(
+                                        duration: const Duration(
+                                          milliseconds: 220,
+                                        ),
+                                        padding: const EdgeInsets.all(14),
+                                        decoration: BoxDecoration(
                                           color: selected
-                                              ? AppColors.amber500
-                                              : AppColors.surface2,
-                                          width: selected ? 1.8 : 1,
+                                              ? AppColors.surface0
+                                              : AppColors.surface1,
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
+                                          border: Border.all(
+                                            color: selected
+                                                ? AppColors.amber500
+                                                : AppColors.surface2,
+                                            width: selected ? 1.8 : 1,
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Table ${order.tableNumber}',
+                                              style:
+                                                  AppTextStyles.operationalTitle(
+                                                    size: 30,
+                                                  ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              '₫${currency.format(order.totalAmount)}',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .titleLarge
+                                                  ?.copyWith(
+                                                    color: AppColors.amber500,
+                                                    fontWeight: FontWeight.w800,
+                                                    letterSpacing: -0.2,
+                                                  ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              l10n.cashierItemsCount(
+                                                order.items.length,
+                                              ),
+                                              style: GoogleFonts.notoSansKr(
+                                                color: AppColors.textSecondary,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            _OrderStatusBadge(
+                                              status: order.status,
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'Table ${order.tableNumber}',
-                                            style: GoogleFonts.bebasNeue(
-                                              color: AppColors.textPrimary,
-                                              fontSize: 34,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            '₫${currency.format(order.totalAmount)}',
-                                            style: GoogleFonts.bebasNeue(
-                                              color: AppColors.amber500,
-                                              fontSize: 24,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            l10n.cashierItemsCount(
-                                              order.items.length,
-                                            ),
-                                            style: GoogleFonts.notoSansKr(
-                                              color: AppColors.textSecondary,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          _OrderStatusBadge(
-                                            status: order.status,
-                                          ),
-                                        ],
-                                      ),
                                     ),
-                                  ),
                                   );
                                 },
                               ),
@@ -708,10 +714,12 @@ class _SelectedOrderView extends StatelessWidget {
                     const Spacer(),
                     Text(
                       '₫${currency.format(order.totalAmount)}',
-                      style: GoogleFonts.bebasNeue(
-                        color: AppColors.amber500,
-                        fontSize: 32,
-                      ),
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(
+                            color: AppColors.amber500,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.3,
+                          ),
                     ),
                   ],
                 ),
@@ -740,11 +748,15 @@ class _SelectedOrderView extends StatelessWidget {
                             alignment: Alignment.center,
                             child: Text(
                               method.label,
-                              style: GoogleFonts.bebasNeue(
-                                color: AppColors.textPrimary,
-                                fontSize: method.value == 'service' ? 18 : 22,
-                                letterSpacing: 0.8,
-                              ),
+                              style: Theme.of(context).textTheme.labelLarge
+                                  ?.copyWith(
+                                    color: AppColors.textPrimary,
+                                    fontSize: method.value == 'service'
+                                        ? 14
+                                        : 16,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.2,
+                                  ),
                             ),
                           ),
                         ),
@@ -839,10 +851,12 @@ class _SelectedOrderView extends StatelessWidget {
                             isServiceSelected
                                 ? l10n.cashierServiceNow
                                 : l10n.cashierPayNow,
-                            style: GoogleFonts.bebasNeue(
-                              fontSize: 22,
-                              letterSpacing: 1.0,
-                            ),
+                            style: Theme.of(context).textTheme.labelLarge
+                                ?.copyWith(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.2,
+                                ),
                           ),
                   ),
                 ),
