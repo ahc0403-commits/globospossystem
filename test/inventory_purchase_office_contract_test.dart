@@ -11,6 +11,8 @@ void main() {
       'supabase/migrations/20260506001000_inventory_purchase_bootstrap_seed.sql';
   const accessFixPath =
       'supabase/migrations/20260506002000_inventory_purchase_pos_native_access_fix.sql';
+  const receiptObservabilityPath =
+      'supabase/migrations/20260513010000_inventory_receiving_idempotency_observability.sql';
 
   test(
     'inventory purchase migration defines separate Office-reviewable domain',
@@ -323,6 +325,56 @@ void main() {
         "v_order.status NOT IN ('office_approved', 'ordered', 'partially_received')",
       ),
     );
+  });
+
+  test('inventory receiving idempotency and observability stay backend-owned', () {
+    final sql = readRepoFile(receiptObservabilityPath);
+
+    expect(
+      sql,
+      contains(
+        'CREATE TABLE IF NOT EXISTS public.inventory_receipt_confirmation_attempts',
+      ),
+    );
+    expect(sql, contains('UNIQUE (purchase_order_id, attempt_key)'));
+    expect(
+      sql,
+      contains(
+        "hashtext('confirm_inventory_purchase_receipt:' || p_purchase_order_id::TEXT || ':' || v_attempt_key_normalized)",
+      ),
+    );
+    expect(
+      sql,
+      contains("attempt_status IN ('succeeded', 'replayed', 'noop')"),
+    );
+    expect(sql, contains("'replayed'"));
+    expect(sql, contains("'succeeded'"));
+    expect(
+      sql,
+      contains(
+        'CREATE OR REPLACE FUNCTION public.get_inventory_receipt_attempt_trace',
+      ),
+    );
+    expect(
+      sql,
+      contains(
+        'CREATE OR REPLACE FUNCTION public.get_inventory_receiving_operational_observability',
+      ),
+    );
+    expect(
+      sql,
+      contains(
+        'GRANT EXECUTE ON FUNCTION public.confirm_inventory_purchase_receipt(UUID, TEXT, JSONB) TO authenticated',
+      ),
+    );
+    expect(sql, isNot(contains('office_approve_inventory_purchase_order')));
+    expect(
+      sql,
+      isNot(contains("rpc('office_approve_inventory_purchase_order'")),
+    );
+    expect(sql, isNot(contains("from('payments')")));
+    expect(sql, isNot(contains("from('orders')")));
+    expect(sql, isNot(contains("from('tables')")));
   });
 
   test('inventory purchase stock audit save supports draft before completion', () {
