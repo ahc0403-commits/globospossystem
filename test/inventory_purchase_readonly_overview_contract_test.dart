@@ -13,6 +13,7 @@ void main() {
     final service = readRepoFile('lib/core/services/inventory_service.dart');
 
     expect(tab, contains('Purchase Overview'));
+    expect(tab, contains('Inventory Operating Runtime Summary'));
     expect(tab, contains('Purchase Review Detail'));
     expect(tab, contains('Approval Gap'));
     expect(tab, contains('Review Focus'));
@@ -227,8 +228,21 @@ void main() {
     expect(tab, contains('inventoryPurchaseOrderSummaryProvider'));
     expect(tab, contains('inventoryPurchaseOrderDetailProvider'));
     expect(tab, contains('Refresh Purchase Overview'));
+    expect(tab, contains('Next Operator Action'));
+    expect(tab, contains('Operating blocked reasons'));
+    expect(
+      tab,
+      contains(
+        'Read the full inventory operating flow from one POS surface: recommendation runtime, latest snapshot state, purchase-order creation readiness, approval handoff, receiving readiness, selected purchase-order closure, blocked reasons, and the next operator action.',
+      ),
+    );
+    expect(tab, contains('Visible snapshot lines'));
+    expect(tab, contains('Visible purchase orders'));
+    expect(tab, contains('Blocked reasons '));
 
     expect(provider, contains('class InventoryPurchaseOverviewState'));
+    expect(provider, contains('class InventoryPurchaseOperatingSummary'));
+    expect(provider, contains('buildInventoryPurchaseOperatingSummary'));
     expect(provider, contains('inventoryPurchaseOverviewProvider'));
     expect(provider, contains('class InventoryPurchaseRecommendationRunState'));
     expect(provider, contains('inventoryPurchaseRecommendationRunProvider'));
@@ -261,6 +275,27 @@ void main() {
     expect(provider, contains('Handoff target Office approval queue'));
     expect(provider, contains('Handoff target POS receiving contract'));
     expect(provider, contains('Last runtime state none yet'));
+    expect(provider, contains('Recommendation running'));
+    expect(provider, contains('Latest snapshot visible'));
+    expect(provider, contains('PO creation ready'));
+    expect(
+      provider,
+      contains(
+        'Refresh the purchase overview to load the current store-scoped operating baseline.',
+      ),
+    );
+    expect(
+      provider,
+      contains(
+        'Hand off the selected purchase order to the Office approval owner and keep POS on visibility-only duty.',
+      ),
+    );
+    expect(
+      provider,
+      contains(
+        'Physically verify the inbound goods, then use the tracked POS receipt confirmation contract for the remaining quantity.',
+      ),
+    );
     expect(
       provider,
       contains(
@@ -344,6 +379,8 @@ void main() {
     expect(tab, isNot(contains("from('payments')")));
     expect(tab, isNot(contains("from('orders')")));
     expect(tab, isNot(contains("from('tables')")));
+    expect(tab, isNot(contains('supabase.')));
+    expect(tab, isNot(contains('.rpc(')));
     expect(tab, isNot(contains('Confirm Receipt')));
     expect(tab, isNot(contains('Approve Purchase Order')));
     expect(tab, isNot(contains('Run Supplier Approval')));

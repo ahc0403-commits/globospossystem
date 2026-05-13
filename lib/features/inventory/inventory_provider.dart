@@ -992,6 +992,42 @@ class InventoryPurchaseRuntimeClosureSnapshot {
   });
 }
 
+class InventoryPurchaseOperatingSummary {
+  final String recommendationRuntimeStateLabel;
+  final String latestSnapshotStateLabel;
+  final String purchaseOrderCreationReadinessLabel;
+  final String approvalHandoffReadinessLabel;
+  final String receivingReadinessLabel;
+  final String selectedPurchaseOrderRuntimeLabel;
+  final String nextOperatorAction;
+  final String operatingNarrative;
+  final String handoffTarget;
+  final List<String> blockedReasons;
+  final int visibleRecommendationLineCount;
+  final int visiblePurchaseOrderCount;
+  final int visibleBlockedReasonCount;
+  final bool hasSelectedPurchaseOrder;
+  final bool canConfirmReceipt;
+
+  const InventoryPurchaseOperatingSummary({
+    required this.recommendationRuntimeStateLabel,
+    required this.latestSnapshotStateLabel,
+    required this.purchaseOrderCreationReadinessLabel,
+    required this.approvalHandoffReadinessLabel,
+    required this.receivingReadinessLabel,
+    required this.selectedPurchaseOrderRuntimeLabel,
+    required this.nextOperatorAction,
+    required this.operatingNarrative,
+    required this.handoffTarget,
+    required this.blockedReasons,
+    required this.visibleRecommendationLineCount,
+    required this.visiblePurchaseOrderCount,
+    required this.visibleBlockedReasonCount,
+    required this.hasSelectedPurchaseOrder,
+    required this.canConfirmReceipt,
+  });
+}
+
 InventoryPurchaseRuntimeClosureSnapshot
 buildInventoryPurchaseRuntimeClosureSnapshot({
   required Map<String, dynamic>? order,
@@ -1120,6 +1156,127 @@ buildInventoryPurchaseRuntimeClosureSnapshot({
     blockedReasons: blockedReasons,
     canCheckApproval: order != null && !approvalRuntime.isEvaluating,
     canConfirmReceipt: canConfirmReceipt,
+  );
+}
+
+InventoryPurchaseOperatingSummary buildInventoryPurchaseOperatingSummary({
+  required InventoryPurchaseOverviewState overview,
+  required InventoryPurchaseRecommendationRunState recommendationRun,
+  required InventoryPurchaseRecommendationSnapshotState recommendationSnapshot,
+  required InventoryPurchaseOrderCreationState orderCreation,
+  required InventoryPurchaseOrderSummaryState orderSummary,
+  required InventoryPurchaseOrderDetailState orderDetail,
+  required InventoryPurchaseRuntimeClosureSnapshot runtimeClosure,
+}) {
+  final recommendationRuntimeStateLabel = recommendationRun.isRunning
+      ? 'Recommendation running'
+      : recommendationRun.error != null
+      ? 'Recommendation blocked'
+      : recommendationRun.lastRunId != null
+      ? 'Recommendation ready'
+      : 'Recommendation idle';
+
+  final latestSnapshotStateLabel = recommendationSnapshot.isLoading
+      ? 'Latest snapshot loading'
+      : recommendationSnapshot.error != null
+      ? 'Latest snapshot blocked'
+      : recommendationSnapshot.run == null
+      ? 'Latest snapshot missing'
+      : recommendationSnapshot.lines.isEmpty
+      ? 'Latest snapshot empty'
+      : 'Latest snapshot visible';
+
+  final purchaseOrderCreationReadinessLabel = orderCreation.isCreating
+      ? 'PO creation running'
+      : orderCreation.error != null
+      ? 'PO creation blocked'
+      : recommendationSnapshot.run == null
+      ? 'PO creation waiting snapshot'
+      : recommendationSnapshot.lines.isEmpty
+      ? 'PO creation waiting supplier-qualified lines'
+      : 'PO creation ready';
+
+  final approvalHandoffReadinessLabel = orderDetail.order == null
+      ? 'Approval handoff waiting selected PO'
+      : runtimeClosure.approvalStateLabel;
+  final receivingReadinessLabel = orderDetail.order == null
+      ? 'Receiving waiting selected PO'
+      : runtimeClosure.receivingStateLabel;
+  final selectedPurchaseOrderRuntimeLabel = orderDetail.order == null
+      ? 'Selected PO runtime pending'
+      : runtimeClosure.lastRuntimeStateLabel;
+
+  final blockedReasons = <String>[
+    if (overview.error != null) overview.error!,
+    if (recommendationRun.error != null) recommendationRun.error!,
+    if (recommendationSnapshot.error != null) recommendationSnapshot.error!,
+    if (orderCreation.error != null) orderCreation.error!,
+    if (orderSummary.error != null) orderSummary.error!,
+    if (orderDetail.error != null) orderDetail.error!,
+    if (recommendationSnapshot.run == null)
+      'No tracked recommendation snapshot is visible yet, so downstream purchase-order preparation still depends on a new snapshot run.',
+    if (recommendationSnapshot.run != null &&
+        recommendationSnapshot.lines.isEmpty)
+      'The latest recommendation snapshot is visible, but no supplier-qualified lines are currently available for purchase-order preparation.',
+    if (orderSummary.orders.isNotEmpty && orderDetail.order == null)
+      'Recent purchase orders are visible, but operators still need to select one to inspect the runtime closure and receiving path.',
+    ...runtimeClosure.blockedReasons,
+  ].where((reason) => reason.trim().isNotEmpty).toSet().toList();
+
+  final nextOperatorAction = () {
+    if (overview.dashboard == null && !overview.isLoading) {
+      return 'Refresh the purchase overview to load the current store-scoped operating baseline.';
+    }
+    if (recommendationRun.isRunning) {
+      return 'Wait for the active recommendation runtime to finish before reviewing the latest snapshot state.';
+    }
+    if (recommendationSnapshot.run == null) {
+      return 'Generate a recommendation snapshot so the purchase workflow can move beyond the overview baseline.';
+    }
+    if (recommendationSnapshot.lines.isEmpty) {
+      return 'Review why the latest snapshot has no supplier-qualified lines before trying to create purchase orders.';
+    }
+    if (orderSummary.orders.isEmpty) {
+      return 'Create purchase orders from the latest snapshot to open the operator runtime path.';
+    }
+    if (orderDetail.order == null) {
+      return 'Select a recent purchase order to inspect approval handoff, receiving readiness, and blocked reasons together.';
+    }
+    if (runtimeClosure.approvalStateLabel == 'Ready to approve') {
+      return 'Hand off the selected purchase order to the Office approval owner and keep POS on visibility-only duty.';
+    }
+    if (runtimeClosure.canConfirmReceipt) {
+      return 'Physically verify the inbound goods, then use the tracked POS receipt confirmation contract for the remaining quantity.';
+    }
+    if (runtimeClosure.receivingStateLabel == 'Received / closed') {
+      return 'Use receipt history and line context to verify the final received state without opening more runtime actions.';
+    }
+    if (blockedReasons.isNotEmpty) {
+      return 'Review the blocked reasons first, then follow the handoff target before attempting any next workflow step.';
+    }
+    return 'Continue monitoring the selected purchase order from the unified runtime operating summary.';
+  }();
+
+  final operatingNarrative = orderDetail.order == null
+      ? 'Inventory operators can read the full runtime flow here, but the selected purchase-order closure only appears after a tracked recent purchase order is loaded.'
+      : 'Inventory operators can read recommendation status, purchase-order readiness, approval handoff, receiving readiness, blocked reasons, and the selected purchase-order runtime closure from one POS surface before taking the next allowed action.';
+
+  return InventoryPurchaseOperatingSummary(
+    recommendationRuntimeStateLabel: recommendationRuntimeStateLabel,
+    latestSnapshotStateLabel: latestSnapshotStateLabel,
+    purchaseOrderCreationReadinessLabel: purchaseOrderCreationReadinessLabel,
+    approvalHandoffReadinessLabel: approvalHandoffReadinessLabel,
+    receivingReadinessLabel: receivingReadinessLabel,
+    selectedPurchaseOrderRuntimeLabel: selectedPurchaseOrderRuntimeLabel,
+    nextOperatorAction: nextOperatorAction,
+    operatingNarrative: operatingNarrative,
+    handoffTarget: runtimeClosure.handoffTarget,
+    blockedReasons: blockedReasons,
+    visibleRecommendationLineCount: recommendationSnapshot.lines.length,
+    visiblePurchaseOrderCount: orderSummary.orders.length,
+    visibleBlockedReasonCount: blockedReasons.length,
+    hasSelectedPurchaseOrder: orderDetail.order != null,
+    canConfirmReceipt: runtimeClosure.canConfirmReceipt,
   );
 }
 
