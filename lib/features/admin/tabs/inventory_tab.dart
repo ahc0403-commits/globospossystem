@@ -2260,6 +2260,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               ),
             ],
             const SizedBox(height: 12),
+            _buildInventoryOrderAttentionBanner(
+              status: status,
+              remainingBase: totalRemainingBase,
+              latestReceiptStatus: latestReceiptStatus,
+              lineItems: detail.lines,
+            ),
+            const SizedBox(height: 12),
             _buildReceiptVisibilitySection(
               orderStatus: status,
               expectedBase: totalExpectedBase,
@@ -2302,6 +2309,76 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     .toList(),
               ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInventoryOrderAttentionBanner({
+    required String status,
+    required double remainingBase,
+    required String? latestReceiptStatus,
+    required List<Map<String, dynamic>> lineItems,
+  }) {
+    final attentionLabel = _inventoryOrderAttentionLabel(
+      status: status,
+      remainingBase: remainingBase,
+      latestReceiptStatus: latestReceiptStatus,
+      lineItems: lineItems,
+    );
+    final attentionColor = _inventoryOrderAttentionColor(attentionLabel);
+    final highlightedLines = lineItems.where((line) {
+      final riskLabel = line['supplier_risk_summary']?.toString();
+      if (riskLabel != null && riskLabel.isNotEmpty) {
+        return riskLabel.contains('price up') ||
+            riskLabel.contains('lead tight') ||
+            riskLabel.contains('lead overdue') ||
+            riskLabel.contains('receipt pending');
+      }
+      return false;
+    }).length;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: attentionColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Order Attention Banner',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Review the current order-level risk posture before scanning individual line supplier signals.',
+            style: GoogleFonts.notoSansKr(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildIngredientMetaChip(attentionLabel, color: attentionColor),
+              _buildIngredientMetaChip(
+                'Highlighted lines $highlightedLines',
+                color: highlightedLines > 0
+                    ? AppColors.amber500
+                    : AppColors.statusAvailable,
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -2892,6 +2969,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       unitPriceDriftLabel: unitPriceDriftLabel,
       leadTimeRiskLabel: leadTimeRiskLabel,
     );
+    line['supplier_risk_summary'] = combinedRiskSummary;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -3302,6 +3380,51 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         receiptVisibilityStatus == 'confirmed' ||
         leadTimeRiskLabel.contains('on track') ||
         leadTimeRiskLabel.contains('complete')) {
+      return AppColors.statusAvailable;
+    }
+    return AppColors.surface2;
+  }
+
+  String _inventoryOrderAttentionLabel({
+    required String status,
+    required double remainingBase,
+    required String? latestReceiptStatus,
+    required List<Map<String, dynamic>> lineItems,
+  }) {
+    final hasEscalatedLine = lineItems.any((line) {
+      final summary = line['supplier_risk_summary']?.toString() ?? '';
+      return summary.contains('price up') || summary.contains('lead overdue');
+    });
+    final hasWatchLine = lineItems.any((line) {
+      final summary = line['supplier_risk_summary']?.toString() ?? '';
+      return summary.contains('lead tight') ||
+          summary.contains('receipt pending');
+    });
+
+    if (status == 'received' || remainingBase <= 0) {
+      return 'Order attention complete';
+    }
+    if (hasEscalatedLine) {
+      return 'Order attention escalation';
+    }
+    if (hasWatchLine || latestReceiptStatus == 'draft') {
+      return 'Order attention watch';
+    }
+    if (latestReceiptStatus == 'confirmed' ||
+        latestReceiptStatus == 'received') {
+      return 'Order attention stable';
+    }
+    return 'Order attention unavailable';
+  }
+
+  Color _inventoryOrderAttentionColor(String label) {
+    if (label.endsWith('escalation')) {
+      return AppColors.statusOccupied;
+    }
+    if (label.endsWith('watch')) {
+      return AppColors.amber500;
+    }
+    if (label.endsWith('complete') || label.endsWith('stable')) {
       return AppColors.statusAvailable;
     }
     return AppColors.surface2;
