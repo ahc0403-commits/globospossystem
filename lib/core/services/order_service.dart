@@ -5,10 +5,18 @@ class OrderService {
     required String storeId,
     required String tableId,
     required List<Map<String, dynamic>> items,
+    String? clientMutationId,
   }) async {
     final result = await supabase.rpc(
-      'create_order',
-      params: {'p_store_id': storeId, 'p_table_id': tableId, 'p_items': items},
+      clientMutationId == null
+          ? 'create_order'
+          : 'create_order_with_client_mutation_id',
+      params: {
+        'p_store_id': storeId,
+        'p_table_id': tableId,
+        'p_items': items,
+        if (clientMutationId != null) 'p_client_mutation_id': clientMutationId,
+      },
     );
     return Map<String, dynamic>.from(result as Map);
   }
@@ -35,10 +43,18 @@ class OrderService {
     required String orderId,
     required String storeId,
     required List<Map<String, dynamic>> items,
+    String? clientMutationId,
   }) async {
     final result = await supabase.rpc(
-      'add_items_to_order',
-      params: {'p_order_id': orderId, 'p_store_id': storeId, 'p_items': items},
+      clientMutationId == null
+          ? 'add_items_to_order'
+          : 'add_items_to_order_with_client_mutation_id',
+      params: {
+        'p_order_id': orderId,
+        'p_store_id': storeId,
+        'p_items': items,
+        if (clientMutationId != null) 'p_client_mutation_id': clientMutationId,
+      },
     );
     return (result as List)
         .map((e) => Map<String, dynamic>.from(e as Map))

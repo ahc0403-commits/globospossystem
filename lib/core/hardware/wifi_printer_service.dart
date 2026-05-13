@@ -1,10 +1,15 @@
 import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
 import 'printer_service.dart';
 
 class WifiPrinterService implements PrinterService {
+  static const connectionTimeout = Duration(seconds: 5);
+  static const printFlushTimeout = Duration(seconds: 5);
+  static const socketCloseTimeout = Duration(seconds: 2);
+
   @override
   bool get isSupported => !kIsWeb;
 
@@ -35,20 +40,24 @@ class WifiPrinterService implements PrinterService {
     if (kIsWeb) {
       return PrintResult.notSupported;
     }
+    if (bytes.isEmpty) {
+      return PrintResult.printFailed;
+    }
+    Socket? socket;
     try {
-      final socket = await Socket.connect(
-        ip,
-        port,
-        timeout: const Duration(seconds: 5),
-      );
+      socket = await Socket.connect(ip, port, timeout: connectionTimeout);
       socket.add(bytes);
-      await socket.flush();
-      await socket.close();
+      await socket.flush().timeout(printFlushTimeout);
+      await socket.close().timeout(socketCloseTimeout);
       return PrintResult.success;
     } on SocketException {
       return PrintResult.connectionFailed;
+    } on TimeoutException {
+      return PrintResult.connectionFailed;
     } catch (_) {
       return PrintResult.printFailed;
+    } finally {
+      socket?.destroy();
     }
   }
 }

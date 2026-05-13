@@ -887,16 +887,13 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                 onPressed:
                     widget.state.isSubmitting ||
                         (!widget.allowSubmitWithoutCart &&
-                            widget.state.cart.isEmpty) ||
-                        !isOnline
+                            widget.state.cart.isEmpty)
                     ? null
                     : widget.onSendOrder,
-                disabledReason: !isOnline
-                    ? PosActionDisabledReason.offline
-                    : (!widget.allowSubmitWithoutCart &&
-                              widget.state.cart.isEmpty
-                          ? PosActionDisabledReason.cartEmpty
-                          : null),
+                disabledReason:
+                    !widget.allowSubmitWithoutCart && widget.state.cart.isEmpty
+                    ? PosActionDisabledReason.cartEmpty
+                    : null,
               ),
             ],
           ),
@@ -911,9 +908,24 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                l10n.orderWorkspaceInternetRequired,
+                'Offline orders are queued locally and sync with the same mutation key after connection recovery.',
                 style: GoogleFonts.notoSansKr(
                   color: AppColors.statusOccupied,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          if (widget.state.offlineQueueCount > 0 ||
+              widget.state.isSyncingOfflineQueue)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                widget.state.isSyncingOfflineQueue
+                    ? 'Syncing queued orders...'
+                    : '${widget.state.offlineQueueCount} queued order operation(s) waiting for sync.',
+                style: GoogleFonts.notoSansKr(
+                  color: AppColors.amber500,
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                 ),
