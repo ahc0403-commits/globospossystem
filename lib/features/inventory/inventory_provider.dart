@@ -1028,6 +1028,34 @@ class InventoryPurchaseOperatingSummary {
   });
 }
 
+class InventoryPurchaseRuntimeSurfaceState {
+  final Map<String, dynamic>? order;
+  final String orderStatus;
+  final String? requestedDate;
+  final double remainingBase;
+  final int confirmedReceiptCount;
+  final int receivedLineCount;
+  final int blockedLineCount;
+  final int pendingLineCount;
+  final int attentionLineCount;
+  final List<Map<String, dynamic>> blockerRows;
+  final InventoryPurchaseRuntimeClosureSnapshot runtimeClosure;
+
+  const InventoryPurchaseRuntimeSurfaceState({
+    required this.order,
+    required this.orderStatus,
+    required this.requestedDate,
+    required this.remainingBase,
+    required this.confirmedReceiptCount,
+    required this.receivedLineCount,
+    required this.blockedLineCount,
+    required this.pendingLineCount,
+    required this.attentionLineCount,
+    required this.blockerRows,
+    required this.runtimeClosure,
+  });
+}
+
 InventoryPurchaseRuntimeClosureSnapshot
 buildInventoryPurchaseRuntimeClosureSnapshot({
   required Map<String, dynamic>? order,
@@ -1279,6 +1307,246 @@ InventoryPurchaseOperatingSummary buildInventoryPurchaseOperatingSummary({
     canConfirmReceipt: runtimeClosure.canConfirmReceipt,
   );
 }
+
+bool _inventoryPurchaseLinePending(Map<String, dynamic> line) {
+  final remainingBase =
+      (line['remaining_quantity_base'] as num?)?.toDouble() ?? 0;
+  final receiptStatus =
+      line['receipt_visibility_status']?.toString() ?? 'pending';
+  return remainingBase > 0 &&
+      receiptStatus != 'received' &&
+      receiptStatus != 'confirmed';
+}
+
+bool _inventoryPurchaseLineReceived(Map<String, dynamic> line) {
+  return !_inventoryPurchaseLinePending(line);
+}
+
+bool _inventoryPurchaseLineHighAttention(Map<String, dynamic> line) {
+  final receiptStatus =
+      line['receipt_visibility_status']?.toString().toLowerCase() ?? 'pending';
+  final supplierRisk =
+      line['supplier_risk_summary']?.toString().toLowerCase() ?? '';
+  return receiptStatus == 'pending' ||
+      supplierRisk.contains('price up') ||
+      supplierRisk.contains('lead overdue') ||
+      supplierRisk.contains('lead tight') ||
+      supplierRisk.contains('risk');
+}
+
+int _inventoryPurchaseSupplierImpactCount(List<Map<String, dynamic>> lines) {
+  return lines
+      .map((line) {
+        final supplierItem = line['supplier_item'] as Map<String, dynamic>?;
+        return supplierItem?['id']?.toString() ??
+            supplierItem?['supplier_sku']?.toString() ??
+            line['product_id']?.toString() ??
+            line['id']?.toString();
+      })
+      .whereType<String>()
+      .where((value) => value.isNotEmpty)
+      .toSet()
+      .length;
+}
+
+String _inventoryPurchaseOldestWaitingAge(String? requestedDate) {
+  if (requestedDate == null || requestedDate.isEmpty) {
+    return 'unavailable';
+  }
+  final requestedAt = DateTime.tryParse(requestedDate);
+  if (requestedAt == null) {
+    return 'unavailable';
+  }
+  final today = DateTime.now();
+  final requestedLocal = DateTime(
+    requestedAt.year,
+    requestedAt.month,
+    requestedAt.day,
+  );
+  final currentLocal = DateTime(today.year, today.month, today.day);
+  final days = currentLocal.difference(requestedLocal).inDays;
+  return days <= 0 ? '0d' : '${days}d';
+}
+
+bool _inventoryPurchaseRequestedDateOverdue(String? requestedDate) {
+  if (requestedDate == null || requestedDate.isEmpty) {
+    return false;
+  }
+  final requestedAt = DateTime.tryParse(requestedDate);
+  if (requestedAt == null) {
+    return false;
+  }
+  final requestedLocal = DateTime(
+    requestedAt.year,
+    requestedAt.month,
+    requestedAt.day,
+  );
+  final currentLocal = DateTime.now();
+  final today = DateTime(
+    currentLocal.year,
+    currentLocal.month,
+    currentLocal.day,
+  );
+  return requestedLocal.isBefore(today);
+}
+
+List<Map<String, dynamic>> buildInventoryPurchaseRuntimeBlockerRows({
+  required String orderStatus,
+  required String? requestedDate,
+  required List<Map<String, dynamic>> lines,
+}) {
+  final pendingLines = lines.where(_inventoryPurchaseLinePending).toList();
+  final highAttentionLines = lines
+      .where(_inventoryPurchaseLineHighAttention)
+      .toList();
+  final overduePendingLines = pendingLines
+      .where((line) => _inventoryPurchaseRequestedDateOverdue(requestedDate))
+      .toList();
+
+  final rows = <Map<String, dynamic>>[];
+
+  if (pendingLines.isNotEmpty) {
+    rows.add({
+      'title': 'Supplier follow-up pending',
+      'severity': overduePendingLines.isNotEmpty ? 'risk' : 'watch',
+      'affected_po_count': 1,
+      'impacted_supplier_count': _inventoryPurchaseSupplierImpactCount(
+        pendingLines,
+      ),
+      'oldest_waiting_age': _inventoryPurchaseOldestWaitingAge(requestedDate),
+      'narrative':
+          '${pendingLines.length} purchase order line(s) still waiting supplier confirmation or receipt progress.',
+      'next_hint': overduePendingLines.isNotEmpty
+          ? 'Check overdue supplier responses'
+          : 'Monitor inbound confirmation',
+    });
+  }
+
+  if (overduePendingLines.isNotEmpty) {
+    rows.add({
+      'title': 'Arrival window delayed',
+      'severity': 'critical',
+      'affected_po_count': 1,
+      'impacted_supplier_count': _inventoryPurchaseSupplierImpactCount(
+        overduePendingLines,
+      ),
+      'oldest_waiting_age': _inventoryPurchaseOldestWaitingAge(requestedDate),
+      'narrative': 'Receiving delayed beyond expected arrival window.',
+      'next_hint': 'Escalate delayed deliveries',
+    });
+  }
+
+  if (highAttentionLines.isNotEmpty) {
+    rows.add({
+      'title': 'High-risk supplier lines',
+      'severity': 'risk',
+      'affected_po_count': 1,
+      'impacted_supplier_count': _inventoryPurchaseSupplierImpactCount(
+        highAttentionLines,
+      ),
+      'oldest_waiting_age': _inventoryPurchaseOldestWaitingAge(requestedDate),
+      'narrative':
+          '${highAttentionLines.length} purchase order line(s) combine receipt pressure with supplier or lead-time risk.',
+      'next_hint': 'Review top attention items',
+    });
+  }
+
+  if (rows.isEmpty) {
+    rows.add({
+      'title': 'No active receiving blockers',
+      'severity': 'healthy',
+      'affected_po_count': 0,
+      'impacted_supplier_count': 0,
+      'oldest_waiting_age': '0d',
+      'narrative': orderStatus == 'received'
+          ? 'This purchase order already looks fully received from backend truth.'
+          : 'Current receiving posture looks healthy from the tracked POS read model.',
+      'next_hint': 'Continue read-only monitoring',
+    });
+  }
+
+  return rows;
+}
+
+final inventoryPurchaseRuntimeSurfaceProvider =
+    Provider<InventoryPurchaseRuntimeSurfaceState>((ref) {
+      final orderDetail = ref.watch(inventoryPurchaseOrderDetailProvider);
+      final approvalRuntime = ref.watch(
+        inventoryPurchaseApprovalRuntimeProvider,
+      );
+      final receivingRuntime = ref.watch(
+        inventoryPurchaseReceivingRuntimeProvider,
+      );
+      final order = orderDetail.order;
+      final orderStatus = order?['status']?.toString() ?? 'submitted';
+      final requestedDate = order?['requested_delivery_date']?.toString();
+      final remainingBase =
+          (order?['total_remaining_quantity_base'] as num?)?.toDouble() ?? 0;
+      final confirmedReceiptCount =
+          (order?['confirmed_receipt_count'] as num?)?.toInt() ?? 0;
+      final receivedLineCount = orderDetail.lines
+          .where(_inventoryPurchaseLineReceived)
+          .length;
+      final pendingLineCount = orderDetail.lines
+          .where(_inventoryPurchaseLinePending)
+          .length;
+      final attentionLineCount = orderDetail.lines
+          .where(_inventoryPurchaseLineHighAttention)
+          .length;
+      final blockedLineCount = attentionLineCount;
+      final blockerRows = buildInventoryPurchaseRuntimeBlockerRows(
+        orderStatus: orderStatus,
+        requestedDate: requestedDate,
+        lines: orderDetail.lines,
+      );
+      final runtimeClosure = buildInventoryPurchaseRuntimeClosureSnapshot(
+        order: order,
+        approvalRuntime: approvalRuntime,
+        receivingRuntime: receivingRuntime,
+        blockedLineCount: blockedLineCount,
+        pendingLineCount: pendingLineCount,
+        attentionLineCount: attentionLineCount,
+      );
+
+      return InventoryPurchaseRuntimeSurfaceState(
+        order: order,
+        orderStatus: orderStatus,
+        requestedDate: requestedDate,
+        remainingBase: remainingBase,
+        confirmedReceiptCount: confirmedReceiptCount,
+        receivedLineCount: receivedLineCount,
+        blockedLineCount: blockedLineCount,
+        pendingLineCount: pendingLineCount,
+        attentionLineCount: attentionLineCount,
+        blockerRows: blockerRows,
+        runtimeClosure: runtimeClosure,
+      );
+    });
+
+final inventoryPurchaseOperatingSummaryProvider =
+    Provider<InventoryPurchaseOperatingSummary>((ref) {
+      final overview = ref.watch(inventoryPurchaseOverviewProvider);
+      final recommendationRun = ref.watch(
+        inventoryPurchaseRecommendationRunProvider,
+      );
+      final recommendationSnapshot = ref.watch(
+        inventoryPurchaseRecommendationSnapshotProvider,
+      );
+      final orderCreation = ref.watch(inventoryPurchaseOrderCreationProvider);
+      final orderSummary = ref.watch(inventoryPurchaseOrderSummaryProvider);
+      final orderDetail = ref.watch(inventoryPurchaseOrderDetailProvider);
+      final runtimeSurface = ref.watch(inventoryPurchaseRuntimeSurfaceProvider);
+
+      return buildInventoryPurchaseOperatingSummary(
+        overview: overview,
+        recommendationRun: recommendationRun,
+        recommendationSnapshot: recommendationSnapshot,
+        orderCreation: orderCreation,
+        orderSummary: orderSummary,
+        orderDetail: orderDetail,
+        runtimeClosure: runtimeSurface.runtimeClosure,
+      );
+    });
 
 class InventoryPurchaseApprovalRuntimeState {
   final bool isEvaluating;

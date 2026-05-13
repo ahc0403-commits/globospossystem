@@ -1446,45 +1446,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         (dashboard?['submitted_purchase_amount'] as num?)?.toDouble() ?? 0;
     final approvedPurchaseAmount =
         (dashboard?['approved_purchase_amount'] as num?)?.toDouble() ?? 0;
-    final order = orderDetail.order;
-    final orderStatus = order?['status']?.toString() ?? 'submitted';
-    final requestedDate = order?['requested_delivery_date']?.toString();
-    final blockedLineCount = order == null
-        ? 0
-        : orderDetail.lines
-              .where(
-                (line) =>
-                    _inventorySupplierAttentionPriority(
-                      line,
-                      requestedDate: requestedDate,
-                      orderStatus: orderStatus,
-                    ) >=
-                    3,
-              )
-              .length;
-    final pendingLineCount = orderDetail.lines
-        .where(_isReceivingLinePending)
-        .length;
-    final approvalRuntime = ref.watch(inventoryPurchaseApprovalRuntimeProvider);
-    final receivingRuntime = ref.watch(
-      inventoryPurchaseReceivingRuntimeProvider,
-    );
-    final runtimeClosure = buildInventoryPurchaseRuntimeClosureSnapshot(
-      order: order,
-      approvalRuntime: approvalRuntime,
-      receivingRuntime: receivingRuntime,
-      blockedLineCount: blockedLineCount,
-      pendingLineCount: pendingLineCount,
-      attentionLineCount: blockedLineCount,
-    );
-    final operatingSummary = buildInventoryPurchaseOperatingSummary(
-      overview: overview,
-      recommendationRun: recommendationRun,
-      recommendationSnapshot: recommendationSnapshot,
-      orderCreation: orderCreation,
-      orderSummary: orderSummary,
-      orderDetail: orderDetail,
-      runtimeClosure: runtimeClosure,
+    final operatingSummary = ref.watch(
+      inventoryPurchaseOperatingSummaryProvider,
     );
 
     return Container(
@@ -1880,6 +1843,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     final receivingRuntime = ref.watch(
       inventoryPurchaseReceivingRuntimeProvider,
     );
+    final runtimeSurface = ref.watch(inventoryPurchaseRuntimeSurfaceProvider);
     final run = snapshot.run;
     final lineCount = snapshot.lines.length;
     final runDate = run?['run_date']?.toString() ?? '-';
@@ -2037,6 +2001,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               storeId: storeId,
               summary: orderSummary,
               detail: orderDetail,
+              runtimeSurface: runtimeSurface,
               approvalRuntime: approvalRuntime,
               receivingRuntime: receivingRuntime,
             ),
@@ -2115,6 +2080,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     required String? storeId,
     required InventoryPurchaseOrderSummaryState summary,
     required InventoryPurchaseOrderDetailState detail,
+    required InventoryPurchaseRuntimeSurfaceState runtimeSurface,
     required InventoryPurchaseApprovalRuntimeState approvalRuntime,
     required InventoryPurchaseReceivingRuntimeState receivingRuntime,
   }) {
@@ -2207,6 +2173,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             _buildPurchaseOrderDetailSection(
               storeId: storeId,
               detail: detail,
+              runtimeSurface: runtimeSurface,
               hasOrders: summary.orders.isNotEmpty,
               approvalRuntime: approvalRuntime,
               receivingRuntime: receivingRuntime,
@@ -2320,6 +2287,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   Widget _buildPurchaseOrderDetailSection({
     required String? storeId,
     required InventoryPurchaseOrderDetailState detail,
+    required InventoryPurchaseRuntimeSurfaceState runtimeSurface,
     required bool hasOrders,
     required InventoryPurchaseApprovalRuntimeState approvalRuntime,
     required InventoryPurchaseReceivingRuntimeState receivingRuntime,
@@ -2330,8 +2298,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     final supplierMap = order?['supplier'] as Map<String, dynamic>?;
     final supplierName = supplierMap?['name']?.toString();
     final memo = order?['memo']?.toString();
-    final status = order?['status']?.toString() ?? 'submitted';
-    final requestedDate = order?['requested_delivery_date']?.toString();
+    final status = runtimeSurface.orderStatus;
+    final requestedDate = runtimeSurface.requestedDate;
     final totalAmount = (order?['total_amount'] as num?)?.toDouble() ?? 0;
     final supplyAmount =
         (order?['total_supply_amount'] as num?)?.toDouble() ?? 0;
@@ -2344,10 +2312,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         (order?['total_accepted_quantity_base'] as num?)?.toDouble() ?? 0;
     final totalRejectedBase =
         (order?['total_rejected_quantity_base'] as num?)?.toDouble() ?? 0;
-    final totalRemainingBase =
-        (order?['total_remaining_quantity_base'] as num?)?.toDouble() ?? 0;
-    final confirmedReceiptCount =
-        (order?['confirmed_receipt_count'] as num?)?.toInt() ?? 0;
+    final totalRemainingBase = runtimeSurface.remainingBase;
+    final confirmedReceiptCount = runtimeSurface.confirmedReceiptCount;
     final draftReceiptCount =
         (order?['draft_receipt_count'] as num?)?.toInt() ?? 0;
     final cancelledReceiptCount =
@@ -2507,36 +2473,22 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             ),
             const SizedBox(height: 12),
             _buildReceivingReadinessSummarySection(
-              lineItems: sortedLines,
-              requestedDate: requestedDate,
-              orderStatus: status,
-              remainingBase: totalRemainingBase,
-              confirmedReceiptCount: confirmedReceiptCount,
+              runtimeSurface: runtimeSurface,
             ),
             const SizedBox(height: 12),
             _buildReceivingBlockersDetailSection(
-              lineItems: sortedLines,
-              requestedDate: requestedDate,
-              orderStatus: status,
+              blockerRows: runtimeSurface.blockerRows,
             ),
             const SizedBox(height: 12),
             _buildInventoryMutationReadinessPhaseSection(
-              lineItems: sortedLines,
-              requestedDate: requestedDate,
-              orderStatus: status,
-              remainingBase: totalRemainingBase,
-              confirmedReceiptCount: confirmedReceiptCount,
+              runtimeSurface: runtimeSurface,
               latestReceiptStatus: latestReceiptStatus,
             ),
             const SizedBox(height: 12),
             _buildInventoryRuntimePathSection(
               storeId: storeId,
-              order: order,
+              runtimeSurface: runtimeSurface,
               lineItems: sortedLines,
-              requestedDate: requestedDate,
-              orderStatus: status,
-              remainingBase: totalRemainingBase,
-              confirmedReceiptCount: confirmedReceiptCount,
               approvalRuntime: approvalRuntime,
               receivingRuntime: receivingRuntime,
             ),
@@ -2592,34 +2544,12 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   }
 
   Widget _buildReceivingReadinessSummarySection({
-    required List<Map<String, dynamic>> lineItems,
-    required String? requestedDate,
-    required String orderStatus,
-    required double remainingBase,
-    required int confirmedReceiptCount,
+    required InventoryPurchaseRuntimeSurfaceState runtimeSurface,
   }) {
-    final readinessState = _inventoryReceiptReadinessLabel(
-      orderStatus: orderStatus,
-      remainingBase: remainingBase,
-      confirmedReceiptCount: confirmedReceiptCount,
-    );
-    final receivedLineCount = lineItems
-        .where((line) => _isReceivingLineReceived(line))
-        .length;
-    final pendingLineCount = lineItems
-        .where((line) => _isReceivingLinePending(line))
-        .length;
-    final attentionLineCount = lineItems
-        .where(
-          (line) =>
-              _inventorySupplierAttentionPriority(
-                line,
-                requestedDate: requestedDate,
-                orderStatus: orderStatus,
-              ) >=
-              3,
-        )
-        .length;
+    final readinessState = runtimeSurface.runtimeClosure.receivingStateLabel;
+    final receivedLineCount = runtimeSurface.receivedLineCount;
+    final pendingLineCount = runtimeSurface.pendingLineCount;
+    final attentionLineCount = runtimeSurface.attentionLineCount;
 
     return Container(
       width: double.infinity,
@@ -2628,7 +2558,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         color: AppColors.surface1,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: _receiptReadinessColor(orderStatus, remainingBase),
+          color: _inventoryReceivingRuntimeStateColor(readinessState),
         ),
       ),
       child: Column(
@@ -2657,7 +2587,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             children: [
               _buildIngredientMetaChip(
                 'Receiving readiness $readinessState',
-                color: _receiptReadinessColor(orderStatus, remainingBase),
+                color: _inventoryReceivingRuntimeStateColor(readinessState),
               ),
               _buildIngredientMetaChip(
                 'Received lines $receivedLineCount',
@@ -2697,16 +2627,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   }
 
   Widget _buildReceivingBlockersDetailSection({
-    required List<Map<String, dynamic>> lineItems,
-    required String? requestedDate,
-    required String orderStatus,
+    required List<Map<String, dynamic>> blockerRows,
   }) {
-    final blockerRows = _inventoryReceivingBlockerRows(
-      lineItems,
-      requestedDate: requestedDate,
-      orderStatus: orderStatus,
-    );
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -2822,45 +2744,19 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   }
 
   Widget _buildInventoryMutationReadinessPhaseSection({
-    required List<Map<String, dynamic>> lineItems,
-    required String? requestedDate,
-    required String orderStatus,
-    required double remainingBase,
-    required int confirmedReceiptCount,
+    required InventoryPurchaseRuntimeSurfaceState runtimeSurface,
     required String? latestReceiptStatus,
   }) {
-    final blockerRows = _inventoryReceivingBlockerRows(
-      lineItems,
-      requestedDate: requestedDate,
-      orderStatus: orderStatus,
-    );
-    final receivedLineCount = lineItems
-        .where((line) => _isReceivingLineReceived(line))
-        .length;
-    final pendingLineCount = lineItems
-        .where((line) => _isReceivingLinePending(line))
-        .length;
-    final attentionLineCount = lineItems
-        .where(
-          (line) =>
-              _inventorySupplierAttentionPriority(
-                line,
-                requestedDate: requestedDate,
-                orderStatus: orderStatus,
-              ) >=
-              3,
-        )
-        .length;
-    final readinessState = _inventoryReceiptReadinessLabel(
-      orderStatus: orderStatus,
-      remainingBase: remainingBase,
-      confirmedReceiptCount: confirmedReceiptCount,
-    );
-    final approvalHandoffLabel = _inventoryApprovalHandoffLabel(
-      orderStatus: orderStatus,
-      blockerRows: blockerRows,
-    );
-    final approvalHandoffColor = _inventoryApprovalHandoffColor(
+    final blockerRows = runtimeSurface.blockerRows;
+    final receivedLineCount = runtimeSurface.receivedLineCount;
+    final pendingLineCount = runtimeSurface.pendingLineCount;
+    final attentionLineCount = runtimeSurface.attentionLineCount;
+    final remainingBase = runtimeSurface.remainingBase;
+    final confirmedReceiptCount = runtimeSurface.confirmedReceiptCount;
+    final readinessState = runtimeSurface.runtimeClosure.receivingStateLabel;
+    final approvalHandoffLabel =
+        runtimeSurface.runtimeClosure.approvalStateLabel;
+    final approvalHandoffColor = _inventoryApprovalRuntimeStateColor(
       approvalHandoffLabel,
     );
     final latestReceiptLabel = latestReceiptStatus == null
@@ -2924,11 +2820,11 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 8),
           _buildInventoryMutationReadinessCard(
             title: 'Receiving Confirmation Readiness',
-            borderColor: _receiptReadinessColor(orderStatus, remainingBase),
+            borderColor: _inventoryReceivingRuntimeStateColor(readinessState),
             chips: [
               _buildIngredientMetaChip(
                 'Readiness $readinessState',
-                color: _receiptReadinessColor(orderStatus, remainingBase),
+                color: _inventoryReceivingRuntimeStateColor(readinessState),
               ),
               _buildIngredientMetaChip(
                 'Received lines $receivedLineCount',
@@ -2950,7 +2846,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               ),
             ],
             narrative:
-                '${_inventoryReceiptReadinessNarrative(orderStatus: orderStatus, remainingBase: remainingBase, confirmedReceiptCount: confirmedReceiptCount, hasReceiptHistory: latestReceiptStatus != null)} Receipt history and blocker detail remain review-only here, so operators can assess readiness without opening receipt execution.',
+                '${runtimeSurface.runtimeClosure.operatorSummary} Receipt history and blocker detail remain review-only here, so operators can assess readiness without opening receipt execution.',
           ),
           const SizedBox(height: 8),
           _buildInventoryMutationReadinessCard(
@@ -3151,15 +3047,16 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
 
   Widget _buildInventoryRuntimePathSection({
     required String? storeId,
-    required Map<String, dynamic>? order,
+    required InventoryPurchaseRuntimeSurfaceState runtimeSurface,
     required List<Map<String, dynamic>> lineItems,
-    required String? requestedDate,
-    required String orderStatus,
-    required double remainingBase,
-    required int confirmedReceiptCount,
     required InventoryPurchaseApprovalRuntimeState approvalRuntime,
     required InventoryPurchaseReceivingRuntimeState receivingRuntime,
   }) {
+    final order = runtimeSurface.order;
+    final orderStatus = runtimeSurface.orderStatus;
+    final remainingBase = runtimeSurface.remainingBase;
+    final confirmedReceiptCount = runtimeSurface.confirmedReceiptCount;
+    final runtimeClosure = runtimeSurface.runtimeClosure;
     final approvalStateLabel = _inventoryApprovalRuntimeStateLabel(orderStatus);
     final approvalStateColor = _inventoryApprovalRuntimeStateColor(
       approvalStateLabel,
@@ -3178,33 +3075,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       remainingBase: remainingBase,
       confirmedReceiptCount: confirmedReceiptCount,
     );
-    final blockedLineCount = lineItems
-        .where(
-          (line) =>
-              _inventorySupplierAttentionPriority(
-                line,
-                requestedDate: requestedDate,
-                orderStatus: orderStatus,
-              ) >=
-              3,
-        )
-        .length;
-    final pendingLineCount = lineItems.where(_isReceivingLinePending).length;
+    final blockedLineCount = runtimeSurface.blockedLineCount;
     final canConfirmReceipt =
-        storeId != null &&
-        _canConfirmInventoryReceipt(
-          orderStatus: orderStatus,
-          remainingBase: remainingBase,
-        ) &&
-        !receivingRuntime.isSubmitting;
-    final runtimeClosure = buildInventoryPurchaseRuntimeClosureSnapshot(
-      order: order,
-      approvalRuntime: approvalRuntime,
-      receivingRuntime: receivingRuntime,
-      blockedLineCount: blockedLineCount,
-      pendingLineCount: pendingLineCount,
-      attentionLineCount: blockedLineCount,
-    );
+        storeId != null && runtimeClosure.canConfirmReceipt;
 
     return Container(
       width: double.infinity,
@@ -3235,10 +3108,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 8),
           _buildInventoryRuntimeClosureSection(
-            runtimeClosure: runtimeClosure,
+            runtimeSurface: runtimeSurface,
             lineItems: lineItems,
-            requestedDate: requestedDate,
-            orderStatus: orderStatus,
           ),
           const SizedBox(height: 8),
           _buildInventoryRuntimePathCard(
@@ -3329,11 +3200,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   }
 
   Widget _buildInventoryRuntimeClosureSection({
-    required InventoryPurchaseRuntimeClosureSnapshot runtimeClosure,
+    required InventoryPurchaseRuntimeSurfaceState runtimeSurface,
     required List<Map<String, dynamic>> lineItems,
-    required String? requestedDate,
-    required String orderStatus,
   }) {
+    final runtimeClosure = runtimeSurface.runtimeClosure;
     final topRuntimeLines = lineItems.take(3).toList();
     return Container(
       width: double.infinity,
@@ -3449,8 +3319,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   .map(
                     (line) => _buildInventoryRuntimeLineContextRow(
                       line,
-                      requestedDate: requestedDate,
-                      orderStatus: orderStatus,
+                      requestedDate: runtimeSurface.requestedDate,
+                      orderStatus: runtimeSurface.orderStatus,
                     ),
                   )
                   .toList(),
@@ -4958,28 +4828,6 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     return 0;
   }
 
-  bool _isReceivingLineReceived(Map<String, dynamic> line) {
-    final receiptVisibilityStatus =
-        line['receipt_visibility_status']?.toString() ?? 'pending';
-    final remainingBase =
-        (line['remaining_quantity_base'] as num?)?.toDouble() ?? 0;
-    return remainingBase <= 0 ||
-        receiptVisibilityStatus == 'received' ||
-        receiptVisibilityStatus == 'confirmed';
-  }
-
-  bool _isReceivingLinePending(Map<String, dynamic> line) {
-    if (_isReceivingLineReceived(line)) {
-      return false;
-    }
-    final receiptVisibilityStatus =
-        line['receipt_visibility_status']?.toString() ?? 'pending';
-    return receiptVisibilityStatus == 'pending' ||
-        receiptVisibilityStatus == 'draft' ||
-        receiptVisibilityStatus == 'none' ||
-        receiptVisibilityStatus == 'partially_received';
-  }
-
   String _inventoryReceivingReadinessOperatorNarrative({
     required int receivedLineCount,
     required int pendingLineCount,
@@ -4995,147 +4843,6 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       return 'All visible lines already look received from the tracked POS read model, so operators can use receipt history only for verification.';
     }
     return 'Receiving posture is currently unavailable from the tracked read model, so operators should rely on the existing receipt visibility surfaces only.';
-  }
-
-  List<Map<String, dynamic>> _inventoryReceivingBlockerRows(
-    List<Map<String, dynamic>> lineItems, {
-    required String? requestedDate,
-    required String orderStatus,
-  }) {
-    final pendingLines = lineItems.where(_isReceivingLinePending).toList();
-    final overdueLines = pendingLines
-        .where(
-          (line) => _inventoryLeadTimeRiskLabel(
-            requestedDate: requestedDate,
-            supplierLeadTimeDays:
-                ((line['supplier_item']
-                            as Map<String, dynamic>?)?['lead_time_days']
-                        as num?)
-                    ?.toInt() ??
-                0,
-            remainingBase:
-                (line['remaining_quantity_base'] as num?)?.toDouble() ?? 0,
-            orderStatus: orderStatus,
-          ).contains('overdue'),
-        )
-        .toList();
-    final criticalLines = lineItems
-        .where(
-          (line) =>
-              _inventorySupplierAttentionPriority(
-                line,
-                requestedDate: requestedDate,
-                orderStatus: orderStatus,
-              ) >=
-              4,
-        )
-        .toList();
-
-    final rows = <Map<String, dynamic>>[];
-
-    if (pendingLines.isNotEmpty) {
-      rows.add({
-        'title': 'Supplier follow-up pending',
-        'severity': overdueLines.isNotEmpty ? 'risk' : 'watch',
-        'affected_po_count': 1,
-        'impacted_supplier_count': _inventoryImpactedSupplierCount(
-          pendingLines,
-        ),
-        'oldest_waiting_age': _inventoryOldestWaitingAge(
-          requestedDate: requestedDate,
-        ),
-        'narrative':
-            '${pendingLines.length} purchase order line(s) still waiting supplier confirmation or receipt progress.',
-        'next_hint': overdueLines.isNotEmpty
-            ? 'Check overdue supplier responses'
-            : 'Monitor inbound confirmation',
-      });
-    }
-
-    if (overdueLines.isNotEmpty) {
-      rows.add({
-        'title': 'Arrival window delayed',
-        'severity': 'critical',
-        'affected_po_count': 1,
-        'impacted_supplier_count': _inventoryImpactedSupplierCount(
-          overdueLines,
-        ),
-        'oldest_waiting_age': _inventoryOldestWaitingAge(
-          requestedDate: requestedDate,
-        ),
-        'narrative': 'Receiving delayed beyond expected arrival window.',
-        'next_hint': 'Escalate delayed deliveries',
-      });
-    }
-
-    if (criticalLines.isNotEmpty) {
-      rows.add({
-        'title': 'High-risk supplier lines',
-        'severity': 'risk',
-        'affected_po_count': 1,
-        'impacted_supplier_count': _inventoryImpactedSupplierCount(
-          criticalLines,
-        ),
-        'oldest_waiting_age': _inventoryOldestWaitingAge(
-          requestedDate: requestedDate,
-        ),
-        'narrative':
-            '${criticalLines.length} purchase order line(s) combine receipt pressure with supplier or lead-time risk.',
-        'next_hint': 'Review top attention items',
-      });
-    }
-
-    if (rows.isEmpty) {
-      rows.add({
-        'title': 'No active receiving blockers',
-        'severity': 'healthy',
-        'affected_po_count': 0,
-        'impacted_supplier_count': 0,
-        'oldest_waiting_age': '0d',
-        'narrative':
-            'Current receiving posture looks healthy from the tracked POS read model.',
-        'next_hint': 'Continue read-only monitoring',
-      });
-    }
-
-    return rows;
-  }
-
-  int _inventoryImpactedSupplierCount(List<Map<String, dynamic>> lines) {
-    final supplierKeys = lines
-        .map((line) {
-          final supplierItem = line['supplier_item'] as Map<String, dynamic>?;
-          return supplierItem?['id']?.toString() ??
-              supplierItem?['supplier_sku']?.toString() ??
-              line['product_id']?.toString() ??
-              line['id']?.toString();
-        })
-        .whereType<String>()
-        .where((value) => value.isNotEmpty)
-        .toSet();
-    return supplierKeys.length;
-  }
-
-  String _inventoryOldestWaitingAge({required String? requestedDate}) {
-    if (requestedDate == null || requestedDate.isEmpty) {
-      return 'unavailable';
-    }
-    final requestedAt = DateTime.tryParse(requestedDate);
-    if (requestedAt == null) {
-      return 'unavailable';
-    }
-    final today = DateTime.now();
-    final requestedLocal = DateTime(
-      requestedAt.year,
-      requestedAt.month,
-      requestedAt.day,
-    );
-    final currentLocal = DateTime(today.year, today.month, today.day);
-    final days = currentLocal.difference(requestedLocal).inDays;
-    if (days <= 0) {
-      return '0d';
-    }
-    return '${days}d';
   }
 
   Color _inventoryReceivingBlockerSeverityColor(String severity) =>
@@ -5281,40 +4988,6 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       return 'This order is not receipt-ready in its current status. Visibility is read-only and does not open approval or correction flows.';
     }
     return 'This order still waits on an earlier workflow step before receipt confirmation becomes relevant. Visibility remains read-only here.';
-  }
-
-  String _inventoryApprovalHandoffLabel({
-    required String orderStatus,
-    required List<Map<String, dynamic>> blockerRows,
-  }) {
-    if (orderStatus == 'office_approved' ||
-        orderStatus == 'ordered' ||
-        orderStatus == 'partially_received' ||
-        orderStatus == 'received') {
-      return 'Approval handoff acknowledged';
-    }
-    if (orderStatus == 'office_rejected' || orderStatus == 'cancelled') {
-      return 'Approval handoff blocked';
-    }
-    if (blockerRows.any(
-      (row) => (row['severity']?.toString() ?? 'healthy') == 'critical',
-    )) {
-      return 'Approval handoff escalated';
-    }
-    return 'Approval handoff pending';
-  }
-
-  Color _inventoryApprovalHandoffColor(String label) {
-    if (label.endsWith('acknowledged')) {
-      return AppColors.statusAvailable;
-    }
-    if (label.endsWith('pending')) {
-      return AppColors.amber500;
-    }
-    if (label.endsWith('escalated') || label.endsWith('blocked')) {
-      return AppColors.statusOccupied;
-    }
-    return AppColors.surface2;
   }
 
   String _inventoryApprovalRuntimeStateLabel(String orderStatus) {
