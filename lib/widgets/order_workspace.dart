@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../core/i18n/locale_extensions.dart';
 import '../core/services/connectivity_service.dart';
 import '../core/ui/app_primitives.dart';
+import '../core/ui/pos_design_tokens.dart';
 import '../core/ui/toast/toast.dart';
 import '../features/admin/providers/menu_provider.dart';
 import '../features/order/order_model.dart';
 import '../features/order/order_provider.dart';
 import '../features/table/table_model.dart';
 import '../main.dart';
+
+enum _OrderPanelOverflowAction { moveTable, cancelOrder }
 
 class OrderWorkspace extends StatelessWidget {
   const OrderWorkspace({
@@ -208,7 +210,7 @@ class _MenuBrowser extends StatelessWidget {
       );
     }
 
-    return AppPanel(
+    return ToastWorkSurface(
       key: const Key('menu_root'),
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -227,7 +229,7 @@ class _MenuBrowser extends StatelessWidget {
                     child: Text(
                       PosEmptyStateCopy.menuNoCategories,
                       style: TextStyle(
-                        color: AppColors.textSecondary,
+                        color: PosColors.textSecondary,
                         fontSize: 13,
                       ),
                     ),
@@ -241,35 +243,12 @@ class _MenuBrowser extends StatelessWidget {
                       final categoryId = category['id']?.toString() ?? '';
                       final selected = selectedCategoryId == categoryId;
 
-                      return InkWell(
-                        onTap: categoryId.isEmpty
-                            ? null
+                      return ToastFilterChip(
+                        label: category['name']?.toString() ?? '-',
+                        selected: selected,
+                        onSelected: categoryId.isEmpty
+                            ? () {}
                             : () => onSelectCategory(categoryId),
-                        borderRadius: BorderRadius.circular(20),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          decoration: BoxDecoration(
-                            color: selected
-                                ? AppColors.amber500
-                                : AppColors.surface1,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: selected
-                                  ? AppColors.amber500
-                                  : AppColors.surface2,
-                            ),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            category['name']?.toString() ?? '-',
-                            style: GoogleFonts.notoSansKr(
-                              color: selected
-                                  ? AppColors.surface0
-                                  : AppColors.textPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
                       );
                     },
                   ),
@@ -305,9 +284,9 @@ class _MenuBrowser extends StatelessWidget {
                       return Container(
                         key: index == 0 ? const Key('menu_first_item') : null,
                         decoration: BoxDecoration(
-                          color: AppColors.surface1,
+                          color: PosColors.surface,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.surface2),
+                          border: Border.all(color: PosColors.panelMuted),
                         ),
                         padding: const EdgeInsets.all(12),
                         child: Row(
@@ -321,11 +300,13 @@ class _MenuBrowser extends StatelessWidget {
                                     name,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.notoSansKr(
-                                      color: AppColors.textPrimary,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
@@ -334,7 +315,7 @@ class _MenuBrowser extends StatelessWidget {
                                         .textTheme
                                         .titleMedium
                                         ?.copyWith(
-                                          color: AppColors.amber500,
+                                          color: PosColors.accent,
                                           fontWeight: FontWeight.w800,
                                           letterSpacing: -0.2,
                                         ),
@@ -359,13 +340,13 @@ class _MenuBrowser extends StatelessWidget {
                                 width: 36,
                                 height: 36,
                                 decoration: const BoxDecoration(
-                                  color: AppColors.amber500,
+                                  color: PosColors.accent,
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
                                   Icons.add,
                                   size: 22,
-                                  color: AppColors.surface0,
+                                  color: PosColors.canvas,
                                 ),
                               ),
                             ),
@@ -443,10 +424,10 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
     final result = await showDialog<int>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface1,
+        backgroundColor: PosColors.surface,
         title: Text(
           'Change Quantity',
-          style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+          style: Theme.of(context).textTheme.titleMedium,
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -454,8 +435,8 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
           children: [
             Text(
               item.label ?? 'Item',
-              style: GoogleFonts.notoSansKr(
-                color: AppColors.textSecondary,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: PosColors.textSecondary,
                 fontSize: 13,
               ),
             ),
@@ -463,7 +444,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
             TextField(
               controller: controller,
               keyboardType: TextInputType.number,
-              style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+              style: Theme.of(context).textTheme.bodyMedium,
               decoration: const InputDecoration(labelText: 'New quantity'),
               autofocus: true,
             ),
@@ -476,8 +457,8 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.amber500,
-              foregroundColor: AppColors.surface0,
+              backgroundColor: PosColors.accent,
+              foregroundColor: PosColors.canvas,
             ),
             onPressed: () {
               final qty = int.tryParse(controller.text.trim());
@@ -518,93 +499,101 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
         activeStatus != 'completed' &&
         activeStatus != 'cancelled' &&
         widget.state.cart.isEmpty;
+    final subtitleParts = <String>[
+      if (widget.guestCount != null)
+        l10n.orderWorkspaceGuestCount(widget.guestCount!),
+      '${widget.table.seatCount ?? 0} seats',
+      if (widget.state.activeOrder != null) l10n.orderWorkspaceCurrentCheck,
+    ];
 
-    return AppPanel(
+    return ToastWorkSurface(
       key: const Key('orders_root'),
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                'Table ${widget.table.tableNumber}',
-                style: AppTextStyles.operationalTitle(
-                  size: 30,
-                  color: AppColors.amber500,
-                ),
-              ),
-              const Spacer(),
-              if (widget.state.activeOrder != null) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
+          ToastSelectedContextHeader(
+            title: 'Table ${widget.table.tableNumber}',
+            subtitle: subtitleParts.join(' • '),
+            trailing: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (widget.state.activeOrder != null)
+                  ToastStatusBadge(
+                    label: l10n.orderWorkspaceCurrentCheck,
+                    color: PosColors.info,
+                    compact: true,
                   ),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface2,
-                    borderRadius: BorderRadius.circular(16),
+                if (widget.guestCount != null &&
+                    widget.state.activeOrder == null)
+                  ToastStatusBadge(
+                    label: l10n.orderWorkspaceGuestCount(widget.guestCount!),
+                    color: PosColors.warning,
+                    compact: true,
                   ),
-                  child: Text(
-                    l10n.orderWorkspaceCurrentCheck,
-                    style: GoogleFonts.notoSansKr(
-                      color: AppColors.textSecondary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                if (widget.onTransferTable != null) ...[
-                  const SizedBox(width: 6),
-                  SizedBox(
-                    height: 28,
-                    child: OutlinedButton.icon(
-                      onPressed: widget.state.isSubmitting
-                          ? null
-                          : widget.onTransferTable,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.textSecondary,
-                        side: const BorderSide(color: AppColors.surface2),
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                if (widget.onTransferTable != null || canCancelOrder)
+                  PopupMenuButton<_OrderPanelOverflowAction>(
+                    tooltip: 'More actions',
+                    enabled: !widget.state.isSubmitting,
+                    onSelected: (action) async {
+                      switch (action) {
+                        case _OrderPanelOverflowAction.moveTable:
+                          widget.onTransferTable?.call();
+                          break;
+                        case _OrderPanelOverflowAction.cancelOrder:
+                          await widget.onCancelOrder();
+                          break;
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      if (widget.onTransferTable != null)
+                        PopupMenuItem(
+                          value: _OrderPanelOverflowAction.moveTable,
+                          child: Row(
+                            children: [
+                              const Icon(Icons.swap_horiz, size: 18),
+                              const SizedBox(width: 8),
+                              Text(l10n.orderWorkspaceMove),
+                            ],
+                          ),
                         ),
-                      ),
-                      icon: const Icon(Icons.swap_horiz, size: 14),
-                      label: Text(
-                        l10n.orderWorkspaceMove,
-                        style: GoogleFonts.notoSansKr(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
+                      if (canCancelOrder)
+                        PopupMenuItem(
+                          value: _OrderPanelOverflowAction.cancelOrder,
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.cancel_outlined,
+                                size: 18,
+                                color: PosColors.danger,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                PosActionVerbs.cancelOrder,
+                                style: const TextStyle(color: PosColors.danger),
+                              ),
+                            ],
+                          ),
                         ),
+                    ],
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: PosColors.panelMuted,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: PosColors.border),
+                      ),
+                      child: const Icon(
+                        Icons.more_horiz,
+                        size: 18,
+                        color: PosColors.textSecondary,
                       ),
                     ),
                   ),
-                ],
               ],
-              if (widget.guestCount != null &&
-                  widget.state.activeOrder == null) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface2,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Text(
-                    l10n.orderWorkspaceGuestCount(widget.guestCount!),
-                    style: GoogleFonts.notoSansKr(
-                      color: AppColors.textSecondary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ],
+            ),
           ),
           if (widget.state.activeOrder != null &&
               !widget.state.isSubmitting) ...[
@@ -613,22 +602,22 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
               key: const Key('order_create_success_banner'),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: AppColors.statusAvailable.withValues(alpha: 0.08),
+                color: PosColors.success.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
                 children: [
                   const Icon(
                     Icons.check_circle_outline,
-                    color: AppColors.statusAvailable,
+                    color: PosColors.success,
                     size: 12,
                   ),
                   const SizedBox(width: 4),
                   Text(
                     key: const Key('latest_order_number_text'),
                     '${l10n.orderWorkspaceKitchenTicketSent} · ${widget.state.activeOrder!.id.length >= 8 ? widget.state.activeOrder!.id.substring(0, 8) : widget.state.activeOrder!.id}',
-                    style: GoogleFonts.notoSansKr(
-                      color: AppColors.statusAvailable,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: PosColors.success,
                       fontSize: 11,
                     ),
                   ),
@@ -649,119 +638,145 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
               children: [
                 if (widget.state.activeOrder != null &&
                     widget.state.activeOrder!.items.isNotEmpty) ...[
-                  Text(
-                    l10n.orderWorkspaceSentToKitchen,
-                    style: GoogleFonts.notoSansKr(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ...widget.state.activeOrder!.items.map((item) {
-                    final label = item.label ?? 'Item';
-                    final isCancelled = item.status == 'cancelled';
-                    final canCancel =
-                        !isCancelled &&
-                        item.status != 'ready' &&
-                        item.status != 'served' &&
-                        widget.onCancelOrderItem != null;
-                    final canEditQty =
-                        item.status == 'pending' &&
-                        widget.onEditOrderItemQuantity != null;
-                    return Opacity(
-                      opacity: isCancelled ? 0.45 : 1.0,
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: isCancelled
-                              ? AppColors.surface2.withValues(alpha: 0.5)
-                              : AppColors.surface2,
-                          borderRadius: BorderRadius.circular(10),
+                  Theme(
+                    data: Theme.of(
+                      context,
+                    ).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      key: const Key('order_sent_items_secondary_detail'),
+                      initiallyExpanded: false,
+                      tilePadding: EdgeInsets.zero,
+                      childrenPadding: EdgeInsets.zero,
+                      title: Text(
+                        l10n.orderWorkspaceSentToKitchen,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: PosColors.textSecondary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
                         ),
-                        child: Row(
-                          children: [
-                            Expanded(
+                      ),
+                      children: [
+                        ...widget.state.activeOrder!.items.map((item) {
+                          final label = item.label ?? 'Item';
+                          final isCancelled = item.status == 'cancelled';
+                          final canCancel =
+                              !isCancelled &&
+                              item.status != 'ready' &&
+                              item.status != 'served' &&
+                              widget.onCancelOrderItem != null;
+                          final canEditQty =
+                              item.status == 'pending' &&
+                              widget.onEditOrderItemQuantity != null;
+                          return Opacity(
+                            opacity: isCancelled ? 0.45 : 1.0,
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: isCancelled
+                                    ? PosColors.panelMuted.withValues(
+                                        alpha: 0.5,
+                                      )
+                                    : PosColors.panelMuted,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                               child: Row(
                                 children: [
-                                  Flexible(
-                                    child: Text(
-                                      '$label x${item.quantity}',
-                                      style: GoogleFonts.notoSansKr(
-                                        color: isCancelled
-                                            ? AppColors.statusCancelled
-                                            : AppColors.textSecondary,
-                                        fontSize: 13,
-                                        decoration: isCancelled
-                                            ? TextDecoration.lineThrough
-                                            : null,
-                                      ),
+                                  Expanded(
+                                    child: Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            '$label x${item.quantity}',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium
+                                                ?.copyWith(
+                                                  color: isCancelled
+                                                      ? PosColors.danger
+                                                      : PosColors.textSecondary,
+                                                  fontSize: 13,
+                                                  decoration: isCancelled
+                                                      ? TextDecoration
+                                                            .lineThrough
+                                                      : null,
+                                                ),
+                                          ),
+                                        ),
+                                        if (canEditQty) ...[
+                                          const SizedBox(width: 4),
+                                          InkWell(
+                                            onTap: widget.state.isSubmitting
+                                                ? null
+                                                : () => _showEditQuantityDialog(
+                                                    item,
+                                                  ),
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                            child: const Padding(
+                                              padding: EdgeInsets.all(2),
+                                              child: Icon(
+                                                Icons.edit,
+                                                size: 14,
+                                                color: PosColors.textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
                                     ),
                                   ),
-                                  if (canEditQty) ...[
-                                    const SizedBox(width: 4),
+                                  if (canCancel)
                                     InkWell(
                                       onTap: widget.state.isSubmitting
                                           ? null
-                                          : () => _showEditQuantityDialog(item),
+                                          : () => widget.onCancelOrderItem!(
+                                              item.id,
+                                            ),
                                       borderRadius: BorderRadius.circular(10),
                                       child: const Padding(
-                                        padding: EdgeInsets.all(2),
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: 4,
+                                          vertical: 2,
+                                        ),
                                         child: Icon(
-                                          Icons.edit,
-                                          size: 14,
-                                          color: AppColors.textSecondary,
+                                          Icons.close,
+                                          size: 16,
+                                          color: PosColors.danger,
                                         ),
                                       ),
                                     ),
-                                  ],
+                                  const SizedBox(width: 4),
+                                  InkWell(
+                                    onTap:
+                                        !widget.canManageSentItems ||
+                                            widget.onCycleSentItemStatus ==
+                                                null ||
+                                            isCancelled
+                                        ? null
+                                        : () => widget.onCycleSentItemStatus!(
+                                            item,
+                                            _cycleStatus(item.status),
+                                          ),
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: _OrderItemStatusChip(
+                                      status: item.status,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
-                            if (canCancel)
-                              InkWell(
-                                onTap: widget.state.isSubmitting
-                                    ? null
-                                    : () => widget.onCancelOrderItem!(item.id),
-                                borderRadius: BorderRadius.circular(10),
-                                child: const Padding(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                    vertical: 2,
-                                  ),
-                                  child: Icon(
-                                    Icons.close,
-                                    size: 16,
-                                    color: AppColors.statusCancelled,
-                                  ),
-                                ),
-                              ),
-                            const SizedBox(width: 4),
-                            InkWell(
-                              onTap:
-                                  !widget.canManageSentItems ||
-                                      widget.onCycleSentItemStatus == null ||
-                                      isCancelled
-                                  ? null
-                                  : () => widget.onCycleSentItemStatus!(
-                                      item,
-                                      _cycleStatus(item.status),
-                                    ),
-                              borderRadius: BorderRadius.circular(10),
-                              child: _OrderItemStatusChip(status: item.status),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 14),
                 ],
                 Text(
                   l10n.orderWorkspaceNewItems,
-                  style: GoogleFonts.notoSansKr(
-                    color: AppColors.textPrimary,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                   ),
@@ -771,13 +786,13 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppColors.surface2,
+                      color: PosColors.panelMuted,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
                       PosEmptyStateCopy.cartEmpty,
-                      style: GoogleFonts.notoSansKr(
-                        color: AppColors.textSecondary,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: PosColors.textSecondary,
                         fontSize: 13,
                       ),
                     ),
@@ -787,9 +802,9 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppColors.surface0,
+                      color: PosColors.canvas,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.surface2),
+                      border: Border.all(color: PosColors.panelMuted),
                     ),
                     child: Row(
                       children: [
@@ -799,18 +814,18 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                             children: [
                               Text(
                                 item.name,
-                                style: GoogleFonts.notoSansKr(
-                                  color: AppColors.textPrimary,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                               ),
                               const SizedBox(height: 2),
                               Text(
                                 '₫${formatter.format(item.price)}',
                                 style: Theme.of(context).textTheme.titleMedium
                                     ?.copyWith(
-                                      color: AppColors.amber500,
+                                      color: PosColors.accent,
                                       fontWeight: FontWeight.w800,
                                       letterSpacing: -0.2,
                                     ),
@@ -825,21 +840,21 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                               onPressed: () =>
                                   widget.onDecrementCartItem(item.menuItemId),
                               icon: const Icon(Icons.remove_circle_outline),
-                              color: AppColors.textSecondary,
+                              color: PosColors.textSecondary,
                             ),
                             Text(
                               '${item.quantity}',
-                              style: GoogleFonts.notoSansKr(
-                                color: AppColors.textPrimary,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                              ),
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                             ),
                             IconButton(
                               visualDensity: VisualDensity.compact,
                               onPressed: () => widget.onIncrementCartItem(item),
                               icon: const Icon(Icons.add_circle_outline),
-                              color: AppColors.amber500,
+                              color: PosColors.accent,
                             ),
                           ],
                         ),
@@ -855,8 +870,8 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
             children: [
               Text(
                 l10n.orderWorkspacePaymentDue,
-                style: GoogleFonts.notoSansKr(
-                  color: AppColors.textSecondary,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: PosColors.textSecondary,
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
                 ),
@@ -866,14 +881,13 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                 '₫${formatter.format(total)}',
                 style: AppTextStyles.operationalTitle(
                   size: 28,
-                  color: AppColors.amber500,
+                  color: PosColors.accent,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          ToastActionRail(
-            padding: const EdgeInsets.only(top: 12),
+          ToastPrimaryActionZone(
             actions: [
               PosActionButton(
                 label: PosActionVerbs.cancel,
@@ -898,6 +912,37 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                     : null,
               ),
             ],
+            supporting: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (!isOnline)
+                  Text(
+                    'Offline orders are queued locally and sync with the same mutation key after connection recovery.',
+                    textAlign: TextAlign.right,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: PosColors.warning,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                if (widget.state.offlineQueueCount > 0 ||
+                    widget.state.isSyncingOfflineQueue)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      widget.state.isSyncingOfflineQueue
+                          ? 'Syncing queued orders...'
+                          : '${widget.state.offlineQueueCount} queued order operation(s) waiting for sync.',
+                      textAlign: TextAlign.right,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.accent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
           if (widget.state.isSubmitting)
             const Padding(
@@ -906,53 +951,12 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                 label: PosLoadingCopy.syncing,
               ),
             ),
-          if (!isOnline)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                'Offline orders are queued locally and sync with the same mutation key after connection recovery.',
-                style: GoogleFonts.notoSansKr(
-                  color: AppColors.statusOccupied,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          if (widget.state.offlineQueueCount > 0 ||
-              widget.state.isSyncingOfflineQueue)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                widget.state.isSyncingOfflineQueue
-                    ? 'Syncing queued orders...'
-                    : '${widget.state.offlineQueueCount} queued order operation(s) waiting for sync.',
-                style: GoogleFonts.notoSansKr(
-                  color: AppColors.amber500,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          if (canCancelOrder) ...[
-            const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerRight,
-              child: PosActionButton(
-                label: PosActionVerbs.cancelOrder,
-                tone: PosActionTone.destructive,
-                icon: PosActionIcons.cancelOrder,
-                onPressed: widget.state.isSubmitting
-                    ? null
-                    : widget.onCancelOrder,
-              ),
-            ),
-          ],
           if (canProcessPayment) ...[
             const SizedBox(height: 12),
             Text(
               '${l10n.orderWorkspacePaymentDue} (₫${formatter.format(activeTotal)})',
-              style: GoogleFonts.notoSansKr(
-                color: AppColors.textSecondary,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: PosColors.textSecondary,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
@@ -977,25 +981,12 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                     ),
                   ].map((tag) {
                     final selected = _selectedPaymentMethod == tag.method;
-                    return ChoiceChip(
+                    return ToastFilterChip(
+                      label: tag.label,
                       selected: selected,
-                      onSelected: (_) {
+                      onSelected: () {
                         setState(() => _selectedPaymentMethod = tag.method);
                       },
-                      label: Text(tag.label),
-                      selectedColor: AppColors.amber500.withValues(alpha: 0.3),
-                      labelStyle: GoogleFonts.notoSansKr(
-                        color: selected
-                            ? AppColors.textPrimary
-                            : AppColors.textSecondary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                      side: BorderSide(
-                        color: selected
-                            ? AppColors.amber500
-                            : AppColors.surface2,
-                      ),
-                      backgroundColor: AppColors.surface2,
                     );
                   }).toList(),
             ),
@@ -1030,8 +1021,8 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
               padding: const EdgeInsets.only(top: 8),
               child: Text(
                 l10n.orderWorkspaceSendBeforePayment,
-                style: GoogleFonts.notoSansKr(
-                  color: AppColors.statusOccupied,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: PosColors.warning,
                   fontSize: 12,
                 ),
               ),
@@ -1058,12 +1049,12 @@ class _OrderItemStatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final normalized = status.toLowerCase();
     final (color, label) = switch (normalized) {
-      'pending' => (AppColors.textSecondary, 'PENDING'),
-      'preparing' => (AppColors.amber500, 'PREPARING'),
-      'ready' => (AppColors.statusAvailable, 'READY'),
-      'served' => (AppColors.statusOccupied, 'SERVED'),
-      'cancelled' => (AppColors.statusCancelled, 'CANCELLED'),
-      _ => (AppColors.textSecondary, normalized.toUpperCase()),
+      'pending' => (PosColors.textSecondary, 'PENDING'),
+      'preparing' => (PosColors.accent, 'PREPARING'),
+      'ready' => (PosColors.success, 'READY'),
+      'served' => (PosColors.warning, 'SERVED'),
+      'cancelled' => (PosColors.danger, 'CANCELLED'),
+      _ => (PosColors.textSecondary, normalized.toUpperCase()),
     };
     return ToastStatusChip(label: label, color: color);
   }

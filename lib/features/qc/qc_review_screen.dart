@@ -288,8 +288,9 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
     return Scaffold(
       backgroundColor: PosColors.canvas,
       appBar: AppBar(
-        backgroundColor: PosColors.canvas,
-        elevation: 0,
+        backgroundColor: PosColors.topbarSurface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 1,
         actions: const [
           Padding(
             padding: EdgeInsets.only(right: 12),
@@ -321,8 +322,8 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
           ? const Center(
               child: CircularProgressIndicator(color: PosColors.accent),
             )
-          : ListView(
-              padding: const EdgeInsets.all(16),
+          : ToastResponsiveScrollBody(
+              maxWidth: 1280,
               children: [
                 Row(
                   children: [

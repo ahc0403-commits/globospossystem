@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/layout/platform_info.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/ui/app_primitives.dart';
+import '../../core/ui/toast/toast_primitives_extended.dart';
 import '../../core/utils/time_utils.dart';
 import '../../main.dart';
 import '../../widgets/app_nav_bar.dart';
@@ -272,7 +273,12 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                       ),
                     ),
                   ),
-                  Positioned.fill(child: _buildBody(kioskState, isOnline)),
+                  Positioned.fill(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 84, 20, 20),
+                      child: _buildBody(kioskState, isOnline),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -306,201 +312,281 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
       );
     }
 
-    return Column(
-      children: [
-        const SizedBox(height: 60),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: GridView.builder(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 14,
-                mainAxisSpacing: 14,
-                childAspectRatio: 2.6,
+    return ToastResponsiveBody(
+      maxWidth: 1180,
+      padding: EdgeInsets.zero,
+      child: ToastWorkSurface(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Select a name',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
               ),
-              itemCount: state.staffList.length,
-              itemBuilder: (context, index) {
-                final staff = state.staffList[index];
-                return Material(
-                  color: AppColors.surface1,
-                  borderRadius: BorderRadius.circular(18),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(18),
-                    onTap: () {
-                      setState(() {
-                        _selectedStaff = staff;
-                        _viewState = _KioskViewState.typeSelect;
-                      });
-                    },
-                    child: Center(
-                      child: Text(
-                        staff['full_name']?.toString() ?? '-',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.notoSansKr(
-                          color: AppColors.textPrimary,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Choose a team member to start the attendance flow.',
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final columns = _kioskGridColumns(constraints.maxWidth);
+                  final aspectRatio = switch (columns) {
+                    1 => 3.4,
+                    2 => 2.8,
+                    3 => 2.4,
+                    _ => 2.1,
+                  };
+
+                  return GridView.builder(
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: columns,
+                      crossAxisSpacing: 14,
+                      mainAxisSpacing: 14,
+                      childAspectRatio: aspectRatio,
                     ),
-                  ),
-                );
-              },
+                    itemCount: state.staffList.length,
+                    itemBuilder: (context, index) {
+                      final staff = state.staffList[index];
+                      return Material(
+                        color: AppColors.surface1,
+                        borderRadius: BorderRadius.circular(18),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(18),
+                          onTap: () {
+                            setState(() {
+                              _selectedStaff = staff;
+                              _viewState = _KioskViewState.typeSelect;
+                            });
+                          },
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              child: Text(
+                                staff['full_name']?.toString() ?? '-',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.notoSansKr(
+                                  color: AppColors.textPrimary,
+                                  fontSize: columns == 1 ? 20 : 24,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
-          ),
+          ],
         ),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 20),
-          child: Text(
-            'Select a name',
-            style: GoogleFonts.notoSansKr(
-              color: AppColors.textSecondary,
-              fontSize: 14,
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
   Widget _buildTypeSelect(bool isOnline) {
     final selectedName = _selectedStaff?['full_name']?.toString() ?? '-';
 
-    return Column(
-      children: [
-        const SizedBox(height: 80),
-        Text(
-          selectedName,
-          style: GoogleFonts.notoSansKr(
-            color: AppColors.textPrimary,
-            fontSize: 36,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const Spacer(),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 220,
-              height: 80,
-              child: FilledButton(
-                onPressed: !isOnline
-                    ? null
-                    : () {
-                        _selectedType = 'clock_in';
-                        _goToCamera();
-                      },
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.amber500,
-                  foregroundColor: AppColors.surface0,
-                ),
-                child: Text(
-                  'Clock In',
-                  style: GoogleFonts.notoSansKr(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
+    return ToastResponsiveBody(
+      maxWidth: 920,
+      padding: EdgeInsets.zero,
+      child: Center(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final stacked = constraints.maxWidth < 720;
+            final actionButtons = [
+              SizedBox(
+                width: stacked ? double.infinity : 220,
+                height: 80,
+                child: FilledButton(
+                  onPressed: !isOnline
+                      ? null
+                      : () {
+                          _selectedType = 'clock_in';
+                          _goToCamera();
+                        },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.amber500,
+                    foregroundColor: AppColors.surface0,
+                  ),
+                  child: Text(
+                    'Clock In',
+                    style: GoogleFonts.notoSansKr(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(width: 16),
-            SizedBox(
-              width: 220,
-              height: 80,
-              child: OutlinedButton(
-                onPressed: !isOnline
-                    ? null
-                    : () {
-                        _selectedType = 'clock_out';
-                        _goToCamera();
-                      },
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.surface2),
-                ),
-                child: Text(
-                  'Clock Out',
-                  style: GoogleFonts.notoSansKr(
-                    color: AppColors.textPrimary,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
+              SizedBox(
+                width: stacked ? double.infinity : 220,
+                height: 80,
+                child: OutlinedButton(
+                  onPressed: !isOnline
+                      ? null
+                      : () {
+                          _selectedType = 'clock_out';
+                          _goToCamera();
+                        },
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppColors.surface2),
+                  ),
+                  child: Text(
+                    'Clock Out',
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.textPrimary,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ];
+
+            return ToastWorkSurface(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    selectedName,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.textPrimary,
+                      fontSize: 36,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Select the attendance action to continue.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  if (stacked)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        actionButtons[0],
+                        const SizedBox(height: 12),
+                        actionButtons[1],
+                      ],
+                    )
+                  else
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        actionButtons[0],
+                        const SizedBox(width: 16),
+                        actionButtons[1],
+                      ],
+                    ),
+                  if (!isOnline) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Available after internet connection',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.statusOccupied,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: _backToIdle,
+                    child: Text(
+                      '← Back',
+                      style: GoogleFonts.notoSansKr(
+                        color: AppColors.textSecondary,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
-        if (!isOnline) ...[
-          const SizedBox(height: 12),
-          Text(
-            'Available after internet connection',
-            style: GoogleFonts.notoSansKr(
-              color: AppColors.statusOccupied,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-        const SizedBox(height: 24),
-        TextButton(
-          onPressed: _backToIdle,
-          child: Text(
-            '← Back',
-            style: GoogleFonts.notoSansKr(
-              color: AppColors.textSecondary,
-              fontSize: 14,
-            ),
-          ),
-        ),
-        const Spacer(),
-      ],
+      ),
     );
   }
 
   Widget _buildCamera() {
     final controller = _cameraController;
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: controller != null && controller.value.isInitialized
-              ? CameraPreview(controller)
-              : Container(color: Colors.black),
-        ),
-        Positioned.fill(
-          child: ColoredBox(
-            color: Colors.black.withValues(alpha: 0.30),
-            child: Center(
-              child: Container(
-                width: 260,
-                height: 260,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  '$_countdown',
-                  style: GoogleFonts.bebasNeue(
-                    color: Colors.white,
-                    fontSize: 100,
+    return ToastResponsiveBody(
+      maxWidth: 1100,
+      padding: EdgeInsets.zero,
+      child: SizedBox.expand(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: controller != null && controller.value.isInitialized
+                    ? CameraPreview(controller)
+                    : Container(color: Colors.black),
+              ),
+              Positioned.fill(
+                child: ColoredBox(
+                  color: Colors.black.withValues(alpha: 0.30),
+                  child: Center(
+                    child: Container(
+                      width: 260,
+                      height: 260,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        '$_countdown',
+                        style: GoogleFonts.bebasNeue(
+                          color: Colors.white,
+                          fontSize: 100,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 22,
+                child: Text(
+                  'Align your face within the circle',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.notoSansKr(
+                    color: Colors.white,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 22,
-          child: Text(
-            'Align your face within the circle',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 16),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -510,94 +596,133 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
       return _buildUploading();
     }
 
-    return Stack(
-      children: [
-        Positioned.fill(child: Image.file(File(file.path), fit: BoxFit.cover)),
-        Positioned(
-          left: 16,
-          right: 16,
-          bottom: 20,
-          child: Row(
+    return ToastResponsiveBody(
+      maxWidth: 1100,
+      padding: EdgeInsets.zero,
+      child: SizedBox.expand(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Stack(
             children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _goToCamera,
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.white),
-                    foregroundColor: Colors.white,
-                  ),
-                  child: Text(
-                    'Retake',
-                    style: GoogleFonts.notoSansKr(fontSize: 16),
-                  ),
-                ),
+              Positioned.fill(
+                child: Image.file(File(file.path), fit: BoxFit.cover),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
-                  onPressed: () =>
-                      _submitAttendance(photoFile: File(file.path)),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.amber500,
-                    foregroundColor: AppColors.surface0,
-                  ),
-                  child: Text(
-                    'Confirm ✓',
-                    style: GoogleFonts.notoSansKr(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 20,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _goToCamera,
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.white),
+                          foregroundColor: Colors.white,
+                        ),
+                        child: Text(
+                          'Retake',
+                          style: GoogleFonts.notoSansKr(fontSize: 16),
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () =>
+                            _submitAttendance(photoFile: File(file.path)),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.amber500,
+                          foregroundColor: AppColors.surface0,
+                        ),
+                        child: Text(
+                          'Confirm ✓',
+                          style: GoogleFonts.notoSansKr(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 
   Widget _buildUploading() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const CircularProgressIndicator(color: AppColors.amber500),
-          const SizedBox(height: 14),
-          Text(
-            'Recording...',
-            style: GoogleFonts.notoSansKr(
-              color: AppColors.textPrimary,
-              fontSize: 18,
-            ),
+    return ToastResponsiveBody(
+      maxWidth: 560,
+      padding: EdgeInsets.zero,
+      child: Center(
+        child: ToastWorkSurface(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: AppColors.amber500),
+              const SizedBox(height: 14),
+              Text(
+                'Recording...',
+                style: GoogleFonts.notoSansKr(
+                  color: AppColors.textPrimary,
+                  fontSize: 18,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildDone(String? lastAction) {
     final isIn = lastAction == 'clock_in';
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.check_circle,
-            color: AppColors.statusAvailable,
-            size: 96,
+    return ToastResponsiveBody(
+      maxWidth: 640,
+      padding: EdgeInsets.zero,
+      child: Center(
+        child: ToastWorkSurface(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.check_circle,
+                color: AppColors.statusAvailable,
+                size: 96,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                isIn ? 'Clock-in complete' : 'Clock-out complete',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.notoSansKr(
+                  color: AppColors.textPrimary,
+                  fontSize: 32,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            isIn ? 'Clock-in complete' : 'Clock-out complete',
-            style: GoogleFonts.notoSansKr(
-              color: AppColors.textPrimary,
-              fontSize: 32,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
+        ),
       ),
     );
+  }
+
+  int _kioskGridColumns(double width) {
+    if (width >= 1080) {
+      return 4;
+    }
+    if (width >= 760) {
+      return 3;
+    }
+    if (width >= 460) {
+      return 2;
+    }
+    return 1;
   }
 }

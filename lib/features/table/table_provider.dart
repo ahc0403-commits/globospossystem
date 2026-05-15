@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/services/tables_service.dart';
 import '../../main.dart';
 import 'table_model.dart';
 
@@ -38,14 +39,10 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
   Future<void> loadTables(String storeId) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final response = await supabase
-          .from('tables')
-          .select()
-          .eq('restaurant_id', storeId)
-          .order('table_number', ascending: true);
+      final response = await tablesService.fetchTables(storeId);
 
       final tables = response
-          .map<PosTable>((row) => PosTable.fromJson(Map<String, dynamic>.from(row)))
+          .map<PosTable>((row) => PosTable.fromJson(row))
           .toList();
 
       state = state.copyWith(
@@ -109,6 +106,10 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
   List<PosTable> _sortTables(List<PosTable> tables) {
     final sorted = [...tables];
     sorted.sort((a, b) {
+      final layoutOrder = a.layoutSortOrder.compareTo(b.layoutSortOrder);
+      if (layoutOrder != 0) {
+        return layoutOrder;
+      }
       final aNum = int.tryParse(a.tableNumber);
       final bNum = int.tryParse(b.tableNumber);
       if (aNum != null && bNum != null) {

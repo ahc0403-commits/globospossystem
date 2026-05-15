@@ -9,10 +9,13 @@
 // signal visibility. Dense but calm. Stronger selected state than
 // non-selected.
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../app_theme.dart';
+import '../pos_design_tokens.dart';
 import 'toast_vocabulary.dart';
 
 // =============================================================================
@@ -106,8 +109,9 @@ class ToastQueueTable extends StatelessWidget {
   Widget _header() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.surface3)),
+      decoration: BoxDecoration(
+        color: AppColors.surface2,
+        borderRadius: AppRadius.md,
       ),
       child: Row(
         children: columns
@@ -118,7 +122,7 @@ class ToastQueueTable extends StatelessWidget {
                   c.label.toUpperCase(),
                   textAlign: c.align,
                   style: GoogleFonts.notoSansKr(
-                    color: AppColors.textMuted,
+                    color: AppColors.textSecondary,
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.6,
@@ -133,20 +137,18 @@ class ToastQueueTable extends StatelessWidget {
 
   Widget _row(ToastQueueRow r) {
     final selected = r.id == selectedId;
-    final bg = selected
-        ? AppColors.amber500.withValues(alpha: 0.12)
-        : Colors.transparent;
     return InkWell(
       onTap: onSelect == null ? null : () => onSelect!(r.id),
+      hoverColor: PosColors.selectedRow.withValues(alpha: 0.72),
       child: Container(
         decoration: BoxDecoration(
-          color: bg,
+          color: selected ? PosColors.selectedRow : Colors.transparent,
+          borderRadius: AppRadius.md,
           border: Border(
             left: BorderSide(
               color: selected ? AppColors.amber500 : Colors.transparent,
-              width: 3,
+              width: 4,
             ),
-            bottom: const BorderSide(color: AppColors.surface3),
           ),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -205,54 +207,90 @@ class ToastMetricStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface1,
-        borderRadius: AppRadius.sm,
-        border: Border.all(color: AppColors.surface3),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Row(
-        children: [
-          for (var i = 0; i < metrics.length; i++) ...[
-            if (i > 0)
-              Container(
-                width: 1,
-                height: 24,
-                color: AppColors.surface3,
-                margin: const EdgeInsets.symmetric(horizontal: 12),
-              ),
-            Expanded(child: _tile(metrics[i])),
-          ],
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = _metricColumnsForWidth(
+          constraints.maxWidth,
+          metrics.length,
+        );
+        final rows = <List<ToastMetric>>[];
+        for (var index = 0; index < metrics.length; index += columns) {
+          rows.add(
+            metrics.sublist(index, math.min(index + columns, metrics.length)),
+          );
+        }
+
+        return Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface0,
+            borderRadius: AppRadius.lg,
+            border: Border.all(color: AppColors.surface3),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          child: Column(
+            children: [
+              for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) ...[
+                Row(
+                  children: [
+                    for (
+                      var columnIndex = 0;
+                      columnIndex < columns;
+                      columnIndex++
+                    ) ...[
+                      Expanded(
+                        child: columnIndex < rows[rowIndex].length
+                            ? _tile(rows[rowIndex][columnIndex])
+                            : const SizedBox.shrink(),
+                      ),
+                      if (columnIndex != columns - 1) const SizedBox(width: 8),
+                    ],
+                  ],
+                ),
+                if (rowIndex != rows.length - 1) const SizedBox(height: 8),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 
   Widget _tile(ToastMetric m) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          m.label.toUpperCase(),
-          style: GoogleFonts.notoSansKr(
-            color: AppColors.textMuted,
-            fontSize: 10,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.6,
-          ),
+    final tone = m.tone;
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: AppRadius.md,
+        border: Border.all(color: AppColors.surface3),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              m.label.toUpperCase(),
+              style: GoogleFonts.notoSansKr(
+                color: AppColors.textSecondary,
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.55,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              m.value,
+              style: GoogleFonts.notoSansKr(
+                color: tone ?? AppColors.textPrimary,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                height: 1.05,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 2),
-        Text(
-          m.value,
-          style: GoogleFonts.notoSansKr(
-            color: m.tone ?? AppColors.textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -266,24 +304,45 @@ class ToastSelectedContextHeader extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.urgentReason,
+    this.noteColor = PosColors.info,
+    this.noteBackgroundColor = PosColors.infoMuted,
+    this.noteIcon = Icons.info_outline_rounded,
     this.trailing,
   });
 
   final String title;
   final String? subtitle;
   final String? urgentReason;
+  final Color noteColor;
+  final Color noteBackgroundColor;
+  final IconData noteIcon;
   final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.surface3)),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      decoration: BoxDecoration(
+        color: PosSurfaceTints.tone(AppColors.amber500, alpha: 0.05),
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(16),
+          topRight: Radius.circular(16),
+        ),
+        border: Border(
+          bottom: BorderSide(color: AppColors.surface3.withValues(alpha: 0.9)),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Container(
+            width: 4,
+            margin: const EdgeInsets.only(right: 12),
+            decoration: BoxDecoration(
+              color: AppColors.amber500,
+              borderRadius: AppRadius.pill,
+            ),
+          ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -292,39 +351,85 @@ class ToastSelectedContextHeader extends StatelessWidget {
                   title,
                   style: GoogleFonts.notoSansKr(
                     color: AppColors.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
                   ),
                 ),
                 if (subtitle != null) ...[
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 6),
                   Text(
                     subtitle!,
                     style: GoogleFonts.notoSansKr(
                       color: AppColors.textSecondary,
-                      fontSize: 12,
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w400,
+                      height: 1.35,
                     ),
                   ),
                 ],
                 if (urgentReason != null) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    urgentReason!,
-                    style: GoogleFonts.notoSansKr(
-                      color: AppColors.statusReady,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: noteBackgroundColor,
+                      borderRadius: AppRadius.pill,
+                      border: Border.all(
+                        color: noteColor.withValues(alpha: 0.18),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(noteIcon, size: 13, color: noteColor),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            urgentReason!,
+                            style: GoogleFonts.notoSansKr(
+                              color: noteColor,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ],
             ),
           ),
-          if (trailing != null) trailing!,
+          if (trailing != null) ...[
+            const SizedBox(width: 12),
+            Flexible(
+              child: Align(alignment: Alignment.topRight, child: trailing!),
+            ),
+          ],
         ],
       ),
     );
   }
+}
+
+int _metricColumnsForWidth(double width, int itemCount) {
+  if (itemCount <= 1) {
+    return 1;
+  }
+  if (width < 420) {
+    return 1;
+  }
+  if (width < 760) {
+    return math.min(2, itemCount);
+  }
+  if (width < 1080) {
+    return math.min(3, itemCount);
+  }
+  return math.min(4, itemCount);
 }
 
 // =============================================================================
@@ -348,9 +453,9 @@ class ToastIssueActionSection extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.statusInfo.withValues(alpha: 0.08),
-        border: Border.all(color: AppColors.statusInfo.withValues(alpha: 0.4)),
-        borderRadius: AppRadius.sm,
+        color: PosColors.infoMuted,
+        border: Border.all(color: PosColors.info.withValues(alpha: 0.18)),
+        borderRadius: AppRadius.md,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -462,23 +567,36 @@ class PosActionButton extends StatelessWidget {
       ],
     );
 
+    final childBackground = tone == PosActionTone.secondary
+        ? AppColors.surface2
+        : bg;
+    final childBorder = tone == PosActionTone.secondary
+        ? AppColors.surface3
+        : bg.withValues(alpha: 0.92);
+
     final btn = Opacity(
       opacity: disabled ? 0.5 : 1.0,
       child: InkWell(
         onTap: disabled ? null : onPressed,
-        borderRadius: AppRadius.sm,
+        borderRadius: AppRadius.lg,
         child: Container(
+          constraints: BoxConstraints(
+            minHeight: compact
+                ? PosMetrics.buttonCompactHeight
+                : PosMetrics.buttonHeight,
+          ),
           padding: compact
               ? const EdgeInsets.symmetric(horizontal: 10, vertical: 6)
               : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: tone == PosActionTone.secondary ? AppColors.surface2 : bg,
-            borderRadius: AppRadius.sm,
-            border: Border.all(
-              color: tone == PosActionTone.secondary ? AppColors.surface3 : bg,
-            ),
+            color: childBackground,
+            borderRadius: AppRadius.lg,
+            border: Border.all(color: childBorder),
+            boxShadow: !disabled && tone == PosActionTone.primary
+                ? PosShadows.low
+                : ToastElevationTokens.none,
           ),
-          child: child,
+          child: Center(child: child),
         ),
       ),
     );
@@ -504,8 +622,9 @@ class ToastActionRail extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: padding,
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.surface3)),
+      decoration: BoxDecoration(
+        color: PosSurfaceTints.tone(AppColors.surface2, alpha: 0.4),
+        border: const Border(top: BorderSide(color: AppColors.surface3)),
       ),
       child: Wrap(
         spacing: 8,
@@ -585,30 +704,36 @@ class ToastOperationalEmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 28, color: AppColors.textMuted),
-          const SizedBox(height: 10),
-          Text(
-            headline,
-            style: GoogleFonts.notoSansKr(
-              color: AppColors.textSecondary,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          if (helper != null) ...[
-            const SizedBox(height: 4),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 28, color: AppColors.textMuted),
+            const SizedBox(height: 12),
             Text(
-              helper!,
+              headline,
+              textAlign: TextAlign.center,
               style: GoogleFonts.notoSansKr(
-                color: AppColors.textMuted,
-                fontSize: 12,
+                color: AppColors.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
               ),
             ),
+            if (helper != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                helper!,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.notoSansKr(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                  height: 1.35,
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

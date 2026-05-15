@@ -70,6 +70,7 @@ flutter:
   uses-material-design: true
   generate: true
   assets:
+    - .env
     - assets/images/
   # fonts: 폰트 파일 추가 후 활성화
   # - family: BebasNeue

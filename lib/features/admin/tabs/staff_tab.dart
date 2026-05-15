@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 
+import '../../../core/i18n/locale_extensions.dart';
+import '../../../core/ui/pos_design_tokens.dart';
+import '../../../core/ui/toast/toast.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
@@ -17,6 +21,17 @@ class StaffTab extends ConsumerStatefulWidget {
 class _StaffTabState extends ConsumerState<StaffTab> {
   String? _initializedRestaurantId;
   String? _lastError;
+  String? _lastAttendanceError;
+  String? _selectedStaffId;
+  String _roleFilter = 'all';
+  String _statusFilter = 'all';
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,11 +39,15 @@ class _StaffTabState extends ConsumerState<StaffTab> {
     final storeId = authState.storeId;
     final viewerRole = authState.role;
     final staffState = ref.watch(staffProvider);
+    final attendanceState = ref.watch(attendanceProvider);
     final notifier = ref.read(staffProvider.notifier);
 
     if (storeId != null && _initializedRestaurantId != storeId) {
       _initializedRestaurantId = storeId;
-      Future.microtask(() => notifier.loadStaff(storeId));
+      Future.microtask(() async {
+        await notifier.loadStaff(storeId);
+        await ref.read(attendanceProvider.notifier).loadLogs(storeId);
+      });
     }
 
     if (staffState.error != null &&
@@ -42,42 +61,62 @@ class _StaffTabState extends ConsumerState<StaffTab> {
       });
     }
 
+    if (attendanceState.error != null &&
+        attendanceState.error!.isNotEmpty &&
+        attendanceState.error != _lastAttendanceError) {
+      _lastAttendanceError = attendanceState.error;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          showErrorToast(context, attendanceState.error!);
+        }
+      });
+    }
+
+    final rows = _buildStaffRows(staffState.staff, attendanceState.logs);
+    final filteredRows = rows.where((row) {
+      if (_roleFilter != 'all' && row.member.role != _roleFilter) {
+        return false;
+      }
+      if (_statusFilter != 'all' && row.statusKey != _statusFilter) {
+        return false;
+      }
+      final query = _searchController.text.trim().toLowerCase();
+      if (query.isEmpty) return true;
+      return row.member.fullName.toLowerCase().contains(query) ||
+          (row.member.email ?? '').toLowerCase().contains(query) ||
+          _roleLabelKo(context, row.member.role).toLowerCase().contains(query);
+    }).toList();
+    final selectedRow = _resolveSelectedRow(filteredRows);
+
+    final roleOptions = <String>{
+      'all',
+      ...staffState.staff.map((member) => member.role),
+    }.toList();
+    final workingCount = rows.where((row) => row.statusKey == 'working').length;
+    final absentCount = rows.where((row) => row.statusKey == 'absent').length;
+    final permissionReviewCount = rows
+        .where((row) => row.permissionNeedsReview)
+        .length;
+
     return Scaffold(
       key: const Key('staff_root'),
       backgroundColor: AppColors.surface0,
-      body: Padding(
+      body: ToastResponsiveBody(
+        maxWidth: 1480,
         padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Text(
-                  'Staff',
-                  style: GoogleFonts.bebasNeue(
-                    color: AppColors.textPrimary,
-                    fontSize: 34,
-                    letterSpacing: 1.0,
-                  ),
-                ),
-                const Spacer(),
-                FilledButton.icon(
-                  onPressed: storeId == null
-                      ? null
-                      : () => _showAddStaffSheet(
-                          context,
-                          storeId,
-                          viewerRole: viewerRole,
-                        ),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.amber500,
-                    foregroundColor: AppColors.surface0,
-                  ),
-                  icon: const Icon(Icons.person_add),
-                  label: const Text('Add Staff'),
-                ),
-              ],
+            _buildStaffCommandHeader(
+              staffCount: staffState.staff.length,
+              workingCount: workingCount,
+              absentCount: absentCount,
+              permissionReviewCount: permissionReviewCount,
+              roleOptions: roleOptions,
+              storeId: storeId,
+              viewerRole: viewerRole,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Expanded(
               child: staffState.isLoading
                   ? const Center(
@@ -85,125 +124,34 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                         color: AppColors.amber500,
                       ),
                     )
-                  : staffState.staff.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.people_outline,
-                            color: AppColors.textSecondary,
-                            size: 48,
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'No staff members yet',
-                            style: GoogleFonts.notoSansKr(
-                              color: AppColors.textSecondary,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.separated(
-                      itemCount: staffState.staff.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final member = staffState.staff[index];
-                        return Opacity(
-                          opacity: member.isActive ? 1 : 0.5,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: AppColors.surface1,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 12,
-                            ),
-                            child: Row(
-                              children: [
-                                _RoleBadge(role: member.role),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        member.fullName,
-                                        style: GoogleFonts.notoSansKr(
-                                          color: AppColors.textPrimary,
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        member.email != null &&
-                                                member.email!.isNotEmpty
-                                            ? member.email!
-                                            : _roleLabelKo(member.role),
-                                        style: GoogleFonts.notoSansKr(
-                                          color: AppColors.textSecondary,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                      if (member.extraPermissions.isNotEmpty)
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            top: 4,
-                                          ),
-                                          child: Text(
-                                            member.extraPermissions.join(', '),
-                                            style: GoogleFonts.notoSansKr(
-                                              color: AppColors.amber500,
-                                              fontSize: 11,
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                if (storeId != null &&
-                                    member.role != 'admin' &&
-                                    member.role != 'store_admin' &&
-                                    member.role != 'brand_admin' &&
-                                    member.role != 'photo_objet_master' &&
-                                    member.role != 'photo_objet_store_admin' &&
-                                    member.role != 'super_admin')
-                                  OutlinedButton(
-                                    onPressed: () => _showPermissionDialog(
-                                      context: context,
-                                      storeId: storeId,
-                                      member: member,
-                                    ),
-                                    child: const Text('Permissions'),
-                                  ),
-                                if (storeId != null &&
-                                    member.role != 'admin' &&
-                                    member.role != 'store_admin' &&
-                                    member.role != 'brand_admin' &&
-                                    member.role != 'photo_objet_master' &&
-                                    member.role != 'photo_objet_store_admin' &&
-                                    member.role != 'super_admin')
-                                  const SizedBox(width: 8),
-                                Switch(
-                                  value: member.isActive,
-                                  activeThumbColor: AppColors.amber500,
-                                  onChanged: storeId == null
-                                      ? null
-                                      : (value) => notifier.toggleActive(
-                                          member.id,
-                                          value,
-                                          storeId,
-                                        ),
-                                ),
-                              ],
-                            ),
-                          ),
+                  : filteredRows.isEmpty
+                  ? const ToastOperationalEmptyState(headline: '표시할 직원이 없습니다.')
+                  : LayoutBuilder(
+                      builder: (context, constraints) {
+                        final listPane = _buildStaffListPane(
+                          rows: filteredRows,
+                          selectedRow: selectedRow,
+                        );
+                        final detailPane = _buildSelectedStaffPane(
+                          storeId: storeId,
+                          row: selectedRow,
+                        );
+
+                        if (constraints.maxWidth < 1120) {
+                          return ListView(
+                            children: [
+                              SizedBox(height: 420, child: listPane),
+                              const SizedBox(height: 16),
+                              detailPane,
+                            ],
+                          );
+                        }
+
+                        return ToastSplitPane(
+                          queueWidth: 460,
+                          queue: listPane,
+                          detail: detailPane,
+                          divider: false,
                         );
                       },
                     ),
@@ -211,6 +159,661 @@ class _StaffTabState extends ConsumerState<StaffTab> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildStaffCommandHeader({
+    required int staffCount,
+    required int workingCount,
+    required int absentCount,
+    required int permissionReviewCount,
+    required List<String> roleOptions,
+    required String? storeId,
+    required String? viewerRole,
+  }) {
+    final l10n = context.l10n;
+    final statusOptions = <String, String>{
+      'all': l10n.staffAllStatuses,
+      'permission': l10n.staffPermissionReview,
+      'working': l10n.staffWorking,
+      'absent': l10n.staffAbsent,
+      'off': l10n.staffDayOff,
+      'done': l10n.staffAttendanceCompleted,
+    };
+
+    return ToastWorkSurface(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+      backgroundColor: AppColors.surface1,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.staffManagementTitle,
+                      style: Theme.of(context).textTheme.headlineLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '직원 계정, 현재 상태, 권한 이상 여부를 한 화면에서 빠르게 확인합니다.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.textSecondary,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ToastStatusBadge(
+                label: permissionReviewCount > 0
+                    ? l10n.staffPermissionReviewRequired
+                    : l10n.staffOperationalHealthy,
+                color: permissionReviewCount > 0
+                    ? PosColors.warning
+                    : PosColors.success,
+                compact: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ToastMetricStrip(
+            metrics: [
+              ToastMetric(label: l10n.staffTotalCount, value: '$staffCount명'),
+              ToastMetric(
+                label: l10n.staffWorkingToday,
+                value: '$workingCount명',
+                tone: PosColors.success,
+              ),
+              ToastMetric(
+                label: l10n.staffAbsent,
+                value: '$absentCount명',
+                tone: absentCount > 0
+                    ? PosColors.warning
+                    : PosColors.textSecondary,
+              ),
+              ToastMetric(
+                label: l10n.staffPermissionReviewRequired,
+                value: '$permissionReviewCount명',
+                tone: permissionReviewCount > 0
+                    ? PosColors.danger
+                    : PosColors.success,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SizedBox(
+                width: 210,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _roleFilter,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: l10n.staffAllRoles,
+                    isDense: true,
+                  ),
+                  items: [
+                    for (final role in roleOptions)
+                      DropdownMenuItem(
+                        value: role,
+                        child: Text(
+                          role == 'all'
+                              ? l10n.staffAllRoles
+                              : _roleLabelKo(context, role),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _roleFilter = value);
+                  },
+                ),
+              ),
+              SizedBox(
+                width: 210,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _statusFilter,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: l10n.staffAllStatuses,
+                    isDense: true,
+                  ),
+                  items: [
+                    for (final entry in statusOptions.entries)
+                      DropdownMenuItem(
+                        value: entry.key,
+                        child: Text(
+                          entry.value,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _statusFilter = value);
+                  },
+                ),
+              ),
+              SizedBox(
+                width: 260,
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    hintText: '이름 또는 이메일 검색',
+                    prefixIcon: Icon(Icons.search),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: storeId == null
+                    ? null
+                    : () => _showAddStaffSheet(
+                        context,
+                        storeId,
+                        viewerRole: viewerRole,
+                      ),
+                icon: const Icon(Icons.person_add_alt_1, size: 18),
+                label: Text(l10n.staffAddAction),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<_StaffBoardRow> _buildStaffRows(
+    List<StaffMember> staff,
+    List<AttendanceRecord> logs,
+  ) {
+    final logsByUser = <String, List<AttendanceRecord>>{};
+    for (final log in logs) {
+      logsByUser.putIfAbsent(log.userId, () => []).add(log);
+    }
+
+    final rows = staff.map((member) {
+      final memberLogs = [
+        ...(logsByUser[member.id] ?? const <AttendanceRecord>[]),
+      ];
+      memberLogs.sort((a, b) => b.loggedAt.compareTo(a.loggedAt));
+
+      DateTime? firstClockIn;
+      DateTime? lastClockOut;
+      for (final log in memberLogs) {
+        if (log.type == 'clock_in') {
+          firstClockIn =
+              firstClockIn == null || log.loggedAt.isBefore(firstClockIn)
+              ? log.loggedAt
+              : firstClockIn;
+        }
+        if (log.type == 'clock_out') {
+          lastClockOut =
+              lastClockOut == null || log.loggedAt.isAfter(lastClockOut)
+              ? log.loggedAt
+              : lastClockOut;
+        }
+      }
+
+      final permissionNeedsReview =
+          member.authId.isEmpty ||
+          !_isKnownRole(member.role) ||
+          member.extraPermissions.any(
+            (permission) =>
+                permission != 'qc_check' && permission != 'inventory_count',
+          );
+
+      final statusKey = !member.isActive
+          ? 'off'
+          : permissionNeedsReview
+          ? 'permission'
+          : firstClockIn == null
+          ? 'absent'
+          : lastClockOut == null
+          ? 'working'
+          : 'done';
+
+      final statusLabel = switch (statusKey) {
+        'off' => context.l10n.staffDayOff,
+        'permission' => context.l10n.staffPermissionReview,
+        'absent' => context.l10n.staffAbsent,
+        'working' => context.l10n.staffWorking,
+        'done' => context.l10n.staffAttendanceCompleted,
+        _ => context.l10n.staffAbsent,
+      };
+
+      final statusColor = switch (statusKey) {
+        'off' => PosColors.textSecondary,
+        'permission' => PosColors.warning,
+        'absent' => PosColors.danger,
+        'working' => PosColors.success,
+        'done' => PosColors.info,
+        _ => PosColors.textSecondary,
+      };
+
+      return _StaffBoardRow(
+        member: member,
+        logs: memberLogs,
+        firstClockIn: firstClockIn,
+        lastClockOut: lastClockOut,
+        statusKey: statusKey,
+        statusLabel: statusLabel,
+        statusColor: statusColor,
+        permissionNeedsReview: permissionNeedsReview,
+      );
+    }).toList();
+
+    rows.sort((a, b) {
+      final statusCompare = _statusPriority(
+        a.statusKey,
+      ).compareTo(_statusPriority(b.statusKey));
+      if (statusCompare != 0) return statusCompare;
+      return a.member.fullName.compareTo(b.member.fullName);
+    });
+    return rows;
+  }
+
+  int _statusPriority(String statusKey) {
+    return switch (statusKey) {
+      'permission' => 0,
+      'working' => 1,
+      'absent' => 2,
+      'off' => 3,
+      _ => 4,
+    };
+  }
+
+  _StaffBoardRow? _resolveSelectedRow(List<_StaffBoardRow> rows) {
+    if (rows.isEmpty) return null;
+    if (_selectedStaffId == null) return rows.first;
+    for (final row in rows) {
+      if (row.member.id == _selectedStaffId) {
+        return row;
+      }
+    }
+    return rows.first;
+  }
+
+  Widget _buildStaffListPane({
+    required List<_StaffBoardRow> rows,
+    required _StaffBoardRow? selectedRow,
+  }) {
+    return ToastWorkSurface(
+      padding: const EdgeInsets.all(12),
+      child: ListView.separated(
+        itemCount: rows.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 8),
+        itemBuilder: (context, index) {
+          final row = rows[index];
+          final selected = selectedRow?.member.id == row.member.id;
+          return InkWell(
+            onTap: () => setState(() => _selectedStaffId = row.member.id),
+            borderRadius: BorderRadius.circular(10),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: selected ? PosColors.accentMuted : PosColors.surface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: selected ? PosColors.accent : PosColors.border,
+                  width: selected ? 1.5 : 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          row.member.fullName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ToastStatusBadge(
+                        label: row.statusLabel,
+                        color: row.statusColor,
+                        compact: true,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _RoleBadge(role: row.member.role),
+                      _metaTag(
+                        row.member.email?.isNotEmpty == true
+                            ? row.member.email!
+                            : context.l10n.staffEmailMissing,
+                      ),
+                      _metaTag(
+                        row.firstClockIn == null
+                            ? context.l10n.staffNoClockInRecords
+                            : context.l10n.staffClockedInAt(
+                                _formatTime(row.firstClockIn),
+                              ),
+                      ),
+                      if (row.permissionNeedsReview)
+                        _metaTag(context.l10n.staffPermissionReview),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSelectedStaffPane({
+    required String? storeId,
+    required _StaffBoardRow? row,
+  }) {
+    if (row == null) {
+      return ToastOperationalEmptyState(
+        headline: context.l10n.staffNoSelection,
+      );
+    }
+
+    final canEditPermissions =
+        storeId != null && _canEditPermissionsForRole(row.member.role);
+
+    return ToastWorkSurface(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: PosColors.accentMuted,
+                child: Text(
+                  _initialsForName(row.member.fullName),
+                  style: GoogleFonts.notoSansKr(
+                    color: PosColors.accent,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      row.member.fullName,
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${_roleLabelKo(context, row.member.role)} · ${row.member.email?.isNotEmpty == true ? row.member.email! : context.l10n.staffEmailMissing}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: PosColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ToastStatusBadge(
+                label: row.statusLabel,
+                color: row.statusColor,
+                compact: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _detailMetric(
+                context.l10n.staffTodayClockIn,
+                _formatTime(row.firstClockIn),
+              ),
+              _detailMetric(
+                context.l10n.staffClockOutRecord,
+                row.lastClockOut == null
+                    ? '--:--'
+                    : _formatTime(row.lastClockOut),
+              ),
+              _detailMetric(
+                context.l10n.staffPermissionStatus,
+                row.permissionNeedsReview
+                    ? context.l10n.staffPermissionReview
+                    : row.member.extraPermissions.isEmpty
+                    ? context.l10n.staffDefaultPermission
+                    : context.l10n.staffAdditionalPermissions(
+                        row.member.extraPermissions.length,
+                      ),
+              ),
+              _detailMetric(
+                context.l10n.staffRegisteredAt,
+                DateFormat('yyyy-MM-dd').format(row.member.createdAt.toLocal()),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              onPressed: storeId == null
+                  ? null
+                  : () => ref
+                        .read(staffProvider.notifier)
+                        .toggleActive(
+                          row.member.id,
+                          !row.member.isActive,
+                          storeId,
+                        ),
+              icon: Icon(
+                row.member.isActive ? Icons.person_off_outlined : Icons.person,
+                size: 16,
+              ),
+              label: Text(
+                row.member.isActive
+                    ? context.l10n.staffDeactivate
+                    : context.l10n.staffActivate,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _StaffDetailDisclosure(
+            row: row,
+            canEditPermissions: canEditPermissions,
+            onChangePermission: canEditPermissions
+                ? () => _showPermissionDialog(
+                    context: context,
+                    storeId: storeId,
+                    member: row.member,
+                  )
+                : null,
+            onViewAttendance: () => _showAttendanceLogSheet(row),
+            attendanceTypeLabel: _attendanceTypeLabel,
+            roleLabel: (role) => _roleLabelKo(context, role),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _metaTag(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: PosColors.panelMuted,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: PosColors.border),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: PosColors.textSecondary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _detailMetric(String label, String value) {
+    return SizedBox(
+      width: 180,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: PosColors.panelMuted,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: PosColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: PosColors.textSecondary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatTime(DateTime? value) {
+    if (value == null) return '--:--';
+    return DateFormat('HH:mm').format(value.toLocal());
+  }
+
+  String _initialsForName(String name) {
+    final parts = name
+        .split(RegExp(r'\s+'))
+        .where((part) => part.trim().isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return '${parts.first.substring(0, 1)}${parts.last.substring(0, 1)}'
+        .toUpperCase();
+  }
+
+  bool _isKnownRole(String role) {
+    const roles = {
+      'waiter',
+      'kitchen',
+      'cashier',
+      'admin',
+      'store_admin',
+      'brand_admin',
+      'photo_objet_master',
+      'photo_objet_store_admin',
+      'super_admin',
+    };
+    return roles.contains(role.toLowerCase());
+  }
+
+  bool _canEditPermissionsForRole(String role) {
+    return role != 'admin' &&
+        role != 'store_admin' &&
+        role != 'brand_admin' &&
+        role != 'photo_objet_master' &&
+        role != 'photo_objet_store_admin' &&
+        role != 'super_admin';
+  }
+
+  String _attendanceTypeLabel(String type) {
+    return switch (type) {
+      'clock_in' => '출근',
+      'clock_out' => '퇴근',
+      _ => type,
+    };
+  }
+
+  Future<void> _showAttendanceLogSheet(_StaffBoardRow row) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface1,
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${row.member.fullName} 출근 기록',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 12),
+              if (row.logs.isEmpty)
+                Text(
+                  '오늘 기록이 없습니다.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: PosColors.textSecondary,
+                  ),
+                )
+              else
+                ...row.logs.map(
+                  (log) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Row(
+                      children: [
+                        ToastStatusBadge(
+                          label: _attendanceTypeLabel(log.type),
+                          color: log.type == 'clock_in'
+                              ? PosColors.success
+                              : PosColors.info,
+                          compact: true,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          DateFormat(
+                            'yyyy-MM-dd HH:mm',
+                          ).format(log.loggedAt.toLocal()),
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -245,23 +848,20 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Add Staff',
-                    style: GoogleFonts.bebasNeue(
-                      color: AppColors.textPrimary,
-                      fontSize: 32,
-                    ),
+                    context.l10n.staffAddAction,
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: fullNameController,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(labelText: 'Full Name'),
+                    decoration: const InputDecoration(labelText: '이름'),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: emailController,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(labelText: 'Email'),
+                    decoration: const InputDecoration(labelText: '이메일'),
                   ),
                   const SizedBox(height: 10),
                   TextField(
@@ -269,8 +869,8 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                     obscureText: true,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
                     decoration: const InputDecoration(
-                      labelText: 'Password',
-                      hintText: 'Minimum 8 characters',
+                      labelText: '비밀번호',
+                      hintText: '8자 이상 입력',
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -278,7 +878,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                     initialValue: role,
                     dropdownColor: AppColors.surface1,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    items: _availableRoleOptions(viewerRole),
+                    items: _availableRoleOptions(context, viewerRole),
                     onChanged: (value) {
                       if (value != null) {
                         setModalState(() => role = value);
@@ -309,30 +909,22 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                                 role: role,
                               );
 
-                              if (!context.mounted) {
-                                return;
-                              }
+                              if (!context.mounted) return;
                               final nextState = ref.read(staffProvider);
-                              if (nextState.error != null) {
-                                return;
-                              }
+                              if (nextState.error != null) return;
                               Navigator.of(context).pop();
                               showSuccessToast(
                                 context,
-                                'Staff account created. They can now log in with their email and password.',
+                                context.l10n.staffCreatedMessage,
                               );
                             },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.amber500,
-                        foregroundColor: AppColors.surface0,
-                      ),
                       child: isCreating
                           ? const SizedBox(
                               width: 18,
                               height: 18,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text('Add Staff'),
+                          : Text(context.l10n.staffAddAction),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -340,7 +932,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                     width: double.infinity,
                     child: OutlinedButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
+                      child: Text(context.l10n.close),
                     ),
                   ),
                 ],
@@ -373,7 +965,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
             return AlertDialog(
               backgroundColor: AppColors.surface1,
               title: Text(
-                '${member.fullName} Permissions',
+                context.l10n.staffPermissionDialogTitle(member.fullName),
                 style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
               ),
               content: Column(
@@ -383,7 +975,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                     value: canQc,
                     activeColor: AppColors.amber500,
                     title: Text(
-                      'Can perform QC inspections',
+                      context.l10n.staffQcPermission,
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textPrimary,
                         fontSize: 14,
@@ -397,7 +989,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                     value: canCount,
                     activeColor: AppColors.amber500,
                     title: Text(
-                      'Can perform physical count',
+                      context.l10n.staffInventoryCountPermission,
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textPrimary,
                         fontSize: 14,
@@ -412,7 +1004,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
+                  child: Text(context.l10n.cancel),
                 ),
                 FilledButton(
                   onPressed: () async {
@@ -429,19 +1021,182 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                     final nextState = ref.read(staffProvider);
                     if (nextState.error != null) return;
                     Navigator.of(context).pop();
-                    showSuccessToast(context, 'Permissions saved.');
+                    showSuccessToast(
+                      context,
+                      context.l10n.staffPermissionsSaved,
+                    );
                   },
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.amber500,
-                    foregroundColor: AppColors.surface0,
-                  ),
-                  child: const Text('Save'),
+                  child: Text(context.l10n.save),
                 ),
               ],
             );
           },
         );
       },
+    );
+  }
+}
+
+class _StaffBoardRow {
+  const _StaffBoardRow({
+    required this.member,
+    required this.logs,
+    required this.firstClockIn,
+    required this.lastClockOut,
+    required this.statusKey,
+    required this.statusLabel,
+    required this.statusColor,
+    required this.permissionNeedsReview,
+  });
+
+  final StaffMember member;
+  final List<AttendanceRecord> logs;
+  final DateTime? firstClockIn;
+  final DateTime? lastClockOut;
+  final String statusKey;
+  final String statusLabel;
+  final Color statusColor;
+  final bool permissionNeedsReview;
+}
+
+class _StaffDetailDisclosure extends StatelessWidget {
+  const _StaffDetailDisclosure({
+    required this.row,
+    required this.canEditPermissions,
+    required this.onChangePermission,
+    required this.onViewAttendance,
+    required this.attendanceTypeLabel,
+    required this.roleLabel,
+  });
+
+  final _StaffBoardRow row;
+  final bool canEditPermissions;
+  final VoidCallback? onChangePermission;
+  final VoidCallback onViewAttendance;
+  final String Function(String type) attendanceTypeLabel;
+  final String Function(String role) roleLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: ExpansionTile(
+        key: const Key('staff_detail_secondary_detail'),
+        initiallyExpanded: false,
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        iconColor: AppColors.textSecondary,
+        collapsedIconColor: AppColors.textSecondary,
+        title: Text(
+          context.l10n.staffQuickActions,
+          style: GoogleFonts.notoSansKr(
+            color: AppColors.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        subtitle: Text(
+          '${context.l10n.staffViewAttendanceLog} · ${context.l10n.staffChangePermission}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.notoSansKr(
+            color: AppColors.textSecondary,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: canEditPermissions ? onChangePermission : null,
+                  icon: const Icon(Icons.verified_user_outlined, size: 16),
+                  label: Text(context.l10n.staffChangePermission),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onViewAttendance,
+                  icon: const Icon(Icons.history_outlined, size: 16),
+                  label: Text(context.l10n.staffViewAttendanceLog),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              context.l10n.staffTodayAttendanceLog,
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (row.logs.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: PosColors.panelMuted,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: PosColors.border),
+              ),
+              child: Text(
+                context.l10n.staffNoLogsToday,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
+              ),
+            )
+          else
+            ...row.logs
+                .take(5)
+                .map(
+                  (log) => Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: PosColors.surface,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: PosColors.border),
+                    ),
+                    child: Row(
+                      children: [
+                        ToastStatusBadge(
+                          label: attendanceTypeLabel(log.type),
+                          color: log.type == 'clock_in'
+                              ? PosColors.success
+                              : PosColors.info,
+                          compact: true,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            DateFormat(
+                              'yyyy-MM-dd HH:mm',
+                            ).format(log.loggedAt.toLocal()),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                        Text(
+                          roleLabel(log.userRole ?? row.member.role),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: PosColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+        ],
+      ),
     );
   }
 }
@@ -455,28 +1210,29 @@ class _RoleBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final normalized = role.toLowerCase();
     final color = switch (normalized) {
-      'waiter' => const Color(0xFF3A7BD5),
+      'waiter' => const Color(0xFF2563EB),
       'kitchen' => AppColors.statusOccupied,
       'cashier' => AppColors.statusAvailable,
-      'admin' => AppColors.amber500,
-      'store_admin' => const Color(0xFF7C5CFA),
-      'brand_admin' => const Color(0xFFFF8A3D),
-      'photo_objet_master' => const Color(0xFF00BFA5),
-      'photo_objet_store_admin' => const Color(0xFF4DD0E1),
+      'admin' => const Color(0xFF111827),
+      'store_admin' => const Color(0xFF7C3AED),
+      'brand_admin' => const Color(0xFFD97706),
+      'photo_objet_master' => const Color(0xFF0891B2),
+      'photo_objet_store_admin' => const Color(0xFF0EA5E9),
+      'super_admin' => const Color(0xFFDC2626),
       _ => AppColors.surface2,
     };
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.22),
+        color: color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
-        _roleLabelKo(normalized),
+        _roleLabelKo(context, normalized),
         style: GoogleFonts.notoSansKr(
-          color: AppColors.textPrimary,
+          color: color,
           fontSize: 11,
           fontWeight: FontWeight.w700,
         ),
@@ -485,59 +1241,73 @@ class _RoleBadge extends StatelessWidget {
   }
 }
 
-String _roleLabelKo(String role) {
+String _roleLabelKo(BuildContext context, String role) {
+  final l10n = context.l10n;
   return switch (role.toLowerCase()) {
-    'waiter' => 'Hall Staff',
-    'kitchen' => 'Kitchen',
-    'cashier' => 'Cashier',
-    'admin' => 'Admin',
-    'store_admin' => 'Store Admin',
-    'brand_admin' => 'Brand Admin',
-    'photo_objet_master' => 'Photo Objet Master',
-    'photo_objet_store_admin' => 'Photo Objet Store Admin',
-    'super_admin' => 'Super Admin',
+    'waiter' => l10n.staffRoleWaiter,
+    'kitchen' => l10n.staffRoleKitchen,
+    'cashier' => l10n.staffRoleCashier,
+    'admin' => l10n.staffRoleAdmin,
+    'store_admin' => l10n.staffRoleStoreAdmin,
+    'brand_admin' => l10n.staffRoleBrandAdmin,
+    'photo_objet_master' => l10n.staffRolePhotoMaster,
+    'photo_objet_store_admin' => l10n.staffRolePhotoStoreAdmin,
+    'super_admin' => l10n.staffRoleSuperAdmin,
     _ => role,
   };
 }
 
-List<DropdownMenuItem<String>> _availableRoleOptions(String? viewerRole) {
-  const baseRoles = [
-    DropdownMenuItem(value: 'waiter', child: Text('Waiter')),
-    DropdownMenuItem(value: 'kitchen', child: Text('Kitchen')),
-    DropdownMenuItem(value: 'cashier', child: Text('Cashier')),
+List<DropdownMenuItem<String>> _availableRoleOptions(
+  BuildContext context,
+  String? viewerRole,
+) {
+  final l10n = context.l10n;
+  final baseRoles = [
+    DropdownMenuItem(value: 'waiter', child: Text(l10n.staffRoleWaiter)),
+    DropdownMenuItem(value: 'kitchen', child: Text(l10n.staffRoleKitchen)),
+    DropdownMenuItem(value: 'cashier', child: Text(l10n.staffRoleCashier)),
   ];
 
   if (viewerRole == 'super_admin') {
-    return const [
+    return [
       ...baseRoles,
-      DropdownMenuItem(value: 'admin', child: Text('Admin')),
-      DropdownMenuItem(value: 'store_admin', child: Text('Store Admin')),
-      DropdownMenuItem(value: 'brand_admin', child: Text('Brand Admin')),
+      DropdownMenuItem(value: 'admin', child: Text(l10n.staffRoleAdmin)),
+      DropdownMenuItem(
+        value: 'store_admin',
+        child: Text(l10n.staffRoleStoreAdmin),
+      ),
+      DropdownMenuItem(
+        value: 'brand_admin',
+        child: Text(l10n.staffRoleBrandAdmin),
+      ),
       DropdownMenuItem(
         value: 'photo_objet_master',
-        child: Text('Photo Objet Master'),
+        child: Text(l10n.staffRolePhotoMaster),
       ),
       DropdownMenuItem(
         value: 'photo_objet_store_admin',
-        child: Text('Photo Objet Store Admin'),
+        child: Text(l10n.staffRolePhotoStoreAdmin),
       ),
     ];
   }
 
   if (viewerRole == 'brand_admin') {
-    return const [
+    return [
       ...baseRoles,
-      DropdownMenuItem(value: 'admin', child: Text('Admin')),
-      DropdownMenuItem(value: 'store_admin', child: Text('Store Admin')),
+      DropdownMenuItem(value: 'admin', child: Text(l10n.staffRoleAdmin)),
+      DropdownMenuItem(
+        value: 'store_admin',
+        child: Text(l10n.staffRoleStoreAdmin),
+      ),
       DropdownMenuItem(
         value: 'photo_objet_store_admin',
-        child: Text('Photo Objet Store Admin'),
+        child: Text(l10n.staffRolePhotoStoreAdmin),
       ),
     ];
   }
 
-  return const [
+  return [
     ...baseRoles,
-    DropdownMenuItem(value: 'admin', child: Text('Admin')),
+    DropdownMenuItem(value: 'admin', child: Text(l10n.staffRoleAdmin)),
   ];
 }

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/ui/pos_design_tokens.dart';
+import '../../../core/ui/toast/toast.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
@@ -99,79 +101,224 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                 (item) => item['category_id']?.toString() == selectedCategoryId,
               )
               .toList();
+    final availableItems = allItems
+        .where((item) => item['is_available'] == true)
+        .length;
 
     return Scaffold(
       backgroundColor: AppColors.surface0,
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          if (constraints.maxWidth < 900) {
-            return Column(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: _CategoryPanel(
-                    categories: categories,
-                    selectedCategoryId: selectedCategoryId,
-                    auditTraceAsync: auditTraceAsync,
-                    onSelect: menuNotifier.selectCategory,
-                    onAddCategory: () =>
-                        _showAddCategoryDialog(context, menuNotifier),
-                  ),
-                ),
-                Expanded(
-                  flex: 3,
-                  child: _ItemsPanel(
-                    selectedItems: selectedItems,
-                    selectedCategoryId: selectedCategoryId,
-                    numberFormat: numberFormat,
-                    onToggleAvailability: menuNotifier.toggleAvailability,
-                    onEditItem: (item) =>
-                        _showEditItemDialog(context, item, menuNotifier),
-                    onAddItem: () => _showAddItemDialog(
+      body: ToastResponsiveBody(
+        maxWidth: 1420,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildMenuCommandHeader(
+              categoryCount: categories.length,
+              itemCount: allItems.length,
+              availableItems: availableItems,
+              selectedItemCount: selectedItems.length,
+              selectedCategoryName: _categoryNameForId(
+                categories,
+                selectedCategoryId,
+              ),
+              onAddCategory: () =>
+                  _showAddCategoryDialog(context, menuNotifier),
+              onAddItem: selectedCategoryId == null
+                  ? null
+                  : () => _showAddItemDialog(
                       context,
                       selectedCategoryId,
                       menuNotifier,
                     ),
-                  ),
-                ),
-              ],
-            );
-          }
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth < 960) {
+                    return ToastViewportScroll(
+                      child: Column(
+                        children: [
+                          SizedBox(
+                            height: 420,
+                            child: _CategoryPanel(
+                              categories: categories,
+                              selectedCategoryId: selectedCategoryId,
+                              auditTraceAsync: auditTraceAsync,
+                              onSelect: menuNotifier.selectCategory,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            height: 620,
+                            child: _ItemsPanel(
+                              selectedItems: selectedItems,
+                              selectedCategoryId: selectedCategoryId,
+                              numberFormat: numberFormat,
+                              onToggleAvailability:
+                                  menuNotifier.toggleAvailability,
+                              onEditItem: (item) => _showEditItemDialog(
+                                context,
+                                item,
+                                menuNotifier,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
 
-          return Row(
+                  return ToastSplitPane(
+                    queueWidth: 360,
+                    queue: _CategoryPanel(
+                      categories: categories,
+                      selectedCategoryId: selectedCategoryId,
+                      auditTraceAsync: auditTraceAsync,
+                      onSelect: menuNotifier.selectCategory,
+                    ),
+                    detail: _ItemsPanel(
+                      selectedItems: selectedItems,
+                      selectedCategoryId: selectedCategoryId,
+                      numberFormat: numberFormat,
+                      onToggleAvailability: menuNotifier.toggleAvailability,
+                      onEditItem: (item) =>
+                          _showEditItemDialog(context, item, menuNotifier),
+                    ),
+                    divider: false,
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenuCommandHeader({
+    required int categoryCount,
+    required int itemCount,
+    required int availableItems,
+    required int selectedItemCount,
+    required String? selectedCategoryName,
+    required VoidCallback onAddCategory,
+    required VoidCallback? onAddItem,
+  }) {
+    return ToastWorkSurface(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+      backgroundColor: AppColors.surface1,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                flex: 1,
-                child: _CategoryPanel(
-                  categories: categories,
-                  selectedCategoryId: selectedCategoryId,
-                  auditTraceAsync: auditTraceAsync,
-                  onSelect: menuNotifier.selectCategory,
-                  onAddCategory: () =>
-                      _showAddCategoryDialog(context, menuNotifier),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '메뉴 관리',
+                      style: Theme.of(context).textTheme.headlineLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '카테고리를 선택하고 메뉴명, 가격, 판매 상태만 빠르게 관리합니다.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.textSecondary,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
                 ),
               ),
+              const SizedBox(width: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.end,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: onAddCategory,
+                    icon: const Icon(
+                      Icons.create_new_folder_outlined,
+                      size: 18,
+                    ),
+                    label: const Text('카테고리 추가'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: onAddItem,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('메뉴 추가'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ToastMetricStrip(
+            metrics: [
+              ToastMetric(label: '카테고리', value: '$categoryCount'),
+              ToastMetric(label: '메뉴', value: '$itemCount'),
+              ToastMetric(
+                label: '판매 가능',
+                value: '$availableItems',
+                tone: PosColors.success,
+              ),
+              ToastMetric(
+                label: '선택 카테고리',
+                value: '$selectedItemCount',
+                tone: selectedCategoryName == null
+                    ? PosColors.textSecondary
+                    : PosColors.accent,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              ToastStatusBadge(
+                label: '메뉴 구성',
+                color: PosColors.accent,
+                compact: true,
+              ),
+              const SizedBox(width: 10),
               Expanded(
-                flex: 2,
-                child: _ItemsPanel(
-                  selectedItems: selectedItems,
-                  selectedCategoryId: selectedCategoryId,
-                  numberFormat: numberFormat,
-                  onToggleAvailability: menuNotifier.toggleAvailability,
-                  onEditItem: (item) =>
-                      _showEditItemDialog(context, item, menuNotifier),
-                  onAddItem: () => _showAddItemDialog(
-                    context,
-                    selectedCategoryId,
-                    menuNotifier,
+                child: Text(
+                  selectedCategoryName == null
+                      ? '카테고리를 선택하면 오른쪽에서 메뉴를 편집할 수 있습니다.'
+                      : '$selectedCategoryName 카테고리의 판매 메뉴를 편집 중입니다.',
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: PosColors.textSecondary,
+                    fontSize: 12,
                   ),
                 ),
               ),
             ],
-          );
-        },
+          ),
+        ],
       ),
     );
+  }
+
+  String? _categoryNameForId(
+    List<Map<String, dynamic>> categories,
+    String? categoryId,
+  ) {
+    if (categoryId == null) {
+      return null;
+    }
+
+    for (final category in categories) {
+      if (category['id']?.toString() == categoryId) {
+        return category['name']?.toString() ?? '-';
+      }
+    }
+
+    return null;
   }
 
   Future<void> _showAddCategoryDialog(
@@ -412,105 +559,61 @@ class _CategoryPanel extends StatelessWidget {
     required this.selectedCategoryId,
     required this.auditTraceAsync,
     required this.onSelect,
-    required this.onAddCategory,
   });
 
   final List<Map<String, dynamic>> categories;
   final String? selectedCategoryId;
   final AsyncValue<List<Map<String, dynamic>>> auditTraceAsync;
   final ValueChanged<String> onSelect;
-  final VoidCallback onAddCategory;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: AppColors.surface0,
+    return PosDataPanel(
+      title: '카테고리',
+      subtitle: '메뉴를 편집할 카테고리를 선택합니다.',
       padding: const EdgeInsets.all(16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: categories.isEmpty
-                ? Center(
+          if (categories.isEmpty)
+            const Expanded(
+              child: PosEmptyState(
+                title: '카테고리가 없습니다.',
+                subtitle: '첫 카테고리를 추가하면 판매 구성을 시작할 수 있습니다.',
+              ),
+            )
+          else
+            Expanded(
+              child: ListView.separated(
+                itemCount: categories.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 6),
+                itemBuilder: (context, index) {
+                  final category = categories[index];
+                  final categoryId = category['id']?.toString() ?? '';
+                  final isSelected = categoryId == selectedCategoryId;
+
+                  return PosListRow(
+                    selected: isSelected,
+                    statusColor: AppColors.amber500,
+                    onTap: categoryId.isEmpty
+                        ? null
+                        : () => onSelect(categoryId),
                     child: Text(
-                      'No categories.',
+                      category['name']?.toString() ?? '-',
                       style: GoogleFonts.notoSansKr(
-                        color: AppColors.textSecondary,
-                        fontSize: 13,
+                        color: AppColors.textPrimary,
+                        fontSize: 15,
+                        fontWeight: isSelected
+                            ? FontWeight.w700
+                            : FontWeight.w600,
                       ),
                     ),
-                  )
-                : ListView.separated(
-                    itemCount: categories.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final category = categories[index];
-                      final categoryId = category['id']?.toString() ?? '';
-                      final isSelected = categoryId == selectedCategoryId;
-
-                      return InkWell(
-                        onTap: categoryId.isEmpty
-                            ? null
-                            : () => onSelect(categoryId),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.surface1,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border(
-                              left: BorderSide(
-                                color: isSelected
-                                    ? AppColors.amber500
-                                    : Colors.transparent,
-                                width: 3,
-                              ),
-                            ),
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 14,
-                          ),
-                          child: Text(
-                            category['name']?.toString() ?? '-',
-                            style: GoogleFonts.notoSansKr(
-                              color: AppColors.textPrimary,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Recent Menu Changes',
-            style: GoogleFonts.notoSansKr(
-              color: AppColors.textPrimary,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          AdminAuditTracePanel(
-            auditTraceAsync: auditTraceAsync,
-            allowedEntityTypes: const {'menu_categories', 'menu_items'},
-            maxItems: 3,
-            compact: true,
-            emptyMessage: 'No recent menu changes.',
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: onAddCategory,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.amber500,
-                foregroundColor: AppColors.surface0,
+                  );
+                },
               ),
-              icon: const Icon(Icons.add),
-              label: const Text('Add Category'),
             ),
-          ),
+          const SizedBox(height: 12),
+          _MenuAuditDisclosure(auditTraceAsync: auditTraceAsync),
         ],
       ),
     );
@@ -524,7 +627,6 @@ class _ItemsPanel extends StatelessWidget {
     required this.numberFormat,
     required this.onToggleAvailability,
     required this.onEditItem,
-    required this.onAddItem,
   });
 
   final List<Map<String, dynamic>> selectedItems;
@@ -533,43 +635,39 @@ class _ItemsPanel extends StatelessWidget {
   final Future<bool> Function(String itemId, bool isAvailable)
   onToggleAvailability;
   final ValueChanged<Map<String, dynamic>> onEditItem;
-  final VoidCallback onAddItem;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.surface0,
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.amber500,
-        onPressed: onAddItem,
-        child: const Icon(Icons.add, color: AppColors.surface0),
-      ),
-      body: Container(
-        color: AppColors.surface0,
-        padding: const EdgeInsets.all(16),
-        child: selectedCategoryId == null
-            ? Center(
-                child: Text(
-                  'Select a category to view menus.',
-                  style: GoogleFonts.notoSansKr(
-                    color: AppColors.textSecondary,
-                    fontSize: 14,
-                  ),
-                ),
-              )
-            : selectedItems.isEmpty
-            ? Center(
-                child: Text(
-                  'No menus. Add your first menu.',
-                  style: GoogleFonts.notoSansKr(
-                    color: AppColors.textSecondary,
-                    fontSize: 14,
-                  ),
-                ),
-              )
-            : ListView.separated(
+    return PosDataPanel(
+      title: '메뉴 목록',
+      subtitle: selectedCategoryId == null
+          ? '카테고리를 선택하면 메뉴 목록이 표시됩니다.'
+          : '메뉴명, 가격, 판매 상태를 한 줄에서 확인합니다.',
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (selectedCategoryId == null)
+            const Expanded(
+              child: PosEmptyState(
+                title: '카테고리를 선택해 주세요.',
+                subtitle: '좌측 목록에서 카테고리를 선택하면 메뉴가 표시됩니다.',
+                icon: Icons.restaurant_menu_outlined,
+              ),
+            )
+          else if (selectedItems.isEmpty)
+            const Expanded(
+              child: PosEmptyState(
+                title: '등록된 메뉴가 없습니다.',
+                subtitle: '첫 메뉴를 추가해 판매 구성을 완성해 주세요.',
+                icon: Icons.fastfood_outlined,
+              ),
+            )
+          else
+            Expanded(
+              child: ListView.separated(
                 itemCount: selectedItems.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   final item = selectedItems[index];
                   final itemId = item['id']?.toString() ?? '';
@@ -584,9 +682,13 @@ class _ItemsPanel extends StatelessWidget {
                   return Container(
                     decoration: BoxDecoration(
                       color: AppColors.surface1,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.surface3),
                     ),
-                    padding: const EdgeInsets.all(14),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                     child: Row(
                       children: [
                         Expanded(
@@ -595,10 +697,12 @@ class _ItemsPanel extends StatelessWidget {
                             children: [
                               Text(
                                 name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: GoogleFonts.notoSansKr(
                                   color: AppColors.textPrimary,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -606,12 +710,21 @@ class _ItemsPanel extends StatelessWidget {
                                 '₫${numberFormat.format(priceValue)}',
                                 style: GoogleFonts.notoSansKr(
                                   color: AppColors.textSecondary,
-                                  fontSize: 14,
+                                  fontSize: 13,
                                 ),
                               ),
                             ],
                           ),
                         ),
+                        const SizedBox(width: 12),
+                        ToastStatusBadge(
+                          label: isAvailable ? '사용' : '중지',
+                          color: isAvailable
+                              ? PosColors.success
+                              : PosColors.textSecondary,
+                          compact: true,
+                        ),
+                        const SizedBox(width: 8),
                         Switch(
                           value: isAvailable,
                           activeThumbColor: AppColors.amber500,
@@ -646,6 +759,59 @@ class _ItemsPanel extends StatelessWidget {
                   );
                 },
               ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MenuAuditDisclosure extends StatelessWidget {
+  const _MenuAuditDisclosure({required this.auditTraceAsync});
+
+  final AsyncValue<List<Map<String, dynamic>>> auditTraceAsync;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: ExpansionTile(
+        key: const Key('menu_audit_secondary_detail'),
+        initiallyExpanded: false,
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        iconColor: AppColors.textSecondary,
+        collapsedIconColor: AppColors.textSecondary,
+        title: Text(
+          '최근 변경',
+          style: GoogleFonts.notoSansKr(
+            color: AppColors.textPrimary,
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        subtitle: Text(
+          '필요할 때만 메뉴 변경 이력을 확인합니다.',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.notoSansKr(
+            color: AppColors.textSecondary,
+            fontSize: 11,
+          ),
+        ),
+        children: [
+          AdminAuditTracePanel(
+            auditTraceAsync: auditTraceAsync,
+            allowedEntityTypes: const {'menu_categories', 'menu_items'},
+            maxItems: 3,
+            compact: true,
+            emptyMessage: '최근 메뉴 변경 내역이 없습니다.',
+          ),
+        ],
       ),
     );
   }

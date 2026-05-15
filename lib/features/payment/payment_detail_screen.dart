@@ -110,8 +110,8 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
 
             return RefreshIndicator(
               onRefresh: _reload,
-              child: ListView(
-                padding: const EdgeInsets.all(AppSpacing.lg),
+              child: ToastResponsiveScrollBody(
+                maxWidth: 1180,
                 children: [
                   ToastWorkSurface(
                     child: Column(
@@ -126,7 +126,9 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
                                 children: [
                                   Text(
                                     l10n.paymentDetailOperationalSnapshot,
-                                    style: Theme.of(context).textTheme.labelLarge
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelLarge
                                         ?.copyWith(
                                           color: AppColors.textSecondary,
                                           fontWeight: FontWeight.w700,
@@ -145,7 +147,9 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
                                     l10n.paymentDetailReadOnlySubtitle(
                                       widget.paymentId,
                                     ),
-                                    style: Theme.of(context).textTheme.bodySmall,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
                                   ),
                                 ],
                               ),
@@ -325,8 +329,9 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
                           ),
                         ],
                       ),
-                      _InfoPanel(
+                      _SecondaryInfoPanel(
                         title: l10n.paymentDetailEInvoiceSummary,
+                        initiallyExpanded: false,
                         rows: [
                           _InfoRow(
                             l10n.paymentDetailJobId,
@@ -373,8 +378,9 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
                           ),
                         ],
                       ),
-                      _InfoPanel(
+                      _SecondaryInfoPanel(
                         title: l10n.paymentDetailProofSummary,
+                        initiallyExpanded: false,
                         rows: [
                           _InfoRow(
                             l10n.paymentDetailProofRequired,
@@ -575,6 +581,50 @@ class _InfoPanel extends StatelessWidget {
   }
 }
 
+class _SecondaryInfoPanel extends StatelessWidget {
+  const _SecondaryInfoPanel({
+    required this.title,
+    required this.rows,
+    this.initiallyExpanded = false,
+  });
+
+  final String title;
+  final List<_InfoRow> rows;
+  final bool initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) {
+    return ToastWorkSurface(
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          key: Key('payment_detail_secondary_${title.hashCode}'),
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: EdgeInsets.zero,
+          childrenPadding: const EdgeInsets.only(top: AppSpacing.md),
+          title: Text(title, style: Theme.of(context).textTheme.titleLarge),
+          subtitle: Text(
+            context.l10n.paymentDetailOperationalSnapshot,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+          ),
+          children: [
+            for (var i = 0; i < rows.length; i++) ...[
+              _InfoRowView(row: rows[i]),
+              if (i != rows.length - 1) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Divider(color: AppColors.surface3, height: 1),
+                const SizedBox(height: AppSpacing.sm),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ResponsivePanelGrid extends StatelessWidget {
   const _ResponsivePanelGrid({required this.children});
 
@@ -660,9 +710,9 @@ class _SignalCard extends StatelessWidget {
       width: 220,
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: AppRadius.sm,
-        border: Border.all(color: color.withValues(alpha: 0.28)),
+        color: AppColors.surface2,
+        borderRadius: AppRadius.md,
+        border: Border.all(color: AppColors.surface3),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -677,7 +727,7 @@ class _SignalCard extends StatelessWidget {
           Text(
             value,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: AppColors.textPrimary,
+              color: color,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -703,8 +753,8 @@ class _PortalPendingPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ToastWorkSurface(
-      backgroundColor: AppColors.statusReady.withValues(alpha: 0.1),
-      borderColor: AppColors.statusReady.withValues(alpha: 0.35),
+      backgroundColor: AppColors.surface2,
+      borderColor: AppColors.surface3,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -15,10 +15,11 @@
 import 'package:flutter/material.dart';
 
 import '../app_theme.dart';
+import '../pos_design_tokens.dart';
 
 /// Tone slot for an operational action button.
 ///
-/// - [primary]    : the single recommended next action (amber, filled)
+/// - [primary]    : the single recommended next action (accent, filled)
 /// - [affirm]     : positive operational confirmation (green, filled).
 ///                  Used for deposit / receipt / resolution confirms where
 ///                  semantic color is "money received / issue cleared".
@@ -71,6 +72,25 @@ Color toneForeground(PosActionTone tone) {
     case PosActionTone.destructive:
       return Colors.white;
   }
+}
+
+Widget iconWithLabel({
+  required IconData icon,
+  required String label,
+  Color? color,
+}) {
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, color: color ?? PosColors.accent),
+      const SizedBox(height: 4),
+      Text(
+        label,
+        style: const TextStyle(fontSize: 12, color: PosColors.primaryText),
+        textAlign: TextAlign.center,
+      ),
+    ],
+  );
 }
 
 /// Action verb vocabulary slots. Sourced from the two pilot surfaces

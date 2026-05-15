@@ -9,6 +9,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/ui/pos_design_tokens.dart';
+import '../../core/ui/toast/toast.dart';
 import '../../main.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
@@ -55,77 +57,92 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
       });
     }
 
-    return Scaffold(
+    final tabs = _tabViews(state, notifier, authState);
+    final groups = _sidebarGroups();
+    final items = groups.expand((group) => group.items).toList(growable: false);
+    final safeIndex = _tabIndex.clamp(0, tabs.length - 1);
+    final selected = items[safeIndex];
+
+    return ToastSidebar(
       key: const Key('admin_root'),
-      backgroundColor: AppColors.surface0,
-      body: Row(
+      title: 'SYSTEM ADMIN',
+      groups: groups,
+      selectedIndex: safeIndex,
+      onItemSelected: (index) => setState(() => _tabIndex = index),
+      topBarTrailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          AppNavBar(),
+          SizedBox(width: 10),
+          ToastStatusBadge(
+            label: 'HQ',
+            color: AppColors.statusOccupied,
+            compact: true,
+          ),
+        ],
+      ),
+      bottomItems: [
+        ToastSidebarItem(
+          icon: Icons.logout,
+          label: 'Logout',
+          urgency: ToastSidebarUrgency.backOffice,
+          itemKey: const Key('logout_button'),
+          onTap: () => ref.read(authProvider.notifier).logout(),
+        ),
+      ],
+      body: Column(
         children: [
-          Container(
-            width: 220,
-            color: AppColors.surface1,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'SYSTEM ADMIN',
-                  style: GoogleFonts.bebasNeue(
-                    color: AppColors.amber500,
-                    fontSize: 30,
-                    letterSpacing: 1.1,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: ToastWorkSurface(
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  ToastSelectedContextHeader(
+                    title: selected.label,
+                    subtitle:
+                        selected.helperLabel ??
+                        'Resolve network-level tasks before drilling into store detail.',
+                    urgentReason: _superAdminUrgencyCopy(selected.urgency),
+                    noteColor: _superAdminUrgencyNoteColor(selected.urgency),
+                    noteBackgroundColor: _superAdminUrgencyNoteBackground(
+                      selected.urgency,
+                    ),
+                    noteIcon: _superAdminUrgencyNoteIcon(selected.urgency),
+                    trailing: ToastStatusBadge(
+                      label: _superAdminUrgencyLabel(selected.urgency),
+                      color: _superAdminUrgencyColor(selected.urgency),
+                      compact: true,
+                    ),
                   ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                _navItem(Icons.store, 'Stores', 0, itemKey: const Key('super_admin_nav_stores')),
-                const SizedBox(height: 8),
-                _navItem(Icons.bar_chart, 'All Reports', 1, itemKey: const Key('super_admin_nav_reports')),
-                const SizedBox(height: 8),
-                _navItem(Icons.fact_check, 'QC Status', 2, itemKey: const Key('super_admin_nav_qc_status')),
-                const SizedBox(height: 8),
-                _navItem(Icons.rule, 'QC Template', 3, itemKey: const Key('super_admin_nav_qc_template')),
-                const SizedBox(height: 8),
-                _navItem(Icons.settings, 'System Settings', 4, itemKey: const Key('super_admin_nav_system_settings')),
-                const Spacer(),
-                OutlinedButton.icon(
-                  key: const Key('logout_button'),
-                  onPressed: () => ref.read(authProvider.notifier).logout(),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: AppColors.statusCancelled),
-                    foregroundColor: AppColors.statusCancelled,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                    child: ToastMetricStrip(
+                      metrics: [
+                        ToastMetric(
+                          label: 'Stores',
+                          value: '${state.filteredRestaurants.length}',
+                        ),
+                        ToastMetric(
+                          label: 'Brands',
+                          value: '${state.brands.length}',
+                        ),
+                        ToastMetric(
+                          label: 'Surface',
+                          value: '${safeIndex + 1}/${items.length}',
+                          tone: _superAdminUrgencyColor(selected.urgency),
+                        ),
+                      ],
+                    ),
                   ),
-                  icon: const Icon(Icons.logout),
-                  label: const Text('Logout'),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: AppNavBar(),
-                  ),
-                  const SizedBox(height: 10),
-                  Expanded(
-                    child: switch (_tabIndex) {
-                      0 => _RestaurantsTab(
-                        state: state,
-                        notifier: notifier,
-                        onGoToAdmin: (storeId) =>
-                            context.go('/admin/$storeId'),
-                      ),
-                      1 => _AllReportsTab(state: state, notifier: notifier),
-                      2 => const _QcOverviewTab(),
-                      3 => const _QcGlobalTemplatesTab(),
-                      _ => _SystemSettingsTab(authState: authState),
-                    },
-                  ),
-                ],
-              ),
+              child: tabs[safeIndex],
             ),
           ),
         ],
@@ -133,47 +150,134 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
     );
   }
 
-  Widget _navItem(IconData icon, String label, int index, {Key? itemKey}) {
-    final selected = _tabIndex == index;
-    return InkWell(
-      key: itemKey,
-      onTap: () => setState(() => _tabIndex = index),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.amber500.withValues(alpha: 0.16)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? AppColors.amber500 : AppColors.surface2,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              color: selected ? AppColors.amber500 : AppColors.textSecondary,
-              size: 18,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                label,
-                style: GoogleFonts.notoSansKr(
-                  color: selected
-                      ? AppColors.textPrimary
-                      : AppColors.textSecondary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
+  List<Widget> _tabViews(
+    SuperAdminState state,
+    SuperAdminNotifier notifier,
+    PosAuthState authState,
+  ) {
+    return [
+      _RestaurantsTab(
+        state: state,
+        notifier: notifier,
+        onGoToAdmin: (storeId) => context.go('/admin/$storeId'),
       ),
-    );
+      _AllReportsTab(state: state, notifier: notifier),
+      const _QcOverviewTab(),
+      const _QcGlobalTemplatesTab(),
+      _SystemSettingsTab(authState: authState),
+    ];
   }
+
+  List<ToastSidebarGroup> _sidebarGroups() {
+    return const [
+      ToastSidebarGroup(
+        title: 'Network Ops',
+        items: [
+          ToastSidebarItem(
+            icon: Icons.store,
+            label: 'Stores',
+            urgency: ToastSidebarUrgency.live,
+            helperLabel:
+                'Select the next store that needs activation, cleanup, or drilldown.',
+            itemKey: Key('super_admin_nav_stores'),
+          ),
+          ToastSidebarItem(
+            icon: Icons.bar_chart,
+            label: 'All Reports',
+            urgency: ToastSidebarUrgency.backOffice,
+            helperLabel:
+                'Review network revenue and store trends after live issues are stable.',
+            itemKey: Key('super_admin_nav_reports'),
+          ),
+        ],
+      ),
+      ToastSidebarGroup(
+        title: 'Compliance',
+        items: [
+          ToastSidebarItem(
+            icon: Icons.fact_check,
+            label: 'QC Status',
+            urgency: ToastSidebarUrgency.exception,
+            helperLabel:
+                'Triage cross-store quality exceptions and overdue follow-up.',
+            itemKey: Key('super_admin_nav_qc_status'),
+          ),
+          ToastSidebarItem(
+            icon: Icons.rule,
+            label: 'QC Template',
+            urgency: ToastSidebarUrgency.backOffice,
+            helperLabel:
+                'Maintain the shared criteria that downstream QC workflows depend on.',
+            itemKey: Key('super_admin_nav_qc_template'),
+          ),
+        ],
+      ),
+      ToastSidebarGroup(
+        title: 'Governance',
+        items: [
+          ToastSidebarItem(
+            icon: Icons.settings,
+            label: 'System Settings',
+            urgency: ToastSidebarUrgency.backOffice,
+            helperLabel:
+                'Change HQ rules only when store operations and exception queues are stable.',
+            itemKey: Key('super_admin_nav_system_settings'),
+          ),
+        ],
+      ),
+    ];
+  }
+}
+
+String _superAdminUrgencyLabel(ToastSidebarUrgency urgency) {
+  return switch (urgency) {
+    ToastSidebarUrgency.live => 'Network Ops',
+    ToastSidebarUrgency.exception => 'Exception Queue',
+    ToastSidebarUrgency.backOffice => 'Governance',
+  };
+}
+
+String _superAdminUrgencyCopy(ToastSidebarUrgency urgency) {
+  return switch (urgency) {
+    ToastSidebarUrgency.live =>
+      'Drill into the next store or network item that needs action now.',
+    ToastSidebarUrgency.exception =>
+      'Use this lane for unresolved cross-store issues and compliance follow-up.',
+    ToastSidebarUrgency.backOffice =>
+      'Review shared rules and reporting once operational risk is controlled.',
+  };
+}
+
+Color _superAdminUrgencyColor(ToastSidebarUrgency urgency) {
+  return switch (urgency) {
+    ToastSidebarUrgency.live => AppColors.amber500,
+    ToastSidebarUrgency.exception => AppColors.statusOccupied,
+    ToastSidebarUrgency.backOffice => AppColors.textSecondary,
+  };
+}
+
+Color _superAdminUrgencyNoteColor(ToastSidebarUrgency urgency) {
+  return switch (urgency) {
+    ToastSidebarUrgency.live => PosColors.accent,
+    ToastSidebarUrgency.exception => PosColors.warning,
+    ToastSidebarUrgency.backOffice => PosColors.textSecondary,
+  };
+}
+
+Color _superAdminUrgencyNoteBackground(ToastSidebarUrgency urgency) {
+  return switch (urgency) {
+    ToastSidebarUrgency.live => PosColors.accentMuted,
+    ToastSidebarUrgency.exception => PosColors.warningMuted,
+    ToastSidebarUrgency.backOffice => PosColors.panelMuted,
+  };
+}
+
+IconData _superAdminUrgencyNoteIcon(ToastSidebarUrgency urgency) {
+  return switch (urgency) {
+    ToastSidebarUrgency.live => Icons.travel_explore_rounded,
+    ToastSidebarUrgency.exception => Icons.priority_high_rounded,
+    ToastSidebarUrgency.backOffice => Icons.policy_rounded,
+  };
 }
 
 class _QcGlobalTemplatesTab extends ConsumerWidget {
@@ -423,7 +527,9 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
                     minLines: 2,
                     maxLines: 4,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(labelText: 'Criterion Details'),
+                    decoration: const InputDecoration(
+                      labelText: 'Criterion Details',
+                    ),
                   ),
                   const SizedBox(height: 10),
                   Row(
@@ -977,10 +1083,7 @@ class _RestaurantsTab extends StatelessWidget {
             );
 
       if (success && context.mounted) {
-        showSuccessToast(
-          context,
-          isEdit ? 'Store updated' : 'Store created',
-        );
+        showSuccessToast(context, isEdit ? 'Store updated' : 'Store created');
         Navigator.of(context).pop();
       }
     }
@@ -1085,14 +1188,9 @@ class _RestaurantsTab extends StatelessWidget {
                     initialValue: storeType,
                     dropdownColor: AppColors.surface1,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(
-                      labelText: 'Store Type',
-                    ),
+                    decoration: const InputDecoration(labelText: 'Store Type'),
                     items: const [
-                      DropdownMenuItem(
-                        value: 'direct',
-                        child: Text('Direct'),
-                      ),
+                      DropdownMenuItem(value: 'direct', child: Text('Direct')),
                       DropdownMenuItem(
                         value: 'external',
                         child: Text('External'),
@@ -1373,9 +1471,7 @@ class _AllReportsTabState extends State<_AllReportsTab> {
                   ),
                   child: Column(
                     children: [
-                      _reportHeader(
-                        label: _groupByBrand ? 'Brand' : 'Store',
-                      ),
+                      _reportHeader(label: _groupByBrand ? 'Brand' : 'Store'),
                       Expanded(
                         child: _groupByBrand
                             ? ListView.builder(

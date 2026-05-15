@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
+import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
 import '../../../main.dart';
 import '../delivery_models.dart';
@@ -44,13 +45,14 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final state = ref.watch(deliverySettlementProvider);
     final role = ref.watch(authProvider).role;
 
     if (!PermissionUtils.canAccessDeliverySettlement(role)) {
       return Center(
         child: Text(
-          'This Deliberry settlement workspace is only available to admin roles.',
+          l10n.deliveryAdminOnlyMessage,
           style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
         ),
       );
@@ -72,48 +74,73 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
               style: const TextStyle(color: AppColors.statusCancelled),
             ),
             const SizedBox(height: 12),
-            ElevatedButton(onPressed: _loadData, child: const Text('Retry')),
+            ElevatedButton(onPressed: _loadData, child: Text(l10n.retry)),
           ],
         ),
       );
     }
 
     final filtered = _filteredSettlements(state.settlements);
+    final unsettledOrders = state.unsettled?.orderCount ?? 0;
+    final unsettledRevenue = state.unsettled?.revenue ?? 0;
+    final pendingCount = state.settlements
+        .where((s) => s.status == 'pending')
+        .length;
+    final statementCount = state.settlements
+        .where((s) => s.status == 'calculated')
+        .length;
+    final disputeCount = state.settlements
+        .where((s) => s.status == 'disputed')
+        .length;
+    final completedCount = state.settlements
+        .where((s) => s.status == 'received')
+        .length;
+    final pendingNet = state.settlements
+        .where((s) => s.status == 'pending')
+        .fold<double>(0, (sum, s) => sum + s.netSettlement);
+    final statementNet = state.settlements
+        .where((s) => s.status == 'calculated')
+        .fold<double>(0, (sum, s) => sum + s.netSettlement);
+    final disputedNet = state.settlements
+        .where((s) => s.status == 'disputed')
+        .fold<double>(0, (sum, s) => sum + s.netSettlement);
+    final atRiskNet =
+        unsettledRevenue + pendingNet + statementNet + disputedNet;
+    final needsAttention =
+        unsettledOrders > 0 ||
+        pendingCount > 0 ||
+        statementCount > 0 ||
+        disputeCount > 0;
 
     return RefreshIndicator(
       onRefresh: () async => _loadData(),
-      child: ListView(
-        padding: const EdgeInsets.all(16),
+      child: ToastResponsiveScrollBody(
+        maxWidth: 1240,
         children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.surface1,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.surface2),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.info_outline,
-                  color: AppColors.amber500,
-                  size: 22,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Deliberry settlement is a separate financial workflow. It is not part of Photo Objet office operations.',
-                    style: GoogleFonts.notoSansKr(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          _buildDeliverySettlementHeader(
+            needsAttention: needsAttention,
+            unsettledOrders: unsettledOrders,
+            unsettledRevenue: unsettledRevenue,
+            statementCount: statementCount,
+            statementNet: statementNet,
+            disputeCount: disputeCount,
+            disputedNet: disputedNet,
+            pendingCount: pendingCount,
+            atRiskNet: atRiskNet,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+          if (state.settlements.isNotEmpty)
+            _buildDeliveryQueueControls(
+              settlements: state.settlements,
+              filteredCount: filtered.length,
+              pendingCount: pendingCount,
+              statementCount: statementCount,
+              disputeCount: disputeCount,
+              completedCount: completedCount,
+            ),
+          if (state.settlements.isNotEmpty) const SizedBox(height: 16),
+          if (state.unsettled != null) _buildUnsettledCard(state.unsettled!),
+          if (state.unsettled != null) const SizedBox(height: 16),
           if (state.unsettled != null || state.settlements.isNotEmpty)
             _buildOperationalAttention(
               unsettled: state.unsettled,
@@ -121,25 +148,13 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
             ),
           if (state.unsettled != null || state.settlements.isNotEmpty)
             const SizedBox(height: 16),
-          // ─── 미정산 카드 ───
-          if (state.unsettled != null) _buildUnsettledCard(state.unsettled!),
-          const SizedBox(height: 16),
-          // ─── 정산 요약 ───
           if (state.settlements.isNotEmpty)
-            _buildAggregateSummary(state.settlements),
-          const SizedBox(height: 16),
-          if (state.settlements.isNotEmpty)
-            _buildHistoryFocus(
-              all: state.settlements,
-              filtered: filtered,
-              unsettled: state.unsettled,
-            ),
+            _buildAggregateSecondaryDetail(state.settlements),
           if (state.settlements.isNotEmpty) const SizedBox(height: 16),
-          // ─── 필터 + 이력 헤더 ───
           Row(
             children: [
               Text(
-                'Settlement History',
+                l10n.deliverySettlementHistory,
                 style: GoogleFonts.notoSansKr(
                   color: AppColors.textPrimary,
                   fontSize: 16,
@@ -161,6 +176,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
             const SizedBox(height: 4),
             Text(
               _historySummaryCopy(
+                context: context,
                 filteredCount: filtered.length,
                 totalCount: state.settlements.length,
               ),
@@ -170,10 +186,6 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
               ),
             ),
           ],
-          const SizedBox(height: 8),
-          // ─── 상태 필터 칩 ───
-          if (state.settlements.isNotEmpty)
-            _buildStatusFilters(state.settlements),
           const SizedBox(height: 12),
           if (filtered.isEmpty)
             Padding(
@@ -187,6 +199,198 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
           else
             ...filtered.map(_buildSettlementCard),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDeliverySettlementHeader({
+    required bool needsAttention,
+    required int unsettledOrders,
+    required double unsettledRevenue,
+    required int statementCount,
+    required double statementNet,
+    required int disputeCount,
+    required double disputedNet,
+    required int pendingCount,
+    required double atRiskNet,
+  }) {
+    final l10n = context.l10n;
+
+    return ToastWorkSurface(
+      key: const Key('delivery_settlement_queue_header'),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.deliveryHeaderTitle,
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      l10n.deliveryHeaderSubtitle,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: PosColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              ToastStatusBadge(
+                label: needsAttention
+                    ? l10n.deliveryAttentionRequired
+                    : l10n.deliveryHealthyQueue,
+                color: disputeCount > 0
+                    ? PosColors.danger
+                    : needsAttention
+                    ? PosColors.warning
+                    : PosColors.success,
+                compact: true,
+              ),
+            ],
+          ),
+          if (needsAttention) ...[
+            const SizedBox(height: 12),
+            PosExceptionAlert(
+              label: disputeCount > 0
+                  ? l10n.deliveryAttentionDisputeOpen(disputeCount)
+                  : statementCount > 0
+                  ? l10n.deliveryAttentionStatementWaiting(statementCount)
+                  : unsettledOrders > 0
+                  ? l10n.deliveryAttentionUnsettledOpen(unsettledOrders)
+                  : l10n.deliveryAttentionFollowUpRemaining,
+              detail: disputeCount > 0
+                  ? l10n.deliveryAttentionDisputedAmount(_fmtVnd(disputedNet))
+                  : statementCount > 0
+                  ? l10n.deliveryAttentionPendingAmount(_fmtVnd(statementNet))
+                  : l10n.deliveryAttentionRiskAmount(_fmtVnd(atRiskNet)),
+              color: disputeCount > 0 ? PosColors.danger : PosColors.warning,
+            ),
+          ],
+          const SizedBox(height: 14),
+          ToastMetricStrip(
+            metrics: [
+              ToastMetric(
+                label: l10n.deliveryKpiUnsettledOrders,
+                value: '$unsettledOrders',
+                tone: unsettledOrders > 0
+                    ? PosColors.warning
+                    : PosColors.textPrimary,
+              ),
+              ToastMetric(
+                label: l10n.deliveryKpiStatementPending,
+                value: '$statementCount',
+                tone: statementCount > 0
+                    ? PosColors.accent
+                    : PosColors.textPrimary,
+              ),
+              ToastMetric(
+                label: l10n.deliveryKpiDispute,
+                value: '$disputeCount',
+                tone: disputeCount > 0 ? PosColors.danger : PosColors.success,
+              ),
+              ToastMetric(
+                label: l10n.deliveryKpiRiskNet,
+                value: _fmtVnd(atRiskNet),
+                tone: atRiskNet > 0 ? PosColors.warning : PosColors.success,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            pendingCount > 0
+                ? l10n.deliveryPendingIncluded(pendingCount)
+                : l10n.deliveryOpenRevenue(_fmtVnd(unsettledRevenue)),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeliveryQueueControls({
+    required List<DeliverySettlement> settlements,
+    required int filteredCount,
+    required int pendingCount,
+    required int statementCount,
+    required int disputeCount,
+    required int completedCount,
+  }) {
+    final l10n = context.l10n;
+
+    return ToastWorkSurface(
+      key: const Key('delivery_settlement_queue_controls'),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _filterChip(l10n.all, null, settlements.length),
+              _filterChip(l10n.deliveryFilterPending, 'pending', pendingCount),
+              _filterChip(
+                l10n.deliveryFilterStatement,
+                'calculated',
+                statementCount,
+              ),
+              _filterChip(l10n.deliveryFilterDispute, 'disputed', disputeCount),
+              _filterChip(
+                l10n.deliveryFilterCompleted,
+                'received',
+                completedCount,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            _historySummaryCopy(
+              context: context,
+              filteredCount: filteredCount,
+              totalCount: settlements.length,
+            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAggregateSecondaryDetail(List<DeliverySettlement> settlements) {
+    return ToastWorkSurface(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: ExpansionTile(
+        key: const Key('delivery_aggregate_secondary_detail'),
+        initiallyExpanded: false,
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: 12),
+        title: Text(
+          context.l10n.deliveryAggregateSummary,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            color: PosColors.textPrimary,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        subtitle: Text(
+          context.l10n.deliverySettlementBoundaryBody,
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
+        ),
+        children: [_buildAggregateSummary(settlements)],
       ),
     );
   }
@@ -236,66 +440,36 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
         l10n.deliverySettlementAtRiskPending(pendingCount, _fmtVnd(pendingNet)),
     ];
 
-    return Container(
+    return ToastWorkSurface(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface1,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.surface2),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            l10n.deliverySettlementAttentionTitle,
-            style: GoogleFonts.notoSansKr(
-              color: AppColors.textPrimary,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            l10n.deliverySettlementAttentionSubtitle,
-            style: GoogleFonts.notoSansKr(
-              color: AppColors.textSecondary,
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
+          Row(
             children: [
-              _attentionMetric(
-                l10n.deliverySettlementFollowUpNow,
-                '${followUpSignals.length}',
-                followUpSignals.isNotEmpty
-                    ? AppColors.statusCancelled
-                    : AppColors.statusAvailable,
+              Expanded(
+                child: Text(
+                  l10n.deliverySettlementAttentionTitle,
+                  style: GoogleFonts.notoSansKr(
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
-              _attentionMetric(
-                l10n.deliverySettlementStatementsWaiting,
-                '$statementCount',
-                statementCount > 0
-                    ? AppColors.amber500
-                    : AppColors.statusAvailable,
-              ),
-              _attentionMetric(
-                l10n.deliverySettlementSettledPeriods,
-                '$settledCount',
-                AppColors.statusAvailable,
-              ),
-              _attentionMetric(
-                l10n.deliverySettlementNetAtRisk,
-                _fmtVnd(atRiskNet),
-                atRiskNet > 0
-                    ? AppColors.statusCancelled
-                    : AppColors.statusAvailable,
+              Text(
+                context.l10n.deliveryFollowUpCount(followUpSignals.length),
+                style: GoogleFonts.notoSansKr(
+                  color: followUpSignals.isNotEmpty
+                      ? AppColors.statusCancelled
+                      : AppColors.statusAvailable,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -304,12 +478,6 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
                 l10n.deliverySettlementUnsettledOrders(unsettledOrders),
                 unsettledOrders > 0
                     ? AppColors.statusCancelled
-                    : AppColors.statusAvailable,
-              ),
-              _attentionChip(
-                l10n.deliverySettlementPendingPeriods(pendingCount),
-                pendingCount > 0
-                    ? AppColors.amber500
                     : AppColors.statusAvailable,
               ),
               _attentionChip(
@@ -325,10 +493,8 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
                     : AppColors.statusAvailable,
               ),
               _attentionChip(
-                l10n.deliverySettlementReadyToConfirm(statementCount),
-                statementCount > 0
-                    ? AppColors.amber500
-                    : AppColors.statusAvailable,
+                '${l10n.deliverySettlementSettledPeriods} $settledCount',
+                AppColors.statusAvailable,
               ),
             ],
           ),
@@ -362,42 +528,14 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
             ),
           ),
           const SizedBox(height: 8),
-          _attentionSupportRow(
-            l10n.deliverySettlementBoundary,
-            l10n.deliverySettlementBoundaryBody,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _attentionMetric(String label, String value, Color color) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 128, maxWidth: 180),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.surface0,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.surface2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
           Text(
-            label,
+            context.l10n.deliveryRiskNetAndCompleted(
+              _fmtVnd(atRiskNet),
+              settledCount,
+            ),
             style: GoogleFonts.notoSansKr(
               color: AppColors.textSecondary,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: GoogleFonts.notoSansKr(
-              color: color,
               fontSize: 12,
-              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -538,7 +676,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'All Settlements Summary',
+            context.l10n.deliveryAggregateSummary,
             style: GoogleFonts.notoSansKr(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -553,7 +691,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
               SizedBox(
                 width: 180,
                 child: _summaryMetric(
-                  'Total Revenue',
+                  context.l10n.reportsTotalSales,
                   _fmtVnd(totalGross),
                   AppColors.textPrimary,
                 ),
@@ -561,7 +699,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
               SizedBox(
                 width: 180,
                 child: _summaryMetric(
-                  'Total Deducted',
+                  context.l10n.deliveryTotalDeductions,
                   '-${_fmtVnd(totalDeductions)}',
                   AppColors.statusCancelled,
                 ),
@@ -569,7 +707,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
               SizedBox(
                 width: 180,
                 child: _summaryMetric(
-                  'Actual Deposit',
+                  context.l10n.deliveryActualDeposit,
                   _fmtVnd(totalNet),
                   AppColors.statusAvailable,
                 ),
@@ -582,32 +720,32 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
             runSpacing: 12,
             children: [
               _summarySupportMetric(
-                'Periods',
+                context.l10n.deliverySettlementPeriods,
                 '${settlements.length}',
                 AppColors.textPrimary,
               ),
               _summarySupportMetric(
-                'Orders',
+                context.l10n.reportsTotalOrders,
                 '$totalOrders',
                 AppColors.textPrimary,
               ),
               _summarySupportMetric(
-                'Avg deposit / period',
+                context.l10n.deliveryAverageDeposit,
                 _fmtVnd(averageNet),
                 AppColors.statusAvailable,
               ),
               _summarySupportMetric(
-                'Avg orders / period',
+                context.l10n.deliveryAverageOrders,
                 averageOrders.toStringAsFixed(1),
                 AppColors.textSecondary,
               ),
               _summarySupportMetric(
-                'Settled',
+                context.l10n.complete,
                 '$receivedCount',
                 AppColors.statusAvailable,
               ),
               _summarySupportMetric(
-                'Need follow-up',
+                context.l10n.deliveryAttentionRequired,
                 '$followUpCount',
                 followUpCount > 0
                     ? AppColors.amber500
@@ -676,31 +814,12 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
     );
   }
 
-  // ─── 상태 필터 칩 ────────────────────
-
-  Widget _buildStatusFilters(List<DeliverySettlement> settlements) {
-    final statusCounts = <String, int>{};
-    for (final s in settlements) {
-      statusCounts[s.status] = (statusCounts[s.status] ?? 0) + 1;
-    }
-
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        _filterChip('All', null, settlements.length),
-        for (final entry in statusCounts.entries)
-          _filterChip(_statusLabel(entry.key), entry.key, entry.value),
-      ],
-    );
-  }
-
-  String _statusLabel(String status) => switch (status) {
-    'pending' => 'Pending',
-    'calculated' => 'Statement',
-    'received' => 'Done',
-    'disputed' => 'Dispute',
-    'adjusted' => 'Adjustment',
+  String _statusLabel(BuildContext context, String status) => switch (status) {
+    'pending' => context.l10n.pending,
+    'calculated' => context.l10n.deliveryStatementPending,
+    'received' => context.l10n.complete,
+    'disputed' => context.l10n.deliveryDispute,
+    'adjusted' => context.l10n.adjusted,
     _ => status,
   };
 
@@ -732,7 +851,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Settlement pending',
+                  '정산 대기',
                   style: GoogleFonts.notoSansKr(
                     color: AppColors.amber500,
                     fontSize: 13,
@@ -764,111 +883,6 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
   }
 
   // ─── 정산 카드 ────────────────────────
-
-  Widget _buildHistoryFocus({
-    required List<DeliverySettlement> all,
-    required List<DeliverySettlement> filtered,
-    required UnsettledRevenueSummary? unsettled,
-  }) {
-    final l10n = context.l10n;
-    final pendingCount = all.where((s) => s.status == 'pending').length;
-    final statementCount = all.where((s) => s.status == 'calculated').length;
-    final disputeCount = all.where((s) => s.status == 'disputed').length;
-    final receivedCount = all.where((s) => s.status == 'received').length;
-    final unsettledRevenue = unsettled?.revenue ?? 0;
-    final pendingNet = all
-        .where((s) => s.status == 'pending')
-        .fold<double>(0, (sum, s) => sum + s.netSettlement);
-    final disputedNet = all
-        .where((s) => s.status == 'disputed')
-        .fold<double>(0, (sum, s) => sum + s.netSettlement);
-    final statementNet = all
-        .where((s) => s.status == 'calculated')
-        .fold<double>(0, (sum, s) => sum + s.netSettlement);
-
-    final focusCopy = statementCount > 0
-        ? l10n.deliverySettlementDepositReady(
-            statementCount,
-            _fmtVnd(statementNet),
-          )
-        : disputeCount > 0
-        ? l10n.deliverySettlementAtRiskDisputed(
-            disputeCount,
-            _fmtVnd(disputedNet),
-          )
-        : pendingCount > 0
-        ? l10n.deliverySettlementAtRiskPending(
-            pendingCount,
-            _fmtVnd(pendingNet),
-          )
-        : unsettledRevenue > 0
-        ? l10n.deliverySettlementAtRiskOpenRevenue(_fmtVnd(unsettledRevenue))
-        : l10n.deliverySettlementFocusNone;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface1,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.surface2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'History Focus',
-            style: GoogleFonts.notoSansKr(
-              color: AppColors.textPrimary,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Use the current filter to inspect the tracked settlement queue without leaving the admin shell.',
-            style: GoogleFonts.notoSansKr(
-              color: AppColors.textSecondary,
-              fontSize: 12,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _summarySupportMetric(
-                'Filtered view',
-                _activeFilterLabel(),
-                AppColors.textPrimary,
-              ),
-              _summarySupportMetric(
-                'Visible periods',
-                '${filtered.length}/${all.length}',
-                AppColors.textPrimary,
-              ),
-              _summarySupportMetric(
-                'Healthy coverage',
-                '$receivedCount/${all.length}',
-                receivedCount == all.length
-                    ? AppColors.statusAvailable
-                    : AppColors.amber500,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _attentionSupportRow(l10n.deliverySettlementFollowUpFocus, focusCopy),
-          const SizedBox(height: 8),
-          _attentionSupportRow(
-            l10n.deliverySettlementBoundary,
-            filtered.isEmpty
-                ? 'No periods match the current filter. Clear the filter to return to the full tracked settlement queue.'
-                : 'Filtered history remains read-only. Deposit confirmation stays inside the tracked control on each eligible settlement card.',
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildSettlementCard(DeliverySettlement s) {
     final dateRange =
@@ -915,12 +929,9 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
                     runSpacing: 8,
                     children: [
                       _statusBadge(s.statusLabel, _statusColor(s.status)),
+                      _statusBadge('주문 ${s.orderCount}건', AppColors.statusInfo),
                       _statusBadge(
-                        'Orders ${s.orderCount}',
-                        AppColors.statusInfo,
-                      ),
-                      _statusBadge(
-                        '${s.items.length} deductions',
+                        '차감 ${s.items.length}건',
                         s.items.isNotEmpty
                             ? AppColors.statusCancelled
                             : AppColors.statusAvailable,
@@ -946,34 +957,34 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
             runSpacing: 12,
             children: [
               _settlementMiniMetric(
-                'Gross',
+                '총매출',
                 _fmtVnd(s.grossTotal),
                 AppColors.textPrimary,
               ),
               _settlementMiniMetric(
-                'Deducted',
+                '차감',
                 '-${_fmtVnd(s.totalDeductions)}',
                 AppColors.statusCancelled,
               ),
               _settlementMiniMetric(
-                'Deposit',
+                '입금',
                 _fmtVnd(s.netSettlement),
                 AppColors.statusAvailable,
               ),
             ],
           ),
           const SizedBox(height: 12),
-          _detailRow('Status', s.statusLabel, color: _statusColor(s.status)),
-          _detailRow('Settlement window', dateRange),
+          _detailRow('상태', s.statusLabel, color: _statusColor(s.status)),
+          _detailRow('정산 기간', dateRange),
           _detailRow(
-            'Received at',
+            '입금 확인',
             _formatDateTime(s.receivedAt),
             color: s.receivedAt != null
                 ? AppColors.statusAvailable
                 : AppColors.textSecondary,
           ),
           _detailRow(
-            'Notes',
+            '메모',
             _stringOrDash(s.notes),
             color: s.notes?.trim().isNotEmpty == true
                 ? AppColors.textPrimary
@@ -982,7 +993,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
           const Divider(color: AppColors.surface2, height: 16),
           // 매출 총액
           _detailRow(
-            'Delivery Revenue (gross)',
+            '배달 총매출',
             _fmtVnd(s.grossTotal),
             color: AppColors.textPrimary,
           ),
@@ -990,8 +1001,8 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
           // 차감 항목
           if (s.items.isEmpty)
             _detailRow(
-              'Deductions',
-              'No tracked deduction lines',
+              '차감 항목',
+              '기록된 차감 내역이 없습니다.',
               color: AppColors.textSecondary,
             )
           else
@@ -1006,13 +1017,13 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
             const Divider(color: AppColors.surface2, height: 16),
           // 합계
           _detailRow(
-            'Total Deducted',
+            '총 차감',
             '-${_fmtVnd(s.totalDeductions)}',
             color: AppColors.statusCancelled,
             bold: true,
           ),
           _detailRow(
-            'Actual Deposit Amount',
+            '실입금액',
             _fmtVnd(s.netSettlement),
             color: AppColors.statusAvailable,
             bold: true,
@@ -1021,7 +1032,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                'Orders: ${s.orderCount}',
+                '주문 ${s.orderCount}건',
                 style: GoogleFonts.notoSansKr(
                   color: AppColors.textSecondary,
                   fontSize: 12,
@@ -1034,7 +1045,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
             Align(
               alignment: Alignment.centerRight,
               child: PosActionButton(
-                label: 'Confirm Deposit',
+                label: '입금 확인',
                 tone: PosActionTone.affirm,
                 icon: Icons.check_circle_outline,
                 loading:
@@ -1135,18 +1146,18 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
   }
 
   String _historySummaryCopy({
+    required BuildContext context,
     required int filteredCount,
     required int totalCount,
   }) {
     if (_statusFilter == null) {
-      return '$totalCount tracked settlement periods are visible in the current history queue.';
+      return context.l10n.deliveryHistorySummaryAll(totalCount);
     }
-    return '$filteredCount of $totalCount periods match the current ${_statusLabel(_statusFilter!)} filter.';
-  }
-
-  String _activeFilterLabel() {
-    if (_statusFilter == null) return 'All periods';
-    return _statusLabel(_statusFilter!);
+    return context.l10n.deliveryHistorySummaryFiltered(
+      totalCount,
+      filteredCount,
+      _statusLabel(context, _statusFilter!),
+    );
   }
 
   String _formatDateTime(DateTime? value) {
@@ -1175,9 +1186,9 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
 
     final confirmed = await ToastConfirmDialog.show(
       context: context,
-      title: 'Confirm Deposit',
-      description: 'Confirmed the deposit on the actual bank account?',
-      confirmLabel: 'Confirm',
+      title: context.l10n.deliveryConfirmDeposit,
+      description: context.l10n.deliveryConfirmDepositQuestion,
+      confirmLabel: context.l10n.confirm,
       confirmTone: PosActionTone.affirm,
     );
 

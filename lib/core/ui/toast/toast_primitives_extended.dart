@@ -1,10 +1,36 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../i18n/locale_extensions.dart';
 import '../app_theme.dart';
 import '../pos_design_tokens.dart';
+import 'toast_primitives.dart';
 import 'toast_vocabulary.dart';
+
+LinearGradient _workSurfaceGradient(Color backgroundColor) {
+  return LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color.alphaBlend(Colors.white.withValues(alpha: 0.14), backgroundColor),
+      backgroundColor,
+      Color.alphaBlend(
+        ToastColorTokens.canvas.withValues(alpha: 0.06),
+        backgroundColor,
+      ),
+    ],
+    stops: const [0, 0.7, 1],
+  );
+}
+
+List<BoxShadow> _workSurfaceShadow(Color borderColor) {
+  if (borderColor == Colors.transparent) {
+    return ToastElevationTokens.none;
+  }
+  return PosShadows.low;
+}
 
 /// Additive Toast-style primitives that are NOT yet defined under
 /// `lib/core/ui/app_primitives.dart` or the existing `toast/` files.
@@ -34,13 +60,187 @@ class ToastWorkSurface extends StatelessWidget {
     return Container(
       clipBehavior: clip ? Clip.antiAlias : Clip.none,
       decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: ToastRadiusTokens.md,
+        gradient: _workSurfaceGradient(backgroundColor),
+        borderRadius: ToastRadiusTokens.lg,
         border: Border.all(color: borderColor),
-        boxShadow: ToastElevationTokens.none,
+        boxShadow: _workSurfaceShadow(borderColor),
       ),
       padding: padding,
       child: child,
+    );
+  }
+}
+
+class ToastOperationalQueuePane extends StatelessWidget {
+  const ToastOperationalQueuePane({
+    super.key,
+    required this.title,
+    required this.child,
+    this.subtitle,
+    this.trailing,
+    this.headerBottom,
+    this.padding = const EdgeInsets.all(ToastSpacingTokens.lg),
+  });
+
+  final String title;
+  final String? subtitle;
+  final Widget child;
+  final Widget? trailing;
+  final Widget? headerBottom;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return ToastWorkSurface(
+      padding: padding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.only(bottom: ToastSpacingTokens.md),
+            decoration: BoxDecoration(
+              color: Colors.transparent,
+              border: Border(
+                bottom: BorderSide(
+                  color: ToastColorTokens.border.withValues(alpha: 0.86),
+                ),
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: GoogleFonts.notoSansKr(
+                          color: ToastColorTokens.textPrimary,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                          height: 1.12,
+                          letterSpacing: -0.4,
+                        ),
+                      ),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: ToastSpacingTokens.sm),
+                        Text(
+                          subtitle!,
+                          style: GoogleFonts.notoSansKr(
+                            color: ToastColorTokens.textSecondary,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w400,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (trailing != null) ...[
+                  const SizedBox(width: ToastSpacingTokens.md),
+                  trailing!,
+                ],
+              ],
+            ),
+          ),
+          if (headerBottom != null) ...[
+            const SizedBox(height: ToastSpacingTokens.md),
+            headerBottom!,
+          ],
+          const SizedBox(height: ToastSpacingTokens.md),
+          Expanded(child: child),
+        ],
+      ),
+    );
+  }
+}
+
+class ToastPrimaryActionZone extends StatelessWidget {
+  const ToastPrimaryActionZone({
+    super.key,
+    required this.actions,
+    this.supporting,
+    this.padding = const EdgeInsets.only(top: ToastSpacingTokens.lg),
+    this.alignment = WrapAlignment.end,
+  });
+
+  final List<Widget> actions;
+  final Widget? supporting;
+  final EdgeInsetsGeometry padding;
+  final WrapAlignment alignment;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: Colors.transparent,
+        border: Border(
+          top: BorderSide(
+            color: ToastColorTokens.border.withValues(alpha: 0.86),
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: ToastSpacingTokens.sm,
+            runSpacing: ToastSpacingTokens.sm,
+            alignment: alignment,
+            children: actions,
+          ),
+          if (supporting != null) ...[
+            const SizedBox(height: ToastSpacingTokens.sm),
+            supporting!,
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class ToastViewportScroll extends StatefulWidget {
+  const ToastViewportScroll({
+    super.key,
+    required this.child,
+    this.padding = EdgeInsets.zero,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  State<ToastViewportScroll> createState() => _ToastViewportScrollState();
+}
+
+class _ToastViewportScrollState extends State<ToastViewportScroll> {
+  late final ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scrollbar(
+      controller: _scrollController,
+      thumbVisibility: true,
+      child: ListView(
+        controller: _scrollController,
+        padding: widget.padding,
+        children: [widget.child],
+      ),
     );
   }
 }
@@ -179,9 +379,9 @@ class ToastStatusBadge extends StatelessWidget {
         vertical: compact ? 4 : 6,
       ),
       decoration: BoxDecoration(
-        color: backgroundColor ?? color.withValues(alpha: 0.12),
+        color: backgroundColor ?? color.withValues(alpha: 0.1),
         borderRadius: ToastRadiusTokens.pill,
-        border: Border.all(color: color.withValues(alpha: 0.35)),
+        border: Border.all(color: color.withValues(alpha: 0.16)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -194,7 +394,7 @@ class ToastStatusBadge extends StatelessWidget {
             label,
             style: GoogleFonts.notoSansKr(
               color: textColor,
-              fontSize: compact ? 10.5 : 11,
+              fontSize: compact ? 11 : 11.5,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -245,6 +445,114 @@ class ToastShell extends StatelessWidget {
   }
 }
 
+EdgeInsets _toastResponsivePagePadding(double width) {
+  if (width < 560) {
+    return const EdgeInsets.all(12);
+  }
+  if (width < 960) {
+    return const EdgeInsets.all(16);
+  }
+  return const EdgeInsets.all(20);
+}
+
+class ToastResponsiveBody extends StatelessWidget {
+  const ToastResponsiveBody({
+    super.key,
+    required this.child,
+    this.maxWidth = 1360,
+    this.padding,
+    this.alignment = Alignment.topCenter,
+  });
+
+  final Widget child;
+  final double maxWidth;
+  final EdgeInsetsGeometry? padding;
+  final Alignment alignment;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final resolvedPadding =
+            padding ?? _toastResponsivePagePadding(constraints.maxWidth);
+        final insets = resolvedPadding.resolve(Directionality.of(context));
+        final availableWidth = math.max(
+          0.0,
+          constraints.maxWidth - insets.horizontal,
+        );
+        final availableHeight = math.max(
+          0.0,
+          constraints.maxHeight - insets.vertical,
+        );
+        final resolvedWidth = math.min(maxWidth, availableWidth);
+
+        return Padding(
+          padding: resolvedPadding,
+          child: Align(
+            alignment: alignment,
+            child: SizedBox(
+              width: resolvedWidth,
+              height: availableHeight,
+              child: child,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class ToastResponsiveScrollBody extends StatelessWidget {
+  const ToastResponsiveScrollBody({
+    super.key,
+    required this.children,
+    this.maxWidth = 1360,
+    this.padding,
+    this.controller,
+    this.physics,
+  });
+
+  final List<Widget> children;
+  final double maxWidth;
+  final EdgeInsetsGeometry? padding;
+  final ScrollController? controller;
+  final ScrollPhysics? physics;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final resolvedPadding =
+            padding ?? _toastResponsivePagePadding(constraints.maxWidth);
+        final insets = resolvedPadding.resolve(Directionality.of(context));
+        final availableWidth = math.max(
+          0.0,
+          constraints.maxWidth - insets.horizontal,
+        );
+        final resolvedWidth = math.min(maxWidth, availableWidth);
+
+        return ListView(
+          controller: controller,
+          physics: physics,
+          padding: resolvedPadding,
+          children: [
+            Align(
+              alignment: Alignment.topCenter,
+              child: SizedBox(
+                width: resolvedWidth,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: children,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class ToastTopbar extends StatelessWidget {
   const ToastTopbar({
     super.key,
@@ -265,12 +573,12 @@ class ToastTopbar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: height,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      padding: const EdgeInsets.symmetric(horizontal: 18),
       decoration: BoxDecoration(
-        color: ToastColorTokens.surface,
+        color: ToastColorTokens.topbarSurface,
         border: Border(
           bottom: BorderSide(
-            color: ToastColorTokens.border.withValues(alpha: 0.82),
+            color: ToastColorTokens.border.withValues(alpha: 0.86),
           ),
         ),
       ),
@@ -278,7 +586,7 @@ class ToastTopbar extends StatelessWidget {
         children: [
           if (leading != null) ...[
             leading!,
-            const SizedBox(width: AppSpacing.md),
+            const SizedBox(width: AppSpacing.sm),
           ],
           Expanded(
             child: Text(
@@ -287,8 +595,8 @@ class ToastTopbar extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.notoSansKr(
                 color: ToastColorTokens.textPrimary,
-                fontSize: 15.5,
-                fontWeight: FontWeight.w900,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
                 height: 1.2,
               ),
             ),
@@ -328,27 +636,23 @@ class _ToastDenseListRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = statusColor ?? ToastColorTokens.border;
+    final accent = statusColor ?? ToastColorTokens.accent;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 140),
       curve: Curves.easeOutCubic,
       decoration: BoxDecoration(
-        color: selected
-            ? ToastColorTokens.selectedRow
-            : ToastColorTokens.surface,
-        borderRadius: ToastRadiusTokens.xs,
+        color: selected ? ToastColorTokens.selectedRow : Colors.transparent,
+        borderRadius: ToastRadiusTokens.md,
         border: Border.all(
-          color: selected
-              ? accent.withValues(alpha: 0.44)
-              : ToastColorTokens.border.withValues(alpha: 0.78),
+          color: selected ? accent.withValues(alpha: 0.22) : Colors.transparent,
         ),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: ToastRadiusTokens.xs,
-          hoverColor: ToastColorTokens.selectedRow.withValues(alpha: 0.42),
+          borderRadius: ToastRadiusTokens.md,
+          hoverColor: ToastColorTokens.selectedRow.withValues(alpha: 0.62),
           focusColor: accent.withValues(alpha: 0.08),
           splashFactory: NoSplash.splashFactory,
           child: ConstrainedBox(
@@ -357,8 +661,8 @@ class _ToastDenseListRow extends StatelessWidget {
               children: [
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 140),
-                  width: selected ? 4 : 3,
-                  color: statusColor ?? Colors.transparent,
+                  width: selected ? 4 : 0,
+                  color: selected ? accent : Colors.transparent,
                 ),
                 Expanded(
                   child: Padding(padding: padding, child: child),
@@ -406,6 +710,502 @@ class PosListRow extends StatelessWidget {
   }
 }
 
+class PosPageHeader extends StatelessWidget {
+  const PosPageHeader({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.trailing,
+    this.bottom,
+    this.padding = const EdgeInsets.fromLTRB(0, 0, 0, 18),
+  });
+
+  final String title;
+  final String? subtitle;
+  final Widget? trailing;
+  final Widget? bottom;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: padding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.headlineLarge,
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        subtitle!,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: PosColors.textSecondary,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (trailing != null) ...[const SizedBox(width: 16), trailing!],
+            ],
+          ),
+          if (bottom != null) ...[const SizedBox(height: 16), bottom!],
+        ],
+      ),
+    );
+  }
+}
+
+class PosStatCard extends StatelessWidget {
+  const PosStatCard({
+    super.key,
+    required this.label,
+    required this.value,
+    this.supporting,
+    this.tone,
+    this.trailing,
+  });
+
+  final String label;
+  final String value;
+  final String? supporting;
+  final Color? tone;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = tone ?? PosColors.textPrimary;
+    return ToastWorkSurface(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      backgroundColor: PosColors.surface,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label.toUpperCase(),
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: PosColors.textSecondary,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              if (trailing != null) trailing!,
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            value,
+            style: Theme.of(
+              context,
+            ).textTheme.displayMedium?.copyWith(fontSize: 26, color: accent),
+          ),
+          if (supporting != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              supporting!,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class PosToolbar extends StatelessWidget {
+  const PosToolbar({super.key, required this.children, this.trailing});
+
+  final List<Widget> children;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return ToastWorkSurface(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          Expanded(
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: children,
+            ),
+          ),
+          if (trailing != null) ...[const SizedBox(width: 12), trailing!],
+        ],
+      ),
+    );
+  }
+}
+
+class PosDataPanel extends StatelessWidget {
+  const PosDataPanel({
+    super.key,
+    required this.title,
+    required this.child,
+    this.subtitle,
+    this.trailing,
+    this.padding = const EdgeInsets.all(18),
+  });
+
+  final String title;
+  final String? subtitle;
+  final Widget child;
+  final Widget? trailing;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return ToastWorkSurface(
+      padding: padding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.titleLarge?.copyWith(fontSize: 20),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle!,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (trailing != null) ...[const SizedBox(width: 12), trailing!],
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(child: child),
+        ],
+      ),
+    );
+  }
+}
+
+class PosSplitContent extends StatelessWidget {
+  const PosSplitContent({
+    super.key,
+    required this.primary,
+    required this.secondary,
+    this.primaryFlex = 7,
+    this.secondaryFlex = 4,
+    this.breakpoint = 1080,
+    this.spacing = 16,
+  });
+
+  final Widget primary;
+  final Widget secondary;
+  final int primaryFlex;
+  final int secondaryFlex;
+  final double breakpoint;
+  final double spacing;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < breakpoint) {
+          return Column(
+            children: [
+              SizedBox(height: 520, child: primary),
+              SizedBox(height: spacing),
+              SizedBox(height: 320, child: secondary),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(flex: primaryFlex, child: primary),
+            SizedBox(width: spacing),
+            Expanded(flex: secondaryFlex, child: secondary),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class PosActionCard extends StatelessWidget {
+  const PosActionCard({
+    super.key,
+    required this.title,
+    required this.child,
+    this.subtitle,
+    this.action,
+    this.badge,
+  });
+
+  final String title;
+  final String? subtitle;
+  final Widget child;
+  final Widget? action;
+  final Widget? badge;
+
+  @override
+  Widget build(BuildContext context) {
+    return ToastWorkSurface(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: Theme.of(context).textTheme.titleLarge),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle!,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (badge != null) badge!,
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(child: child),
+          if (action != null) ...[
+            const SizedBox(height: 16),
+            SizedBox(width: double.infinity, child: action!),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class PosPrimaryButton extends StatelessWidget {
+  const PosPrimaryButton({
+    super.key,
+    required this.label,
+    this.onPressed,
+    this.icon,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    if (icon == null) {
+      return FilledButton(onPressed: onPressed, child: Text(label));
+    }
+    return FilledButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 18),
+      label: Text(label),
+    );
+  }
+}
+
+class PosSecondaryButton extends StatelessWidget {
+  const PosSecondaryButton({
+    super.key,
+    required this.label,
+    this.onPressed,
+    this.icon,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    if (icon == null) {
+      return OutlinedButton(onPressed: onPressed, child: Text(label));
+    }
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 18),
+      label: Text(label),
+    );
+  }
+}
+
+class PosTableShell extends StatelessWidget {
+  const PosTableShell({
+    super.key,
+    required this.columns,
+    required this.rows,
+    this.selectedId,
+    this.onSelect,
+  });
+
+  final List<ToastQueueColumn> columns;
+  final List<ToastQueueRow> rows;
+  final String? selectedId;
+  final ValueChanged<String>? onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return ToastWorkSurface(
+      padding: const EdgeInsets.all(12),
+      child: ToastQueueTable(
+        columns: columns,
+        rows: rows,
+        selectedId: selectedId,
+        onSelect: onSelect,
+      ),
+    );
+  }
+}
+
+class PosSelectedRow extends StatelessWidget {
+  const PosSelectedRow({
+    super.key,
+    required this.child,
+    this.selected = false,
+    this.onTap,
+    this.statusColor,
+  });
+
+  final Widget child;
+  final bool selected;
+  final VoidCallback? onTap;
+  final Color? statusColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return PosListRow(
+      selected: selected,
+      onTap: onTap,
+      statusColor: statusColor,
+      child: child,
+    );
+  }
+}
+
+class PosEmptyState extends StatelessWidget {
+  const PosEmptyState({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.icon = Icons.inbox_outlined,
+  });
+
+  final String title;
+  final String? subtitle;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: PosColors.textMuted, size: 28),
+          const SizedBox(height: 12),
+          Text(title, style: Theme.of(context).textTheme.titleMedium),
+          if (subtitle != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              subtitle!,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class PosExceptionAlert extends StatelessWidget {
+  const PosExceptionAlert({
+    super.key,
+    required this.label,
+    this.detail,
+    this.color = PosColors.warning,
+    this.icon = Icons.warning_amber_rounded,
+  });
+
+  final String label;
+  final String? detail;
+  final Color color;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: ToastRadiusTokens.md,
+        border: Border.all(color: color.withValues(alpha: 0.16)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (detail != null) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    detail!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: PosColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Wave 1.6 caller-supplied metric tile. Pairs with [ToastMetricItemStrip].
 ///
 /// Distinct from the existing `ToastMetric` / `ToastMetricStrip` in
@@ -449,38 +1249,345 @@ class ToastMetricItemStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ToastWorkSurface(
-      padding: EdgeInsets.symmetric(
-        horizontal: compact ? 10 : AppSpacing.lg,
-        vertical: compact ? 7 : 10,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = _metricItemColumnsForWidth(
+          constraints.maxWidth,
+          items.length,
+        );
+        final rows = <List<ToastMetricItem>>[];
+        for (var index = 0; index < items.length; index += columns) {
+          rows.add(
+            items.sublist(index, math.min(index + columns, items.length)),
+          );
+        }
+
+        return ToastWorkSurface(
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 10 : AppSpacing.lg,
+            vertical: compact ? 7 : 10,
+          ),
+          backgroundColor: muted
+              ? ToastColorTokens.mutedSurface
+              : ToastColorTokens.surface,
+          borderColor: muted
+              ? ToastColorTokens.border.withValues(alpha: 0.58)
+              : ToastColorTokens.border,
+          child: Column(
+            children: [
+              for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) ...[
+                Row(
+                  children: [
+                    for (
+                      var columnIndex = 0;
+                      columnIndex < columns;
+                      columnIndex++
+                    ) ...[
+                      Expanded(
+                        child: columnIndex < rows[rowIndex].length
+                            ? _ToastMetricCell(
+                                item: rows[rowIndex][columnIndex],
+                                compact: compact,
+                                muted: muted,
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                      if (columnIndex != columns - 1)
+                        SizedBox(
+                          height: compact ? 28 : 36,
+                          child: VerticalDivider(
+                            color: muted
+                                ? ToastColorTokens.border.withValues(
+                                    alpha: 0.42,
+                                  )
+                                : ToastColorTokens.border.withValues(
+                                    alpha: 0.72,
+                                  ),
+                          ),
+                        ),
+                    ],
+                  ],
+                ),
+                if (rowIndex != rows.length - 1)
+                  SizedBox(height: compact ? 6 : 8),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+int _metricItemColumnsForWidth(double width, int itemCount) {
+  if (itemCount <= 1) {
+    return 1;
+  }
+  if (width < 420) {
+    return 1;
+  }
+  if (width < 760) {
+    return math.min(2, itemCount);
+  }
+  if (width < 1080) {
+    return math.min(3, itemCount);
+  }
+  return math.min(4, itemCount);
+}
+
+/// Wave 1.6 caller-supplied item for [ToastSidebarPanel].
+///
+/// Distinct from `ToastSidebarItem` in `toast_sidebar.dart` (which is
+/// consumed by the full-shell `ToastSidebar` orchestrator). This item
+/// shape is rail-only and accepts the fields the stash photo-ops
+/// shell passes today: `icon`, `label`, optional `sectionLabel`,
+/// optional `helperLabel`, optional `badge`, optional `onTap`, optional
+/// `itemKey`.
+class ToastSidebarPanelItem {
+  const ToastSidebarPanelItem({
+    required this.icon,
+    required this.label,
+    this.sectionLabel,
+    this.helperLabel,
+    this.badge,
+    this.onTap,
+    this.itemKey,
+  });
+
+  final IconData icon;
+  final String label;
+
+  /// Section header rendered above this item. Stash-era shells use this
+  /// to group navigation entries without a wrapping `ToastSidebarGroup`.
+  final String? sectionLabel;
+
+  /// Secondary helper text rendered under the label.
+  final String? helperLabel;
+
+  /// Provider-backed badge widget (e.g. a count chip).
+  final Widget? badge;
+
+  final VoidCallback? onTap;
+  final Key? itemKey;
+}
+
+/// Wave 1.6 rail-only sibling of the full-shell `ToastSidebar` in
+/// `toast_sidebar.dart`.
+///
+/// Use [ToastSidebarPanel] when you need just a sidebar column to slot
+/// into another shell (e.g. `ToastShell.sidebar`); use `ToastSidebar`
+/// when you need the orchestrator that also renders a body and topbar.
+///
+/// Renders a fixed-width `Container` with a title row, an optional
+/// `subtitle`, a scrollable list of items (with optional section
+/// headers above each item), and optional `bottomItems` pinned at the
+/// foot. Rendering style mirrors PR #43's `_SidebarRail` in
+/// `web_sidebar_layout.dart` so the visual surface remains consistent.
+class ToastSidebarPanel extends StatelessWidget {
+  const ToastSidebarPanel({
+    super.key,
+    required this.title,
+    this.subtitle,
+    required this.items,
+    required this.selectedIndex,
+    required this.onItemSelected,
+    this.leading,
+    this.bottomItems,
+  });
+
+  final String title;
+  final String? subtitle;
+  final List<ToastSidebarPanelItem> items;
+  final int selectedIndex;
+  final ValueChanged<int> onItemSelected;
+  final Widget? leading;
+  final List<ToastSidebarPanelItem>? bottomItems;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: ToastShellTokens.sidebarWidth,
+      decoration: BoxDecoration(
+        color: PosColors.sidebarSurface,
+        border: Border(
+          right: BorderSide(
+            color: PosColors.border,
+            width: ToastShellTokens.borderWidth,
+          ),
+        ),
       ),
-      backgroundColor: muted
-          ? ToastColorTokens.mutedSurface
-          : ToastColorTokens.surface,
-      borderColor: muted
-          ? ToastColorTokens.border.withValues(alpha: 0.58)
-          : ToastColorTokens.border,
-      child: Row(
+      child: Column(
         children: [
-          for (var index = 0; index < items.length; index++) ...[
-            Expanded(
-              child: _ToastMetricCell(
-                item: items[index],
-                compact: compact,
-                muted: muted,
+          Container(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
+            alignment: Alignment.centerLeft,
+            decoration: BoxDecoration(
+              color: PosColors.sidebarSurface,
+              border: const Border(bottom: BorderSide(color: PosColors.border)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    if (leading != null) ...[
+                      leading!,
+                      const SizedBox(width: 8),
+                    ],
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.notoSansKr(
+                          color: PosColors.text,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (subtitle != null && subtitle!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.notoSansKr(
+                      color: PosColors.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.15,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                final isSelected = selectedIndex == index;
+                final header = item.sectionLabel;
+                final nav = _PanelRailItem(
+                  key: item.itemKey,
+                  icon: item.icon,
+                  label: item.label,
+                  helperLabel: item.helperLabel,
+                  badge: item.badge,
+                  isSelected: isSelected,
+                  onTap: item.onTap ?? () => onItemSelected(index),
+                );
+                if (header == null || header.isEmpty) return nav;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        index == 0 ? 4 : 14,
+                        16,
+                        6,
+                      ),
+                      child: Text(
+                        header.toUpperCase(),
+                        style: GoogleFonts.notoSansKr(
+                          color: PosColors.textMuted,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                    nav,
+                  ],
+                );
+              },
+            ),
+          ),
+          if (bottomItems != null && bottomItems!.isNotEmpty) ...[
+            Container(height: 1, color: PosColors.border),
+            ...bottomItems!.map(
+              (item) => _PanelRailItem(
+                icon: item.icon,
+                label: item.label,
+                helperLabel: item.helperLabel,
+                badge: item.badge,
+                isSelected: false,
+                onTap: item.onTap ?? () {},
               ),
             ),
-            if (index != items.length - 1)
-              SizedBox(
-                height: compact ? 28 : 36,
-                child: VerticalDivider(
-                  color: muted
-                      ? ToastColorTokens.border.withValues(alpha: 0.42)
-                      : ToastColorTokens.border.withValues(alpha: 0.72),
-                ),
-              ),
+            const SizedBox(height: 8),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _PanelRailItem extends StatelessWidget {
+  const _PanelRailItem({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+    this.helperLabel,
+    this.badge,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final String? helperLabel;
+  final Widget? badge;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 2,
+      ),
+      child: PosListRow(
+        selected: isSelected,
+        minHeight: ToastShellTokens.navItemHeight,
+        onTap: onTap,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: isSelected ? PosColors.accent : PosColors.textSecondary,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.notoSansKr(
+                  color: isSelected ? PosColors.text : PosColors.textSecondary,
+                  fontSize: 13.5,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                ),
+              ),
+            ),
+            if (badge != null) ...[
+              const SizedBox(width: AppSpacing.xs),
+              badge!,
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -539,252 +1646,6 @@ class _ToastMetricCell extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Wave 1.6 caller-supplied item for [ToastSidebarPanel].
-///
-/// Distinct from `ToastSidebarItem` in `toast_sidebar.dart` (which is
-/// consumed by the full-shell `ToastSidebar` orchestrator). This item
-/// shape is rail-only and accepts the fields the stash photo-ops
-/// shell passes today: `icon`, `label`, optional `sectionLabel`,
-/// optional `helperLabel`, optional `badge`, optional `onTap`, optional
-/// `itemKey`.
-class ToastSidebarPanelItem {
-  const ToastSidebarPanelItem({
-    required this.icon,
-    required this.label,
-    this.sectionLabel,
-    this.helperLabel,
-    this.badge,
-    this.onTap,
-    this.itemKey,
-  });
-
-  final IconData icon;
-  final String label;
-
-  /// Section header rendered above this item. Stash-era shells use this
-  /// to group navigation entries without a wrapping `ToastSidebarGroup`.
-  final String? sectionLabel;
-
-  /// Secondary helper text rendered under the label. Stored for future
-  /// renderers; today's `_PanelRailItem` does not paint it (kept slim
-  /// for the initial Wave 1.6 unblock).
-  final String? helperLabel;
-
-  /// Provider-backed badge widget (e.g. a count chip). Stored for
-  /// future renderers; today's `_PanelRailItem` does not paint it.
-  final Widget? badge;
-
-  final VoidCallback? onTap;
-  final Key? itemKey;
-}
-
-/// Wave 1.6 rail-only sibling of the full-shell `ToastSidebar` in
-/// `toast_sidebar.dart`.
-///
-/// Use [ToastSidebarPanel] when you need just a sidebar column to slot
-/// into another shell (e.g. `ToastShell.sidebar`); use `ToastSidebar`
-/// when you need the orchestrator that also renders a body and topbar.
-///
-/// Renders a fixed-width `Container` with a title row, an optional
-/// `subtitle`, a scrollable list of items (with optional section
-/// headers above each item), and optional `bottomItems` pinned at the
-/// foot. Rendering style mirrors PR #43's `_SidebarRail` in
-/// `web_sidebar_layout.dart` so the visual surface remains consistent.
-class ToastSidebarPanel extends StatelessWidget {
-  const ToastSidebarPanel({
-    super.key,
-    required this.title,
-    this.subtitle,
-    required this.items,
-    required this.selectedIndex,
-    required this.onItemSelected,
-    this.leading,
-    this.bottomItems,
-  });
-
-  final String title;
-  final String? subtitle;
-  final List<ToastSidebarPanelItem> items;
-  final int selectedIndex;
-  final ValueChanged<int> onItemSelected;
-  final Widget? leading;
-  final List<ToastSidebarPanelItem>? bottomItems;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: ToastShellTokens.sidebarWidth,
-      decoration: BoxDecoration(
-        color: PosColors.surface,
-        border: Border(
-          right: BorderSide(
-            color: PosColors.border,
-            width: ToastShellTokens.borderWidth,
-          ),
-        ),
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
-            alignment: Alignment.centerLeft,
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: PosColors.border)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    if (leading != null) ...[
-                      leading!,
-                      const SizedBox(width: 8),
-                    ],
-                    Expanded(
-                      child: Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.notoSansKr(
-                          color: PosColors.text,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.4,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                if (subtitle != null && subtitle!.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.notoSansKr(
-                      color: PosColors.textSecondary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.6,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: items.length,
-              itemBuilder: (context, index) {
-                final item = items[index];
-                final isSelected = selectedIndex == index;
-                final header = item.sectionLabel;
-                final nav = _PanelRailItem(
-                  key: item.itemKey,
-                  icon: item.icon,
-                  label: item.label,
-                  isSelected: isSelected,
-                  onTap: item.onTap ?? () => onItemSelected(index),
-                );
-                if (header == null || header.isEmpty) return nav;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        16,
-                        index == 0 ? 4 : 14,
-                        16,
-                        6,
-                      ),
-                      child: Text(
-                        header.toUpperCase(),
-                        style: GoogleFonts.notoSansKr(
-                          color: PosColors.textMuted,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                    ),
-                    nav,
-                  ],
-                );
-              },
-            ),
-          ),
-          if (bottomItems != null && bottomItems!.isNotEmpty) ...[
-            Container(height: 1, color: PosColors.border),
-            ...bottomItems!.map(
-              (item) => _PanelRailItem(
-                icon: item.icon,
-                label: item.label,
-                isSelected: false,
-                onTap: item.onTap ?? () {},
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _PanelRailItem extends StatelessWidget {
-  const _PanelRailItem({
-    super.key,
-    required this.icon,
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
-        vertical: 2,
-      ),
-      child: PosListRow(
-        selected: isSelected,
-        minHeight: ToastShellTokens.navItemHeight,
-        onTap: onTap,
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 17,
-              color: isSelected ? PosColors.accent : PosColors.textMuted,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.notoSansKr(
-                  color: isSelected ? PosColors.text : PosColors.textSecondary,
-                  fontSize: 13,
-                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
