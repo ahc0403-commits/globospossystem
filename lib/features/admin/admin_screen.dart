@@ -14,7 +14,6 @@ import '../../widgets/offline_banner.dart';
 import '../../core/utils/permission_utils.dart';
 import '../auth/auth_provider.dart';
 import 'tabs/attendance_tab.dart';
-import 'tabs/inventory_tab.dart';
 import 'tabs/menu_tab.dart';
 import 'tabs/qc_tab.dart';
 import 'tabs/reports_tab.dart';
@@ -23,6 +22,7 @@ import 'tabs/staff_tab.dart';
 import 'tabs/tables_tab.dart';
 import '../delivery/screens/delivery_settlement_tab.dart';
 import 'tabs/einvoice_tab.dart';
+import '../inventory_purchase/inventory_purchase_screen.dart';
 
 class AdminScreen extends ConsumerStatefulWidget {
   const AdminScreen({
@@ -52,8 +52,9 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   Widget build(BuildContext context) {
     final isSuperAdminView = widget.overrideRestaurantId != null;
     final role = ref.watch(authProvider).role;
+    final width = MediaQuery.sizeOf(context).width;
 
-    if (PlatformInfo.isWebOrDesktop) {
+    if (PlatformInfo.isWebOrDesktop && width >= 720) {
       return _buildWebDesktopLayout(context, isSuperAdminView, role);
     }
 
@@ -67,7 +68,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       const StaffTab(),
       const ReportsTab(),
       const AttendanceTab(),
-      const InventoryTab(),
+      const InventoryPurchaseScreen(),
       const QcTab(),
       const SettingsTab(),
     ];

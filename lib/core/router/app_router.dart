@@ -14,6 +14,7 @@ import '../../features/photo_ops/photo_ops_screen.dart';
 import '../../features/payment/payment_detail_screen.dart';
 import '../../features/attendance/attendance_kiosk_screen.dart';
 import '../../features/qc/qc_check_screen.dart';
+import '../../features/qc/qc_review_screen.dart';
 import '../../features/super_admin/super_admin_screen.dart';
 import '../../features/waiter/waiter_screen.dart';
 
@@ -117,7 +118,8 @@ GoRouter buildAppRouter(ProviderContainer container) {
         return redirectTo;
       }
 
-      if (location == '/photo-ops' && !PermissionUtils.canAccessPhotoOps(role)) {
+      if (location == '/photo-ops' &&
+          !PermissionUtils.canAccessPhotoOps(role)) {
         redirectTo = homeRoute;
         NavigationHistoryService.instance.push(redirectTo);
         return redirectTo;
@@ -145,6 +147,13 @@ GoRouter buildAppRouter(ProviderContainer container) {
         return redirectTo;
       }
 
+      if (location == '/qc-review' &&
+          !PermissionUtils.canDoQcVisitReview(role, auth.extraPermissions)) {
+        redirectTo = homeRoute;
+        NavigationHistoryService.instance.push(redirectTo);
+        return redirectTo;
+      }
+
       NavigationHistoryService.instance.push(fullLocation);
       return null;
     },
@@ -162,6 +171,7 @@ GoRouter buildAppRouter(ProviderContainer container) {
         builder: (_, __) => const AttendanceKioskScreen(),
       ),
       GoRoute(path: '/qc-check', builder: (_, __) => const QcCheckScreen()),
+      GoRoute(path: '/qc-review', builder: (_, __) => const QcReviewScreen()),
       GoRoute(path: '/photo-ops', builder: (_, __) => const PhotoOpsScreen()),
       GoRoute(
         path: '/payments/:paymentId',

@@ -975,37 +975,48 @@ class PosActionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return ToastWorkSurface(
       padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final body = constraints.hasBoundedHeight
+              ? Expanded(child: child)
+              : child;
+
+          return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: Theme.of(context).textTheme.titleLarge),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle!,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ],
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle!,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (badge != null) badge!,
+                ],
               ),
-              if (badge != null) badge!,
+              const SizedBox(height: 16),
+              body,
+              if (action != null) ...[
+                const SizedBox(height: 16),
+                SizedBox(width: double.infinity, child: action!),
+              ],
             ],
-          ),
-          const SizedBox(height: 16),
-          Expanded(child: child),
-          if (action != null) ...[
-            const SizedBox(height: 16),
-            SizedBox(width: double.infinity, child: action!),
-          ],
-        ],
+          );
+        },
       ),
     );
   }

@@ -46,7 +46,9 @@ class AppNavBar extends ConsumerWidget {
       }
     }
     final l10n = context.l10n;
-    final compactLanguageSwitcher = MediaQuery.sizeOf(context).width < 1180;
+    final width = MediaQuery.sizeOf(context).width;
+    final veryCompact = width < 520;
+    final compactLanguageSwitcher = width < 1180;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -64,18 +66,6 @@ class AppNavBar extends ConsumerWidget {
         ),
         const SizedBox(width: 6),
         _NavButton(
-          icon: Icons.arrow_forward_ios_rounded,
-          tooltip: l10n.forward,
-          enabled: nav.canGoForward,
-          onTap: () {
-            final next = nav.goForward();
-            if (next != null) {
-              context.go(next);
-            }
-          },
-        ),
-        const SizedBox(width: 6),
-        _NavButton(
           icon: Icons.home_rounded,
           tooltip: l10n.home,
           enabled: !isHome,
@@ -84,7 +74,21 @@ class AppNavBar extends ConsumerWidget {
             context.go(homeRoute);
           },
         ),
-        if (authState.accessibleStores.length > 1) ...[
+        if (!veryCompact) ...[
+          const SizedBox(width: 6),
+          _NavButton(
+            icon: Icons.arrow_forward_ios_rounded,
+            tooltip: l10n.forward,
+            enabled: nav.canGoForward,
+            onTap: () {
+              final next = nav.goForward();
+              if (next != null) {
+                context.go(next);
+              }
+            },
+          ),
+        ],
+        if (!veryCompact && authState.accessibleStores.length > 1) ...[
           const SizedBox(width: 10),
           _StoreSwitcher(
             value: authState.storeId,
@@ -92,12 +96,14 @@ class AppNavBar extends ConsumerWidget {
             onChanged: (storeId) =>
                 ref.read(authProvider.notifier).setActiveStore(storeId),
           ),
-        ] else if (activeStore != null) ...[
+        ] else if (!veryCompact && activeStore != null) ...[
           const SizedBox(width: 10),
           _StorePill(store: activeStore),
         ],
-        const SizedBox(width: 10),
-        LanguageSwitcher(compact: compactLanguageSwitcher),
+        if (!veryCompact) ...[
+          const SizedBox(width: 10),
+          LanguageSwitcher(compact: compactLanguageSwitcher),
+        ],
       ],
     );
   }

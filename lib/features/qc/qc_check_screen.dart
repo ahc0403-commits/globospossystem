@@ -78,6 +78,11 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
       draft.photoRequiredCount = _readInt(check['photo_required_count']);
       draft.svReviewStatus = check['sv_review_status']?.toString();
       draft.grade = check['grade']?.toString();
+      draft.completed =
+          draft.submissionStatus == 'submitted' ||
+          draft.result != null ||
+          draft.attachedPhotoCount > 0 ||
+          draft.noteController.text.trim().isNotEmpty;
     }
 
     _didPrepopulate = true;
@@ -127,7 +132,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
 
     final toSubmit = <MapEntry<String, _CheckDraft>>[];
     for (final entry in _drafts.entries) {
-      if (entry.value.result == null) continue;
+      if (!entry.value.hasInput) continue;
       toSubmit.add(entry);
     }
 
@@ -150,7 +155,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
       if (requiresPhoto && attachedPhotoCount < requiredPhotoCount) {
         showErrorToast(
           context,
-          '$templateName: photo evidence is required before saving.',
+          context.l10n.qscPhotoRequiredBeforeSaving(templateName),
         );
         return;
       }
@@ -170,7 +175,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
           storeId: storeId,
           templateId: entry.key,
           checkDate: checkDate,
-          result: entry.value.result!,
+          result: entry.value.result ?? 'na',
           evidencePhoto: localFiles.isNotEmpty ? localFiles.first : null,
           evidencePhotos: localFiles.isNotEmpty ? localFiles : null,
           evidencePhotoUrl: localFiles.isEmpty ? existingPhotoUrl : null,
@@ -248,6 +253,8 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
           t['category']?.toString() ?? context.l10n.qcCategoryOther;
       grouped.putIfAbsent(category, () => []).add(t);
     }
+    final isInitialTemplateLoad =
+        templateState.isLoading && templateState.templates.isEmpty;
 
     return Scaffold(
       backgroundColor: PosColors.canvas,
@@ -291,12 +298,12 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
           ],
         ),
       ),
-      body: templateState.isLoading || checkState.isLoading
+      body: isInitialTemplateLoad
           ? const Center(
               child: CircularProgressIndicator(color: PosColors.accent),
             )
           : ToastResponsiveScrollBody(
-              maxWidth: 1180,
+              maxWidth: 760,
               children: [
                 ToastWorkSurface(
                   padding: const EdgeInsets.all(16),
@@ -320,6 +327,17 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                           height: 1.4,
                         ),
                       ),
+                      if (checkState.isLoading) ...[
+                        const SizedBox(height: 10),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(99),
+                          child: const LinearProgressIndicator(
+                            minHeight: 3,
+                            backgroundColor: PosColors.border,
+                            color: PosColors.accent,
+                          ),
+                        ),
+                      ],
                       if (templateState.error != null) ...[
                         const SizedBox(height: 10),
                         Text(
@@ -494,41 +512,50 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                                     ),
                                     _statusChip(
                                       requiresPhoto
-                                          ? 'Photo $requiredPhotoCount'
-                                          : 'No Photo',
+                                          ? context.l10n.qscPhotoCount(
+                                              requiredPhotoCount,
+                                            )
+                                          : context.l10n.qscNoPhoto,
                                       requiresPhoto
                                           ? PosColors.info
                                           : PosColors.textMuted,
                                     ),
                                     if (isSvRequired)
                                       _statusChip(
-                                        'SV Review',
+                                        context.l10n.qscSvRequired,
                                         PosColors.accent,
                                       ),
                                   ],
                                 ),
                                 const SizedBox(height: 10),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
+                                Row(
                                   children: [
-                                    _resultButton(
-                                      label: context.l10n.qcResultPass,
-                                      selected: draft.result == 'pass',
-                                      onTap: () =>
-                                          setState(() => draft.result = 'pass'),
+                                    Expanded(
+                                      child: Text(
+                                        draft.completed
+                                            ? context.l10n.qscInputComplete
+                                            : context.l10n.qscInputCompleteHint,
+                                        style: GoogleFonts.notoSansKr(
+                                          color: draft.completed
+                                              ? PosColors.success
+                                              : PosColors.textMuted,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
                                     ),
-                                    _resultButton(
-                                      label: context.l10n.qcResultFail,
-                                      selected: draft.result == 'fail',
-                                      onTap: () =>
-                                          setState(() => draft.result = 'fail'),
-                                    ),
-                                    _resultButton(
-                                      label: context.l10n.qcResultNa,
-                                      selected: draft.result == 'na',
-                                      onTap: () =>
-                                          setState(() => draft.result = 'na'),
+                                    const SizedBox(width: 8),
+                                    OutlinedButton.icon(
+                                      onPressed: () => setState(
+                                        () =>
+                                            draft.completed = !draft.completed,
+                                      ),
+                                      icon: Icon(
+                                        draft.completed
+                                            ? Icons.check_circle
+                                            : Icons.radio_button_unchecked,
+                                      ),
+                                      label: Text(context.l10n.complete),
                                     ),
                                   ],
                                 ),
@@ -706,37 +733,6 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
     );
   }
 
-  Widget _resultButton({
-    required String label,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected
-              ? PosColors.accent.withValues(alpha: 0.20)
-              : PosColors.canvas,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: selected ? PosColors.accent : PosColors.border,
-          ),
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.notoSansKr(
-            color: selected ? PosColors.accent : PosColors.textMuted,
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _statusChip(String label, Color color) {
     return ToastStatusBadge(label: label, color: color);
   }
@@ -885,6 +881,7 @@ class _CheckDraft {
   _CheckDraft();
 
   String? result;
+  bool completed = false;
   final List<XFile> photoFiles = [];
   String? existingPhotoUrl;
   String? submissionStatus;
@@ -907,4 +904,10 @@ class _CheckDraft {
       photoRequiredCount != null ||
       svReviewStatus != null ||
       (grade != null && grade!.isNotEmpty);
+
+  bool get hasInput =>
+      completed ||
+      photoFiles.isNotEmpty ||
+      existingPhotoUrl != null ||
+      noteController.text.trim().isNotEmpty;
 }

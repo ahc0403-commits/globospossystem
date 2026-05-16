@@ -33,7 +33,7 @@ class PermissionUtils {
       hasPermission(role, extraPermissions, 'qc_check');
 
   static bool canDoQcVisitReview(String? role, List<String> extraPermissions) =>
-      isAdminLike(role) || extraPermissions.contains('qc_check');
+      isAdminLike(role) || extraPermissions.contains('qc_visit_review');
 
   static bool canDoInventoryCount(
     String? role,

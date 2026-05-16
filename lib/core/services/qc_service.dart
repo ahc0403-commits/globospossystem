@@ -99,12 +99,30 @@ class QcService {
         'evidence_photo_url': map['evidence_photo_url'],
         'note': map['note'],
         'created_at': map['created_at'],
+        'submitted_at': map['submitted_at'],
+        'submission_status': map['submission_status'],
+        'photo_required_count': map['photo_required_count'],
+        'photo_uploaded_count': map['photo_uploaded_count'],
+        'score': map['score'],
+        'grade': map['grade'],
+        'sv_review_status': map['sv_review_status'],
+        'sv_reviewed_by': map['sv_reviewed_by'],
+        'sv_reviewed_at': map['sv_reviewed_at'],
+        'sv_score': map['sv_score'],
+        'sv_note': map['sv_note'],
+        'visit_session_id': map['visit_session_id'],
         'qc_templates': {
           'id': map['template_id'],
           'category': map['template_category'],
           'criteria_text': map['template_criteria_text'],
           'criteria_photo_url': map['template_criteria_photo_url'],
           'is_global': map['template_is_global'],
+          'qsc_domain': map['template_qsc_domain'],
+          'requires_photo': map['template_requires_photo'],
+          'required_photo_count': map['template_required_photo_count'],
+          'weight': map['template_weight'],
+          'sort_group': map['template_sort_group'],
+          'is_sv_required': map['template_is_sv_required'],
         },
       };
     }).toList();
@@ -270,9 +288,9 @@ class QcService {
         .order('check_date', ascending: false)
         .order('created_at', ascending: false);
 
-    return List<Map<String, dynamic>>.from(result as List)
-        .map((row) => Map<String, dynamic>.from(row))
-        .toList();
+    return List<Map<String, dynamic>>.from(
+      result as List,
+    ).map((row) => Map<String, dynamic>.from(row)).toList();
   }
 
   Future<Map<String, dynamic>> upsertCheckV2({
