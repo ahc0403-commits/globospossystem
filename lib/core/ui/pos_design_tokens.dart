@@ -8,31 +8,34 @@ import 'package:flutter/material.dart';
 /// `PosColors` / `PosMetrics` / `PosShadows` namespaces required by upcoming
 /// Toast-style screens.
 class ToastColorTokens {
-  static const canvas = Color(0xFFF7F8FA);
-  static const canvasAlt = Color(0xFFEFF2F5);
+  static const canvas = Color(0xFFF5F7FA);
+  static const canvasAlt = Color(0xFFF8FAFC);
   static const surface = Color(0xFFFFFFFF);
   static const elevatedSurface = Color(0xFFFFFFFF);
-  static const mutedSurface = Color(0xFFF1F3F5);
-  static const selectedRow = Color(0xFFFFF1EA);
-  static const disabledSurface = Color(0xFFE7EAEE);
-  static const border = Color(0xFFD9DEE5);
-  static const borderStrong = Color(0xFFB6BEC9);
-  static const focusBorder = Color(0xFFE25D2A);
+  static const mutedSurface = Color(0xFFF8FAFC);
+  static const sidebarSurface = Color(0xFFFFFFFF);
+  static const topbarSurface = Color(0xFFFFFFFF);
+  static const heroTint = Color(0xFFEEF5FF);
+  static const selectedRow = Color(0xFFEEF5FF);
+  static const disabledSurface = Color(0xFFEEF2F7);
+  static const border = Color(0xFFE5E7EB);
+  static const borderStrong = Color(0xFFCBD5E1);
+  static const focusBorder = Color(0xFF2563EB);
   static const divider = border;
-  static const textPrimary = Color(0xFF1D232B);
-  static const textSecondary = Color(0xFF4E5866);
-  static const textMuted = Color(0xFF7B8491);
-  static const accent = Color(0xFFE45F2B);
-  static const accentStrong = Color(0xFFC54D20);
-  static const accentMuted = Color(0xFFFFEDE6);
-  static const success = Color(0xFF127A55);
-  static const successMuted = Color(0xFFE7F5EF);
-  static const warning = Color(0xFFB4610F);
-  static const warningMuted = Color(0xFFFFF1D6);
-  static const danger = Color(0xFFB4322B);
-  static const dangerMuted = Color(0xFFFCE8E6);
-  static const info = Color(0xFF236BC3);
-  static const infoMuted = Color(0xFFE9F1FF);
+  static const textPrimary = Color(0xFF111827);
+  static const textSecondary = Color(0xFF6B7280);
+  static const textMuted = Color(0xFF94A3B8);
+  static const accent = Color(0xFF2563EB);
+  static const accentStrong = Color(0xFF1D4ED8);
+  static const accentMuted = Color(0xFFDBEAFE);
+  static const success = Color(0xFF059669);
+  static const successMuted = Color(0xFFECFDF5);
+  static const warning = Color(0xFFD97706);
+  static const warningMuted = Color(0xFFFFF7ED);
+  static const danger = Color(0xFFDC2626);
+  static const dangerMuted = Color(0xFFFEF2F2);
+  static const info = Color(0xFF0284C7);
+  static const infoMuted = Color(0xFFE0F2FE);
 }
 
 class ToastStatusTokens {
@@ -68,29 +71,29 @@ class ToastSpacingTokens {
 }
 
 class ToastRadiusTokens {
-  static const BorderRadius xs = BorderRadius.all(Radius.circular(3));
-  static const BorderRadius sm = BorderRadius.all(Radius.circular(4));
-  static const BorderRadius md = BorderRadius.all(Radius.circular(6));
-  static const BorderRadius lg = BorderRadius.all(Radius.circular(8));
-  static const BorderRadius xl = BorderRadius.all(Radius.circular(10));
+  static const BorderRadius xs = BorderRadius.all(Radius.circular(8));
+  static const BorderRadius sm = BorderRadius.all(Radius.circular(10));
+  static const BorderRadius md = BorderRadius.all(Radius.circular(14));
+  static const BorderRadius lg = BorderRadius.all(Radius.circular(16));
+  static const BorderRadius xl = BorderRadius.all(Radius.circular(20));
   static const BorderRadius pill = BorderRadius.all(Radius.circular(999));
 }
 
 class ToastElevationTokens {
   static const none = <BoxShadow>[];
   static const low = <BoxShadow>[
-    BoxShadow(color: Color(0x05000000), blurRadius: 6, offset: Offset(0, 1)),
+    BoxShadow(color: Color(0x0F0F172A), blurRadius: 24, offset: Offset(0, 10)),
   ];
   static const medium = <BoxShadow>[
-    BoxShadow(color: Color(0x08000000), blurRadius: 10, offset: Offset(0, 3)),
+    BoxShadow(color: Color(0x120F172A), blurRadius: 32, offset: Offset(0, 14)),
   ];
 }
 
 class ToastShellTokens {
-  static const double sidebarWidth = 232;
+  static const double sidebarWidth = 212;
   static const double sidebarCompactWidth = 68;
   static const double topbarHeight = 56;
-  static const double navItemHeight = 36;
+  static const double navItemHeight = 46;
   static const double workSurfacePadding = ToastSpacingTokens.lg;
   static const double borderWidth = 1;
   static const double focusBorderWidth = 1.5;
@@ -102,6 +105,9 @@ class PosColors {
   static const background = canvas;
   static const canvasAlt = ToastColorTokens.canvasAlt;
   static const surface = ToastColorTokens.surface;
+  static const sidebarSurface = ToastColorTokens.sidebarSurface;
+  static const topbarSurface = ToastColorTokens.topbarSurface;
+  static const heroTint = ToastColorTokens.heroTint;
   static const panel = ToastColorTokens.surface;
   static const panelMuted = ToastColorTokens.mutedSurface;
   static const panelStrong = surface;
@@ -115,7 +121,9 @@ class PosColors {
   static const divider = border;
   static const text = ToastColorTokens.textPrimary;
   static const textPrimary = text;
+  static const primaryText = text;
   static const textSecondary = ToastColorTokens.textSecondary;
+  static const secondaryText = textSecondary;
   static const textMuted = ToastColorTokens.textMuted;
   static const accent = ToastColorTokens.accent;
   static const accentStrong = ToastColorTokens.accentStrong;
@@ -150,8 +158,8 @@ class PosColors {
 }
 
 class PosShadows {
-  static const low = ToastElevationTokens.none;
-  static const raised = ToastElevationTokens.low;
+  static const low = ToastElevationTokens.low;
+  static const raised = ToastElevationTokens.medium;
 }
 
 class PosMetrics {
@@ -165,4 +173,32 @@ class PosMetrics {
   static const double topBarHeight = ToastShellTokens.topbarHeight;
   static const double panelBorderWidth = ToastShellTokens.borderWidth;
   static const double focusBorderWidth = ToastShellTokens.focusBorderWidth;
+}
+
+class PosSurfaceTints {
+  const PosSurfaceTints._();
+
+  static Color tone(
+    Color color, {
+    double alpha = 0.08,
+    Color base = ToastColorTokens.surface,
+  }) {
+    return Color.alphaBlend(color.withValues(alpha: alpha), base);
+  }
+
+  static LinearGradient liftedGradient(Color baseColor) {
+    return LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        Color.alphaBlend(Colors.white.withValues(alpha: 0.38), baseColor),
+        baseColor,
+        Color.alphaBlend(
+          ToastColorTokens.canvas.withValues(alpha: 0.05),
+          baseColor,
+        ),
+      ],
+      stops: const [0, 0.58, 1],
+    );
+  }
 }

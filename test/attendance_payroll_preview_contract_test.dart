@@ -14,20 +14,26 @@ void main() {
     );
     final pinService = readRepoFile('lib/core/services/pin_service.dart');
 
-    expect(attendanceTab, contains('Preview Payroll'));
-    expect(attendanceTab, contains('Export Payroll'));
-    expect(attendanceTab, contains('Payroll Preview'));
     expect(
       attendanceTab,
-      contains('Read-only estimate for the selected attendance period.'),
+      contains('title: context.l10n.attendanceManagementTitle'),
     );
-    expect(attendanceTab, contains('Unlock Payroll'));
     expect(
       attendanceTab,
-      contains('Payroll preview is locked by the current payroll PIN.'),
+      contains('label: context.l10n.payrollPreview'),
     );
+    expect(
+      attendanceTab,
+      contains('label: context.l10n.download'),
+    );
+    expect(
+      attendanceTab,
+      contains('title: context.l10n.attendancePayrollSummaryTitle'),
+    );
+    expect(attendanceTab, contains('PosSplitContent('));
+    expect(attendanceTab, contains('PosTableShell('));
     expect(attendanceTab, contains('pinService.verifyPin('));
-    expect(attendanceTab, contains('Unpaired shift'));
+    expect(attendanceTab, contains('record.isUnpaired'));
     expect(attendanceTab, contains('payrollService.calculatePayroll('));
     expect(attendanceTab, contains('payrollService.exportToExcel('));
 

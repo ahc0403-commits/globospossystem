@@ -13,6 +13,8 @@ void main() {
       'supabase/migrations/20260506002000_inventory_purchase_pos_native_access_fix.sql';
   const receiptObservabilityPath =
       'supabase/migrations/20260513010000_inventory_receiving_idempotency_observability.sql';
+  const recommendationAdjustmentPath =
+      'supabase/migrations/20260515090000_inventory_recommendation_adjustments.sql';
 
   test(
     'inventory purchase migration defines separate Office-reviewable domain',
@@ -465,6 +467,97 @@ void main() {
       expect(sql, contains('public.can_access_inventory_purchase_store'));
       expect(sql, isNot(contains('office_purchases')));
       expect(sql, isNot(contains('accounting.purchase_requests')));
+    },
+  );
+
+  test(
+    'inventory purchase repeat POS order duplicates an existing inventory order',
+    () {
+      final sql = readRepoFile(
+        'supabase/migrations/20260515100000_inventory_repeat_purchase_order.sql',
+      );
+
+      expect(
+        sql,
+        contains(
+          'CREATE OR REPLACE FUNCTION public.create_repeat_inventory_purchase_order',
+        ),
+      );
+      expect(sql, contains('p_source_purchase_order_id UUID'));
+      expect(sql, contains('SELECT *'));
+      expect(sql, contains('FROM public.inventory_purchase_orders'));
+      expect(sql, contains('INSERT INTO public.inventory_purchase_orders'));
+      expect(
+        sql,
+        contains('INSERT INTO public.inventory_purchase_order_lines'),
+      );
+      expect(sql, contains("'repeat'"));
+      expect(sql, contains("'repeat_pos'"));
+      expect(sql, contains("'pos'"));
+      expect(sql, contains('public.can_access_inventory_purchase_store'));
+      expect(
+        sql,
+        contains('public.recalculate_inventory_purchase_order_totals'),
+      );
+      expect(
+        sql,
+        contains(
+          'GRANT EXECUTE ON FUNCTION public.create_repeat_inventory_purchase_order(UUID, DATE, TEXT)',
+        ),
+      );
+      expect(sql, isNot(contains('office_purchases')));
+      expect(sql, isNot(contains('accounting.purchase_requests')));
+    },
+  );
+
+  test(
+    'inventory recommendation adjustments stay POS-owned before order creation',
+    () {
+      final sql = readRepoFile(recommendationAdjustmentPath);
+
+      expect(
+        sql,
+        contains('ALTER TABLE public.inventory_recommendation_lines'),
+      );
+      expect(sql, contains('adjusted_order_units'));
+      expect(sql, contains('adjusted_quantity_base'));
+      expect(sql, contains('adjustment_memo'));
+      expect(
+        sql,
+        contains(
+          'CREATE OR REPLACE FUNCTION public.update_inventory_recommendation_line_adjustment',
+        ),
+      );
+      expect(sql, contains('public.can_access_inventory_purchase_store'));
+      expect(
+        sql,
+        contains('COALESCE(adjusted_order_units, recommended_order_units) > 0'),
+      );
+      expect(
+        sql,
+        contains(
+          'COALESCE(rl.adjusted_order_units, rl.recommended_order_units) AS effective_order_units',
+        ),
+      );
+      expect(
+        sql,
+        contains(
+          'adjusted.effective_order_units * isi.order_unit_quantity_base',
+        ),
+      );
+      expect(
+        sql,
+        contains("'adjusted_order_units', adjusted.adjusted_order_units"),
+      );
+      expect(
+        sql,
+        contains(
+          'GRANT EXECUTE ON FUNCTION public.update_inventory_recommendation_line_adjustment(UUID, NUMERIC, TEXT)',
+        ),
+      );
+      expect(sql, isNot(contains('office_purchases')));
+      expect(sql, isNot(contains('accounting.purchase_requests')));
+      expect(sql, isNot(contains('office_approve_inventory_purchase_order')));
     },
   );
 

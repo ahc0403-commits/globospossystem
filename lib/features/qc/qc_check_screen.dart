@@ -78,6 +78,11 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
       draft.photoRequiredCount = _readInt(check['photo_required_count']);
       draft.svReviewStatus = check['sv_review_status']?.toString();
       draft.grade = check['grade']?.toString();
+      draft.completed =
+          draft.submissionStatus == 'submitted' ||
+          draft.result != null ||
+          draft.attachedPhotoCount > 0 ||
+          draft.noteController.text.trim().isNotEmpty;
     }
 
     _didPrepopulate = true;
@@ -127,7 +132,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
 
     final toSubmit = <MapEntry<String, _CheckDraft>>[];
     for (final entry in _drafts.entries) {
-      if (entry.value.result == null) continue;
+      if (!entry.value.hasInput) continue;
       toSubmit.add(entry);
     }
 
@@ -150,7 +155,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
       if (requiresPhoto && attachedPhotoCount < requiredPhotoCount) {
         showErrorToast(
           context,
-          '$templateName: photo evidence is required before saving.',
+          context.l10n.qscPhotoRequiredBeforeSaving(templateName),
         );
         return;
       }
@@ -170,7 +175,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
           storeId: storeId,
           templateId: entry.key,
           checkDate: checkDate,
-          result: entry.value.result!,
+          result: entry.value.result ?? 'na',
           evidencePhoto: localFiles.isNotEmpty ? localFiles.first : null,
           evidencePhotos: localFiles.isNotEmpty ? localFiles : null,
           evidencePhotoUrl: localFiles.isEmpty ? existingPhotoUrl : null,
@@ -248,12 +253,15 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
           t['category']?.toString() ?? context.l10n.qcCategoryOther;
       grouped.putIfAbsent(category, () => []).add(t);
     }
+    final isInitialTemplateLoad =
+        templateState.isLoading && templateState.templates.isEmpty;
 
     return Scaffold(
       backgroundColor: PosColors.canvas,
       appBar: AppBar(
-        backgroundColor: PosColors.canvas,
-        elevation: 0,
+        backgroundColor: PosColors.topbarSurface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 1,
         actions: [
           if (canReview)
             IconButton(
@@ -290,351 +298,414 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
           ],
         ),
       ),
-      body: templateState.isLoading || checkState.isLoading
+      body: isInitialTemplateLoad
           ? const Center(
               child: CircularProgressIndicator(color: PosColors.accent),
             )
-          : ListView(
-              padding: const EdgeInsets.all(16),
+          : ToastResponsiveScrollBody(
+              maxWidth: 760,
               children: [
-                Text(
-                  context.l10n.qcScopeHint,
-                  style: GoogleFonts.notoSansKr(
-                    color: PosColors.textMuted,
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                if (templateState.error != null) ...[
-                  Text(
-                    templateState.error!,
-                    style: GoogleFonts.notoSansKr(
-                      color: PosColors.danger,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                ],
-                if (checkState.error != null) ...[
-                  Text(
-                    checkState.error!,
-                    style: GoogleFonts.notoSansKr(
-                      color: PosColors.danger,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                ],
-                for (final category in grouped.keys) ...[
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: PosColors.accent.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 4,
-                          height: 16,
-                          color: PosColors.accent,
+                ToastWorkSurface(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.l10n.qcTitle,
+                        style: GoogleFonts.notoSansKr(
+                          color: PosColors.text,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          category,
-                          style: GoogleFonts.notoSansKr(
-                            color: PosColors.text,
-                            fontWeight: FontWeight.w700,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${DateFormat('yyyy-MM-dd').format(_todayVn)} · ${context.l10n.qcScopeHint}',
+                        style: GoogleFonts.notoSansKr(
+                          color: PosColors.textMuted,
+                          fontSize: 12,
+                          height: 1.4,
+                        ),
+                      ),
+                      if (checkState.isLoading) ...[
+                        const SizedBox(height: 10),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(99),
+                          child: const LinearProgressIndicator(
+                            minHeight: 3,
+                            backgroundColor: PosColors.border,
+                            color: PosColors.accent,
                           ),
                         ),
                       ],
-                    ),
+                      if (templateState.error != null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          templateState.error!,
+                          style: GoogleFonts.notoSansKr(
+                            color: PosColors.danger,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                      if (checkState.error != null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          checkState.error!,
+                          style: GoogleFonts.notoSansKr(
+                            color: PosColors.danger,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                  ...grouped[category]!.map((template) {
-                    final templateId = template['id']?.toString() ?? '';
-                    final draft = _drafts.putIfAbsent(
-                      templateId,
-                      () => _CheckDraft(),
-                    );
-                    final criteriaPhotoUrl = template['criteria_photo_url']
-                        ?.toString();
-                    final qscDomain = template['qsc_domain']?.toString();
-                    final requiresPhoto = template['requires_photo'] != false;
-                    final requiredPhotoCount =
-                        template['required_photo_count'] is num
-                        ? (template['required_photo_count'] as num).toInt()
-                        : (requiresPhoto ? 1 : 0);
-                    final isSvRequired = template['is_sv_required'] == true;
-
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: PosColors.panelStrong,
-                        borderRadius: ToastRadiusTokens.xs,
-                        border: Border.all(color: PosColors.border),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                ),
+                const SizedBox(height: 12),
+                for (final category in grouped.keys) ...[
+                  ToastWorkSurface(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: PosColors.accent.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
                             children: [
-                              const Icon(
-                                Icons.assignment_outlined,
+                              Container(
+                                width: 4,
+                                height: 16,
                                 color: PosColors.accent,
-                                size: 16,
                               ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  template['criteria_text']?.toString() ?? '-',
-                                  style: GoogleFonts.notoSansKr(
-                                    color: PosColors.text,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 15,
-                                  ),
+                              const SizedBox(width: 8),
+                              Text(
+                                category,
+                                style: GoogleFonts.notoSansKr(
+                                  color: PosColors.text,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 10),
-                          if (criteriaPhotoUrl != null &&
-                              criteriaPhotoUrl.isNotEmpty)
-                            GestureDetector(
-                              onTap: () => _showImageDialog(criteriaPhotoUrl),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: PosColors.accent.withValues(
-                                      alpha: 0.5,
-                                    ),
-                                  ),
-                                ),
-                                child: Column(
+                        ),
+                        const SizedBox(height: 12),
+                        ...grouped[category]!.map((template) {
+                          final templateId = template['id']?.toString() ?? '';
+                          final draft = _drafts.putIfAbsent(
+                            templateId,
+                            () => _CheckDraft(),
+                          );
+                          final criteriaPhotoUrl =
+                              template['criteria_photo_url']?.toString();
+                          final qscDomain = template['qsc_domain']?.toString();
+                          final requiresPhoto =
+                              template['requires_photo'] != false;
+                          final requiredPhotoCount =
+                              template['required_photo_count'] is num
+                              ? (template['required_photo_count'] as num)
+                                    .toInt()
+                              : (requiresPhoto ? 1 : 0);
+                          final isSvRequired =
+                              template['is_sv_required'] == true;
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: PosColors.panelStrong,
+                              borderRadius: ToastRadiusTokens.xs,
+                              border: Border.all(color: PosColors.border),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
                                   children: [
-                                    ClipRRect(
-                                      borderRadius: const BorderRadius.vertical(
-                                        top: Radius.circular(8),
-                                      ),
-                                      child: Image.network(
-                                        criteriaPhotoUrl,
-                                        height: 100,
-                                        width: double.infinity,
-                                        fit: BoxFit.cover,
-                                      ),
+                                    const Icon(
+                                      Icons.assignment_outlined,
+                                      color: PosColors.accent,
+                                      size: 16,
                                     ),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 4,
-                                      ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
                                       child: Text(
-                                        context.l10n.qcReferencePhoto,
+                                        template['criteria_text']?.toString() ??
+                                            '-',
                                         style: GoogleFonts.notoSansKr(
-                                          color: PosColors.accent,
-                                          fontSize: 11,
+                                          color: PosColors.text,
                                           fontWeight: FontWeight.w700,
+                                          fontSize: 15,
                                         ),
                                       ),
                                     ),
                                   ],
                                 ),
-                              ),
-                            ),
-                          const SizedBox(height: 10),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              _statusChip(
-                                switch (qscDomain) {
-                                  'service' => 'S',
-                                  'cleanliness' => 'C',
-                                  _ => 'Q',
-                                },
-                                switch (qscDomain) {
-                                  'service' => PosColors.info,
-                                  'cleanliness' => PosColors.warning,
-                                  _ => PosColors.info,
-                                },
-                              ),
-                              _statusChip(
-                                requiresPhoto
-                                    ? 'Photo $requiredPhotoCount'
-                                    : 'No Photo',
-                                requiresPhoto
-                                    ? PosColors.info
-                                    : PosColors.textMuted,
-                              ),
-                              if (isSvRequired)
-                                _statusChip('SV Review', PosColors.accent),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              _resultButton(
-                                label: context.l10n.qcResultPass,
-                                selected: draft.result == 'pass',
-                                onTap: () =>
-                                    setState(() => draft.result = 'pass'),
-                              ),
-                              _resultButton(
-                                label: context.l10n.qcResultFail,
-                                selected: draft.result == 'fail',
-                                onTap: () =>
-                                    setState(() => draft.result = 'fail'),
-                              ),
-                              _resultButton(
-                                label: context.l10n.qcResultNa,
-                                selected: draft.result == 'na',
-                                onTap: () =>
-                                    setState(() => draft.result = 'na'),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              OutlinedButton.icon(
-                                onPressed: () => _pickEvidencePhoto(templateId),
-                                icon: const Icon(Icons.photo_camera),
-                                label: Text(context.l10n.qcAttachPhoto),
-                              ),
-                              const SizedBox(width: 8),
-                              if (draft.existingPhotoUrl != null &&
-                                  draft.photoFiles.isEmpty)
-                                GestureDetector(
-                                  onTap: () =>
-                                      _showImageDialog(draft.existingPhotoUrl!),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Image.network(
-                                      draft.existingPhotoUrl!,
-                                      width: 40,
-                                      height: 40,
-                                      fit: BoxFit.cover,
+                                const SizedBox(height: 10),
+                                if (criteriaPhotoUrl != null &&
+                                    criteriaPhotoUrl.isNotEmpty)
+                                  GestureDetector(
+                                    onTap: () =>
+                                        _showImageDialog(criteriaPhotoUrl),
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: PosColors.accent.withValues(
+                                            alpha: 0.5,
+                                          ),
+                                        ),
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          ClipRRect(
+                                            borderRadius:
+                                                const BorderRadius.vertical(
+                                                  top: Radius.circular(8),
+                                                ),
+                                            child: Image.network(
+                                              criteriaPhotoUrl,
+                                              height: 100,
+                                              width: double.infinity,
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 4,
+                                            ),
+                                            child: Text(
+                                              context.l10n.qcReferencePhoto,
+                                              style: GoogleFonts.notoSansKr(
+                                                color: PosColors.accent,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
+                                const SizedBox(height: 10),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    _statusChip(
+                                      switch (qscDomain) {
+                                        'service' => 'S',
+                                        'cleanliness' => 'C',
+                                        _ => 'Q',
+                                      },
+                                      switch (qscDomain) {
+                                        'service' => PosColors.info,
+                                        'cleanliness' => PosColors.warning,
+                                        _ => PosColors.info,
+                                      },
+                                    ),
+                                    _statusChip(
+                                      requiresPhoto
+                                          ? context.l10n.qscPhotoCount(
+                                              requiredPhotoCount,
+                                            )
+                                          : context.l10n.qscNoPhoto,
+                                      requiresPhoto
+                                          ? PosColors.info
+                                          : PosColors.textMuted,
+                                    ),
+                                    if (isSvRequired)
+                                      _statusChip(
+                                        context.l10n.qscSvRequired,
+                                        PosColors.accent,
+                                      ),
+                                  ],
                                 ),
-                            ],
-                          ),
-                          if (draft.photoFiles.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            SizedBox(
-                              height: 56,
-                              child: ListView.separated(
-                                scrollDirection: Axis.horizontal,
-                                itemCount: draft.photoFiles.length,
-                                separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        draft.completed
+                                            ? context.l10n.qscInputComplete
+                                            : context.l10n.qscInputCompleteHint,
+                                        style: GoogleFonts.notoSansKr(
+                                          color: draft.completed
+                                              ? PosColors.success
+                                              : PosColors.textMuted,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
                                     const SizedBox(width: 8),
-                                itemBuilder: (context, index) {
-                                  final file = draft.photoFiles[index];
-                                  return Stack(
-                                    children: [
+                                    OutlinedButton.icon(
+                                      onPressed: () => setState(
+                                        () =>
+                                            draft.completed = !draft.completed,
+                                      ),
+                                      icon: Icon(
+                                        draft.completed
+                                            ? Icons.check_circle
+                                            : Icons.radio_button_unchecked,
+                                      ),
+                                      label: Text(context.l10n.complete),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    OutlinedButton.icon(
+                                      onPressed: () =>
+                                          _pickEvidencePhoto(templateId),
+                                      icon: const Icon(Icons.photo_camera),
+                                      label: Text(context.l10n.qcAttachPhoto),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    if (draft.existingPhotoUrl != null &&
+                                        draft.photoFiles.isEmpty)
                                       GestureDetector(
-                                        onTap: () =>
-                                            _showPickedImageDialog(file),
+                                        onTap: () => _showImageDialog(
+                                          draft.existingPhotoUrl!,
+                                        ),
                                         child: ClipRRect(
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
-                                          child: _pickedImagePreview(file),
+                                          child: Image.network(
+                                            draft.existingPhotoUrl!,
+                                            width: 40,
+                                            height: 40,
+                                            fit: BoxFit.cover,
+                                          ),
                                         ),
                                       ),
-                                      Positioned(
-                                        top: -6,
-                                        right: -6,
-                                        child: IconButton(
-                                          visualDensity: VisualDensity.compact,
-                                          padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(
-                                            minWidth: 24,
-                                            minHeight: 24,
-                                          ),
-                                          onPressed: () => _removeEvidencePhoto(
-                                            templateId,
-                                            index,
-                                          ),
-                                          icon: const CircleAvatar(
-                                            radius: 10,
-                                            backgroundColor: PosColors.danger,
-                                            child: Icon(
-                                              Icons.close,
-                                              size: 12,
-                                              color: Colors.white,
+                                  ],
+                                ),
+                                if (draft.photoFiles.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  SizedBox(
+                                    height: 56,
+                                    child: ListView.separated(
+                                      scrollDirection: Axis.horizontal,
+                                      itemCount: draft.photoFiles.length,
+                                      separatorBuilder: (_, __) =>
+                                          const SizedBox(width: 8),
+                                      itemBuilder: (context, index) {
+                                        final file = draft.photoFiles[index];
+                                        return Stack(
+                                          children: [
+                                            GestureDetector(
+                                              onTap: () =>
+                                                  _showPickedImageDialog(file),
+                                              child: ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                child: _pickedImagePreview(
+                                                  file,
+                                                ),
+                                              ),
                                             ),
+                                            Positioned(
+                                              top: -6,
+                                              right: -6,
+                                              child: IconButton(
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                padding: EdgeInsets.zero,
+                                                constraints:
+                                                    const BoxConstraints(
+                                                      minWidth: 24,
+                                                      minHeight: 24,
+                                                    ),
+                                                onPressed: () =>
+                                                    _removeEvidencePhoto(
+                                                      templateId,
+                                                      index,
+                                                    ),
+                                                icon: const CircleAvatar(
+                                                  radius: 10,
+                                                  backgroundColor:
+                                                      PosColors.danger,
+                                                  child: Icon(
+                                                    Icons.close,
+                                                    size: 12,
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                                if (draft.hasQscStatus) ...[
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      if (draft.submissionStatus != null)
+                                        _statusChip(
+                                          _submissionStatusLabel(
+                                            context,
+                                            draft.submissionStatus!,
                                           ),
+                                          PosColors.accent,
                                         ),
-                                      ),
+                                      if (draft.photoUploadedCount != null ||
+                                          draft.photoRequiredCount != null)
+                                        _statusChip(
+                                          'Photo ${draft.photoUploadedCount ?? 0}/${draft.photoRequiredCount ?? 0}',
+                                          PosColors.textMuted,
+                                        ),
+                                      if (draft.svReviewStatus != null)
+                                        _statusChip(
+                                          _svReviewStatusLabel(
+                                            context,
+                                            draft.svReviewStatus!,
+                                          ),
+                                          PosColors.success,
+                                        ),
+                                      if (draft.grade != null &&
+                                          draft.grade!.isNotEmpty)
+                                        _statusChip(
+                                          draft.grade!.toUpperCase(),
+                                          _gradeColor(draft.grade!),
+                                        ),
                                     ],
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                          if (draft.hasQscStatus) ...[
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                if (draft.submissionStatus != null)
-                                  _statusChip(
-                                    _submissionStatusLabel(
-                                      context,
-                                      draft.submissionStatus!,
-                                    ),
-                                    PosColors.accent,
                                   ),
-                                if (draft.photoUploadedCount != null ||
-                                    draft.photoRequiredCount != null)
-                                  _statusChip(
-                                    'Photo ${draft.photoUploadedCount ?? 0}/${draft.photoRequiredCount ?? 0}',
-                                    PosColors.textMuted,
+                                ],
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: draft.noteController,
+                                  style: GoogleFonts.notoSansKr(
+                                    color: PosColors.text,
+                                    fontSize: 13,
                                   ),
-                                if (draft.svReviewStatus != null)
-                                  _statusChip(
-                                    _svReviewStatusLabel(
-                                      context,
-                                      draft.svReviewStatus!,
-                                    ),
-                                    PosColors.success,
+                                  decoration: InputDecoration(
+                                    hintText: context.l10n.qcMemoHint,
+                                    border: const OutlineInputBorder(),
                                   ),
-                                if (draft.grade != null &&
-                                    draft.grade!.isNotEmpty)
-                                  _statusChip(
-                                    draft.grade!.toUpperCase(),
-                                    _gradeColor(draft.grade!),
-                                  ),
+                                  maxLines: 2,
+                                ),
                               ],
                             ),
-                          ],
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: draft.noteController,
-                            style: GoogleFonts.notoSansKr(
-                              color: PosColors.text,
-                              fontSize: 13,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: context.l10n.qcMemoHint,
-                              border: OutlineInputBorder(),
-                            ),
-                            maxLines: 2,
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
                 ],
-                const SizedBox(height: 8),
                 SizedBox(
                   height: 52,
                   child: FilledButton(
@@ -656,40 +727,9 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 12),
               ],
             ),
-    );
-  }
-
-  Widget _resultButton({
-    required String label,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected
-              ? PosColors.accent.withValues(alpha: 0.20)
-              : PosColors.canvas,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: selected ? PosColors.accent : PosColors.border,
-          ),
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.notoSansKr(
-            color: selected ? PosColors.accent : PosColors.textMuted,
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
     );
   }
 
@@ -841,6 +881,7 @@ class _CheckDraft {
   _CheckDraft();
 
   String? result;
+  bool completed = false;
   final List<XFile> photoFiles = [];
   String? existingPhotoUrl;
   String? submissionStatus;
@@ -863,4 +904,10 @@ class _CheckDraft {
       photoRequiredCount != null ||
       svReviewStatus != null ||
       (grade != null && grade!.isNotEmpty);
+
+  bool get hasInput =>
+      completed ||
+      photoFiles.isNotEmpty ||
+      existingPhotoUrl != null ||
+      noteController.text.trim().isNotEmpty;
 }

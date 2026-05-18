@@ -6,6 +6,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/i18n/locale_extensions.dart';
+import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
@@ -29,10 +31,23 @@ class _QcTabState extends ConsumerState<QcTab>
 
   String? _initializedRestaurantId;
   DateTime _weekStart = _startOfWeek(DateTime.now());
+  int _selectedSurfaceIndex = 0;
 
   static DateTime _startOfWeek(DateTime now) {
     final day = DateTime(now.year, now.month, now.day);
     return day.subtract(Duration(days: day.weekday - 1));
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedSurfaceIndex = _tabController.index;
+    _tabController.addListener(() {
+      if (!mounted) return;
+      if (_selectedSurfaceIndex != _tabController.index) {
+        setState(() => _selectedSurfaceIndex = _tabController.index);
+      }
+    });
   }
 
   @override
@@ -59,6 +74,21 @@ class _QcTabState extends ConsumerState<QcTab>
   @override
   Widget build(BuildContext context) {
     final storeId = ref.watch(authProvider).storeId;
+    final templateState = ref.watch(qcTemplateProvider);
+    final checkState = ref.watch(qcCheckProvider);
+    final followupState = ref.watch(qcFollowupProvider);
+    final failedChecks = checkState.checks
+        .where((check) => check['result']?.toString() == 'fail')
+        .length;
+    final openFollowups = followupState.followups.where((followup) {
+      final status = followup['status']?.toString();
+      return status == 'open' || status == 'in_progress';
+    }).length;
+    final surfaces = const [
+      'Follow-ups',
+      'Weekly Inspection Status',
+      'Template Management',
+    ];
 
     if (storeId != null && _initializedRestaurantId != storeId) {
       _initializedRestaurantId = storeId;
@@ -67,52 +97,267 @@ class _QcTabState extends ConsumerState<QcTab>
 
     return Scaffold(
       key: const Key('qc_root'),
-      backgroundColor: AppColors.surface0,
-      body: Column(
-        children: [
-          Container(
-            color: AppColors.surface0,
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: TabBar(
-              controller: _tabController,
-              indicatorColor: AppColors.amber500,
-              labelColor: AppColors.amber500,
-              unselectedLabelColor: AppColors.textSecondary,
-              labelStyle: GoogleFonts.notoSansKr(fontWeight: FontWeight.w700),
-              tabs: const [
-                Tab(text: 'Template Management'),
-                Tab(text: 'Weekly Inspection Status'),
-                Tab(text: 'Follow-ups'),
-              ],
+      backgroundColor: PosColors.canvas,
+      body: ToastResponsiveBody(
+        maxWidth: 1460,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildQcExceptionHeader(
+              templateCount: templateState.templates.length,
+              weeklyCheckCount: checkState.checks.length,
+              failedCheckCount: failedChecks,
+              openFollowupCount: openFollowups,
+              currentSurface: surfaces[_selectedSurfaceIndex],
             ),
+            const SizedBox(height: 12),
+            _buildQcWorkflowControls(surfaces: surfaces),
+            const SizedBox(height: 12),
+            _QcWorkflowSummary(
+              label: _qcSurfaceLabel(surfaces[_selectedSurfaceIndex]),
+              summary: _qcSurfaceSummary(surfaces[_selectedSurfaceIndex]),
+              color: _qcSurfaceColor(surfaces[_selectedSurfaceIndex]),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ToastWorkSurface(
+                padding: EdgeInsets.zero,
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _FollowupTab(storeId: storeId),
+                    _WeeklyViewTab(
+                      storeId: storeId,
+                      weekStart: _weekStart,
+                      onPrevWeek: storeId == null
+                          ? null
+                          : () => _loadWeek(
+                              storeId,
+                              _weekStart.subtract(const Duration(days: 7)),
+                            ),
+                      onNextWeek: storeId == null
+                          ? null
+                          : () => _loadWeek(
+                              storeId,
+                              _weekStart.add(const Duration(days: 7)),
+                            ),
+                    ),
+                    _TemplateManagementTab(
+                      picker: _picker,
+                      storeId: storeId,
+                      role: ref.watch(authProvider).role,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQcExceptionHeader({
+    required int templateCount,
+    required int weeklyCheckCount,
+    required int failedCheckCount,
+    required int openFollowupCount,
+    required String currentSurface,
+  }) {
+    final l10n = context.l10n;
+    final needsReview = openFollowupCount > 0 || failedCheckCount > 0;
+
+    return ToastWorkSurface(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+      backgroundColor: PosColors.surface,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.qcManagementTitle,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.headlineLarge?.copyWith(letterSpacing: 0),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      l10n.qcSurfaceFollowUpSummary,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.textSecondary,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              ToastStatusBadge(
+                label: _qcSurfaceLabel(currentSurface),
+                color: needsReview ? PosColors.danger : PosColors.success,
+                compact: true,
+              ),
+            ],
           ),
+          const SizedBox(height: 14),
+          ToastMetricStrip(
+            metrics: [
+              ToastMetric(
+                label: l10n.qcOpenActions,
+                value: '$openFollowupCount',
+                tone: openFollowupCount > 0
+                    ? PosColors.danger
+                    : PosColors.success,
+              ),
+              ToastMetric(
+                label: l10n.qcFailedItems,
+                value: '$failedCheckCount',
+                tone: failedCheckCount > 0
+                    ? PosColors.warning
+                    : PosColors.success,
+              ),
+              ToastMetric(
+                label: l10n.qcWeeklyChecks,
+                value: '$weeklyCheckCount',
+                tone: PosColors.info,
+              ),
+              ToastMetric(label: l10n.qcTemplates, value: '$templateCount'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              ToastStatusBadge(
+                label: needsReview
+                    ? l10n.reportsNeedsReviewShort
+                    : l10n.staffNoIssues,
+                color: needsReview ? PosColors.warning : PosColors.success,
+                compact: true,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  needsReview
+                      ? l10n.qcSurfaceFollowUpSummary
+                      : l10n.qcSurfaceDefaultSummary,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: PosColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQcWorkflowControls({required List<String> surfaces}) {
+    return ToastWorkSurface(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      backgroundColor: PosColors.surface,
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (var index = 0; index < surfaces.length; index++)
+            _QcSurfaceTab(
+              label: _qcSurfaceDisplayLabel(surfaces[index]),
+              selected: index == _selectedSurfaceIndex,
+              onTap: () => _tabController.animateTo(index),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _qcSurfaceDisplayLabel(String tab) {
+    switch (tab) {
+      case 'Template Management':
+        return context.l10n.qcTemplates;
+      case 'Weekly Inspection Status':
+        return context.l10n.qcWeeklyBoard;
+      case 'Follow-ups':
+        return context.l10n.followUp;
+      default:
+        return tab;
+    }
+  }
+
+  String _qcSurfaceLabel(String tab) {
+    final l10n = context.l10n;
+    switch (tab) {
+      case 'Follow-ups':
+        return l10n.qcExceptionQueue;
+      case 'Weekly Inspection Status':
+        return l10n.qcLiveReview;
+      default:
+        return l10n.adminWorkflowBackOffice;
+    }
+  }
+
+  String _qcSurfaceSummary(String tab) {
+    switch (tab) {
+      case 'Template Management':
+        return context.l10n.qcSurfaceTemplateSummary;
+      case 'Weekly Inspection Status':
+        return context.l10n.qcSurfaceWeeklySummary;
+      case 'Follow-ups':
+        return context.l10n.qcSurfaceFollowUpSummary;
+      default:
+        return context.l10n.qcSurfaceDefaultSummary;
+    }
+  }
+
+  Color _qcSurfaceColor(String tab) {
+    switch (tab) {
+      case 'Follow-ups':
+        return PosColors.danger;
+      case 'Weekly Inspection Status':
+        return PosColors.accent;
+      default:
+        return PosColors.textSecondary;
+    }
+  }
+}
+
+class _QcWorkflowSummary extends StatelessWidget {
+  const _QcWorkflowSummary({
+    required this.label,
+    required this.summary,
+    required this.color,
+  });
+
+  final String label;
+  final String summary;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return ToastWorkSurface(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      backgroundColor: PosColors.surface,
+      child: Row(
+        children: [
+          ToastStatusBadge(label: label, color: color, compact: true),
+          const SizedBox(width: 10),
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _TemplateManagementTab(
-                  picker: _picker,
-                  storeId: storeId,
-                  role: ref.watch(authProvider).role,
-                ),
-                _WeeklyViewTab(
-                  storeId: storeId,
-                  weekStart: _weekStart,
-                  onPrevWeek: storeId == null
-                      ? null
-                      : () => _loadWeek(
-                          storeId,
-                          _weekStart.subtract(const Duration(days: 7)),
-                        ),
-                  onNextWeek: storeId == null
-                      ? null
-                      : () => _loadWeek(
-                          storeId,
-                          _weekStart.add(const Duration(days: 7)),
-                        ),
-                ),
-                _FollowupTab(storeId: storeId),
-              ],
+            child: Text(
+              summary,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: PosColors.textSecondary,
+                fontSize: 12,
+              ),
             ),
           ),
         ],
@@ -140,28 +385,21 @@ class _TemplateManagementTab extends ConsumerWidget {
 
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Column(
+      child: ListView(
         children: [
           Row(
             children: [
               Text(
-                'QC Template',
-                style: GoogleFonts.bebasNeue(
-                  color: AppColors.textPrimary,
-                  fontSize: 30,
-                ),
+                context.l10n.qcTemplateBoardTitle,
+                style: Theme.of(context).textTheme.titleLarge,
               ),
               const Spacer(),
               FilledButton.icon(
                 onPressed: storeId == null
                     ? null
                     : () => _showTemplateSheet(context, ref, picker, storeId!),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.amber500,
-                  foregroundColor: AppColors.surface0,
-                ),
                 icon: const Icon(Icons.add),
-                label: const Text('Add Criterion'),
+                label: Text(context.l10n.qcAdminAddCriterion),
               ),
             ],
           ),
@@ -169,7 +407,7 @@ class _TemplateManagementTab extends ConsumerWidget {
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'QC v1 scope includes only template management and criteria visibility needed for inspection execution. Save and deactivation are recorded in the audit log.',
+              context.l10n.qcTemplateBoardSubtitle,
               style: GoogleFonts.notoSansKr(
                 color: AppColors.textSecondary,
                 fontSize: 12,
@@ -189,178 +427,184 @@ class _TemplateManagementTab extends ConsumerWidget {
               ),
             ),
           if (state.error != null) const SizedBox(height: 8),
-          Expanded(
-            child: state.isLoading && state.templates.isEmpty
-                ? const Center(
-                    child: CircularProgressIndicator(color: AppColors.amber500),
-                  )
-                : state.templates.isEmpty
-                ? Center(
-                    child: Text(
-                      'No templates.',
+          if (state.isLoading && state.templates.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 48),
+              child: Center(
+                child: CircularProgressIndicator(color: AppColors.amber500),
+              ),
+            )
+          else if (state.templates.isEmpty)
+            Center(
+              child: Text(
+                context.l10n.qcNoTemplatesRegistered,
+                style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
+              ),
+            )
+          else
+            ReorderableListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: state.templates.length,
+              onReorder: (oldIndex, newIndex) async {
+                if (newIndex > oldIndex) {
+                  newIndex -= 1;
+                }
+                final copied = [...state.templates];
+                final item = copied.removeAt(oldIndex);
+                copied.insert(newIndex, item);
+
+                for (var i = 0; i < copied.length; i++) {
+                  final template = copied[i];
+                  final isGlobal = template['is_global'] == true;
+                  if (isGlobal && !isSuperAdmin) {
+                    continue;
+                  }
+                  final id = copied[i]['id']?.toString() ?? '';
+                  if (id.isEmpty) continue;
+                  await notifier.updateTemplate(id, {'sort_order': i});
+                }
+              },
+              itemBuilder: (context, index) {
+                final template = state.templates[index];
+                final id = template['id']?.toString() ?? '';
+                final category =
+                    template['category']?.toString() ??
+                    context.l10n.qcCategoryOther;
+                final text = template['criteria_text']?.toString() ?? '-';
+                final photo = template['criteria_photo_url']?.toString();
+                final isGlobal = template['is_global'] == true;
+                final canEdit = !isGlobal || isSuperAdmin;
+
+                return Container(
+                  key: ValueKey(id),
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface1,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.surface2),
+                  ),
+                  child: ListTile(
+                    leading: photo == null || photo.isEmpty
+                        ? const Icon(
+                            Icons.image_not_supported_outlined,
+                            color: AppColors.textSecondary,
+                          )
+                        : ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              photo,
+                              width: 40,
+                              height: 40,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                    title: Text(
+                      text,
                       style: GoogleFonts.notoSansKr(
-                        color: AppColors.textSecondary,
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  )
-                : ReorderableListView.builder(
-                    itemCount: state.templates.length,
-                    onReorder: (oldIndex, newIndex) async {
-                      if (newIndex > oldIndex) {
-                        newIndex -= 1;
-                      }
-                      final copied = [...state.templates];
-                      final item = copied.removeAt(oldIndex);
-                      copied.insert(newIndex, item);
-
-                      for (var i = 0; i < copied.length; i++) {
-                        final template = copied[i];
-                        final isGlobal = template['is_global'] == true;
-                        if (isGlobal && !isSuperAdmin) {
-                          continue;
-                        }
-                        final id = copied[i]['id']?.toString() ?? '';
-                        if (id.isEmpty) continue;
-                        await notifier.updateTemplate(id, {'sort_order': i});
-                      }
-                    },
-                    itemBuilder: (context, index) {
-                      final template = state.templates[index];
-                      final id = template['id']?.toString() ?? '';
-                      final category =
-                          template['category']?.toString() ?? 'Other';
-                      final text = template['criteria_text']?.toString() ?? '-';
-                      final photo = template['criteria_photo_url']?.toString();
-                      final isGlobal = template['is_global'] == true;
-                      final canEdit = !isGlobal || isSuperAdmin;
-
-                      return Container(
-                        key: ValueKey(id),
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface1,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.surface2),
-                        ),
-                        child: ListTile(
-                          leading: photo == null || photo.isEmpty
-                              ? const Icon(
-                                  Icons.image_not_supported_outlined,
-                                  color: AppColors.textSecondary,
-                                )
-                              : ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.network(
-                                    photo,
-                                    width: 40,
-                                    height: 40,
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                          title: Text(
-                            text,
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Wrap(
+                        spacing: 8,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: PosColors.accentMuted,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              category,
+                              style: GoogleFonts.notoSansKr(
+                                color: PosColors.accent,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            context.l10n.qcSortOrder(
+                              template['sort_order'] ?? 0,
+                            ),
                             style: GoogleFonts.notoSansKr(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w600,
+                              color: AppColors.textSecondary,
+                              fontSize: 11,
                             ),
                           ),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Wrap(
-                              spacing: 8,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.amber500.withValues(
-                                      alpha: 0.16,
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    category,
-                                    style: GoogleFonts.notoSansKr(
-                                      color: AppColors.amber500,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
+                          if (isGlobal)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.amber500.withValues(
+                                  alpha: 0.16,
                                 ),
-                                Text(
-                                  'Order ${template['sort_order'] ?? 0}',
-                                  style: GoogleFonts.notoSansKr(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 11,
-                                  ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                context.l10n.qcSharedByHeadOffice,
+                                style: GoogleFonts.notoSansKr(
+                                  color: AppColors.amber500,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
                                 ),
-                                if (isGlobal)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 3,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.amber500.withValues(
-                                        alpha: 0.16,
-                                      ),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      '📌 HQ Shared',
-                                      style: GoogleFonts.notoSansKr(
-                                        color: AppColors.amber500,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                              ],
+                              ),
                             ),
-                          ),
-                          trailing: SizedBox(
-                            width: 110,
-                            child: Row(
-                              children: [
-                                IconButton(
-                                  onPressed: !canEdit || storeId == null
-                                      ? null
-                                      : () => _showTemplateSheet(
-                                          context,
-                                          ref,
-                                          picker,
-                                          storeId!,
-                                          initial: template,
-                                        ),
-                                  icon: const Icon(Icons.edit_outlined),
-                                  color: AppColors.textSecondary,
-                                ),
-                                IconButton(
-                                  onPressed: !canEdit
-                                      ? null
-                                      : () async {
-                                          await notifier.deleteTemplate(id);
-                                          if (!context.mounted) return;
-                                          showSuccessToast(context, 'Deleted');
-                                        },
-                                  icon: const Icon(Icons.delete_outline),
-                                  color: AppColors.statusCancelled,
-                                ),
-                                if (canEdit)
-                                  const Icon(
-                                    Icons.drag_handle,
-                                    color: AppColors.textSecondary,
+                        ],
+                      ),
+                    ),
+                    trailing: SizedBox(
+                      width: 110,
+                      child: Row(
+                        children: [
+                          IconButton(
+                            onPressed: !canEdit || storeId == null
+                                ? null
+                                : () => _showTemplateSheet(
+                                    context,
+                                    ref,
+                                    picker,
+                                    storeId!,
+                                    initial: template,
                                   ),
-                              ],
-                            ),
+                            icon: const Icon(Icons.edit_outlined),
+                            color: AppColors.textSecondary,
                           ),
-                        ),
-                      );
-                    },
+                          IconButton(
+                            onPressed: !canEdit
+                                ? null
+                                : () async {
+                                    await notifier.deleteTemplate(id);
+                                    if (!context.mounted) return;
+                                    showSuccessToast(
+                                      context,
+                                      context.l10n.deleted,
+                                    );
+                                  },
+                            icon: const Icon(Icons.delete_outline),
+                            color: AppColors.statusCancelled,
+                          ),
+                          if (canEdit)
+                            const Icon(
+                              Icons.drag_handle,
+                              color: AppColors.textSecondary,
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
-          ),
+                );
+              },
+            ),
         ],
       ),
     );
@@ -408,17 +652,18 @@ class _TemplateManagementTab extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isEdit ? 'Edit Criterion' : 'Add Criterion',
-                    style: GoogleFonts.bebasNeue(
-                      color: AppColors.amber500,
-                      fontSize: 30,
-                    ),
+                    isEdit
+                        ? context.l10n.qcEditCriterionTitle
+                        : context.l10n.qcAddCriterionTitle,
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: categoryController,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(labelText: 'Category'),
+                    decoration: InputDecoration(
+                      labelText: context.l10n.qcAdminCategory,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   TextField(
@@ -426,8 +671,8 @@ class _TemplateManagementTab extends ConsumerWidget {
                     minLines: 2,
                     maxLines: 4,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(
-                      labelText: 'Criterion (text)',
+                    decoration: InputDecoration(
+                      labelText: context.l10n.qcAdminCriterionText,
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -435,7 +680,9 @@ class _TemplateManagementTab extends ConsumerWidget {
                     controller: sortController,
                     keyboardType: TextInputType.number,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(labelText: 'Order'),
+                    decoration: InputDecoration(
+                      labelText: context.l10n.qcAdminOrder,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   Row(
@@ -452,7 +699,7 @@ class _TemplateManagementTab extends ConsumerWidget {
                           });
                         },
                         icon: const Icon(Icons.photo_library_outlined),
-                        label: const Text('Upload Photo'),
+                        label: Text(context.l10n.qcAdminUploadPhoto),
                       ),
                       const SizedBox(width: 8),
                       if (selectedFile != null)
@@ -519,14 +766,14 @@ class _TemplateManagementTab extends ConsumerWidget {
                         }
 
                         if (!context.mounted) return;
-                        showSuccessToast(context, 'Saved');
+                        showSuccessToast(context, context.l10n.qcSaved);
                         Navigator.of(context).pop();
                       },
                       style: FilledButton.styleFrom(
                         backgroundColor: AppColors.amber500,
                         foregroundColor: AppColors.surface0,
                       ),
-                      child: const Text('Save'),
+                      child: Text(context.l10n.save),
                     ),
                   ),
                 ],
@@ -540,6 +787,43 @@ class _TemplateManagementTab extends ConsumerWidget {
     categoryController.dispose();
     criteriaController.dispose();
     sortController.dispose();
+  }
+}
+
+class _QcSurfaceTab extends StatelessWidget {
+  const _QcSurfaceTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: AppRadius.lg,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? PosColors.accentMuted : PosColors.surface,
+          borderRadius: AppRadius.lg,
+          border: Border.all(
+            color: selected ? PosColors.accent : PosColors.border,
+          ),
+        ),
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: selected ? PosColors.accent : PosColors.textSecondary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -595,13 +879,16 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
     final rows = _buildRows(templates);
     final categoryOptions = <String>{
       'all',
-      ...templates.map((e) => e['category']?.toString() ?? 'Other'),
+      ...templates.map(
+        (e) => e['category']?.toString() ?? context.l10n.qcCategoryOther,
+      ),
     }.toList();
 
     final filteredRangeChecks = checkState.dateRangeChecks.where((check) {
       final result = check['result']?.toString() ?? '';
       final template = check['qc_templates'] as Map<String, dynamic>?;
-      final category = template?['category']?.toString() ?? 'Other';
+      final category =
+          template?['category']?.toString() ?? context.l10n.qcCategoryOther;
       final matchesResult = switch (_resultFilter) {
         'pass' => result == 'pass',
         'fail' => result == 'fail',
@@ -620,7 +907,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'QC v1 scope includes only weekly inspection status and per-date inspection history. Coverage analysis and follow-ups are in a separate product scope.',
+              context.l10n.qcWeeklyScopeHint,
               style: GoogleFonts.notoSansKr(
                 color: AppColors.textSecondary,
                 fontSize: 12,
@@ -631,11 +918,14 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
           Row(
             children: [
               SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment<bool>(value: false, label: Text('Weekly View')),
+                segments: [
+                  ButtonSegment<bool>(
+                    value: false,
+                    label: Text(context.l10n.qcAdminWeeklyView),
+                  ),
                   ButtonSegment<bool>(
                     value: true,
-                    label: Text('Period Search'),
+                    label: Text(context.l10n.qcAdminPeriodSearch),
                   ),
                 ],
                 selected: {_rangeMode},
@@ -723,7 +1013,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                                   ),
                                   color: AppColors.surface2,
                                   child: Text(
-                                    'Criterion',
+                                    context.l10n.qcCriterionShort,
                                     style: GoogleFonts.notoSansKr(
                                       color: AppColors.textSecondary,
                                       fontWeight: FontWeight.w700,
@@ -952,14 +1242,14 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
             children: [
               _dateButton(
                 context: context,
-                label: 'From',
+                label: context.l10n.from,
                 value: _from,
                 onPicked: (picked) => setState(() => _from = picked),
               ),
               const SizedBox(width: 8),
               _dateButton(
                 context: context,
-                label: 'To',
+                label: context.l10n.to,
                 value: _to,
                 onPicked: (picked) => setState(() => _to = picked),
               ),
@@ -970,7 +1260,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                   backgroundColor: AppColors.amber500,
                   foregroundColor: AppColors.surface0,
                 ),
-                child: const Text('Search'),
+                child: Text(context.l10n.search),
               ),
               const Spacer(),
               SizedBox(
@@ -979,15 +1269,27 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                   initialValue: _resultFilter,
                   dropdownColor: AppColors.surface1,
                   style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     isDense: true,
-                    labelText: 'Result',
+                    labelText: context.l10n.qcAdminResult,
                   ),
-                  items: const [
-                    DropdownMenuItem(value: 'all', child: Text('All')),
-                    DropdownMenuItem(value: 'pass', child: Text('Pass')),
-                    DropdownMenuItem(value: 'fail', child: Text('Fail')),
-                    DropdownMenuItem(value: 'na', child: Text('N/A')),
+                  items: [
+                    DropdownMenuItem(
+                      value: 'all',
+                      child: Text(context.l10n.all),
+                    ),
+                    DropdownMenuItem(
+                      value: 'pass',
+                      child: Text(context.l10n.qcAdminPass),
+                    ),
+                    DropdownMenuItem(
+                      value: 'fail',
+                      child: Text(context.l10n.qcAdminFail),
+                    ),
+                    DropdownMenuItem(
+                      value: 'na',
+                      child: Text(context.l10n.qcAdminNa),
+                    ),
                   ],
                   onChanged: (value) {
                     if (value != null) setState(() => _resultFilter = value);
@@ -1001,15 +1303,17 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                   initialValue: _categoryFilter,
                   dropdownColor: AppColors.surface1,
                   style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     isDense: true,
-                    labelText: 'Category',
+                    labelText: context.l10n.qcAdminCategory,
                   ),
                   items: categoryOptions
                       .map(
                         (category) => DropdownMenuItem(
                           value: category,
-                          child: Text(category == 'all' ? 'All' : category),
+                          child: Text(
+                            category == 'all' ? context.l10n.all : category,
+                          ),
                         ),
                       )
                       .toList(),
@@ -1031,7 +1335,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
             Expanded(
               child: Center(
                 child: Text(
-                  'No search results.',
+                  context.l10n.qcNoSearchResults,
                   style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
                 ),
               ),
@@ -1046,9 +1350,9 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                   final template = row['qc_templates'] as Map<String, dynamic>?;
                   final result = row['result']?.toString() ?? '';
                   final resultLabel = switch (result) {
-                    'pass' => '✅ Pass',
-                    'fail' => '❌ Fail',
-                    'na' => '— N/A',
+                    'pass' => context.l10n.qcResultPass,
+                    'fail' => context.l10n.qcResultFail,
+                    'na' => context.l10n.qcResultNa,
                     _ => '-',
                   };
                   return Container(
@@ -1073,7 +1377,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            '${template?['category'] ?? 'Other'} | ${template?['criteria_text'] ?? '-'}',
+                            '${template?['category'] ?? context.l10n.qcCategoryOther} | ${template?['criteria_text'] ?? '-'}',
                             style: GoogleFonts.notoSansKr(
                               color: AppColors.textPrimary,
                               fontWeight: FontWeight.w600,
@@ -1171,7 +1475,8 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
   List<_QcRow> _buildRows(List<Map<String, dynamic>> templates) {
     final grouped = <String, List<Map<String, dynamic>>>{};
     for (final t in templates) {
-      final category = t['category']?.toString() ?? 'Other';
+      final category =
+          t['category']?.toString() ?? context.l10n.qcCategoryOther;
       grouped.putIfAbsent(category, () => []).add(t);
     }
 
@@ -1216,7 +1521,9 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
             return AlertDialog(
               backgroundColor: AppColors.surface1,
               title: Text(
-                DateFormat('yyyy-MM-dd (E)', 'ko').format(day),
+                DateFormat.yMMMMEEEEd(
+                  Localizations.localeOf(context).toLanguageTag(),
+                ).format(day),
                 style: GoogleFonts.notoSansKr(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w700,
@@ -1229,7 +1536,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Criterion: ${row.criteria}',
+                      context.l10n.qcCriterionLabel(row.criteria),
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textPrimary,
                       ),
@@ -1237,17 +1544,17 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                     const SizedBox(height: 10),
                     if (check == null)
                       Text(
-                        'Not inspected on this date',
+                        context.l10n.qcNotInspectedOnDate,
                         style: GoogleFonts.notoSansKr(
                           color: AppColors.textSecondary,
                         ),
                       )
                     else ...[
                       Text(
-                        'Result: ${switch (result) {
-                          'pass' => '✅ Pass',
-                          'fail' => '❌ Fail',
-                          'na' => '— N/A',
+                        '${context.l10n.qcAdminResult}: ${switch (result) {
+                          'pass' => context.l10n.qcResultPass,
+                          'fail' => context.l10n.qcResultFail,
+                          'na' => context.l10n.qcResultNa,
                           _ => '-',
                         }}',
                         style: GoogleFonts.notoSansKr(
@@ -1275,7 +1582,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                       if (note != null && note.isNotEmpty) ...[
                         const SizedBox(height: 8),
                         Text(
-                          '[memo] $note',
+                          context.l10n.inventoryMemoWithValue(note),
                           style: GoogleFonts.notoSansKr(
                             color: AppColors.textSecondary,
                           ),
@@ -1306,7 +1613,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                                   if (success) {
                                     showSuccessToast(
                                       context,
-                                      'Follow-up created',
+                                      context.l10n.qcFollowUpCreated,
                                     );
                                   } else {
                                     final error = ref
@@ -1329,7 +1636,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                                 size: 16,
                               ),
                               label: Text(
-                                'Follow-ups Created',
+                                context.l10n.qcCreateFollowUp,
                                 style: GoogleFonts.notoSansKr(fontSize: 12),
                               ),
                             ),
@@ -1342,7 +1649,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('Close'),
+                  child: Text(context.l10n.close),
                 ),
               ],
             );
@@ -1433,9 +1740,12 @@ class _FollowupStatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, color) = switch (status) {
-      'open' => ('Unresolved', AppColors.statusCancelled),
-      'in_progress' => ('In Progress', AppColors.statusOccupied),
-      'resolved' => ('Resolved', AppColors.statusAvailable),
+      'open' => (context.l10n.qcUnresolved, AppColors.statusCancelled),
+      'in_progress' => (
+        context.l10n.reportsInProgress,
+        AppColors.statusOccupied,
+      ),
+      'resolved' => (context.l10n.resolved, AppColors.statusAvailable),
       _ => (status, AppColors.textSecondary),
     };
 
@@ -1452,7 +1762,7 @@ class _FollowupStatusBadge extends StatelessWidget {
           Icon(Icons.assignment_turned_in_outlined, size: 14, color: color),
           const SizedBox(width: 4),
           Text(
-            'Follow-ups: $label',
+            '${context.l10n.followUp}: $label',
             style: GoogleFonts.notoSansKr(
               color: color,
               fontSize: 12,
@@ -1514,57 +1824,12 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
       padding: const EdgeInsets.all(16),
       child: ListView(
         children: [
-          // ─── Analytics Section ───
-          Text(
-            'QC Analytics',
-            style: GoogleFonts.notoSansKr(
-              color: AppColors.textPrimary,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              _analyticsDateButton(
-                context: context,
-                label: 'From',
-                value: _analyticsFrom,
-                onPicked: (picked) => setState(() => _analyticsFrom = picked),
-              ),
-              const SizedBox(width: 8),
-              _analyticsDateButton(
-                context: context,
-                label: 'To',
-                value: _analyticsTo,
-                onPicked: (picked) => setState(() => _analyticsTo = picked),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (analyticsAsync != null)
-            analyticsAsync.when(
-              data: (data) => _buildAnalyticsCard(data),
-              loading: () => const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: CircularProgressIndicator(color: AppColors.amber500),
-                ),
-              ),
-              error: (e, _) => Text(
-                'Failed to load analytics data: $e',
-                style: GoogleFonts.notoSansKr(
-                  color: AppColors.statusCancelled,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-          const SizedBox(height: 20),
-          // ─── Followup Section ───
+          _buildAnalyticsSecondaryDetail(context, analyticsAsync),
+          const SizedBox(height: 16),
           Row(
             children: [
               Text(
-                'Follow-up Management',
+                context.l10n.qcFollowupManagementTitle,
                 style: GoogleFonts.notoSansKr(
                   color: AppColors.textPrimary,
                   fontSize: 16,
@@ -1586,11 +1851,14 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _followupFilterChip('Unresolved', 'active'),
-              _followupFilterChip('All', 'all'),
-              _followupFilterChip('Unresolved', 'open'),
-              _followupFilterChip('In Progress', 'in_progress'),
-              _followupFilterChip('Resolved', 'resolved'),
+              _followupFilterChip(context.l10n.qcUnresolved, 'active'),
+              _followupFilterChip(context.l10n.all, 'all'),
+              _followupFilterChip(context.l10n.qcUnresolved, 'open'),
+              _followupFilterChip(
+                context.l10n.reportsInProgress,
+                'in_progress',
+              ),
+              _followupFilterChip(context.l10n.resolved, 'resolved'),
             ],
           ),
           const SizedBox(height: 12),
@@ -1616,13 +1884,86 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
               padding: const EdgeInsets.all(32),
               child: Center(
                 child: Text(
-                  'No follow-ups.',
+                  context.l10n.qcNoFollowUps,
                   style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
                 ),
               ),
             )
           else
             ...filtered.map((f) => _buildFollowupCard(context, f)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnalyticsSecondaryDetail(
+    BuildContext context,
+    AsyncValue<Map<String, dynamic>>? analyticsAsync,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        color: PosColors.mutedSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: PosColors.border),
+      ),
+      child: ExpansionTile(
+        key: const Key('qc_analytics_secondary_detail'),
+        initiallyExpanded: false,
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        iconColor: PosColors.textSecondary,
+        collapsedIconColor: PosColors.textSecondary,
+        title: Text(
+          context.l10n.qcAnalyticsTitle,
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            color: PosColors.textPrimary,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        subtitle: Text(
+          context.l10n.qcSurfaceWeeklySummary,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
+        ),
+        children: [
+          Row(
+            children: [
+              _analyticsDateButton(
+                context: context,
+                label: context.l10n.from,
+                value: _analyticsFrom,
+                onPicked: (picked) => setState(() => _analyticsFrom = picked),
+              ),
+              const SizedBox(width: 8),
+              _analyticsDateButton(
+                context: context,
+                label: context.l10n.to,
+                value: _analyticsTo,
+                onPicked: (picked) => setState(() => _analyticsTo = picked),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (analyticsAsync != null)
+            analyticsAsync.when(
+              data: (data) => _buildAnalyticsCard(data),
+              loading: () => const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: CircularProgressIndicator(color: AppColors.amber500),
+                ),
+              ),
+              error: (e, _) => Text(
+                context.l10n.qcAnalyticsLoadFailed('$e'),
+                style: GoogleFonts.notoSansKr(
+                  color: AppColors.statusCancelled,
+                  fontSize: 12,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1677,14 +2018,14 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
             children: [
               Expanded(
                 child: _analyticMetric(
-                  'Total Inspections',
+                  context.l10n.qcAnalyticsTotalInspections,
                   '$totalChecks',
                   AppColors.textPrimary,
                 ),
               ),
               Expanded(
                 child: _analyticMetric(
-                  'Pass Rate',
+                  context.l10n.qcAnalyticsPassRate,
                   '$passRate%',
                   passRate >= 80
                       ? AppColors.statusAvailable
@@ -1693,7 +2034,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
               ),
               Expanded(
                 child: _analyticMetric(
-                  'Coverage',
+                  context.l10n.qcAnalyticsCoverage,
                   '$coverage%',
                   AppColors.textPrimary,
                 ),
@@ -1705,28 +2046,28 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
             children: [
               Expanded(
                 child: _analyticMetric(
-                  'Pass',
+                  context.l10n.qcAdminPass,
                   '$passCount',
                   AppColors.statusAvailable,
                 ),
               ),
               Expanded(
                 child: _analyticMetric(
-                  'Fail',
+                  context.l10n.qcAdminFail,
                   '$failCount',
                   AppColors.statusCancelled,
                 ),
               ),
               Expanded(
                 child: _analyticMetric(
-                  'N/A',
+                  context.l10n.qcAdminNa,
                   '$naCount',
                   AppColors.textSecondary,
                 ),
               ),
               Expanded(
                 child: _analyticMetric(
-                  'Unresolved Actions',
+                  context.l10n.qcAnalyticsUnresolvedActions,
                   '$openFollowups',
                   openFollowups > 0
                       ? AppColors.statusCancelled
@@ -1799,15 +2140,20 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
     final assignedTo = followup['assigned_to_name']?.toString();
     final resolutionNotes = followup['resolution_notes']?.toString();
     final checkDate = followup['check_date']?.toString() ?? '-';
-    final category = followup['template_category']?.toString() ?? 'Other';
+    final category =
+        followup['template_category']?.toString() ??
+        context.l10n.qcCategoryOther;
     final criteria = followup['template_criteria']?.toString() ?? '-';
     final createdAt = followup['created_at']?.toString();
     final resolvedAt = followup['resolved_at']?.toString();
 
     final (statusLabel, statusColor) = switch (status) {
-      'open' => ('Unresolved', AppColors.statusCancelled),
-      'in_progress' => ('In Progress', AppColors.statusOccupied),
-      'resolved' => ('Resolved', AppColors.statusAvailable),
+      'open' => (context.l10n.qcUnresolved, AppColors.statusCancelled),
+      'in_progress' => (
+        context.l10n.reportsInProgress,
+        AppColors.statusOccupied,
+      ),
+      'resolved' => (context.l10n.resolved, AppColors.statusAvailable),
       _ => (status, AppColors.textSecondary),
     };
 
@@ -1827,7 +2173,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
               _FollowupStatusBadge(status: status),
               const Spacer(),
               Text(
-                'Inspection date $checkDate',
+                context.l10n.qcInspectionDate(checkDate),
                 style: GoogleFonts.notoSansKr(
                   color: AppColors.textSecondary,
                   fontSize: 11,
@@ -1847,7 +2193,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
           if (assignedTo != null && assignedTo.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
-              'Assignee: $assignedTo',
+              context.l10n.qcAssignee(assignedTo),
               style: GoogleFonts.notoSansKr(
                 color: AppColors.textSecondary,
                 fontSize: 12,
@@ -1857,7 +2203,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
           if (resolutionNotes != null && resolutionNotes.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
-              'Resolution notes: $resolutionNotes',
+              context.l10n.qcResolutionNotes(resolutionNotes),
               style: GoogleFonts.notoSansKr(
                 color: AppColors.textSecondary,
                 fontSize: 12,
@@ -1867,8 +2213,12 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
           if (createdAt != null) ...[
             const SizedBox(height: 4),
             Text(
-              'Created ${_formatTimestamp(createdAt)}'
-              '${resolvedAt != null ? ' · Resolved ${_formatTimestamp(resolvedAt)}' : ''}',
+              resolvedAt == null
+                  ? context.l10n.qcCreatedAt(_formatTimestamp(createdAt))
+                  : context.l10n.qcCreatedResolvedAt(
+                      _formatTimestamp(createdAt),
+                      _formatTimestamp(resolvedAt),
+                    ),
               style: GoogleFonts.notoSansKr(
                 color: AppColors.textSecondary,
                 fontSize: 11,
@@ -1888,7 +2238,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
                       side: const BorderSide(color: AppColors.statusOccupied),
                     ),
                     child: Text(
-                      'Start Progress',
+                      context.l10n.qcStartProgress,
                       style: GoogleFonts.notoSansKr(fontSize: 12),
                     ),
                   ),
@@ -1900,7 +2250,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
                     side: const BorderSide(color: AppColors.statusAvailable),
                   ),
                   child: Text(
-                    'Resolved',
+                    context.l10n.resolved,
                     style: GoogleFonts.notoSansKr(fontSize: 12),
                   ),
                 ),
@@ -1932,7 +2282,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
 
     if (!context.mounted) return;
     if (success) {
-      showSuccessToast(context, 'Status changed');
+      showSuccessToast(context, context.l10n.qcStatusChanged);
     } else {
       final error = ref.read(qcFollowupProvider).error;
       if (error != null) showErrorToast(context, error);
@@ -1947,20 +2297,20 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
 
     final confirmed = await ToastConfirmDialog.withContent(
       context: context,
-      title: 'Resolve Follow-up',
-      confirmLabel: 'Resolved',
+      title: context.l10n.qcResolveFollowUp,
+      confirmLabel: context.l10n.resolved,
       confirmTone: PosActionTone.affirm,
       content: TextField(
         controller: notesController,
         style: const TextStyle(color: AppColors.textPrimary),
         maxLines: 3,
-        decoration: const InputDecoration(
-          labelText: 'Resolution notes (optional)',
-          labelStyle: TextStyle(color: AppColors.textSecondary),
-          enabledBorder: OutlineInputBorder(
+        decoration: InputDecoration(
+          labelText: context.l10n.qcAdminResolutionNotesOptional,
+          labelStyle: const TextStyle(color: AppColors.textSecondary),
+          enabledBorder: const OutlineInputBorder(
             borderSide: BorderSide(color: AppColors.surface2),
           ),
-          focusedBorder: OutlineInputBorder(
+          focusedBorder: const OutlineInputBorder(
             borderSide: BorderSide(color: AppColors.amber500),
           ),
         ),
@@ -1986,7 +2336,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
 
     if (!context.mounted) return;
     if (success) {
-      showSuccessToast(context, 'Follow-up resolved');
+      showSuccessToast(context, context.l10n.qcFollowUpResolved);
     } else {
       final error = ref.read(qcFollowupProvider).error;
       if (error != null) showErrorToast(context, error);

@@ -46,7 +46,9 @@ class AppNavBar extends ConsumerWidget {
       }
     }
     final l10n = context.l10n;
-    final compactLanguageSwitcher = MediaQuery.sizeOf(context).width < 1100;
+    final width = MediaQuery.sizeOf(context).width;
+    final veryCompact = width < 520;
+    final compactLanguageSwitcher = width < 1180;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -62,19 +64,7 @@ class AppNavBar extends ConsumerWidget {
             }
           },
         ),
-        const SizedBox(width: 4),
-        _NavButton(
-          icon: Icons.arrow_forward_ios_rounded,
-          tooltip: l10n.forward,
-          enabled: nav.canGoForward,
-          onTap: () {
-            final next = nav.goForward();
-            if (next != null) {
-              context.go(next);
-            }
-          },
-        ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 6),
         _NavButton(
           icon: Icons.home_rounded,
           tooltip: l10n.home,
@@ -84,20 +74,36 @@ class AppNavBar extends ConsumerWidget {
             context.go(homeRoute);
           },
         ),
-        if (authState.accessibleStores.length > 1) ...[
-          const SizedBox(width: 8),
+        if (!veryCompact) ...[
+          const SizedBox(width: 6),
+          _NavButton(
+            icon: Icons.arrow_forward_ios_rounded,
+            tooltip: l10n.forward,
+            enabled: nav.canGoForward,
+            onTap: () {
+              final next = nav.goForward();
+              if (next != null) {
+                context.go(next);
+              }
+            },
+          ),
+        ],
+        if (!veryCompact && authState.accessibleStores.length > 1) ...[
+          const SizedBox(width: 10),
           _StoreSwitcher(
             value: authState.storeId,
             stores: authState.accessibleStores,
             onChanged: (storeId) =>
                 ref.read(authProvider.notifier).setActiveStore(storeId),
           ),
-        ] else if (activeStore != null) ...[
-          const SizedBox(width: 8),
+        ] else if (!veryCompact && activeStore != null) ...[
+          const SizedBox(width: 10),
           _StorePill(store: activeStore),
         ],
-        const SizedBox(width: 8),
-        LanguageSwitcher(compact: compactLanguageSwitcher),
+        if (!veryCompact) ...[
+          const SizedBox(width: 10),
+          LanguageSwitcher(compact: compactLanguageSwitcher),
+        ],
       ],
     );
   }
@@ -124,20 +130,20 @@ class _NavButton extends StatelessWidget {
         onTap: enabled ? onTap : null,
         borderRadius: AppRadius.sm,
         child: Container(
-          width: 36,
-          height: 36,
+          width: 34,
+          height: 34,
           decoration: BoxDecoration(
-            color: enabled ? PosColors.mutedSurface : PosColors.surface,
+            color: enabled ? PosColors.surface : PosColors.canvasAlt,
             borderRadius: AppRadius.sm,
             border: Border.all(
               color: enabled
-                  ? PosColors.borderStrong
+                  ? PosColors.border
                   : PosColors.border.withValues(alpha: 0.7),
             ),
           ),
           child: Icon(
             icon,
-            size: 18,
+            size: 16,
             color: enabled
                 ? PosColors.textPrimary
                 : PosColors.textMuted.withValues(alpha: 0.72),
@@ -165,7 +171,7 @@ class _StoreSwitcher extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: PosColors.surface,
-        borderRadius: AppRadius.sm,
+        borderRadius: AppRadius.lg,
         border: Border.all(color: PosColors.border),
       ),
       child: DropdownButtonHideUnderline(
@@ -177,7 +183,7 @@ class _StoreSwitcher extends StatelessWidget {
           iconEnabledColor: PosColors.accent,
           style: GoogleFonts.notoSansKr(
             color: PosColors.textPrimary,
-            fontSize: 12,
+            fontSize: 13,
             fontWeight: FontWeight.w700,
           ),
           items: stores
@@ -216,14 +222,14 @@ class _StorePill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
         color: PosColors.surface,
-        borderRadius: AppRadius.sm,
+        borderRadius: AppRadius.lg,
         border: Border.all(color: PosColors.border),
       ),
       child: Text(
         label,
         style: GoogleFonts.notoSansKr(
           color: PosColors.textPrimary,
-          fontSize: 12,
+          fontSize: 13,
           fontWeight: FontWeight.w700,
         ),
       ),

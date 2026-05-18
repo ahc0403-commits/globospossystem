@@ -1,7 +1,46 @@
 const puppeteer = require('puppeteer');
 const { createClient } = require('@supabase/supabase-js');
+const XLSX = require('xlsx');
 const fs = require('fs');
 const path = require('path');
+
+function hasDeviceHeader(cells) {
+  return cells.some(cell =>
+    ['device name', '기기명'].some(header =>
+      String(cell).trim().toLowerCase().includes(header),
+    ),
+  );
+}
+
+function canonicalHeader(header) {
+  const normalized = String(header).trim().toLowerCase();
+  if (normalized === '매장' || normalized === 'store') return 'Store';
+  if (normalized === '기기명' || normalized === 'device name') {
+    return 'Device Name';
+  }
+  if (normalized === '기기id' || normalized === 'device id') return 'Device ID';
+  if (normalized === '시간' || normalized === 'time') return 'Time';
+  if (normalized === '금액' || normalized === 'amount') return 'Amount';
+  if (normalized === '구분' || normalized === 'type') return 'Type';
+  return String(header).trim();
+}
+
+function rowsFromMatrix(matrix) {
+  const headerIndex = matrix.findIndex(hasDeviceHeader);
+  if (headerIndex < 0) return [];
+
+  const headers = matrix[headerIndex].map(canonicalHeader);
+  return matrix
+    .slice(headerIndex + 1)
+    .map(cells => {
+      const row = {};
+      headers.forEach((header, index) => {
+        row[header] = cells[index] !== undefined ? String(cells[index]).trim() : '';
+      });
+      return row;
+    })
+    .filter(row => String(row['Device Name'] || '').trim() !== '');
+}
 
 function parseHtmlXlsTable(htmlContent) {
   const stripTags = s =>
@@ -23,8 +62,7 @@ function parseHtmlXlsTable(htmlContent) {
   const trPattern = /<tr[\s\S]*?<\/tr>/gi;
 
   function parseOneTable(tableHtml) {
-    const rows = [];
-    let headers = null;
+    const matrix = [];
     const trp = new RegExp(trPattern.source, 'gi');
     let trMatch;
     while ((trMatch = trp.exec(tableHtml)) !== null) {
@@ -35,32 +73,87 @@ function parseHtmlXlsTable(htmlContent) {
         cells.push(stripTags(cm[1]));
       }
       if (cells.length === 0 || cells.every(c => c === '')) continue;
-      if (headers === null) {
-        headers = cells;
-      } else {
-        const row = {};
-        headers.forEach((h, i) => {
-          row[h] = cells[i] !== undefined ? cells[i] : '';
-        });
-        rows.push(row);
-      }
+      matrix.push(cells);
     }
-    return { headers: headers || [], rows };
+    return rowsFromMatrix(matrix);
   }
 
   const tablePattern = /<table[\s\S]*?<\/table>/gi;
   let tMatch;
   while ((tMatch = tablePattern.exec(body)) !== null) {
-    const { headers, rows } = parseOneTable(tMatch[0]);
-    if (
-      headers.some(
-        h => h === 'Device Name' || h.toLowerCase().includes('device name'),
-      )
-    ) {
-      return rows;
-    }
+    const rows = parseOneTable(tMatch[0]);
+    if (rows.length > 0) return rows;
   }
 
+  return [];
+}
+
+function parseSpreadsheetFile(filePath) {
+  const buffer = fs.readFileSync(filePath);
+  const sample = buffer.toString('utf8', 0, Math.min(buffer.length, 2048));
+
+  if (/<html|<table/i.test(sample)) {
+    return parseHtmlXlsTable(buffer.toString('utf8'));
+  }
+
+  const workbook = XLSX.read(buffer, { type: 'buffer' });
+  for (const sheetName of workbook.SheetNames) {
+    const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+      header: 1,
+      raw: false,
+      blankrows: false,
+    });
+    const rows = rowsFromMatrix(matrix);
+    if (rows.length > 0) return rows;
+  }
+  return [];
+}
+
+function parseVisibleDeviceTable() {
+  const tables = Array.from(document.querySelectorAll('table'));
+  for (const table of tables) {
+    const matrix = Array.from(table.querySelectorAll('tr'))
+      .map(row =>
+        Array.from(row.querySelectorAll('th, td')).map(cell =>
+          cell.innerText.trim(),
+        ),
+      )
+      .filter(cells => cells.length > 0 && cells.some(cell => cell !== ''));
+
+    const headerIndex = matrix.findIndex(cells =>
+      cells.some(cell =>
+        ['device name', '기기명'].some(header =>
+          cell.toLowerCase().includes(header),
+        ),
+      ),
+    );
+    if (headerIndex < 0) continue;
+
+    const headers = matrix[headerIndex].map(header => {
+      const normalized = String(header).trim().toLowerCase();
+      if (normalized === '매장' || normalized === 'store') return 'Store';
+      if (normalized === '기기명' || normalized === 'device name') {
+        return 'Device Name';
+      }
+      if (normalized === '기기id' || normalized === 'device id') {
+        return 'Device ID';
+      }
+      if (normalized === '시간' || normalized === 'time') return 'Time';
+      if (normalized === '금액' || normalized === 'amount') return 'Amount';
+      if (normalized === '구분' || normalized === 'type') return 'Type';
+      return String(header).trim();
+    });
+    return matrix
+      .slice(headerIndex + 1)
+      .map(cells => {
+        const row = {};
+        headers.forEach((header, index) => {
+          row[header] = cells[index] || '';
+        });
+        return row;
+      })
+      .filter(row => String(row['Device Name'] || '').trim() !== '');
+  }
   return [];
 }
 
@@ -148,7 +241,7 @@ function aggregateByDevice(rows) {
       };
     }
 
-    if (type === 'Cash') {
+    if (type === 'Cash' || type === '현금') {
       devices[deviceName].gross_sales += amount;
       devices[deviceName].transaction_count += 1;
     } else {
@@ -173,7 +266,9 @@ async function loginAndGetData(page, user, pass, targetDate, downloadDir) {
   await page.$eval('#pw', el => (el.value = ''));
   await page.type('#pw', pass);
   await Promise.all([
-    page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 45000 }),
+    page
+      .waitForNavigation({ waitUntil: 'networkidle2', timeout: 45000 })
+      .catch(() => {}),
     page.click('button, input[type=submit]'),
   ]);
 
@@ -187,16 +282,42 @@ async function loginAndGetData(page, user, pass, targetDate, downloadDir) {
   });
   await page.waitForSelector('#selDate', { timeout: 10000 });
 
-  await page.$eval(
-    '#selDate',
-    (el, date) => {
-      el.value = date;
-      el.dispatchEvent(new Event('change', { bubbles: true }));
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-    },
-    targetDate,
-  );
-  await new Promise(r => setTimeout(r, 2000));
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt > 0) {
+      await new Promise(r => setTimeout(r, 1500));
+      await page.goto('http://moersinc.com/day.php', {
+        waitUntil: 'networkidle2',
+        timeout: 30000,
+      });
+      await page.waitForSelector('#selDate', { timeout: 10000 });
+    }
+
+    await new Promise(r => setTimeout(r, 1200));
+    await Promise.all([
+      page
+        .waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 })
+        .catch(() => {}),
+      page.$eval(
+        '#selDate',
+        (el, date) => {
+          el.value = date;
+          if (typeof window.onChange === 'function') {
+            window.onChange();
+            return;
+          }
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+        },
+        targetDate,
+      ),
+    ]);
+    await new Promise(r => setTimeout(r, 1000));
+
+    const rateLimited = await page.evaluate(() =>
+      document.body.innerText.includes('Can be viewed every'),
+    );
+    if (!rateLimited) break;
+  }
 
   const hasDownloadBtn = await page.evaluate(() => {
     const candidates = Array.from(
@@ -266,55 +387,16 @@ async function loginAndGetData(page, user, pass, targetDate, downloadDir) {
           const tb = fs.statSync(path.join(downloadDir, b)).mtimeMs;
           return tb - ta;
         });
-        const htmlContent = fs.readFileSync(
-          path.join(downloadDir, files[0]),
-          'utf8',
-        );
-        return { method: 'excel', rows: parseHtmlXlsTable(htmlContent) };
+        return {
+          method: 'excel',
+          rows: parseSpreadsheetFile(path.join(downloadDir, files[0])),
+        };
       }
     }
     throw new Error('Download timeout — no Excel file appeared after 30s');
   }
 
-  await page.evaluate(() => {
-    const submitBtn = document.querySelector(
-      'form button[type=submit], form input[type=submit]',
-    );
-    if (submitBtn) {
-      submitBtn.click();
-    } else {
-      const form = document.querySelector('form');
-      if (form) form.submit();
-    }
-  });
-  await page
-    .waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 })
-    .catch(() => {});
-  await new Promise(r => setTimeout(r, 1000));
-
-  const rows = await page.evaluate(() => {
-    const table = document.querySelectorAll('table')[1] || document.querySelector('table');
-    if (!table) return [];
-    const headerRow = table.querySelector('tr');
-    if (!headerRow) return [];
-    const headers = Array.from(headerRow.querySelectorAll('th, td')).map(el =>
-      el.innerText.trim(),
-    );
-    const dataRows = Array.from(table.querySelectorAll('tr')).slice(1);
-    return dataRows
-      .map(row => {
-        const cells = Array.from(row.querySelectorAll('td')).map(el =>
-          el.innerText.trim(),
-        );
-        if (cells.length === 0) return null;
-        const obj = {};
-        headers.forEach((h, i) => {
-          obj[h] = cells[i] || '';
-        });
-        return obj;
-      })
-      .filter(Boolean);
-  });
+  const rows = await page.evaluate(parseVisibleDeviceTable);
 
   return { method: 'html_scrape', rows };
 }

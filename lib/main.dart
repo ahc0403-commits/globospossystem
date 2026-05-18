@@ -14,14 +14,18 @@ export 'core/ui/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Web에서는 .env 파일 로드 불필요.
-  // Native test/runtime may inject values via --dart-define only, so missing
-  // .env must not prevent boot.
-  if (!kIsWeb) {
+  // Web debug runs still need the public Supabase config to boot locally.
+  // Only the checked-in `.env` is loaded on web; native keeps its local-first
+  // fallback order.
+  final envCandidates = kIsWeb
+      ? const ['.env']
+      : const ['.env.local', '.env'];
+  for (final fileName in envCandidates) {
     try {
-      await dotenv.load(fileName: '.env');
+      await dotenv.load(fileName: fileName);
+      break;
     } catch (_) {
-      // Fall back to dart-defines or defaults in AppConstants.
+      // Try the next local env source before falling back to dart-defines.
     }
   }
   await Supabase.initialize(

@@ -157,6 +157,41 @@ class TablesNotifier extends StateNotifier<TablesState> {
       return false;
     }
   }
+
+  Future<bool> updateTableLayout({
+    required String tableId,
+    required double layoutX,
+    required double layoutY,
+    required double layoutW,
+    required double layoutH,
+    required int layoutRotation,
+    required String layoutShape,
+    required int layoutSortOrder,
+    bool refresh = true,
+  }) async {
+    try {
+      await tablesService.updateTableLayout(
+        tableId: tableId,
+        storeId: storeId,
+        layoutX: layoutX,
+        layoutY: layoutY,
+        layoutW: layoutW,
+        layoutH: layoutH,
+        layoutRotation: layoutRotation,
+        layoutShape: layoutShape,
+        layoutSortOrder: layoutSortOrder,
+      );
+      if (refresh) {
+        await fetchTables();
+      }
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        error: _mapTablesError(error, 'Failed to save table layout.'),
+      );
+      return false;
+    }
+  }
 }
 
 final tablesProvider = StateNotifierProvider.autoDispose

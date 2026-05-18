@@ -82,6 +82,10 @@ checklist before the next slice starts.
 - re-run repo search for legacy UI standards
 - confirm deprecated documents did not regain active authority
 - confirm new feature plans still point to the active source of truth
+- enforce compatibility-budget tests for legacy shell helpers on migrated
+  surfaces
+- enforce regression tests that fail when new admin-shell adapters or legacy UI
+  aliases are reintroduced
 - run `flutter analyze` and `flutter test`
 
 ## Done Definition

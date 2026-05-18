@@ -79,6 +79,9 @@ void main() {
       expect(screen, contains('l10n.paymentDetailJobStatus'));
       expect(screen, contains('l10n.paymentDetailRefId'));
       expect(screen, contains('l10n.paymentDetailSid'));
+      expect(screen, contains('class _SecondaryInfoPanel'));
+      expect(screen, contains('initiallyExpanded: false'));
+      expect(screen, contains('ExpansionTile('));
 
       expect(
         paymentService,

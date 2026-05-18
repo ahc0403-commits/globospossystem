@@ -32,6 +32,10 @@ Primary authority:
       explicit and consistent.
 - [ ] Old dark-admin, tablet-first, kiosk-first, or browser-like chrome is not
       the baseline visual reference.
+- [ ] Migrated surfaces do not add new `AppColors`, `AppPanel`,
+      `WebSidebarLayout`, or legacy shell-adapter dependencies.
+- [ ] Migrated surfaces avoid screen-local typography and decoration fallbacks
+      when an operational primitive or token already exists.
 
 ## Non-Regression Gate
 
@@ -50,6 +54,8 @@ Primary authority:
       warning or a retained implementation symbol, not a source-of-truth file.
 - [ ] `source of truth` for Office UI resolves back to the Office source-of-
       truth document, not to an older standard file.
+- [ ] Repo tests or automated audits enforce the current legacy-compatibility
+      allowlist for migrated shells and surfaces.
 
 ## Verdict Rule
 

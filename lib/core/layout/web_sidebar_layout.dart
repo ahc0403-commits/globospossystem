@@ -35,15 +35,14 @@ class SidebarItem {
   final String workflowKey;
 
   /// Wave 1.5 shell migration: optional section header label inlined
-  /// above this item. Stored but not rendered today.
+  /// above this item.
   final String? sectionLabel;
 
   /// Wave 1.5 shell migration: secondary helper string under the label.
-  /// Stored but not rendered today.
   final String? helperLabel;
 
   /// Wave 1.5 shell migration: optional provider-backed badge widget
-  /// (e.g. a count chip). Stored but not rendered today.
+  /// (e.g. a count chip).
   final Widget? badge;
 }
 
@@ -134,7 +133,7 @@ class _SidebarRail extends StatelessWidget {
     return Container(
       width: ToastShellTokens.sidebarWidth,
       decoration: BoxDecoration(
-        color: PosColors.surface,
+        color: PosColors.sidebarSurface,
         border: Border(
           right: BorderSide(
             color: PosColors.border,
@@ -145,11 +144,11 @@ class _SidebarRail extends StatelessWidget {
       child: Column(
         children: [
           Container(
-            height: 72,
-            padding: const EdgeInsets.symmetric(horizontal: 18),
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
             alignment: Alignment.centerLeft,
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: PosColors.border)),
+            decoration: BoxDecoration(
+              color: PosColors.sidebarSurface,
+              border: const Border(bottom: BorderSide(color: PosColors.border)),
             ),
             child: Row(
               children: [
@@ -161,9 +160,9 @@ class _SidebarRail extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.notoSansKr(
                       color: PosColors.text,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.4,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.1,
                     ),
                   ),
                 ),
@@ -172,7 +171,7 @@ class _SidebarRail extends StatelessWidget {
           ),
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: 10),
               itemCount: items.length,
               itemBuilder: (context, index) {
                 final item = items[index];
@@ -182,6 +181,8 @@ class _SidebarRail extends StatelessWidget {
                   key: item.itemKey,
                   icon: item.icon,
                   label: item.label,
+                  helperLabel: item.helperLabel,
+                  badge: item.badge,
                   isSelected: isSelected,
                   onTap: item.onTap ?? () => onItemSelected(index),
                 );
@@ -200,9 +201,9 @@ class _SidebarRail extends StatelessWidget {
                         header.toUpperCase(),
                         style: GoogleFonts.notoSansKr(
                           color: PosColors.textMuted,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.8,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.45,
                         ),
                       ),
                     ),
@@ -218,6 +219,8 @@ class _SidebarRail extends StatelessWidget {
               (item) => _SidebarRailItem(
                 icon: item.icon,
                 label: item.label,
+                helperLabel: item.helperLabel,
+                badge: item.badge,
                 isSelected: false,
                 onTap: item.onTap ?? () {},
               ),
@@ -237,12 +240,16 @@ class _SidebarRailItem extends StatelessWidget {
     required this.label,
     required this.isSelected,
     required this.onTap,
+    this.helperLabel,
+    this.badge,
   });
 
   final IconData icon;
   final String label;
   final bool isSelected;
   final VoidCallback onTap;
+  final String? helperLabel;
+  final Widget? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -255,14 +262,16 @@ class _SidebarRailItem extends StatelessWidget {
         selected: isSelected,
         minHeight: ToastShellTokens.navItemHeight,
         onTap: onTap,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Icon(
               icon,
-              size: 17,
-              color: isSelected ? PosColors.accent : PosColors.textMuted,
+              size: 18,
+              color: isSelected ? PosColors.accent : PosColors.textSecondary,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(
               child: Text(
                 label,
@@ -270,11 +279,15 @@ class _SidebarRailItem extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.notoSansKr(
                   color: isSelected ? PosColors.text : PosColors.textSecondary,
-                  fontSize: 13,
-                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                  fontSize: 14,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
                 ),
               ),
             ),
+            if (badge != null) ...[
+              const SizedBox(width: AppSpacing.xs),
+              badge!,
+            ],
           ],
         ),
       ),

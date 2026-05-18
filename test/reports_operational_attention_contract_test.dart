@@ -31,6 +31,12 @@ void main() {
     expect(reportsTab, contains('l10n.reportsOperationalFollowUpFocus'));
     expect(reportsTab, contains('l10n.reportsOperationalHealthyBaseline'));
     expect(reportsTab, contains('l10n.reportsOperationalBoundary'));
+    expect(reportsTab, contains('class _ReportsOperationalSignalsDetail'));
+    expect(
+      reportsTab,
+      contains("key: const Key('reports_operational_signals_detail')"),
+    );
+    expect(reportsTab, contains('initiallyExpanded: false'));
     expect(reportsTab, contains('_signalCard('));
     expect(reportsTab, contains('_statusStrip('));
     expect(reportsTab, contains('_statusStripBadge('));
