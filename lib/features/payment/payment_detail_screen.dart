@@ -41,6 +41,7 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
   String? _subscribedSignature;
   bool _realtimeConnected = false;
   bool _refreshInFlight = false;
+  bool _adjustmentInFlight = false;
 
   @override
   void initState() {
@@ -136,6 +137,13 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
           schema: 'public',
           table: 'payments',
           filter: LiveSyncScope.entityFilter('id', widget.paymentId),
+          callback: (_) => _refreshDetailFromRealtime(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'payment_adjustments',
+          filter: LiveSyncScope.entityFilter('payment_id', widget.paymentId),
           callback: (_) => _refreshDetailFromRealtime(),
         );
 
@@ -313,6 +321,24 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
             final paymentMethod = _stringOrDash(
               payment['method'] ?? payment['payment_method'],
             );
+            final adjustments = _listOfMaps(detail['adjustments']);
+            final refundAmount = _sumAdjustmentAmount(adjustments, 'refund');
+            final voidAmount = _sumAdjustmentAmount(adjustments, 'void');
+            final adjustedAmount = refundAmount + voidAmount;
+            final paymentAmountValue = _numValue(
+              payment['amount'] ??
+                  payment['paid_amount'] ??
+                  payment['settled_amount'],
+            ).toDouble();
+            final remainingAdjustmentAmount =
+                (paymentAmountValue - adjustedAmount).clamp(0, double.infinity);
+            final isRevenuePayment = payment['is_revenue'] != false;
+            final canAdjust =
+                isRevenuePayment &&
+                remainingAdjustmentAmount > 0 &&
+                !_adjustmentInFlight;
+            final canVoid =
+                canAdjust && adjustedAmount == 0 && paymentAmountValue > 0;
 
             return RefreshIndicator(
               onRefresh: _reload,
@@ -416,6 +442,25 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
                                   : '${l10n.paymentDetailProofRequired}: ${_boolLabel(context, payment['proof_required'])}',
                               color: _statusColor(proofStatus),
                             ),
+                            _SignalCard(
+                              title: l10n.paymentDetailAdjustmentSignal,
+                              value: _adjustmentStatus(
+                                context: context,
+                                refundAmount: refundAmount,
+                                voidAmount: voidAmount,
+                                paymentAmount: paymentAmountValue,
+                              ),
+                              detail: l10n.paymentDetailRemainingAmount(
+                                _formatCurrency(remainingAdjustmentAmount),
+                              ),
+                              color: _statusColor(
+                                voidAmount > 0
+                                    ? 'void'
+                                    : refundAmount > 0
+                                    ? 'refund'
+                                    : 'open',
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: AppSpacing.md),
@@ -436,6 +481,35 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
                               tone: PosActionTone.secondary,
                               icon: Icons.print_outlined,
                               onPressed: () => _printReceipt(detail),
+                            ),
+                            PosActionButton(
+                              key: const Key('payment_detail_refund_payment'),
+                              label: l10n.paymentDetailRefund,
+                              tone: PosActionTone.destructive,
+                              icon: Icons.keyboard_return_outlined,
+                              loading: _adjustmentInFlight,
+                              onPressed: canAdjust
+                                  ? () => _openAdjustmentDialog(
+                                      payment: payment,
+                                      adjustmentType: 'refund',
+                                      maxAmount: remainingAdjustmentAmount
+                                          .toDouble(),
+                                    )
+                                  : null,
+                            ),
+                            PosActionButton(
+                              key: const Key('payment_detail_void_payment'),
+                              label: l10n.paymentDetailVoid,
+                              tone: PosActionTone.destructive,
+                              icon: Icons.block_outlined,
+                              loading: _adjustmentInFlight,
+                              onPressed: canVoid
+                                  ? () => _openAdjustmentDialog(
+                                      payment: payment,
+                                      adjustmentType: 'void',
+                                      maxAmount: paymentAmountValue,
+                                    )
+                                  : null,
                             ),
                             ToastStatusBadge(
                               label: l10n.paymentDetailBadgePayment(
@@ -547,6 +621,44 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
                             l10n.paymentDetailOrderCreated,
                             _formatDateTime(order['created_at']),
                           ),
+                        ],
+                      ),
+                      _SecondaryInfoPanel(
+                        title: l10n.paymentDetailAdjustmentSummary,
+                        initiallyExpanded: adjustments.isNotEmpty,
+                        rows: [
+                          _InfoRow(
+                            l10n.paymentDetailAdjustmentRefunded,
+                            _formatCurrency(refundAmount),
+                          ),
+                          _InfoRow(
+                            l10n.paymentDetailAdjustmentVoided,
+                            _formatCurrency(voidAmount),
+                          ),
+                          _InfoRow(
+                            l10n.paymentDetailRemainingAdjustable,
+                            _formatCurrency(remainingAdjustmentAmount),
+                          ),
+                          _InfoRow(
+                            l10n.paymentDetailAdjustmentCount,
+                            adjustments.length.toString(),
+                          ),
+                          if (adjustments.isNotEmpty) ...[
+                            _InfoRow(
+                              l10n.paymentDetailLastAdjustmentType,
+                              _stringOrDash(
+                                adjustments.first['adjustment_type'],
+                              ),
+                            ),
+                            _InfoRow(
+                              l10n.paymentDetailLastAdjustmentReason,
+                              _stringOrDash(adjustments.first['reason']),
+                            ),
+                            _InfoRow(
+                              l10n.paymentDetailLastAdjustmentRecorded,
+                              _formatDateTime(adjustments.first['created_at']),
+                            ),
+                          ],
                         ],
                       ),
                       _SecondaryInfoPanel(
@@ -676,11 +788,145 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
     }
   }
 
+  Future<void> _openAdjustmentDialog({
+    required Map<String, dynamic> payment,
+    required String adjustmentType,
+    required double maxAmount,
+  }) async {
+    final l10n = context.l10n;
+    final isVoid = adjustmentType == 'void';
+    final amountController = TextEditingController(
+      text: isVoid ? maxAmount.toStringAsFixed(0) : '',
+    );
+    final reasonController = TextEditingController();
+
+    try {
+      final confirmed = await ToastConfirmDialog.withContent(
+        context: context,
+        title: isVoid
+            ? l10n.paymentDetailVoidPayment
+            : l10n.paymentDetailRefundPayment,
+        confirmLabel: isVoid
+            ? l10n.paymentDetailVoid
+            : l10n.paymentDetailRefund,
+        cancelLabel: l10n.cancel,
+        destructive: true,
+        icon: isVoid ? Icons.block_outlined : Icons.keyboard_return_outlined,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${l10n.paymentDetailPaymentId}: ${_stringOrDash(payment['id'])}',
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(l10n.paymentDetailAvailableAmount(_formatCurrency(maxAmount))),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              key: const Key('payment_adjustment_amount_input'),
+              controller: amountController,
+              enabled: !isVoid,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: InputDecoration(
+                labelText: l10n.paymentDetailAdjustmentAmount,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              key: const Key('payment_adjustment_reason_input'),
+              controller: reasonController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                labelText: l10n.paymentDetailAdjustmentReason,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true) return;
+      if (!mounted) return;
+
+      final reason = reasonController.text.trim();
+      final amount = isVoid
+          ? maxAmount
+          : double.tryParse(amountController.text.replaceAll(',', '').trim());
+
+      if (reason.isEmpty) {
+        showErrorToast(context, l10n.paymentDetailReasonRequired);
+        return;
+      }
+
+      if (amount == null || amount <= 0 || amount > maxAmount) {
+        showErrorToast(
+          context,
+          l10n.paymentDetailAdjustmentAmountLimit(_formatCurrency(maxAmount)),
+        );
+        return;
+      }
+
+      await _submitAdjustment(
+        adjustmentType: adjustmentType,
+        amount: amount,
+        reason: reason,
+      );
+    } finally {
+      amountController.dispose();
+      reasonController.dispose();
+    }
+  }
+
+  Future<void> _submitAdjustment({
+    required String adjustmentType,
+    required double amount,
+    required String reason,
+  }) async {
+    setState(() {
+      _adjustmentInFlight = true;
+    });
+
+    try {
+      await paymentService.recordPaymentAdjustment(
+        paymentId: widget.paymentId,
+        adjustmentType: adjustmentType,
+        amount: amount,
+        reason: reason,
+      );
+      if (!mounted) return;
+      final l10n = context.l10n;
+      showSuccessToast(
+        context,
+        adjustmentType == 'void'
+            ? l10n.paymentDetailVoidRecorded
+            : l10n.paymentDetailRefundRecorded,
+      );
+      await _refreshDetailSilently();
+    } catch (error) {
+      if (!mounted) return;
+      showErrorToast(context, _mapAdjustmentError(context, error));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _adjustmentInFlight = false;
+        });
+      }
+    }
+  }
+
   Map<String, dynamic> _map(dynamic value) {
     if (value is Map) {
       return Map<String, dynamic>.from(value);
     }
     return const <String, dynamic>{};
+  }
+
+  List<Map<String, dynamic>> _listOfMaps(dynamic value) {
+    if (value is! List) return const [];
+    return value.map((item) => Map<String, dynamic>.from(item as Map)).toList();
   }
 
   String _extractTableNumber(Map<String, dynamic> order) {
@@ -779,6 +1025,57 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
     return 'required';
   }
 
+  double _sumAdjustmentAmount(
+    List<Map<String, dynamic>> adjustments,
+    String adjustmentType,
+  ) {
+    return adjustments
+        .where((row) => row['adjustment_type']?.toString() == adjustmentType)
+        .fold<double>(
+          0,
+          (sum, row) => sum + _numValue(row['amount']).toDouble(),
+        );
+  }
+
+  String _adjustmentStatus({
+    required BuildContext context,
+    required double refundAmount,
+    required double voidAmount,
+    required double paymentAmount,
+  }) {
+    final l10n = context.l10n;
+    if (voidAmount > 0) return l10n.paymentDetailAdjustmentStatusVoided;
+    if (refundAmount <= 0) return l10n.paymentDetailAdjustmentStatusOpen;
+    if (refundAmount >= paymentAmount) {
+      return l10n.paymentDetailAdjustmentStatusRefunded;
+    }
+    return l10n.paymentDetailAdjustmentStatusPartialRefund;
+  }
+
+  String _mapAdjustmentError(BuildContext context, Object error) {
+    final l10n = context.l10n;
+    final message = error.toString();
+    if (message.contains('PAYMENT_REFUND_EXCEEDS_REMAINING_AMOUNT')) {
+      return l10n.paymentDetailRefundExceedsRemaining;
+    }
+    if (message.contains('PAYMENT_VOID_AMOUNT_MUST_MATCH_PAYMENT')) {
+      return l10n.paymentDetailVoidMustMatchPayment;
+    }
+    if (message.contains('PAYMENT_VOID_AFTER_REFUND_NOT_ALLOWED')) {
+      return l10n.paymentDetailRefundAfterPartial;
+    }
+    if (message.contains('PAYMENT_ADJUSTMENT_SERVICE_NOT_ALLOWED')) {
+      return l10n.paymentDetailServiceAdjustmentNotAllowed;
+    }
+    if (message.contains('PAYMENT_ADJUSTMENT_REASON_REQUIRED')) {
+      return l10n.paymentDetailReasonRequired;
+    }
+    if (message.contains('PAYMENT_ADJUSTMENT_FORBIDDEN')) {
+      return l10n.paymentDetailAdjustmentForbidden;
+    }
+    return l10n.paymentDetailAdjustmentFailed(message);
+  }
+
   bool _showPortalPending({
     required Map<String, dynamic> einvoiceJob,
     required String issuanceStatus,
@@ -861,6 +1158,8 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
     }
     if (normalized.contains('fail') ||
         normalized.contains('cancel') ||
+        normalized.contains('refund') ||
+        normalized.contains('void') ||
         normalized.contains('error')) {
       return AppColors.statusCancelled;
     }

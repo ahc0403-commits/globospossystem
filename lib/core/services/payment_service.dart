@@ -161,7 +161,45 @@ class PaymentService {
       }
     }
 
-    return {'payment': paymentMap, 'order': orderMap, 'einvoice_job': jobMap};
+    final adjustments = await supabase
+        .from('payment_adjustments')
+        .select()
+        .eq('payment_id', paymentId)
+        .order('created_at', ascending: false);
+
+    return {
+      'payment': paymentMap,
+      'order': orderMap,
+      'einvoice_job': jobMap,
+      'adjustments': adjustments
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList(),
+    };
+  }
+
+  Future<Map<String, dynamic>> recordPaymentAdjustment({
+    required String paymentId,
+    required String adjustmentType,
+    double? amount,
+    required String reason,
+  }) async {
+    final params = <String, dynamic>{
+      'p_payment_id': paymentId,
+      'p_adjustment_type': adjustmentType,
+      'p_reason': reason,
+    };
+    if (amount != null) {
+      params['p_amount'] = amount;
+    }
+
+    final result = await supabase.rpc(
+      'record_payment_adjustment',
+      params: params,
+    );
+    if (result is List && result.isNotEmpty && result.first is Map) {
+      return Map<String, dynamic>.from(result.first as Map);
+    }
+    return Map<String, dynamic>.from(result as Map);
   }
 
   Future<List<Map<String, dynamic>>> processPaymentSplits({

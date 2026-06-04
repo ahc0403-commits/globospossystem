@@ -18,9 +18,13 @@ String readOfficeFile(String path) {
 void main() {
   group('tri-system Deliberry -> POS -> Office data flow harness', () {
     test('static contracts keep all three systems wired through read fences', () {
-      final posSalesView = readRepoFile(
-        'supabase/migrations/20260604000000_office_pos_sales_events.sql',
-      );
+      final posSalesView =
+          readRepoFile(
+            'supabase/migrations/20260604000000_office_pos_sales_events.sql',
+          ) +
+          readRepoFile(
+            'supabase/migrations/20260604001000_pos_payment_refund_void_adjustments.sql',
+          );
       final deliberrySettlementFunction = readRepoFile(
         'supabase/functions/generate_delivery_settlement/index.ts',
       );
@@ -41,6 +45,15 @@ void main() {
       );
 
       expect(posSalesView, contains("'external_sales'::text as source_table"));
+      expect(
+        posSalesView,
+        contains("'payment_adjustments'::text as source_table"),
+      );
+      expect(posSalesView, contains("('payment_adjustment:' || pa.id::text)"));
+      expect(posSalesView, contains('pa.adjustment_type as event_type'));
+      expect(posSalesView, contains('(-pa.amount)::numeric(15,2)'));
+      expect(posSalesView, contains('record_payment_adjustment'));
+      expect(posSalesView, contains('PAYMENT_ADJUSTMENTS_IMMUTABLE'));
       expect(posSalesView, contains("('external_sale:' || es.id::text)"));
       expect(posSalesView, contains("'pay'::text as payment_bucket"));
       expect(
