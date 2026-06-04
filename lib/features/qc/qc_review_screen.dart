@@ -9,6 +9,7 @@ import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/qc_service.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast_primitives_extended.dart';
+import '../../core/utils/number_input_utils.dart';
 import '../../core/utils/permission_utils.dart';
 import '../../core/utils/role_routes.dart';
 import '../../core/utils/time_utils.dart';
@@ -69,6 +70,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
         });
       }
       return Scaffold(
+        key: const Key('qc_review_root'),
         backgroundColor: PosColors.canvas,
         body: Center(
           child: Text(
@@ -115,6 +117,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
         .length;
 
     return Scaffold(
+      key: const Key('qc_review_root'),
       backgroundColor: PosColors.canvas,
       appBar: AppBar(
         backgroundColor: PosColors.topbarSurface,
@@ -362,6 +365,8 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                   height: 160,
                   width: double.infinity,
                   fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) =>
+                      _imageLoadFallback(height: 160, width: double.infinity),
                 ),
               ),
             ),
@@ -508,9 +513,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                             storeId: storeId,
                             checkIds: [checkId],
                             svReviewStatus: status,
-                            svScore: double.tryParse(
-                              scoreController.text.trim(),
-                            ),
+                            svScore: parseDecimalInput(scoreController.text),
                             svNote: noteController.text.trim().isEmpty
                                 ? null
                                 : noteController.text.trim(),
@@ -584,7 +587,13 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                       maxScale: 4,
                       child: url == null || url.isEmpty
                           ? const SizedBox.shrink()
-                          : Image.network(url, fit: BoxFit.contain),
+                          : Image.network(
+                              url,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => _imageLoadFallback(
+                                color: Colors.white.withValues(alpha: 0.78),
+                              ),
+                            ),
                     );
                   }).toList(),
                 ),
@@ -646,6 +655,21 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
         color: PosColors.textMuted,
         fontSize: 11,
         fontWeight: FontWeight.w700,
+      ),
+    );
+  }
+
+  Widget _imageLoadFallback({
+    double? width,
+    double? height,
+    Color color = PosColors.textMuted,
+  }) {
+    return Container(
+      width: width,
+      height: height,
+      color: PosColors.canvasAlt,
+      child: Center(
+        child: Icon(Icons.broken_image_outlined, color: color, size: 22),
       ),
     );
   }

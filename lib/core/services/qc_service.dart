@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
@@ -154,21 +152,12 @@ class QcService {
   Future<String?> uploadQcPhoto({
     required String storeId,
     required String templateId,
-    required File file,
+    required XFile file,
     required String type,
     String? checkDate,
   }) async {
-    final bytes = await file.readAsBytes();
-    final original = img.decodeImage(bytes);
-    if (original == null) return null;
-
-    final widthDominant = original.width >= original.height;
-    final resized = img.copyResize(
-      original,
-      width: widthDominant ? 1200 : null,
-      height: widthDominant ? null : 1200,
-    );
-    final compressed = Uint8List.fromList(img.encodeJpg(resized, quality: 75));
+    final upload = await _prepareQcPhotoUpload(file);
+    if (upload == null) return null;
 
     final path = type == 'template'
         ? '$storeId/templates/$templateId.jpg'
@@ -178,9 +167,9 @@ class QcService {
         .from('qc-photos')
         .uploadBinary(
           path,
-          compressed,
-          fileOptions: const FileOptions(
-            contentType: 'image/jpeg',
+          upload.bytes,
+          fileOptions: FileOptions(
+            contentType: upload.contentType,
             upsert: true,
           ),
         );

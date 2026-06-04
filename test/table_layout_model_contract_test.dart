@@ -42,4 +42,17 @@ void main() {
     expect(table.layoutShape, PosTableShape.rectangle);
     expect(table.layoutSortOrder, 0);
   });
+
+  test('PosTable exposes reservation status separately from occupancy', () {
+    final table = PosTable.fromJson({
+      'id': 'table-1',
+      'restaurant_id': 'store-1',
+      'table_number': 'A1',
+      'status': 'reserved',
+    });
+
+    expect(table.isReserved, isTrue);
+    expect(table.isAvailable, isFalse);
+    expect(table.isOccupied, isFalse);
+  });
 }

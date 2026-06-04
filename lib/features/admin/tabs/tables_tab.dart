@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../core/i18n/locale_extensions.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
+import '../../../core/utils/number_input_utils.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
@@ -150,7 +152,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
       _draftLayoutByTableId.clear();
       _layoutEditMode = false;
     });
-    showSuccessToast(context, 'Table layout saved.');
+    showSuccessToast(context, context.l10n.tablesLayoutSaved);
   }
 
   @override
@@ -191,6 +193,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     final selectedTable = _resolveSelectedTable(tablesState.tables);
 
     return Scaffold(
+      key: const Key('admin_tables_root'),
       backgroundColor: AppColors.surface0,
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 220),
@@ -250,24 +253,25 @@ class _TablesTabState extends ConsumerState<TablesTab> {
   bool _matchesTableFilter(PosTable table) {
     return switch (_tableFilter) {
       'occupied' => table.isOccupied,
-      'waiting' => table.status == 'pending' || table.status == 'reserved',
-      'empty' => !table.isOccupied,
+      'reserved' => table.isReserved,
+      'empty' => table.isAvailable,
       _ => true,
     };
   }
 
   String _tableStatusLabel(PosTable table) {
+    final l10n = context.l10n;
     return switch (table.status) {
-      'occupied' => '사용 중',
-      'pending' || 'reserved' => '대기 중',
-      _ => '비어 있음',
+      'occupied' => l10n.tablesFilterOccupied,
+      'reserved' => l10n.tablesFilterReserved,
+      _ => l10n.tablesFilterEmpty,
     };
   }
 
   Color _tableStatusColor(PosTable table) {
     return switch (table.status) {
       'occupied' => PosColors.success,
-      'pending' || 'reserved' => PosColors.warning,
+      'reserved' => PosColors.warning,
       _ => PosColors.textSecondary,
     };
   }
@@ -280,9 +284,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     required AsyncValue<List<Map<String, dynamic>>> auditTraceAsync,
   }) {
     if (tablesState.isLoading && tablesState.tables.isEmpty) {
-      return const ToastOperationalLoadingState(
-        label: PosLoadingCopy.loadingTables,
-      );
+      return ToastOperationalLoadingState(label: context.l10n.waiterLoading);
     }
 
     if (tablesState.error != null && tablesState.tables.isEmpty) {
@@ -291,7 +293,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Failed to load tables.',
+              context.l10n.tablesLoadFailed,
               style: GoogleFonts.notoSansKr(
                 color: AppColors.statusCancelled,
                 fontSize: 14,
@@ -304,7 +306,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                 backgroundColor: AppColors.amber500,
                 foregroundColor: AppColors.surface0,
               ),
-              child: const Text('Retry'),
+              child: Text(context.l10n.retry),
             ),
           ],
         ),
@@ -312,8 +314,8 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     }
 
     if (tablesState.tables.isEmpty) {
-      return const ToastOperationalEmptyState(
-        headline: PosEmptyStateCopy.tablesEmpty,
+      return ToastOperationalEmptyState(
+        headline: context.l10n.tablesNoTablesTitle,
         icon: Icons.table_restaurant,
       );
     }
@@ -323,12 +325,10 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     final occupiedCount = layoutTables
         .where((table) => table.isOccupied)
         .length;
-    final waitingCount = layoutTables
-        .where(
-          (table) => table.status == 'pending' || table.status == 'reserved',
-        )
+    final reservedCount = layoutTables
+        .where((table) => table.isReserved)
         .length;
-    final emptyCount = layoutTables.length - occupiedCount - waitingCount;
+    final emptyCount = layoutTables.length - occupiedCount - reservedCount;
 
     return Column(
       key: key,
@@ -338,7 +338,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
           child: _buildTableCommandHeader(
             totalCount: layoutTables.length,
             occupiedCount: occupiedCount,
-            waitingCount: waitingCount,
+            reservedCount: reservedCount,
             emptyCount: emptyCount,
             tablesState: tablesState,
             tablesNotifier: tablesNotifier,
@@ -350,10 +350,13 @@ class _TablesTabState extends ConsumerState<TablesTab> {
               ? Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   child: PosTableShell(
-                    columns: const [
-                      ToastQueueColumn(label: '테이블', flex: 4),
-                      ToastQueueColumn(label: '좌석', flex: 2),
-                      ToastQueueColumn(label: '상태', flex: 3),
+                    columns: [
+                      ToastQueueColumn(label: context.l10n.table, flex: 4),
+                      ToastQueueColumn(
+                        label: context.l10n.tablesSeatCount,
+                        flex: 2,
+                      ),
+                      ToastQueueColumn(label: context.l10n.status, flex: 3),
                     ],
                     rows: filteredTables
                         .map(
@@ -365,7 +368,11 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                                 style: Theme.of(context).textTheme.bodyMedium
                                     ?.copyWith(fontWeight: FontWeight.w700),
                               ),
-                              Text('${table.seatCount ?? 0}인'),
+                              Text(
+                                context.l10n.waiterSeatCount(
+                                  table.seatCount ?? 0,
+                                ),
+                              ),
                               Align(
                                 alignment: Alignment.centerLeft,
                                 child: ToastStatusBadge(
@@ -441,12 +448,13 @@ class _TablesTabState extends ConsumerState<TablesTab> {
   Widget _buildTableCommandHeader({
     required int totalCount,
     required int occupiedCount,
-    required int waitingCount,
+    required int reservedCount,
     required int emptyCount,
     required TablesState tablesState,
     required TablesNotifier tablesNotifier,
     required AsyncValue<List<Map<String, dynamic>>> auditTraceAsync,
   }) {
+    final l10n = context.l10n;
     final hasDraft = _draftLayoutByTableId.isNotEmpty;
     final selectedTable = _selectedTable;
 
@@ -464,14 +472,14 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '테이블 관리',
+                      l10n.tablesManagementTitle,
                       style: Theme.of(context).textTheme.headlineLarge,
                     ),
                     const SizedBox(height: 4),
                     Text(
                       _layoutEditMode
-                          ? '테이블 추가, 위치 이동, 삭제, 저장만 처리하는 레이아웃 편집 단계입니다.'
-                          : '홀 테이블 상태를 빠르게 확인하고 필요한 테이블만 선택합니다.',
+                          ? l10n.tablesManagementEditSubtitle
+                          : l10n.tablesManagementMonitorSubtitle,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: PosColors.textSecondary,
                         fontSize: 13,
@@ -482,7 +490,9 @@ class _TablesTabState extends ConsumerState<TablesTab> {
               ),
               const SizedBox(width: 12),
               ToastStatusBadge(
-                label: _layoutEditMode ? '레이아웃 편집' : '운영 모니터',
+                label: _layoutEditMode
+                    ? l10n.tablesLayoutEditMode
+                    : l10n.tablesOperationMonitor,
                 color: _layoutEditMode ? PosColors.warning : PosColors.info,
                 compact: true,
               ),
@@ -491,21 +501,21 @@ class _TablesTabState extends ConsumerState<TablesTab> {
           const SizedBox(height: 14),
           ToastMetricStrip(
             metrics: [
-              ToastMetric(label: '전체 테이블', value: '$totalCount'),
+              ToastMetric(label: l10n.tablesTotalTables, value: '$totalCount'),
               ToastMetric(
-                label: '사용 중',
+                label: l10n.tablesFilterOccupied,
                 value: '$occupiedCount',
                 tone: PosColors.success,
               ),
               ToastMetric(
-                label: '대기 중',
-                value: '$waitingCount',
-                tone: waitingCount > 0
+                label: l10n.tablesFilterReserved,
+                value: '$reservedCount',
+                tone: reservedCount > 0
                     ? PosColors.warning
                     : PosColors.textSecondary,
               ),
               ToastMetric(
-                label: '비어 있음',
+                label: l10n.tablesFilterEmpty,
                 value: '$emptyCount',
                 tone: PosColors.accent,
               ),
@@ -518,40 +528,40 @@ class _TablesTabState extends ConsumerState<TablesTab> {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               ToastFilterChip(
-                label: '전체',
+                label: l10n.all,
                 selected: _tableFilter == 'all',
                 count: totalCount,
                 onSelected: () => setState(() => _tableFilter = 'all'),
               ),
               ToastFilterChip(
-                label: '사용 중',
+                label: l10n.tablesFilterOccupied,
                 selected: _tableFilter == 'occupied',
                 count: occupiedCount,
                 onSelected: () => setState(() => _tableFilter = 'occupied'),
               ),
               ToastFilterChip(
-                label: '대기 중',
-                selected: _tableFilter == 'waiting',
-                count: waitingCount,
-                onSelected: () => setState(() => _tableFilter = 'waiting'),
+                label: l10n.tablesFilterReserved,
+                selected: _tableFilter == 'reserved',
+                count: reservedCount,
+                onSelected: () => setState(() => _tableFilter = 'reserved'),
               ),
               ToastFilterChip(
-                label: '비어 있음',
+                label: l10n.tablesFilterEmpty,
                 selected: _tableFilter == 'empty',
                 count: emptyCount,
                 onSelected: () => setState(() => _tableFilter = 'empty'),
               ),
               SegmentedButton<bool>(
-                segments: const [
+                segments: [
                   ButtonSegment(
                     value: false,
-                    icon: Icon(Icons.grid_view_rounded),
-                    label: Text('그리드'),
+                    icon: const Icon(Icons.grid_view_rounded),
+                    label: Text(l10n.tablesViewGrid),
                   ),
                   ButtonSegment(
                     value: true,
-                    icon: Icon(Icons.view_list_rounded),
-                    label: Text('리스트'),
+                    icon: const Icon(Icons.view_list_rounded),
+                    label: Text(l10n.tablesViewList),
                   ),
                 ],
                 selected: {_showListView},
@@ -560,16 +570,16 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                 },
               ),
               SegmentedButton<bool>(
-                segments: const [
+                segments: [
                   ButtonSegment(
                     value: false,
-                    icon: Icon(Icons.visibility_outlined),
-                    label: Text('상태'),
+                    icon: const Icon(Icons.visibility_outlined),
+                    label: Text(l10n.tablesModeStatus),
                   ),
                   ButtonSegment(
                     value: true,
-                    icon: Icon(Icons.edit_location_alt_outlined),
-                    label: Text('편집'),
+                    icon: const Icon(Icons.edit_location_alt_outlined),
+                    label: Text(l10n.tablesModeEdit),
                   ),
                 ],
                 selected: {_layoutEditMode},
@@ -586,8 +596,61 @@ class _TablesTabState extends ConsumerState<TablesTab> {
               FilledButton.icon(
                 onPressed: () => _showAddTableDialog(context, tablesNotifier),
                 icon: const Icon(Icons.add, size: 18),
-                label: const Text('테이블 추가'),
+                label: Text(l10n.tablesAddTitle),
               ),
+              if (!_layoutEditMode &&
+                  selectedTable != null &&
+                  !selectedTable.isOccupied)
+                OutlinedButton.icon(
+                  key: const Key('admin_tables_toggle_reservation'),
+                  onPressed: () async {
+                    final nextStatus = selectedTable.isReserved
+                        ? 'available'
+                        : 'reserved';
+                    final success = await tablesNotifier.updateTableStatus(
+                      selectedTable.id,
+                      nextStatus,
+                    );
+                    if (!mounted || !success) {
+                      return;
+                    }
+                    setState(() {
+                      _selectedTable = PosTable(
+                        id: selectedTable.id,
+                        storeId: selectedTable.storeId,
+                        tableNumber: selectedTable.tableNumber,
+                        seatCount: selectedTable.seatCount,
+                        status: nextStatus,
+                        layoutX: selectedTable.layoutX,
+                        layoutY: selectedTable.layoutY,
+                        layoutW: selectedTable.layoutW,
+                        layoutH: selectedTable.layoutH,
+                        layoutRotation: selectedTable.layoutRotation,
+                        layoutShape: selectedTable.layoutShape,
+                        layoutSortOrder: selectedTable.layoutSortOrder,
+                      );
+                    });
+                    showSuccessToast(
+                      context,
+                      nextStatus == 'reserved'
+                          ? l10n.tablesReserved(selectedTable.tableNumber)
+                          : l10n.tablesReservationCleared(
+                              selectedTable.tableNumber,
+                            ),
+                    );
+                  },
+                  icon: Icon(
+                    selectedTable.isReserved
+                        ? Icons.event_available_outlined
+                        : Icons.event_busy_outlined,
+                    size: 18,
+                  ),
+                  label: Text(
+                    selectedTable.isReserved
+                        ? l10n.tablesReleaseReservation
+                        : l10n.tablesReserveSelected,
+                  ),
+                ),
               if (_layoutEditMode)
                 FilledButton.icon(
                   onPressed: hasDraft
@@ -595,7 +658,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                             _saveDraftLayout(tablesNotifier, tablesState.tables)
                       : null,
                   icon: const Icon(Icons.save_outlined, size: 18),
-                  label: const Text('레이아웃 저장'),
+                  label: Text(l10n.tablesSaveLayout),
                 ),
               if (_layoutEditMode)
                 OutlinedButton.icon(
@@ -607,7 +670,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                         }
                       : null,
                   icon: const Icon(Icons.undo_outlined, size: 18),
-                  label: const Text('초안 초기화'),
+                  label: Text(l10n.tablesResetDraft),
                 ),
               if (_layoutEditMode && selectedTable != null)
                 OutlinedButton.icon(
@@ -626,19 +689,19 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                     });
                     showSuccessToast(
                       context,
-                      'Table "$selectedNumber" deleted.',
+                      l10n.tablesDeleted(selectedNumber),
                     );
                   },
                   icon: const Icon(Icons.delete_outline, size: 18),
-                  label: const Text('선택 삭제'),
+                  label: Text(l10n.tablesDeleteSelected),
                 ),
             ],
           ),
           if (_layoutEditMode) ...[
             const SizedBox(height: 12),
-            const PosExceptionAlert(
-              label: '레이아웃 편집 중입니다.',
-              detail: '테이블을 이동한 뒤 저장하세요. 주문 입력, 결제, 주방 처리는 이 화면에서 하지 않습니다.',
+            PosExceptionAlert(
+              label: l10n.tablesLayoutEditActiveTitle,
+              detail: l10n.tablesLayoutEditActiveDetail,
               color: PosColors.info,
               icon: Icons.grid_view_rounded,
             ),
@@ -653,6 +716,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
   Widget _buildAdminTablesAuditDetail(
     AsyncValue<List<Map<String, dynamic>>> auditTraceAsync,
   ) {
+    final l10n = context.l10n;
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface1,
@@ -667,7 +731,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
         iconColor: AppColors.textSecondary,
         collapsedIconColor: AppColors.textSecondary,
         title: Text(
-          '최근 테이블 변경',
+          l10n.tablesRecentChanges,
           style: GoogleFonts.notoSansKr(
             color: AppColors.textPrimary,
             fontSize: 14,
@@ -675,7 +739,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
           ),
         ),
         subtitle: Text(
-          '감사 기록은 필요할 때만 펼쳐 확인합니다.',
+          l10n.tablesRecentChangesHint,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: GoogleFonts.notoSansKr(
@@ -689,7 +753,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
             allowedEntityTypes: const {'tables'},
             maxItems: 3,
             compact: true,
-            emptyMessage: '최근 테이블 변경 내역이 없습니다.',
+            emptyMessage: l10n.tablesNoRecentChanges,
           ),
         ],
       ),
@@ -700,6 +764,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     BuildContext context,
     TablesNotifier tablesNotifier,
   ) async {
+    final l10n = context.l10n;
     final tableController = TextEditingController();
     final seatController = TextEditingController();
 
@@ -709,7 +774,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
         return AlertDialog(
           backgroundColor: AppColors.surface1,
           title: Text(
-            'Add Table',
+            l10n.tablesAddTitle,
             style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
           ),
           content: Column(
@@ -718,21 +783,21 @@ class _TablesTabState extends ConsumerState<TablesTab> {
               TextField(
                 controller: tableController,
                 style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                decoration: const InputDecoration(labelText: 'Table Number'),
+                decoration: InputDecoration(labelText: l10n.tablesTableNumber),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: seatController,
                 keyboardType: TextInputType.number,
                 style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                decoration: const InputDecoration(labelText: 'Seat Count'),
+                decoration: InputDecoration(labelText: l10n.tablesSeatCount),
               ),
             ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: Text(l10n.cancel),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
@@ -741,14 +806,11 @@ class _TablesTabState extends ConsumerState<TablesTab> {
               ),
               onPressed: () async {
                 final tableNumber = tableController.text.trim();
-                final seatCount = int.tryParse(seatController.text.trim());
+                final seatCount = parseIntInput(seatController.text);
                 if (tableNumber.isEmpty ||
                     seatCount == null ||
                     seatCount <= 0) {
-                  showErrorToast(
-                    context,
-                    'Enter a valid table number and seat count.',
-                  );
+                  showErrorToast(context, l10n.tablesInvalidTableAndSeat);
                   return;
                 }
 
@@ -759,11 +821,11 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                 if (context.mounted) {
                   if (success) {
                     Navigator.of(context).pop();
-                    showSuccessToast(context, 'Table "$tableNumber" added.');
+                    showSuccessToast(context, l10n.tablesAdded(tableNumber));
                   }
                 }
               },
-              child: const Text('Add'),
+              child: Text(l10n.add),
             ),
           ],
         );
@@ -788,6 +850,7 @@ class _AdminTableOperationsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final activeOrder = orderState.activeOrder;
     final itemCount =
         activeOrder?.items.fold<int>(0, (sum, item) => sum + item.quantity) ??
@@ -812,7 +875,7 @@ class _AdminTableOperationsPanel extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '선택된 테이블 상태',
+                      l10n.tablesSelectedStatusTitle,
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textPrimary,
                         fontSize: 20,
@@ -821,7 +884,7 @@ class _AdminTableOperationsPanel extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      '테이블 ${table.tableNumber}',
+                      l10n.waiterTableLabel(table.tableNumber),
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textSecondary,
                         fontSize: 13,
@@ -831,7 +894,7 @@ class _AdminTableOperationsPanel extends StatelessWidget {
                 ),
               ),
               ToastStatusBadge(
-                label: _statusLabel(table),
+                label: _statusLabel(context, table),
                 color: _statusColor(table),
                 compact: true,
               ),
@@ -840,23 +903,26 @@ class _AdminTableOperationsPanel extends StatelessWidget {
           const SizedBox(height: 16),
           ToastMetricStrip(
             metrics: [
-              ToastMetric(label: '좌석', value: '${table.seatCount ?? 0}인'),
               ToastMetric(
-                label: '주문 품목',
+                label: l10n.tablesSeatCount,
+                value: l10n.waiterSeatCount(table.seatCount ?? 0),
+              ),
+              ToastMetric(
+                label: l10n.tablesOrderItemsMetric,
                 value: '$itemCount',
                 tone: itemCount > 0 ? PosColors.accent : PosColors.textMuted,
               ),
               ToastMetric(
-                label: '주문 합계',
+                label: l10n.tablesOrderTotalMetric,
                 value: '${total.toStringAsFixed(0)} VND',
                 tone: total > 0 ? PosColors.success : PosColors.textMuted,
               ),
             ],
           ),
           const SizedBox(height: 16),
-          const PosExceptionAlert(
-            label: '운영 역할 경계 적용',
-            detail: '주문 입력, 결제 실행, 주방 상태 변경은 역할별 운영 화면에서 처리합니다.',
+          PosExceptionAlert(
+            label: l10n.tablesRoleBoundaryTitle,
+            detail: l10n.tablesRoleBoundaryDetail,
             color: PosColors.info,
             icon: Icons.admin_panel_settings_outlined,
           ),
@@ -870,7 +936,8 @@ class _AdminTableOperationsPanel extends StatelessWidget {
                     items: activeOrder.items
                         .map(
                           (item) => _AdminTableOrderLine(
-                            label: item.label ?? 'Item',
+                            label:
+                                item.label ?? l10n.orderWorkspaceItemFallback,
                             quantity: item.quantity,
                             status: item.status,
                             amount: item.unitPrice * item.quantity,
@@ -883,7 +950,7 @@ class _AdminTableOperationsPanel extends StatelessWidget {
           Align(
             alignment: Alignment.centerRight,
             child: PosSecondaryButton(
-              label: '닫기',
+              label: l10n.close,
               icon: Icons.close_rounded,
               onPressed: onClose,
             ),
@@ -893,18 +960,19 @@ class _AdminTableOperationsPanel extends StatelessWidget {
     );
   }
 
-  static String _statusLabel(PosTable table) {
+  String _statusLabel(BuildContext context, PosTable table) {
+    final l10n = context.l10n;
     return switch (table.status) {
-      'occupied' => '사용 중',
-      'pending' || 'reserved' => '대기 중',
-      _ => '비어 있음',
+      'occupied' => l10n.tablesFilterOccupied,
+      'reserved' => l10n.tablesFilterReserved,
+      _ => l10n.tablesFilterEmpty,
     };
   }
 
   static Color _statusColor(PosTable table) {
     return switch (table.status) {
       'occupied' => PosColors.success,
-      'pending' || 'reserved' => PosColors.warning,
+      'reserved' => PosColors.warning,
       _ => PosColors.textSecondary,
     };
   }
@@ -917,6 +985,7 @@ class _AdminTableEmptyOrder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -928,7 +997,7 @@ class _AdminTableEmptyOrder extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            '활성 주문 없음',
+            l10n.tablesNoActiveOrderTitle,
             style: GoogleFonts.notoSansKr(
               color: AppColors.textPrimary,
               fontSize: 16,
@@ -937,7 +1006,7 @@ class _AdminTableEmptyOrder extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '테이블 ${table.tableNumber}의 현재 운영 상태만 표시됩니다.',
+            l10n.tablesNoActiveOrderSubtitle(table.tableNumber),
             textAlign: TextAlign.center,
             style: GoogleFonts.notoSansKr(
               color: AppColors.textSecondary,
@@ -963,6 +1032,7 @@ class _AdminTableOrderSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final shortId = orderId.length >= 8 ? orderId.substring(0, 8) : orderId;
 
     return Align(
@@ -981,7 +1051,7 @@ class _AdminTableOrderSummary extends StatelessWidget {
           iconColor: AppColors.textSecondary,
           collapsedIconColor: AppColors.textSecondary,
           title: Text(
-            '활성 주문 #$shortId',
+            l10n.tablesActiveOrderTitle(shortId),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: GoogleFonts.notoSansKr(
@@ -991,7 +1061,7 @@ class _AdminTableOrderSummary extends StatelessWidget {
             ),
           ),
           subtitle: Text(
-            '읽기 전용 주문 상태입니다. 주문/결제/주방 처리는 역할별 화면에서 진행합니다.',
+            l10n.tablesReadOnlyOrderSubtitle,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: GoogleFonts.notoSansKr(
@@ -1008,9 +1078,9 @@ class _AdminTableOrderSummary extends StatelessWidget {
             SizedBox(
               height: 220,
               child: items.isEmpty
-                  ? const PosEmptyState(
-                      title: '주문 품목 없음',
-                      subtitle: '현재 활성 주문에 표시할 품목이 없습니다.',
+                  ? PosEmptyState(
+                      title: l10n.tablesNoOrderItemsTitle,
+                      subtitle: l10n.tablesNoOrderItemsSubtitle,
                       icon: Icons.receipt_long_outlined,
                     )
                   : ListView.separated(
@@ -1103,7 +1173,7 @@ class _RestaurantMissingView extends StatelessWidget {
       backgroundColor: AppColors.surface0,
       body: Center(
         child: Text(
-          'No store linked to this account.',
+          context.l10n.noLinkedStoreMessage,
           style: GoogleFonts.notoSansKr(
             color: AppColors.statusCancelled,
             fontSize: 14,

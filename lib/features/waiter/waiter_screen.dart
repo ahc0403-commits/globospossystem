@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/ui/pos_design_tokens.dart';
+import '../../core/utils/number_input_utils.dart';
 import '../../main.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../widgets/app_nav_bar.dart';
@@ -52,7 +53,7 @@ final restaurantSettingsProvider = FutureProvider.family<StoreSettings, String>(
     final rawCharge = response['per_person_charge'];
     final charge = switch (rawCharge) {
       num value => value.toDouble(),
-      String value => double.tryParse(value),
+      String value => parseDecimalInput(value),
       _ => null,
     };
 
@@ -106,12 +107,25 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     String storeId,
     bool requireGuestCount,
   ) async {
+    if (table.isReserved) {
+      showErrorToast(
+        context,
+        context.l10n.waiterTableReservedUnavailable(table.tableNumber),
+      );
+      return;
+    }
+
     int? guestCount;
     if (requireGuestCount) {
       guestCount = await _showGuestCountDialog();
       if (guestCount == null) {
         return;
       }
+    }
+
+    final selectingDifferentTable = _selectedTable?.id != table.id;
+    if (selectingDifferentTable) {
+      ref.read(orderProvider.notifier).clearSession();
     }
 
     setState(() {
@@ -163,7 +177,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                 foregroundColor: AppColors.surface0,
               ),
               onPressed: () {
-                final guestCount = int.tryParse(controller.text.trim());
+                final guestCount = parseIntInput(controller.text);
                 if (guestCount == null || guestCount < 1) {
                   return;
                 }
@@ -221,7 +235,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     final tableState = ref.read(waiterTableProvider);
     final currentTableId = _selectedTable?.id;
     final availableTables = tableState.tables
-        .where((t) => t.id != currentTableId && !t.isOccupied)
+        .where((t) => t.id != currentTableId && t.isAvailable)
         .toList();
 
     if (availableTables.isEmpty) {
@@ -330,6 +344,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     required bool isBuffetMode,
   }) {
     final orderNotifier = ref.read(orderProvider.notifier);
+    final l10n = context.l10n;
 
     return OrderWorkspace(
       key: ValueKey<String>('order-${selectedTable.id}-$_orderPanelNonce'),
@@ -347,11 +362,22 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
       onCancel: _onCancelOrderPanel,
       onCancelOrderItem: storeId == null
           ? null
-          : (itemId) => orderNotifier.cancelOrderItem(itemId, storeId),
+          : (itemId) async {
+              await orderNotifier.cancelOrderItem(itemId, storeId);
+              if (!mounted) {
+                return;
+              }
+              await ref.read(waiterTableProvider.notifier).loadTables(storeId);
+            },
       onEditOrderItemQuantity: storeId == null
           ? null
-          : (itemId, qty) =>
-                orderNotifier.editOrderItemQuantity(itemId, storeId, qty),
+          : (itemId, qty) async {
+              await orderNotifier.editOrderItemQuantity(itemId, storeId, qty);
+              if (!mounted) {
+                return;
+              }
+              await ref.read(waiterTableProvider.notifier).loadTables(storeId);
+            },
       onTransferTable: storeId == null || orderState.activeOrder == null
           ? null
           : () async {
@@ -386,15 +412,27 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
           return;
         }
         if (nextState.error == null) {
+          await ref.read(waiterTableProvider.notifier).loadTables(storeId);
+          if (!mounted) {
+            return;
+          }
           _onCancelOrderPanel();
           _showOrderCancelledSnackBar();
         }
       },
       onSendOrder: () async {
         if (storeId == null) {
+          showErrorToast(context, l10n.orderWorkspaceMenuOfflineTitle);
           return;
         }
-        if (orderState.activeOrder == null) {
+        final latestOrderState = ref.read(orderProvider);
+        if (!allowSubmitWithoutCart && latestOrderState.cart.isEmpty) {
+          showErrorToast(context, l10n.orderWorkspaceNoItemsAdded);
+          return;
+        }
+
+        final activeOrder = latestOrderState.activeOrder;
+        if (activeOrder == null) {
           if (isBuffetMode) {
             await orderNotifier.submitBuffetOrder(
               storeId,
@@ -405,7 +443,13 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
             await orderNotifier.submitOrder(storeId, selectedTable.id);
           }
         } else {
-          await orderNotifier.addMoreItems(orderState.activeOrder!.id, storeId);
+          await orderNotifier.addMoreItems(activeOrder.id, storeId);
+        }
+        if (!mounted) {
+          return;
+        }
+        if (ref.read(orderProvider).error == null) {
+          await ref.read(waiterTableProvider.notifier).loadTables(storeId);
         }
       },
     );
@@ -421,96 +465,293 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
   }) {
     final l10n = context.l10n;
     final hasSelection = selectedTable != null;
+    final compactMetricsLabel =
+        '${l10n.waiterMetricTotal} $tableCount · '
+        '${l10n.waiterMetricOccupied} $occupiedCount · '
+        '${l10n.waiterMetricAvailable} $emptyCount';
 
-    return ToastWorkSurface(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-      backgroundColor: AppColors.surface1,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.waiterScreenTitle,
-                      style: Theme.of(context).textTheme.headlineLarge,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      showOrderWorkspace
-                          ? l10n.waiterSelectedTableSubtitle
-                          : l10n.waiterTapTableToStart,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: PosColors.textSecondary,
-                        fontSize: 13,
+    if (showOrderWorkspace) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final useMobileHeader = constraints.maxWidth < 560;
+          if (useMobileHeader) {
+            return ToastWorkSurface(
+              key: const Key('waiter_mobile_order_header'),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              backgroundColor: AppColors.surface1,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        l10n.waiterScreenTitle,
+                        style: Theme.of(context).textTheme.titleLarge,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      ToastStatusBadge(
+                        label: hasSelection
+                            ? l10n.waiterSelectedTable(
+                                selectedTable.tableNumber,
+                              )
+                            : l10n.waiterDiningFloor,
+                        color: hasSelection ? PosColors.accent : PosColors.info,
+                        compact: true,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      ToastStatusBadge(
+                        label: isBuffetMode
+                            ? l10n.waiterBuffetStartPrompt
+                            : l10n.waiterWorkspaceReadyPrompt,
+                        color: isBuffetMode
+                            ? PosColors.warning
+                            : PosColors.success,
+                        compact: true,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          compactMetricsLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: PosColors.textSecondary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return ToastWorkSurface(
+            key: const Key('waiter_order_compact_header'),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            backgroundColor: AppColors.surface1,
+            child: Row(
+              children: [
+                Text(
+                  l10n.waiterScreenTitle,
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
-              ),
-              const SizedBox(width: 12),
-              ToastStatusBadge(
-                label: hasSelection
-                    ? l10n.waiterSelectedTable(selectedTable.tableNumber)
-                    : l10n.waiterDiningFloor,
-                color: hasSelection ? PosColors.accent : PosColors.info,
-                compact: true,
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          ToastMetricStrip(
-            metrics: [
-              ToastMetric(label: l10n.waiterMetricTotal, value: '$tableCount'),
-              ToastMetric(
-                label: l10n.waiterMetricOccupied,
-                value: '$occupiedCount',
-                tone: occupiedCount > 0
-                    ? PosColors.accent
-                    : PosColors.textSecondary,
-              ),
-              ToastMetric(
-                label: l10n.waiterMetricAvailable,
-                value: '$emptyCount',
-                tone: PosColors.success,
-              ),
-              ToastMetric(
-                label: l10n.waiterSelectedTableLabel,
-                value: selectedTable?.tableNumber ?? '-',
-                tone: hasSelection ? PosColors.accent : PosColors.textSecondary,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              ToastStatusBadge(
-                label: isBuffetMode
-                    ? l10n.waiterBuffetStartPrompt
-                    : l10n.waiterWorkspaceReadyPrompt,
-                color: isBuffetMode ? PosColors.warning : PosColors.success,
-                compact: true,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  l10n.waiterScreenSubtitle,
+                const SizedBox(width: 10),
+                ToastStatusBadge(
+                  label: hasSelection
+                      ? l10n.waiterSelectedTable(selectedTable.tableNumber)
+                      : l10n.waiterDiningFloor,
+                  color: hasSelection ? PosColors.accent : PosColors.info,
+                  compact: true,
+                ),
+                const SizedBox(width: 8),
+                ToastStatusBadge(
+                  label: isBuffetMode
+                      ? l10n.waiterBuffetStartPrompt
+                      : l10n.waiterWorkspaceReadyPrompt,
+                  color: isBuffetMode ? PosColors.warning : PosColors.success,
+                  compact: true,
+                ),
+                const Spacer(),
+                Text(
+                  compactMetricsLabel,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: PosColors.textSecondary,
                     fontSize: 12,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
+              ],
+            ),
+          );
+        },
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useMobileHeader = constraints.maxWidth < 560;
+        if (useMobileHeader) {
+          return ToastWorkSurface(
+            key: const Key('waiter_mobile_command_header'),
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+            backgroundColor: AppColors.surface1,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            l10n.waiterScreenTitle,
+                            style: Theme.of(context).textTheme.headlineMedium,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            l10n.waiterTapTableToStart,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: PosColors.textSecondary,
+                                  fontSize: 12,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    ToastStatusBadge(
+                      label: hasSelection
+                          ? l10n.waiterSelectedTable(selectedTable.tableNumber)
+                          : l10n.waiterDiningFloor,
+                      color: hasSelection ? PosColors.accent : PosColors.info,
+                      compact: true,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    ToastStatusBadge(
+                      label: isBuffetMode
+                          ? l10n.waiterBuffetStartPrompt
+                          : l10n.waiterWorkspaceReadyPrompt,
+                      color: isBuffetMode
+                          ? PosColors.warning
+                          : PosColors.success,
+                      compact: true,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        compactMetricsLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: PosColors.textSecondary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ToastWorkSurface(
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+          backgroundColor: AppColors.surface1,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l10n.waiterScreenTitle,
+                          style: Theme.of(context).textTheme.headlineLarge,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          showOrderWorkspace
+                              ? l10n.waiterSelectedTableSubtitle
+                              : l10n.waiterTapTableToStart,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: PosColors.textSecondary,
+                                fontSize: 13,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  ToastStatusBadge(
+                    label: hasSelection
+                        ? l10n.waiterSelectedTable(selectedTable.tableNumber)
+                        : l10n.waiterDiningFloor,
+                    color: hasSelection ? PosColors.accent : PosColors.info,
+                    compact: true,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              ToastMetricStrip(
+                metrics: [
+                  ToastMetric(
+                    label: l10n.waiterMetricTotal,
+                    value: '$tableCount',
+                  ),
+                  ToastMetric(
+                    label: l10n.waiterMetricOccupied,
+                    value: '$occupiedCount',
+                    tone: occupiedCount > 0
+                        ? PosColors.accent
+                        : PosColors.textSecondary,
+                  ),
+                  ToastMetric(
+                    label: l10n.waiterMetricAvailable,
+                    value: '$emptyCount',
+                    tone: PosColors.success,
+                  ),
+                  ToastMetric(
+                    label: l10n.waiterSelectedTableLabel,
+                    value: selectedTable?.tableNumber ?? '-',
+                    tone: hasSelection
+                        ? PosColors.accent
+                        : PosColors.textSecondary,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  ToastStatusBadge(
+                    label: isBuffetMode
+                        ? l10n.waiterBuffetStartPrompt
+                        : l10n.waiterWorkspaceReadyPrompt,
+                    color: isBuffetMode ? PosColors.warning : PosColors.success,
+                    compact: true,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      l10n.waiterScreenSubtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -546,7 +787,10 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     final occupiedCount = tableState.tables
         .where((table) => table.isOccupied)
         .length;
-    final emptyCount = tableState.tables.length - occupiedCount;
+    final reservedCount = tableState.tables
+        .where((table) => table.isReserved)
+        .length;
+    final emptyCount = tableState.tables.length - occupiedCount - reservedCount;
 
     return Scaffold(
       key: const Key('dashboard_root'),
@@ -557,7 +801,11 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
           Expanded(
             child: Column(
               children: [
-                _WaiterTopBar(storeId: storeId),
+                _WaiterTopBar(
+                  storeId: storeId,
+                  showOrderWorkspace: showOrderWorkspace,
+                  onReturnToFloor: _onCancelOrderPanel,
+                ),
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
@@ -597,7 +845,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
 
                       return ToastResponsiveBody(
                         maxWidth: 1480,
-                        padding: const EdgeInsets.all(16),
+                        padding: EdgeInsets.all(showOrderWorkspace ? 10 : 16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -609,14 +857,22 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                               isBuffetMode: isBuffetMode,
                               showOrderWorkspace: showOrderWorkspace,
                             ),
-                            const SizedBox(height: 16),
+                            SizedBox(height: showOrderWorkspace ? 10 : 16),
                             Expanded(
                               child: constraints.maxWidth >= 1120
                                   ? Row(
                                       children: [
-                                        Expanded(flex: 4, child: queuePane),
-                                        const SizedBox(width: 16),
-                                        Expanded(flex: 7, child: detailPane),
+                                        Expanded(
+                                          flex: showOrderWorkspace ? 3 : 4,
+                                          child: queuePane,
+                                        ),
+                                        SizedBox(
+                                          width: showOrderWorkspace ? 12 : 16,
+                                        ),
+                                        Expanded(
+                                          flex: showOrderWorkspace ? 9 : 7,
+                                          child: detailPane,
+                                        ),
                                       ],
                                     )
                                   : AnimatedSwitcher(
@@ -657,9 +913,15 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
 }
 
 class _WaiterTopBar extends ConsumerWidget {
-  const _WaiterTopBar({required this.storeId});
+  const _WaiterTopBar({
+    required this.storeId,
+    required this.showOrderWorkspace,
+    required this.onReturnToFloor,
+  });
 
   final String? storeId;
+  final bool showOrderWorkspace;
+  final VoidCallback onReturnToFloor;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -677,7 +939,12 @@ class _WaiterTopBar extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          const AppNavBar(),
+          AppNavBar(
+            forceBackEnabled: showOrderWorkspace,
+            forceHomeEnabled: showOrderWorkspace,
+            onBackPressed: showOrderWorkspace ? onReturnToFloor : null,
+            onHomePressed: showOrderWorkspace ? onReturnToFloor : null,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -696,6 +963,8 @@ class _WaiterTopBar extends ConsumerWidget {
                 restaurantName.when(
                   data: (name) => Text(
                     name.isEmpty ? l10n.store : name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.notoSansKr(
                       color: AppColors.textPrimary,
                       fontSize: 16,
@@ -704,6 +973,8 @@ class _WaiterTopBar extends ConsumerWidget {
                   ),
                   loading: () => Text(
                     l10n.waiterLoading,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.notoSansKr(
                       color: AppColors.textSecondary,
                       fontSize: 14,
@@ -711,6 +982,8 @@ class _WaiterTopBar extends ConsumerWidget {
                   ),
                   error: (_, _) => Text(
                     l10n.store,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.notoSansKr(
                       color: AppColors.textSecondary,
                       fontSize: 14,
@@ -811,6 +1084,7 @@ class _TableGridView extends StatelessWidget {
       child: FloorLayoutView(
         tables: state.tables,
         selectedTableId: selectedTableId,
+        orderPreviewByTableId: state.orderPreviewByTableId,
         onTapTable: onTapTable,
         editable: false,
         padding: const EdgeInsets.fromLTRB(0, 4, 0, 0),

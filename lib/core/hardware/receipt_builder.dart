@@ -17,7 +17,7 @@ class ReceiptBuilder {
 
     bytes.addAll(
       generator.text(
-        restaurantName,
+        _escText(restaurantName),
         styles: const PosStyles(
           bold: true,
           align: PosAlign.center,
@@ -36,9 +36,9 @@ class ReceiptBuilder {
 
     bytes.addAll(
       generator.row([
-        PosColumn(text: 'Table / Bàn: $tableNumber', width: 8),
+        PosColumn(text: _escText('Table / Ban: $tableNumber'), width: 8),
         PosColumn(
-          text: TimeUtils.formatTime(paidAt),  // UTC to Vietnam time
+          text: TimeUtils.formatTime(paidAt), // UTC to Vietnam time
           width: 4,
           styles: const PosStyles(align: PosAlign.right),
         ),
@@ -46,7 +46,7 @@ class ReceiptBuilder {
     );
     bytes.addAll(
       generator.text(
-        TimeUtils.formatDate(paidAt),  // UTC to Vietnam date
+        TimeUtils.formatDate(paidAt), // UTC to Vietnam date
       ),
     );
     bytes.addAll(generator.hr());
@@ -64,7 +64,7 @@ class ReceiptBuilder {
           styles: const PosStyles(bold: true, align: PosAlign.center),
         ),
         PosColumn(
-          text: 'Giá (₫)',
+          text: 'Gia (VND)',
           width: 4,
           styles: const PosStyles(bold: true, align: PosAlign.right),
         ),
@@ -75,7 +75,7 @@ class ReceiptBuilder {
     for (final item in items) {
       bytes.addAll(
         generator.row([
-          PosColumn(text: item.name, width: 6),
+          PosColumn(text: _escText(item.name), width: 6),
           PosColumn(
             text: '${item.quantity}',
             width: 2,
@@ -94,7 +94,7 @@ class ReceiptBuilder {
     bytes.addAll(
       generator.row([
         PosColumn(
-          text: isService ? 'DỊCH VỤ / Service' : 'TỔNG CỘNG / Total',
+          text: isService ? 'DICH VU / Service' : 'TONG CONG / Total',
           width: 6,
           styles: const PosStyles(bold: true),
         ),
@@ -107,13 +107,13 @@ class ReceiptBuilder {
     );
 
     final methodLabel = _methodLabel(paymentMethod);
-    bytes.addAll(generator.text('Thanh toán / Payment: $methodLabel'));
+    bytes.addAll(generator.text('Thanh toan / Payment: $methodLabel'));
 
     if (isService) {
       bytes.addAll(generator.hr());
       bytes.addAll(
         generator.text(
-          '* Service Provision — not counted in revenue',
+          '* Service Provision - not counted in revenue',
           styles: const PosStyles(align: PosAlign.center),
         ),
       );
@@ -148,7 +148,7 @@ class ReceiptBuilder {
       }
       buffer.write(s[i]);
     }
-    return '${buffer.toString()}₫';
+    return '${buffer.toString()} VND';
   }
 
   static String _methodLabel(String method) {
@@ -162,8 +162,162 @@ class ReceiptBuilder {
       case 'service':
         return 'Service / Dich vu';
       default:
-        return method;
+        return _escText(method);
     }
+  }
+
+  static String _escText(String value) {
+    const replacements = {
+      '₫': 'VND',
+      'đ': 'd',
+      'Đ': 'D',
+      'à': 'a',
+      'á': 'a',
+      'ạ': 'a',
+      'ả': 'a',
+      'ã': 'a',
+      'â': 'a',
+      'ầ': 'a',
+      'ấ': 'a',
+      'ậ': 'a',
+      'ẩ': 'a',
+      'ẫ': 'a',
+      'ă': 'a',
+      'ằ': 'a',
+      'ắ': 'a',
+      'ặ': 'a',
+      'ẳ': 'a',
+      'ẵ': 'a',
+      'è': 'e',
+      'é': 'e',
+      'ẹ': 'e',
+      'ẻ': 'e',
+      'ẽ': 'e',
+      'ê': 'e',
+      'ề': 'e',
+      'ế': 'e',
+      'ệ': 'e',
+      'ể': 'e',
+      'ễ': 'e',
+      'ì': 'i',
+      'í': 'i',
+      'ị': 'i',
+      'ỉ': 'i',
+      'ĩ': 'i',
+      'ò': 'o',
+      'ó': 'o',
+      'ọ': 'o',
+      'ỏ': 'o',
+      'õ': 'o',
+      'ô': 'o',
+      'ồ': 'o',
+      'ố': 'o',
+      'ộ': 'o',
+      'ổ': 'o',
+      'ỗ': 'o',
+      'ơ': 'o',
+      'ờ': 'o',
+      'ớ': 'o',
+      'ợ': 'o',
+      'ở': 'o',
+      'ỡ': 'o',
+      'ù': 'u',
+      'ú': 'u',
+      'ụ': 'u',
+      'ủ': 'u',
+      'ũ': 'u',
+      'ư': 'u',
+      'ừ': 'u',
+      'ứ': 'u',
+      'ự': 'u',
+      'ử': 'u',
+      'ữ': 'u',
+      'ỳ': 'y',
+      'ý': 'y',
+      'ỵ': 'y',
+      'ỷ': 'y',
+      'ỹ': 'y',
+      'À': 'A',
+      'Á': 'A',
+      'Ạ': 'A',
+      'Ả': 'A',
+      'Ã': 'A',
+      'Â': 'A',
+      'Ầ': 'A',
+      'Ấ': 'A',
+      'Ậ': 'A',
+      'Ẩ': 'A',
+      'Ẫ': 'A',
+      'Ă': 'A',
+      'Ằ': 'A',
+      'Ắ': 'A',
+      'Ặ': 'A',
+      'Ẳ': 'A',
+      'Ẵ': 'A',
+      'È': 'E',
+      'É': 'E',
+      'Ẹ': 'E',
+      'Ẻ': 'E',
+      'Ẽ': 'E',
+      'Ê': 'E',
+      'Ề': 'E',
+      'Ế': 'E',
+      'Ệ': 'E',
+      'Ể': 'E',
+      'Ễ': 'E',
+      'Ì': 'I',
+      'Í': 'I',
+      'Ị': 'I',
+      'Ỉ': 'I',
+      'Ĩ': 'I',
+      'Ò': 'O',
+      'Ó': 'O',
+      'Ọ': 'O',
+      'Ỏ': 'O',
+      'Õ': 'O',
+      'Ô': 'O',
+      'Ồ': 'O',
+      'Ố': 'O',
+      'Ộ': 'O',
+      'Ổ': 'O',
+      'Ỗ': 'O',
+      'Ơ': 'O',
+      'Ờ': 'O',
+      'Ớ': 'O',
+      'Ợ': 'O',
+      'Ở': 'O',
+      'Ỡ': 'O',
+      'Ù': 'U',
+      'Ú': 'U',
+      'Ụ': 'U',
+      'Ủ': 'U',
+      'Ũ': 'U',
+      'Ư': 'U',
+      'Ừ': 'U',
+      'Ứ': 'U',
+      'Ự': 'U',
+      'Ử': 'U',
+      'Ữ': 'U',
+      'Ỳ': 'Y',
+      'Ý': 'Y',
+      'Ỵ': 'Y',
+      'Ỷ': 'Y',
+      'Ỹ': 'Y',
+    };
+
+    final buffer = StringBuffer();
+    for (final rune in value.runes) {
+      final char = String.fromCharCode(rune);
+      final replacement = replacements[char];
+      if (replacement != null) {
+        buffer.write(replacement);
+      } else if (rune <= 255) {
+        buffer.write(char);
+      } else {
+        buffer.write('?');
+      }
+    }
+    return buffer.toString();
   }
 }
 

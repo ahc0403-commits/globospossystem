@@ -1,22 +1,49 @@
 import '../../main.dart';
 
 class OrderService {
+  bool _isRpcSignatureMismatch(Object error, String functionName) {
+    final message = error.toString().toLowerCase();
+    if (!message.contains(functionName.toLowerCase())) {
+      return false;
+    }
+
+    return message.contains('could not find the function') ||
+        message.contains('function public.') ||
+        message.contains('does not exist') ||
+        message.contains('no function matches');
+  }
+
   Future<Map<String, dynamic>> createOrder({
     required String storeId,
     required String tableId,
     required List<Map<String, dynamic>> items,
     String? clientMutationId,
   }) async {
+    if (clientMutationId != null) {
+      try {
+        final result = await supabase.rpc(
+          'create_order_with_client_mutation_id',
+          params: {
+            'p_store_id': storeId,
+            'p_table_id': tableId,
+            'p_items': items,
+            'p_client_mutation_id': clientMutationId,
+          },
+        );
+        return Map<String, dynamic>.from(result as Map);
+      } catch (error) {
+        if (!_isRpcSignatureMismatch(
+          error,
+          'create_order_with_client_mutation_id',
+        )) {
+          rethrow;
+        }
+      }
+    }
+
     final result = await supabase.rpc(
-      clientMutationId == null
-          ? 'create_order'
-          : 'create_order_with_client_mutation_id',
-      params: {
-        'p_store_id': storeId,
-        'p_table_id': tableId,
-        'p_items': items,
-        if (clientMutationId != null) 'p_client_mutation_id': clientMutationId,
-      },
+      'create_order',
+      params: {'p_store_id': storeId, 'p_table_id': tableId, 'p_items': items},
     );
     return Map<String, dynamic>.from(result as Map);
   }
@@ -45,16 +72,33 @@ class OrderService {
     required List<Map<String, dynamic>> items,
     String? clientMutationId,
   }) async {
+    if (clientMutationId != null) {
+      try {
+        final result = await supabase.rpc(
+          'add_items_to_order_with_client_mutation_id',
+          params: {
+            'p_order_id': orderId,
+            'p_store_id': storeId,
+            'p_items': items,
+            'p_client_mutation_id': clientMutationId,
+          },
+        );
+        return (result as List)
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+      } catch (error) {
+        if (!_isRpcSignatureMismatch(
+          error,
+          'add_items_to_order_with_client_mutation_id',
+        )) {
+          rethrow;
+        }
+      }
+    }
+
     final result = await supabase.rpc(
-      clientMutationId == null
-          ? 'add_items_to_order'
-          : 'add_items_to_order_with_client_mutation_id',
-      params: {
-        'p_order_id': orderId,
-        'p_store_id': storeId,
-        'p_items': items,
-        if (clientMutationId != null) 'p_client_mutation_id': clientMutationId,
-      },
+      'add_items_to_order',
+      params: {'p_order_id': orderId, 'p_store_id': storeId, 'p_items': items},
     );
     return (result as List)
         .map((e) => Map<String, dynamic>.from(e as Map))

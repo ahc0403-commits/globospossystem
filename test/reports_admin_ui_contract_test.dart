@@ -17,4 +17,18 @@ void main() {
     expect(source, isNot(contains('PosStatCard(')));
     expect(source, isNot(contains('_ReportsMetricCard')));
   });
+
+  test(
+    'reports compact analysis uses a parent scroll instead of overflowing',
+    () {
+      final source = readRepoFile('lib/features/admin/tabs/reports_tab.dart');
+
+      expect(source, contains("Key('reports_compact_scroll')"));
+      expect(source, contains('compactReportHeight'));
+      expect(source, contains('reportConstraints.maxWidth < 1080'));
+      expect(source, contains('compactSecondaryHeight: 520'));
+      expect(source, contains('keyboardDismissBehavior:'));
+      expect(source, contains('ScrollViewKeyboardDismissBehavior.onDrag'));
+    },
+  );
 }

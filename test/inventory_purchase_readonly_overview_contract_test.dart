@@ -18,6 +18,9 @@ void main() {
       final documentService = readRepoFile(
         'lib/features/inventory_purchase/inventory_purchase_document_service.dart',
       );
+      final numberUtils = readRepoFile(
+        'lib/core/utils/number_input_utils.dart',
+      );
       final design = readRepoFile('docs/inventory_purchase_office_design.md');
 
       expect(design, contains('[BOUNDARY DECISION - 2026-05-15]'));
@@ -30,7 +33,7 @@ void main() {
       expect(design, contains('POS/Admin은 나머지 4개 승인 범위'));
 
       expect(screen, contains('class InventoryPurchaseScreen'));
-      expect(screen, contains('재고/발주 관리 대시보드'));
+      expect(screen, contains('l10n.inventoryPurchaseDashboardTitle'));
       expect(screen, isNot(contains('get_inventory_stock_status')));
       expect(screen, contains('inventoryPurchaseOverviewProvider'));
       expect(screen, contains('inventoryPurchaseStockStatusProvider'));
@@ -49,31 +52,50 @@ void main() {
       expect(screen, contains('inventoryPurchaseProductCatalogProvider'));
       expect(screen, contains('inventoryPurchaseNewMenuProvider'));
       expect(screen, contains('recipeProvider'));
-      expect(screen, contains('추천 발주 생성'));
-      expect(screen, contains('추천 수량 조정'));
-      expect(screen, contains('공급처별 발주 생성'));
-      expect(screen, contains('직접 발주 등록'));
-      expect(screen, contains('반복 발주'));
-      expect(screen, contains('반복 발주 등록'));
-      expect(screen, contains('발주서 출력/PDF'));
-      expect(screen, contains('입고 확정'));
-      expect(screen, contains('실사 입력'));
-      expect(screen, contains('소진 데이터 갱신'));
-      expect(screen, contains('소진량 추이'));
-      expect(screen, contains('카테고리별 소진 비중'));
-      expect(screen, contains('소진 이상 알림'));
+      expect(screen, contains('l10n.inventoryPurchaseGenerateRecommendation'));
+      expect(
+        screen,
+        contains('l10n.inventoryPurchaseRecommendationAdjustment'),
+      );
+      expect(screen, contains('l10n.inventoryPurchaseCreateSupplierOrders'));
+      expect(screen, contains('l10n.inventoryPurchaseManualOrder'));
+      expect(screen, contains('l10n.inventoryPurchaseRepeatOrder'));
+      expect(screen, contains('l10n.inventoryPurchaseCreateRepeatOrder'));
+      expect(screen, contains('l10n.inventoryPurchasePrintPdf'));
+      expect(screen, contains('l10n.inventoryPurchaseReceiveTitle'));
+      expect(screen, contains('l10n.inventoryPurchaseStockAuditInput'));
+      expect(screen, contains("Key('pending_stock_audit_preview')"));
+      expect(screen, contains('StatefulBuilder('));
+      expect(screen, contains('_countValidStockAuditLines'));
+      expect(screen, contains('_stockAuditPreviewLines'));
+      expect(screen, contains('_parseStockAuditQuantity'));
+      expect(screen, contains('parseDecimalInput(factorController.text)'));
+      expect(screen, contains('parseDecimalInput(unitPriceController.text)'));
+      expect(screen, contains('parseIntInput(leadTimeController.text)'));
+      expect(numberUtils, contains(".replaceAll(',', '')"));
+      expect(screen, contains('class _StockAuditPendingPreview'));
+      expect(screen, contains('onChanged: (_) => setDialogState(() {})'));
+      expect(screen, contains('l10n.inventoryPurchaseRefreshConsumption'));
+      expect(screen, contains('l10n.inventoryPurchaseConsumptionTrendTitle'));
+      expect(
+        screen,
+        contains('l10n.inventoryPurchaseConsumptionShareByCategory'),
+      );
+      expect(screen, contains('l10n.inventoryPurchaseConsumptionAlerts'));
       expect(screen, contains('class _ConsumptionTrendChart'));
       expect(screen, contains('class _ConsumptionShareList'));
       expect(screen, contains('BarChart('));
-      expect(screen, contains('거래처 등록'));
-      expect(screen, contains('제품 등록'));
-      expect(screen, contains('공급처 품목 연결'));
-      expect(screen, contains('레시피 라인 추가'));
-      expect(screen, contains('신메뉴 등록'));
+      expect(screen, contains('l10n.inventoryPurchaseAddSupplier'));
+      expect(screen, contains('l10n.inventoryPurchaseAddProduct'));
+      expect(screen, contains('l10n.inventoryPurchaseLinkSupplierItem'));
+      expect(screen, contains('l10n.inventoryPurchaseAddRecipeLine'));
+      expect(screen, contains('l10n.inventoryPurchaseNewMenuTitle'));
       expect(screen, contains('inventoryPurchaseDocumentService'));
-      expect(screen, contains('Office 승인은 Office 전용'));
+      expect(screen, contains('l10n.inventoryPurchaseOfficeApprovalOnly'));
       expect(screen, contains('ToastMetricStrip('));
       expect(screen, contains('ToastResponsiveBody('));
+      expect(screen, contains('ToastResponsiveScrollBody('));
+      expect(screen, contains('constraints.hasBoundedHeight'));
       expect(
         screen,
         isNot(contains("Key('inventory_purchase_secondary_detail')")),
@@ -217,7 +239,7 @@ void main() {
       );
       expect(documentService, contains('Printing.layoutPdf'));
       expect(documentService, contains('PdfGoogleFonts.notoSansKRRegular'));
-      expect(documentService, contains('Office 승인/반려/수정은 Office 앱에서만 처리합니다.'));
+      expect(documentService, contains('l10n.inventoryPurchasePdfOfficeNote'));
       expect(
         documentService,
         isNot(contains('office_approve_inventory_purchase_order')),

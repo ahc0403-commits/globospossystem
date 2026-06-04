@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/tables_service.dart';
+import '../../../core/utils/live_sync_scope.dart';
 import '../../../main.dart';
 
 class TableOrderSummary {
@@ -54,6 +57,10 @@ class TablesNotifier extends StateNotifier<TablesState> {
   }
 
   final String storeId;
+  static const _autoRefreshInterval = Duration(seconds: 2);
+  RealtimeChannel? _channel;
+  Timer? _pollTimer;
+  bool _realtimeConnected = false;
 
   String _mapTablesError(Object error, String fallback) {
     if (error is! PostgrestException) {
@@ -70,6 +77,9 @@ class TablesNotifier extends StateNotifier<TablesState> {
     if (message.contains('TABLE_NOT_FOUND')) {
       return 'Reload tables and try again.';
     }
+    if (message.contains('TABLE_STATUS_INVALID')) {
+      return 'Unsupported table status.';
+    }
     if (message.contains('duplicate key value') || message.contains('23505')) {
       return 'A table with the same number already exists.';
     }
@@ -77,8 +87,10 @@ class TablesNotifier extends StateNotifier<TablesState> {
     return fallback;
   }
 
-  Future<void> fetchTables() async {
-    state = state.copyWith(isLoading: true, clearError: true);
+  Future<void> fetchTables({bool showLoading = true}) async {
+    if (showLoading) {
+      state = state.copyWith(isLoading: true, clearError: true);
+    }
     try {
       final tables = await tablesService.fetchTables(storeId);
 
@@ -131,9 +143,68 @@ class TablesNotifier extends StateNotifier<TablesState> {
         isLoading: false,
         clearError: true,
       );
+      await subscribeRealtime();
     } catch (error) {
       state = state.copyWith(isLoading: false, error: 'Failed to load tables.');
     }
+  }
+
+  Future<void> subscribeRealtime() async {
+    if (_channel != null) {
+      _ensureAutoRefresh();
+      return;
+    }
+
+    _channel = supabase
+        .channel(LiveSyncScope.storeChannel('admin_tables', storeId))
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'tables',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshTablesFromRealtime(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'orders',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshTablesFromRealtime(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'order_items',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshTablesFromRealtime(),
+        )
+        .subscribe((status, [error]) {
+          final connected = status == RealtimeSubscribeStatus.subscribed;
+          if (connected != _realtimeConnected) {
+            _realtimeConnected = connected;
+            _ensureAutoRefresh();
+          }
+        });
+    _ensureAutoRefresh();
+  }
+
+  void _refreshTablesFromRealtime() {
+    if (!mounted) {
+      return;
+    }
+    unawaited(fetchTables(showLoading: false));
+  }
+
+  void _ensureAutoRefresh() {
+    if (_pollTimer != null) {
+      return;
+    }
+
+    _pollTimer = Timer.periodic(_autoRefreshInterval, (_) {
+      if (mounted) {
+        unawaited(fetchTables(showLoading: false));
+      }
+    });
   }
 
   Future<bool> addTable(String tableNumber, int seatCount) async {
@@ -142,7 +213,9 @@ class TablesNotifier extends StateNotifier<TablesState> {
       await fetchTables();
       return true;
     } catch (error) {
-      state = state.copyWith(error: _mapTablesError(error, 'Failed to add table.'));
+      state = state.copyWith(
+        error: _mapTablesError(error, 'Failed to add table.'),
+      );
       return false;
     }
   }
@@ -153,7 +226,22 @@ class TablesNotifier extends StateNotifier<TablesState> {
       await fetchTables();
       return true;
     } catch (error) {
-      state = state.copyWith(error: _mapTablesError(error, 'Failed to delete table.'));
+      state = state.copyWith(
+        error: _mapTablesError(error, 'Failed to delete table.'),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> updateTableStatus(String tableId, String status) async {
+    try {
+      await tablesService.updateTableStatus(tableId, status, storeId);
+      await fetchTables();
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        error: _mapTablesError(error, 'Failed to update table status.'),
+      );
       return false;
     }
   }
@@ -191,6 +279,15 @@ class TablesNotifier extends StateNotifier<TablesState> {
       );
       return false;
     }
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    _channel?.unsubscribe();
+    _channel = null;
+    super.dispose();
   }
 }
 

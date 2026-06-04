@@ -21,4 +21,29 @@ void main() {
     expect(source, isNot(contains('PosToolbar(')));
     expect(source, isNot(contains('PosStatCard(')));
   });
+
+  test('qc weekly board gives the lower table usable scroll space', () {
+    final source = readRepoFile('lib/features/admin/tabs/qc_tab.dart');
+
+    expect(source, contains('const _qcWeeklyBoardPageMinHeight = 940.0'));
+    expect(
+      source,
+      contains(
+        'minHeight: _selectedSurfaceIndex == 1\n'
+        '            ? _qcWeeklyBoardPageMinHeight\n'
+        '            : _qcDefaultPageMinHeight',
+      ),
+    );
+    expect(source, contains("Key('qc_weekly_board_table')"));
+    expect(source, contains('const _qcWeeklyBoardScrollPadding'));
+    expect(source, contains('const _qcWeeklyBoardScrollPhysics'));
+    expect(
+      RegExp(r'physics: _qcWeeklyBoardScrollPhysics').allMatches(source).length,
+      greaterThanOrEqualTo(3),
+    );
+    expect(
+      RegExp(r'padding: _qcWeeklyBoardScrollPadding').allMatches(source).length,
+      greaterThanOrEqualTo(2),
+    );
+  });
 }

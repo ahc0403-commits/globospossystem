@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/payments/payment_total_calculator.dart';
 import '../../core/services/order_service.dart';
 import '../../core/services/payment_service.dart';
+import '../../core/utils/live_sync_scope.dart';
 import '../../main.dart';
 import '../order/order_model.dart';
 
@@ -68,61 +72,79 @@ class PaymentState {
 class PaymentNotifier extends StateNotifier<PaymentState> {
   PaymentNotifier() : super(const PaymentState());
 
+  static const _autoRefreshInterval = Duration(seconds: 2);
+
   RealtimeChannel? _ordersChannel;
   RealtimeChannel? _paymentsChannel;
   String? _restaurantId;
+  // Realtime can be delayed or dropped on mobile web. Keep cashier payment
+  // readiness moving so served tables do not wait for a manual refresh.
+  Timer? _pollTimer;
+  String? _pollStoreId;
+  bool _realtimeConnected = false;
 
   Future<void> loadOrders(String storeId) async {
     _restaurantId = storeId;
 
     try {
+      final storePricing = await _loadStorePricing(storeId);
       final response = await supabase
           .from('orders')
           .select(
-            'id, table_id, status, created_at, tables(table_number), order_items(id, menu_item_id, label, unit_price, quantity, status, item_type, menu_items(name))',
+            'id, table_id, status, created_at, tables(table_number), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, paying_amount_inc_tax, menu_items(name, vat_category))',
           )
           .eq('restaurant_id', storeId)
           .not('status', 'in', '(completed,cancelled)')
-          .order('created_at', ascending: true);
+          .order('created_at', ascending: true)
+          .order('created_at', referencedTable: 'order_items', ascending: true)
+          .order('id', referencedTable: 'order_items', ascending: true);
 
-      final orders = response.map<CashierOrder>((row) {
-        final data = Map<String, dynamic>.from(row);
-        final itemsRaw = data['order_items'];
-        final items = (itemsRaw is List)
-            ? itemsRaw
-                  .map<OrderItem>(
-                    (item) =>
-                        OrderItem.fromJson(Map<String, dynamic>.from(item)),
-                  )
-                  .toList()
-            : <OrderItem>[];
+      final orders = response
+          .map<CashierOrder?>((row) {
+            final data = Map<String, dynamic>.from(row);
+            final itemsRaw = data['order_items'];
+            final itemRows = itemsRaw is List
+                ? itemsRaw
+                      .map((item) => Map<String, dynamic>.from(item as Map))
+                      .toList()
+                : <Map<String, dynamic>>[];
+            itemRows.sort(_compareOrderItemRowsByCreatedAt);
+            final isPayable = _isCashierPayableItemRows(itemRows);
+            if (!isPayable) {
+              return null;
+            }
 
-        final total = items
-            .where((item) => item.status != 'cancelled')
-            .fold<double>(
-              0,
-              (sum, item) => sum + (item.unitPrice * item.quantity),
+            final items = itemRows.map<OrderItem>(OrderItem.fromJson).toList();
+
+            final total = calculatePaymentQuote(
+              lines: itemRows.map(_paymentQuoteLineFromRow),
+              vatPricingMode: storePricing.vatPricingMode,
+              serviceChargeEnabled: storePricing.serviceChargeEnabled,
+              serviceChargeRate: storePricing.serviceChargeRate,
+            ).payableTotal;
+
+            final tableRaw = data['tables'];
+            final tableNumber = tableRaw is Map<String, dynamic>
+                ? tableRaw['table_number']?.toString() ?? '-'
+                : '-';
+
+            final createdAtRaw = data['created_at']?.toString();
+
+            return CashierOrder(
+              orderId: data['id'].toString(),
+              tableNumber: tableNumber,
+              tableId: data['table_id'].toString(),
+              status: 'serving',
+              items: items,
+              totalAmount: total,
+              createdAt: createdAtRaw != null
+                  ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
+                  : DateTime.now(),
             );
-
-        final tableRaw = data['tables'];
-        final tableNumber = tableRaw is Map<String, dynamic>
-            ? tableRaw['table_number']?.toString() ?? '-'
-            : '-';
-
-        final createdAtRaw = data['created_at']?.toString();
-
-        return CashierOrder(
-          orderId: data['id'].toString(),
-          tableNumber: tableNumber,
-          tableId: data['table_id'].toString(),
-          status: data['status']?.toString() ?? 'pending',
-          items: items,
-          totalAmount: total,
-          createdAt: createdAtRaw != null
-              ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
-              : DateTime.now(),
-        );
-      }).toList();
+          })
+          .whereType<CashierOrder>()
+          .where((order) => order.totalAmount > 0)
+          .toList();
 
       final selected = state.selectedOrder;
       CashierOrder? updatedSelected;
@@ -154,6 +176,17 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       clearPaymentSuccess: true,
       clearError: true,
     );
+  }
+
+  Future<_CashierStorePricing> _loadStorePricing(String storeId) async {
+    final response = await supabase
+        .from('restaurants')
+        .select(
+          'vat_pricing_mode, brands(service_charge_enabled, service_charge_rate)',
+        )
+        .eq('id', storeId)
+        .maybeSingle();
+    return _CashierStorePricing.fromJson(response);
   }
 
   Future<Map<String, dynamic>?> processPayment(
@@ -227,6 +260,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     if (_restaurantId == storeId &&
         _ordersChannel != null &&
         _paymentsChannel != null) {
+      _ensureAutoRefresh(storeId);
       return;
     }
 
@@ -236,38 +270,108 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     if (_paymentsChannel != null) {
       await _paymentsChannel!.unsubscribe();
     }
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    _pollStoreId = null;
+    _realtimeConnected = false;
 
     _restaurantId = storeId;
 
     _ordersChannel = supabase
-        .channel('public:cashier_orders:$storeId')
+        .channel(LiveSyncScope.storeChannel('cashier_orders', storeId))
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'orders',
-          callback: (_) => loadOrders(storeId),
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshPaymentOrdersFromRealtime(storeId),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
           table: 'orders',
-          callback: (_) => loadOrders(storeId),
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshPaymentOrdersFromRealtime(storeId),
         )
-        .subscribe();
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'order_items',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshPaymentOrdersFromRealtime(storeId),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'order_items',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshPaymentOrdersFromRealtime(storeId),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'order_items',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshPaymentOrdersFromRealtime(storeId),
+        )
+        .subscribe((status, [error]) {
+          final connected = status == RealtimeSubscribeStatus.subscribed;
+          if (connected != _realtimeConnected) {
+            _realtimeConnected = connected;
+            _ensureAutoRefresh(storeId);
+          }
+        });
 
     _paymentsChannel = supabase
-        .channel('public:cashier_payments:$storeId')
+        .channel(LiveSyncScope.storeChannel('cashier_payments', storeId))
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'payments',
-          callback: (_) => loadOrders(storeId),
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshPaymentOrdersFromRealtime(storeId),
         )
-        .subscribe();
+        .subscribe((status, [error]) {
+          final connected = status == RealtimeSubscribeStatus.subscribed;
+          if (connected != _realtimeConnected) {
+            _realtimeConnected = connected;
+            _ensureAutoRefresh(storeId);
+          }
+        });
+    _ensureAutoRefresh(storeId);
+    Future.delayed(_autoRefreshInterval, () {
+      if (mounted && !_realtimeConnected && _restaurantId == storeId) {
+        _ensureAutoRefresh(storeId);
+      }
+    });
+  }
+
+  void _refreshPaymentOrdersFromRealtime(String storeId) {
+    if (!mounted) {
+      return;
+    }
+    unawaited(loadOrders(storeId));
+  }
+
+  void _ensureAutoRefresh(String storeId) {
+    if (_pollTimer != null && _pollStoreId == storeId) {
+      return;
+    }
+
+    _pollTimer?.cancel();
+    _pollStoreId = storeId;
+    _pollTimer = Timer.periodic(_autoRefreshInterval, (_) {
+      if (mounted && _restaurantId == storeId) {
+        unawaited(loadOrders(storeId));
+      }
+    });
   }
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    _pollStoreId = null;
     _ordersChannel?.unsubscribe();
     _paymentsChannel?.unsubscribe();
     _ordersChannel = null;
@@ -354,6 +458,8 @@ String _mapPaymentError(Object error, String fallbackPrefix) {
       'ORDER_NOT_PAYABLE' => 'Only open dine-in orders can be paid.',
       'ORDER_TOTAL_INVALID' =>
         'This order total is invalid and cannot be processed.',
+      'PAYMENT_AMOUNT_EXCEEDS_REMAINING' =>
+        'The payment amount is higher than the remaining order total.',
       'PAYMENT_AMOUNT_MISMATCH' =>
         'The payment amount no longer matches the current order total.',
       'ORDER_NOT_CANCELLABLE' =>
@@ -364,4 +470,111 @@ String _mapPaymentError(Object error, String fallbackPrefix) {
     };
   }
   return '$fallbackPrefix: $error';
+}
+
+int _compareOrderItemRowsByCreatedAt(
+  Map<String, dynamic> left,
+  Map<String, dynamic> right,
+) {
+  final leftCreatedAt = DateTime.tryParse(left['created_at']?.toString() ?? '');
+  final rightCreatedAt = DateTime.tryParse(
+    right['created_at']?.toString() ?? '',
+  );
+
+  if (leftCreatedAt != null && rightCreatedAt != null) {
+    final createdAtComparison = leftCreatedAt.compareTo(rightCreatedAt);
+    if (createdAtComparison != 0) {
+      return createdAtComparison;
+    }
+  } else if (leftCreatedAt != null) {
+    return -1;
+  } else if (rightCreatedAt != null) {
+    return 1;
+  }
+
+  return (left['id']?.toString() ?? '').compareTo(
+    right['id']?.toString() ?? '',
+  );
+}
+
+PaymentQuoteLine _paymentQuoteLineFromRow(Map<String, dynamic> row) {
+  final menuItemRaw = row['menu_items'];
+  String? vatCategory;
+  if (menuItemRaw is Map) {
+    vatCategory = menuItemRaw['vat_category']?.toString();
+  }
+
+  return PaymentQuoteLine(
+    unitPrice: _toDoubleValue(row['unit_price']),
+    quantity: _toIntValue(row['quantity']),
+    status: row['status']?.toString() ?? 'pending',
+    itemType: row['item_type']?.toString() ?? 'menu_item',
+    vatCategory: row['vat_category']?.toString() ?? vatCategory,
+    payingAmountIncTax: _nullableDoubleValue(row['paying_amount_inc_tax']),
+  );
+}
+
+bool _isCashierPayableItemRows(List<Map<String, dynamic>> itemRows) {
+  final activeRows = itemRows.where(
+    (row) => row['status']?.toString().toLowerCase() != 'cancelled',
+  );
+  if (activeRows.isEmpty) {
+    return false;
+  }
+  return activeRows.every(
+    (row) => row['status']?.toString().toLowerCase() == 'served',
+  );
+}
+
+class _CashierStorePricing {
+  const _CashierStorePricing({
+    required this.vatPricingMode,
+    required this.serviceChargeEnabled,
+    required this.serviceChargeRate,
+  });
+
+  factory _CashierStorePricing.fromJson(Map<String, dynamic>? json) {
+    final brandRaw = json?['brands'];
+    final brand = brandRaw is Map
+        ? Map<String, dynamic>.from(brandRaw)
+        : brandRaw is List && brandRaw.isNotEmpty && brandRaw.first is Map
+        ? Map<String, dynamic>.from(brandRaw.first as Map)
+        : const <String, dynamic>{};
+
+    return _CashierStorePricing(
+      vatPricingMode:
+          json?['vat_pricing_mode']?.toString() ?? vatPricingModeExclusive,
+      serviceChargeEnabled: brand['service_charge_enabled'] == true,
+      serviceChargeRate: _toDoubleValue(brand['service_charge_rate']),
+    );
+  }
+
+  final String vatPricingMode;
+  final bool serviceChargeEnabled;
+  final double serviceChargeRate;
+}
+
+double _toDoubleValue(dynamic value) {
+  return switch (value) {
+    num v => v.toDouble(),
+    String v => double.tryParse(v) ?? 0,
+    _ => 0,
+  };
+}
+
+double? _nullableDoubleValue(dynamic value) {
+  return switch (value) {
+    num v => v.toDouble(),
+    String v => double.tryParse(v),
+    _ => null,
+  };
+}
+
+int _toIntValue(dynamic value) {
+  return switch (value) {
+    int v => v,
+    num v => v.toInt(),
+    String v => int.tryParse(v) ?? 0,
+    _ => 0,
+  };
 }

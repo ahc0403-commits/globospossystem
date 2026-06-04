@@ -7,25 +7,27 @@ import '../core/i18n/locale_extensions.dart';
 import '../core/ui/app_theme.dart';
 import '../core/ui/pos_design_tokens.dart';
 import '../core/services/navigation_history_service.dart';
+import '../core/utils/role_routes.dart' as role_routes;
 import '../features/auth/auth_provider.dart';
 import '../features/auth/auth_state.dart';
 import 'language_switcher.dart';
 
 class AppNavBar extends ConsumerWidget {
-  const AppNavBar({super.key});
+  const AppNavBar({
+    super.key,
+    this.forceBackEnabled = false,
+    this.forceHomeEnabled = false,
+    this.onBackPressed,
+    this.onHomePressed,
+  });
 
-  static String homeRouteForRole(String? role) {
-    return switch (role) {
-      'super_admin' => '/super-admin',
-      'photo_objet_master' || 'photo_objet_store_admin' => '/photo-ops',
-      'brand_admin' || 'store_admin' => '/admin',
-      'admin' => '/admin',
-      'waiter' => '/waiter',
-      'kitchen' => '/kitchen',
-      'cashier' => '/cashier',
-      _ => '/login',
-    };
-  }
+  final bool forceBackEnabled;
+  final bool forceHomeEnabled;
+  final VoidCallback? onBackPressed;
+  final VoidCallback? onHomePressed;
+
+  static String homeRouteForRole(String? role) =>
+      role_routes.homeRouteForRole(role);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -38,6 +40,8 @@ class AppNavBar extends ConsumerWidget {
         currentLocation == homeRoute ||
         currentLocation.startsWith('$homeRoute?') ||
         currentLocation.startsWith('$homeRoute/');
+    final canGoBack = forceBackEnabled || nav.canGoBack;
+    final canGoHome = forceHomeEnabled || !isHome;
     AccessibleStore? activeStore;
     for (final store in authState.accessibleStores) {
       if (store.id == authState.storeId) {
@@ -46,65 +50,86 @@ class AppNavBar extends ConsumerWidget {
       }
     }
     final l10n = context.l10n;
-    final width = MediaQuery.sizeOf(context).width;
-    final veryCompact = width < 520;
-    final compactLanguageSwitcher = width < 1180;
+    final viewportWidth = MediaQuery.sizeOf(context).width;
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _NavButton(
-          icon: Icons.arrow_back_ios_new_rounded,
-          tooltip: l10n.back,
-          enabled: nav.canGoBack,
-          onTap: () {
-            final prev = nav.goBack();
-            if (prev != null) {
-              context.go(prev);
-            }
-          },
-        ),
-        const SizedBox(width: 6),
-        _NavButton(
-          icon: Icons.home_rounded,
-          tooltip: l10n.home,
-          enabled: !isHome,
-          onTap: () {
-            nav.push(homeRoute);
-            context.go(homeRoute);
-          },
-        ),
-        if (!veryCompact) ...[
-          const SizedBox(width: 6),
-          _NavButton(
-            icon: Icons.arrow_forward_ios_rounded,
-            tooltip: l10n.forward,
-            enabled: nav.canGoForward,
-            onTap: () {
-              final next = nav.goForward();
-              if (next != null) {
-                context.go(next);
-              }
-            },
-          ),
-        ],
-        if (!veryCompact && authState.accessibleStores.length > 1) ...[
-          const SizedBox(width: 10),
-          _StoreSwitcher(
-            value: authState.storeId,
-            stores: authState.accessibleStores,
-            onChanged: (storeId) =>
-                ref.read(authProvider.notifier).setActiveStore(storeId),
-          ),
-        ] else if (!veryCompact && activeStore != null) ...[
-          const SizedBox(width: 10),
-          _StorePill(store: activeStore),
-        ],
-        if (!veryCompact) ...[
-          const SizedBox(width: 10),
-          LanguageSwitcher(compact: compactLanguageSwitcher),
-        ],
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth =
+            constraints.hasBoundedWidth && constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : viewportWidth;
+        final veryCompact = availableWidth < 132 || viewportWidth < 420;
+        final showForward = !veryCompact && availableWidth >= 132;
+        final showStore = !veryCompact && availableWidth >= 290;
+        final showLanguage = !veryCompact && availableWidth >= 460;
+        final compactLanguageSwitcher =
+            availableWidth < 640 || viewportWidth < 1180;
+
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _NavButton(
+              icon: Icons.arrow_back_ios_new_rounded,
+              tooltip: l10n.back,
+              enabled: canGoBack,
+              onTap: () {
+                if (forceBackEnabled && onBackPressed != null) {
+                  onBackPressed!();
+                  return;
+                }
+                final prev = nav.goBack();
+                if (prev != null) {
+                  context.go(prev);
+                }
+              },
+            ),
+            const SizedBox(width: 6),
+            _NavButton(
+              icon: Icons.home_rounded,
+              tooltip: l10n.home,
+              enabled: canGoHome,
+              onTap: () {
+                if (forceHomeEnabled && onHomePressed != null) {
+                  onHomePressed!();
+                  return;
+                }
+                nav.push(homeRoute);
+                context.go(homeRoute);
+              },
+            ),
+            if (showForward) ...[
+              const SizedBox(width: 6),
+              _NavButton(
+                icon: Icons.arrow_forward_ios_rounded,
+                tooltip: l10n.forward,
+                enabled: nav.canGoForward,
+                onTap: () {
+                  final next = nav.goForward();
+                  if (next != null) {
+                    context.go(next);
+                  }
+                },
+              ),
+            ],
+            if (showStore && authState.accessibleStores.length > 1) ...[
+              const SizedBox(width: 10),
+              _StoreSwitcher(
+                value: authState.storeId,
+                stores: authState.accessibleStores,
+                onChanged: (storeId) =>
+                    ref.read(authProvider.notifier).setActiveStore(storeId),
+              ),
+            ] else if (showStore && activeStore != null) ...[
+              const SizedBox(width: 10),
+              _StorePill(store: activeStore),
+            ],
+            if (showLanguage) ...[
+              const SizedBox(width: 10),
+              LanguageSwitcher(compact: compactLanguageSwitcher),
+            ],
+          ],
+        );
+      },
     );
   }
 }
@@ -168,6 +193,7 @@ class _StoreSwitcher extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: 170,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: PosColors.surface,
@@ -176,6 +202,7 @@ class _StoreSwitcher extends StatelessWidget {
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
+          isExpanded: true,
           value: value != null && stores.any((store) => store.id == value)
               ? value
               : stores.first.id,
@@ -194,6 +221,8 @@ class _StoreSwitcher extends StatelessWidget {
                     store.brandName == null || store.brandName!.isEmpty
                         ? store.name
                         : '${store.brandName} / ${store.name}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               )
@@ -219,6 +248,7 @@ class _StorePill extends StatelessWidget {
         : '${store.brandName} / ${store.name}';
 
     return Container(
+      constraints: const BoxConstraints(maxWidth: 170),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
         color: PosColors.surface,
@@ -227,6 +257,8 @@ class _StorePill extends StatelessWidget {
       ),
       child: Text(
         label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: GoogleFonts.notoSansKr(
           color: PosColors.textPrimary,
           fontSize: 13,

@@ -6,9 +6,15 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/models/pos_table.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../main.dart';
+import 'table_order_preview.dart';
 
 typedef TableTapCallback = void Function(PosTable table);
 typedef TableMoveCallback = void Function(PosTable table, Rect normalizedRect);
+
+int _firstActionableTableIndex(List<PosTable> tables) {
+  final availableIndex = tables.indexWhere((table) => table.isAvailable);
+  return availableIndex == -1 ? 0 : availableIndex;
+}
 
 class FloorLayoutView extends StatefulWidget {
   const FloorLayoutView({
@@ -20,6 +26,7 @@ class FloorLayoutView extends StatefulWidget {
     this.editable = false,
     this.padding = const EdgeInsets.all(20),
     this.draftLayoutByTableId,
+    this.orderPreviewByTableId = const {},
   });
 
   final List<PosTable> tables;
@@ -29,6 +36,7 @@ class FloorLayoutView extends StatefulWidget {
   final bool editable;
   final EdgeInsets padding;
   final Map<String, Rect>? draftLayoutByTableId;
+  final Map<String, TableOrderPreview> orderPreviewByTableId;
 
   @override
   State<FloorLayoutView> createState() => _FloorLayoutViewState();
@@ -85,6 +93,9 @@ class _FloorLayoutViewState extends State<FloorLayoutView> {
         if (sort != 0) return sort;
         return a.tableNumber.compareTo(b.tableNumber);
       });
+    final firstActionableTableIndex = widget.editable
+        ? 0
+        : _firstActionableTableIndex(sortedTables);
 
     return Padding(
       padding: widget.padding,
@@ -100,40 +111,103 @@ class _FloorLayoutViewState extends State<FloorLayoutView> {
               constraints.maxWidth,
               constraints.maxHeight,
             );
+            final useCompactGrid =
+                !widget.editable && constraints.maxWidth < 560;
 
             return ClipRRect(
               borderRadius: BorderRadius.circular(24),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: CustomPaint(painter: _FloorGridPainter()),
-                  ),
-                  for (final (index, table) in sortedTables.indexed)
-                    _FloorTablePositioned(
-                      key: index == 0
-                          ? const Key('table_first_card')
-                          : ValueKey(table.id),
-                      table: table,
-                      rect: _effectiveRect(table),
-                      canvasSize: canvasSize,
-                      selected: widget.selectedTableId == table.id,
-                      editable: widget.editable,
-                      onTap: () => widget.onTapTable(table),
-                      onPanUpdate:
-                          widget.editable && widget.onTableMoved != null
-                          ? (details) => _handleMove(
-                              table: table,
-                              canvasSize: canvasSize,
-                              details: details,
-                            )
-                          : null,
+              child: useCompactGrid
+                  ? _CompactFloorTableGrid(
+                      tables: sortedTables,
+                      firstActionableTableIndex: firstActionableTableIndex,
+                      selectedTableId: widget.selectedTableId,
+                      orderPreviewByTableId: widget.orderPreviewByTableId,
+                      onTapTable: widget.onTapTable,
+                    )
+                  : Stack(
+                      children: [
+                        Positioned.fill(
+                          child: CustomPaint(painter: _FloorGridPainter()),
+                        ),
+                        for (final (index, table) in sortedTables.indexed)
+                          _FloorTablePositioned(
+                            key: index == firstActionableTableIndex
+                                ? const Key('table_first_card')
+                                : ValueKey(table.id),
+                            table: table,
+                            rect: _effectiveRect(table),
+                            canvasSize: canvasSize,
+                            orderPreview:
+                                widget.orderPreviewByTableId[table.id],
+                            selected: widget.selectedTableId == table.id,
+                            editable: widget.editable,
+                            onTap: () => widget.onTapTable(table),
+                            onPanUpdate:
+                                widget.editable && widget.onTableMoved != null
+                                ? (details) => _handleMove(
+                                    table: table,
+                                    canvasSize: canvasSize,
+                                    details: details,
+                                  )
+                                : null,
+                          ),
+                      ],
                     ),
-                ],
-              ),
             );
           },
         ),
       ),
+    );
+  }
+}
+
+class _CompactFloorTableGrid extends StatelessWidget {
+  const _CompactFloorTableGrid({
+    required this.tables,
+    required this.firstActionableTableIndex,
+    required this.selectedTableId,
+    required this.orderPreviewByTableId,
+    required this.onTapTable,
+  });
+
+  final List<PosTable> tables;
+  final int firstActionableTableIndex;
+  final String? selectedTableId;
+  final Map<String, TableOrderPreview> orderPreviewByTableId;
+  final TableTapCallback onTapTable;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final crossAxisCount = constraints.maxWidth < 340 ? 2 : 3;
+        return GridView.builder(
+          key: const Key('floor_compact_table_grid'),
+          padding: const EdgeInsets.all(10),
+          itemCount: tables.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+            childAspectRatio: crossAxisCount == 2 ? 1.45 : 1.28,
+          ),
+          itemBuilder: (context, index) {
+            final table = tables[index];
+            return GestureDetector(
+              key: index == firstActionableTableIndex
+                  ? const Key('table_first_card')
+                  : ValueKey<String>('compact_table_${table.id}'),
+              onTap: () => onTapTable(table),
+              child: _FloorTableTile(
+                table: table,
+                orderPreview: orderPreviewByTableId[table.id],
+                selected: selectedTableId == table.id,
+                editable: false,
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -144,6 +218,7 @@ class _FloorTablePositioned extends StatelessWidget {
     required this.table,
     required this.rect,
     required this.canvasSize,
+    required this.orderPreview,
     required this.selected,
     required this.editable,
     required this.onTap,
@@ -153,6 +228,7 @@ class _FloorTablePositioned extends StatelessWidget {
   final PosTable table;
   final Rect rect;
   final Size canvasSize;
+  final TableOrderPreview? orderPreview;
   final bool selected;
   final bool editable;
   final VoidCallback onTap;
@@ -172,6 +248,7 @@ class _FloorTablePositioned extends StatelessWidget {
           angle: table.layoutRotation * math.pi / 180,
           child: _FloorTableTile(
             table: table,
+            orderPreview: orderPreview,
             selected: selected,
             editable: editable,
           ),
@@ -184,19 +261,24 @@ class _FloorTablePositioned extends StatelessWidget {
 class _FloorTableTile extends StatelessWidget {
   const _FloorTableTile({
     required this.table,
+    required this.orderPreview,
     required this.selected,
     required this.editable,
   });
 
   final PosTable table;
+  final TableOrderPreview? orderPreview;
   final bool selected;
   final bool editable;
 
   @override
   Widget build(BuildContext context) {
     final occupied = table.isOccupied;
+    final reserved = table.isReserved;
     final borderColor = selected
         ? PosColors.accent
+        : reserved
+        ? PosColors.warning.withValues(alpha: 0.55)
         : occupied
         ? AppColors.statusInfo.withValues(alpha: 0.45)
         : AppColors.surface3;
@@ -207,6 +289,11 @@ class _FloorTableTile extends StatelessWidget {
           )
         : occupied
         ? AppColors.surface1
+        : reserved
+        ? Color.alphaBlend(
+            PosColors.warning.withValues(alpha: 0.10),
+            AppColors.surface0,
+          )
         : AppColors.surface0;
 
     return DecoratedBox(
@@ -235,6 +322,10 @@ class _FloorTableTile extends StatelessWidget {
           builder: (context, constraints) {
             final compact =
                 constraints.maxHeight < 88 || constraints.maxWidth < 112;
+            final activePreview =
+                orderPreview != null && orderPreview!.itemCount > 0
+                ? orderPreview
+                : null;
 
             if (compact) {
               return Column(
@@ -253,19 +344,29 @@ class _FloorTableTile extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: occupied
-                          ? AppColors.statusInfo
-                          : AppColors.statusAvailable,
-                      shape: BoxShape.circle,
+                  if (activePreview == null)
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: occupied
+                            ? AppColors.statusInfo
+                            : reserved
+                            ? PosColors.warning
+                            : AppColors.statusAvailable,
+                        shape: BoxShape.circle,
+                      ),
+                    )
+                  else
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: _OrderCountBadge(count: activePreview.itemCount),
                     ),
-                  ),
                 ],
               );
             }
+
+            final previewMaxHeight = math.max(26.0, constraints.maxHeight - 74);
 
             return Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -279,17 +380,20 @@ class _FloorTableTile extends StatelessWidget {
                     fontSize: 20,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  '${table.seatCount ?? 0} seats',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.notoSansKr(
-                    color: AppColors.textSecondary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                if (activePreview == null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '${table.seatCount ?? 0} seats',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
+                  const SizedBox(height: 8),
+                ] else
+                  const SizedBox(height: 3),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -299,6 +403,8 @@ class _FloorTableTile extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: occupied
                             ? AppColors.statusInfo
+                            : reserved
+                            ? PosColors.warning
                             : AppColors.statusAvailable,
                         shape: BoxShape.circle,
                       ),
@@ -309,8 +415,14 @@ class _FloorTableTile extends StatelessWidget {
                         editable
                             ? (occupied
                                   ? 'Occupied · drag'
+                                  : reserved
+                                  ? 'Reserved · drag'
                                   : 'Available · drag')
-                            : (occupied ? 'Occupied' : 'Available'),
+                            : (occupied
+                                  ? 'Occupied'
+                                  : reserved
+                                  ? 'Reserved'
+                                  : 'Available'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.notoSansKr(
@@ -322,10 +434,114 @@ class _FloorTableTile extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (activePreview != null) ...[
+                  const SizedBox(height: 5),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: previewMaxHeight),
+                    child: _TableOrderPreviewChip(preview: activePreview),
+                  ),
+                ],
               ],
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+class _OrderCountBadge extends StatelessWidget {
+  const _OrderCountBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: PosColors.accent.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: PosColors.accent.withValues(alpha: 0.42)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.restaurant_menu, size: 11, color: PosColors.accent),
+          const SizedBox(width: 3),
+          Text(
+            '$count',
+            style: GoogleFonts.notoSansKr(
+              color: PosColors.accent,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TableOrderPreviewChip extends StatelessWidget {
+  const _TableOrderPreviewChip({required this.preview});
+
+  final TableOrderPreview preview;
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleLines = preview.lines.take(2).toList();
+    final hiddenCount = preview.lines.length - visibleLines.length;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+      decoration: BoxDecoration(
+        color: PosColors.accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: PosColors.accent.withValues(alpha: 0.32)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.restaurant_menu, size: 12, color: PosColors.accent),
+              const SizedBox(width: 4),
+              Text(
+                '${preview.itemCount}',
+                style: GoogleFonts.notoSansKr(
+                  color: PosColors.accent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          for (final line in visibleLines)
+            Text(
+              '${line.label} x${line.quantity}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.notoSansKr(
+                color: PosColors.textSecondary,
+                fontSize: 9.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          if (hiddenCount > 0)
+            Text(
+              '+$hiddenCount',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.notoSansKr(
+                color: PosColors.textMuted,
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+        ],
       ),
     );
   }

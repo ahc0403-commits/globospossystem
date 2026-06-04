@@ -3,13 +3,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:globos_pos_system/main.dart' as app;
 
-const _sharedPassword = '1234!@#\$';
+const _sharedPassword = String.fromEnvironment(
+  'SMOKE_SHARED_PASSWORD',
+  defaultValue: '1234!@#\$',
+);
+const _maxTestDataInputsPerActivatableButton = 3;
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('full multi-account smoke test', (tester) async {
     final report = SmokeRunReport();
+    final previousOnError = FlutterError.onError;
+    FlutterError.onError = (details) {
+      if (details.exceptionAsString().contains('RenderFlex overflowed')) {
+        debugPrint('SMOKE_RENDER_OVERFLOW_DIAGNOSTIC_START');
+        debugPrint(details.toString());
+        debugPrint('SMOKE_RENDER_OVERFLOW_DIAGNOSTIC_END');
+      }
+      previousOnError?.call(details);
+    };
 
     try {
       app.main();
@@ -19,21 +32,59 @@ void main() {
       // advances that order, cashier pays that order, then admin/super
       // navigate the rest. Validation runs last with a full feature set.
       final accounts = <AccountSpec>[
-        AccountSpec(email: 'waiter@globos.test',           expectedSurface: AccountSurface.waiterPos),
-        AccountSpec(email: 'kitchen@globos.test',          expectedSurface: AccountSurface.kitchenPos),
-        AccountSpec(email: 'cashier@globos.test',          expectedSurface: AccountSurface.cashierPos),
-        AccountSpec(email: 'admin@globos.test',            expectedSurface: AccountSurface.adminPos),
-        AccountSpec(email: 'superadmin@globos.test',       expectedSurface: AccountSurface.superAdminPos),
+        AccountSpec(
+          email: 'waiter@globos.test',
+          expectedSurface: AccountSurface.waiterPos,
+        ),
+        AccountSpec(
+          email: 'kitchen@globos.test',
+          expectedSurface: AccountSurface.kitchenPos,
+        ),
+        AccountSpec(
+          email: 'cashier@globos.test',
+          expectedSurface: AccountSurface.cashierPos,
+        ),
+        AccountSpec(
+          email: 'admin@globos.test',
+          expectedSurface: AccountSurface.adminPos,
+        ),
+        AccountSpec(
+          email: 'superadmin@globos.test',
+          expectedSurface: AccountSurface.superAdminPos,
+        ),
         // Office accounts live in a separate office app/Supabase project.
         // They exist in auth.users but have no public.users POS profile,
         // so _fetchUserProfile throws. skipIfLoginFails records the outcome
         // as EXPECTED_OUT_OF_SCOPE without stopping the run.
-        AccountSpec(email: 'office.store@globos.vn',     expectedSurface: AccountSurface.officeStore,  skipIfLoginFails: true),
-        AccountSpec(email: 'office.brand.kn@globos.vn', expectedSurface: AccountSurface.officeBrand, skipIfLoginFails: true),
-        AccountSpec(email: 'office.brand.mk@globos.vn', expectedSurface: AccountSurface.officeBrand, skipIfLoginFails: true),
-        AccountSpec(email: 'office.staff@globos.vn',    expectedSurface: AccountSurface.officeStaff, skipIfLoginFails: true),
-        AccountSpec(email: 'office.super@globos.vn',    expectedSurface: AccountSurface.officeSuper, skipIfLoginFails: true),
-        AccountSpec(email: 'pos.validation.codex@globos.test', expectedSurface: AccountSurface.validation),
+        AccountSpec(
+          email: 'office.store@globos.vn',
+          expectedSurface: AccountSurface.officeStore,
+          skipIfLoginFails: true,
+        ),
+        AccountSpec(
+          email: 'office.brand.kn@globos.vn',
+          expectedSurface: AccountSurface.officeBrand,
+          skipIfLoginFails: true,
+        ),
+        AccountSpec(
+          email: 'office.brand.mk@globos.vn',
+          expectedSurface: AccountSurface.officeBrand,
+          skipIfLoginFails: true,
+        ),
+        AccountSpec(
+          email: 'office.staff@globos.vn',
+          expectedSurface: AccountSurface.officeStaff,
+          skipIfLoginFails: true,
+        ),
+        AccountSpec(
+          email: 'office.super@globos.vn',
+          expectedSurface: AccountSurface.officeSuper,
+          skipIfLoginFails: true,
+        ),
+        AccountSpec(
+          email: 'pos.validation.codex@globos.test',
+          expectedSurface: AccountSurface.validation,
+        ),
       ];
 
       final ctx = SmokeContext(tester: tester, report: report);
@@ -47,8 +98,9 @@ void main() {
       report.stopCondition = 'All listed accounts completed without failure.';
       report.printToConsole();
     } catch (e, st) {
-      report.finalVerdict =
-          report.finalVerdict == 'PASS' ? 'FAIL' : report.finalVerdict;
+      report.finalVerdict = report.finalVerdict == 'PASS'
+          ? 'FAIL'
+          : report.finalVerdict;
       report.firstFailure ??= 'Unhandled failure';
       report.stackTrace ??= st.toString();
       report.printToConsole();
@@ -75,7 +127,12 @@ Future<void> _runAccount(SmokeContext ctx, AccountSpec account) async {
   if (account.skipIfLoginFails) {
     try {
       ctx.report.commandsRun.add('login_pass_1');
-      await _performLogin(tester, email: account.email, password: _sharedPassword);
+      await _performLogin(
+        tester,
+        email: account.email,
+        password: _sharedPassword,
+      );
+      await _acceptPrivacyConsentIfPresent(tester);
       final landing = _captureLandingSurface(tester);
       accountResult.loginResult = 'PASS';
       accountResult.landingSurface = landing;
@@ -90,7 +147,12 @@ Future<void> _runAccount(SmokeContext ctx, AccountSpec account) async {
     }
   } else {
     await _safeStep(ctx, 'login_pass_1', () async {
-      await _performLogin(tester, email: account.email, password: _sharedPassword);
+      await _performLogin(
+        tester,
+        email: account.email,
+        password: _sharedPassword,
+      );
+      await _acceptPrivacyConsentIfPresent(tester);
       final landing = _captureLandingSurface(tester);
       accountResult.loginResult = 'PASS';
       accountResult.landingSurface = landing;
@@ -110,9 +172,13 @@ Future<void> _runAccount(SmokeContext ctx, AccountSpec account) async {
   // Run each visible feature exactly maxPasses times (default 1).
   for (final feature in visible) {
     for (var pass = 1; pass <= feature.maxPasses; pass++) {
-      await _safeStep(ctx, '${feature.name}_pass_$pass[${account.email}]', () async {
-        await feature.run(ctx, account);
-      });
+      await _safeStep(
+        ctx,
+        '${feature.name}_pass_$pass[${account.email}]',
+        () async {
+          await feature.run(ctx, account);
+        },
+      );
     }
   }
 
@@ -131,9 +197,9 @@ Future<void> _runAccount(SmokeContext ctx, AccountSpec account) async {
 Future<void> _ensureLoginScreen(WidgetTester tester) async {
   await tester.pumpAndSettle(const Duration(seconds: 2));
 
-  final emailFinder    = find.byKey(const Key(UiKeys.loginEmailField));
+  final emailFinder = find.byKey(const Key(UiKeys.loginEmailField));
   final passwordFinder = find.byKey(const Key(UiKeys.loginPasswordField));
-  final buttonFinder   = find.byKey(const Key(UiKeys.loginSubmitButton));
+  final buttonFinder = find.byKey(const Key(UiKeys.loginSubmitButton));
 
   if (emailFinder.evaluate().isEmpty ||
       passwordFinder.evaluate().isEmpty ||
@@ -151,8 +217,8 @@ Future<void> _performLogin(
   required String email,
   required String password,
 }) async {
-  final emailField  = find.byKey(const Key(UiKeys.loginEmailField));
-  final passField   = find.byKey(const Key(UiKeys.loginPasswordField));
+  final emailField = find.byKey(const Key(UiKeys.loginEmailField));
+  final passField = find.byKey(const Key(UiKeys.loginPasswordField));
   final loginButton = find.byKey(const Key(UiKeys.loginSubmitButton));
 
   await tester.tap(emailField);
@@ -173,12 +239,29 @@ Future<void> _performLogin(
   }
 }
 
+Future<void> _acceptPrivacyConsentIfPresent(WidgetTester tester) async {
+  final checkbox = find.byKey(const Key(UiKeys.privacyConsentCheckbox));
+  final acceptButton = find.byKey(const Key(UiKeys.privacyConsentAcceptButton));
+
+  if (checkbox.evaluate().isEmpty || acceptButton.evaluate().isEmpty) {
+    return;
+  }
+
+  await tester.ensureVisible(checkbox.first);
+  await tester.tap(checkbox.first);
+  await tester.pumpAndSettle(const Duration(seconds: 1));
+
+  await tester.ensureVisible(acceptButton.first);
+  await tester.tap(acceptButton.first);
+  await tester.pumpAndSettle(const Duration(seconds: 6));
+}
+
 String _captureLandingSurface(WidgetTester tester) {
   for (final candidate in [
     UiKeys.kitchenRoot,
     UiKeys.cashierRoot,
-    UiKeys.dashboardRoot,   // waiterPos
-    UiKeys.adminRoot,       // adminPos / officePos / superAdminPos
+    UiKeys.dashboardRoot, // waiterPos
+    UiKeys.adminRoot, // adminPos / officePos / superAdminPos
   ]) {
     if (find.byKey(Key(candidate)).evaluate().isNotEmpty) {
       return 'root:$candidate';
@@ -238,9 +321,9 @@ List<FeatureSpec> _blockedFeatures(
   List<FeatureSpec> visible,
 ) {
   final visibleNames = visible.map((e) => e.name).toSet();
-  return _featureMatrix(surface)
-      .where((e) => !visibleNames.contains(e.name))
-      .toList();
+  return _featureMatrix(
+    surface,
+  ).where((e) => !visibleNames.contains(e.name)).toList();
 }
 
 // ---------------------------------------------------------------------------
@@ -274,9 +357,7 @@ List<FeatureSpec> _featureMatrix(AccountSurface surface) {
         _superAdminSystemSettingsTabFeature(),
       ];
     case AccountSurface.cashierPos:
-      return [
-        _cashierFeature(),
-      ];
+      return [_cashierFeature()];
     case AccountSurface.waiterPos:
       return [
         _waiterDashboardFeature(),
@@ -284,9 +365,7 @@ List<FeatureSpec> _featureMatrix(AccountSurface surface) {
         _waiterOrderFeature(),
       ];
     case AccountSurface.kitchenPos:
-      return [
-        _kitchenFeature(),
-      ];
+      return [_kitchenFeature()];
     case AccountSurface.officeStore:
       return [
         _adminLandingFeature(),
@@ -294,14 +373,9 @@ List<FeatureSpec> _featureMatrix(AccountSurface surface) {
         _dailyClosingFeature(),
       ];
     case AccountSurface.officeBrand:
-      return [
-        _adminLandingFeature(),
-        _reportsFeature(),
-      ];
+      return [_adminLandingFeature(), _reportsFeature()];
     case AccountSurface.officeStaff:
-      return [
-        _adminLandingFeature(),
-      ];
+      return [_adminLandingFeature()];
     case AccountSurface.officeSuper:
       return [
         _adminLandingFeature(),
@@ -355,8 +429,11 @@ FeatureSpec _adminTablesNavFeature() {
       final tester = ctx.tester;
       await tester.tap(find.byKey(const Key(UiKeys.navTables)));
       await tester.pumpAndSettle(const Duration(seconds: 2));
-      // TablesTab body has no dedicated key; verify shell stayed mounted.
-      _expectVisible(tester, UiKeys.adminRoot, 'admin_root lost after Tables nav');
+      _expectVisible(
+        tester,
+        UiKeys.adminTablesRoot,
+        'admin_tables_root not visible after Tables nav',
+      );
     },
   );
 }
@@ -369,7 +446,11 @@ FeatureSpec _adminMenuNavFeature() {
       final tester = ctx.tester;
       await tester.tap(find.byKey(const Key(UiKeys.navMenu)));
       await tester.pumpAndSettle(const Duration(seconds: 2));
-      _expectVisible(tester, UiKeys.adminRoot, 'admin_root lost after Menu nav');
+      _expectVisible(
+        tester,
+        UiKeys.adminMenuRoot,
+        'admin_menu_root not visible after Menu nav',
+      );
     },
   );
 }
@@ -382,7 +463,11 @@ FeatureSpec _adminStaffNavFeature() {
       final tester = ctx.tester;
       await tester.tap(find.byKey(const Key(UiKeys.navStaff)));
       await tester.pumpAndSettle(const Duration(seconds: 2));
-      _expectVisible(tester, UiKeys.staffRoot, 'staff_root not visible after Staff nav');
+      _expectVisible(
+        tester,
+        UiKeys.staffRoot,
+        'staff_root not visible after Staff nav',
+      );
     },
   );
 }
@@ -395,7 +480,11 @@ FeatureSpec _adminAttendanceNavFeature() {
       final tester = ctx.tester;
       await tester.tap(find.byKey(const Key(UiKeys.navAttendance)));
       await tester.pumpAndSettle(const Duration(seconds: 2));
-      _expectVisible(tester, UiKeys.attendanceRoot, 'attendance_root not visible after Attendance nav');
+      _expectVisible(
+        tester,
+        UiKeys.attendanceRoot,
+        'attendance_root not visible after Attendance nav',
+      );
     },
   );
 }
@@ -408,7 +497,11 @@ FeatureSpec _adminInventoryNavFeature() {
       final tester = ctx.tester;
       await tester.tap(find.byKey(const Key(UiKeys.navInventory)));
       await tester.pumpAndSettle(const Duration(seconds: 2));
-      _expectVisible(tester, UiKeys.inventoryRoot, 'inventory_root not visible after Inventory nav');
+      _expectVisible(
+        tester,
+        UiKeys.inventoryRoot,
+        'inventory_root not visible after Inventory nav',
+      );
     },
   );
 }
@@ -434,7 +527,11 @@ FeatureSpec _adminSettingsNavFeature() {
       final tester = ctx.tester;
       await tester.tap(find.byKey(const Key(UiKeys.navSettings)));
       await tester.pumpAndSettle(const Duration(seconds: 2));
-      _expectVisible(tester, UiKeys.settingsRoot, 'settings_root not visible after Settings nav');
+      _expectVisible(
+        tester,
+        UiKeys.settingsRoot,
+        'settings_root not visible after Settings nav',
+      );
     },
   );
 }
@@ -447,7 +544,11 @@ FeatureSpec _adminEinvoiceNavFeature() {
       final tester = ctx.tester;
       await tester.tap(find.byKey(const Key(UiKeys.navEinvoice)));
       await tester.pumpAndSettle(const Duration(seconds: 2));
-      _expectVisible(tester, UiKeys.einvoiceRoot, 'einvoice_root not visible after E-Invoice nav');
+      _expectVisible(
+        tester,
+        UiKeys.einvoiceRoot,
+        'einvoice_root not visible after E-Invoice nav',
+      );
     },
   );
 }
@@ -460,8 +561,11 @@ FeatureSpec _adminDeliveryNavFeature() {
       final tester = ctx.tester;
       await tester.tap(find.byKey(const Key(UiKeys.navDeliverySettlement)));
       await tester.pumpAndSettle(const Duration(seconds: 2));
-      _expectVisible(tester, UiKeys.adminRoot,
-          'admin_root lost after Delivery Settlement nav');
+      _expectVisible(
+        tester,
+        UiKeys.deliverySettlementRoot,
+        'delivery_settlement_root not visible after Delivery Settlement nav',
+      );
     },
   );
 }
@@ -496,8 +600,9 @@ FeatureSpec _dailyClosingFeature() {
       _expectVisible(tester, UiKeys.reportsRoot, 'reports_root not visible');
 
       // Already-closed → record artifact and skip without failing the run.
-      final alreadyClosed =
-          find.byKey(const Key(UiKeys.dailyClosingAlreadyClosedBanner));
+      final alreadyClosed = find.byKey(
+        const Key(UiKeys.dailyClosingAlreadyClosedBanner),
+      );
       if (alreadyClosed.evaluate().isNotEmpty) {
         ctx.report.linkArtifacts.add(
           'daily_closing[${account.email}]: already closed for today (non-repeatable boundary observed)',
@@ -505,8 +610,9 @@ FeatureSpec _dailyClosingFeature() {
         return;
       }
 
-      final closeButton =
-          find.byKey(const Key(UiKeys.dailyClosingSubmitButton));
+      final closeButton = find.byKey(
+        const Key(UiKeys.dailyClosingSubmitButton),
+      );
       if (closeButton.evaluate().isEmpty) {
         // Role lacks button — record and skip.
         ctx.report.linkArtifacts.add(
@@ -527,12 +633,15 @@ FeatureSpec _dailyClosingFeature() {
       }
       await tester.pumpAndSettle(const Duration(seconds: 4));
 
-      final successBanner =
-          find.byKey(const Key(UiKeys.dailyClosingSuccessBanner));
-      final nowAlreadyClosed =
-          find.byKey(const Key(UiKeys.dailyClosingAlreadyClosedBanner));
-      final closeButtonAfter =
-          find.byKey(const Key(UiKeys.dailyClosingSubmitButton));
+      final successBanner = find.byKey(
+        const Key(UiKeys.dailyClosingSuccessBanner),
+      );
+      final nowAlreadyClosed = find.byKey(
+        const Key(UiKeys.dailyClosingAlreadyClosedBanner),
+      );
+      final closeButtonAfter = find.byKey(
+        const Key(UiKeys.dailyClosingSubmitButton),
+      );
 
       final successDetected =
           successBanner.evaluate().isNotEmpty ||
@@ -564,8 +673,7 @@ FeatureSpec _kitchenFeature() {
 
       final capturedId = ctx.capturedOrderId;
       if (capturedId != null) {
-        final perOrderCard =
-            find.byKey(Key('kitchen_order_$capturedId'));
+        final perOrderCard = find.byKey(Key('kitchen_order_$capturedId'));
         if (perOrderCard.evaluate().isEmpty) {
           throw TestFailure(
             'Cross-account flow broken: waiter created order $capturedId '
@@ -578,10 +686,10 @@ FeatureSpec _kitchenFeature() {
         );
       }
 
-      final firstOrder =
-          find.byKey(const Key(UiKeys.kitchenFirstOrderCard));
-      final advanceButton =
-          find.byKey(const Key(UiKeys.kitchenAdvanceStatusButton));
+      final firstOrder = find.byKey(const Key(UiKeys.kitchenFirstOrderCard));
+      final advanceButton = find.byKey(
+        const Key(UiKeys.kitchenAdvanceStatusButton),
+      );
 
       if (firstOrder.evaluate().isEmpty) {
         // Even waiter's order would manifest as the first card; absence here
@@ -599,7 +707,8 @@ FeatureSpec _kitchenFeature() {
       }
 
       _expectVisible(
-        tester, UiKeys.kitchenFirstOrderCard,
+        tester,
+        UiKeys.kitchenFirstOrderCard,
         'kitchen_first_order_card disappeared',
       );
 
@@ -657,12 +766,35 @@ FeatureSpec _cashierFeature() {
       }
 
       await tester.tap(payButton);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final cashMethod = find.byKey(const Key(UiKeys.cashierMethodDialogCash));
+      _expectVisible(
+        tester,
+        UiKeys.cashierMethodDialogCash,
+        'cashier_method_dialog_CASH not visible after first payment button tap',
+      );
+
+      if (find
+          .byKey(const Key(UiKeys.paymentSuccessBanner))
+          .evaluate()
+          .isNotEmpty) {
+        throw TestFailure(
+          'payment_success_banner became visible after method lookup only. '
+          'Cashier payment must complete only after a selected method is confirmed.',
+        );
+      }
+
+      await tester.tap(cashMethod);
+      await tester.pumpAndSettle(const Duration(seconds: 1));
+
+      await tester.tap(payButton);
       await tester.pumpAndSettle(const Duration(seconds: 4));
 
       _expectVisible(
         tester,
         UiKeys.paymentSuccessBanner,
-        'payment_success_banner not visible after payment',
+        'payment_success_banner not visible after confirmed payment',
       );
 
       // Order has been paid; clear captured id so subsequent accounts
@@ -682,8 +814,16 @@ FeatureSpec _waiterDashboardFeature() {
     entryKey: UiKeys.dashboardRoot,
     run: (ctx, account) async {
       final tester = ctx.tester;
-      _expectVisible(tester, UiKeys.dashboardRoot, 'dashboard_root not visible');
-      _expectVisible(tester, UiKeys.tablesRoot, 'tables_root not visible on waiter dashboard');
+      _expectVisible(
+        tester,
+        UiKeys.dashboardRoot,
+        'dashboard_root not visible',
+      );
+      _expectVisible(
+        tester,
+        UiKeys.tablesRoot,
+        'tables_root not visible on waiter dashboard',
+      );
     },
   );
 }
@@ -698,8 +838,9 @@ FeatureSpec _waiterTablesFeature() {
 
       final firstTable = find.byKey(const Key(UiKeys.tableFirstCard));
       if (firstTable.evaluate().isEmpty) {
-        ctx.report.linkArtifacts
-            .add('waiter_tables[${account.email}]: no table_first_card visible');
+        ctx.report.linkArtifacts.add(
+          'waiter_tables[${account.email}]: no table_first_card visible',
+        );
         return;
       }
 
@@ -708,10 +849,16 @@ FeatureSpec _waiterTablesFeature() {
 
       await _dismissGuestCountDialogIfPresent(tester);
 
-      final ordersVisible =
-          find.byKey(const Key(UiKeys.ordersRoot)).evaluate().isNotEmpty;
+      final ordersVisible = find
+          .byKey(const Key(UiKeys.ordersRoot))
+          .evaluate()
+          .isNotEmpty;
       if (ordersVisible) {
-        _expectVisible(tester, UiKeys.ordersRoot, 'orders_root not visible in workspace');
+        _expectVisible(
+          tester,
+          UiKeys.ordersRoot,
+          'orders_root not visible in workspace',
+        );
         // Cancel back to grid without creating an order — waiter_order
         // is the dedicated feature that performs the create.
         final cancelButton = find.text('CANCEL');
@@ -741,8 +888,8 @@ FeatureSpec _waiterOrderFeature() {
 
       await _dismissGuestCountDialogIfPresent(tester);
 
-      final menuItem   = find.byKey(const Key(UiKeys.menuFirstItem));
-      final submitBtn  = find.byKey(const Key(UiKeys.cartSubmitOrder));
+      final menuItem = find.byKey(const Key(UiKeys.menuFirstItem));
+      final submitBtn = find.byKey(const Key(UiKeys.cartSubmitOrder));
 
       if (menuItem.evaluate().isEmpty || submitBtn.evaluate().isEmpty) {
         ctx.report.linkArtifacts.add(
@@ -794,7 +941,11 @@ FeatureSpec _superAdminLandingFeature() {
     name: 'super_admin_landing',
     entryKey: UiKeys.adminRoot,
     run: (ctx, account) async {
-      _expectVisible(ctx.tester, UiKeys.adminRoot, 'admin_root (SuperAdminScreen) not visible');
+      _expectVisible(
+        ctx.tester,
+        UiKeys.adminRoot,
+        'admin_root (SuperAdminScreen) not visible',
+      );
       _expectVisible(
         ctx.tester,
         UiKeys.superAdminNavStores,
@@ -812,7 +963,11 @@ FeatureSpec _superAdminStoresTabFeature() {
       final tester = ctx.tester;
       await tester.tap(find.byKey(const Key(UiKeys.superAdminNavStores)));
       await tester.pumpAndSettle(const Duration(seconds: 2));
-      _expectVisible(tester, UiKeys.adminRoot, 'admin_root lost after super_admin Stores tab nav');
+      _expectVisible(
+        tester,
+        UiKeys.adminRoot,
+        'admin_root lost after super_admin Stores tab nav',
+      );
     },
   );
 }
@@ -825,7 +980,11 @@ FeatureSpec _superAdminReportsTabFeature() {
       final tester = ctx.tester;
       await tester.tap(find.byKey(const Key(UiKeys.superAdminNavReports)));
       await tester.pumpAndSettle(const Duration(seconds: 3));
-      _expectVisible(tester, UiKeys.adminRoot, 'admin_root lost after super_admin Reports tab nav');
+      _expectVisible(
+        tester,
+        UiKeys.adminRoot,
+        'admin_root lost after super_admin Reports tab nav',
+      );
     },
   );
 }
@@ -838,7 +997,11 @@ FeatureSpec _superAdminQcStatusTabFeature() {
       final tester = ctx.tester;
       await tester.tap(find.byKey(const Key(UiKeys.superAdminNavQcStatus)));
       await tester.pumpAndSettle(const Duration(seconds: 3));
-      _expectVisible(tester, UiKeys.adminRoot, 'admin_root lost after super_admin QC Status tab nav');
+      _expectVisible(
+        tester,
+        UiKeys.adminRoot,
+        'admin_root lost after super_admin QC Status tab nav',
+      );
     },
   );
 }
@@ -851,7 +1014,11 @@ FeatureSpec _superAdminQcTemplateTabFeature() {
       final tester = ctx.tester;
       await tester.tap(find.byKey(const Key(UiKeys.superAdminNavQcTemplate)));
       await tester.pumpAndSettle(const Duration(seconds: 3));
-      _expectVisible(tester, UiKeys.adminRoot, 'admin_root lost after super_admin QC Template tab nav');
+      _expectVisible(
+        tester,
+        UiKeys.adminRoot,
+        'admin_root lost after super_admin QC Template tab nav',
+      );
     },
   );
 }
@@ -862,9 +1029,15 @@ FeatureSpec _superAdminSystemSettingsTabFeature() {
     entryKey: UiKeys.superAdminNavSystemSettings,
     run: (ctx, account) async {
       final tester = ctx.tester;
-      await tester.tap(find.byKey(const Key(UiKeys.superAdminNavSystemSettings)));
+      await tester.tap(
+        find.byKey(const Key(UiKeys.superAdminNavSystemSettings)),
+      );
       await tester.pumpAndSettle(const Duration(seconds: 3));
-      _expectVisible(tester, UiKeys.adminRoot, 'admin_root lost after super_admin System Settings tab nav');
+      _expectVisible(
+        tester,
+        UiKeys.adminRoot,
+        'admin_root lost after super_admin System Settings tab nav',
+      );
     },
   );
 }
@@ -938,76 +1111,83 @@ Future<T> _safeStepReturn<T>(
 
 class UiKeys {
   // Login
-  static const loginEmailField    = 'login_email_field';
+  static const loginEmailField = 'login_email_field';
   static const loginPasswordField = 'login_password_field';
-  static const loginSubmitButton  = 'login_submit_button';
-  static const authErrorText      = 'auth_error_text';
-  static const logoutButton       = 'logout_button';
+  static const loginSubmitButton = 'login_submit_button';
+  static const authErrorText = 'auth_error_text';
+  static const logoutButton = 'logout_button';
+  static const privacyConsentCheckbox = 'privacy_consent_checkbox';
+  static const privacyConsentAcceptButton = 'privacy_consent_accept_button';
 
   // Admin sidebar nav (all entries now keyed)
-  static const navTables             = 'nav_tables';
-  static const navMenu               = 'nav_menu';
-  static const navStaff              = 'nav_staff';
-  static const navReports            = 'nav_reports';
-  static const navAttendance         = 'nav_attendance';
-  static const navInventory          = 'nav_inventory';
-  static const navQc                 = 'nav_qc';
-  static const navSettings           = 'nav_settings';
-  static const navEinvoice           = 'nav_einvoice';
+  static const navTables = 'nav_tables';
+  static const navMenu = 'nav_menu';
+  static const navStaff = 'nav_staff';
+  static const navReports = 'nav_reports';
+  static const navAttendance = 'nav_attendance';
+  static const navInventory = 'nav_inventory';
+  static const navQc = 'nav_qc';
+  static const navSettings = 'nav_settings';
+  static const navEinvoice = 'nav_einvoice';
   static const navDeliverySettlement = 'nav_delivery_settlement';
   // nav_daily_closing is the section header inside Reports tab; not a sidebar
   // entry. Used via ensureVisible elsewhere.
   static const navDailyClosing = 'nav_daily_closing';
 
   // Root screens
-  static const dashboardRoot    = 'dashboard_root';
-  static const tablesRoot       = 'tables_root';
-  static const kitchenRoot      = 'kitchen_root';
-  static const cashierRoot      = 'cashier_root';
-  static const adminRoot        = 'admin_root';
-  static const reportsRoot      = 'reports_root';
+  static const dashboardRoot = 'dashboard_root';
+  static const tablesRoot = 'tables_root';
+  static const kitchenRoot = 'kitchen_root';
+  static const cashierRoot = 'cashier_root';
+  static const adminRoot = 'admin_root';
+  static const reportsRoot = 'reports_root';
   static const dailyClosingRoot = 'daily_closing_root';
-  static const menuRoot         = 'menu_root';
-  static const ordersRoot       = 'orders_root';
+  static const menuRoot = 'menu_root';
+  static const ordersRoot = 'orders_root';
 
   // Admin tab body roots
-  static const staffRoot        = 'staff_root';
-  static const attendanceRoot   = 'attendance_root';
-  static const inventoryRoot    = 'inventory_root';
-  static const qcRoot           = 'qc_root';
-  static const settingsRoot     = 'settings_root';
-  static const einvoiceRoot     = 'einvoice_root';
+  static const adminTablesRoot = 'admin_tables_root';
+  static const adminMenuRoot = 'admin_menu_root';
+  static const staffRoot = 'staff_root';
+  static const attendanceRoot = 'attendance_root';
+  static const inventoryRoot = 'inventory_root';
+  static const qcRoot = 'qc_root';
+  static const settingsRoot = 'settings_root';
+  static const einvoiceRoot = 'einvoice_root';
+  static const deliverySettlementRoot = 'delivery_settlement_root';
 
   // SuperAdmin sidebar
-  static const superAdminNavStores         = 'super_admin_nav_stores';
-  static const superAdminNavReports        = 'super_admin_nav_reports';
-  static const superAdminNavQcStatus       = 'super_admin_nav_qc_status';
-  static const superAdminNavQcTemplate     = 'super_admin_nav_qc_template';
+  static const superAdminNavStores = 'super_admin_nav_stores';
+  static const superAdminNavReports = 'super_admin_nav_reports';
+  static const superAdminNavQcStatus = 'super_admin_nav_qc_status';
+  static const superAdminNavQcTemplate = 'super_admin_nav_qc_template';
   static const superAdminNavSystemSettings = 'super_admin_nav_system_settings';
 
   // Order workspace
-  static const menuFirstItem            = 'menu_first_item';
-  static const cartSubmitOrder          = 'cart_submit_order';
+  static const menuFirstItem = 'menu_first_item';
+  static const cartSubmitOrder = 'cart_submit_order';
   static const orderCreateSuccessBanner = 'order_create_success_banner';
-  static const latestOrderNumberText    = 'latest_order_number_text';
-  static const latestOrderIdFullText    = 'latest_order_id_full_text';
+  static const latestOrderNumberText = 'latest_order_number_text';
+  static const latestOrderIdFullText = 'latest_order_id_full_text';
 
   // Tables
   static const tableFirstCard = 'table_first_card';
 
   // Payment
   static const paymentFirstCandidate = 'payment_first_candidate';
-  static const paymentSubmitButton   = 'payment_submit_button';
-  static const paymentSuccessBanner  = 'payment_success_banner';
+  static const paymentSubmitButton = 'payment_submit_button';
+  static const cashierMethodDialogCash = 'cashier_method_dialog_CASH';
+  static const paymentSuccessBanner = 'payment_success_banner';
 
   // Kitchen
-  static const kitchenFirstOrderCard      = 'kitchen_first_order_card';
+  static const kitchenFirstOrderCard = 'kitchen_first_order_card';
   static const kitchenAdvanceStatusButton = 'kitchen_advance_status_button';
 
   // Daily closing
-  static const dailyClosingSubmitButton        = 'daily_closing_submit_button';
-  static const dailyClosingSuccessBanner       = 'daily_closing_success_banner';
-  static const dailyClosingAlreadyClosedBanner = 'daily_closing_already_closed_banner';
+  static const dailyClosingSubmitButton = 'daily_closing_submit_button';
+  static const dailyClosingSuccessBanner = 'daily_closing_success_banner';
+  static const dailyClosingAlreadyClosedBanner =
+      'daily_closing_already_closed_banner';
 }
 
 // ---------------------------------------------------------------------------
@@ -1035,6 +1215,7 @@ class AccountSpec {
   });
   final String email;
   final AccountSurface expectedSurface;
+
   /// When true, login failure is recorded as EXPECTED_OUT_OF_SCOPE without
   /// failing the run. Used for office-system accounts whose profiles live in
   /// a separate Supabase project.
@@ -1047,12 +1228,17 @@ class FeatureSpec {
     required this.entryKey,
     required this.run,
     this.maxPasses = 1,
-  });
+  }) : assert(
+         maxPasses >= 1 && maxPasses <= _maxTestDataInputsPerActivatableButton,
+         'Button activation test data is capped at 3 inputs per button.',
+       );
   final String name;
   final String entryKey;
   final Future<void> Function(SmokeContext ctx, AccountSpec account) run;
+
   /// Per-account execution count. Default 1; non-repeatable operations
-  /// (daily_closing) must remain at 1.
+  /// (daily_closing) must remain at 1. Do not raise this above the
+  /// per-button test-data cap.
   final int maxPasses;
 }
 
@@ -1061,6 +1247,7 @@ class SmokeContext {
   final WidgetTester tester;
   final SmokeRunReport report;
   String currentAccount = '';
+
   /// Full uuid of the order created by the waiter, captured for kitchen and
   /// cashier accounts to target. Cleared once the cashier pays it.
   String? capturedOrderId;
@@ -1071,7 +1258,7 @@ class SmokeRunReport {
   String stopCondition = '';
   String? firstFailure;
   String? stackTrace;
-  final List<String> commandsRun   = [];
+  final List<String> commandsRun = [];
   final List<AccountResult> accounts = [];
   final List<String> linkArtifacts = [];
 
@@ -1090,9 +1277,13 @@ class SmokeRunReport {
       debugPrint('     hiddenOrBlocked:       ${a.hiddenOrBlockedFeatures}');
     }
     debugPrint('5. Link Artifacts:');
-    for (final item in linkArtifacts) { debugPrint('   - $item'); }
+    for (final item in linkArtifacts) {
+      debugPrint('   - $item');
+    }
     debugPrint('6. Steps Run:');
-    for (final item in commandsRun) { debugPrint('   - $item'); }
+    for (final item in commandsRun) {
+      debugPrint('   - $item');
+    }
     if (stackTrace != null) {
       debugPrint('7. Stack Trace:');
       debugPrint(stackTrace);

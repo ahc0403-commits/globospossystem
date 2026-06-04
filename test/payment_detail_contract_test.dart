@@ -17,18 +17,16 @@ void main() {
     expect(router, contains('PaymentDetailScreen('));
     expect(router, contains("state.pathParameters['paymentId']"));
 
-    expect(roleRoutes, contains("location.startsWith('/payments/')"));
+    expect(roleRoutes, contains("path.startsWith('/payments/')"));
     expect(
       roleRoutes,
       contains(
-        "'cashier' => location == '/cashier' || location.startsWith('/payments/')",
+        "'cashier' => path == '/cashier' || path.startsWith('/payments/')",
       ),
     );
     expect(
       roleRoutes,
-      contains(
-        "'admin' => location == '/admin' || location.startsWith('/payments/')",
-      ),
+      contains("'admin' => path == '/admin' || path.startsWith('/payments/')"),
     );
   });
 
@@ -57,10 +55,42 @@ void main() {
         'lib/core/services/einvoice_service.dart',
       );
 
+      expect(screen, contains('paymentService.fetchPaymentDetail('));
+      expect(screen, contains('storeId: storeId'));
+      expect(screen, contains('_detailFuture = _loadDetail();'));
       expect(
         screen,
-        contains('paymentService.fetchPaymentDetail(widget.paymentId)'),
+        contains("LiveSyncScope.entityFilter('id', widget.paymentId)"),
       );
+      expect(
+        screen,
+        contains("LiveSyncScope.entityFilter('order_id', orderId)"),
+      );
+      expect(screen, contains('Timer.periodic(_autoRefreshInterval'));
+      expect(screen, contains('Map<String, dynamic>? _lastDetail'));
+      expect(screen, contains('bool _refreshInFlight = false'));
+      expect(screen, contains('if (detail != null || _lastDetail == null)'));
+      expect(screen, contains('Future<void> _refreshDetailSilently() async'));
+      expect(screen, contains('unawaited(_refreshDetailSilently())'));
+      expect(
+        screen,
+        contains('final currentDetail = snapshot.data ?? _lastDetail'),
+      );
+      expect(
+        screen,
+        contains(
+          'snapshot.connectionState == ConnectionState.waiting &&\n'
+          '                currentDetail == null',
+        ),
+      );
+      expect(screen, contains('if (_realtimeConnected)'));
+      expect(screen, contains('_pollTimer?.cancel()'));
+      final realtimeRefreshBody = RegExp(
+        r'void _refreshDetailFromRealtime\(\) \{(?<body>[\s\S]*?)\n  \}',
+      ).firstMatch(screen)?.namedGroup('body');
+      expect(realtimeRefreshBody, isNotNull);
+      expect(realtimeRefreshBody, isNot(contains('_detailFuture = future')));
+      expect(realtimeRefreshBody, isNot(contains('setState(')));
       expect(
         screen,
         contains("import '../../core/i18n/locale_extensions.dart';"),
@@ -71,6 +101,7 @@ void main() {
       expect(screen, contains('l10n.paymentDetailEInvoiceSummary'));
       expect(screen, contains('l10n.paymentDetailProofSummary'));
       expect(screen, contains('l10n.paymentDetailOperationalSnapshot'));
+      expect(screen, contains('l10n.paymentDetailFinishPayment'));
       expect(screen, contains('l10n.paymentDetailPortalPendingTitle'));
       expect(screen, contains('l10n.paymentDetailPortalPendingBody'));
       expect(screen, contains('l10n.paymentDetailPortalPendingFooter'));
@@ -79,20 +110,39 @@ void main() {
       expect(screen, contains('l10n.paymentDetailJobStatus'));
       expect(screen, contains('l10n.paymentDetailRefId'));
       expect(screen, contains('l10n.paymentDetailSid'));
+      expect(screen, contains("import 'package:go_router/go_router.dart';"));
+      expect(
+        screen,
+        contains("key: const Key('payment_detail_close_to_cashier')"),
+      );
+      expect(
+        screen,
+        contains("key: const Key('payment_detail_finish_payment')"),
+      );
+      expect(screen, contains("context.go('/cashier')"));
       expect(screen, contains('class _SecondaryInfoPanel'));
       expect(screen, contains('initiallyExpanded: false'));
       expect(screen, contains('ExpansionTile('));
+      expect(screen, contains("Key('payment_detail_print_receipt')"));
+      expect(screen, contains('ReceiptBuilder.buildPaymentReceipt'));
+      expect(screen, contains('printerProvider'));
+      expect(screen, contains('_receiptItems(order'));
 
       expect(
         paymentService,
-        contains(
-          'Future<Map<String, dynamic>?> fetchPaymentDetail(String paymentId)',
-        ),
+        contains('Future<Map<String, dynamic>?> fetchPaymentDetail('),
       );
+      expect(paymentService, contains('String? storeId'));
+      expect(paymentService, contains(".eq('restaurant_id', storeId)"));
+      expect(paymentService, contains('restaurant_name'));
+      expect(paymentService, contains('label, unit_price, quantity'));
       expect(einvoiceService, isNot(contains('resendInvoiceEmail')));
       expect(screen, isNot(contains('requestRedInvoice(')));
       expect(screen, isNot(contains('resendInvoiceEmail')));
       expect(screen, isNot(contains('inventory_purchase')));
+
+      final koL10n = readRepoFile('lib/l10n/app_ko.arb');
+      expect(koL10n, contains('"paymentDetailFinishPayment": "결제 종료"'));
     },
   );
 }

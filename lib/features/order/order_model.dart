@@ -35,6 +35,8 @@ class OrderItem {
     required this.quantity,
     required this.status,
     required this.itemType,
+    this.vatCategory,
+    this.payingAmountIncTax,
   });
 
   final String id;
@@ -44,6 +46,8 @@ class OrderItem {
   final int quantity;
   final String status;
   final String itemType;
+  final String? vatCategory;
+  final double? payingAmountIncTax;
 
   OrderItem copyWith({
     String? id,
@@ -53,6 +57,8 @@ class OrderItem {
     int? quantity,
     String? status,
     String? itemType,
+    String? vatCategory,
+    double? payingAmountIncTax,
   }) {
     return OrderItem(
       id: id ?? this.id,
@@ -62,16 +68,21 @@ class OrderItem {
       quantity: quantity ?? this.quantity,
       status: status ?? this.status,
       itemType: itemType ?? this.itemType,
+      vatCategory: vatCategory ?? this.vatCategory,
+      payingAmountIncTax: payingAmountIncTax ?? this.payingAmountIncTax,
     );
   }
 
   factory OrderItem.fromJson(Map<String, dynamic> json) {
     final unitPriceRaw = json['unit_price'];
     final quantityRaw = json['quantity'];
+    final payingAmountRaw = json['paying_amount_inc_tax'];
     final menuItemRaw = json['menu_items'];
     String? menuItemName;
-    if (menuItemRaw is Map<String, dynamic>) {
+    String? vatCategory;
+    if (menuItemRaw is Map) {
       menuItemName = menuItemRaw['name']?.toString();
+      vatCategory = menuItemRaw['vat_category']?.toString();
     }
 
     return OrderItem(
@@ -91,7 +102,13 @@ class OrderItem {
         _ => 0,
       },
       status: json['status']?.toString() ?? 'pending',
-      itemType: json['item_type']?.toString() ?? 'menu',
+      itemType: json['item_type']?.toString() ?? 'menu_item',
+      vatCategory: json['vat_category']?.toString() ?? vatCategory,
+      payingAmountIncTax: switch (payingAmountRaw) {
+        num value => value.toDouble(),
+        String value => double.tryParse(value),
+        _ => null,
+      },
     );
   }
 }
@@ -130,13 +147,13 @@ class Order {
   factory Order.fromJson(Map<String, dynamic> json) {
     final createdAtRaw = json['created_at']?.toString();
     final rawItems = json['order_items'];
-    final items = (rawItems is List)
+    final itemRows = rawItems is List
         ? rawItems
-              .map<OrderItem>(
-                (item) => OrderItem.fromJson(Map<String, dynamic>.from(item)),
-              )
+              .map((item) => Map<String, dynamic>.from(item as Map))
               .toList()
-        : const <OrderItem>[];
+        : <Map<String, dynamic>>[];
+    itemRows.sort(_compareOrderItemRowsByCreatedAt);
+    final items = itemRows.map<OrderItem>(OrderItem.fromJson).toList();
 
     return Order(
       id: json['id'].toString(),
@@ -149,4 +166,29 @@ class Order {
       items: items,
     );
   }
+}
+
+int _compareOrderItemRowsByCreatedAt(
+  Map<String, dynamic> left,
+  Map<String, dynamic> right,
+) {
+  final leftCreatedAt = DateTime.tryParse(left['created_at']?.toString() ?? '');
+  final rightCreatedAt = DateTime.tryParse(
+    right['created_at']?.toString() ?? '',
+  );
+
+  if (leftCreatedAt != null && rightCreatedAt != null) {
+    final createdAtComparison = leftCreatedAt.compareTo(rightCreatedAt);
+    if (createdAtComparison != 0) {
+      return createdAtComparison;
+    }
+  } else if (leftCreatedAt != null) {
+    return -1;
+  } else if (rightCreatedAt != null) {
+    return 1;
+  }
+
+  return (left['id']?.toString() ?? '').compareTo(
+    right['id']?.toString() ?? '',
+  );
 }

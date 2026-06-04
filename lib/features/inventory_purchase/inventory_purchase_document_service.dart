@@ -5,12 +5,15 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../l10n/app_localizations.dart';
+
 class InventoryPurchaseDocumentService {
   const InventoryPurchaseDocumentService();
 
   Future<bool> layoutPurchaseOrderPdf({
     required Map<String, dynamic> order,
     required List<Map<String, dynamic>> lines,
+    required AppLocalizations l10n,
   }) {
     final orderNo = _string(
       order['purchase_order_no'],
@@ -18,13 +21,15 @@ class InventoryPurchaseDocumentService {
     );
     return Printing.layoutPdf(
       name: '$orderNo.pdf',
-      onLayout: (_) => buildPurchaseOrderPdf(order: order, lines: lines),
+      onLayout: (_) =>
+          buildPurchaseOrderPdf(order: order, lines: lines, l10n: l10n),
     );
   }
 
   Future<Uint8List> buildPurchaseOrderPdf({
     required Map<String, dynamic> order,
     required List<Map<String, dynamic>> lines,
+    required AppLocalizations l10n,
   }) async {
     final regular = await PdfGoogleFonts.notoSansKRRegular();
     final bold = await PdfGoogleFonts.notoSansKRBold();
@@ -34,7 +39,7 @@ class InventoryPurchaseDocumentService {
     final orderNo = _string(order['purchase_order_no'], fallback: '-');
     final supplierName = _nestedName(order['supplier']);
     final requestedDate = _date(order['requested_delivery_date']);
-    final status = _statusLabel(order['status']);
+    final status = _statusLabel(order['status'], l10n);
     final supplyAmount = _num(order['total_supply_amount']);
     final taxAmount = _num(order['tax_amount']);
     final totalAmount = _num(order['total_amount']);
@@ -59,17 +64,19 @@ class InventoryPurchaseDocumentService {
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text(
-                      '발주서',
+                      l10n.inventoryPurchasePdfTitle,
                       style: pw.TextStyle(
                         fontSize: 28,
                         fontWeight: pw.FontWeight.bold,
                       ),
                     ),
                     pw.SizedBox(height: 8),
-                    pw.Text('공급처: $supplierName'),
-                    pw.Text('발주번호: $orderNo'),
-                    pw.Text('납품요청일: $requestedDate'),
-                    pw.Text('상태: $status'),
+                    pw.Text(l10n.inventoryPurchasePdfSupplier(supplierName)),
+                    pw.Text(l10n.inventoryPurchasePdfOrderNo(orderNo)),
+                    pw.Text(
+                      l10n.inventoryPurchasePdfRequestedDate(requestedDate),
+                    ),
+                    pw.Text(l10n.inventoryPurchasePdfStatus(status)),
                   ],
                 ),
               ),
@@ -90,7 +97,7 @@ class InventoryPurchaseDocumentService {
           ),
           pw.SizedBox(height: 24),
           pw.Text(
-            '발주 상품 내역',
+            l10n.inventoryPurchasePdfProductLines,
             style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
           ),
           pw.SizedBox(height: 8),
@@ -99,7 +106,15 @@ class InventoryPurchaseDocumentService {
             headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
             cellStyle: const pw.TextStyle(fontSize: 9),
             cellAlignment: pw.Alignment.centerLeft,
-            headers: const ['No.', '상품명', '발주수량', '단위', '단가', '공급가액', '메모'],
+            headers: [
+              l10n.inventoryPurchasePdfLineNo,
+              l10n.inventoryPurchaseProductName,
+              l10n.inventoryPurchaseOrderQuantity,
+              l10n.inventoryPurchaseUnit,
+              l10n.inventoryPurchaseUnitPrice,
+              l10n.inventoryPurchaseSupplyAmount,
+              l10n.inventoryPurchaseMemo,
+            ],
             data: [
               for (var index = 0; index < lines.length; index++)
                 [
@@ -121,16 +136,23 @@ class InventoryPurchaseDocumentService {
               child: pw.Table(
                 border: pw.TableBorder.all(color: PdfColors.grey400),
                 children: [
-                  _totalRow('공급가액 합계', _money(supplyAmount)),
-                  _totalRow('부가세', _money(taxAmount)),
-                  _totalRow('총 발주 금액', _money(totalAmount), strong: true),
+                  _totalRow(
+                    l10n.inventoryPurchasePdfSupplyAmountTotal,
+                    _money(supplyAmount),
+                  ),
+                  _totalRow(l10n.inventoryPurchaseTaxAmount, _money(taxAmount)),
+                  _totalRow(
+                    l10n.inventoryPurchasePdfTotalAmount,
+                    _money(totalAmount),
+                    strong: true,
+                  ),
                 ],
               ),
             ),
           ),
           pw.SizedBox(height: 18),
           pw.Text(
-            'Office 승인/반려/수정은 Office 앱에서만 처리합니다. POS는 발주서 출력, 입고 확인, 상태 조회를 담당합니다.',
+            l10n.inventoryPurchasePdfOfficeNote,
             style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
           ),
         ],
@@ -166,12 +188,8 @@ class InventoryPurchaseDocumentService {
 const inventoryPurchaseDocumentService = InventoryPurchaseDocumentService();
 
 String _money(Object? value) {
-  final formatter = NumberFormat.currency(
-    locale: 'ko_KR',
-    symbol: '₩ ',
-    decimalDigits: 0,
-  );
-  return formatter.format(_num(value));
+  final formatter = NumberFormat('#,###', 'vi_VN');
+  return '${formatter.format(_num(value))} VND';
 }
 
 num _num(Object? value) {
@@ -200,17 +218,17 @@ String _nestedName(Object? value) {
   return _string(value, fallback: '-');
 }
 
-String _statusLabel(Object? value) {
+String _statusLabel(Object? value, AppLocalizations l10n) {
   return switch (_string(value)) {
-    'draft' => '임시',
-    'submitted' => '승인 대기',
-    'office_approved' => 'Office 승인',
-    'office_returned' => '반환',
-    'office_rejected' => '반려',
-    'ordered' => '발주 진행',
-    'partially_received' => '부분 입고',
-    'received' => '입고 완료',
-    'cancelled' => '취소',
+    'draft' => l10n.inventoryPurchaseStatusDraft,
+    'submitted' => l10n.inventoryPurchaseStatusSubmitted,
+    'office_approved' => l10n.inventoryPurchaseStatusOfficeApproved,
+    'office_returned' => l10n.inventoryPurchaseStatusOfficeReturned,
+    'office_rejected' => l10n.inventoryPurchaseStatusOfficeRejected,
+    'ordered' => l10n.inventoryPurchaseStatusOrdered,
+    'partially_received' => l10n.inventoryPurchaseStatusPartiallyReceived,
+    'received' => l10n.inventoryPurchaseStatusReceived,
+    'cancelled' => l10n.inventoryPurchaseStatusCancelled,
     _ => _string(value, fallback: '-'),
   };
 }

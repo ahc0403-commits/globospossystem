@@ -52,9 +52,13 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   Widget build(BuildContext context) {
     final isSuperAdminView = widget.overrideRestaurantId != null;
     final role = ref.watch(authProvider).role;
-    final width = MediaQuery.sizeOf(context).width;
+    final viewport = MediaQuery.sizeOf(context);
+    final useDesktopShell =
+        PlatformInfo.isWebOrDesktop &&
+        viewport.width >= 720 &&
+        viewport.shortestSide >= 600;
 
-    if (PlatformInfo.isWebOrDesktop && width >= 720) {
+    if (useDesktopShell) {
       return _buildWebDesktopLayout(context, isSuperAdminView, role);
     }
 

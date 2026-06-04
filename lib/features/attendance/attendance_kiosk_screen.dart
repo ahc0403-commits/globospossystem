@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../core/i18n/locale_extensions.dart';
 import '../../core/layout/platform_info.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/ui/app_primitives.dart';
@@ -190,11 +191,11 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
 
     final state = ref.read(attendanceKioskProvider);
     if (state.error == 'PHOTO_UPLOAD_FAILED') {
-      showErrorToast(context, 'Photo upload failed. Clock-in was recorded.');
+      showErrorToast(context, context.l10n.attendancePhotoUploadFailedRecorded);
     }
 
     if (!success) {
-      showErrorToast(context, 'Attendance record failed');
+      showErrorToast(context, context.l10n.attendanceRecordFailed);
       _backToIdle();
       return;
     }
@@ -212,14 +213,15 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
     final storeId = auth.storeId;
     final kioskState = ref.watch(attendanceKioskProvider);
     final isOnline = ref.watch(connectivityProvider).asData?.value ?? true;
+    final l10n = context.l10n;
 
     if (!PlatformInfo.isAndroid) {
       return Scaffold(
+        key: const Key('attendance_kiosk_root'),
         backgroundColor: AppColors.surface0,
-        body: const AppEmptyState(
-          title: 'Android tablet required',
-          message:
-              'The attendance kiosk camera flow is only available on Android tablets.',
+        body: AppEmptyState(
+          title: l10n.attendanceAndroidTabletRequired,
+          message: l10n.attendanceAndroidTabletOnlyMessage,
           icon: Icons.tablet_android,
         ),
       );
@@ -230,6 +232,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
     }
 
     return Scaffold(
+      key: const Key('attendance_kiosk_root'),
       backgroundColor: AppColors.surface0,
       body: SafeArea(
         child: Column(
@@ -247,8 +250,8 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                           const AppNavBar(),
                           const SizedBox(width: 10),
                         ],
-                        const AppStatusBadge(
-                          label: 'ATTENDANCE',
+                        AppStatusBadge(
+                          label: l10n.attendance,
                           color: AppColors.statusInfo,
                         ),
                         const SizedBox(width: 12),

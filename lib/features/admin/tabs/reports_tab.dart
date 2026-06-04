@@ -26,6 +26,10 @@ class ReportsTab extends ConsumerStatefulWidget {
   ConsumerState<ReportsTab> createState() => _ReportsTabState();
 }
 
+String _formatVnd(NumberFormat currency, num amount) {
+  return '${currency.format(amount)} VND';
+}
+
 class _ReportsTabState extends ConsumerState<ReportsTab> {
   DateTime? _pendingStart;
   DateTime? _pendingEnd;
@@ -50,6 +54,219 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     if (storeId != null && _initializedRestaurantId != storeId) {
       _initializedRestaurantId = storeId;
       Future.microtask(() => reportNotifier.loadReport(storeId));
+    }
+
+    final compactHeader = _buildReportsCommandHeader(
+      storeId: storeId,
+      reportState: reportState,
+      reportNotifier: reportNotifier,
+      summary: summary,
+      currency: currency,
+      dateFormat: dateFormat,
+    );
+
+    void applyQuickRange(DateTime start, DateTime end) {
+      if (storeId == null) return;
+      setState(() {
+        _pendingStart = start;
+        _pendingEnd = end;
+      });
+      reportNotifier.setDateRange(start, end, storeId);
+    }
+
+    Widget quickRangesCard() {
+      return PosActionCard(
+        title: l10n.reportsQuickRanges,
+        subtitle: l10n.reportsQuickRangesSubtitle,
+        action: storeId == null
+            ? null
+            : PosSecondaryButton(
+                label: l10n.refresh,
+                icon: Icons.refresh_rounded,
+                onPressed: () => reportNotifier.loadReport(storeId),
+              ),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _quickRangeChip(
+              l10n.today,
+              onTap: storeId == null
+                  ? null
+                  : () {
+                      final now = DateTime.now();
+                      applyQuickRange(
+                        DateTime(now.year, now.month, now.day),
+                        now,
+                      );
+                    },
+            ),
+            _quickRangeChip(
+              l10n.thisWeek,
+              onTap: storeId == null
+                  ? null
+                  : () {
+                      final now = DateTime.now();
+                      final start = DateTime(
+                        now.year,
+                        now.month,
+                        now.day,
+                      ).subtract(Duration(days: now.weekday - 1));
+                      applyQuickRange(start, now);
+                    },
+            ),
+            _quickRangeChip(
+              l10n.thisMonth,
+              onTap: storeId == null
+                  ? null
+                  : () {
+                      final now = DateTime.now();
+                      applyQuickRange(DateTime(now.year, now.month, 1), now);
+                    },
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget compactReportBody() {
+      if (reportState.isLoading) {
+        return const SizedBox(
+          height: 320,
+          child: ToastOperationalLoadingState(
+            label: PosLoadingCopy.loadingReport,
+          ),
+        );
+      }
+
+      if (reportState.error != null) {
+        return ToastWorkSurface(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                reportState.error!,
+                style: GoogleFonts.notoSansKr(
+                  color: AppColors.statusCancelled,
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: storeId == null
+                    ? null
+                    : () => reportNotifier.loadReport(storeId),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.amber500,
+                  foregroundColor: AppColors.surface0,
+                ),
+                child: Text(l10n.retry),
+              ),
+            ],
+          ),
+        );
+      }
+
+      if (!hasOperationalData) {
+        return SizedBox(
+          height: 180,
+          child: PosActionCard(
+            title: l10n.reportsNoDataTitle,
+            subtitle: l10n.reportsNoDataSubtitle,
+            action: storeId == null
+                ? null
+                : PosPrimaryButton(
+                    label: l10n.reportsReloadToday,
+                    icon: Icons.play_arrow_rounded,
+                    onPressed: () {
+                      final now = DateTime.now();
+                      applyQuickRange(
+                        DateTime(now.year, now.month, now.day),
+                        now,
+                      );
+                    },
+                  ),
+            child: Text(
+              l10n.reportsNoDataBody,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: PosColors.textSecondary,
+                height: 1.45,
+              ),
+            ),
+          ),
+        );
+      }
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PosDataPanel(
+            title: l10n.reportsHourlyOrderFocus,
+            subtitle: l10n.reportsHourlyOrderFocusSubtitle,
+            child: _ReportsHourlyOverview(summary: summary, currency: currency),
+          ),
+          const SizedBox(height: 12),
+          PosActionCard(
+            title: l10n.reportsImmediateSignals,
+            subtitle: l10n.reportsImmediateSignalsSubtitle,
+            badge: ToastStatusBadge(
+              label:
+                  summary.failedEinvoiceJobsCount > 0 ||
+                      summary.missingProofPhotosCount > 0
+                  ? l10n.reportsNeedsReviewShort
+                  : l10n.reportsHealthyShort,
+              color:
+                  summary.failedEinvoiceJobsCount > 0 ||
+                      summary.missingProofPhotosCount > 0
+                  ? PosColors.warning
+                  : PosColors.success,
+              compact: true,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _ReportsOperationalSignalsDetail(summary: summary),
+                const SizedBox(height: 12),
+                _ReportsBreakdownPanel(
+                  summary: summary,
+                  currency: currency,
+                  scrollable: false,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          quickRangesCard(),
+          const SizedBox(height: 12),
+          PosDataPanel(
+            title: l10n.reportsDailySalesTitle,
+            subtitle: l10n.reportsDailySalesSubtitle,
+            child: _DailyTable(summary: summary, currency: currency),
+          ),
+        ],
+      );
+    }
+
+    if (MediaQuery.sizeOf(context).width < 1080) {
+      return Scaffold(
+        key: const Key('reports_root'),
+        backgroundColor: AppColors.surface0,
+        body: ToastResponsiveScrollBody(
+          key: const Key('reports_compact_scroll'),
+          maxWidth: 1460,
+          padding: const EdgeInsets.all(16),
+          children: [
+            compactHeader,
+            if (summary != null) ...[
+              const SizedBox(height: 12),
+              _ReportsInsightRow(summary: summary),
+            ],
+            const SizedBox(height: 12),
+            compactReportBody(),
+          ],
+        ),
+      );
     }
 
     return Scaffold(
@@ -107,182 +324,215 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                       ),
                     )
                   : (hasOperationalData
-                        ? Column(
-                            children: [
-                              Expanded(
-                                child: PosSplitContent(
-                                  primary: PosDataPanel(
-                                    title: l10n.reportsHourlyOrderFocus,
-                                    subtitle:
-                                        l10n.reportsHourlyOrderFocusSubtitle,
-                                    child: _ReportsHourlyOverview(
-                                      summary: summary,
-                                      currency: currency,
+                        ? LayoutBuilder(
+                            builder: (context, reportConstraints) {
+                              const compactReportHeight =
+                                  520.0 + 12.0 + 520.0 + 12.0 + 272.0;
+                              final content = Column(
+                                children: [
+                                  Expanded(
+                                    child: PosSplitContent(
+                                      primary: PosDataPanel(
+                                        title: l10n.reportsHourlyOrderFocus,
+                                        subtitle: l10n
+                                            .reportsHourlyOrderFocusSubtitle,
+                                        child: _ReportsHourlyOverview(
+                                          summary: summary,
+                                          currency: currency,
+                                        ),
+                                      ),
+                                      secondary: Column(
+                                        children: [
+                                          Expanded(
+                                            child: PosActionCard(
+                                              title:
+                                                  l10n.reportsImmediateSignals,
+                                              subtitle: l10n
+                                                  .reportsImmediateSignalsSubtitle,
+                                              badge: ToastStatusBadge(
+                                                label:
+                                                    summary.failedEinvoiceJobsCount >
+                                                            0 ||
+                                                        summary.missingProofPhotosCount >
+                                                            0
+                                                    ? l10n.reportsNeedsReviewShort
+                                                    : l10n.reportsHealthyShort,
+                                                color:
+                                                    summary.failedEinvoiceJobsCount >
+                                                            0 ||
+                                                        summary.missingProofPhotosCount >
+                                                            0
+                                                    ? PosColors.warning
+                                                    : PosColors.success,
+                                                compact: true,
+                                              ),
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.stretch,
+                                                children: [
+                                                  _ReportsOperationalSignalsDetail(
+                                                    summary: summary,
+                                                  ),
+                                                  const SizedBox(height: 12),
+                                                  Expanded(
+                                                    child:
+                                                        _ReportsBreakdownPanel(
+                                                          summary: summary,
+                                                          currency: currency,
+                                                        ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          PosActionCard(
+                                            title: l10n.reportsQuickRanges,
+                                            subtitle:
+                                                l10n.reportsQuickRangesSubtitle,
+                                            action: storeId == null
+                                                ? null
+                                                : PosSecondaryButton(
+                                                    label: l10n.refresh,
+                                                    icon: Icons.refresh_rounded,
+                                                    onPressed: () {
+                                                      reportNotifier.loadReport(
+                                                        storeId,
+                                                      );
+                                                    },
+                                                  ),
+                                            child: Wrap(
+                                              spacing: 8,
+                                              runSpacing: 8,
+                                              children: [
+                                                _quickRangeChip(
+                                                  l10n.today,
+                                                  onTap: storeId == null
+                                                      ? null
+                                                      : () {
+                                                          final now =
+                                                              DateTime.now();
+                                                          final start =
+                                                              DateTime(
+                                                                now.year,
+                                                                now.month,
+                                                                now.day,
+                                                              );
+                                                          setState(() {
+                                                            _pendingStart =
+                                                                start;
+                                                            _pendingEnd = now;
+                                                          });
+                                                          reportNotifier
+                                                              .setDateRange(
+                                                                start,
+                                                                now,
+                                                                storeId,
+                                                              );
+                                                        },
+                                                ),
+                                                _quickRangeChip(
+                                                  l10n.thisWeek,
+                                                  onTap: storeId == null
+                                                      ? null
+                                                      : () {
+                                                          final now =
+                                                              DateTime.now();
+                                                          final weekdayOffset =
+                                                              now.weekday - 1;
+                                                          final start =
+                                                              DateTime(
+                                                                now.year,
+                                                                now.month,
+                                                                now.day,
+                                                              ).subtract(
+                                                                Duration(
+                                                                  days:
+                                                                      weekdayOffset,
+                                                                ),
+                                                              );
+                                                          setState(() {
+                                                            _pendingStart =
+                                                                start;
+                                                            _pendingEnd = now;
+                                                          });
+                                                          reportNotifier
+                                                              .setDateRange(
+                                                                start,
+                                                                now,
+                                                                storeId,
+                                                              );
+                                                        },
+                                                ),
+                                                _quickRangeChip(
+                                                  l10n.thisMonth,
+                                                  onTap: storeId == null
+                                                      ? null
+                                                      : () {
+                                                          final now =
+                                                              DateTime.now();
+                                                          final start =
+                                                              DateTime(
+                                                                now.year,
+                                                                now.month,
+                                                                1,
+                                                              );
+                                                          setState(() {
+                                                            _pendingStart =
+                                                                start;
+                                                            _pendingEnd = now;
+                                                          });
+                                                          reportNotifier
+                                                              .setDateRange(
+                                                                start,
+                                                                now,
+                                                                storeId,
+                                                              );
+                                                        },
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      spacing: 12,
+                                      compactSecondaryHeight: 520,
                                     ),
                                   ),
-                                  secondary: Column(
-                                    children: [
-                                      Expanded(
-                                        child: PosActionCard(
-                                          title: l10n.reportsImmediateSignals,
-                                          subtitle: l10n
-                                              .reportsImmediateSignalsSubtitle,
-                                          badge: ToastStatusBadge(
-                                            label:
-                                                summary.failedEinvoiceJobsCount >
-                                                        0 ||
-                                                    summary.missingProofPhotosCount >
-                                                        0
-                                                ? l10n.reportsNeedsReviewShort
-                                                : l10n.reportsHealthyShort,
-                                            color:
-                                                summary.failedEinvoiceJobsCount >
-                                                        0 ||
-                                                    summary.missingProofPhotosCount >
-                                                        0
-                                                ? PosColors.warning
-                                                : PosColors.success,
-                                            compact: true,
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.stretch,
-                                            children: [
-                                              _ReportsOperationalSignalsDetail(
-                                                summary: summary,
-                                              ),
-                                              const SizedBox(height: 12),
-                                              Expanded(
-                                                child: _ReportsBreakdownPanel(
-                                                  summary: summary,
-                                                  currency: currency,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
+                                  const SizedBox(height: 12),
+                                  SizedBox(
+                                    height: 272,
+                                    child: PosDataPanel(
+                                      title:
+                                          context.l10n.reportsDailySalesTitle,
+                                      subtitle: context
+                                          .l10n
+                                          .reportsDailySalesSubtitle,
+                                      child: _DailyTable(
+                                        summary: summary,
+                                        currency: currency,
                                       ),
-                                      const SizedBox(height: 12),
-                                      PosActionCard(
-                                        title: l10n.reportsQuickRanges,
-                                        subtitle:
-                                            l10n.reportsQuickRangesSubtitle,
-                                        action: storeId == null
-                                            ? null
-                                            : PosSecondaryButton(
-                                                label: l10n.refresh,
-                                                icon: Icons.refresh_rounded,
-                                                onPressed: () {
-                                                  reportNotifier.loadReport(
-                                                    storeId,
-                                                  );
-                                                },
-                                              ),
-                                        child: Wrap(
-                                          spacing: 8,
-                                          runSpacing: 8,
-                                          children: [
-                                            _quickRangeChip(
-                                              l10n.today,
-                                              onTap: storeId == null
-                                                  ? null
-                                                  : () {
-                                                      final now =
-                                                          DateTime.now();
-                                                      final start = DateTime(
-                                                        now.year,
-                                                        now.month,
-                                                        now.day,
-                                                      );
-                                                      setState(() {
-                                                        _pendingStart = start;
-                                                        _pendingEnd = now;
-                                                      });
-                                                      reportNotifier
-                                                          .setDateRange(
-                                                            start,
-                                                            now,
-                                                            storeId,
-                                                          );
-                                                    },
-                                            ),
-                                            _quickRangeChip(
-                                              l10n.thisWeek,
-                                              onTap: storeId == null
-                                                  ? null
-                                                  : () {
-                                                      final now =
-                                                          DateTime.now();
-                                                      final weekdayOffset =
-                                                          now.weekday - 1;
-                                                      final start =
-                                                          DateTime(
-                                                            now.year,
-                                                            now.month,
-                                                            now.day,
-                                                          ).subtract(
-                                                            Duration(
-                                                              days:
-                                                                  weekdayOffset,
-                                                            ),
-                                                          );
-                                                      setState(() {
-                                                        _pendingStart = start;
-                                                        _pendingEnd = now;
-                                                      });
-                                                      reportNotifier
-                                                          .setDateRange(
-                                                            start,
-                                                            now,
-                                                            storeId,
-                                                          );
-                                                    },
-                                            ),
-                                            _quickRangeChip(
-                                              l10n.thisMonth,
-                                              onTap: storeId == null
-                                                  ? null
-                                                  : () {
-                                                      final now =
-                                                          DateTime.now();
-                                                      final start = DateTime(
-                                                        now.year,
-                                                        now.month,
-                                                        1,
-                                                      );
-                                                      setState(() {
-                                                        _pendingStart = start;
-                                                        _pendingEnd = now;
-                                                      });
-                                                      reportNotifier
-                                                          .setDateRange(
-                                                            start,
-                                                            now,
-                                                            storeId,
-                                                          );
-                                                    },
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
+                                    ),
                                   ),
-                                  spacing: 12,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              SizedBox(
-                                height: 272,
-                                child: PosDataPanel(
-                                  title: '일별 매출',
-                                  subtitle: '기간별 매출 변화를 스캔하고 이상치를 찾습니다.',
-                                  child: _DailyTable(
-                                    summary: summary,
-                                    currency: currency,
-                                  ),
-                                ),
-                              ),
-                            ],
+                                ],
+                              );
+
+                              if (reportConstraints.maxWidth < 1080) {
+                                return ListView(
+                                  key: const Key('reports_compact_scroll'),
+                                  keyboardDismissBehavior:
+                                      ScrollViewKeyboardDismissBehavior.onDrag,
+                                  children: [
+                                    SizedBox(
+                                      height: compactReportHeight,
+                                      child: content,
+                                    ),
+                                  ],
+                                );
+                              }
+
+                              return content;
+                            },
                           )
                         : _ReportsEmptyWorkspace(
                             onReloadToday: storeId == null
@@ -323,10 +573,10 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     final l10n = context.l10n;
     final totalRevenue = summary == null
         ? '—'
-        : '₫${currency.format(summary.totalRevenue)}';
+        : _formatVnd(currency, summary.totalRevenue);
     final averageOrder = summary == null || summary.totalOrders == 0
         ? '—'
-        : '₫${currency.format(summary.totalRevenue / summary.totalOrders)}';
+        : _formatVnd(currency, summary.totalRevenue / summary.totalOrders);
     final cancellationTone = summary == null || summary.cancelledOrders == 0
         ? PosColors.textSecondary
         : PosColors.warning;
@@ -388,7 +638,9 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
               ),
               ToastMetric(
                 label: l10n.reportsCanceledAmount,
-                value: summary == null ? '—' : '${summary.cancelledOrders}건',
+                value: summary == null
+                    ? '—'
+                    : l10n.countCases(summary.cancelledOrders),
                 tone: cancellationTone,
               ),
             ],
@@ -670,121 +922,150 @@ class _ReportsEmptyWorkspace extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        SizedBox(
-          height: 180,
-          child: PosActionCard(
-            title: context.l10n.reportsNoDataTitle,
-            subtitle: context.l10n.reportsNoDataSubtitle,
-            action: onReloadToday == null
-                ? null
-                : PosPrimaryButton(
-                    label: context.l10n.reportsReloadToday,
-                    icon: Icons.play_arrow_rounded,
-                    onPressed: onReloadToday,
-                  ),
-            child: Row(
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: PosColors.accentMuted,
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: const Icon(
-                    Icons.insights_outlined,
-                    color: PosColors.accent,
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    context.l10n.reportsNoDataBody,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: PosColors.textSecondary,
-                      height: 1.45,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+    final noDataCard = SizedBox(
+      height: 180,
+      child: PosActionCard(
+        title: context.l10n.reportsNoDataTitle,
+        subtitle: context.l10n.reportsNoDataSubtitle,
+        action: onReloadToday == null
+            ? null
+            : PosPrimaryButton(
+                label: context.l10n.reportsReloadToday,
+                icon: Icons.play_arrow_rounded,
+                onPressed: onReloadToday,
+              ),
+        child: Row(
           children: [
-            _ReportsInsightTile(
-              data: _ReportsInsightData(
-                title: context.l10n.reportsPeakHourUnavailable,
-                body: context.l10n.reportsEmptyPeakBody,
-                tone: PosColors.info,
-                icon: Icons.schedule_rounded,
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: PosColors.accentMuted,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: const Icon(
+                Icons.insights_outlined,
+                color: PosColors.accent,
+                size: 28,
               ),
             ),
-            _ReportsInsightTile(
-              data: _ReportsInsightData(
-                title: context.l10n.reportsEmptyNoCancelOrFailure,
-                body: context.l10n.reportsEmptyNoCancelOrFailureBody,
-                tone: PosColors.success,
-                icon: Icons.check_circle_outline_rounded,
-              ),
-            ),
-            _ReportsInsightTile(
-              data: _ReportsInsightData(
-                title: context.l10n.reportsEmptyProofWaiting,
-                body: context.l10n.reportsEmptyProofWaitingBody,
-                tone: PosColors.warning,
-                icon: Icons.receipt_long_rounded,
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                context.l10n.reportsNoDataBody,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: PosColors.textSecondary,
+                  height: 1.45,
+                ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        Expanded(
-          child: PosDataPanel(
-            title: context.l10n.reportsLiveSignalsReady,
-            subtitle: context.l10n.reportsLiveSignalsReadySubtitle,
-            child: Center(
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 520),
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: PosColors.mutedSurface,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: PosColors.border),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.wifi_tethering_rounded,
-                      color: PosColors.textMuted,
-                      size: 26,
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      context.l10n.reportsWaitingLiveSignals,
-                      style: Theme.of(context).textTheme.titleMedium,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      context.l10n.reportsWaitingLiveSignalsBody,
-                      style: Theme.of(context).textTheme.bodySmall,
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-            ),
+      ),
+    );
+    final signalTiles = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _ReportsInsightTile(
+          data: _ReportsInsightData(
+            title: context.l10n.reportsPeakHourUnavailable,
+            body: context.l10n.reportsEmptyPeakBody,
+            tone: PosColors.info,
+            icon: Icons.schedule_rounded,
+          ),
+        ),
+        _ReportsInsightTile(
+          data: _ReportsInsightData(
+            title: context.l10n.reportsEmptyNoCancelOrFailure,
+            body: context.l10n.reportsEmptyNoCancelOrFailureBody,
+            tone: PosColors.success,
+            icon: Icons.check_circle_outline_rounded,
+          ),
+        ),
+        _ReportsInsightTile(
+          data: _ReportsInsightData(
+            title: context.l10n.reportsEmptyProofWaiting,
+            body: context.l10n.reportsEmptyProofWaitingBody,
+            tone: PosColors.warning,
+            icon: Icons.receipt_long_rounded,
           ),
         ),
       ],
+    );
+    final liveSignalPanel = PosDataPanel(
+      title: context.l10n.reportsLiveSignalsReady,
+      subtitle: context.l10n.reportsLiveSignalsReadySubtitle,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            padding: EdgeInsets.zero,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 520),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: PosColors.mutedSurface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: PosColors.border),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.wifi_tethering_rounded,
+                        color: PosColors.textMuted,
+                        size: 24,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        context.l10n.reportsWaitingLiveSignals,
+                        style: Theme.of(context).textTheme.titleMedium,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        context.l10n.reportsWaitingLiveSignalsBody,
+                        style: Theme.of(context).textTheme.bodySmall,
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.hasBoundedHeight && constraints.maxHeight < 640) {
+          return ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              noDataCard,
+              const SizedBox(height: 12),
+              signalTiles,
+              const SizedBox(height: 12),
+              SizedBox(height: 220, child: liveSignalPanel),
+            ],
+          );
+        }
+
+        return Column(
+          children: [
+            noDataCard,
+            const SizedBox(height: 12),
+            signalTiles,
+            const SizedBox(height: 12),
+            Expanded(child: liveSignalPanel),
+          ],
+        );
+      },
     );
   }
 }
@@ -816,40 +1097,46 @@ class _ReportsHourlyOverview extends StatelessWidget {
       );
     }
 
-    return Column(
-      children: [
-        Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final chart = _HourlyRevenueSection(
+          summary: summary,
+          currency: currency,
+        );
+        return Column(
           children: [
-            Expanded(
-              child: _ReportsInlineMetric(
-                label: context.l10n.reportsDineInRevenue,
-                value: '₫${currency.format(summary.dineInRevenue)}',
-                tone: PosColors.textPrimary,
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: _ReportsInlineMetric(
+                    label: context.l10n.reportsDineInRevenue,
+                    value: _formatVnd(currency, summary.dineInRevenue),
+                    tone: PosColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _ReportsInlineMetric(
+                    label: context.l10n.reportsDeliveryRevenue,
+                    value: _formatVnd(currency, summary.deliveryRevenue),
+                    tone: PosColors.accent,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _ReportsInlineMetric(
+                    label: context.l10n.reportsServiceExpenses,
+                    value: _formatVnd(currency, summary.serviceTotal),
+                    tone: PosColors.textSecondary,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _ReportsInlineMetric(
-                label: context.l10n.reportsDeliveryRevenue,
-                value: '₫${currency.format(summary.deliveryRevenue)}',
-                tone: PosColors.accent,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _ReportsInlineMetric(
-                label: context.l10n.reportsServiceExpenses,
-                value: '₫${currency.format(summary.serviceTotal)}',
-                tone: PosColors.textSecondary,
-              ),
-            ),
+            const SizedBox(height: 12),
+            if (constraints.hasBoundedHeight) Expanded(child: chart) else chart,
           ],
-        ),
-        const SizedBox(height: 12),
-        Expanded(
-          child: _HourlyRevenueSection(summary: summary, currency: currency),
-        ),
-      ],
+        );
+      },
     );
   }
 }
@@ -899,142 +1186,151 @@ class _ReportsInlineMetric extends StatelessWidget {
 }
 
 class _ReportsBreakdownPanel extends StatelessWidget {
-  const _ReportsBreakdownPanel({required this.summary, required this.currency});
+  const _ReportsBreakdownPanel({
+    required this.summary,
+    required this.currency,
+    this.scrollable = true,
+  });
 
   final ReportSummary summary;
   final NumberFormat currency;
+  final bool scrollable;
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _ReportsSectionTitle(
-            title: context.l10n.reportsChannelMix,
-            action: Text(
-              context.l10n.reportsOrderCount(summary.totalOrders),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: PosColors.textSecondary,
-                fontWeight: FontWeight.w700,
-              ),
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _ReportsSectionTitle(
+          title: context.l10n.reportsChannelMix,
+          action: Text(
+            context.l10n.reportsOrderCount(summary.totalOrders),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: PosColors.textSecondary,
+              fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _ReportsInlineMetric(
-                  label: context.l10n.dineIn,
-                  value: '₫${currency.format(summary.dineInRevenue)}',
-                  tone: PosColors.textPrimary,
-                ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _ReportsInlineMetric(
+                label: context.l10n.dineIn,
+                value: _formatVnd(currency, summary.dineInRevenue),
+                tone: PosColors.textPrimary,
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _ReportsInlineMetric(
-                  label: context.l10n.delivery,
-                  value: '₫${currency.format(summary.deliveryRevenue)}',
-                  tone: PosColors.accent,
-                ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _ReportsInlineMetric(
+                label: context.l10n.delivery,
+                value: _formatVnd(currency, summary.deliveryRevenue),
+                tone: PosColors.accent,
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _ReportsSectionTitle(title: context.l10n.cashierPaymentMethod),
-          const SizedBox(height: 10),
-          if (summary.paymentMethodBreakdown.isEmpty)
-            PosEmptyState(
-              title: context.l10n.reportsNoPaymentMethodData,
-              subtitle: context.l10n.reportsNoPaymentMethodDataSubtitle,
-              icon: Icons.payments_outlined,
-            )
-          else
-            ...summary.paymentMethodBreakdown.map(
-              (method) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: PosColors.mutedSurface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: PosColors.border),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          method.method,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                      Text(
-                        context.l10n.reportsOrderCount(method.count),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: PosColors.textSecondary,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _ReportsSectionTitle(title: context.l10n.cashierPaymentMethod),
+        const SizedBox(height: 10),
+        if (summary.paymentMethodBreakdown.isEmpty)
+          PosEmptyState(
+            title: context.l10n.reportsNoPaymentMethodData,
+            subtitle: context.l10n.reportsNoPaymentMethodDataSubtitle,
+            icon: Icons.payments_outlined,
+          )
+        else
+          ...summary.paymentMethodBreakdown.map(
+            (method) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: PosColors.mutedSurface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: PosColors.border),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        method.method,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      SizedBox(
-                        width: 118,
-                        child: Text(
-                          '₫${currency.format(method.totalAmount)}',
-                          textAlign: TextAlign.right,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    Text(
+                      context.l10n.reportsOrderCount(method.count),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.textSecondary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 132,
+                      child: Text(
+                        _formatVnd(currency, method.totalAmount),
+                        textAlign: TextAlign.right,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
-          const SizedBox(height: 16),
-          _ReportsSectionTitle(
-            title: context.l10n.reportsOperationalExceptions,
           ),
-          const SizedBox(height: 10),
-          _ReportsExceptionRow(
-            label: context.l10n.reportsMissingProof,
-            value: context.l10n.reportsOrderCount(
-              summary.missingProofPhotosCount,
-            ),
-            tone: summary.missingProofPhotosCount > 0
-                ? PosColors.warning
-                : PosColors.success,
+        const SizedBox(height: 16),
+        _ReportsSectionTitle(title: context.l10n.reportsOperationalExceptions),
+        const SizedBox(height: 10),
+        _ReportsExceptionRow(
+          label: context.l10n.reportsMissingProof,
+          value: context.l10n.reportsOrderCount(
+            summary.missingProofPhotosCount,
           ),
-          const SizedBox(height: 8),
-          _ReportsExceptionRow(
-            label: context.l10n.reportsFailedEinvoice,
-            value: context.l10n.reportsOrderCount(
-              summary.failedEinvoiceJobsCount,
-            ),
-            tone: summary.failedEinvoiceJobsCount > 0
-                ? PosColors.danger
-                : PosColors.success,
+          tone: summary.missingProofPhotosCount > 0
+              ? PosColors.warning
+              : PosColors.success,
+        ),
+        const SizedBox(height: 8),
+        _ReportsExceptionRow(
+          label: context.l10n.reportsFailedEinvoice,
+          value: context.l10n.reportsOrderCount(
+            summary.failedEinvoiceJobsCount,
           ),
-          const SizedBox(height: 8),
-          _ReportsExceptionRow(
-            label: context.l10n.reportsProofCompletion,
-            value: '${summary.proofCompletePercent.toStringAsFixed(0)}%',
-            tone: summary.proofCompletePercent < 100
-                ? PosColors.warning
-                : PosColors.success,
-          ),
-          const SizedBox(height: 8),
-          _ReportsExceptionRow(
-            label: context.l10n.reportsWt08Reported,
-            value: context.l10n.reportsOrderCount(summary.wetaxReportedCount),
-            tone: PosColors.info,
-          ),
-        ],
-      ),
+          tone: summary.failedEinvoiceJobsCount > 0
+              ? PosColors.danger
+              : PosColors.success,
+        ),
+        const SizedBox(height: 8),
+        _ReportsExceptionRow(
+          label: context.l10n.reportsProofCompletion,
+          value: '${summary.proofCompletePercent.toStringAsFixed(0)}%',
+          tone: summary.proofCompletePercent < 100
+              ? PosColors.warning
+              : PosColors.success,
+        ),
+        const SizedBox(height: 8),
+        _ReportsExceptionRow(
+          label: context.l10n.reportsWt08Reported,
+          value: context.l10n.reportsOrderCount(summary.wetaxReportedCount),
+          tone: PosColors.info,
+        ),
+      ],
     );
+
+    if (!scrollable) {
+      return content;
+    }
+
+    return SingleChildScrollView(child: content);
   }
 }
 
@@ -1132,25 +1428,25 @@ class _SummaryGrid extends StatelessWidget {
           children: [
             _summaryCard(
               title: l10n.dineIn,
-              value: '₫${currency.format(data.dineInRevenue)}',
+              value: _formatVnd(currency, data.dineInRevenue),
               valueColor: AppColors.amber500,
               valueFontSize: 28,
             ),
             _summaryCard(
               title: l10n.delivery,
-              value: '₫${currency.format(data.deliveryRevenue)}',
+              value: _formatVnd(currency, data.deliveryRevenue),
               valueColor: AppColors.statusAvailable,
               valueFontSize: 28,
             ),
             _summaryCard(
               title: l10n.reportsServiceExpensesHint,
-              value: '₫${currency.format(data.serviceTotal)}',
+              value: _formatVnd(currency, data.serviceTotal),
               valueColor: AppColors.textSecondary,
               valueFontSize: 28,
             ),
             _summaryCard(
               title: l10n.reportsTotalSales,
-              value: '₫${currency.format(data.totalRevenue)}',
+              value: _formatVnd(currency, data.totalRevenue),
               valueColor: AppColors.amber500,
               valueFontSize: 32,
             ),
@@ -1240,7 +1536,7 @@ class _DailyTable extends StatelessWidget {
       );
     }
 
-    String vnd(double v) => '₫${currency.format(v)}';
+    String vnd(double v) => _formatVnd(currency, v);
 
     return ToastDenseDataTable(
       columns: [
@@ -1378,7 +1674,7 @@ class _PaymentMethodRow extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Text(
-            '${l10n.cash} ₫${currency.format(summary.cashTotal)}',
+            '${l10n.cash} ${_formatVnd(currency, summary.cashTotal)}',
             style: GoogleFonts.notoSansKr(
               color: AppColors.textPrimary,
               fontSize: 13,
@@ -1387,7 +1683,7 @@ class _PaymentMethodRow extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Text(
-            '${l10n.cashierCardMethod} ₫${currency.format(summary.cardTotal)}',
+            '${l10n.cashierCardMethod} ${_formatVnd(currency, summary.cardTotal)}',
             style: GoogleFonts.notoSansKr(
               color: AppColors.textPrimary,
               fontSize: 13,
@@ -1397,7 +1693,7 @@ class _PaymentMethodRow extends StatelessWidget {
           if (summary.payTotal > 0) ...[
             const SizedBox(width: 12),
             Text(
-              '${l10n.pay} ₫${currency.format(summary.payTotal)}',
+              '${l10n.pay} ${_formatVnd(currency, summary.payTotal)}',
               style: GoogleFonts.notoSansKr(
                 color: AppColors.textPrimary,
                 fontSize: 13,
@@ -2003,12 +2299,12 @@ class _TodaySummarySection extends ConsumerWidget {
                 ),
                 _metricTile(
                   context.l10n.reportsPaymentTotal,
-                  '₫${currency.format(summary.paymentsTotal)}',
+                  _formatVnd(currency, summary.paymentsTotal),
                   AppColors.amber500,
                 ),
                 _metricTile(
                   context.l10n.reportsCashCard,
-                  '₫${currency.format(summary.paymentsCash)} / ₫${currency.format(summary.paymentsCard)}',
+                  '${_formatVnd(currency, summary.paymentsCash)} / ${_formatVnd(currency, summary.paymentsCard)}',
                   AppColors.textSecondary,
                 ),
                 _metricTile(
@@ -2148,9 +2444,9 @@ class _HourlyRevenueSection extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     SizedBox(
-                      width: 90,
+                      width: 104,
                       child: Text(
-                        '₫${currency.format(h.amount)}',
+                        _formatVnd(currency, h.amount),
                         style: GoogleFonts.notoSansKr(
                           color: AppColors.textPrimary,
                           fontSize: 11,
@@ -2399,9 +2695,9 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
           _dCell('${record.ordersTotal}'),
           _dCell('${record.ordersCompleted}'),
           _dCell('${record.ordersCancelled}'),
-          _dCell('₫${currency.format(record.paymentsTotal)}'),
-          _dCell('₫${currency.format(record.paymentsCash)}'),
-          _dCell('₫${currency.format(record.paymentsCard)}'),
+          _dCell(_formatVnd(currency, record.paymentsTotal)),
+          _dCell(_formatVnd(currency, record.paymentsCash)),
+          _dCell(_formatVnd(currency, record.paymentsCard)),
           _dCell('${record.lowStockCount}'),
           _dCell(record.closedByName, overflow: true),
         ],

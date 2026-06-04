@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../core/i18n/locale_extensions.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
+import '../../../core/utils/number_input_utils.dart';
 import '../../../core/utils/permission_utils.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
@@ -784,7 +785,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
 
     if (confirmed != true || !context.mounted) return;
 
-    final qty = double.tryParse(qtyController.text.trim());
+    final qty = parseDecimalInput(qtyController.text);
     if (qty == null || qty <= 0) {
       if (context.mounted) {
         showErrorToast(context, l10n.inventoryEnterQuantityGreaterThanZero);
@@ -824,6 +825,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     final ingredientState = ref.watch(ingredientProvider);
     final recipeState = ref.watch(recipeProvider);
     final notifier = ref.read(recipeProvider.notifier);
+    final l10n = context.l10n;
     final menuItems = recipeState.menuItems;
     final gramIngredients = ingredientState.items
         .where((item) => item['unit']?.toString() == 'g')
@@ -852,7 +854,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         children: [
           Row(
             children: [
-              Text('레시피 매핑', style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                l10n.inventorySurfaceRecipe,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               const Spacer(),
               FilledButton.icon(
                 onPressed: storeId == null || menuItems.isEmpty
@@ -866,13 +871,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                         initialMenuItemId: _selectedMenuItemId,
                       ),
                 icon: const Icon(Icons.add),
-                label: const Text('매핑 추가'),
+                label: Text(l10n.inventoryAddRecipeMapping),
               ),
             ],
           ),
           const SizedBox(height: 10),
           Text(
-            '메뉴와 원재료 사용량을 연결해 재고 차감의 기준선을 맞춥니다.',
+            l10n.inventorySurfaceRecipeSummary,
             style: GoogleFonts.notoSansKr(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -1199,8 +1204,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     ? null
                     : DateTime.tryParse(lastUpdatedRaw)?.toLocal();
                 final actual =
-                    (double.tryParse(actualController.text.trim()) ??
-                        existingActual) ??
+                    parseDecimalInput(actualController.text) ??
+                    existingActual ??
                     theoretical;
                 final variance = actual - theoretical;
 
@@ -1315,8 +1320,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                           onPressed: storeId == null
                               ? null
                               : () async {
-                                  final parsed = double.tryParse(
-                                    actualController.text.trim(),
+                                  final parsed = parseDecimalInput(
+                                    actualController.text,
                                   );
                                   if (parsed == null) {
                                     showErrorToast(
@@ -5756,8 +5761,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 ),
                 FilledButton(
                   onPressed: () async {
-                    final targetStockDays = double.tryParse(
-                      targetDaysController.text.trim(),
+                    final targetStockDays = parseDecimalInput(
+                      targetDaysController.text,
                     );
                     if (targetStockDays == null || targetStockDays <= 0) {
                       showErrorToast(
@@ -6410,11 +6415,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
 
                     if (isEdit) {
                       final patch = <String, dynamic>{};
-                      final parsedStock = double.tryParse(stockController.text);
-                      final parsedReorder = double.tryParse(
+                      final parsedStock = parseDecimalInput(
+                        stockController.text,
+                      );
+                      final parsedReorder = parseDecimalInput(
                         reorderController.text,
                       );
-                      final parsedCost = double.tryParse(costController.text);
+                      final parsedCost = parseDecimalInput(costController.text);
                       final supplier = supplierController.text.trim();
 
                       if (name != (initial['name']?.toString() ?? '')) {
@@ -6477,9 +6484,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                         storeId: storeId,
                         name: name,
                         unit: unit,
-                        currentStock: double.tryParse(stockController.text),
-                        reorderPoint: double.tryParse(reorderController.text),
-                        costPerUnit: double.tryParse(costController.text),
+                        currentStock: parseDecimalInput(stockController.text),
+                        reorderPoint: parseDecimalInput(reorderController.text),
+                        costPerUnit: parseDecimalInput(costController.text),
                         supplierName: supplierController.text.trim().isEmpty
                             ? null
                             : supplierController.text.trim(),
@@ -6611,7 +6618,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 ),
                 FilledButton(
                   onPressed: () async {
-                    final qty = double.tryParse(qtyController.text.trim());
+                    final qty = parseDecimalInput(qtyController.text);
                     if (menuItemId == null ||
                         ingredientId == null ||
                         qty == null ||

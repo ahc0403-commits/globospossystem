@@ -15,7 +15,17 @@ void main() {
       expect(canAccessRouteForRole('kitchen', '/kitchen'), isTrue);
     });
 
-    test('allows logged-in roles to enter attendance kiosk', () {
+    test('normalizes query-string deep links before checking access', () {
+      expect(canAccessRouteForRole('store_admin', '/admin?tab=qc'), isTrue);
+      expect(
+        canAccessRouteForRole('super_admin', '/admin/store-1?tab=einvoice'),
+        isTrue,
+      );
+      expect(canAccessRouteForRole('cashier', '/payments/payment-1'), isTrue);
+      expect(canAccessRouteForRole('waiter', '/payments/payment-1'), isFalse);
+    });
+
+    test('blocks dormant attendance kiosk route for logged-in roles', () {
       const roles = [
         'super_admin',
         'photo_objet_master',
@@ -31,8 +41,8 @@ void main() {
       for (final role in roles) {
         expect(
           canAccessRouteForRole(role, '/attendance-kiosk'),
-          isTrue,
-          reason: 'attendance kiosk should stay available for role=$role',
+          isFalse,
+          reason: 'attendance kiosk is dormant and disabled for role=$role',
         );
       }
     });
@@ -56,6 +66,27 @@ void main() {
       expect(canAccessRouteForRole('super_admin', '/admin'), isFalse);
       expect(canAccessRouteForRole('super_admin', '/admin/store-1'), isTrue);
       expect(canAccessRouteForRole('store_admin', '/super-admin'), isFalse);
+    });
+
+    test('keeps standalone QSC routes permission-gated', () {
+      expect(canAccessRouteForRole('waiter', '/qc-check'), isFalse);
+      expect(
+        canAccessRouteForRole(
+          'waiter',
+          '/qc-check',
+          extraPermissions: const ['qc_check'],
+        ),
+        isTrue,
+      );
+      expect(canAccessRouteForRole('waiter', '/qc-review'), isFalse);
+      expect(
+        canAccessRouteForRole(
+          'waiter',
+          '/qc-review',
+          extraPermissions: const ['qc_visit_review'],
+        ),
+        isTrue,
+      );
     });
   });
 }

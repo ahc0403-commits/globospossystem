@@ -229,6 +229,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
         });
       }
       return Scaffold(
+        key: const Key('qc_check_root'),
         backgroundColor: PosColors.canvas,
         body: Center(
           child: Text(
@@ -255,8 +256,16 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
     }
     final isInitialTemplateLoad =
         templateState.isLoading && templateState.templates.isEmpty;
+    final draftPreviewTemplates = templateState.templates
+        .where((template) {
+          final templateId = template['id']?.toString() ?? '';
+          final draft = _drafts[templateId];
+          return draft != null && draft.hasInput;
+        })
+        .toList(growable: false);
 
     return Scaffold(
+      key: const Key('qc_check_root'),
       backgroundColor: PosColors.canvas,
       appBar: AppBar(
         backgroundColor: PosColors.topbarSurface,
@@ -361,6 +370,14 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                     ],
                   ),
                 ),
+                if (draftPreviewTemplates.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _QcDraftPreview(
+                    templates: draftPreviewTemplates,
+                    drafts: _drafts,
+                    resultLabel: (value) => _qcResultLabel(context, value),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 for (final category in grouped.keys) ...[
                   ToastWorkSurface(
@@ -474,6 +491,11 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                                               height: 100,
                                               width: double.infinity,
                                               fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) =>
+                                                  _imageLoadFallback(
+                                                    height: 100,
+                                                    width: double.infinity,
+                                                  ),
                                             ),
                                           ),
                                           Padding(
@@ -525,6 +547,46 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                                         context.l10n.qscSvRequired,
                                         PosColors.accent,
                                       ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                Wrap(
+                                  key: ValueKey<String>(
+                                    'qc_result_selector_$templateId',
+                                  ),
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    _qcResultChip(
+                                      context,
+                                      label: context.l10n.qcResultPass,
+                                      selected: draft.result == 'pass',
+                                      color: PosColors.success,
+                                      onSelected: () => setState(() {
+                                        draft.result = 'pass';
+                                        draft.completed = true;
+                                      }),
+                                    ),
+                                    _qcResultChip(
+                                      context,
+                                      label: context.l10n.qcResultFail,
+                                      selected: draft.result == 'fail',
+                                      color: PosColors.danger,
+                                      onSelected: () => setState(() {
+                                        draft.result = 'fail';
+                                        draft.completed = true;
+                                      }),
+                                    ),
+                                    _qcResultChip(
+                                      context,
+                                      label: context.l10n.qcResultNa,
+                                      selected: draft.result == 'na',
+                                      color: PosColors.textMuted,
+                                      onSelected: () => setState(() {
+                                        draft.result = 'na';
+                                        draft.completed = true;
+                                      }),
+                                    ),
                                   ],
                                 ),
                                 const SizedBox(height: 10),
@@ -584,6 +646,11 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                                             width: 40,
                                             height: 40,
                                             fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) =>
+                                                _imageLoadFallback(
+                                                  width: 40,
+                                                  height: 40,
+                                                ),
                                           ),
                                         ),
                                       ),
@@ -696,6 +763,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                                     hintText: context.l10n.qcMemoHint,
                                     border: const OutlineInputBorder(),
                                   ),
+                                  onChanged: (_) => setState(() {}),
                                   maxLines: 2,
                                 ),
                               ],
@@ -735,6 +803,39 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
 
   Widget _statusChip(String label, Color color) {
     return ToastStatusBadge(label: label, color: color);
+  }
+
+  Widget _qcResultChip(
+    BuildContext context, {
+    required String label,
+    required bool selected,
+    required Color color,
+    required VoidCallback onSelected,
+  }) {
+    return ChoiceChip(
+      label: Text(
+        label,
+        style: GoogleFonts.notoSansKr(
+          color: selected ? color : PosColors.text,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+      selected: selected,
+      selectedColor: color.withValues(alpha: 0.14),
+      backgroundColor: PosColors.panelStrong,
+      side: BorderSide(color: selected ? color : PosColors.border),
+      onSelected: (_) => onSelected(),
+    );
+  }
+
+  String _qcResultLabel(BuildContext context, String? value) {
+    return switch (value) {
+      'pass' => context.l10n.qcResultPass,
+      'fail' => context.l10n.qcResultFail,
+      'na' => context.l10n.qcResultNa,
+      _ => context.l10n.qscInputCompleteHint,
+    };
   }
 
   String _submissionStatusLabel(BuildContext context, String value) {
@@ -795,7 +896,13 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                 child: InteractiveViewer(
                   minScale: 0.8,
                   maxScale: 4,
-                  child: Image.network(path, fit: BoxFit.contain),
+                  child: Image.network(
+                    path,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => _imageLoadFallback(
+                      color: Colors.white.withValues(alpha: 0.78),
+                    ),
+                  ),
                 ),
               ),
               Positioned(
@@ -833,6 +940,21 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
         }
         return Image.memory(bytes, width: 56, height: 56, fit: BoxFit.cover);
       },
+    );
+  }
+
+  Widget _imageLoadFallback({
+    double? width,
+    double? height,
+    Color color = PosColors.textMuted,
+  }) {
+    return Container(
+      width: width,
+      height: height,
+      color: PosColors.canvasAlt,
+      child: Center(
+        child: Icon(Icons.broken_image_outlined, color: color, size: 22),
+      ),
     );
   }
 
@@ -877,6 +999,141 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
   }
 }
 
+class _QcDraftPreview extends StatelessWidget {
+  const _QcDraftPreview({
+    required this.templates,
+    required this.drafts,
+    required this.resultLabel,
+  });
+
+  final List<Map<String, dynamic>> templates;
+  final Map<String, _CheckDraft> drafts;
+  final String Function(String?) resultLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleTemplates = templates
+        .where((template) {
+          final templateId = template['id']?.toString() ?? '';
+          final draft = drafts[templateId];
+          return draft != null && draft.hasInput;
+        })
+        .toList(growable: false);
+
+    if (visibleTemplates.isEmpty) return const SizedBox.shrink();
+
+    return ToastWorkSurface(
+      key: const Key('pending_qc_draft_preview'),
+      padding: const EdgeInsets.all(12),
+      backgroundColor: PosColors.panelStrong,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.fact_check_outlined,
+                size: 18,
+                color: PosColors.accent,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${context.l10n.selected} ${context.l10n.qcTitle}',
+                  style: GoogleFonts.notoSansKr(
+                    color: PosColors.text,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              ToastStatusBadge(
+                label: '${visibleTemplates.length}',
+                color: PosColors.accent,
+                compact: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 66,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: visibleTemplates.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final template = visibleTemplates[index];
+                final templateId = template['id']?.toString() ?? '';
+                final draft = drafts[templateId]!;
+                final photoCount = draft.attachedPhotoCount;
+                return Container(
+                  key: ValueKey<String>('pending_qc_draft_item_$templateId'),
+                  width: 220,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: PosColors.canvasAlt,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: PosColors.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        template['criteria_text']?.toString() ?? '-',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.notoSansKr(
+                          color: PosColors.text,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          ToastStatusBadge(
+                            label: resultLabel(draft.result),
+                            color: _resultColor(draft.result),
+                            compact: true,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              photoCount > 0
+                                  ? '${context.l10n.qcAttachPhoto} $photoCount'
+                                  : context.l10n.qscNoPhoto,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.notoSansKr(
+                                color: PosColors.textMuted,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _resultColor(String? value) {
+    return switch (value) {
+      'pass' => PosColors.success,
+      'fail' => PosColors.danger,
+      _ => PosColors.textMuted,
+    };
+  }
+}
+
 class _CheckDraft {
   _CheckDraft();
 
@@ -907,6 +1164,7 @@ class _CheckDraft {
 
   bool get hasInput =>
       completed ||
+      result != null ||
       photoFiles.isNotEmpty ||
       existingPhotoUrl != null ||
       noteController.text.trim().isNotEmpty;

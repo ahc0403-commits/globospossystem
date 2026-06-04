@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/i18n/locale_extensions.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
+import '../../../core/utils/number_input_utils.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
@@ -24,6 +26,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final storeId = ref.watch(authProvider).storeId;
     if (storeId == null) {
       return const _RestaurantMissingView();
@@ -54,6 +57,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
 
     if (isLoading) {
       return const Scaffold(
+        key: Key('admin_menu_root'),
         backgroundColor: AppColors.surface0,
         body: Center(
           child: CircularProgressIndicator(color: AppColors.amber500),
@@ -63,13 +67,14 @@ class _MenuTabState extends ConsumerState<MenuTab> {
 
     if (categoriesError || itemsError) {
       return Scaffold(
+        key: const Key('admin_menu_root'),
         backgroundColor: AppColors.surface0,
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Failed to load menu info.',
+                l10n.menuLoadFailed,
                 style: GoogleFonts.notoSansKr(
                   color: AppColors.statusCancelled,
                   fontSize: 14,
@@ -82,7 +87,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                   backgroundColor: AppColors.amber500,
                   foregroundColor: AppColors.surface0,
                 ),
-                child: const Text('Retry'),
+                child: Text(l10n.retry),
               ),
             ],
           ),
@@ -105,94 +110,74 @@ class _MenuTabState extends ConsumerState<MenuTab> {
         .where((item) => item['is_available'] == true)
         .length;
 
-    return Scaffold(
-      backgroundColor: AppColors.surface0,
-      body: ToastResponsiveBody(
-        maxWidth: 1420,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildMenuCommandHeader(
-              categoryCount: categories.length,
-              itemCount: allItems.length,
-              availableItems: availableItems,
-              selectedItemCount: selectedItems.length,
-              selectedCategoryName: _categoryNameForId(
-                categories,
-                selectedCategoryId,
-              ),
-              onAddCategory: () =>
-                  _showAddCategoryDialog(context, menuNotifier),
-              onAddItem: selectedCategoryId == null
-                  ? null
-                  : () => _showAddItemDialog(
-                      context,
-                      selectedCategoryId,
-                      menuNotifier,
-                    ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  if (constraints.maxWidth < 960) {
-                    return ToastViewportScroll(
-                      child: Column(
-                        children: [
-                          SizedBox(
-                            height: 420,
-                            child: _CategoryPanel(
-                              categories: categories,
-                              selectedCategoryId: selectedCategoryId,
-                              auditTraceAsync: auditTraceAsync,
-                              onSelect: menuNotifier.selectCategory,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            height: 620,
-                            child: _ItemsPanel(
-                              selectedItems: selectedItems,
-                              selectedCategoryId: selectedCategoryId,
-                              numberFormat: numberFormat,
-                              onToggleAvailability:
-                                  menuNotifier.toggleAvailability,
-                              onEditItem: (item) => _showEditItemDialog(
-                                context,
-                                item,
-                                menuNotifier,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
+    final header = _buildMenuCommandHeader(
+      categoryCount: categories.length,
+      itemCount: allItems.length,
+      availableItems: availableItems,
+      selectedItemCount: selectedItems.length,
+      selectedCategoryName: _categoryNameForId(categories, selectedCategoryId),
+      onAddCategory: () => _showAddCategoryDialog(context, menuNotifier),
+      onAddItem: selectedCategoryId == null
+          ? null
+          : () => _showAddItemDialog(context, selectedCategoryId, menuNotifier),
+    );
 
-                  return ToastSplitPane(
+    Widget categoryPane({required bool scrollable}) => _CategoryPanel(
+      categories: categories,
+      selectedCategoryId: selectedCategoryId,
+      auditTraceAsync: auditTraceAsync,
+      scrollable: scrollable,
+      onSelect: menuNotifier.selectCategory,
+    );
+
+    Widget itemsPane({required bool scrollable}) => _ItemsPanel(
+      selectedItems: selectedItems,
+      selectedCategoryId: selectedCategoryId,
+      numberFormat: numberFormat,
+      scrollable: scrollable,
+      onToggleAvailability: menuNotifier.toggleAvailability,
+      onEditItem: (item) => _showEditItemDialog(context, item, menuNotifier),
+    );
+
+    return Scaffold(
+      key: const Key('admin_menu_root'),
+      backgroundColor: AppColors.surface0,
+      body: LayoutBuilder(
+        builder: (context, viewport) {
+          if (viewport.maxWidth < 960) {
+            return ToastResponsiveScrollBody(
+              maxWidth: 1420,
+              padding: const EdgeInsets.all(16),
+              children: [
+                header,
+                const SizedBox(height: 16),
+                categoryPane(scrollable: false),
+                const SizedBox(height: 16),
+                itemsPane(scrollable: false),
+              ],
+            );
+          }
+
+          return ToastResponsiveBody(
+            maxWidth: 1420,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                header,
+                const SizedBox(height: 16),
+                Expanded(
+                  child: ToastSplitPane(
                     queueWidth: 360,
-                    queue: _CategoryPanel(
-                      categories: categories,
-                      selectedCategoryId: selectedCategoryId,
-                      auditTraceAsync: auditTraceAsync,
-                      onSelect: menuNotifier.selectCategory,
-                    ),
-                    detail: _ItemsPanel(
-                      selectedItems: selectedItems,
-                      selectedCategoryId: selectedCategoryId,
-                      numberFormat: numberFormat,
-                      onToggleAvailability: menuNotifier.toggleAvailability,
-                      onEditItem: (item) =>
-                          _showEditItemDialog(context, item, menuNotifier),
-                    ),
+                    queue: categoryPane(scrollable: true),
+                    detail: itemsPane(scrollable: true),
                     divider: false,
-                  );
-                },
-              ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -220,12 +205,12 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '메뉴 관리',
+                      context.l10n.menuManagementTitle,
                       style: Theme.of(context).textTheme.headlineLarge,
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '카테고리를 선택하고 메뉴명, 가격, 판매 상태만 빠르게 관리합니다.',
+                      context.l10n.menuManagementSubtitle,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: PosColors.textSecondary,
                         fontSize: 13,
@@ -246,12 +231,12 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                       Icons.create_new_folder_outlined,
                       size: 18,
                     ),
-                    label: const Text('카테고리 추가'),
+                    label: Text(context.l10n.menuAddCategory),
                   ),
                   FilledButton.icon(
                     onPressed: onAddItem,
                     icon: const Icon(Icons.add, size: 18),
-                    label: const Text('메뉴 추가'),
+                    label: Text(context.l10n.menuAddMenu),
                   ),
                 ],
               ),
@@ -260,15 +245,21 @@ class _MenuTabState extends ConsumerState<MenuTab> {
           const SizedBox(height: 14),
           ToastMetricStrip(
             metrics: [
-              ToastMetric(label: '카테고리', value: '$categoryCount'),
-              ToastMetric(label: '메뉴', value: '$itemCount'),
               ToastMetric(
-                label: '판매 가능',
+                label: context.l10n.menuCategoriesMetric,
+                value: '$categoryCount',
+              ),
+              ToastMetric(
+                label: context.l10n.menuItemsMetric,
+                value: '$itemCount',
+              ),
+              ToastMetric(
+                label: context.l10n.menuAvailableItemsMetric,
                 value: '$availableItems',
                 tone: PosColors.success,
               ),
               ToastMetric(
-                label: '선택 카테고리',
+                label: context.l10n.menuSelectedCategoryMetric,
                 value: '$selectedItemCount',
                 tone: selectedCategoryName == null
                     ? PosColors.textSecondary
@@ -280,7 +271,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
           Row(
             children: [
               ToastStatusBadge(
-                label: '메뉴 구성',
+                label: context.l10n.menuConfiguration,
                 color: PosColors.accent,
                 compact: true,
               ),
@@ -288,8 +279,8 @@ class _MenuTabState extends ConsumerState<MenuTab> {
               Expanded(
                 child: Text(
                   selectedCategoryName == null
-                      ? '카테고리를 선택하면 오른쪽에서 메뉴를 편집할 수 있습니다.'
-                      : '$selectedCategoryName 카테고리의 판매 메뉴를 편집 중입니다.',
+                      ? context.l10n.menuSelectCategoryEditHint
+                      : context.l10n.menuEditingCategory(selectedCategoryName),
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: PosColors.textSecondary,
@@ -325,6 +316,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     BuildContext context,
     MenuNotifier menuNotifier,
   ) async {
+    final l10n = context.l10n;
     final nameController = TextEditingController();
 
     await showDialog<void>(
@@ -333,18 +325,18 @@ class _MenuTabState extends ConsumerState<MenuTab> {
         return AlertDialog(
           backgroundColor: AppColors.surface1,
           title: Text(
-            'Add Category',
+            l10n.menuAddCategory,
             style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
           ),
           content: TextField(
             controller: nameController,
             style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-            decoration: const InputDecoration(labelText: 'Category Name'),
+            decoration: InputDecoration(labelText: l10n.menuCategoryName),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: Text(l10n.cancel),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
@@ -354,7 +346,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
               onPressed: () async {
                 final name = nameController.text.trim();
                 if (name.isEmpty) {
-                  showErrorToast(context, 'Enter a category name.');
+                  showErrorToast(context, l10n.menuEnterCategoryName);
                   return;
                 }
 
@@ -362,11 +354,11 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                 if (context.mounted) {
                   if (success) {
                     Navigator.of(context).pop();
-                    showSuccessToast(context, 'Category "$name" added.');
+                    showSuccessToast(context, l10n.menuCategoryAdded(name));
                   }
                 }
               },
-              child: const Text('Add'),
+              child: Text(l10n.add),
             ),
           ],
         );
@@ -385,6 +377,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       return;
     }
 
+    final l10n = context.l10n;
     final nameController = TextEditingController();
     final priceController = TextEditingController();
 
@@ -394,7 +387,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
         return AlertDialog(
           backgroundColor: AppColors.surface1,
           title: Text(
-            'Add Menu',
+            l10n.menuAddMenu,
             style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
           ),
           content: Column(
@@ -403,21 +396,21 @@ class _MenuTabState extends ConsumerState<MenuTab> {
               TextField(
                 controller: nameController,
                 style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                decoration: const InputDecoration(labelText: 'Menu Name'),
+                decoration: InputDecoration(labelText: l10n.menuMenuName),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: priceController,
                 keyboardType: TextInputType.number,
                 style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                decoration: const InputDecoration(labelText: 'Price'),
+                decoration: InputDecoration(labelText: l10n.menuPrice),
               ),
             ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: Text(l10n.cancel),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
@@ -426,9 +419,9 @@ class _MenuTabState extends ConsumerState<MenuTab> {
               ),
               onPressed: () async {
                 final name = nameController.text.trim();
-                final price = double.tryParse(priceController.text.trim());
+                final price = parseDecimalInput(priceController.text);
                 if (name.isEmpty || price == null || price <= 0) {
-                  showErrorToast(context, 'Enter a valid menu name and price.');
+                  showErrorToast(context, l10n.menuEnterValidNameAndPrice);
                   return;
                 }
 
@@ -440,11 +433,11 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                 if (context.mounted) {
                   if (success) {
                     Navigator.of(context).pop();
-                    showSuccessToast(context, 'Menu "$name" added.');
+                    showSuccessToast(context, l10n.menuAdded(name));
                   }
                 }
               },
-              child: const Text('Add'),
+              child: Text(l10n.add),
             ),
           ],
         );
@@ -460,6 +453,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     Map<String, dynamic> item,
     MenuNotifier menuNotifier,
   ) async {
+    final l10n = context.l10n;
     final itemId = item['id']?.toString() ?? '';
     if (itemId.isEmpty) {
       return;
@@ -470,7 +464,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     final rawPrice = item['price'];
     final initialPrice = switch (rawPrice) {
       num value => value.toDouble(),
-      String value => double.tryParse(value) ?? 0,
+      String value => parseDecimalInput(value) ?? 0,
       _ => 0.0,
     };
     final priceController = TextEditingController(
@@ -483,7 +477,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
         return AlertDialog(
           backgroundColor: AppColors.surface1,
           title: Text(
-            'Edit Menu',
+            l10n.menuEditMenu,
             style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
           ),
           content: Column(
@@ -492,7 +486,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
               TextField(
                 controller: nameController,
                 style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                decoration: const InputDecoration(labelText: 'Menu Name'),
+                decoration: InputDecoration(labelText: l10n.menuMenuName),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -501,14 +495,14 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                   decimal: true,
                 ),
                 style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                decoration: const InputDecoration(labelText: 'Price'),
+                decoration: InputDecoration(labelText: l10n.menuPrice),
               ),
             ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: Text(l10n.cancel),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
@@ -517,15 +511,15 @@ class _MenuTabState extends ConsumerState<MenuTab> {
               ),
               onPressed: () async {
                 final name = nameController.text.trim();
-                final price = double.tryParse(priceController.text.trim());
+                final price = parseDecimalInput(priceController.text);
                 if (name.isEmpty || price == null || price <= 0) {
-                  showErrorToast(context, 'Enter a valid menu name and price.');
+                  showErrorToast(context, l10n.menuEnterValidNameAndPrice);
                   return;
                 }
 
                 if (name == (item['name']?.toString() ?? '') &&
                     price == initialPrice) {
-                  showErrorToast(context, 'No menu changes.');
+                  showErrorToast(context, l10n.noChanges);
                   return;
                 }
 
@@ -537,11 +531,11 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                 if (context.mounted) {
                   if (success) {
                     Navigator.of(context).pop();
-                    showSuccessToast(context, 'Menu "$name" saved.');
+                    showSuccessToast(context, l10n.menuSaved(name));
                   }
                 }
               },
-              child: const Text('Save'),
+              child: Text(l10n.save),
             ),
           ],
         );
@@ -559,59 +553,57 @@ class _CategoryPanel extends StatelessWidget {
     required this.selectedCategoryId,
     required this.auditTraceAsync,
     required this.onSelect,
+    this.scrollable = true,
   });
 
   final List<Map<String, dynamic>> categories;
   final String? selectedCategoryId;
   final AsyncValue<List<Map<String, dynamic>>> auditTraceAsync;
   final ValueChanged<String> onSelect;
+  final bool scrollable;
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final categoryBody = categories.isEmpty
+        ? PosEmptyState(
+            title: l10n.menuNoCategories,
+            subtitle: l10n.menuCreateRailFirst,
+          )
+        : ListView.separated(
+            shrinkWrap: !scrollable,
+            physics: scrollable ? null : const NeverScrollableScrollPhysics(),
+            itemCount: categories.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 6),
+            itemBuilder: (context, index) {
+              final category = categories[index];
+              final categoryId = category['id']?.toString() ?? '';
+              final isSelected = categoryId == selectedCategoryId;
+
+              return PosListRow(
+                selected: isSelected,
+                statusColor: AppColors.amber500,
+                onTap: categoryId.isEmpty ? null : () => onSelect(categoryId),
+                child: Text(
+                  category['name']?.toString() ?? '-',
+                  style: GoogleFonts.notoSansKr(
+                    color: AppColors.textPrimary,
+                    fontSize: 15,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                  ),
+                ),
+              );
+            },
+          );
+
     return PosDataPanel(
-      title: '카테고리',
-      subtitle: '메뉴를 편집할 카테고리를 선택합니다.',
+      title: l10n.menuCategoriesMetric,
+      subtitle: l10n.menuCategoryPanelSubtitle,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (categories.isEmpty)
-            const Expanded(
-              child: PosEmptyState(
-                title: '카테고리가 없습니다.',
-                subtitle: '첫 카테고리를 추가하면 판매 구성을 시작할 수 있습니다.',
-              ),
-            )
-          else
-            Expanded(
-              child: ListView.separated(
-                itemCount: categories.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 6),
-                itemBuilder: (context, index) {
-                  final category = categories[index];
-                  final categoryId = category['id']?.toString() ?? '';
-                  final isSelected = categoryId == selectedCategoryId;
-
-                  return PosListRow(
-                    selected: isSelected,
-                    statusColor: AppColors.amber500,
-                    onTap: categoryId.isEmpty
-                        ? null
-                        : () => onSelect(categoryId),
-                    child: Text(
-                      category['name']?.toString() ?? '-',
-                      style: GoogleFonts.notoSansKr(
-                        color: AppColors.textPrimary,
-                        fontSize: 15,
-                        fontWeight: isSelected
-                            ? FontWeight.w700
-                            : FontWeight.w600,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
+          if (scrollable) Expanded(child: categoryBody) else categoryBody,
           const SizedBox(height: 12),
           _MenuAuditDisclosure(auditTraceAsync: auditTraceAsync),
         ],
@@ -627,6 +619,7 @@ class _ItemsPanel extends StatelessWidget {
     required this.numberFormat,
     required this.onToggleAvailability,
     required this.onEditItem,
+    this.scrollable = true,
   });
 
   final List<Map<String, dynamic>> selectedItems;
@@ -635,37 +628,46 @@ class _ItemsPanel extends StatelessWidget {
   final Future<bool> Function(String itemId, bool isAvailable)
   onToggleAvailability;
   final ValueChanged<Map<String, dynamic>> onEditItem;
+  final bool scrollable;
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    Widget panelBody(Widget child) =>
+        scrollable ? Expanded(child: child) : child;
+
     return PosDataPanel(
-      title: '메뉴 목록',
+      title: l10n.menuItemsPanelTitle,
       subtitle: selectedCategoryId == null
-          ? '카테고리를 선택하면 메뉴 목록이 표시됩니다.'
-          : '메뉴명, 가격, 판매 상태를 한 줄에서 확인합니다.',
+          ? l10n.menuItemsSelectCategorySubtitle
+          : l10n.menuItemsReadySubtitle,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (selectedCategoryId == null)
-            const Expanded(
-              child: PosEmptyState(
-                title: '카테고리를 선택해 주세요.',
-                subtitle: '좌측 목록에서 카테고리를 선택하면 메뉴가 표시됩니다.',
+            panelBody(
+              PosEmptyState(
+                title: l10n.menuSelectCategoryTitle,
+                subtitle: l10n.menuSelectCategoryMessage,
                 icon: Icons.restaurant_menu_outlined,
               ),
             )
           else if (selectedItems.isEmpty)
-            const Expanded(
-              child: PosEmptyState(
-                title: '등록된 메뉴가 없습니다.',
-                subtitle: '첫 메뉴를 추가해 판매 구성을 완성해 주세요.',
+            panelBody(
+              PosEmptyState(
+                title: l10n.menuNoItemsTitle,
+                subtitle: l10n.menuNoItemsMessage,
                 icon: Icons.fastfood_outlined,
               ),
             )
           else
-            Expanded(
-              child: ListView.separated(
+            panelBody(
+              ListView.separated(
+                shrinkWrap: !scrollable,
+                physics: scrollable
+                    ? null
+                    : const NeverScrollableScrollPhysics(),
                 itemCount: selectedItems.length,
                 separatorBuilder: (_, _) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
@@ -718,7 +720,9 @@ class _ItemsPanel extends StatelessWidget {
                         ),
                         const SizedBox(width: 12),
                         ToastStatusBadge(
-                          label: isAvailable ? '사용' : '중지',
+                          label: isAvailable
+                              ? l10n.menuAvailable
+                              : l10n.menuSoldOut,
                           color: isAvailable
                               ? PosColors.success
                               : PosColors.textSecondary,
@@ -739,8 +743,8 @@ class _ItemsPanel extends StatelessWidget {
                                   showSuccessToast(
                                     context,
                                     value
-                                        ? 'Menu "$name" marked as available.'
-                                        : 'Menu "$name" marked as sold out.',
+                                        ? l10n.menuMarkedAvailable(name)
+                                        : l10n.menuMarkedSoldOut(name),
                                   );
                                 },
                         ),
@@ -752,7 +756,7 @@ class _ItemsPanel extends StatelessWidget {
                             Icons.edit_outlined,
                             color: AppColors.textSecondary,
                           ),
-                          tooltip: 'Edit Menu',
+                          tooltip: l10n.menuEditMenu,
                         ),
                       ],
                     ),
@@ -773,6 +777,7 @@ class _MenuAuditDisclosure extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface0,
@@ -787,7 +792,7 @@ class _MenuAuditDisclosure extends StatelessWidget {
         iconColor: AppColors.textSecondary,
         collapsedIconColor: AppColors.textSecondary,
         title: Text(
-          '최근 변경',
+          l10n.changeHistory,
           style: GoogleFonts.notoSansKr(
             color: AppColors.textPrimary,
             fontSize: 13,
@@ -795,7 +800,7 @@ class _MenuAuditDisclosure extends StatelessWidget {
           ),
         ),
         subtitle: Text(
-          '필요할 때만 메뉴 변경 이력을 확인합니다.',
+          l10n.menuRecentChangesHint,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: GoogleFonts.notoSansKr(
@@ -809,7 +814,7 @@ class _MenuAuditDisclosure extends StatelessWidget {
             allowedEntityTypes: const {'menu_categories', 'menu_items'},
             maxItems: 3,
             compact: true,
-            emptyMessage: '최근 메뉴 변경 내역이 없습니다.',
+            emptyMessage: l10n.menuNoRecentChanges,
           ),
         ],
       ),
@@ -826,7 +831,7 @@ class _RestaurantMissingView extends StatelessWidget {
       backgroundColor: AppColors.surface0,
       body: Center(
         child: Text(
-          'Store not found for this account.',
+          context.l10n.menuNoLinkedStoreMessage,
           style: GoogleFonts.notoSansKr(
             color: AppColors.statusCancelled,
             fontSize: 14,

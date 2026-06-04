@@ -1,3 +1,5 @@
+import 'permission_utils.dart';
+
 String homeRouteForRole(String? role) {
   return switch (role) {
     'super_admin' => '/super-admin',
@@ -10,27 +12,36 @@ String homeRouteForRole(String? role) {
   };
 }
 
-bool canAccessRouteForRole(String? role, String location) {
-  if (role == null) return location == '/login';
-  if (location == '/login' || location == '/onboarding') return true;
-  if (location == '/qc-check') return true;
-  if (location == '/qc-review') return true;
-  if (location == '/attendance-kiosk') return true;
+bool canAccessRouteForRole(
+  String? role,
+  String location, {
+  List<String> extraPermissions = const <String>[],
+}) {
+  final path = Uri.parse(location).path;
+
+  if (role == null) return path == '/login';
+  if (path == '/login' || path == '/onboarding') return true;
+  if (path == '/attendance-kiosk') return false;
+  if (path == '/qc-check') {
+    return PermissionUtils.canDoQcCheck(role, extraPermissions);
+  }
+  if (path == '/qc-review') {
+    return PermissionUtils.canDoQcVisitReview(role, extraPermissions);
+  }
 
   return switch (role) {
     'super_admin' =>
-      location == '/super-admin' ||
-          location == '/photo-ops' ||
-          location.startsWith('/admin/') ||
-          location.startsWith('/payments/'),
+      path == '/super-admin' ||
+          path == '/photo-ops' ||
+          path.startsWith('/admin/') ||
+          path.startsWith('/payments/'),
     'brand_admin' ||
     'store_admin' ||
-    'admin' => location == '/admin' || location.startsWith('/payments/'),
-    'photo_objet_master' ||
-    'photo_objet_store_admin' => location == '/photo-ops',
-    'waiter' => location == '/waiter',
-    'kitchen' => location == '/kitchen',
-    'cashier' => location == '/cashier' || location.startsWith('/payments/'),
+    'admin' => path == '/admin' || path.startsWith('/payments/'),
+    'photo_objet_master' || 'photo_objet_store_admin' => path == '/photo-ops',
+    'waiter' => path == '/waiter',
+    'kitchen' => path == '/kitchen',
+    'cashier' => path == '/cashier' || path.startsWith('/payments/'),
     _ => false,
   };
 }

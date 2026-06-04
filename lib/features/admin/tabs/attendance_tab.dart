@@ -18,6 +18,10 @@ import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
 
+String _formatVnd(NumberFormat currency, num amount) {
+  return '${currency.format(amount)} VND';
+}
+
 class AttendanceTab extends ConsumerStatefulWidget {
   const AttendanceTab({super.key});
 
@@ -466,6 +470,176 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         .where((row) => (row['photo_url']?.toString() ?? '').isNotEmpty)
         .length;
     final currency = NumberFormat('#,###', 'vi_VN');
+    final attendanceHeader = _buildAttendanceCommandHeader(
+      storeId: storeId,
+      todayPresentCount: todayPresentCount,
+      attendanceRate: attendanceRate,
+      reviewCount: reviewCount,
+      payrollTargetCount: payrollTargetCount,
+    );
+
+    Widget compactAttendanceList() {
+      return PosDataPanel(
+        title: context.l10n.attendanceRecordsTitle,
+        subtitle: context.l10n.attendanceRecordsSubtitle,
+        trailing: ToastStatusBadge(
+          label: context.l10n.attendanceShowingStaff(attendanceRows.length),
+          color: PosColors.info,
+          compact: true,
+        ),
+        child: _isLogsLoading
+            ? const SizedBox(
+                height: 260,
+                child: Center(
+                  child: CircularProgressIndicator(color: AppColors.amber500),
+                ),
+              )
+            : attendanceRows.isEmpty
+            ? PosEmptyState(
+                title: context.l10n.attendanceNoRecordsSelectedPeriod,
+                subtitle: context.l10n.attendanceRecordSourceHint,
+                icon: Icons.event_note_outlined,
+              )
+            : Column(
+                children: [
+                  for (
+                    var index = 0;
+                    index < attendanceRows.length;
+                    index++
+                  ) ...[
+                    Builder(
+                      builder: (context) {
+                        final row = attendanceRows[index];
+                        final selected =
+                            selectedAttendanceRow?['userId'] == row['userId'];
+                        return InkWell(
+                          onTap: () => setState(
+                            () => _selectedAttendanceUserId =
+                                row['userId'] as String,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? PosColors.accentMuted
+                                  : PosColors.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: selected
+                                    ? PosColors.accent
+                                    : PosColors.border,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        row['name'] as String,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    ToastStatusBadge(
+                                      label: row['statusLabel'] as String,
+                                      color: row['statusColor'] as Color,
+                                      compact: true,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    _compactAttendanceChip(
+                                      row['role'] as String,
+                                    ),
+                                    _compactAttendanceChip(
+                                      '${context.l10n.clockIn} ${_formatClock(row['clockIn'] as DateTime?)}',
+                                    ),
+                                    _compactAttendanceChip(
+                                      '${context.l10n.clockOut} ${_formatClock(row['clockOut'] as DateTime?)}',
+                                    ),
+                                    _compactAttendanceChip(
+                                      context.l10n.attendanceHoursValue(
+                                        (row['hours'] as double)
+                                            .toStringAsFixed(1),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    if (index != attendanceRows.length - 1)
+                      const SizedBox(height: 8),
+                  ],
+                ],
+              ),
+      );
+    }
+
+    Widget selectedDetail({required bool scrollable}) =>
+        _buildSelectedAttendanceDetailPanel(
+          storeId: storeId,
+          selectedAttendanceRow: selectedAttendanceRow,
+          selectedPayroll: selectedPayroll,
+          filteredPayrolls: filteredPayrolls,
+          payrollRequiresUnlock: payrollRequiresUnlock,
+          totalHours: totalHours,
+          overtimeHours: overtimeHours,
+          estimatedPayroll: estimatedPayroll,
+          currency: currency,
+          scrollable: scrollable,
+        );
+
+    if (MediaQuery.sizeOf(context).width < 1120) {
+      return Scaffold(
+        key: const Key('attendance_root'),
+        backgroundColor: AppColors.surface0,
+        body: ToastResponsiveScrollBody(
+          maxWidth: 1480,
+          padding: const EdgeInsets.all(20),
+          children: [
+            attendanceHeader,
+            if (_logsError != null) ...[
+              const SizedBox(height: 12),
+              PosExceptionAlert(label: _logsError!, color: PosColors.danger),
+            ],
+            if (_payrollError != null) ...[
+              const SizedBox(height: 12),
+              PosExceptionAlert(
+                label: _payrollError!,
+                color: PosColors.warning,
+              ),
+            ],
+            const SizedBox(height: 16),
+            compactAttendanceList(),
+            const SizedBox(height: 16),
+            selectedDetail(scrollable: false),
+            const SizedBox(height: 12),
+            _buildAttendanceSecondarySignals(
+              photoCaptureCount: photoCaptureCount,
+            ),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
       key: const Key('attendance_root'),
@@ -833,6 +1007,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     required double overtimeHours,
     required double estimatedPayroll,
     required NumberFormat currency,
+    bool scrollable = true,
   }) {
     final hasUnpairedLogs =
         selectedPayroll?.dailyRecords.any((record) => record.isUnpaired) ??
@@ -901,178 +1076,205 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
             ],
           ),
           const SizedBox(height: 16),
-          Expanded(
-            child: SingleChildScrollView(
-              child: selectedAttendanceRow == null
-                  ? PosEmptyState(
-                      title: context.l10n.staffNoSelection,
-                      subtitle: context.l10n.attendanceRecordsSubtitle,
-                      icon: Icons.person_search_outlined,
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: PosColors.mutedSurface,
-                            borderRadius: AppRadius.lg,
-                            border: Border.all(color: PosColors.border),
+          _attendanceDetailBody(
+            scrollable: scrollable,
+            child: selectedAttendanceRow == null
+                ? PosEmptyState(
+                    title: context.l10n.staffNoSelection,
+                    subtitle: context.l10n.attendanceRecordsSubtitle,
+                    icon: Icons.person_search_outlined,
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: PosColors.mutedSurface,
+                          borderRadius: AppRadius.lg,
+                          border: Border.all(color: PosColors.border),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _summaryMetricRow(
+                              context.l10n.attendanceFirstClockIn,
+                              _formatClock(
+                                selectedAttendanceRow['clockIn'] as DateTime?,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            _summaryMetricRow(
+                              context.l10n.attendanceLastClockOut,
+                              _formatClock(
+                                selectedAttendanceRow['clockOut'] as DateTime?,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            _summaryMetricRow(
+                              context.l10n.attendanceWorkedHoursShort,
+                              context.l10n.attendanceHoursValue(
+                                (selectedAttendanceRow['hours'] as double)
+                                    .toStringAsFixed(1),
+                              ),
+                            ),
+                            if (hasUnpairedLogs) ...[
+                              const SizedBox(height: 12),
+                              PosExceptionAlert(
+                                label: context.l10n.attendanceUnpairedLogsTitle,
+                                detail:
+                                    context.l10n.attendanceUnpairedLogsDetail,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: AppColors.surface1,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.surface2),
+                        ),
+                        child: ExpansionTile(
+                          key: const Key('attendance_payroll_secondary_detail'),
+                          initiallyExpanded: false,
+                          tilePadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _summaryMetricRow(
-                                context.l10n.attendanceFirstClockIn,
-                                _formatClock(
-                                  selectedAttendanceRow['clockIn'] as DateTime?,
+                          childrenPadding: const EdgeInsets.fromLTRB(
+                            14,
+                            0,
+                            14,
+                            14,
+                          ),
+                          iconColor: AppColors.textSecondary,
+                          collapsedIconColor: AppColors.textSecondary,
+                          title: Text(
+                            context.l10n.attendancePayrollSummaryTitle,
+                            style: GoogleFonts.notoSansKr(
+                              color: AppColors.textPrimary,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          subtitle: Text(
+                            payrollRequiresUnlock
+                                ? context
+                                      .l10n
+                                      .attendancePayrollSummaryUnlockSubtitle
+                                : context
+                                      .l10n
+                                      .attendancePayrollSummaryReadySubtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.notoSansKr(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                          children: [
+                            if (_isPayrollLoading)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    color: AppColors.amber500,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 10),
+                              )
+                            else ...[
                               _summaryMetricRow(
-                                context.l10n.attendanceLastClockOut,
-                                _formatClock(
-                                  selectedAttendanceRow['clockOut']
-                                      as DateTime?,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              _summaryMetricRow(
-                                context.l10n.attendanceWorkedHoursShort,
+                                context.l10n.attendanceTotalWorkedHours,
                                 context.l10n.attendanceHoursValue(
-                                  (selectedAttendanceRow['hours'] as double)
-                                      .toStringAsFixed(1),
+                                  totalHours.toStringAsFixed(1),
                                 ),
                               ),
-                              if (hasUnpairedLogs) ...[
-                                const SizedBox(height: 12),
-                                PosExceptionAlert(
-                                  label:
-                                      context.l10n.attendanceUnpairedLogsTitle,
-                                  detail:
-                                      context.l10n.attendanceUnpairedLogsDetail,
+                              const SizedBox(height: 10),
+                              _summaryMetricRow(
+                                context.l10n.attendanceOvertimeHours,
+                                context.l10n.attendanceHoursValue(
+                                  overtimeHours.toStringAsFixed(1),
                                 ),
-                              ],
+                                tone: overtimeHours > 0
+                                    ? PosColors.warning
+                                    : PosColors.textPrimary,
+                              ),
+                              const SizedBox(height: 10),
+                              _summaryMetricRow(
+                                context.l10n.attendanceEstimatedPayroll,
+                                _formatVnd(currency, estimatedPayroll),
+                                tone: PosColors.accent,
+                              ),
+                              const SizedBox(height: 10),
+                              _summaryMetricRow(
+                                context.l10n.attendanceAccumulatedPayroll,
+                                selectedPayroll == null
+                                    ? context.l10n.attendancePreviewRequired
+                                    : _formatVnd(
+                                        currency,
+                                        selectedPayroll.totalAmount,
+                                      ),
+                                tone: selectedPayroll == null
+                                    ? PosColors.textSecondary
+                                    : PosColors.accent,
+                              ),
+                              const SizedBox(height: 14),
+                              SizedBox(
+                                width: double.infinity,
+                                child: FilledButton.icon(
+                                  onPressed: payrollAction,
+                                  icon: Icon(
+                                    payrollRequiresUnlock
+                                        ? Icons.lock_open_rounded
+                                        : filteredPayrolls.isEmpty
+                                        ? Icons.payments_outlined
+                                        : Icons.download_rounded,
+                                    size: 18,
+                                  ),
+                                  label: Text(payrollActionLabel),
+                                ),
+                              ),
                             ],
-                          ),
+                          ],
                         ),
-                        const SizedBox(height: 12),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.surface1,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.surface2),
-                          ),
-                          child: ExpansionTile(
-                            key: const Key(
-                              'attendance_payroll_secondary_detail',
-                            ),
-                            initiallyExpanded: false,
-                            tilePadding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                            ),
-                            childrenPadding: const EdgeInsets.fromLTRB(
-                              14,
-                              0,
-                              14,
-                              14,
-                            ),
-                            iconColor: AppColors.textSecondary,
-                            collapsedIconColor: AppColors.textSecondary,
-                            title: Text(
-                              context.l10n.attendancePayrollSummaryTitle,
-                              style: GoogleFonts.notoSansKr(
-                                color: AppColors.textPrimary,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            subtitle: Text(
-                              payrollRequiresUnlock
-                                  ? context
-                                        .l10n
-                                        .attendancePayrollSummaryUnlockSubtitle
-                                  : context
-                                        .l10n
-                                        .attendancePayrollSummaryReadySubtitle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.notoSansKr(
-                                color: AppColors.textSecondary,
-                                fontSize: 12,
-                              ),
-                            ),
-                            children: [
-                              if (_isPayrollLoading)
-                                const Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 12),
-                                  child: Center(
-                                    child: CircularProgressIndicator(
-                                      color: AppColors.amber500,
-                                    ),
-                                  ),
-                                )
-                              else ...[
-                                _summaryMetricRow(
-                                  context.l10n.attendanceTotalWorkedHours,
-                                  context.l10n.attendanceHoursValue(
-                                    totalHours.toStringAsFixed(1),
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                _summaryMetricRow(
-                                  context.l10n.attendanceOvertimeHours,
-                                  context.l10n.attendanceHoursValue(
-                                    overtimeHours.toStringAsFixed(1),
-                                  ),
-                                  tone: overtimeHours > 0
-                                      ? PosColors.warning
-                                      : PosColors.textPrimary,
-                                ),
-                                const SizedBox(height: 10),
-                                _summaryMetricRow(
-                                  context.l10n.attendanceEstimatedPayroll,
-                                  '₫${currency.format(estimatedPayroll)}',
-                                  tone: PosColors.accent,
-                                ),
-                                const SizedBox(height: 10),
-                                _summaryMetricRow(
-                                  context.l10n.attendanceAccumulatedPayroll,
-                                  selectedPayroll == null
-                                      ? context.l10n.attendancePreviewRequired
-                                      : '₫${currency.format(selectedPayroll.totalAmount)}',
-                                  tone: selectedPayroll == null
-                                      ? PosColors.textSecondary
-                                      : PosColors.accent,
-                                ),
-                                const SizedBox(height: 14),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: FilledButton.icon(
-                                    onPressed: payrollAction,
-                                    icon: Icon(
-                                      payrollRequiresUnlock
-                                          ? Icons.lock_open_rounded
-                                          : filteredPayrolls.isEmpty
-                                          ? Icons.payments_outlined
-                                          : Icons.download_rounded,
-                                      size: 18,
-                                    ),
-                                    label: Text(payrollActionLabel),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
+                      ),
+                    ],
+                  ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _compactAttendanceChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: PosColors.panelMuted,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: PosColors.border),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: PosColors.textSecondary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _attendanceDetailBody({
+    required bool scrollable,
+    required Widget child,
+  }) {
+    if (!scrollable) {
+      return child;
+    }
+
+    return Expanded(child: SingleChildScrollView(child: child));
   }
 
   Widget _buildAttendanceSecondarySignals({required int photoCaptureCount}) {

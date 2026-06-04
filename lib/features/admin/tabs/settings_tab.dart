@@ -8,6 +8,7 @@ import '../../../core/i18n/locale_extensions.dart';
 import '../../../core/services/pin_service.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
+import '../../../core/utils/number_input_utils.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../../widgets/pin_dialog.dart';
@@ -321,70 +322,88 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
       false => l10n.settingsSyncNeedsReview,
       null => l10n.settingsSyncUnknown,
     };
+    final header = _buildSettingsConfigurationHeader(
+      selectedCategory: selectedCategory,
+      settingsState: settingsState,
+      authState: authState,
+      printerState: printerState,
+      printerSyncLabel: printerSyncLabel,
+      storeId: storeId,
+    );
+
+    Widget settingsPanel({required bool scrollable}) => _buildSettingsPanel(
+      context: context,
+      authState: authState,
+      authUid: authUid,
+      storeId: storeId,
+      settingsState: settingsState,
+      notifier: notifier,
+      printerState: printerState,
+      printerNotifier: printerNotifier,
+      auditTraceAsync: auditTraceAsync,
+      scrollable: scrollable,
+    );
 
     return Scaffold(
       key: const Key('settings_root'),
       backgroundColor: AppColors.surface0,
-      body: ToastResponsiveBody(
-        maxWidth: 1480,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildSettingsConfigurationHeader(
-              selectedCategory: selectedCategory,
-              settingsState: settingsState,
-              authState: authState,
-              printerState: printerState,
-              printerSyncLabel: printerSyncLabel,
-              storeId: storeId,
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: settingsState.isLoading
-                  ? const Center(
+      body: LayoutBuilder(
+        builder: (context, viewport) {
+          final categoryPane = _buildCategoryPane(categories);
+
+          if (viewport.maxWidth < 1120) {
+            return ToastResponsiveScrollBody(
+              maxWidth: 1480,
+              padding: const EdgeInsets.all(16),
+              children: [
+                header,
+                const SizedBox(height: 16),
+                if (settingsState.isLoading)
+                  const SizedBox(
+                    height: 320,
+                    child: Center(
                       child: CircularProgressIndicator(
                         color: AppColors.amber500,
                       ),
-                    )
-                  : LayoutBuilder(
-                      builder: (context, constraints) {
-                        final categoryPane = _buildCategoryPane(categories);
-                        final panel = _buildSettingsPanel(
-                          context: context,
-                          authState: authState,
-                          authUid: authUid,
-                          storeId: storeId,
-                          settingsState: settingsState,
-                          notifier: notifier,
-                          printerState: printerState,
-                          printerNotifier: printerNotifier,
-                          auditTraceAsync: auditTraceAsync,
-                        );
+                    ),
+                  )
+                else ...[
+                  categoryPane,
+                  const SizedBox(height: 16),
+                  settingsPanel(scrollable: false),
+                ],
+              ],
+            );
+          }
 
-                        if (constraints.maxWidth < 1120) {
-                          return ListView(
-                            children: [
-                              categoryPane,
-                              const SizedBox(height: 16),
-                              panel,
-                            ],
-                          );
-                        }
-
-                        return Row(
+          return ToastResponsiveBody(
+            maxWidth: 1480,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                header,
+                const SizedBox(height: 16),
+                Expanded(
+                  child: settingsState.isLoading
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                            color: AppColors.amber500,
+                          ),
+                        )
+                      : Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             SizedBox(width: 240, child: categoryPane),
                             const SizedBox(width: 16),
-                            Expanded(child: panel),
+                            Expanded(child: settingsPanel(scrollable: true)),
                           ],
-                        );
-                      },
-                    ),
+                        ),
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -572,6 +591,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     required PrinterState printerState,
     required PrinterNotifier printerNotifier,
     required AsyncValue<List<Map<String, dynamic>>> auditTraceAsync,
+    required bool scrollable,
   }) {
     switch (_selectedCategory) {
       case 'permissions':
@@ -581,6 +601,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
           authUid: authUid,
           settingsState: settingsState,
           notifier: notifier,
+          scrollable: scrollable,
         );
       case 'payment':
         return _buildPaymentPanel(storeId: storeId);
@@ -590,11 +611,13 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
           printerState: printerState,
           printerNotifier: printerNotifier,
           settingsState: settingsState,
+          scrollable: scrollable,
         );
       case 'system':
         return _buildSystemPanel(
           storeId: storeId,
           auditTraceAsync: auditTraceAsync,
+          scrollable: scrollable,
         );
       case 'store':
       default:
@@ -602,18 +625,28 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
           context: context,
           settingsState: settingsState,
           notifier: notifier,
+          scrollable: scrollable,
         );
     }
+  }
+
+  Widget _settingsPanelBody({required bool scrollable, required Widget child}) {
+    if (!scrollable) {
+      return child;
+    }
+    return SingleChildScrollView(child: child);
   }
 
   Widget _buildStorePanel({
     required BuildContext context,
     required SettingsState settingsState,
     required SettingsNotifier notifier,
+    required bool scrollable,
   }) {
     return ToastWorkSurface(
       padding: const EdgeInsets.all(18),
-      child: SingleChildScrollView(
+      child: _settingsPanelBody(
+        scrollable: scrollable,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -712,9 +745,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                             perPersonCharge:
                                 (_operationMode == 'buffet' ||
                                     _operationMode == 'hybrid')
-                                ? double.tryParse(
-                                    _perPersonController.text.trim(),
-                                  )
+                                ? parseDecimalInput(_perPersonController.text)
                                 : null,
                           );
                           if (!context.mounted) return;
@@ -748,10 +779,12 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     required String? authUid,
     required SettingsState settingsState,
     required SettingsNotifier notifier,
+    required bool scrollable,
   }) {
     return ToastWorkSurface(
       padding: const EdgeInsets.all(18),
-      child: SingleChildScrollView(
+      child: _settingsPanelBody(
+        scrollable: scrollable,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -919,10 +952,12 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     required PrinterState printerState,
     required PrinterNotifier printerNotifier,
     required SettingsState settingsState,
+    required bool scrollable,
   }) {
     return ToastWorkSurface(
       padding: const EdgeInsets.all(18),
-      child: SingleChildScrollView(
+      child: _settingsPanelBody(
+        scrollable: scrollable,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1065,10 +1100,12 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
   Widget _buildSystemPanel({
     required String? storeId,
     required AsyncValue<List<Map<String, dynamic>>> auditTraceAsync,
+    required bool scrollable,
   }) {
     return ToastWorkSurface(
       padding: const EdgeInsets.all(18),
-      child: SingleChildScrollView(
+      child: _settingsPanelBody(
+        scrollable: scrollable,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

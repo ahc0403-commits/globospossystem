@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,10 +9,18 @@ import 'package:intl/intl.dart';
 import '../../../core/i18n/locale_extensions.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
+import '../../../core/utils/number_input_utils.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
 import '../../qc/qc_provider.dart';
+
+const _qcDefaultPageMinHeight = 720.0;
+const _qcWeeklyBoardPageMinHeight = 940.0;
+const _qcWeeklyBoardScrollPadding = EdgeInsets.only(bottom: 96);
+const _qcWeeklyBoardScrollPhysics = AlwaysScrollableScrollPhysics(
+  parent: ClampingScrollPhysics(),
+);
 
 class QcTab extends ConsumerStatefulWidget {
   const QcTab({super.key});
@@ -100,6 +108,9 @@ class _QcTabState extends ConsumerState<QcTab>
       backgroundColor: PosColors.canvas,
       body: ToastResponsiveBody(
         maxWidth: 1460,
+        minHeight: _selectedSurfaceIndex == 1
+            ? _qcWeeklyBoardPageMinHeight
+            : _qcDefaultPageMinHeight,
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -630,7 +641,8 @@ class _TemplateManagementTab extends ConsumerWidget {
       text: '${initial?['sort_order'] ?? 0}',
     );
 
-    File? selectedFile;
+    XFile? selectedFile;
+    Uint8List? selectedPreviewBytes;
     String? existingUrl = initial?['criteria_photo_url']?.toString();
 
     await showModalBottomSheet<void>(
@@ -693,8 +705,10 @@ class _TemplateManagementTab extends ConsumerWidget {
                             source: ImageSource.gallery,
                           );
                           if (picked == null) return;
+                          final previewBytes = await picked.readAsBytes();
                           setModalState(() {
-                            selectedFile = File(picked.path);
+                            selectedFile = picked;
+                            selectedPreviewBytes = previewBytes;
                             existingUrl = null;
                           });
                         },
@@ -705,8 +719,8 @@ class _TemplateManagementTab extends ConsumerWidget {
                       if (selectedFile != null)
                         ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: Image.file(
-                            selectedFile!,
+                          child: Image.memory(
+                            selectedPreviewBytes!,
                             width: 40,
                             height: 40,
                             fit: BoxFit.cover,
@@ -732,7 +746,7 @@ class _TemplateManagementTab extends ConsumerWidget {
                         final category = categoryController.text.trim();
                         final criteria = criteriaController.text.trim();
                         final sortOrder =
-                            int.tryParse(sortController.text.trim()) ?? 0;
+                            parseIntInput(sortController.text) ?? 0;
                         if (category.isEmpty || criteria.isEmpty) return;
 
                         String? photoUrl = existingUrl;
@@ -1000,6 +1014,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                   else
                     Expanded(
                       child: Row(
+                        key: const Key('qc_weekly_board_table'),
                         children: [
                           SizedBox(
                             width: 160,
@@ -1022,6 +1037,9 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                                 ),
                                 Expanded(
                                   child: ListView.builder(
+                                    primary: false,
+                                    physics: _qcWeeklyBoardScrollPhysics,
+                                    padding: _qcWeeklyBoardScrollPadding,
                                     itemCount: rows.length,
                                     itemBuilder: (context, index) {
                                       final row = rows[index];
@@ -1078,6 +1096,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                           Expanded(
                             child: SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
+                              physics: _qcWeeklyBoardScrollPhysics,
                               child: SizedBox(
                                 width: 64.0 * 7,
                                 child: Column(
@@ -1127,6 +1146,9 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                                     ),
                                     Expanded(
                                       child: ListView.builder(
+                                        primary: false,
+                                        physics: _qcWeeklyBoardScrollPhysics,
+                                        padding: _qcWeeklyBoardScrollPadding,
                                         itemCount: rows.length,
                                         itemBuilder: (context, index) {
                                           final row = rows[index];

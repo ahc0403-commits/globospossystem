@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../main.dart';
+import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/einvoice_service.dart';
+import '../../main.dart';
 import '../../widgets/error_toast.dart';
 
 enum _BuyerLookupState { idle, cacheHit, wt09Hit, manualFallback }
@@ -66,7 +67,7 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
         _emailCcCtrl.text = cached['receiver_email_cc'] ?? '';
         setState(() {
           _lookupState = _BuyerLookupState.cacheHit;
-          _lookupNote = 'Known buyer loaded from store or tax-entity cache.';
+          _lookupNote = context.l10n.redInvoiceCacheHitNote;
         });
         return;
       }
@@ -81,7 +82,7 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
         }
         setState(() {
           _lookupState = _BuyerLookupState.wt09Hit;
-          _lookupNote = 'WT09 company lookup filled legal name and address.';
+          _lookupNote = context.l10n.redInvoiceWt09HitNote;
         });
         return;
       }
@@ -92,8 +93,7 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
         setState(() {
           if (_lookupState == _BuyerLookupState.idle) {
             _lookupState = _BuyerLookupState.manualFallback;
-            _lookupNote =
-                'No cache or live WT09 match. Continue with manual entry.';
+            _lookupNote = context.l10n.redInvoiceManualFallbackNote;
           }
           _isLookingUp = false;
         });
@@ -119,7 +119,9 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
       if (!mounted) return;
       Navigator.of(context).pop(true); // true = submitted
     } catch (e) {
-      if (mounted) showErrorToast(context, 'Failed to request red invoice: $e');
+      if (mounted) {
+        showErrorToast(context, context.l10n.redInvoiceRequestFailed('$e'));
+      }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -127,6 +129,7 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return AlertDialog(
       backgroundColor: AppColors.surface1,
       contentPadding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
@@ -135,7 +138,7 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
           const Icon(Icons.receipt_long, color: AppColors.amber500, size: 22),
           const SizedBox(width: 8),
           Text(
-            'Red Invoice (Hóa Đơn Đỏ)',
+            l10n.redInvoiceTitle,
             style: GoogleFonts.notoSansKr(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
@@ -156,7 +159,7 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Text(
-        'Does this customer need a red invoice?',
+        context.l10n.redInvoicePrompt,
         style: GoogleFonts.notoSansKr(
           color: AppColors.textSecondary,
           fontSize: 15,
@@ -170,7 +173,7 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
       TextButton(
         onPressed: () => Navigator.of(context).pop(false),
         child: Text(
-          'No',
+          context.l10n.no,
           style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
         ),
       ),
@@ -182,7 +185,7 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
         ),
         icon: const Icon(Icons.receipt_long, size: 16),
         label: Text(
-          'Yes, issue invoice',
+          context.l10n.redInvoiceIssueInvoice,
           style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w700),
         ),
       ),
@@ -190,6 +193,7 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
   }
 
   Widget _buildForm() {
+    final l10n = context.l10n;
     return Form(
       key: _formKey,
       child: Column(
@@ -197,13 +201,13 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 8),
-          _label('Tax Code'),
+          _label(l10n.redInvoiceTaxCode),
           Row(
             children: [
               Expanded(
                 child: _field(
                   controller: _taxCodeCtrl,
-                  hint: 'e.g. 0312345678',
+                  hint: l10n.redInvoiceTaxCodeHint,
                   required: false,
                   onFieldSubmitted: _onTaxCodeSubmitted,
                 ),
@@ -230,7 +234,7 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
                           foregroundColor: AppColors.textSecondary,
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                         ),
-                        child: const Text('Lookup'),
+                        child: Text(l10n.lookup),
                       ),
               ),
             ],
@@ -238,37 +242,39 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
           const SizedBox(height: 10),
           _lookupStatusPanel(),
           const SizedBox(height: 10),
-          _label('Company Name'),
+          _label(l10n.redInvoiceCompanyName),
           _field(
             controller: _companyCtrl,
-            hint: 'GLOBOSVN Co., Ltd.',
+            hint: l10n.redInvoiceCompanyNameHint,
             required: false,
           ),
           const SizedBox(height: 10),
-          _label('Address'),
+          _label(l10n.address),
           _field(
             controller: _addressCtrl,
-            hint: 'Registered address',
+            hint: l10n.redInvoiceAddressHint,
             required: false,
           ),
           const SizedBox(height: 10),
-          _label('Email *'),
+          _label(l10n.redInvoiceEmailRequiredLabel),
           _field(
             controller: _emailCtrl,
-            hint: 'invoice@company.com',
+            hint: l10n.redInvoiceEmailHint,
             required: true,
             keyboardType: TextInputType.emailAddress,
             validator: (v) {
-              if (v == null || v.trim().isEmpty) return 'Email is required';
-              if (!v.contains('@')) return 'Invalid email';
+              if (v == null || v.trim().isEmpty) {
+                return l10n.redInvoiceEmailRequired;
+              }
+              if (!v.contains('@')) return l10n.redInvoiceInvalidEmail;
               return null;
             },
           ),
           const SizedBox(height: 10),
-          _label('CC Email (optional)'),
+          _label(l10n.redInvoiceCcEmailOptional),
           _field(
             controller: _emailCcCtrl,
-            hint: 'cc@company.com',
+            hint: l10n.redInvoiceCcEmailHint,
             required: false,
             keyboardType: TextInputType.emailAddress,
           ),
@@ -285,7 +291,7 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
             ? null
             : () => setState(() => _showForm = false),
         child: Text(
-          'Back',
+          context.l10n.back,
           style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
         ),
       ),
@@ -305,7 +311,7 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
                 ),
               )
             : Text(
-                'Submit',
+                context.l10n.redInvoiceSubmit,
                 style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w700),
               ),
       ),
@@ -313,6 +319,7 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
   }
 
   Widget _lookupStatusPanel() {
+    final l10n = context.l10n;
     if (_lookupState == _BuyerLookupState.idle) {
       return Container(
         width: double.infinity,
@@ -323,7 +330,7 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
           border: Border.all(color: AppColors.surface2),
         ),
         child: Text(
-          'Enter a tax code to check store cache first, then WT09 if nothing is cached.',
+          l10n.redInvoiceLookupIdle,
           style: GoogleFonts.notoSansKr(
             color: AppColors.textSecondary,
             fontSize: 12,
@@ -337,19 +344,23 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
       _BuyerLookupState.cacheHit => (
         AppColors.statusAvailable,
         Icons.inventory_2_outlined,
-        'Cache Match',
+        l10n.redInvoiceCacheMatch,
       ),
       _BuyerLookupState.wt09Hit => (
         AppColors.amber500,
         Icons.cloud_sync_outlined,
-        'WT09 Auto-Fill',
+        l10n.redInvoiceWt09AutoFill,
       ),
       _BuyerLookupState.manualFallback => (
         AppColors.statusOccupied,
         Icons.edit_note,
-        'Manual Entry',
+        l10n.redInvoiceManualEntry,
       ),
-      _ => (AppColors.textSecondary, Icons.info_outline, 'Buyer Lookup'),
+      _ => (
+        AppColors.textSecondary,
+        Icons.info_outline,
+        l10n.redInvoiceBuyerLookup,
+      ),
     };
 
     return Container(

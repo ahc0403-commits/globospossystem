@@ -51,6 +51,94 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
       surfaceMeta.length - 1,
     );
     final selectedSurface = surfaceMeta[safeSurfaceIndex];
+    final contentChildren = <Widget>[
+      _HeroBanner(
+        role: auth.role,
+        activeStoreName: activeStoreName,
+        storeCount: auth.accessibleStores.length,
+      ),
+      const SizedBox(height: 18),
+      if (state.isLoading && state.data == null)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 80),
+          child: Center(
+            child: CircularProgressIndicator(color: PosColors.accent),
+          ),
+        )
+      else if (state.error != null && state.data == null)
+        _ErrorCard(message: state.error!, onRetry: notifier.load)
+      else if (state.data != null) ...[
+        if (state.data!.salesWarningCode != null) ...[
+          _WarningSurface(
+            message: _localizedSalesWarning(context, state.data!),
+          ),
+          const SizedBox(height: 18),
+        ],
+        _KpiGrid(data: state.data!.kpi),
+        const SizedBox(height: 18),
+        _WorkflowSurface(
+          title: l10n.photoOpsPriorityQueueTitle,
+          subtitle: l10n.photoOpsPriorityQueueSubtitle,
+          kind: PhotoOpsSurfaceKind.priority,
+          child: _PriorityList(
+            items: _buildPriorityItems(context, state.data!.kpi),
+          ),
+        ),
+        const SizedBox(height: 18),
+        _WorkflowSurface(
+          title: l10n.photoOpsSalesTitle,
+          subtitle: l10n.photoOpsSalesSubtitle,
+          kind: PhotoOpsSurfaceKind.backOffice,
+          child: _SalesList(rows: state.data!.salesSummary),
+        ),
+        const SizedBox(height: 18),
+        _WorkflowSurface(
+          title: l10n.photoOpsAttendanceTitle,
+          subtitle: l10n.photoOpsAttendanceSubtitle,
+          kind: PhotoOpsSurfaceKind.live,
+          child: _AttendanceList(rows: state.data!.recentAttendance),
+        ),
+        const SizedBox(height: 18),
+        _WorkflowSurface(
+          title: l10n.photoOpsInventoryTitle,
+          subtitle: l10n.photoOpsInventorySubtitle,
+          kind: PhotoOpsSurfaceKind.priority,
+          child: _InventoryList(rows: state.data!.inventoryAlerts),
+        ),
+        const SizedBox(height: 18),
+        _WorkflowSurface(
+          title: l10n.photoOpsSalaryTitle,
+          subtitle: l10n.photoOpsSalarySubtitle,
+          kind: PhotoOpsSurfaceKind.backOffice,
+          child: _PayrollList(rows: state.data!.payrollPreview),
+        ),
+        const SizedBox(height: 18),
+        _WorkflowSurface(
+          title: l10n.photoOpsStoreScopeTitle,
+          subtitle: l10n.photoOpsStoreScopeSubtitle,
+          kind: PhotoOpsSurfaceKind.backOffice,
+          child: _StoreScopeList(
+            stores: auth.accessibleStores,
+            activeStoreId: activeStoreId,
+          ),
+        ),
+      ],
+    ];
+
+    Widget surface({required Widget child}) {
+      return ToastOperationalQueuePane(
+        title: selectedSurface.title,
+        subtitle: selectedSurface.subtitle,
+        headerBottom: _PhotoOpsHeaderSummary(
+          selectedSurface: selectedSurface,
+          role: auth.role,
+          activeStoreName: activeStoreName,
+          storeCount: auth.accessibleStores.length,
+          data: state.data,
+        ),
+        child: child,
+      );
+    }
 
     return KeyedSubtree(
       key: const Key('photo_ops_root'),
@@ -98,102 +186,37 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
             key: const Key('photo_ops_active_store_badge'),
           ),
         ),
-        child: ToastResponsiveBody(
-          maxWidth: 1360,
-          child: ToastOperationalQueuePane(
-            title: selectedSurface.title,
-            subtitle: selectedSurface.subtitle,
-            headerBottom: _PhotoOpsHeaderSummary(
-              selectedSurface: selectedSurface,
-              role: auth.role,
-              activeStoreName: activeStoreName,
-              storeCount: auth.accessibleStores.length,
-              data: state.data,
-            ),
-            child: RefreshIndicator(
-              onRefresh: notifier.load,
-              color: PosColors.accent,
-              child: ListView(
-                children: [
-                  _HeroBanner(
-                    role: auth.role,
-                    activeStoreName: activeStoreName,
-                    storeCount: auth.accessibleStores.length,
-                  ),
-                  const SizedBox(height: 18),
-                  if (state.isLoading && state.data == null)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 80),
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          color: PosColors.accent,
-                        ),
-                      ),
-                    )
-                  else if (state.error != null && state.data == null)
-                    _ErrorCard(message: state.error!, onRetry: notifier.load)
-                  else if (state.data != null) ...[
-                    if (state.data!.salesWarningCode != null) ...[
-                      _WarningSurface(
-                        message: _localizedSalesWarning(context, state.data!),
-                      ),
-                      const SizedBox(height: 18),
-                    ],
-                    _KpiGrid(data: state.data!.kpi),
-                    const SizedBox(height: 18),
-                    _WorkflowSurface(
-                      title: l10n.photoOpsPriorityQueueTitle,
-                      subtitle: l10n.photoOpsPriorityQueueSubtitle,
-                      kind: PhotoOpsSurfaceKind.priority,
-                      child: _PriorityList(
-                        items: _buildPriorityItems(context, state.data!.kpi),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    _WorkflowSurface(
-                      title: l10n.photoOpsSalesTitle,
-                      subtitle: l10n.photoOpsSalesSubtitle,
-                      kind: PhotoOpsSurfaceKind.backOffice,
-                      child: _SalesList(rows: state.data!.salesSummary),
-                    ),
-                    const SizedBox(height: 18),
-                    _WorkflowSurface(
-                      title: l10n.photoOpsAttendanceTitle,
-                      subtitle: l10n.photoOpsAttendanceSubtitle,
-                      kind: PhotoOpsSurfaceKind.live,
-                      child: _AttendanceList(
-                        rows: state.data!.recentAttendance,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    _WorkflowSurface(
-                      title: l10n.photoOpsInventoryTitle,
-                      subtitle: l10n.photoOpsInventorySubtitle,
-                      kind: PhotoOpsSurfaceKind.priority,
-                      child: _InventoryList(rows: state.data!.inventoryAlerts),
-                    ),
-                    const SizedBox(height: 18),
-                    _WorkflowSurface(
-                      title: l10n.photoOpsSalaryTitle,
-                      subtitle: l10n.photoOpsSalarySubtitle,
-                      kind: PhotoOpsSurfaceKind.backOffice,
-                      child: _PayrollList(rows: state.data!.payrollPreview),
-                    ),
-                    const SizedBox(height: 18),
-                    _WorkflowSurface(
-                      title: l10n.photoOpsStoreScopeTitle,
-                      subtitle: l10n.photoOpsStoreScopeSubtitle,
-                      kind: PhotoOpsSurfaceKind.backOffice,
-                      child: _StoreScopeList(
-                        stores: auth.accessibleStores,
-                        activeStoreId: activeStoreId,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 1120) {
+              return RefreshIndicator(
+                onRefresh: notifier.load,
+                color: PosColors.accent,
+                child: ToastResponsiveScrollBody(
+                  maxWidth: 1360,
+                  children: [
+                    surface(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: contentChildren,
                       ),
                     ),
                   ],
-                ],
+                ),
+              );
+            }
+
+            return ToastResponsiveBody(
+              maxWidth: 1360,
+              child: surface(
+                child: RefreshIndicator(
+                  onRefresh: notifier.load,
+                  color: PosColors.accent,
+                  child: ListView(children: contentChildren),
+                ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
@@ -275,16 +298,18 @@ class _PhotoOpsHeaderSummary extends StatelessWidget {
             children: [
               ToastSelectedContextHeader(
                 title: selectedSurface.title,
-                subtitle:
-                    'Photo Ops keeps HQ aware of live store health without replacing the store-level workflow.',
-                urgentReason: _surfaceUrgencyCopy(selectedSurface.kind),
+                subtitle: context.l10n.photoOpsContextSubtitle,
+                urgentReason: _surfaceUrgencyCopy(
+                  context,
+                  selectedSurface.kind,
+                ),
                 noteColor: _surfaceNoteColor(selectedSurface.kind),
                 noteBackgroundColor: _surfaceNoteBackground(
                   selectedSurface.kind,
                 ),
                 noteIcon: _surfaceNoteIcon(selectedSurface.kind),
                 trailing: ToastStatusBadge(
-                  label: _surfaceLabel(selectedSurface.kind),
+                  label: _surfaceLabel(context, selectedSurface.kind),
                   color: _surfaceTone(selectedSurface.kind),
                   compact: true,
                 ),
@@ -293,9 +318,15 @@ class _PhotoOpsHeaderSummary extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
                 child: ToastMetricStrip(
                   metrics: [
-                    ToastMetric(label: 'Role', value: role ?? '-'),
-                    ToastMetric(label: 'Active Store', value: activeStoreName),
-                    ToastMetric(label: 'Scope', value: '$storeCount stores'),
+                    ToastMetric(label: context.l10n.role, value: role ?? '-'),
+                    ToastMetric(
+                      label: context.l10n.photoOpsMetaActiveStore,
+                      value: activeStoreName,
+                    ),
+                    ToastMetric(
+                      label: context.l10n.photoOpsMetaAccessibleStores,
+                      value: context.l10n.photoOpsStoreCount(storeCount),
+                    ),
                   ],
                 ),
               ),
@@ -307,25 +338,25 @@ class _PhotoOpsHeaderSummary extends StatelessWidget {
           ToastMetricStrip(
             metrics: [
               ToastMetric(
-                label: 'Sales',
+                label: context.l10n.photoOpsKpiSales,
                 value: '${data!.kpi.activeStoreSales.toStringAsFixed(0)} VND',
               ),
               ToastMetric(
-                label: 'Attendance',
+                label: context.l10n.photoOpsKpiAttendance,
                 value: '${data!.kpi.activeAttendanceEvents}',
                 tone: data!.kpi.activeAttendanceEvents > 0
                     ? PosColors.accent
                     : PosColors.textSecondary,
               ),
               ToastMetric(
-                label: 'Inventory Alerts',
+                label: context.l10n.photoOpsKpiInventoryAlerts,
                 value: '${data!.kpi.activeInventoryAlerts}',
                 tone: data!.kpi.activeInventoryAlerts > 0
                     ? PosColors.warning
                     : PosColors.textSecondary,
               ),
               ToastMetric(
-                label: 'Payroll Preview',
+                label: context.l10n.photoOpsKpiPayrollEstimate,
                 value:
                     '${data!.kpi.activePayrollEstimate.toStringAsFixed(0)} VND',
               ),
@@ -632,7 +663,7 @@ class _WorkflowSurface extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 ToastStatusBadge(
-                  label: _surfaceLabel(kind),
+                  label: _surfaceLabel(context, kind),
                   color: _surfaceTone(kind),
                   compact: true,
                 ),
@@ -646,22 +677,21 @@ class _WorkflowSurface extends StatelessWidget {
   }
 }
 
-String _surfaceLabel(PhotoOpsSurfaceKind kind) {
+String _surfaceLabel(BuildContext context, PhotoOpsSurfaceKind kind) {
+  final l10n = context.l10n;
   return switch (kind) {
-    PhotoOpsSurfaceKind.priority => 'Priority Queue',
-    PhotoOpsSurfaceKind.live => 'Live Ops',
-    PhotoOpsSurfaceKind.backOffice => 'Back Office',
+    PhotoOpsSurfaceKind.priority => l10n.photoOpsPriorityQueueTitle,
+    PhotoOpsSurfaceKind.live => l10n.photoOpsLiveOps,
+    PhotoOpsSurfaceKind.backOffice => l10n.photoOpsBackOffice,
   };
 }
 
-String _surfaceUrgencyCopy(PhotoOpsSurfaceKind kind) {
+String _surfaceUrgencyCopy(BuildContext context, PhotoOpsSurfaceKind kind) {
+  final l10n = context.l10n;
   return switch (kind) {
-    PhotoOpsSurfaceKind.priority =>
-      'Use this lane to triage exceptions and the next cross-store follow-up item.',
-    PhotoOpsSurfaceKind.live =>
-      'This lane reflects current store activity that may require immediate awareness.',
-    PhotoOpsSurfaceKind.backOffice =>
-      'This lane is supportive reporting and review after urgent queues are stable.',
+    PhotoOpsSurfaceKind.priority => l10n.photoOpsPriorityUrgency,
+    PhotoOpsSurfaceKind.live => l10n.photoOpsLiveUrgency,
+    PhotoOpsSurfaceKind.backOffice => l10n.photoOpsBackOfficeUrgency,
   };
 }
 

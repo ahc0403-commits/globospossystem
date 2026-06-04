@@ -1,8 +1,10 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/constants/app_constants.dart';
 import 'core/i18n/locale_controller.dart';
@@ -14,10 +16,16 @@ export 'core/ui/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Web debug runs still need the public Supabase config to boot locally.
-  // Only the checked-in `.env` is loaded on web; native keeps its local-first
-  // fallback order.
-  final envCandidates = kIsWeb
+  // Prefer local env files when they are available, then fall back to
+  // dart-defines. Web deployments inject Supabase config via dart-define so
+  // local .env files are not bundled into the release asset set.
+  const hasWebDartDefinedSupabaseConfig =
+      kIsWeb &&
+      String.fromEnvironment('SUPABASE_URL') != '' &&
+      String.fromEnvironment('SUPABASE_ANON_KEY') != '';
+  final envCandidates = hasWebDartDefinedSupabaseConfig
+      ? const <String>[]
+      : kIsWeb
       ? const ['.env']
       : const ['.env.local', '.env'];
   for (final fileName in envCandidates) {
@@ -32,6 +40,7 @@ Future<void> main() async {
     url: AppConstants.supabaseUrl,
     anonKey: AppConstants.supabaseAnonKey,
   );
+  await _warmUpWebKoreanFonts();
 
   final container = ProviderContainer();
   final router = buildAppRouter(container);
@@ -42,6 +51,24 @@ Future<void> main() async {
       child: GlobosPosApp(router: router),
     ),
   );
+}
+
+Future<void> _warmUpWebKoreanFonts() async {
+  if (!kIsWeb) {
+    return;
+  }
+
+  try {
+    GoogleFonts.notoSansKr(fontWeight: FontWeight.w400);
+    GoogleFonts.notoSansKr(fontWeight: FontWeight.w500);
+    GoogleFonts.notoSansKr(fontWeight: FontWeight.w600);
+    GoogleFonts.notoSansKr(fontWeight: FontWeight.w700);
+    GoogleFonts.notoSansKr(fontWeight: FontWeight.w800);
+    GoogleFonts.notoSansKr(fontWeight: FontWeight.w900);
+    await GoogleFonts.pendingFonts().timeout(const Duration(seconds: 10));
+  } catch (_) {
+    // Do not block store operation if the font CDN is unreachable.
+  }
 }
 
 /// Supabase client 전역 접근용
@@ -59,6 +86,7 @@ class GlobosPosApp extends ConsumerWidget {
       title: 'GLOBOS POS',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.build(),
+      scrollBehavior: const GlobosScrollBehavior(),
       locale: localeState.locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [
@@ -70,4 +98,17 @@ class GlobosPosApp extends ConsumerWidget {
       routerConfig: router,
     );
   }
+}
+
+class GlobosScrollBehavior extends MaterialScrollBehavior {
+  const GlobosScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => const {
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.trackpad,
+    PointerDeviceKind.stylus,
+    PointerDeviceKind.unknown,
+  };
 }

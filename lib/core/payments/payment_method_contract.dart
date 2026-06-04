@@ -53,11 +53,32 @@ bool isSupportedPaymentMethodInput(String method) {
 }
 
 bool requiresPaymentProof(String method) {
-  return !isServicePaymentMethod(method) && method != paymentMethodCash;
+  final normalized = normalizePaymentMethodInput(method);
+  return !isServicePaymentMethod(normalized) && normalized != paymentMethodCash;
 }
 
 String normalizePaymentMethodForStorage(String method) {
   return isServicePaymentMethod(method) ? paymentMethodOther : method;
+}
+
+String normalizePaymentMethodInput(String method) {
+  final trimmed = method.trim();
+  switch (trimmed.toLowerCase()) {
+    case 'cash':
+      return paymentMethodCash;
+    case 'card':
+    case 'creditcard':
+    case 'credit_card':
+      return paymentMethodCreditCard;
+    case 'pay':
+    case 'epay':
+    case 'e_pay':
+      return paymentMethodOther;
+    case 'service':
+      return paymentMethodService;
+    default:
+      return trimmed.toUpperCase();
+  }
 }
 
 String paymentMethodDisplayLabel(String method) {

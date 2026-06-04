@@ -32,6 +32,8 @@ class PosTable {
   final int layoutSortOrder;
 
   bool get isOccupied => status.toLowerCase() == 'occupied';
+  bool get isReserved => status.toLowerCase() == 'reserved';
+  bool get isAvailable => status.toLowerCase() == 'available';
 
   Rect get layoutRect => Rect.fromLTWH(layoutX, layoutY, layoutW, layoutH);
 

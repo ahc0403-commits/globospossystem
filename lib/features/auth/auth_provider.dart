@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
     show AuthChangeEvent, AuthException, PostgrestException, User;
 import '../../core/services/navigation_history_service.dart';
+import '../../core/utils/role_routes.dart';
 import '../../main.dart';
 import 'auth_state.dart';
 
@@ -13,6 +14,15 @@ const authErrorProfileLoadFailed = 'auth/profile-load-failed';
 const authErrorProfileMissing = 'auth/profile-missing';
 const authErrorProfilePermissionDenied = 'auth/profile-permission-denied';
 const authErrorProfileLookupFailedPrefix = 'auth/profile-lookup-failed:';
+const authErrorPrivacyConsentFailed = 'auth/privacy-consent-failed';
+const authErrorPrivacyConsentFailedPrefix = 'auth/privacy-consent-failed:';
+const authErrorPrivacyConsentPermissionDenied =
+    'auth/privacy-consent-permission-denied';
+const authErrorPrivacyConsentProfileMissing =
+    'auth/privacy-consent-profile-missing';
+const authErrorPrivacyConsentSetupMissing =
+    'auth/privacy-consent-setup-missing';
+const privacyConsentDocumentVersion = 'vn-pdpl-2026-01';
 
 class AuthNotifier extends StateNotifier<PosAuthState> {
   AuthNotifier() : super(const PosAuthState()) {
@@ -74,6 +84,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         primaryStoreId: primaryStoreId,
         stores: stores,
       );
+      final hasPrivacyConsent = await _hasAcceptedCurrentPrivacyConsent();
 
       state = state.copyWith(
         isLoading: false,
@@ -83,20 +94,12 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         primaryStoreId: primaryStoreId,
         accessibleStores: stores,
         extraPermissions: extraPermissions,
+        privacyConsentRequired: !hasPrivacyConsent,
         clearError: true,
       );
 
       final role = data['role'] as String?;
-      final homeRoute = switch (role) {
-        'super_admin' => '/super-admin',
-        'photo_objet_master' || 'photo_objet_store_admin' => '/photo-ops',
-        'brand_admin' || 'store_admin' => '/admin',
-        'admin' => '/admin',
-        'waiter' => '/waiter',
-        'kitchen' => '/kitchen',
-        'cashier' => '/cashier',
-        _ => '/login',
-      };
+      final homeRoute = homeRouteForRole(role);
       NavigationHistoryService.instance.push(homeRoute);
     } on PostgrestException catch (error) {
       await _handleProfileLoadError(error);
@@ -166,6 +169,34 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     await supabase.auth.signOut();
     NavigationHistoryService.instance.clear();
     state = const PosAuthState();
+  }
+
+  Future<void> acceptPrivacyConsent({required String localeName}) async {
+    if (state.user == null) return;
+
+    state = state.copyWith(isPrivacyConsentSubmitting: true, clearError: true);
+
+    try {
+      await supabase.rpc(
+        'accept_my_privacy_consent',
+        params: {'p_consent_locale': localeName},
+      );
+      state = state.copyWith(
+        isPrivacyConsentSubmitting: false,
+        privacyConsentRequired: false,
+        clearError: true,
+      );
+      final role = state.role;
+      if (role != null) {
+        NavigationHistoryService.instance.push(homeRouteForRole(role));
+      }
+    } catch (error) {
+      state = state.copyWith(
+        isPrivacyConsentSubmitting: false,
+        privacyConsentRequired: true,
+        errorMessage: _privacyConsentErrorMessage(error),
+      );
+    }
   }
 
   Future<void> setActiveStore(String storeId) async {
@@ -298,6 +329,47 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     }
 
     return stores.first.id;
+  }
+
+  Future<bool> _hasAcceptedCurrentPrivacyConsent() async {
+    try {
+      final accepted = await supabase.rpc(
+        'has_accepted_current_privacy_consent',
+      );
+      return accepted == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String _privacyConsentErrorMessage(Object error) {
+    if (error is PostgrestException) {
+      final code = error.code?.toUpperCase() ?? '';
+      final message = error.message.toUpperCase();
+
+      if (code == 'PGRST202' ||
+          code == '42P01' ||
+          message.contains('ACCEPT_MY_PRIVACY_CONSENT') ||
+          message.contains('HAS_ACCEPTED_CURRENT_PRIVACY_CONSENT') ||
+          message.contains('USER_PRIVACY_CONSENTS') ||
+          message.contains('SCHEMA CACHE')) {
+        return authErrorPrivacyConsentSetupMissing;
+      }
+
+      if (message.contains('PRIVACY_CONSENT_USER_REQUIRED')) {
+        return authErrorPrivacyConsentProfileMissing;
+      }
+
+      if (code == '42501' ||
+          message.contains('PERMISSION') ||
+          message.contains('ROW-LEVEL SECURITY')) {
+        return authErrorPrivacyConsentPermissionDenied;
+      }
+
+      return '$authErrorPrivacyConsentFailedPrefix ${error.message}';
+    }
+
+    return authErrorPrivacyConsentFailed;
   }
 }
 

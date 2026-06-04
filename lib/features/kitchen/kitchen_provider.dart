@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/order_service.dart';
+import '../../core/utils/live_sync_scope.dart';
 import '../../main.dart';
 
 class KitchenItem {
@@ -114,44 +115,52 @@ class KitchenState {
 class KitchenNotifier extends StateNotifier<KitchenState> {
   KitchenNotifier() : super(const KitchenState());
 
+  static const _autoRefreshInterval = Duration(seconds: 2);
+
   RealtimeChannel? _ordersChannel;
   String? _restaurantId;
-  // RULES.md: Realtime 끊김 → 30초 폴링 자동 전환
+  // Realtime can report subscribed while table events are still delayed or
+  // filtered. Keep a lightweight safety refresh so kitchen never depends on
+  // manual reload to see waiter submissions.
   Timer? _pollTimer;
+  String? _pollStoreId;
   bool _realtimeConnected = false;
 
-  Future<void> loadOrders(String storeId) async {
+  Future<void> loadOrders(String storeId, {bool showLoading = true}) async {
     _restaurantId = storeId;
-    state = state.copyWith(isLoading: true, clearError: true);
+    if (showLoading) {
+      state = state.copyWith(isLoading: true, clearError: true);
+    }
 
     try {
       final response = await supabase
           .from('orders')
           .select(
-            'id, created_at, status, tables(table_number), order_items(id, label, quantity, status, menu_items(name))',
+            'id, created_at, status, tables(table_number), order_items(id, created_at, label, quantity, status, menu_items(name))',
           )
           .eq('restaurant_id', storeId)
           .inFilter('status', ['pending', 'confirmed', 'serving'])
-          .order('created_at', ascending: true);
+          .order('created_at', ascending: true)
+          .order('created_at', referencedTable: 'order_items', ascending: true)
+          .order('id', referencedTable: 'order_items', ascending: true);
 
       final orders = response
           .map<KitchenOrder>((row) {
             final data = Map<String, dynamic>.from(row);
             final orderItems = data['order_items'];
-            final items = (orderItems is List)
+            final itemRows = orderItems is List
                 ? orderItems
-                      .map<KitchenItem>(
-                        (item) => KitchenItem.fromJson(
-                          Map<String, dynamic>.from(item),
-                        ),
-                      )
-                      .where(
-                        (item) =>
-                            item.status != 'served' &&
-                            item.status != 'cancelled',
-                      )
+                      .map((item) => Map<String, dynamic>.from(item as Map))
                       .toList()
-                : <KitchenItem>[];
+                : <Map<String, dynamic>>[];
+            itemRows.sort(_compareOrderItemRowsByCreatedAt);
+            final items = itemRows
+                .map<KitchenItem>(KitchenItem.fromJson)
+                .where(
+                  (item) =>
+                      item.status != 'served' && item.status != 'cancelled',
+                )
+                .toList();
 
             final tableData = data['tables'];
             String tableNumber = '-';
@@ -189,27 +198,55 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
 
   Future<void> subscribeRealtime(String storeId) async {
     if (_ordersChannel != null && _restaurantId == storeId) {
+      _ensureAutoRefresh(storeId);
       return;
     }
 
     if (_ordersChannel != null) {
       await _ordersChannel!.unsubscribe();
     }
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    _pollStoreId = null;
+    _realtimeConnected = false;
 
     _restaurantId = storeId;
     _ordersChannel = supabase
-        .channel('public:kitchen_orders:$storeId')
+        .channel(LiveSyncScope.storeChannel('kitchen_orders', storeId))
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'orders',
-          callback: (_) => loadOrders(storeId),
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshKitchenOrdersFromRealtime(storeId),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
           table: 'orders',
-          callback: (_) => loadOrders(storeId),
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshKitchenOrdersFromRealtime(storeId),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'order_items',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshKitchenOrdersFromRealtime(storeId),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'order_items',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshKitchenOrdersFromRealtime(storeId),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'order_items',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshKitchenOrdersFromRealtime(storeId),
         )
         .subscribe((status, [error]) {
           // Realtime 연결 상태 추적
@@ -217,27 +254,38 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
           if (connected != _realtimeConnected) {
             _realtimeConnected = connected;
             if (connected) {
-              // Realtime 복구 → 폴링 중단
-              _pollTimer?.cancel();
-              _pollTimer = null;
+              _ensureAutoRefresh(storeId);
             } else {
-              // Realtime 끊김 → 30초 폴링 시작
-              _startPollingFallback(storeId);
+              _ensureAutoRefresh(storeId);
             }
           }
         });
-    // 구독 후 초기 연결 확인용 타이머 (5초 내 연결 안 되면 폴링 시작)
-    Future.delayed(const Duration(seconds: 5), () {
+    _ensureAutoRefresh(storeId);
+    Future.delayed(_autoRefreshInterval, () {
       if (mounted && !_realtimeConnected && _restaurantId == storeId) {
-        _startPollingFallback(storeId);
+        _ensureAutoRefresh(storeId);
       }
     });
   }
 
-  void _startPollingFallback(String storeId) {
-    if (_pollTimer != null) return; // already polling
-    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) loadOrders(storeId);
+  void _refreshKitchenOrdersFromRealtime(String storeId) {
+    if (!mounted) {
+      return;
+    }
+    unawaited(loadOrders(storeId, showLoading: false));
+  }
+
+  void _ensureAutoRefresh(String storeId) {
+    if (_pollTimer != null && _pollStoreId == storeId) {
+      return;
+    }
+
+    _pollTimer?.cancel();
+    _pollStoreId = storeId;
+    _pollTimer = Timer.periodic(_autoRefreshInterval, (_) {
+      if (mounted && _restaurantId == storeId) {
+        unawaited(loadOrders(storeId, showLoading: false));
+      }
     });
   }
 
@@ -286,9 +334,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
         storeId: storeId,
         status: newStatus,
       );
-      if (newStatus == 'served') {
-        await loadOrders(storeId);
-      }
+      await loadOrders(storeId, showLoading: false);
     } catch (error) {
       state = state.copyWith(
         orders: previous,
@@ -301,10 +347,36 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
   void dispose() {
     _pollTimer?.cancel();
     _pollTimer = null;
+    _pollStoreId = null;
     _ordersChannel?.unsubscribe();
     _ordersChannel = null;
     super.dispose();
   }
+}
+
+int _compareOrderItemRowsByCreatedAt(
+  Map<String, dynamic> left,
+  Map<String, dynamic> right,
+) {
+  final leftCreatedAt = DateTime.tryParse(left['created_at']?.toString() ?? '');
+  final rightCreatedAt = DateTime.tryParse(
+    right['created_at']?.toString() ?? '',
+  );
+
+  if (leftCreatedAt != null && rightCreatedAt != null) {
+    final createdAtComparison = leftCreatedAt.compareTo(rightCreatedAt);
+    if (createdAtComparison != 0) {
+      return createdAtComparison;
+    }
+  } else if (leftCreatedAt != null) {
+    return -1;
+  } else if (rightCreatedAt != null) {
+    return 1;
+  }
+
+  return (left['id']?.toString() ?? '').compareTo(
+    right['id']?.toString() ?? '',
+  );
 }
 
 final kitchenProvider = StateNotifierProvider<KitchenNotifier, KitchenState>(

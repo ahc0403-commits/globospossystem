@@ -4,6 +4,21 @@ import 'package:flutter_test/flutter_test.dart';
 
 String readRepoFile(String path) => File(path).readAsStringSync();
 
+const arbFiles = [
+  'lib/l10n/app_en.arb',
+  'lib/l10n/app_ko.arb',
+  'lib/l10n/app_vi.arb',
+];
+
+List<String> readTopLevelArbKeys(String path) {
+  final keyPattern = RegExp(r'^  "([^"]+)":');
+  return File(path)
+      .readAsLinesSync()
+      .map((line) => keyPattern.firstMatch(line)?.group(1))
+      .whereType<String>()
+      .toList();
+}
+
 void main() {
   test('main wires generated localizations and locale provider', () {
     final mainFile = readRepoFile('lib/main.dart');
@@ -36,5 +51,35 @@ void main() {
     expect(File('lib/l10n/app_en.arb').existsSync(), isTrue);
     expect(File('lib/l10n/app_ko.arb').existsSync(), isTrue);
     expect(File('lib/l10n/app_vi.arb').existsSync(), isTrue);
+  });
+
+  test('arb files do not define duplicate top-level keys', () {
+    for (final path in arbFiles) {
+      final counts = <String, int>{};
+      for (final key in readTopLevelArbKeys(path)) {
+        counts[key] = (counts[key] ?? 0) + 1;
+      }
+      final duplicates =
+          counts.entries
+              .where((entry) => entry.value > 1)
+              .map((entry) => entry.key)
+              .toList()
+            ..sort();
+
+      expect(duplicates, isEmpty, reason: '$path has duplicate ARB keys');
+    }
+  });
+
+  test('arb files expose the same key set across supported locales', () {
+    final englishKeys = readTopLevelArbKeys('lib/l10n/app_en.arb').toSet();
+
+    for (final path in arbFiles.skip(1)) {
+      final localeKeys = readTopLevelArbKeys(path).toSet();
+      final missing = englishKeys.difference(localeKeys).toList()..sort();
+      final extra = localeKeys.difference(englishKeys).toList()..sort();
+
+      expect(missing, isEmpty, reason: '$path is missing ARB keys');
+      expect(extra, isEmpty, reason: '$path has extra ARB keys');
+    }
   });
 }

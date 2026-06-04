@@ -66,8 +66,16 @@ void main() {
     expect(cashier, isNot(contains('cashierTodaySummaryProvider')));
 
     expect(kitchen, contains('class _KitchenTicketPreview'));
-    expect(kitchen, contains('class _KitchenExecutionItemRow'));
-    expect(kitchen, contains('_executionOpen'));
+    expect(kitchen, contains('class _KitchenTicketItemRow'));
+    expect(kitchen, contains('onPressed: isProcessing ? null : onItemAction'));
+    expect(kitchen, isNot(contains('_handleOrderPrimaryAction')));
+    expect(
+      kitchen,
+      isNot(contains("const Key('kitchen_start_cooking_button')")),
+    );
+    expect(kitchen, isNot(contains('PosPrimaryButton(')));
+    expect(kitchen, isNot(contains('class _KitchenExecutionItemRow')));
+    expect(kitchen, isNot(contains('_executionOpen')));
 
     expect(
       orderWorkspace,

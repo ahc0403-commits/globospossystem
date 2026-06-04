@@ -22,4 +22,17 @@ void main() {
     expect(source, isNot(contains('PosToolbar(')));
     expect(source, isNot(contains('PosStatCard(')));
   });
+
+  test('settings compact stack does not nest panel vertical scroll', () {
+    final source = readRepoFile('lib/features/admin/tabs/settings_tab.dart');
+
+    expect(source, contains('viewport.maxWidth < 1120'));
+    expect(source, contains('ToastResponsiveScrollBody('));
+    expect(source, contains('settingsPanel(scrollable: false)'));
+    expect(source, contains('settingsPanel(scrollable: true)'));
+    expect(source, contains('required bool scrollable'));
+    expect(source, contains('Widget _settingsPanelBody'));
+    expect(source, contains('if (!scrollable)'));
+    expect(source, contains('return SingleChildScrollView(child: child);'));
+  });
 }

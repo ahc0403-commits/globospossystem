@@ -362,73 +362,117 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
               job.createdAt.month == DateTime.now().month,
         )
         .fold<double>(0, (sum, job) => sum + job.totalAmount);
+    final header = _buildEinvoiceExceptionHeader(
+      pendingCount: pendingCount,
+      completedCount: completedCount,
+      failedCount: failedCount,
+      monthTotal: monthTotal,
+    );
+    final opsAlerts = flags == null
+        ? const <Widget>[]
+        : <Widget>[
+            ..._buildOpsAlerts(flags, allJobs),
+            const SizedBox(height: 12),
+          ];
+    final queueControls = _buildEinvoiceQueueControls(
+      filteredCount: filteredJobs.length,
+    );
 
     return Scaffold(
       key: const Key('einvoice_root'),
       backgroundColor: PosColors.canvas,
-      body: ToastResponsiveBody(
-        maxWidth: 1480,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildEinvoiceExceptionHeader(
-              pendingCount: pendingCount,
-              completedCount: completedCount,
-              failedCount: failedCount,
-              monthTotal: monthTotal,
-            ),
-            if (flags != null) ...[
-              ..._buildOpsAlerts(flags, allJobs),
-              const SizedBox(height: 12),
-            ],
-            const SizedBox(height: 12),
-            _buildEinvoiceQueueControls(filteredCount: filteredJobs.length),
-            const SizedBox(height: 16),
-            Expanded(
-              child: jobsAsync.when(
-                loading: () => const ToastOperationalLoadingState(
-                  label: PosLoadingCopy.loadingEinvoiceJobs,
+      body: LayoutBuilder(
+        builder: (context, viewport) {
+          if (viewport.maxWidth < 1120) {
+            return ToastResponsiveScrollBody(
+              maxWidth: 1480,
+              padding: const EdgeInsets.all(16),
+              children: [
+                header,
+                ...opsAlerts,
+                const SizedBox(height: 12),
+                queueControls,
+                const SizedBox(height: 16),
+                jobsAsync.when(
+                  loading: () => const SizedBox(
+                    height: 320,
+                    child: ToastOperationalLoadingState(
+                      label: PosLoadingCopy.loadingEinvoiceJobs,
+                    ),
+                  ),
+                  error: (error, _) => _buildErrorState(error),
+                  data: (_) {
+                    if (filteredJobs.isEmpty) {
+                      return _buildEmptyState();
+                    }
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildQueuePane(
+                          jobs: filteredJobs,
+                          selectedJob: selectedJob,
+                          scrollable: false,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildDetailPane(selectedJob, scrollable: false),
+                      ],
+                    );
+                  },
                 ),
-                error: (error, _) => _buildErrorState(error),
-                data: (_) {
-                  if (filteredJobs.isEmpty) {
-                    return _buildEmptyState();
-                  }
+              ],
+            );
+          }
 
-                  return LayoutBuilder(
-                    builder: (context, constraints) {
-                      final queuePane = _buildQueuePane(
-                        jobs: filteredJobs,
-                        selectedJob: selectedJob,
-                      );
-                      final detailPane = _buildDetailPane(selectedJob);
-
-                      if (constraints.maxWidth < 1120) {
-                        return ListView(
-                          children: [
-                            SizedBox(height: 420, child: queuePane),
-                            const SizedBox(height: 16),
-                            detailPane,
-                          ],
-                        );
+          return ToastResponsiveBody(
+            maxWidth: 1480,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                header,
+                ...opsAlerts,
+                const SizedBox(height: 12),
+                queueControls,
+                const SizedBox(height: 16),
+                Expanded(
+                  child: jobsAsync.when(
+                    loading: () => const ToastOperationalLoadingState(
+                      label: PosLoadingCopy.loadingEinvoiceJobs,
+                    ),
+                    error: (error, _) => _buildErrorState(error),
+                    data: (_) {
+                      if (filteredJobs.isEmpty) {
+                        return _buildEmptyState();
                       }
 
                       return Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          SizedBox(width: 520, child: queuePane),
+                          SizedBox(
+                            width: 520,
+                            child: _buildQueuePane(
+                              jobs: filteredJobs,
+                              selectedJob: selectedJob,
+                              scrollable: true,
+                            ),
+                          ),
                           const SizedBox(width: 16),
-                          Expanded(child: detailPane),
+                          Expanded(
+                            child: _buildDetailPane(
+                              selectedJob,
+                              scrollable: true,
+                            ),
+                          ),
                         ],
                       );
                     },
-                  );
-                },
-              ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -551,12 +595,12 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           _toolbarChip(
-            label: '오늘',
+            label: l10n.today,
             selected: _periodFilter == 'today',
             onTap: () => setState(() => _periodFilter = 'today'),
           ),
           _toolbarChip(
-            label: '7일',
+            label: l10n.last7Days,
             selected: _periodFilter == 'week',
             onTap: () => setState(() => _periodFilter = 'week'),
           ),
@@ -698,10 +742,13 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
   Widget _buildQueuePane({
     required List<_EinvoiceQueueItem> jobs,
     required _EinvoiceQueueItem? selectedJob,
+    required bool scrollable,
   }) {
     return ToastWorkSurface(
       padding: const EdgeInsets.all(12),
       child: ListView.separated(
+        shrinkWrap: !scrollable,
+        physics: scrollable ? null : const NeverScrollableScrollPhysics(),
         itemCount: jobs.length,
         separatorBuilder: (_, _) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
@@ -834,7 +881,7 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
     );
   }
 
-  Widget _buildDetailPane(_EinvoiceQueueItem? job) {
+  Widget _buildDetailPane(_EinvoiceQueueItem? job, {required bool scrollable}) {
     if (job == null) {
       return _buildEmptyState(
         headline: context.l10n.einvoiceNoSelectionTitle,
@@ -844,113 +891,113 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
 
     final isRetrying = _retryingJobId == job.id;
     final isResolving = _resolvingJobId == job.id;
-
-    return ToastWorkSurface(
-      padding: const EdgeInsets.all(18),
-      child: SingleChildScrollView(
-        child: Column(
+    final detailContent = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        context.l10n.einvoiceSelectedIssue,
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${job.tableLabel(context)} · ${job.orderShortId} · ${_formatDateTime(job.createdAt)}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: PosColors.textSecondary,
-                        ),
-                      ),
-                    ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    context.l10n.einvoiceSelectedIssue,
+                    style: Theme.of(context).textTheme.headlineSmall,
                   ),
-                ),
-                ToastStatusBadge(
-                  label: job.statusLabel(context),
-                  color: job.statusColor,
-                  compact: true,
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            if (job.isFailed || job.isPendingPolling)
-              PosExceptionAlert(
-                label: job.isPendingPolling
-                    ? context.l10n.einvoiceAwaitingTaxResponse
-                    : context.l10n.einvoiceCheckFailureReasonFirst,
-                detail: job.errorMessage?.isNotEmpty == true
-                    ? job.errorMessage
-                    : job.errorClassification?.isNotEmpty == true
-                    ? job.errorClassification
-                    : context.l10n.einvoiceCheckDispatchAndTaxStatus,
-                color: job.isFailed ? PosColors.danger : PosColors.warning,
-                icon: job.isFailed
-                    ? Icons.priority_high_rounded
-                    : Icons.sync_problem_rounded,
+                  const SizedBox(height: 4),
+                  Text(
+                    '${job.tableLabel(context)} · ${job.orderShortId} · ${_formatDateTime(job.createdAt)}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: PosColors.textSecondary,
+                    ),
+                  ),
+                ],
               ),
-            if (job.isFailed || job.isPendingPolling)
-              const SizedBox(height: 14),
-            ToastMetricStrip(
-              metrics: [
-                ToastMetric(
-                  label: context.l10n.einvoiceTotalAmount,
-                  value: _fmtVnd(job.totalAmount),
-                  tone: PosColors.accent,
-                ),
-                ToastMetric(
-                  label: context.l10n.einvoiceVat,
-                  value: _fmtVnd(job.vatAmount),
-                ),
-                ToastMetric(
-                  label: context.l10n.einvoiceSupplyAmount,
-                  value: _fmtVnd(job.supplyAmount),
-                ),
-              ],
             ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: isRetrying ? null : () => _runPrimaryAction(job),
-              icon: isRetrying
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.receipt_long_outlined),
-              label: Text(context.l10n.einvoiceProcessIssue),
-            ),
-            if (job.isFailed && !job.isResolved) ...[
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: isResolving ? null : () => _markResolved(job),
-                icon: isResolving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.check_circle_outline, size: 16),
-                label: Text(context.l10n.einvoiceProcessed),
-              ),
-            ],
-            const SizedBox(height: 16),
-            _EinvoiceJobSecondaryDetail(
-              job: job,
-              onOpenPortal: job.lookupUrl?.isNotEmpty == true
-                  ? () => launchUrl(Uri.parse(job.lookupUrl!))
-                  : null,
-              onCopyRef: () => _copyRefId(job.refId),
+            ToastStatusBadge(
+              label: job.statusLabel(context),
+              color: job.statusColor,
+              compact: true,
             ),
           ],
         ),
-      ),
+        const SizedBox(height: 14),
+        if (job.isFailed || job.isPendingPolling)
+          PosExceptionAlert(
+            label: job.isPendingPolling
+                ? context.l10n.einvoiceAwaitingTaxResponse
+                : context.l10n.einvoiceCheckFailureReasonFirst,
+            detail: job.errorMessage?.isNotEmpty == true
+                ? job.errorMessage
+                : job.errorClassification?.isNotEmpty == true
+                ? job.errorClassification
+                : context.l10n.einvoiceCheckDispatchAndTaxStatus,
+            color: job.isFailed ? PosColors.danger : PosColors.warning,
+            icon: job.isFailed
+                ? Icons.priority_high_rounded
+                : Icons.sync_problem_rounded,
+          ),
+        if (job.isFailed || job.isPendingPolling) const SizedBox(height: 14),
+        ToastMetricStrip(
+          metrics: [
+            ToastMetric(
+              label: context.l10n.einvoiceTotalAmount,
+              value: _fmtVnd(job.totalAmount),
+              tone: PosColors.accent,
+            ),
+            ToastMetric(
+              label: context.l10n.einvoiceVat,
+              value: _fmtVnd(job.vatAmount),
+            ),
+            ToastMetric(
+              label: context.l10n.einvoiceSupplyAmount,
+              value: _fmtVnd(job.supplyAmount),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: isRetrying ? null : () => _runPrimaryAction(job),
+          icon: isRetrying
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.receipt_long_outlined),
+          label: Text(context.l10n.einvoiceProcessIssue),
+        ),
+        if (job.isFailed && !job.isResolved) ...[
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: isResolving ? null : () => _markResolved(job),
+            icon: isResolving
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.check_circle_outline, size: 16),
+            label: Text(context.l10n.einvoiceProcessed),
+          ),
+        ],
+        const SizedBox(height: 16),
+        _EinvoiceJobSecondaryDetail(
+          job: job,
+          onOpenPortal: job.lookupUrl?.isNotEmpty == true
+              ? () => launchUrl(Uri.parse(job.lookupUrl!))
+              : null,
+          onCopyRef: () => _copyRefId(job.refId),
+        ),
+      ],
+    );
+
+    return ToastWorkSurface(
+      padding: const EdgeInsets.all(18),
+      child: scrollable
+          ? SingleChildScrollView(child: detailContent)
+          : detailContent,
     );
   }
 

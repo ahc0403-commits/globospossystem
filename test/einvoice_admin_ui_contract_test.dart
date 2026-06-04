@@ -20,4 +20,23 @@ void main() {
     expect(source, isNot(contains('PosToolbar(')));
     expect(source, isNot(contains('PosStatCard(')));
   });
+
+  test(
+    'einvoice compact stack delegates queue and detail scrolling to parent',
+    () {
+      final source = readRepoFile('lib/features/admin/tabs/einvoice_tab.dart');
+
+      expect(source, contains('viewport.maxWidth < 1120'));
+      expect(source, contains('ToastResponsiveScrollBody('));
+      expect(source, contains('scrollable: false'));
+      expect(source, contains('scrollable: true'));
+      expect(source, contains('shrinkWrap: !scrollable'));
+      expect(source, contains('NeverScrollableScrollPhysics'));
+      expect(source, contains('required bool scrollable'));
+      expect(
+        source,
+        isNot(contains('SizedBox(height: 420, child: queuePane)')),
+      );
+    },
+  );
 }

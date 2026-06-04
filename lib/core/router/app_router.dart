@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/services/navigation_history_service.dart';
 import '../../core/utils/permission_utils.dart';
+import '../../core/utils/role_routes.dart';
 import '../../features/admin/admin_screen.dart';
 import '../../features/auth/auth_provider.dart';
 import '../../features/auth/auth_state.dart';
 import '../../features/auth/login_screen.dart';
+import '../../features/auth/privacy_consent_screen.dart';
 import '../../features/cashier/cashier_screen.dart';
 import '../../features/kitchen/kitchen_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
@@ -42,11 +44,18 @@ GoRouter buildAppRouter(ProviderContainer container) {
       final isLoggedIn = auth.user != null && role != null;
       final location = state.matchedLocation;
       final fullLocation = state.uri.toString();
+      final path = state.uri.path;
       String? redirectTo;
 
       // 1. 비로그인 → 로그인 화면
       if (!isLoggedIn) {
         redirectTo = location == '/login' ? null : '/login';
+        NavigationHistoryService.instance.push(redirectTo ?? fullLocation);
+        return redirectTo;
+      }
+
+      if (auth.privacyConsentRequired) {
+        redirectTo = location == '/privacy-consent' ? null : '/privacy-consent';
         NavigationHistoryService.instance.push(redirectTo ?? fullLocation);
         return redirectTo;
       }
@@ -59,20 +68,16 @@ GoRouter buildAppRouter(ProviderContainer container) {
       }
 
       // 3. 역할별 허용 경로 정의
-      final String homeRoute = switch (role) {
-        'waiter' => '/waiter',
-        'kitchen' => '/kitchen',
-        'cashier' => '/cashier',
-        'super_admin' => '/super-admin',
-        'photo_objet_master' || 'photo_objet_store_admin' => '/photo-ops',
-        'brand_admin' || 'store_admin' => '/admin',
-        _ => '/admin',
-      };
+      final homeRoute = homeRouteForRole(role);
 
-      const publicRoutes = ['/login', '/onboarding'];
+      const publicRoutes = ['/login', '/onboarding', '/privacy-consent'];
 
       // 4. 공개 경로에 있으면 → 홈으로
       if (publicRoutes.contains(location)) {
+        if (homeRoute == '/login') {
+          NavigationHistoryService.instance.push(fullLocation);
+          return null;
+        }
         redirectTo = homeRoute;
         NavigationHistoryService.instance.push(redirectTo);
         return redirectTo;
@@ -125,6 +130,17 @@ GoRouter buildAppRouter(ProviderContainer container) {
         return redirectTo;
       }
 
+      if (path.startsWith('/payments/') &&
+          !canAccessRouteForRole(
+            role,
+            fullLocation,
+            extraPermissions: auth.extraPermissions,
+          )) {
+        redirectTo = homeRoute;
+        NavigationHistoryService.instance.push(redirectTo);
+        return redirectTo;
+      }
+
       // 6-D. /admin/:storeId 는 super_admin 전용
       if (location.startsWith('/admin/') && role != 'super_admin') {
         redirectTo = homeRoute;
@@ -159,6 +175,10 @@ GoRouter buildAppRouter(ProviderContainer container) {
     },
     routes: [
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+      GoRoute(
+        path: '/privacy-consent',
+        builder: (_, __) => const PrivacyConsentScreen(),
+      ),
       GoRoute(
         path: '/onboarding',
         builder: (_, __) => const OnboardingScreen(),
@@ -213,6 +233,7 @@ int _tabIndexFromQuery(String? value) {
     'qc' => 6,
     'settings' => 7,
     'delivery' || 'settlement' => 8,
+    'einvoice' || 'e-invoice' || 'invoice' => 9,
     _ => 0,
   };
 }

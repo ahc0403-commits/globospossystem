@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image/image.dart' as img;
+import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -34,29 +36,41 @@ class PaymentProofService {
   Future<PaymentProofSaveResult> saveProof({
     required String paymentId,
     required String storeId,
-    required File originalFile,
+    required XFile originalFile,
     DateTime? takenAt,
   }) async {
     final capturedAt = takenAt ?? DateTime.now();
+    final bytes = await originalFile.readAsBytes();
 
     try {
-      final signedUrl = await _uploadAndAttach(
+      final signedUrl = await _uploadAndAttachBytes(
         paymentId: paymentId,
         storeId: storeId,
-        file: originalFile,
+        bytes: bytes,
         takenAt: capturedAt,
       );
       return PaymentProofSaveResult(queued: false, signedUrl: signedUrl);
     } catch (_) {
-      final persistedFile = await _persistQueueFile(
-        paymentId: paymentId,
-        originalFile: originalFile,
-      );
+      final compressed = _compressImage(bytes);
+      String? localPath;
+      String? imageBytesBase64;
+
+      if (kIsWeb) {
+        imageBytesBase64 = base64Encode(compressed);
+      } else {
+        final persistedFile = await _persistQueueFile(
+          paymentId: paymentId,
+          bytes: compressed,
+        );
+        localPath = persistedFile.path;
+      }
+
       await _enqueue(
         _QueuedPaymentProof(
           paymentId: paymentId,
           storeId: storeId,
-          localPath: persistedFile.path,
+          localPath: localPath,
+          imageBytesBase64: imageBytesBase64,
           takenAtIso: capturedAt.toUtc().toIso8601String(),
         ),
       );
@@ -72,21 +86,36 @@ class PaymentProofService {
     var uploadedCount = 0;
 
     for (final item in queue) {
-      final file = File(item.localPath);
-      if (!file.existsSync()) {
-        continue;
-      }
-
       try {
-        await _uploadAndAttach(
-          paymentId: item.paymentId,
-          storeId: item.storeId,
-          file: file,
-          takenAt:
-              DateTime.tryParse(item.takenAtIso)?.toLocal() ?? DateTime.now(),
-        );
+        final takenAt =
+            DateTime.tryParse(item.takenAtIso)?.toLocal() ?? DateTime.now();
+        final encodedBytes = item.imageBytesBase64;
+        final localPath = item.localPath;
+
+        if (encodedBytes != null && encodedBytes.isNotEmpty) {
+          await _uploadCompressedAndAttach(
+            paymentId: item.paymentId,
+            storeId: item.storeId,
+            compressed: base64Decode(encodedBytes),
+            takenAt: takenAt,
+          );
+        } else if (localPath != null && localPath.isNotEmpty && !kIsWeb) {
+          final file = File(localPath);
+          if (!file.existsSync()) {
+            continue;
+          }
+          await _uploadCompressedAndAttach(
+            paymentId: item.paymentId,
+            storeId: item.storeId,
+            compressed: await file.readAsBytes(),
+            takenAt: takenAt,
+          );
+          await file.delete().catchError((_) => file);
+        } else {
+          continue;
+        }
+
         uploadedCount += 1;
-        await file.delete().catchError((_) => file);
       } catch (_) {
         remaining.add(item);
       }
@@ -96,14 +125,27 @@ class PaymentProofService {
     return uploadedCount;
   }
 
-  Future<String> _uploadAndAttach({
+  Future<String> _uploadAndAttachBytes({
     required String paymentId,
     required String storeId,
-    required File file,
+    required Uint8List bytes,
     required DateTime takenAt,
   }) async {
-    final bytes = await file.readAsBytes();
     final compressed = _compressImage(bytes);
+    return _uploadCompressedAndAttach(
+      paymentId: paymentId,
+      storeId: storeId,
+      compressed: compressed,
+      takenAt: takenAt,
+    );
+  }
+
+  Future<String> _uploadCompressedAndAttach({
+    required String paymentId,
+    required String storeId,
+    required Uint8List compressed,
+    required DateTime takenAt,
+  }) async {
     final taxEntityId = await _lookupTaxEntityId(storeId);
     final date = takenAt.toUtc();
     final dateStr =
@@ -169,7 +211,7 @@ class PaymentProofService {
 
   Future<File> _persistQueueFile({
     required String paymentId,
-    required File originalFile,
+    required Uint8List bytes,
   }) async {
     final dir = await getApplicationDocumentsDirectory();
     final queueDir = Directory('${dir.path}/payment_proof_queue');
@@ -178,7 +220,7 @@ class PaymentProofService {
     }
 
     final target = File('${queueDir.path}/$paymentId.jpg');
-    await originalFile.copy(target.path);
+    await target.writeAsBytes(bytes);
     return target;
   }
 
@@ -219,30 +261,36 @@ class _QueuedPaymentProof {
   const _QueuedPaymentProof({
     required this.paymentId,
     required this.storeId,
-    required this.localPath,
+    this.localPath,
+    this.imageBytesBase64,
     required this.takenAtIso,
   });
 
   final String paymentId;
   final String storeId;
-  final String localPath;
+  final String? localPath;
+  final String? imageBytesBase64;
   final String takenAtIso;
 
   factory _QueuedPaymentProof.fromJson(Map<String, dynamic> json) {
     return _QueuedPaymentProof(
       paymentId: json['payment_id'].toString(),
       storeId: json['store_id'].toString(),
-      localPath: json['local_path'].toString(),
+      localPath: json['local_path']?.toString(),
+      imageBytesBase64: json['image_bytes_base64']?.toString(),
       takenAtIso: json['taken_at_iso'].toString(),
     );
   }
 
-  Map<String, dynamic> toJson() => {
-    'payment_id': paymentId,
-    'store_id': storeId,
-    'local_path': localPath,
-    'taken_at_iso': takenAtIso,
-  };
+  Map<String, dynamic> toJson() {
+    return {
+      'payment_id': paymentId,
+      'store_id': storeId,
+      if (localPath != null) 'local_path': localPath,
+      if (imageBytesBase64 != null) 'image_bytes_base64': imageBytesBase64,
+      'taken_at_iso': takenAtIso,
+    };
+  }
 }
 
 final paymentProofService = PaymentProofService();

@@ -41,6 +41,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
     final staffState = ref.watch(staffProvider);
     final attendanceState = ref.watch(attendanceProvider);
     final notifier = ref.read(staffProvider.notifier);
+    final l10n = context.l10n;
 
     if (storeId != null && _initializedRestaurantId != storeId) {
       _initializedRestaurantId = storeId;
@@ -97,67 +98,97 @@ class _StaffTabState extends ConsumerState<StaffTab> {
     final permissionReviewCount = rows
         .where((row) => row.permissionNeedsReview)
         .length;
+    Widget header({required bool compact}) => _buildStaffCommandHeader(
+      staffCount: staffState.staff.length,
+      workingCount: workingCount,
+      absentCount: absentCount,
+      permissionReviewCount: permissionReviewCount,
+      roleOptions: roleOptions,
+      storeId: storeId,
+      viewerRole: viewerRole,
+      compact: compact,
+    );
+    final loadingState = const SizedBox(
+      height: 320,
+      child: Center(
+        child: CircularProgressIndicator(color: AppColors.amber500),
+      ),
+    );
 
     return Scaffold(
       key: const Key('staff_root'),
       backgroundColor: AppColors.surface0,
-      body: ToastResponsiveBody(
-        maxWidth: 1480,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildStaffCommandHeader(
-              staffCount: staffState.staff.length,
-              workingCount: workingCount,
-              absentCount: absentCount,
-              permissionReviewCount: permissionReviewCount,
-              roleOptions: roleOptions,
-              storeId: storeId,
-              viewerRole: viewerRole,
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: staffState.isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.amber500,
+      body: LayoutBuilder(
+        builder: (context, viewport) {
+          final compact = viewport.maxWidth < 1120;
+          if (compact) {
+            return ToastResponsiveScrollBody(
+              maxWidth: 1480,
+              padding: const EdgeInsets.all(16),
+              children: [
+                header(compact: true),
+                const SizedBox(height: 16),
+                if (staffState.isLoading)
+                  loadingState
+                else if (filteredRows.isEmpty)
+                  ToastWorkSurface(
+                    child: SizedBox(
+                      height: 260,
+                      child: ToastOperationalEmptyState(
+                        headline: l10n.staffNoVisibleStaff,
                       ),
-                    )
-                  : filteredRows.isEmpty
-                  ? const ToastOperationalEmptyState(headline: '표시할 직원이 없습니다.')
-                  : LayoutBuilder(
-                      builder: (context, constraints) {
-                        final listPane = _buildStaffListPane(
-                          rows: filteredRows,
-                          selectedRow: selectedRow,
-                        );
-                        final detailPane = _buildSelectedStaffPane(
-                          storeId: storeId,
-                          row: selectedRow,
-                        );
-
-                        if (constraints.maxWidth < 1120) {
-                          return ListView(
-                            children: [
-                              SizedBox(height: 420, child: listPane),
-                              const SizedBox(height: 16),
-                              detailPane,
-                            ],
-                          );
-                        }
-
-                        return ToastSplitPane(
-                          queueWidth: 460,
-                          queue: listPane,
-                          detail: detailPane,
-                          divider: false,
-                        );
-                      },
                     ),
+                  )
+                else ...[
+                  _buildSelectedStaffPane(
+                    storeId: storeId,
+                    row: selectedRow,
+                    compact: true,
+                  ),
+                  const SizedBox(height: 16),
+                  _buildStaffListPane(
+                    rows: filteredRows,
+                    selectedRow: selectedRow,
+                    scrollable: false,
+                  ),
+                ],
+              ],
+            );
+          }
+
+          return ToastResponsiveBody(
+            maxWidth: 1480,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                header(compact: false),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: staffState.isLoading
+                      ? loadingState
+                      : filteredRows.isEmpty
+                      ? ToastOperationalEmptyState(
+                          headline: l10n.staffNoVisibleStaff,
+                        )
+                      : ToastSplitPane(
+                          queueWidth: 460,
+                          queue: _buildStaffListPane(
+                            rows: filteredRows,
+                            selectedRow: selectedRow,
+                          ),
+                          detail: _buildSelectedStaffPane(
+                            storeId: storeId,
+                            row: selectedRow,
+                            compact: false,
+                          ),
+                          divider: false,
+                        ),
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -170,6 +201,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
     required List<String> roleOptions,
     required String? storeId,
     required String? viewerRole,
+    bool compact = false,
   }) {
     final l10n = context.l10n;
     final statusOptions = <String, String>{
@@ -180,6 +212,158 @@ class _StaffTabState extends ConsumerState<StaffTab> {
       'off': l10n.staffDayOff,
       'done': l10n.staffAttendanceCompleted,
     };
+
+    if (compact) {
+      return ToastWorkSurface(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        backgroundColor: AppColors.surface1,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    l10n.staffManagementTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleLarge?.copyWith(fontSize: 20),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ToastStatusBadge(
+                  label: permissionReviewCount > 0
+                      ? l10n.staffPermissionReviewRequired
+                      : l10n.staffOperationalHealthy,
+                  color: permissionReviewCount > 0
+                      ? PosColors.warning
+                      : PosColors.success,
+                  compact: true,
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _compactStaffSignal(
+                    label: l10n.staffTotalCount,
+                    value: l10n.staffCount(staffCount),
+                  ),
+                  const SizedBox(width: 8),
+                  _compactStaffSignal(
+                    label: l10n.staffWorkingToday,
+                    value: l10n.staffCount(workingCount),
+                    tone: PosColors.success,
+                  ),
+                  const SizedBox(width: 8),
+                  _compactStaffSignal(
+                    label: l10n.staffAbsent,
+                    value: l10n.staffCount(absentCount),
+                    tone: absentCount > 0
+                        ? PosColors.warning
+                        : PosColors.textSecondary,
+                  ),
+                  const SizedBox(width: 8),
+                  _compactStaffSignal(
+                    label: l10n.staffPermissionReviewRequired,
+                    value: l10n.staffCount(permissionReviewCount),
+                    tone: permissionReviewCount > 0
+                        ? PosColors.danger
+                        : PosColors.success,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _searchController,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: l10n.staffSearchHint,
+                prefixIcon: const Icon(Icons.search),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _roleFilter,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: l10n.staffAllRoles,
+                      isDense: true,
+                    ),
+                    items: [
+                      for (final role in roleOptions)
+                        DropdownMenuItem(
+                          value: role,
+                          child: Text(
+                            role == 'all'
+                                ? l10n.staffAllRoles
+                                : _roleLabelKo(context, role),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _roleFilter = value);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _statusFilter,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: l10n.staffAllStatuses,
+                      isDense: true,
+                    ),
+                    items: [
+                      for (final entry in statusOptions.entries)
+                        DropdownMenuItem(
+                          value: entry.key,
+                          child: Text(
+                            entry.value,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _statusFilter = value);
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: storeId == null
+                    ? null
+                    : () => _showAddStaffSheet(
+                        context,
+                        storeId,
+                        viewerRole: viewerRole,
+                      ),
+                icon: const Icon(Icons.person_add_alt_1, size: 18),
+                label: Text(l10n.staffAddAction),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return ToastWorkSurface(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
@@ -200,7 +384,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '직원 계정, 현재 상태, 권한 이상 여부를 한 화면에서 빠르게 확인합니다.',
+                      l10n.staffManagementSubtitle,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: PosColors.textSecondary,
                         fontSize: 13,
@@ -223,22 +407,25 @@ class _StaffTabState extends ConsumerState<StaffTab> {
           const SizedBox(height: 14),
           ToastMetricStrip(
             metrics: [
-              ToastMetric(label: l10n.staffTotalCount, value: '$staffCount명'),
+              ToastMetric(
+                label: l10n.staffTotalCount,
+                value: l10n.staffCount(staffCount),
+              ),
               ToastMetric(
                 label: l10n.staffWorkingToday,
-                value: '$workingCount명',
+                value: l10n.staffCount(workingCount),
                 tone: PosColors.success,
               ),
               ToastMetric(
                 label: l10n.staffAbsent,
-                value: '$absentCount명',
+                value: l10n.staffCount(absentCount),
                 tone: absentCount > 0
                     ? PosColors.warning
                     : PosColors.textSecondary,
               ),
               ToastMetric(
                 label: l10n.staffPermissionReviewRequired,
-                value: '$permissionReviewCount명',
+                value: l10n.staffCount(permissionReviewCount),
                 tone: permissionReviewCount > 0
                     ? PosColors.danger
                     : PosColors.success,
@@ -308,9 +495,9 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                 child: TextField(
                   controller: _searchController,
                   onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    hintText: '이름 또는 이메일 검색',
-                    prefixIcon: Icon(Icons.search),
+                  decoration: InputDecoration(
+                    hintText: l10n.staffSearchHint,
+                    prefixIcon: const Icon(Icons.search),
                     isDense: true,
                   ),
                 ),
@@ -329,6 +516,32 @@ class _StaffTabState extends ConsumerState<StaffTab> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _compactStaffSignal({
+    required String label,
+    required String value,
+    Color? tone,
+  }) {
+    final color = tone ?? PosColors.textSecondary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.14)),
+      ),
+      child: Text(
+        '$label $value',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+        ),
       ),
     );
   }
@@ -447,10 +660,13 @@ class _StaffTabState extends ConsumerState<StaffTab> {
   Widget _buildStaffListPane({
     required List<_StaffBoardRow> rows,
     required _StaffBoardRow? selectedRow,
+    bool scrollable = true,
   }) {
     return ToastWorkSurface(
       padding: const EdgeInsets.all(12),
       child: ListView.separated(
+        shrinkWrap: !scrollable,
+        physics: scrollable ? null : const NeverScrollableScrollPhysics(),
         itemCount: rows.length,
         separatorBuilder: (_, _) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
@@ -526,6 +742,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
   Widget _buildSelectedStaffPane({
     required String? storeId,
     required _StaffBoardRow? row,
+    bool compact = false,
   }) {
     if (row == null) {
       return ToastOperationalEmptyState(
@@ -535,6 +752,143 @@ class _StaffTabState extends ConsumerState<StaffTab> {
 
     final canEditPermissions =
         storeId != null && _canEditPermissionsForRole(row.member.role);
+
+    if (compact) {
+      return ToastWorkSurface(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: PosColors.accentMuted,
+                  child: Text(
+                    _initialsForName(row.member.fullName),
+                    style: GoogleFonts.notoSansKr(
+                      color: PosColors.accent,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        row.member.fullName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${_roleLabelKo(context, row.member.role)} · ${row.member.email?.isNotEmpty == true ? row.member.email! : context.l10n.staffEmailMissing}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: PosColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ToastStatusBadge(
+                  label: row.statusLabel,
+                  color: row.statusColor,
+                  compact: true,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _StaffDetailDisclosure(
+              row: row,
+              canEditPermissions: canEditPermissions,
+              onChangePermission: canEditPermissions
+                  ? () => _showPermissionDialog(
+                      context: context,
+                      storeId: storeId,
+                      member: row.member,
+                    )
+                  : null,
+              onViewAttendance: () => _showAttendanceLogSheet(row),
+              attendanceTypeLabel: _attendanceTypeLabel,
+              roleLabel: (role) => _roleLabelKo(context, role),
+              initiallyExpanded: true,
+              showAttendancePreview: false,
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: storeId == null
+                    ? null
+                    : () => ref
+                          .read(staffProvider.notifier)
+                          .toggleActive(
+                            row.member.id,
+                            !row.member.isActive,
+                            storeId,
+                          ),
+                icon: Icon(
+                  row.member.isActive
+                      ? Icons.person_off_outlined
+                      : Icons.person,
+                  size: 16,
+                ),
+                label: Text(
+                  row.member.isActive
+                      ? context.l10n.staffDeactivate
+                      : context.l10n.staffActivate,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _detailMetric(
+                  context.l10n.staffTodayClockIn,
+                  _formatTime(row.firstClockIn),
+                  compact: true,
+                ),
+                _detailMetric(
+                  context.l10n.staffClockOutRecord,
+                  row.lastClockOut == null
+                      ? '--:--'
+                      : _formatTime(row.lastClockOut),
+                  compact: true,
+                ),
+                _detailMetric(
+                  context.l10n.staffPermissionStatus,
+                  row.permissionNeedsReview
+                      ? context.l10n.staffPermissionReview
+                      : row.member.extraPermissions.isEmpty
+                      ? context.l10n.staffDefaultPermission
+                      : context.l10n.staffAdditionalPermissions(
+                          row.member.extraPermissions.length,
+                        ),
+                  compact: true,
+                ),
+                _detailMetric(
+                  context.l10n.staffRegisteredAt,
+                  DateFormat(
+                    'yyyy-MM-dd',
+                  ).format(row.member.createdAt.toLocal()),
+                  compact: true,
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
 
     return ToastWorkSurface(
       padding: const EdgeInsets.all(16),
@@ -677,11 +1031,14 @@ class _StaffTabState extends ConsumerState<StaffTab> {
     );
   }
 
-  Widget _detailMetric(String label, String value) {
+  Widget _detailMetric(String label, String value, {bool compact = false}) {
     return SizedBox(
-      width: 180,
+      width: compact ? 148 : 180,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: compact ? 8 : 10,
+        ),
         decoration: BoxDecoration(
           color: PosColors.panelMuted,
           borderRadius: BorderRadius.circular(10),
@@ -756,9 +1113,10 @@ class _StaffTabState extends ConsumerState<StaffTab> {
   }
 
   String _attendanceTypeLabel(String type) {
+    final l10n = context.l10n;
     return switch (type) {
-      'clock_in' => '출근',
-      'clock_out' => '퇴근',
+      'clock_in' => l10n.clockIn,
+      'clock_out' => l10n.clockOut,
       _ => type,
     };
   }
@@ -775,13 +1133,13 @@ class _StaffTabState extends ConsumerState<StaffTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${row.member.fullName} 출근 기록',
+                context.l10n.staffAttendanceSheetTitle(row.member.fullName),
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 12),
               if (row.logs.isEmpty)
                 Text(
-                  '오늘 기록이 없습니다.',
+                  context.l10n.staffNoLogsTodayShort,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: PosColors.textSecondary,
                   ),
@@ -855,22 +1213,22 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                   TextField(
                     controller: fullNameController,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(labelText: '이름'),
+                    decoration: InputDecoration(labelText: context.l10n.name),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: emailController,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(labelText: '이메일'),
+                    decoration: InputDecoration(labelText: context.l10n.email),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: passwordController,
                     obscureText: true,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(
-                      labelText: '비밀번호',
-                      hintText: '8자 이상 입력',
+                    decoration: InputDecoration(
+                      labelText: context.l10n.password,
+                      hintText: context.l10n.staffPasswordHint,
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -1067,6 +1425,8 @@ class _StaffDetailDisclosure extends StatelessWidget {
     required this.onViewAttendance,
     required this.attendanceTypeLabel,
     required this.roleLabel,
+    this.initiallyExpanded = false,
+    this.showAttendancePreview = true,
   });
 
   final _StaffBoardRow row;
@@ -1075,6 +1435,8 @@ class _StaffDetailDisclosure extends StatelessWidget {
   final VoidCallback onViewAttendance;
   final String Function(String type) attendanceTypeLabel;
   final String Function(String role) roleLabel;
+  final bool initiallyExpanded;
+  final bool showAttendancePreview;
 
   @override
   Widget build(BuildContext context) {
@@ -1086,7 +1448,7 @@ class _StaffDetailDisclosure extends StatelessWidget {
       ),
       child: ExpansionTile(
         key: const Key('staff_detail_secondary_detail'),
-        initiallyExpanded: false,
+        initiallyExpanded: initiallyExpanded,
         tilePadding: const EdgeInsets.symmetric(horizontal: 12),
         childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         iconColor: AppColors.textSecondary,
@@ -1129,72 +1491,74 @@ class _StaffDetailDisclosure extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              context.l10n.staffTodayAttendanceLog,
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (row.logs.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: PosColors.panelMuted,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: PosColors.border),
-              ),
+          if (showAttendancePreview) ...[
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
               child: Text(
-                context.l10n.staffNoLogsToday,
+                context.l10n.staffTodayAttendanceLog,
                 style: Theme.of(
                   context,
-                ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
               ),
-            )
-          else
-            ...row.logs
-                .take(5)
-                .map(
-                  (log) => Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: PosColors.surface,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: PosColors.border),
-                    ),
-                    child: Row(
-                      children: [
-                        ToastStatusBadge(
-                          label: attendanceTypeLabel(log.type),
-                          color: log.type == 'clock_in'
-                              ? PosColors.success
-                              : PosColors.info,
-                          compact: true,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            DateFormat(
-                              'yyyy-MM-dd HH:mm',
-                            ).format(log.loggedAt.toLocal()),
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ),
-                        Text(
-                          roleLabel(log.userRole ?? row.member.role),
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: PosColors.textSecondary),
-                        ),
-                      ],
-                    ),
+            ),
+            const SizedBox(height: 8),
+            if (row.logs.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: PosColors.panelMuted,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: PosColors.border),
+                ),
+                child: Text(
+                  context.l10n.staffNoLogsToday,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: PosColors.textSecondary,
                   ),
                 ),
+              )
+            else
+              ...row.logs
+                  .take(5)
+                  .map(
+                    (log) => Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: PosColors.surface,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: PosColors.border),
+                      ),
+                      child: Row(
+                        children: [
+                          ToastStatusBadge(
+                            label: attendanceTypeLabel(log.type),
+                            color: log.type == 'clock_in'
+                                ? PosColors.success
+                                : PosColors.info,
+                            compact: true,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              DateFormat(
+                                'yyyy-MM-dd HH:mm',
+                              ).format(log.loggedAt.toLocal()),
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ),
+                          Text(
+                            roleLabel(log.userRole ?? row.member.role),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: PosColors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+          ],
         ],
       ),
     );

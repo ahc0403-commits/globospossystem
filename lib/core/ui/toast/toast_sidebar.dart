@@ -88,6 +88,40 @@ class ToastSidebar extends StatelessWidget {
         ? 0
         : selectedIndex.clamp(0, entries.length - 1).toInt();
     final selected = entries.isEmpty ? null : entries[safeIndex];
+    final viewport = MediaQuery.sizeOf(context);
+    final useCompactShell = viewport.width < 900 || viewport.shortestSide < 600;
+
+    if (useCompactShell) {
+      return Scaffold(
+        backgroundColor: PosColors.canvas,
+        body: SafeArea(
+          child: Column(
+            children: [
+              ToastTopbar(
+                title: selected?.item.label ?? title,
+                leading: topBarLeading,
+                trailing: topBarTrailing,
+              ),
+              _ToastSidebarCompactNav(
+                entries: entries,
+                selectedIndex: safeIndex,
+                onItemSelected: onItemSelected,
+                bottomItems: bottomItems ?? const <ToastSidebarItem>[],
+              ),
+              Expanded(
+                child: ToastWorkSurface(
+                  padding: EdgeInsets.zero,
+                  backgroundColor: PosColors.canvas,
+                  borderColor: Colors.transparent,
+                  clip: false,
+                  child: body,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: PosColors.canvas,
@@ -112,6 +146,117 @@ class ToastSidebar extends StatelessWidget {
           borderColor: Colors.transparent,
           clip: false,
           child: body,
+        ),
+      ),
+    );
+  }
+}
+
+class _ToastSidebarCompactNav extends StatelessWidget {
+  const _ToastSidebarCompactNav({
+    required this.entries,
+    required this.selectedIndex,
+    required this.onItemSelected,
+    required this.bottomItems,
+  });
+
+  final List<_ToastSidebarEntry> entries;
+  final int selectedIndex;
+  final ValueChanged<int> onItemSelected;
+  final List<ToastSidebarItem> bottomItems;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = <Widget>[
+      for (final entry in entries)
+        _ToastSidebarCompactNavItem(
+          key: entry.item.itemKey,
+          icon: entry.item.icon,
+          label: entry.item.label,
+          selected: entry.flatIndex == selectedIndex,
+          onTap: entry.item.onTap ?? () => onItemSelected(entry.flatIndex),
+        ),
+      for (final item in bottomItems)
+        _ToastSidebarCompactNavItem(
+          key: item.itemKey,
+          icon: item.icon,
+          label: item.label,
+          selected: false,
+          onTap: item.onTap ?? () {},
+        ),
+    ];
+
+    return Container(
+      height: 64,
+      decoration: const BoxDecoration(
+        color: PosColors.surface,
+        border: Border(bottom: BorderSide(color: PosColors.border)),
+      ),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: ClampingScrollPhysics(),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        itemCount: items.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) => items[index],
+      ),
+    );
+  }
+}
+
+class _ToastSidebarCompactNavItem extends StatelessWidget {
+  const _ToastSidebarCompactNavItem({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: selected ? PosColors.accentMuted : PosColors.mutedSurface,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: selected ? PosColors.accent : PosColors.border,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 17,
+                color: selected ? PosColors.accent : PosColors.textSecondary,
+              ),
+              const SizedBox(width: 7),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.notoSansKr(
+                  color: selected ? PosColors.accent : PosColors.textSecondary,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

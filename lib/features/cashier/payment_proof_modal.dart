@@ -1,9 +1,10 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../core/i18n/locale_extensions.dart';
 import '../../core/layout/platform_info.dart';
 import '../../core/services/payment_proof_service.dart';
 import '../../main.dart';
@@ -28,7 +29,8 @@ class PaymentProofModal extends StatefulWidget {
 class _PaymentProofModalState extends State<PaymentProofModal> {
   final ImagePicker _picker = ImagePicker();
 
-  File? _selectedFile;
+  XFile? _selectedFile;
+  Uint8List? _selectedPreviewBytes;
   bool _isSaving = false;
 
   Future<void> _pickPhoto() async {
@@ -38,18 +40,22 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
           : ImageSource.gallery;
       final picked = await _picker.pickImage(source: source, imageQuality: 90);
       if (picked == null || !mounted) return;
+      final previewBytes = await picked.readAsBytes();
 
-      setState(() => _selectedFile = File(picked.path));
+      setState(() {
+        _selectedFile = picked;
+        _selectedPreviewBytes = previewBytes;
+      });
     } catch (e) {
       if (!mounted) return;
-      showErrorToast(context, 'Proof photo capture failed: $e');
+      showErrorToast(context, context.l10n.paymentProofCaptureFailed('$e'));
     }
   }
 
   Future<void> _save() async {
     final file = _selectedFile;
     if (file == null) {
-      showErrorToast(context, 'Capture or choose a proof photo first.');
+      showErrorToast(context, context.l10n.paymentProofRequired);
       return;
     }
 
@@ -64,7 +70,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
       Navigator.of(context).pop(result);
     } catch (e) {
       if (!mounted) return;
-      showErrorToast(context, 'Proof save failed: $e');
+      showErrorToast(context, context.l10n.paymentProofSaveFailed('$e'));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -72,6 +78,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return AlertDialog(
       backgroundColor: AppColors.surface1,
       contentPadding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
@@ -80,7 +87,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
           const Icon(Icons.photo_camera, color: AppColors.amber500, size: 22),
           const SizedBox(width: 8),
           Text(
-            'Payment Proof',
+            l10n.paymentProofTitle,
             style: AppTextStyles.operationalTitle(
               size: 24,
               color: AppColors.textPrimary,
@@ -95,7 +102,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Direction: Operational — capture a quick proof photo for ${widget.methodLabel.toUpperCase()} settlement before you move on.',
+              l10n.paymentProofDirection(widget.methodLabel.toUpperCase()),
               style: GoogleFonts.notoSansKr(
                 color: AppColors.textSecondary,
                 fontSize: 13,
@@ -115,7 +122,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
             ),
             const SizedBox(height: 12),
             Text(
-              'If upload fails, we will queue the photo locally and retry on the next cashier session.',
+              l10n.paymentProofUploadQueueHint,
               style: GoogleFonts.notoSansKr(
                 color: AppColors.textSecondary,
                 fontSize: 11,
@@ -129,7 +136,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
         TextButton(
           onPressed: _isSaving ? null : () => Navigator.of(context).pop(null),
           child: Text(
-            'Skip for now',
+            l10n.paymentProofSkipForNow,
             style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
           ),
         ),
@@ -137,7 +144,9 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
           onPressed: _isSaving ? null : _pickPhoto,
           icon: const Icon(Icons.photo_camera_outlined, size: 16),
           label: Text(
-            _selectedFile == null ? 'Capture' : 'Retake',
+            _selectedFile == null
+                ? l10n.paymentProofCapture
+                : l10n.paymentProofRetake,
             style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w700),
           ),
         ),
@@ -158,7 +167,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
                 )
               : const Icon(Icons.cloud_upload_outlined, size: 16),
           label: Text(
-            'Save Proof',
+            l10n.paymentProofSaveProof,
             style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w700),
           ),
         ),
@@ -167,6 +176,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
   }
 
   Widget _emptyState() {
+    final l10n = context.l10n;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -185,7 +195,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
         ),
         const SizedBox(height: 12),
         Text(
-          'No proof photo yet',
+          l10n.paymentProofNoPhotoYet,
           style: GoogleFonts.notoSansKr(
             color: AppColors.textPrimary,
             fontSize: 15,
@@ -194,7 +204,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Capture the terminal slip, QR confirmation, or transfer evidence.',
+          l10n.paymentProofEmptySubtitle,
           textAlign: TextAlign.center,
           style: GoogleFonts.notoSansKr(
             color: AppColors.textSecondary,
@@ -207,22 +217,30 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
   }
 
   Widget _previewCard() {
+    final l10n = context.l10n;
     final file = _selectedFile!;
+    final previewBytes = _selectedPreviewBytes;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(12),
-          child: Image.file(
-            file,
-            height: 220,
-            width: double.infinity,
-            fit: BoxFit.cover,
-          ),
+          child: previewBytes == null
+              ? const SizedBox(
+                  height: 220,
+                  width: double.infinity,
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              : Image.memory(
+                  previewBytes,
+                  height: 220,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
         ),
         const SizedBox(height: 10),
         Text(
-          'Ready to upload',
+          l10n.paymentProofReadyToUpload,
           style: GoogleFonts.notoSansKr(
             color: AppColors.textPrimary,
             fontSize: 14,
@@ -231,7 +249,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
         ),
         const SizedBox(height: 4),
         Text(
-          file.path.split('/').last,
+          _fileLabel(file),
           style: GoogleFonts.firaCode(
             color: AppColors.textSecondary,
             fontSize: 11,
@@ -239,5 +257,10 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
         ),
       ],
     );
+  }
+
+  String _fileLabel(XFile file) {
+    if (file.name.isNotEmpty) return file.name;
+    return file.path.split('/').last;
   }
 }

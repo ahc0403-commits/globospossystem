@@ -8,6 +8,7 @@ import '../../core/ui/app_primitives.dart';
 import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast_primitives_extended.dart';
+import '../../core/utils/number_input_utils.dart';
 import '../../main.dart';
 import 'onboarding_provider.dart';
 
@@ -178,7 +179,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         return;
                       }
                       final perPerson = needsPerPerson
-                          ? double.tryParse(_perPersonController.text.trim())
+                          ? parseDecimalInput(_perPersonController.text)
                           : null;
                       await notifier.createStore(
                         name,

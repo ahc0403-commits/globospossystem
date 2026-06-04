@@ -545,26 +545,50 @@ class PosActionButton extends StatelessWidget {
           )
         : (icon != null ? Icon(icon, size: iconSize, color: fg) : null);
 
-    final child = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (showIconSlot) ...[
-          SizedBox(
-            width: iconSize,
-            height: iconSize,
-            child: Center(child: iconSlot),
-          ),
-          SizedBox(width: compact ? 6 : 8),
-        ],
-        Text(
-          loading ? (loadingLabel ?? label) : label,
+    final child = LayoutBuilder(
+      builder: (context, constraints) {
+        final labelText = loading ? (loadingLabel ?? label) : label;
+        final gapWidth = showIconSlot ? (compact ? 6.0 : 8.0) : 0.0;
+        final leadingWidth = showIconSlot ? iconSize + gapWidth : 0.0;
+        final boundedLabel =
+            constraints.hasBoundedWidth && constraints.maxWidth.isFinite;
+        final labelMaxWidth = boundedLabel
+            ? math.max(0.0, constraints.maxWidth - leadingWidth)
+            : double.infinity;
+        final labelWidget = Text(
+          labelText,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          softWrap: false,
           style: GoogleFonts.notoSansKr(
             color: fg,
             fontSize: compact ? 12 : 13,
             fontWeight: compact ? FontWeight.w700 : FontWeight.w800,
           ),
-        ),
-      ],
+        );
+
+        return Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (showIconSlot) ...[
+                SizedBox(
+                  width: iconSize,
+                  height: iconSize,
+                  child: Center(child: iconSlot),
+                ),
+                SizedBox(width: gapWidth),
+              ],
+              boundedLabel
+                  ? ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: labelMaxWidth),
+                      child: labelWidget,
+                    )
+                  : labelWidget,
+            ],
+          ),
+        );
+      },
     );
 
     final childBackground = tone == PosActionTone.secondary
@@ -596,7 +620,7 @@ class PosActionButton extends StatelessWidget {
                 ? PosShadows.low
                 : ToastElevationTokens.none,
           ),
-          child: Center(child: child),
+          child: child,
         ),
       ),
     );

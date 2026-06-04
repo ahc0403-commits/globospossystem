@@ -51,6 +51,15 @@ void main() {
     expect(screen, contains('fetchCheckPhotos'));
 
     expect(checkScreen, contains('entry.value.hasInput'));
+    expect(checkScreen, contains("Key('pending_qc_draft_preview')"));
+    expect(checkScreen, contains('pending_qc_draft_item_'));
+    expect(checkScreen, contains('qc_result_selector_'));
+    expect(checkScreen, contains('_qcResultChip('));
+    expect(checkScreen, contains('qcResultPass'));
+    expect(checkScreen, contains('qcResultFail'));
+    expect(checkScreen, contains('qcResultNa'));
+    expect(checkScreen, contains('draft.result ='));
+    expect(checkScreen, contains('result != null'));
     expect(checkScreen, contains("result: entry.value.result ?? 'na'"));
     expect(checkScreen, contains('qscInputComplete'));
     expect(checkScreen, contains('isInitialTemplateLoad'));

@@ -18,4 +18,18 @@ void main() {
     expect(source, isNot(contains("_MenuSurfaceTab(label: '옵션')")));
     expect(source, isNot(contains("_MenuSurfaceTab(label: '메뉴 그룹')")));
   });
+
+  test(
+    'menu compact stack delegates category and item scrolling to the page',
+    () {
+      final source = readRepoFile('lib/features/admin/tabs/menu_tab.dart');
+
+      expect(source, contains('scrollable: false'));
+      expect(source, contains('this.scrollable = true'));
+      expect(source, contains('shrinkWrap: !scrollable'));
+      expect(source, contains('NeverScrollableScrollPhysics'));
+      expect(source, isNot(contains('height: 420')));
+      expect(source, isNot(contains('height: 620')));
+    },
+  );
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../core/i18n/locale_extensions.dart';
@@ -42,8 +43,10 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
   String? _initializedRestaurantId;
   final Set<String> _flashingOrderIds = <String>{};
   final Set<String> _completedOrderIds = <String>{};
+  final Set<String> _processingItemIds = <String>{};
   final Map<String, Timer> _flashTimers = <String, Timer>{};
   String? _lastError;
+  bool _hasObservedKitchenSnapshot = false;
   late final ProviderSubscription<KitchenState> _kitchenSub;
   late final ProviderSubscription<KitchenState> _kitchenErrorSub;
 
@@ -60,14 +63,32 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
     });
 
     _kitchenSub = ref.listenManual<KitchenState>(kitchenProvider, (prev, next) {
-      final oldIds = (prev?.orders ?? const <KitchenOrder>[])
-          .map((order) => order.orderId)
-          .toSet();
-      final newOrders = next.orders.where(
-        (order) => !oldIds.contains(order.orderId),
-      );
-      for (final order in newOrders) {
-        _triggerFlash(order.orderId);
+      if (next.isLoading) {
+        return;
+      }
+
+      final previousOrders = prev?.orders ?? const <KitchenOrder>[];
+      if (!_hasObservedKitchenSnapshot) {
+        _hasObservedKitchenSnapshot = true;
+        return;
+      }
+
+      final oldIds = previousOrders.map((order) => order.orderId).toSet();
+      final previousItemIds = {
+        for (final order in previousOrders)
+          for (final item in order.items) item.itemId,
+      };
+
+      for (final order in next.orders) {
+        final isNewOrder = !oldIds.contains(order.orderId);
+        final hasNewPendingItem = order.items.any(
+          (item) =>
+              item.status == 'pending' &&
+              !previousItemIds.contains(item.itemId),
+        );
+        if (isNewOrder || hasNewPendingItem) {
+          _triggerKitchenNewOrderAlert(order);
+        }
       }
     });
 
@@ -101,11 +122,31 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
     });
   }
 
+  void _triggerKitchenNewOrderAlert(KitchenOrder order) {
+    _triggerFlash(order.orderId);
+    unawaited(_playKitchenAlertSound());
+    if (!mounted) {
+      return;
+    }
+    final message =
+        '${context.l10n.kitchenNewOrders} · ${context.l10n.kitchenTableLabel(order.tableNumber)}';
+    showSuccessToast(context, message);
+  }
+
+  Future<void> _playKitchenAlertSound() async {
+    try {
+      await SystemSound.play(SystemSoundType.alert);
+    } catch (_) {
+      // Some web/mobile runtimes block alert sounds without user activation.
+    }
+  }
+
   void _ensureLoaded(String? storeId) {
     if (storeId == null || _initializedRestaurantId == storeId) {
       return;
     }
     _initializedRestaurantId = storeId;
+    _hasObservedKitchenSnapshot = false;
     Future.microtask(() {
       ref.read(kitchenProvider.notifier).loadOrders(storeId);
     });
@@ -120,31 +161,44 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
     };
   }
 
-  Future<void> _handleItemTap(
+  Future<void> _handleItemAction(
     KitchenNotifier notifier,
     KitchenOrder order,
     KitchenItem item,
   ) async {
-    final nextStatus = _cycleStatus(item.status);
-    final isLastToServe =
-        nextStatus == 'served' &&
-        order.items.every(
-          (current) =>
-              current.itemId == item.itemId || current.status == 'served',
-        );
-
-    if (isLastToServe) {
-      setState(() {
-        _completedOrderIds.add(order.orderId);
-      });
-      await Future<void>.delayed(const Duration(milliseconds: 500));
-      if (!mounted) return;
-      setState(() {
-        _completedOrderIds.remove(order.orderId);
-      });
+    if (_processingItemIds.contains(item.itemId)) {
+      return;
     }
+    final nextStatus = _cycleStatus(item.status);
+    final completesTicket =
+        nextStatus == 'served' && _isLastOpenItem(order, item);
 
-    await notifier.updateItemStatus(item.itemId, nextStatus);
+    setState(() {
+      _processingItemIds.add(item.itemId);
+    });
+
+    try {
+      await notifier.updateItemStatus(item.itemId, nextStatus);
+      if (!mounted) return;
+      if (completesTicket) {
+        setState(() {
+          _completedOrderIds.add(order.orderId);
+        });
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        if (!mounted) return;
+        setState(() {
+          _completedOrderIds.remove(order.orderId);
+        });
+      }
+    } finally {
+      if (!mounted) {
+        _processingItemIds.remove(item.itemId);
+      } else {
+        setState(() {
+          _processingItemIds.remove(item.itemId);
+        });
+      }
+    }
   }
 
   @override
@@ -197,23 +251,23 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
 
                       final queuedOrders = kitchenState.orders
                           .where(
-                            (order) =>
-                                _kitchenLaneForOrder(order) ==
-                                _KitchenLane.queued,
+                            (order) => order.items.any(
+                              (item) => item.status == 'pending',
+                            ),
                           )
                           .toList();
                       final preparingOrders = kitchenState.orders
                           .where(
-                            (order) =>
-                                _kitchenLaneForOrder(order) ==
-                                _KitchenLane.preparing,
+                            (order) => order.items.any(
+                              (item) => item.status == 'preparing',
+                            ),
                           )
                           .toList();
                       final readyOrders = kitchenState.orders
                           .where(
-                            (order) =>
-                                _kitchenLaneForOrder(order) ==
-                                _KitchenLane.ready,
+                            (order) => order.items.any(
+                              (item) => item.status == 'ready',
+                            ),
                           )
                           .toList();
                       final pendingItems = kitchenState.orders
@@ -254,74 +308,70 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                                   if (constraints.maxWidth < 1120) {
                                     return ListView(
                                       children: [
-                                        SizedBox(
-                                          height: 420,
-                                          child: _KitchenLaneColumn(
-                                            title:
-                                                context.l10n.kitchenNewOrders,
-                                            subtitle: context
-                                                .l10n
-                                                .kitchenLaneNewSubtitle,
-                                            statusColor: PosColors.info,
-                                            orders: queuedOrders,
-                                            now: _now,
-                                            spotlightOrderId: spotlightOrderId,
-                                            flashingOrderIds: _flashingOrderIds,
-                                            completedOrderIds:
-                                                _completedOrderIds,
-                                            onItemTap: (order, item) =>
-                                                _handleItemTap(
-                                                  notifier,
-                                                  order,
-                                                  item,
-                                                ),
-                                          ),
+                                        _KitchenLaneColumn(
+                                          title: context.l10n.kitchenNewOrders,
+                                          subtitle: context
+                                              .l10n
+                                              .kitchenLaneNewSubtitle,
+                                          statusColor: PosColors.info,
+                                          visibleStatuses: const {'pending'},
+                                          orders: queuedOrders,
+                                          now: _now,
+                                          spotlightOrderId: spotlightOrderId,
+                                          flashingOrderIds: _flashingOrderIds,
+                                          completedOrderIds: _completedOrderIds,
+                                          processingItemIds: _processingItemIds,
+                                          scrollable: false,
+                                          onItemAction: (order, item) =>
+                                              _handleItemAction(
+                                                notifier,
+                                                order,
+                                                item,
+                                              ),
                                         ),
                                         const SizedBox(height: 16),
-                                        SizedBox(
-                                          height: 420,
-                                          child: _KitchenLaneColumn(
-                                            title: context.l10n.kitchenCooking,
-                                            subtitle: context
-                                                .l10n
-                                                .kitchenLanePreparingSubtitle,
-                                            statusColor: PosColors.warning,
-                                            orders: preparingOrders,
-                                            now: _now,
-                                            spotlightOrderId: spotlightOrderId,
-                                            flashingOrderIds: _flashingOrderIds,
-                                            completedOrderIds:
-                                                _completedOrderIds,
-                                            onItemTap: (order, item) =>
-                                                _handleItemTap(
-                                                  notifier,
-                                                  order,
-                                                  item,
-                                                ),
-                                          ),
+                                        _KitchenLaneColumn(
+                                          title: context.l10n.kitchenCooking,
+                                          subtitle: context
+                                              .l10n
+                                              .kitchenLanePreparingSubtitle,
+                                          statusColor: PosColors.warning,
+                                          visibleStatuses: const {'preparing'},
+                                          orders: preparingOrders,
+                                          now: _now,
+                                          spotlightOrderId: spotlightOrderId,
+                                          flashingOrderIds: _flashingOrderIds,
+                                          completedOrderIds: _completedOrderIds,
+                                          processingItemIds: _processingItemIds,
+                                          scrollable: false,
+                                          onItemAction: (order, item) =>
+                                              _handleItemAction(
+                                                notifier,
+                                                order,
+                                                item,
+                                              ),
                                         ),
                                         const SizedBox(height: 16),
-                                        SizedBox(
-                                          height: 420,
-                                          child: _KitchenLaneColumn(
-                                            title: context.l10n.kitchenComplete,
-                                            subtitle: context
-                                                .l10n
-                                                .kitchenLaneReadySubtitle,
-                                            statusColor: PosColors.success,
-                                            orders: readyOrders,
-                                            now: _now,
-                                            spotlightOrderId: spotlightOrderId,
-                                            flashingOrderIds: _flashingOrderIds,
-                                            completedOrderIds:
-                                                _completedOrderIds,
-                                            onItemTap: (order, item) =>
-                                                _handleItemTap(
-                                                  notifier,
-                                                  order,
-                                                  item,
-                                                ),
-                                          ),
+                                        _KitchenLaneColumn(
+                                          title: context.l10n.kitchenComplete,
+                                          subtitle: context
+                                              .l10n
+                                              .kitchenLaneReadySubtitle,
+                                          statusColor: PosColors.success,
+                                          visibleStatuses: const {'ready'},
+                                          orders: readyOrders,
+                                          now: _now,
+                                          spotlightOrderId: spotlightOrderId,
+                                          flashingOrderIds: _flashingOrderIds,
+                                          completedOrderIds: _completedOrderIds,
+                                          processingItemIds: _processingItemIds,
+                                          scrollable: false,
+                                          onItemAction: (order, item) =>
+                                              _handleItemAction(
+                                                notifier,
+                                                order,
+                                                item,
+                                              ),
                                         ),
                                       ],
                                     );
@@ -336,13 +386,15 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                                               .l10n
                                               .kitchenLaneNewSubtitle,
                                           statusColor: PosColors.info,
+                                          visibleStatuses: const {'pending'},
                                           orders: queuedOrders,
                                           now: _now,
                                           spotlightOrderId: spotlightOrderId,
                                           flashingOrderIds: _flashingOrderIds,
                                           completedOrderIds: _completedOrderIds,
-                                          onItemTap: (order, item) =>
-                                              _handleItemTap(
+                                          processingItemIds: _processingItemIds,
+                                          onItemAction: (order, item) =>
+                                              _handleItemAction(
                                                 notifier,
                                                 order,
                                                 item,
@@ -357,13 +409,15 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                                               .l10n
                                               .kitchenLanePreparingSubtitle,
                                           statusColor: PosColors.warning,
+                                          visibleStatuses: const {'preparing'},
                                           orders: preparingOrders,
                                           now: _now,
                                           spotlightOrderId: spotlightOrderId,
                                           flashingOrderIds: _flashingOrderIds,
                                           completedOrderIds: _completedOrderIds,
-                                          onItemTap: (order, item) =>
-                                              _handleItemTap(
+                                          processingItemIds: _processingItemIds,
+                                          onItemAction: (order, item) =>
+                                              _handleItemAction(
                                                 notifier,
                                                 order,
                                                 item,
@@ -378,13 +432,15 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                                               .l10n
                                               .kitchenLaneReadySubtitle,
                                           statusColor: PosColors.success,
+                                          visibleStatuses: const {'ready'},
                                           orders: readyOrders,
                                           now: _now,
                                           spotlightOrderId: spotlightOrderId,
                                           flashingOrderIds: _flashingOrderIds,
                                           completedOrderIds: _completedOrderIds,
-                                          onItemTap: (order, item) =>
-                                              _handleItemTap(
+                                          processingItemIds: _processingItemIds,
+                                          onItemAction: (order, item) =>
+                                              _handleItemAction(
                                                 notifier,
                                                 order,
                                                 item,
@@ -410,8 +466,6 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
     );
   }
 }
-
-enum _KitchenLane { queued, preparing, ready }
 
 class _KitchenCommandHeader extends StatelessWidget {
   const _KitchenCommandHeader({
@@ -508,40 +562,35 @@ class _KitchenCommandHeader extends StatelessWidget {
   }
 }
 
-_KitchenLane _kitchenLaneForOrder(KitchenOrder order) {
-  if (order.items.every((item) => item.status == 'ready')) {
-    return _KitchenLane.ready;
-  }
-  if (order.items.any(
-    (item) => item.status == 'preparing' || item.status == 'ready',
-  )) {
-    return _KitchenLane.preparing;
-  }
-  return _KitchenLane.queued;
-}
-
 class _KitchenLaneColumn extends StatelessWidget {
   const _KitchenLaneColumn({
     required this.title,
     required this.subtitle,
     required this.statusColor,
+    required this.visibleStatuses,
     required this.orders,
     required this.now,
     required this.spotlightOrderId,
     required this.flashingOrderIds,
     required this.completedOrderIds,
-    required this.onItemTap,
+    required this.processingItemIds,
+    required this.onItemAction,
+    this.scrollable = true,
   });
 
   final String title;
   final String subtitle;
   final Color statusColor;
+  final Set<String> visibleStatuses;
   final List<KitchenOrder> orders;
   final DateTime now;
   final String? spotlightOrderId;
   final Set<String> flashingOrderIds;
   final Set<String> completedOrderIds;
-  final Future<void> Function(KitchenOrder order, KitchenItem item) onItemTap;
+  final Set<String> processingItemIds;
+  final bool scrollable;
+  final Future<void> Function(KitchenOrder order, KitchenItem item)
+  onItemAction;
 
   @override
   Widget build(BuildContext context) {
@@ -561,21 +610,29 @@ class _KitchenLaneColumn extends StatelessWidget {
             )
           : ListView.separated(
               padding: EdgeInsets.zero,
+              shrinkWrap: !scrollable,
+              physics: scrollable ? null : const NeverScrollableScrollPhysics(),
               itemCount: orders.length,
               separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final order = orders[index];
+                final visibleOrder = order.copyWith(
+                  items: order.items
+                      .where((item) => visibleStatuses.contains(item.status))
+                      .toList(),
+                );
                 return _KitchenOrderCard(
                   key: Key('kitchen_order_${order.orderId}'),
                   spotlightKey: order.orderId == spotlightOrderId
                       ? const Key('kitchen_first_order_card')
                       : null,
-                  order: order,
+                  order: visibleOrder,
                   now: now,
                   flashing: flashingOrderIds.contains(order.orderId),
                   completedFlashing: completedOrderIds.contains(order.orderId),
-                  onItemTap: (item) {
-                    onItemTap(order, item);
+                  processingItemIds: processingItemIds,
+                  onItemAction: (item) {
+                    unawaited(onItemAction(order, item));
                   },
                 );
               },
@@ -643,7 +700,7 @@ class _KitchenLanePlaceholder extends StatelessWidget {
   }
 }
 
-class _KitchenOrderCard extends StatefulWidget {
+class _KitchenOrderCard extends StatelessWidget {
   const _KitchenOrderCard({
     super.key,
     this.spotlightKey,
@@ -651,7 +708,8 @@ class _KitchenOrderCard extends StatefulWidget {
     required this.now,
     required this.flashing,
     required this.completedFlashing,
-    required this.onItemTap,
+    required this.processingItemIds,
+    required this.onItemAction,
   });
 
   final Key? spotlightKey;
@@ -659,37 +717,30 @@ class _KitchenOrderCard extends StatefulWidget {
   final DateTime now;
   final bool flashing;
   final bool completedFlashing;
-  final ValueChanged<KitchenItem> onItemTap;
-
-  @override
-  State<_KitchenOrderCard> createState() => _KitchenOrderCardState();
-}
-
-class _KitchenOrderCardState extends State<_KitchenOrderCard> {
-  bool _executionOpen = false;
+  final Set<String> processingItemIds;
+  final ValueChanged<KitchenItem> onItemAction;
 
   @override
   Widget build(BuildContext context) {
-    final order = widget.order;
-    final elapsed = _elapsedLabel(context, order.createdAt, widget.now);
+    final elapsed = _elapsedLabel(context, order.createdAt, now);
     final orderSummary = _orderQueueSummary(context, order);
-    final priorityColor = _orderPriorityColor(order, widget.now);
+    final priorityColor = _orderPriorityColor(order, now);
     final emphasized =
-        widget.spotlightKey != null ||
-        widget.flashing ||
-        widget.completedFlashing ||
+        spotlightKey != null ||
+        flashing ||
+        completedFlashing ||
         priorityColor == AppColors.statusCancelled;
 
     return AnimatedContainer(
-      key: widget.spotlightKey,
+      key: spotlightKey,
       duration: const Duration(milliseconds: 260),
       decoration: BoxDecoration(
         color: AppColors.surface1,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: widget.completedFlashing
+          color: completedFlashing
               ? AppColors.statusAvailable
-              : widget.flashing
+              : flashing
               ? AppColors.amber500
               : priorityColor.withValues(alpha: 0.44),
           width: emphasized ? 2.3 : 1.1,
@@ -721,14 +772,28 @@ class _KitchenOrderCardState extends State<_KitchenOrderCard> {
               children: [
                 Row(
                   children: [
-                    Text(
-                      context.l10n.kitchenTableLabel(order.tableNumber),
-                      style: AppTextStyles.operationalTitle(size: 28),
+                    Expanded(
+                      child: Text(
+                        context.l10n.kitchenTableLabel(order.tableNumber),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.operationalTitle(size: 28),
+                      ),
                     ),
-                    const Spacer(),
-                    ToastStatusBadge.kitchen(
-                      label: orderSummary.label,
-                      status: orderSummary.status,
+                    const SizedBox(width: 8),
+                    Flexible(
+                      fit: FlexFit.loose,
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: ToastStatusBadge.kitchen(
+                            label: orderSummary.label,
+                            status: orderSummary.status,
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -769,61 +834,11 @@ class _KitchenOrderCardState extends State<_KitchenOrderCard> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-            child: _executionOpen
-                ? Column(
-                    children: [
-                      for (final (itemIndex, item) in order.items.indexed) ...[
-                        _KitchenExecutionItemRow(
-                          key: (widget.spotlightKey != null && itemIndex == 0)
-                              ? const Key('kitchen_advance_status_button')
-                              : null,
-                          item: item,
-                          onAdvance: () => widget.onItemTap(item),
-                        ),
-                        if (itemIndex != order.items.length - 1)
-                          const SizedBox(height: 8),
-                      ],
-                    ],
-                  )
-                : _KitchenTicketPreview(order: order),
-          ),
-          ToastPrimaryActionZone(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-            alignment: WrapAlignment.start,
-            actions: [
-              PosPrimaryButton(
-                label: _executionOpen ? '티켓 접기' : '티켓 실행',
-                icon: _executionOpen
-                    ? Icons.unfold_less_rounded
-                    : Icons.restaurant_menu_rounded,
-                onPressed: () {
-                  setState(() {
-                    _executionOpen = !_executionOpen;
-                  });
-                },
-              ),
-              if (_executionOpen)
-                Text(
-                  context.l10n.kitchenTapItemToAction(
-                    orderSummary.primaryActionLabel,
-                  ),
-                  style: GoogleFonts.notoSansKr(
-                    color: AppColors.textPrimary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-            ],
-            supporting: Text(
-              _executionOpen
-                  ? context.l10n.kitchenImmediateFlowHint
-                  : orderSummary.supportingCopy,
-              style: GoogleFonts.notoSansKr(
-                color: AppColors.textSecondary,
-                fontSize: 11.5,
-                height: 1.4,
-              ),
+            child: _KitchenTicketPreview(
+              order: order,
+              processingItemIds: processingItemIds,
+              onItemAction: onItemAction,
             ),
           ),
         ],
@@ -833,15 +848,18 @@ class _KitchenOrderCardState extends State<_KitchenOrderCard> {
 }
 
 class _KitchenTicketPreview extends StatelessWidget {
-  const _KitchenTicketPreview({required this.order});
+  const _KitchenTicketPreview({
+    required this.order,
+    required this.processingItemIds,
+    required this.onItemAction,
+  });
 
   final KitchenOrder order;
+  final Set<String> processingItemIds;
+  final ValueChanged<KitchenItem> onItemAction;
 
   @override
   Widget build(BuildContext context) {
-    final visibleItems = order.items.take(3).toList();
-    final remainingCount = order.items.length - visibleItems.length;
-
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -852,50 +870,16 @@ class _KitchenTicketPreview extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final item in visibleItems)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 34,
-                    child: Text(
-                      '${item.quantity}x',
-                      style: GoogleFonts.notoSansKr(
-                        color: AppColors.amber500,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      item.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.notoSansKr(
-                        color: AppColors.textPrimary,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _StatusChip(status: item.status),
-                ],
-              ),
+          for (final (index, item) in order.items.indexed) ...[
+            _KitchenTicketItemRow(
+              key: index == 0
+                  ? const Key('kitchen_first_ticket_item_row')
+                  : null,
+              item: item,
+              isProcessing: processingItemIds.contains(item.itemId),
+              onItemAction: () => onItemAction(item),
             ),
-          if (remainingCount > 0) ...[
-            const SizedBox(height: 6),
-            Text(
-              '+$remainingCount',
-              textAlign: TextAlign.right,
-              style: GoogleFonts.notoSansKr(
-                color: AppColors.textSecondary,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            if (index != order.items.length - 1) const SizedBox(height: 8),
           ],
         ],
       ),
@@ -903,61 +887,84 @@ class _KitchenTicketPreview extends StatelessWidget {
   }
 }
 
-class _KitchenExecutionItemRow extends StatelessWidget {
-  const _KitchenExecutionItemRow({
+class _KitchenTicketItemRow extends StatelessWidget {
+  const _KitchenTicketItemRow({
     super.key,
     required this.item,
-    required this.onAdvance,
+    required this.isProcessing,
+    required this.onItemAction,
   });
 
   final KitchenItem item;
-  final VoidCallback onAdvance;
+  final bool isProcessing;
+  final VoidCallback onItemAction;
 
   @override
   Widget build(BuildContext context) {
+    final isActionable = _isKitchenItemActionable(item);
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
       decoration: BoxDecoration(
-        color: AppColors.surface2,
-        borderRadius: BorderRadius.circular(12),
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.surface3),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            width: 32,
-            child: Text(
-              '${item.quantity}x',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: AppColors.amber500,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.label,
+          Row(
+            children: [
+              SizedBox(
+                width: 34,
+                child: Text(
+                  '${item.quantity}x',
                   style: GoogleFonts.notoSansKr(
-                    color: AppColors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
+                    color: AppColors.amber500,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
                   ),
                 ),
-                const SizedBox(height: 4),
-                _StatusChip(status: item.status),
-              ],
+              ),
+              Expanded(
+                child: Text(
+                  item.label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.notoSansKr(
+                    color: AppColors.textPrimary,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    height: 1.25,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _StatusChip(status: item.status),
+            ],
+          ),
+          if (isActionable) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                key: const Key('kitchen_item_status_button'),
+                onPressed: isProcessing ? null : onItemAction,
+                icon: isProcessing
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(_kitchenItemActionIcon(item.status), size: 16),
+                label: Text(_kitchenItemActionLabel(context, item.status)),
+                style: OutlinedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          PosSecondaryButton(
-            label: _nextKitchenActionCopy(context, item.status),
-            icon: Icons.arrow_forward_rounded,
-            onPressed: onAdvance,
-          ),
+          ],
         ],
       ),
     );
@@ -1366,12 +1373,13 @@ String _elapsedLabel(BuildContext context, DateTime createdAt, DateTime now) {
 
 Color _orderPriorityColor(KitchenOrder order, DateTime now) {
   final hasPending = order.items.any((item) => item.status == 'pending');
+  final hasPreparing = order.items.any((item) => item.status == 'preparing');
   final hasReady = order.items.any((item) => item.status == 'ready');
   final waitMinutes = now.difference(order.createdAt.toUtc()).inMinutes;
   if (waitMinutes >= 15) {
     return AppColors.statusCancelled;
   }
-  if (hasPending) {
+  if (hasPending || hasPreparing) {
     return AppColors.amber500;
   }
   if (hasReady) {
@@ -1400,20 +1408,20 @@ _orderQueueSummary(BuildContext context, KitchenOrder order) {
       primaryActionLabel: l10n.kitchenStartCooking,
     );
   }
-  if (hasReady) {
-    return (
-      status: 'ready',
-      label: l10n.kitchenReadyHandoff,
-      supportingCopy: l10n.kitchenReadySupport,
-      primaryActionLabel: l10n.kitchenHandoffComplete,
-    );
-  }
   if (hasPreparing) {
     return (
       status: 'preparing',
       label: l10n.kitchenCooking,
       supportingCopy: l10n.kitchenPreparingSupport,
       primaryActionLabel: l10n.kitchenMarkComplete,
+    );
+  }
+  if (hasReady) {
+    return (
+      status: 'ready',
+      label: l10n.kitchenReadyHandoff,
+      supportingCopy: l10n.kitchenReadySupport,
+      primaryActionLabel: l10n.kitchenHandoffComplete,
     );
   }
   return (
@@ -1424,19 +1432,34 @@ _orderQueueSummary(BuildContext context, KitchenOrder order) {
   );
 }
 
-String _nextKitchenActionCopy(BuildContext context, String status) {
-  switch (status.toLowerCase()) {
-    case 'pending':
-      return context.l10n.kitchenStartCooking;
-    case 'preparing':
-      return context.l10n.kitchenMarkComplete;
-    case 'ready':
-      return context.l10n.kitchenHandoffComplete;
-    case 'served':
-      return context.l10n.kitchenProcessingComplete;
-    default:
-      return context.l10n.kitchenMoveNextStep;
-  }
+bool _isKitchenItemActionable(KitchenItem item) {
+  return item.status == 'pending' ||
+      item.status == 'preparing' ||
+      item.status == 'ready';
+}
+
+bool _isLastOpenItem(KitchenOrder order, KitchenItem item) {
+  return order.items.every(
+    (current) => current.itemId == item.itemId || current.status == 'served',
+  );
+}
+
+String _kitchenItemActionLabel(BuildContext context, String status) {
+  return switch (status) {
+    'pending' => context.l10n.kitchenStartCooking,
+    'preparing' => context.l10n.kitchenMarkComplete,
+    'ready' => context.l10n.kitchenHandoffComplete,
+    _ => context.l10n.kitchenMoveNextStep,
+  };
+}
+
+IconData _kitchenItemActionIcon(String status) {
+  return switch (status) {
+    'pending' => Icons.local_fire_department_rounded,
+    'preparing' => Icons.done_rounded,
+    'ready' => Icons.room_service_rounded,
+    _ => Icons.arrow_forward_rounded,
+  };
 }
 
 String _statusLabel(BuildContext context, String normalizedStatus) {

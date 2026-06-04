@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/services/offline_mutation_queue_service.dart';
 import '../../core/services/order_service.dart';
+import '../../core/utils/live_sync_scope.dart';
 import '../../main.dart';
 import 'order_model.dart';
 
@@ -53,8 +54,14 @@ class OrderNotifier extends StateNotifier<OrderState> {
     _refreshOfflineQueueCount();
   }
 
+  static const _autoRefreshInterval = Duration(seconds: 2);
+
   RealtimeChannel? _orderItemsChannel;
   String? _subscribedOrderId;
+  String? _subscribedStoreId;
+  String? _subscribedTableId;
+  Timer? _pollTimer;
+  bool _realtimeConnected = false;
   final _uuid = const Uuid();
 
   List<Map<String, dynamic>> _cartPayloadItems() {
@@ -134,17 +141,23 @@ class OrderNotifier extends StateNotifier<OrderState> {
     }
   }
 
-  Future<void> loadActiveOrder(String tableId, String storeId) async {
+  Future<void> loadActiveOrder(
+    String tableId,
+    String storeId, {
+    bool syncOffline = true,
+  }) async {
     try {
       final response = await supabase
           .from('orders')
           .select(
-            'id, table_id, status, created_at, order_items(id, menu_item_id, label, unit_price, quantity, status, item_type, menu_items(name))',
+            'id, table_id, status, created_at, order_items(id, created_at, menu_item_id, label, unit_price, quantity, status, item_type, menu_items(name))',
           )
           .eq('table_id', tableId)
           .eq('restaurant_id', storeId)
           .not('status', 'in', '(completed,cancelled)')
           .order('created_at', ascending: false)
+          .order('created_at', referencedTable: 'order_items', ascending: true)
+          .order('id', referencedTable: 'order_items', ascending: true)
           .limit(1);
 
       final activeOrder = response.isEmpty
@@ -152,56 +165,150 @@ class OrderNotifier extends StateNotifier<OrderState> {
           : Order.fromJson(Map<String, dynamic>.from(response.first));
 
       state = state.copyWith(activeOrder: activeOrder, clearError: true);
-      unawaited(syncOfflineQueue(storeId, tableId: tableId));
-
-      // Subscribe to order_items changes for realtime kitchen status updates
-      if (activeOrder != null) {
-        await _subscribeOrderItems(activeOrder.id, tableId, storeId);
-      } else {
-        await _unsubscribeOrderItems();
+      if (syncOffline) {
+        unawaited(syncOfflineQueue(storeId, tableId: tableId));
       }
+
+      await _subscribeOrderItems(activeOrder?.id, tableId, storeId);
     } catch (error) {
       state = state.copyWith(error: 'Failed to load active order: $error');
     }
   }
 
   Future<void> _subscribeOrderItems(
-    String orderId,
+    String? orderId,
     String tableId,
     String storeId,
   ) async {
-    if (_subscribedOrderId == orderId && _orderItemsChannel != null) {
+    if (_subscribedOrderId == orderId &&
+        _subscribedTableId == tableId &&
+        _subscribedStoreId == storeId &&
+        _orderItemsChannel != null) {
+      _ensureAutoRefresh(tableId, storeId);
       return;
     }
 
     await _unsubscribeOrderItems();
     _subscribedOrderId = orderId;
+    _subscribedTableId = tableId;
+    _subscribedStoreId = storeId;
+    _realtimeConnected = false;
 
     _orderItemsChannel = supabase
-        .channel('public:waiter_order_items:$orderId')
+        .channel(
+          LiveSyncScope.entityChannel(
+            'waiter_active_order',
+            storeId,
+            orderId ?? tableId,
+          ),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'orders',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (payload) =>
+              _refreshActiveOrderFromRealtime(tableId, storeId, payload),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'orders',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (payload) =>
+              _refreshActiveOrderFromRealtime(tableId, storeId, payload),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'orders',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (payload) =>
+              _refreshActiveOrderFromRealtime(tableId, storeId, payload),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'order_items',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshActiveOrderFromRealtime(tableId, storeId),
+        )
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
           table: 'order_items',
-          callback: (_) {
-            if (mounted) {
-              loadActiveOrder(tableId, storeId);
-            }
-          },
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshActiveOrderFromRealtime(tableId, storeId),
         )
-        .subscribe();
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'order_items',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshActiveOrderFromRealtime(tableId, storeId),
+        )
+        .subscribe((status, [error]) {
+          final connected = status == RealtimeSubscribeStatus.subscribed;
+          if (connected != _realtimeConnected) {
+            _realtimeConnected = connected;
+            _ensureAutoRefresh(tableId, storeId);
+          }
+        });
+    _ensureAutoRefresh(tableId, storeId);
   }
 
   Future<void> _unsubscribeOrderItems() async {
+    _pollTimer?.cancel();
+    _pollTimer = null;
     if (_orderItemsChannel != null) {
       await _orderItemsChannel!.unsubscribe();
       _orderItemsChannel = null;
       _subscribedOrderId = null;
+      _subscribedStoreId = null;
+      _subscribedTableId = null;
     }
+  }
+
+  void _refreshActiveOrderFromRealtime(
+    String tableId,
+    String storeId, [
+    PostgresChangePayload? payload,
+  ]) {
+    if (!mounted) {
+      return;
+    }
+    if (payload != null && !_payloadBelongsToTable(payload, tableId)) {
+      return;
+    }
+    unawaited(loadActiveOrder(tableId, storeId, syncOffline: false));
+  }
+
+  bool _payloadBelongsToTable(PostgresChangePayload payload, String tableId) {
+    final newTableId = payload.newRecord['table_id']?.toString();
+    final oldTableId = payload.oldRecord['table_id']?.toString();
+    return newTableId == tableId || oldTableId == tableId;
+  }
+
+  void _ensureAutoRefresh(String tableId, String storeId) {
+    if (_pollTimer != null &&
+        _subscribedTableId == tableId &&
+        _subscribedStoreId == storeId) {
+      return;
+    }
+
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(_autoRefreshInterval, (_) {
+      if (mounted &&
+          _subscribedTableId == tableId &&
+          _subscribedStoreId == storeId) {
+        unawaited(loadActiveOrder(tableId, storeId, syncOffline: false));
+      }
+    });
   }
 
   Future<void> submitOrder(String storeId, String tableId) async {
     if (state.cart.isEmpty) {
+      state = state.copyWith(error: _orderItemsRequiredMessage);
       return;
     }
 
@@ -248,6 +355,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
 
   Future<void> addMoreItems(String orderId, String storeId) async {
     if (state.cart.isEmpty) {
+      state = state.copyWith(error: _orderItemsRequiredMessage);
       return;
     }
 
@@ -527,10 +635,14 @@ final orderProvider = StateNotifierProvider<OrderNotifier, OrderState>(
   (ref) => OrderNotifier(),
 );
 
+const _orderItemsRequiredMessage =
+    'Add at least one item before sending the order.';
+
 String _mapOrderError(Object error, String fallbackPrefix) {
   if (error is PostgrestException) {
     return switch (error.message) {
       'TABLE_ALREADY_OCCUPIED' => 'The selected table is already occupied.',
+      'TABLE_NOT_AVAILABLE' => 'The selected table is not available.',
       'TABLE_NOT_FOUND' => 'The selected table could not be found.',
       'ORDER_ITEMS_REQUIRED' =>
         'Add at least one item before sending the order.',

@@ -15,6 +15,9 @@ windows/flutter/ephemeral
 *.log
 *.tmp
 .DS_Store
+.env
+.env.*
+.vercel
 supabase/.temp
 scripts/node_modules
 tmp

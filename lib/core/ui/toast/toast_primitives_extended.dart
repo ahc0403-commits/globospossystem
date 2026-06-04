@@ -93,65 +93,73 @@ class ToastOperationalQueuePane extends StatelessWidget {
   Widget build(BuildContext context) {
     return ToastWorkSurface(
       padding: padding,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.only(bottom: ToastSpacingTokens.md),
-            decoration: BoxDecoration(
-              color: Colors.transparent,
-              border: Border(
-                bottom: BorderSide(
-                  color: ToastColorTokens.border.withValues(alpha: 0.86),
-                ),
-              ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: GoogleFonts.notoSansKr(
-                          color: ToastColorTokens.textPrimary,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                          height: 1.12,
-                          letterSpacing: -0.4,
-                        ),
-                      ),
-                      if (subtitle != null) ...[
-                        const SizedBox(height: ToastSpacingTokens.sm),
-                        Text(
-                          subtitle!,
-                          style: GoogleFonts.notoSansKr(
-                            color: ToastColorTokens.textSecondary,
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w400,
-                            height: 1.35,
-                          ),
-                        ),
-                      ],
-                    ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final body = constraints.hasBoundedHeight
+              ? Expanded(child: child)
+              : child;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.only(bottom: ToastSpacingTokens.md),
+                decoration: BoxDecoration(
+                  color: Colors.transparent,
+                  border: Border(
+                    bottom: BorderSide(
+                      color: ToastColorTokens.border.withValues(alpha: 0.86),
+                    ),
                   ),
                 ),
-                if (trailing != null) ...[
-                  const SizedBox(width: ToastSpacingTokens.md),
-                  trailing!,
-                ],
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: GoogleFonts.notoSansKr(
+                              color: ToastColorTokens.textPrimary,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w700,
+                              height: 1.12,
+                              letterSpacing: -0.4,
+                            ),
+                          ),
+                          if (subtitle != null) ...[
+                            const SizedBox(height: ToastSpacingTokens.sm),
+                            Text(
+                              subtitle!,
+                              style: GoogleFonts.notoSansKr(
+                                color: ToastColorTokens.textSecondary,
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w400,
+                                height: 1.35,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    if (trailing != null) ...[
+                      const SizedBox(width: ToastSpacingTokens.md),
+                      trailing!,
+                    ],
+                  ],
+                ),
+              ),
+              if (headerBottom != null) ...[
+                const SizedBox(height: ToastSpacingTokens.md),
+                headerBottom!,
               ],
-            ),
-          ),
-          if (headerBottom != null) ...[
-            const SizedBox(height: ToastSpacingTokens.md),
-            headerBottom!,
-          ],
-          const SizedBox(height: ToastSpacingTokens.md),
-          Expanded(child: child),
-        ],
+              const SizedBox(height: ToastSpacingTokens.md),
+              body,
+            ],
+          );
+        },
       ),
     );
   }
@@ -207,10 +215,14 @@ class ToastViewportScroll extends StatefulWidget {
     super.key,
     required this.child,
     this.padding = EdgeInsets.zero,
+    this.physics = const AlwaysScrollableScrollPhysics(
+      parent: ClampingScrollPhysics(),
+    ),
   });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
+  final ScrollPhysics physics;
 
   @override
   State<ToastViewportScroll> createState() => _ToastViewportScrollState();
@@ -238,6 +250,8 @@ class _ToastViewportScrollState extends State<ToastViewportScroll> {
       thumbVisibility: true,
       child: ListView(
         controller: _scrollController,
+        physics: widget.physics,
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: widget.padding,
         children: [widget.child],
       ),
@@ -455,6 +469,9 @@ EdgeInsets _toastResponsivePagePadding(double width) {
   return const EdgeInsets.all(20);
 }
 
+const double _toastSingleScrollOwnerBreakpoint = 1120;
+const double _toastCompactPageMinHeight = 1600;
+
 class ToastResponsiveBody extends StatelessWidget {
   const ToastResponsiveBody({
     super.key,
@@ -462,12 +479,16 @@ class ToastResponsiveBody extends StatelessWidget {
     this.maxWidth = 1360,
     this.padding,
     this.alignment = Alignment.topCenter,
+    this.minHeight = 720,
+    this.fitToViewportWhenNarrow = false,
   });
 
   final Widget child;
   final double maxWidth;
   final EdgeInsetsGeometry? padding;
   final Alignment alignment;
+  final double minHeight;
+  final bool fitToViewportWhenNarrow;
 
   @override
   Widget build(BuildContext context) {
@@ -485,18 +506,32 @@ class ToastResponsiveBody extends StatelessWidget {
           constraints.maxHeight - insets.vertical,
         );
         final resolvedWidth = math.min(maxWidth, availableWidth);
-
-        return Padding(
-          padding: resolvedPadding,
-          child: Align(
-            alignment: alignment,
-            child: SizedBox(
-              width: resolvedWidth,
-              height: availableHeight,
-              child: child,
-            ),
+        final narrowLayout =
+            constraints.maxWidth < _toastSingleScrollOwnerBreakpoint;
+        final preferredHeight = narrowLayout && !fitToViewportWhenNarrow
+            ? math.max(
+                math.max(availableHeight, minHeight),
+                _toastCompactPageMinHeight,
+              )
+            : math.max(availableHeight, minHeight);
+        final useSingleScrollOwner = fitToViewportWhenNarrow && narrowLayout;
+        final effectiveHeight = useSingleScrollOwner
+            ? availableHeight
+            : preferredHeight;
+        final body = Align(
+          alignment: alignment,
+          child: SizedBox(
+            width: resolvedWidth,
+            height: effectiveHeight,
+            child: child,
           ),
         );
+
+        if (!narrowLayout && effectiveHeight <= availableHeight) {
+          return Padding(padding: resolvedPadding, child: body);
+        }
+
+        return ToastViewportScroll(padding: resolvedPadding, child: body);
       },
     );
   }
@@ -533,7 +568,12 @@ class ToastResponsiveScrollBody extends StatelessWidget {
 
         return ListView(
           controller: controller,
-          physics: physics,
+          physics:
+              physics ??
+              const AlwaysScrollableScrollPhysics(
+                parent: ClampingScrollPhysics(),
+              ),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: resolvedPadding,
           children: [
             Align(
@@ -606,7 +646,10 @@ class ToastTopbar extends StatelessWidget {
           ),
           if (trailing != null) ...[
             const SizedBox(width: AppSpacing.md),
-            trailing!,
+            Flexible(
+              fit: FlexFit.loose,
+              child: Align(alignment: Alignment.centerRight, child: trailing!),
+            ),
           ],
         ],
       ),
@@ -875,38 +918,49 @@ class PosDataPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return ToastWorkSurface(
       padding: padding,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final body = constraints.hasBoundedHeight
+              ? Expanded(child: child)
+              : child;
+
+          return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.titleLarge?.copyWith(fontSize: 20),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: Theme.of(
+                            context,
+                          ).textTheme.titleLarge?.copyWith(fontSize: 20),
+                        ),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            subtitle!,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ],
                     ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle!,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
+                  ),
+                  if (trailing != null) ...[
+                    const SizedBox(width: 12),
+                    trailing!,
                   ],
-                ),
+                ],
               ),
-              if (trailing != null) ...[const SizedBox(width: 12), trailing!],
+              const SizedBox(height: 16),
+              body,
             ],
-          ),
-          const SizedBox(height: 16),
-          Expanded(child: child),
-        ],
+          );
+        },
       ),
     );
   }
@@ -921,6 +975,8 @@ class PosSplitContent extends StatelessWidget {
     this.secondaryFlex = 4,
     this.breakpoint = 1080,
     this.spacing = 16,
+    this.compactPrimaryHeight = 520,
+    this.compactSecondaryHeight = 320,
   });
 
   final Widget primary;
@@ -929,19 +985,35 @@ class PosSplitContent extends StatelessWidget {
   final int secondaryFlex;
   final double breakpoint;
   final double spacing;
+  final double compactPrimaryHeight;
+  final double compactSecondaryHeight;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth < breakpoint) {
-          return Column(
-            children: [
-              SizedBox(height: 520, child: primary),
-              SizedBox(height: spacing),
-              SizedBox(height: 320, child: secondary),
-            ],
-          );
+          final stackedHeight =
+              compactPrimaryHeight + spacing + compactSecondaryHeight;
+          final stackedChildren = [
+            SizedBox(height: compactPrimaryHeight, child: primary),
+            SizedBox(height: spacing),
+            SizedBox(height: compactSecondaryHeight, child: secondary),
+          ];
+
+          if (constraints.hasBoundedHeight &&
+              constraints.maxHeight < stackedHeight) {
+            return ListView(
+              padding: EdgeInsets.zero,
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: ClampingScrollPhysics(),
+              ),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              children: stackedChildren,
+            );
+          }
+
+          return Column(children: stackedChildren);
         }
         return Row(
           children: [

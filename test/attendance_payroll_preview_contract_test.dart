@@ -18,20 +18,18 @@ void main() {
       attendanceTab,
       contains('title: context.l10n.attendanceManagementTitle'),
     );
-    expect(
-      attendanceTab,
-      contains('label: context.l10n.payrollPreview'),
-    );
-    expect(
-      attendanceTab,
-      contains('label: context.l10n.download'),
-    );
+    expect(attendanceTab, contains('label: context.l10n.payrollPreview'));
+    expect(attendanceTab, contains('label: context.l10n.download'));
     expect(
       attendanceTab,
       contains('title: context.l10n.attendancePayrollSummaryTitle'),
     );
     expect(attendanceTab, contains('PosSplitContent('));
     expect(attendanceTab, contains('PosTableShell('));
+    expect(attendanceTab, contains('compactAttendanceList'));
+    expect(attendanceTab, contains('ToastResponsiveScrollBody('));
+    expect(attendanceTab, contains('_attendanceDetailBody'));
+    expect(attendanceTab, contains('scrollable: false'));
     expect(attendanceTab, contains('pinService.verifyPin('));
     expect(attendanceTab, contains('record.isUnpaired'));
     expect(attendanceTab, contains('payrollService.calculatePayroll('));

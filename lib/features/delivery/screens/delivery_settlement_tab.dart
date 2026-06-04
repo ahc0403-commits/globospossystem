@@ -51,6 +51,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
 
     if (!PermissionUtils.canAccessDeliverySettlement(role)) {
       return Center(
+        key: const Key('delivery_settlement_root'),
         child: Text(
           l10n.deliveryAdminOnlyMessage,
           style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
@@ -60,12 +61,14 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
 
     if (state.isLoading) {
       return const ToastOperationalLoadingState(
+        key: Key('delivery_settlement_root'),
         label: PosLoadingCopy.loadingSettlements,
       );
     }
 
     if (state.error != null) {
       return Center(
+        key: const Key('delivery_settlement_root'),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -113,6 +116,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
         disputeCount > 0;
 
     return RefreshIndicator(
+      key: const Key('delivery_settlement_root'),
       onRefresh: () async => _loadData(),
       child: ToastResponsiveScrollBody(
         maxWidth: 1240,
@@ -835,6 +839,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
   // ─── 미정산 금액 카드 ──────────────────
 
   Widget _buildUnsettledCard(UnsettledRevenueSummary u) {
+    final l10n = context.l10n;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -851,7 +856,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '정산 대기',
+                  l10n.deliverySettlementWaiting,
                   style: GoogleFonts.notoSansKr(
                     color: AppColors.amber500,
                     fontSize: 13,
@@ -885,6 +890,8 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
   // ─── 정산 카드 ────────────────────────
 
   Widget _buildSettlementCard(DeliverySettlement s) {
+    final l10n = context.l10n;
+    final statusLabel = _statusLabel(context, s.status);
     final dateRange =
         '${DateFormat('M/d').format(s.periodStart)}~${DateFormat('M/d').format(s.periodEnd)}';
 
@@ -917,7 +924,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    s.statusLabel,
+                    statusLabel,
                     style: GoogleFonts.notoSansKr(
                       color: AppColors.textSecondary,
                       fontSize: 12,
@@ -928,10 +935,13 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      _statusBadge(s.statusLabel, _statusColor(s.status)),
-                      _statusBadge('주문 ${s.orderCount}건', AppColors.statusInfo),
+                      _statusBadge(statusLabel, _statusColor(s.status)),
                       _statusBadge(
-                        '차감 ${s.items.length}건',
+                        l10n.deliveryOrderCount(s.orderCount),
+                        AppColors.statusInfo,
+                      ),
+                      _statusBadge(
+                        l10n.deliveryDeductionCount(s.items.length),
                         s.items.isNotEmpty
                             ? AppColors.statusCancelled
                             : AppColors.statusAvailable,
@@ -957,34 +967,34 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
             runSpacing: 12,
             children: [
               _settlementMiniMetric(
-                '총매출',
+                l10n.reportsTotalSales,
                 _fmtVnd(s.grossTotal),
                 AppColors.textPrimary,
               ),
               _settlementMiniMetric(
-                '차감',
+                l10n.deliveryDeductionShort,
                 '-${_fmtVnd(s.totalDeductions)}',
                 AppColors.statusCancelled,
               ),
               _settlementMiniMetric(
-                '입금',
+                l10n.deliveryDepositShort,
                 _fmtVnd(s.netSettlement),
                 AppColors.statusAvailable,
               ),
             ],
           ),
           const SizedBox(height: 12),
-          _detailRow('상태', s.statusLabel, color: _statusColor(s.status)),
-          _detailRow('정산 기간', dateRange),
+          _detailRow(l10n.status, statusLabel, color: _statusColor(s.status)),
+          _detailRow(l10n.deliverySettlementPeriod, dateRange),
           _detailRow(
-            '입금 확인',
+            l10n.deliveryConfirmDeposit,
             _formatDateTime(s.receivedAt),
             color: s.receivedAt != null
                 ? AppColors.statusAvailable
                 : AppColors.textSecondary,
           ),
           _detailRow(
-            '메모',
+            l10n.memoOptional,
             _stringOrDash(s.notes),
             color: s.notes?.trim().isNotEmpty == true
                 ? AppColors.textPrimary
@@ -993,7 +1003,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
           const Divider(color: AppColors.surface2, height: 16),
           // 매출 총액
           _detailRow(
-            '배달 총매출',
+            l10n.deliveryGrossTotal,
             _fmtVnd(s.grossTotal),
             color: AppColors.textPrimary,
           ),
@@ -1001,8 +1011,8 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
           // 차감 항목
           if (s.items.isEmpty)
             _detailRow(
-              '차감 항목',
-              '기록된 차감 내역이 없습니다.',
+              l10n.deliveryDeductionItems,
+              l10n.deliveryNoDeductionItems,
               color: AppColors.textSecondary,
             )
           else
@@ -1017,13 +1027,13 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
             const Divider(color: AppColors.surface2, height: 16),
           // 합계
           _detailRow(
-            '총 차감',
+            l10n.deliveryTotalDeductions,
             '-${_fmtVnd(s.totalDeductions)}',
             color: AppColors.statusCancelled,
             bold: true,
           ),
           _detailRow(
-            '실입금액',
+            l10n.deliveryActualDeposit,
             _fmtVnd(s.netSettlement),
             color: AppColors.statusAvailable,
             bold: true,
@@ -1032,7 +1042,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                '주문 ${s.orderCount}건',
+                l10n.deliveryOrderCount(s.orderCount),
                 style: GoogleFonts.notoSansKr(
                   color: AppColors.textSecondary,
                   fontSize: 12,
@@ -1045,7 +1055,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
             Align(
               alignment: Alignment.centerRight,
               child: PosActionButton(
-                label: '입금 확인',
+                label: context.l10n.deliveryConfirmDeposit,
                 tone: PosActionTone.affirm,
                 icon: Icons.check_circle_outline,
                 loading:
