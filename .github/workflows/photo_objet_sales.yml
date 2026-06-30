@@ -1,13 +1,17 @@
-name: Photo Objet Daily Sales Pull
+name: Photo Objet Sales Pull
 
 on:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '*/10 * * * *'
   workflow_dispatch:
     inputs:
       target_date:
-        description: 'Date to pull (YYYY-MM-DD), defaults to yesterday'
+        description: 'Date to pull (YYYY-MM-DD), defaults to today in Asia/Ho_Chi_Minh'
         required: false
+
+concurrency:
+  group: photo-objet-sales-pull
+  cancel-in-progress: false
 
 jobs:
   pull-sales:
@@ -35,6 +39,8 @@ jobs:
           TARGET_DATE: ${{ github.event.inputs.target_date }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          PHOTO_OBJET_INCLUDE_YESTERDAY: 'false'
+          PHOTO_OBJET_D7_ENABLED: 'false'
           MOERS_D7_USER: tob003
           MOERS_D7_PASS: ${{ secrets.MOERS_D7_PASS }}
           PHOTO_OBJET_D7_STORE_ID: ${{ secrets.PHOTO_OBJET_D7_STORE_ID }}

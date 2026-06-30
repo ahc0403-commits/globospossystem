@@ -1,8 +1,45 @@
 const puppeteer = require('puppeteer');
 const { createClient } = require('@supabase/supabase-js');
 const XLSX = require('xlsx');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+
+const HCM_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+
+function envFlag(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === null || raw === '') return fallback;
+  return ['1', 'true', 'yes', 'y', 'on'].includes(String(raw).toLowerCase());
+}
+
+function hcmDateString(offsetDays = 0) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + offsetDays);
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: HCM_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const value = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
+
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value)
+      .sort()
+      .map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function sha256(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
 
 function hasDeviceHeader(cells) {
   return cells.some(cell =>
@@ -165,53 +202,62 @@ const supabase = createClient(
 const STORES = [
   {
     storeName: 'D7',
+    enabled: envFlag('PHOTO_OBJET_D7_ENABLED', false),
     user: process.env.MOERS_D7_USER,
     pass: process.env.MOERS_D7_PASS,
     storeId: process.env.PHOTO_OBJET_D7_STORE_ID,
   },
   {
     storeName: 'BIEN HOA',
+    enabled: envFlag('PHOTO_OBJET_BIENHOA_ENABLED', true),
     user: process.env.MOERS_BIENHOA_USER,
     pass: process.env.MOERS_BIENHOA_PASS,
     storeId: process.env.PHOTO_OBJET_BIENHOA_STORE_ID,
   },
   {
     storeName: 'DI AN',
+    enabled: envFlag('PHOTO_OBJET_DIAN_ENABLED', true),
     user: process.env.MOERS_DIAN_USER,
     pass: process.env.MOERS_DIAN_PASS,
     storeId: process.env.PHOTO_OBJET_DIAN_STORE_ID,
   },
   {
     storeName: 'LONG THANH',
+    enabled: envFlag('PHOTO_OBJET_LONGTHANH_ENABLED', true),
     user: process.env.MOERS_LONGTHANH_USER,
     pass: process.env.MOERS_LONGTHANH_PASS,
     storeId: process.env.PHOTO_OBJET_LONGTHANH_STORE_ID,
   },
   {
     storeName: 'THAO DIEN',
+    enabled: envFlag('PHOTO_OBJET_THAODIEN_ENABLED', true),
     user: process.env.MOERS_THAODIEN_USER,
     pass: process.env.MOERS_THAODIEN_PASS,
     storeId: process.env.PHOTO_OBJET_THAODIEN_STORE_ID,
   },
   {
     storeName: 'QUANG TRUNG',
+    enabled: envFlag('PHOTO_OBJET_QUANGTRUNG_ENABLED', true),
     user: process.env.MOERS_QUANGTRUNG_USER,
     pass: process.env.MOERS_QUANGTRUNG_PASS,
     storeId: process.env.PHOTO_OBJET_QUANGTRUNG_STORE_ID,
   },
   {
     storeName: 'NOW ZONE',
+    enabled: envFlag('PHOTO_OBJET_NOWZONE_ENABLED', true),
     user: process.env.MOERS_NOWZONE_USER,
     pass: process.env.MOERS_NOWZONE_PASS,
     storeId: process.env.PHOTO_OBJET_NOWZONE_STORE_ID,
   },
 ];
 
-function getTargetDate() {
-  if (process.env.TARGET_DATE) return process.env.TARGET_DATE;
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().split('T')[0];
+function getTargetDates() {
+  if (process.env.TARGET_DATE) return [process.env.TARGET_DATE];
+  const dates = [hcmDateString(0)];
+  if (envFlag('PHOTO_OBJET_INCLUDE_YESTERDAY', false)) {
+    dates.push(hcmDateString(-1));
+  }
+  return [...new Set(dates)];
 }
 
 function parseAmount(raw) {
@@ -225,9 +271,8 @@ function aggregateByDevice(rows) {
     const deviceName = String(row['Device Name'] || '').trim();
     const deviceId = String(row['Device ID'] || '').trim();
     const amount = parseAmount(row['Amount']);
-    const type = String(row['Type'] || '').trim();
 
-    if (!deviceName) continue;
+    if (!deviceName || amount <= 0) continue;
 
     if (!devices[deviceName]) {
       devices[deviceName] = {
@@ -241,18 +286,73 @@ function aggregateByDevice(rows) {
       };
     }
 
-    if (type === 'Cash' || type === '현금') {
-      devices[deviceName].gross_sales += amount;
-      devices[deviceName].transaction_count += 1;
-    } else {
-      devices[deviceName].service_amount += amount;
-      devices[deviceName].service_count += 1;
-    }
+    devices[deviceName].gross_sales += amount;
+    devices[deviceName].transaction_count += 1;
 
     devices[deviceName].raw_rows.push(row);
   }
 
   return Object.values(devices);
+}
+
+function parseSoldAt(targetDate, rawTime) {
+  const time = String(rawTime || '').trim();
+  const match = time.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) return null;
+  const hh = match[1].padStart(2, '0');
+  const mm = match[2];
+  const ss = (match[3] || '00').padStart(2, '0');
+  return `${targetDate}T${hh}:${mm}:${ss}+07:00`;
+}
+
+function normalizeRawSalesRows(rows, store, targetDate, method, pullRunId) {
+  return rows
+    .map((row, index) => {
+      const deviceName = String(row['Device Name'] || '').trim();
+      const deviceId = String(row['Device ID'] || '').trim();
+      const saleTimeText = String(row['Time'] || '').trim();
+      const rawType = String(row['Type'] || '').trim();
+      const amount = parseAmount(row['Amount']);
+
+      if (!deviceName || amount <= 0) return null;
+
+      const rawPayload = {
+        source: 'moers',
+        collector_method: method,
+        store_name: store.storeName,
+        row_index: index,
+        row,
+      };
+      const hashBasis = stableJson({
+        store_id: store.storeId,
+        sale_date: targetDate,
+        device_id: deviceId,
+        device_name: deviceName,
+        sale_time_text: saleTimeText,
+        amount,
+        raw_type: rawType,
+        row_index: index,
+        row,
+      });
+
+      return {
+        store_id: store.storeId,
+        sale_date: targetDate,
+        device_name: deviceName,
+        device_id: deviceId || null,
+        sale_time_text: saleTimeText || null,
+        sold_at: parseSoldAt(targetDate, saleTimeText),
+        amount,
+        raw_type: rawType || null,
+        payment_method: 'CASH',
+        buyer_kind: 'anonymous',
+        raw_payload: rawPayload,
+        source_hash: sha256(hashBasis),
+        pull_run_id: pullRunId,
+        last_seen_at: new Date().toISOString(),
+      };
+    })
+    .filter(Boolean);
 }
 
 async function loginAndGetData(page, user, pass, targetDate, downloadDir) {
@@ -401,8 +501,76 @@ async function loginAndGetData(page, user, pass, targetDate, downloadDir) {
   return { method: 'html_scrape', rows };
 }
 
+async function startPullRun(store, targetDate) {
+  const { data, error } = await supabase
+    .from('photo_objet_sales_pull_runs')
+    .insert({
+      store_id: store.storeId,
+      target_date: targetDate,
+      status: 'started',
+    })
+    .select('id')
+    .single();
+
+  if (error) throw new Error(`Pull run create failed: ${error.message}`);
+  return data.id;
+}
+
+async function finishPullRun(runId, patch) {
+  if (!runId) return;
+  const { error } = await supabase
+    .from('photo_objet_sales_pull_runs')
+    .update({
+      ...patch,
+      finished_at: new Date().toISOString(),
+    })
+    .eq('id', runId);
+  if (error) {
+    console.error(`  Pull run update failed: ${error.message}`);
+  }
+}
+
+async function upsertRawSalesRows(rows) {
+  if (rows.length === 0) {
+    return { inserted: 0, duplicate: 0 };
+  }
+
+  const hashes = rows.map(row => row.source_hash);
+  const { data: existing, error: lookupError } = await supabase
+    .from('photo_objet_sales_raw')
+    .select('source_hash')
+    .in('source_hash', hashes);
+  if (lookupError) {
+    throw new Error(`Raw sales lookup failed: ${lookupError.message}`);
+  }
+
+  const existingHashes = new Set((existing || []).map(row => row.source_hash));
+  const { error } = await supabase
+    .from('photo_objet_sales_raw')
+    .upsert(rows, { onConflict: 'source_hash' });
+  if (error) {
+    throw new Error(`Raw sales upsert failed: ${error.message}`);
+  }
+
+  return {
+    inserted: rows.filter(row => !existingHashes.has(row.source_hash)).length,
+    duplicate: rows.filter(row => existingHashes.has(row.source_hash)).length,
+  };
+}
+
 async function processStore(store, targetDate, downloadDir) {
-  const { storeName, user, pass, storeId } = store;
+  const { storeName, user, pass, storeId, enabled } = store;
+
+  if (!enabled) {
+    return {
+      storeName,
+      success: true,
+      skipped: true,
+      rows: 0,
+      rawInserted: 0,
+      rawDuplicate: 0,
+    };
+  }
 
   if (!storeId) {
     return {
@@ -436,8 +604,10 @@ async function processStore(store, targetDate, downloadDir) {
   const page = await browser.newPage();
   page.setDefaultTimeout(15000);
   page.setDefaultNavigationTimeout(30000);
+  let pullRunId = null;
 
   try {
+    pullRunId = await startPullRun(store, targetDate);
     const { method, rows } = await loginAndGetData(
       page,
       user,
@@ -447,12 +617,38 @@ async function processStore(store, targetDate, downloadDir) {
     );
     console.log(`  Method: ${method}, ${rows.length} rows`);
 
+    const rawRows = normalizeRawSalesRows(
+      rows,
+      store,
+      targetDate,
+      method,
+      pullRunId,
+    );
+    const rawResult = await upsertRawSalesRows(rawRows);
+    console.log(
+      `  ${storeName}: ${rawResult.inserted} new raw rows, ${rawResult.duplicate} duplicates`,
+    );
+
     const deviceRows = aggregateByDevice(rows);
     console.log(`  ${storeName}: ${deviceRows.length} devices`);
 
     if (deviceRows.length === 0) {
       console.log(`  ${storeName}: no sales rows for target date`);
-      return { storeName, success: true, rows: 0 };
+      await finishPullRun(pullRunId, {
+        collector_method: method,
+        status: 'success',
+        rows_read: rows.length,
+        rows_inserted: rawResult.inserted,
+        rows_duplicate: rawResult.duplicate,
+        aggregate_rows: 0,
+      });
+      return {
+        storeName,
+        success: true,
+        rows: 0,
+        rawInserted: rawResult.inserted,
+        rawDuplicate: rawResult.duplicate,
+      };
     }
 
     const payload = deviceRows.map(d => ({
@@ -465,6 +661,7 @@ async function processStore(store, targetDate, downloadDir) {
       transaction_count: d.transaction_count,
       service_count: d.service_count,
       raw_rows: d.raw_rows,
+      pulled_at: new Date().toISOString(),
       pull_source: 'scheduled',
     }));
 
@@ -477,9 +674,27 @@ async function processStore(store, targetDate, downloadDir) {
     }
 
     console.log(`  ✓ ${storeName}: ${payload.length} device rows upserted`);
-    return { storeName, success: true, rows: payload.length };
+    await finishPullRun(pullRunId, {
+      collector_method: method,
+      status: 'success',
+      rows_read: rows.length,
+      rows_inserted: rawResult.inserted,
+      rows_duplicate: rawResult.duplicate,
+      aggregate_rows: payload.length,
+    });
+    return {
+      storeName,
+      success: true,
+      rows: payload.length,
+      rawInserted: rawResult.inserted,
+      rawDuplicate: rawResult.duplicate,
+    };
   } catch (err) {
     console.error(`  ✗ ${storeName}: ${err.message}`);
+    await finishPullRun(pullRunId, {
+      status: 'failed',
+      error_message: err.message,
+    });
     return { storeName, success: false, error: err.message };
   } finally {
     await page.close();
@@ -493,6 +708,7 @@ function validateEnv() {
   if (!process.env.SUPABASE_SERVICE_KEY) missing.push('SUPABASE_SERVICE_KEY');
 
   for (const store of STORES) {
+    if (!store.enabled) continue;
     if (!store.user) missing.push(`user for ${store.storeName}`);
     if (!store.pass) missing.push(`password for ${store.storeName}`);
     if (!store.storeId) missing.push(`store_id for ${store.storeName}`);
@@ -506,9 +722,15 @@ function validateEnv() {
 async function main() {
   validateEnv();
 
-  const targetDate = getTargetDate();
+  const targetDates = getTargetDates();
+  const enabledStores = STORES.filter(store => store.enabled);
+  const skippedStores = STORES.filter(store => !store.enabled);
   console.log('\n=== Photo Objet Sales Pull ===');
-  console.log(`Target date: ${targetDate}`);
+  console.log(`Target dates: ${targetDates.join(', ')}`);
+  console.log(`Enabled stores: ${enabledStores.map(s => s.storeName).join(', ')}`);
+  if (skippedStores.length > 0) {
+    console.log(`Skipped stores: ${skippedStores.map(s => s.storeName).join(', ')}`);
+  }
   console.log(`Started at: ${new Date().toISOString()}\n`);
 
   const downloadDir = path.join(__dirname, 'downloads_tmp');
@@ -517,10 +739,12 @@ async function main() {
   const results = [];
 
   try {
-    for (const store of STORES) {
-      console.log(`\nProcessing: ${store.storeName}`);
-      const result = await processStore(store, targetDate, downloadDir);
-      results.push(result);
+    for (const targetDate of targetDates) {
+      for (const store of STORES) {
+        console.log(`\nProcessing: ${store.storeName} (${targetDate})`);
+        const result = await processStore(store, targetDate, downloadDir);
+        results.push({ ...result, targetDate });
+      }
     }
   } finally {
     try {
@@ -533,7 +757,9 @@ async function main() {
   const failed = results.filter(r => !r.success);
   console.log(`Success: ${success.length}/${results.length}`);
   success.forEach(r =>
-    console.log(`  ✓ ${r.storeName} (${r.rows} device rows)`),
+    console.log(
+      `  ✓ ${r.storeName} ${r.targetDate} (${r.rows} device rows, ${r.rawInserted || 0} new raw, ${r.rawDuplicate || 0} duplicate raw${r.skipped ? ', skipped' : ''})`,
+    ),
   );
   if (failed.length > 0) {
     console.log('Failed:');
