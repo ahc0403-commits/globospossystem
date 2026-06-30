@@ -33,9 +33,9 @@ jobs:
           rm -rf ~/.cache/puppeteer
           CHROME_VERSION=$(node -p "require('puppeteer').PUPPETEER_REVISIONS.chrome")
           echo "Puppeteer Chrome revision: ${CHROME_VERSION}"
-          INSTALL_OUTPUT=$(./node_modules/.bin/browsers install "chrome@${CHROME_VERSION}" --path "$HOME/.cache/puppeteer")
-          echo "${INSTALL_OUTPUT}"
-          CHROME_PATH=$(echo "${INSTALL_OUTPUT}" | awk 'NF { print $NF }' | tail -1)
+          ./node_modules/.bin/browsers install "chrome@${CHROME_VERSION}" --path "$HOME/.cache/puppeteer"
+          CHROME_PATH=$(find "$HOME/.cache/puppeteer" -type f -path "*/chrome-linux64/chrome" | head -1)
+          test -n "${CHROME_PATH}"
           echo "PUPPETEER_EXECUTABLE_PATH=${CHROME_PATH}" >> "$GITHUB_ENV"
           export PUPPETEER_EXECUTABLE_PATH="${CHROME_PATH}"
           "${CHROME_PATH}" --version
