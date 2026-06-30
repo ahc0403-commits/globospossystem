@@ -28,14 +28,13 @@ jobs:
         run: npm install --no-package-lock
         working-directory: scripts
 
-      - name: Install Chromium
+      - uses: browser-actions/setup-chrome@v1
+        id: setup-chrome
+
+      - name: Configure Chrome
         run: |
-          rm -rf ~/.cache/puppeteer
-          CHROME_VERSION=$(node -p "require('puppeteer').PUPPETEER_REVISIONS.chrome")
-          echo "Puppeteer Chrome revision: ${CHROME_VERSION}"
-          ./node_modules/.bin/browsers install "chrome@${CHROME_VERSION}" --path "$HOME/.cache/puppeteer"
-          CHROME_PATH=$(find "$HOME/.cache/puppeteer" -type f -path "*/chrome-linux64/chrome" | head -1)
-          test -n "${CHROME_PATH}"
+          CHROME_PATH="${{ steps.setup-chrome.outputs.chrome-path }}"
+          test -x "${CHROME_PATH}"
           echo "PUPPETEER_EXECUTABLE_PATH=${CHROME_PATH}" >> "$GITHUB_ENV"
           export PUPPETEER_EXECUTABLE_PATH="${CHROME_PATH}"
           "${CHROME_PATH}" --version
