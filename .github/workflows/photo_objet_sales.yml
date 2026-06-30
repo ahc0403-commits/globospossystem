@@ -30,8 +30,9 @@ jobs:
 
       - name: Install Chromium
         run: |
-          rm -rf ~/.cache/puppeteer/chrome
-          npx puppeteer browsers install chrome
+          rm -rf ~/.cache/puppeteer
+          npx puppeteer install chrome
+          node -e "console.log(require('puppeteer').executablePath())"
         working-directory: scripts
 
       - name: Pull Photo Objet sales
