@@ -29,7 +29,9 @@ jobs:
         working-directory: scripts
 
       - name: Install Chromium
-        run: npx puppeteer browsers install chrome
+        run: |
+          rm -rf ~/.cache/puppeteer/chrome
+          npx puppeteer browsers install chrome
         working-directory: scripts
 
       - name: Pull Photo Objet sales
