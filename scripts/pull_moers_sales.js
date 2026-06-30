@@ -599,6 +599,10 @@ async function processStore(store, targetDate, downloadDir) {
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu',
+      '--disable-extensions',
+      '--disable-component-extensions-with-background-pages',
+      '--disable-client-side-phishing-detection',
+      '--disable-features=BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights,HttpsFirstBalancedModeAutoEnable,HttpsUpgrades,SubresourceFilter',
     ],
   });
   console.log(`  ${storeName}: opening browser page`);
