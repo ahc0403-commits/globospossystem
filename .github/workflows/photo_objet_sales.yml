@@ -31,7 +31,8 @@ jobs:
       - name: Install Chromium
         run: |
           rm -rf ~/.cache/puppeteer
-          npx puppeteer install chrome
+          CHROME_VERSION=$(node -p "require('puppeteer').PUPPETEER_REVISIONS.chrome")
+          npx puppeteer browsers install "chrome@${CHROME_VERSION}"
           node -e "console.log(require('puppeteer').executablePath())"
         working-directory: scripts
 
