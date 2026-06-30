@@ -32,7 +32,7 @@ jobs:
         run: |
           rm -rf ~/.cache/puppeteer
           CHROME_VERSION=$(node -p "require('puppeteer').PUPPETEER_REVISIONS.chrome")
-          npx puppeteer browsers install "chrome@${CHROME_VERSION}"
+          npx @puppeteer/browsers install "chrome@${CHROME_VERSION}" --path "$HOME/.cache/puppeteer"
           node -e "console.log(require('puppeteer').executablePath())"
         working-directory: scripts
 
