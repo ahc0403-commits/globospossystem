@@ -592,6 +592,7 @@ async function processStore(store, targetDate, downloadDir) {
 
   const browser = await puppeteer.launch({
     headless: true,
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
     protocolTimeout: 120000,
     args: [
       '--no-sandbox',
