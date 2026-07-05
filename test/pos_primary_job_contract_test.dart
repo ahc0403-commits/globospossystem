@@ -79,9 +79,10 @@ void main() {
 
     expect(
       orderWorkspace,
-      contains("key: const Key('order_sent_items_secondary_detail')"),
+      contains('order_sent_items_always_visible_detail'),
     );
-    expect(orderWorkspace, contains('initiallyExpanded: false'));
+    expect(orderWorkspace, isNot(contains('order_sent_items_secondary_detail')));
+    expect(orderWorkspace, contains('initiallyExpanded: true'));
   });
 
   test(
