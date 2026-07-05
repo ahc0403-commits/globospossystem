@@ -12,8 +12,9 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
+import '../../i18n/locale_extensions.dart';
 import '../app_theme.dart';
 import '../pos_design_tokens.dart';
 import 'toast_vocabulary.dart';
@@ -121,7 +122,7 @@ class ToastQueueTable extends StatelessWidget {
                 child: Text(
                   c.label.toUpperCase(),
                   textAlign: c.align,
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.textSecondary,
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
@@ -209,10 +210,11 @@ class ToastMetricStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = _metricColumnsForWidth(
-          constraints.maxWidth,
-          metrics.length,
-        );
+        final compactPhone = constraints.maxWidth < 420;
+        final columns = compactPhone
+            ? 1
+            : _metricColumnsForWidth(constraints.maxWidth, metrics.length);
+        final gap = compactPhone ? 6.0 : 8.0;
         final rows = <List<ToastMetric>>[];
         for (var index = 0; index < metrics.length; index += columns) {
           rows.add(
@@ -226,7 +228,10 @@ class ToastMetricStrip extends StatelessWidget {
             borderRadius: AppRadius.lg,
             border: Border.all(color: AppColors.surface3),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          padding: EdgeInsets.symmetric(
+            horizontal: compactPhone ? 5 : 6,
+            vertical: compactPhone ? 5 : 6,
+          ),
           child: Column(
             children: [
               for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) ...[
@@ -239,14 +244,17 @@ class ToastMetricStrip extends StatelessWidget {
                     ) ...[
                       Expanded(
                         child: columnIndex < rows[rowIndex].length
-                            ? _tile(rows[rowIndex][columnIndex])
+                            ? _tile(
+                                rows[rowIndex][columnIndex],
+                                compactPhone: compactPhone,
+                              )
                             : const SizedBox.shrink(),
                       ),
-                      if (columnIndex != columns - 1) const SizedBox(width: 8),
+                      if (columnIndex != columns - 1) SizedBox(width: gap),
                     ],
                   ],
                 ),
-                if (rowIndex != rows.length - 1) const SizedBox(height: 8),
+                if (rowIndex != rows.length - 1) SizedBox(height: gap),
               ],
             ],
           ),
@@ -255,7 +263,7 @@ class ToastMetricStrip extends StatelessWidget {
     );
   }
 
-  Widget _tile(ToastMetric m) {
+  Widget _tile(ToastMetric m, {required bool compactPhone}) {
     final tone = m.tone;
     return Container(
       decoration: BoxDecoration(
@@ -264,28 +272,38 @@ class ToastMetricStrip extends StatelessWidget {
         border: Border.all(color: AppColors.surface3),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        padding: EdgeInsets.symmetric(
+          horizontal: compactPhone ? 9 : 10,
+          vertical: compactPhone ? 8 : 10,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               m.label.toUpperCase(),
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
-                fontSize: 10,
+                fontSize: compactPhone ? 9.5 : 10,
                 fontWeight: FontWeight.w800,
-                letterSpacing: 0.55,
+                letterSpacing: compactPhone ? 0.25 : 0.55,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              m.value,
-              style: GoogleFonts.notoSansKr(
-                color: tone ?? AppColors.textPrimary,
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                height: 1.05,
+            SizedBox(height: compactPhone ? 6 : 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  m.value,
+                  maxLines: 1,
+                  style: AppFonts.system(
+                    color: tone ?? AppColors.textPrimary,
+                    fontSize: compactPhone ? 20 : 22,
+                    fontWeight: FontWeight.w800,
+                    height: 1.05,
+                  ),
+                ),
               ),
             ),
           ],
@@ -349,18 +367,18 @@ class ToastSelectedContextHeader extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.textPrimary,
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
+                    letterSpacing: 0,
                   ),
                 ),
                 if (subtitle != null) ...[
                   const SizedBox(height: 6),
                   Text(
                     subtitle!,
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: AppColors.textSecondary,
                       fontSize: 13.5,
                       fontWeight: FontWeight.w400,
@@ -390,7 +408,7 @@ class ToastSelectedContextHeader extends StatelessWidget {
                         Flexible(
                           child: Text(
                             urgentReason!,
-                            style: GoogleFonts.notoSansKr(
+                            style: AppFonts.system(
                               color: noteColor,
                               fontSize: 11.5,
                               fontWeight: FontWeight.w800,
@@ -462,7 +480,7 @@ class ToastIssueActionSection extends StatelessWidget {
         children: [
           Text(
             issue,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontSize: 14,
               fontWeight: FontWeight.w700,
@@ -472,7 +490,7 @@ class ToastIssueActionSection extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               detail!,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -529,7 +547,7 @@ class PosActionButton extends StatelessWidget {
     final bg = toneBackground(tone);
     final fg = toneForeground(tone);
     final tooltip = disabled && !loading && disabledReason != null
-        ? PosDisabledCopy.forReason(disabledReason!)
+        ? PosDisabledCopy.forReason(context.l10n, disabledReason!)
         : null;
 
     final showIconSlot = icon != null || loading;
@@ -560,7 +578,7 @@ class PosActionButton extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           softWrap: false,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: fg,
             fontSize: compact ? 12 : 13,
             fontWeight: compact ? FontWeight.w700 : FontWeight.w800,
@@ -699,7 +717,7 @@ class ToastStatusChip extends StatelessWidget {
       ),
       child: Text(
         label.toUpperCase(),
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: fg,
           fontSize: 10,
           fontWeight: FontWeight.w800,
@@ -727,38 +745,59 @@ class ToastOperationalEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 28, color: AppColors.textMuted),
-            const SizedBox(height: 12),
-            Text(
-              headline,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.notoSansKr(
-                color: AppColors.textPrimary,
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            if (helper != null) ...[
-              const SizedBox(height: 6),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxHeight.isFinite
+            ? constraints.maxHeight < 120
+            : false;
+        final content = Padding(
+          padding: EdgeInsets.all(compact ? 8 : 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: compact ? 22 : 28, color: AppColors.textMuted),
+              SizedBox(height: compact ? 8 : 12),
               Text(
-                helper!,
+                headline,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.notoSansKr(
-                  color: AppColors.textSecondary,
-                  fontSize: 13,
-                  height: 1.35,
+                maxLines: compact ? 2 : null,
+                overflow: compact ? TextOverflow.ellipsis : null,
+                style: AppFonts.system(
+                  color: AppColors.textPrimary,
+                  fontSize: compact ? 14 : 16,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
+              if (helper != null) ...[
+                SizedBox(height: compact ? 4 : 6),
+                Text(
+                  helper!,
+                  textAlign: TextAlign.center,
+                  maxLines: compact ? 2 : null,
+                  overflow: compact ? TextOverflow.ellipsis : null,
+                  style: AppFonts.system(
+                    color: AppColors.textSecondary,
+                    fontSize: compact ? 12 : 13,
+                    height: 1.35,
+                  ),
+                ),
+              ],
             ],
-          ],
-        ),
-      ),
+          ),
+        );
+
+        if (!constraints.maxHeight.isFinite) {
+          return Center(child: content);
+        }
+
+        return SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(child: content),
+          ),
+        );
+      },
     );
   }
 }
@@ -802,7 +841,7 @@ class ToastFilterChip extends StatelessWidget {
         ),
         child: Text(
           display,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: selected ? AppColors.surface0 : AppColors.textPrimary,
             fontSize: 12,
             fontWeight: FontWeight.w600,
@@ -901,7 +940,7 @@ class ToastDenseDataTable extends StatelessWidget {
               flex: c.flex,
               child: Text(
                 c.label,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textPrimary,
                   fontSize: _fontSize,
                   fontWeight: FontWeight.w700,
@@ -924,7 +963,7 @@ class ToastDenseDataTable extends StatelessWidget {
               flex: i < columns.length ? columns[i].flex : 1,
               child: Text(
                 row.cells[i],
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textPrimary,
                   fontSize: _fontSize,
                   fontWeight: row.bold ? FontWeight.w700 : FontWeight.w500,
@@ -952,7 +991,7 @@ class ToastDenseDataTable extends StatelessWidget {
               flex: i < columns.length ? columns[i].flex : 1,
               child: Text(
                 row.cells[i],
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textPrimary,
                   fontSize: _fontSize,
                   fontWeight: FontWeight.w700,
@@ -1008,7 +1047,7 @@ class ToastConfirmDialog {
             Flexible(
               child: Text(
                 title,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w700,
                 ),
@@ -1020,14 +1059,14 @@ class ToastConfirmDialog {
             ? null
             : Text(
                 description,
-                style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
+                style: AppFonts.system(color: AppColors.textSecondary),
               ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: Text(
               cancelLabel,
-              style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
+              style: AppFonts.system(color: AppColors.textSecondary),
             ),
           ),
           PosActionButton(
@@ -1080,7 +1119,7 @@ class ToastConfirmDialog {
             Flexible(
               child: Text(
                 title,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w700,
                 ),
@@ -1094,7 +1133,7 @@ class ToastConfirmDialog {
             onPressed: () => Navigator.pop(ctx, false),
             child: Text(
               cancelLabel,
-              style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
+              style: AppFonts.system(color: AppColors.textSecondary),
             ),
           ),
           PosActionButton(
@@ -1112,15 +1151,13 @@ class ToastConfirmDialog {
 // ToastOperationalLoadingState — calm, no decoration.
 // =============================================================================
 class ToastOperationalLoadingState extends StatelessWidget {
-  const ToastOperationalLoadingState({
-    super.key,
-    this.label = PosLoadingCopy.loadingQueue,
-  });
+  const ToastOperationalLoadingState({super.key, this.label});
 
-  final String label;
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
+    final effectiveLabel = label ?? PosLoadingCopy.loadingQueue(context.l10n);
     return Center(
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1132,8 +1169,8 @@ class ToastOperationalLoadingState extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Text(
-            label,
-            style: GoogleFonts.notoSansKr(
+            effectiveLabel,
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
               fontWeight: FontWeight.w600,

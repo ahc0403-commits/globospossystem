@@ -62,7 +62,7 @@ void main() {
     expect(waiter, contains('t.isAvailable'));
     expect(waiter, contains('reservedCount'));
     expect(floorLayout, contains('final reserved = table.isReserved'));
-    expect(floorLayout, contains("'Reserved'"));
+    expect(floorLayout, contains('l10n.tablesFilterReserved'));
     expect(orderProvider, contains("'TABLE_NOT_AVAILABLE'"));
   });
 }

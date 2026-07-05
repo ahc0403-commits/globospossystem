@@ -5,10 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/layout/adaptive_layout.dart';
-import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
-import '../../main.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/offline_banner.dart';
 import '../../core/utils/permission_utils.dart';
@@ -187,58 +185,6 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     ];
   }
 
-  List<BottomNavigationBarItem> _mobileNavItemsForRole(String? role) {
-    final l10n = context.l10n;
-    final items = <BottomNavigationBarItem>[
-      BottomNavigationBarItem(
-        icon: Icon(Icons.table_restaurant),
-        label: l10n.tables,
-      ),
-      BottomNavigationBarItem(
-        icon: Icon(Icons.restaurant_menu),
-        label: l10n.menu,
-      ),
-      BottomNavigationBarItem(
-        icon: const Icon(Icons.people),
-        label: l10n.staff,
-      ),
-      BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: l10n.reports),
-      BottomNavigationBarItem(
-        icon: Icon(Icons.access_time),
-        label: l10n.attendance,
-      ),
-      BottomNavigationBarItem(
-        icon: Icon(Icons.inventory_2_outlined),
-        label: l10n.inventory,
-      ),
-      BottomNavigationBarItem(
-        icon: const Icon(Icons.fact_check),
-        label: l10n.navQuality,
-      ),
-      BottomNavigationBarItem(
-        icon: const Icon(Icons.settings),
-        label: l10n.settings,
-      ),
-    ];
-
-    if (PermissionUtils.canAccessDeliverySettlement(role)) {
-      items.add(
-        BottomNavigationBarItem(
-          icon: Icon(Icons.delivery_dining),
-          label: l10n.deliberryShort,
-        ),
-      );
-    }
-
-    items.add(
-      BottomNavigationBarItem(
-        icon: Icon(Icons.receipt_long),
-        label: l10n.eInvoice,
-      ),
-    );
-    return items;
-  }
-
   Widget _buildWebDesktopLayout(
     BuildContext context,
     bool isSuperAdminView,
@@ -305,57 +251,49 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     String? role,
   ) {
     final tabs = _tabsForRole(role);
-    final navItems = _mobileNavItemsForRole(role);
+    final groups = _sidebarGroupsForRole(role);
     final safeIndex = _currentIndex.clamp(0, tabs.length - 1);
 
-    return Scaffold(
+    return ToastSidebar(
       key: const Key('admin_root'),
-      backgroundColor: PosColors.canvas,
-      appBar: AppBar(
-        backgroundColor: PosColors.canvas,
-        elevation: 0,
-        leading: isSuperAdminView
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back, color: PosColors.accent),
-                tooltip: context.l10n.backToSystemAdmin,
-                onPressed: () => context.go('/super-admin'),
-              )
-            : null,
-        title: Text(
-          isSuperAdminView
-              ? context.l10n.adminViewTitle
-              : context.l10n.appTitle,
-          style: AppTextStyles.operationalTitle(
-            size: 24,
-            color: PosColors.accent,
-          ),
-        ),
-        actions: [
-          const Padding(
-            padding: EdgeInsets.only(right: 8),
-            child: Center(child: AppNavBar()),
-          ),
-          if (isSuperAdminView)
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8),
-              child: Center(
-                child: ToastStatusBadge(
+      title: isSuperAdminView
+          ? context.l10n.adminViewTitle
+          : context.l10n.appTitle,
+      groups: groups,
+      selectedIndex: safeIndex,
+      onItemSelected: (index) => setState(() => _currentIndex = index),
+      topBarLeading: isSuperAdminView
+          ? IconButton(
+              icon: const Icon(Icons.arrow_back, color: PosColors.accent),
+              tooltip: context.l10n.backToSystemAdmin,
+              onPressed: () => context.go('/super-admin'),
+            )
+          : null,
+      topBarTrailing: isSuperAdminView
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const AppNavBar(),
+                const SizedBox(width: 8),
+                ToastStatusBadge(
                   label: context.l10n.superAdminMode,
                   color: PosColors.warning,
                   compact: true,
                 ),
+              ],
+            )
+          : const AppNavBar(),
+      bottomItems: isSuperAdminView
+          ? null
+          : [
+              ToastSidebarItem(
+                icon: Icons.logout,
+                label: context.l10n.logout,
+                urgency: ToastSidebarUrgency.backOffice,
+                itemKey: const Key('logout_button'),
+                onTap: () => ref.read(authProvider.notifier).logout(),
               ),
-            ),
-          if (!isSuperAdminView)
-            IconButton(
-              key: const Key('logout_button'),
-              onPressed: () => ref.read(authProvider.notifier).logout(),
-              icon: const Icon(Icons.logout),
-              color: PosColors.textPrimary,
-              tooltip: context.l10n.logout,
-            ),
-        ],
-      ),
+            ],
       body: Column(
         children: [
           const OfflineBanner(),
@@ -363,20 +301,6 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
             child: IndexedStack(index: safeIndex, children: tabs),
           ),
         ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: safeIndex,
-        onTap: (index) {
-          if (index >= tabs.length) {
-            return;
-          }
-          setState(() => _currentIndex = index);
-        },
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: PosColors.surface,
-        selectedItemColor: PosColors.accent,
-        unselectedItemColor: PosColors.textSecondary,
-        items: navItems,
       ),
     );
   }

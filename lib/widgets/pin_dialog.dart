@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../core/i18n/locale_extensions.dart';
 import '../main.dart';
@@ -46,7 +46,7 @@ class _PinDialogState extends State<_PinDialog> {
           children: [
             Text(
               widget.title,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textPrimary,
                 fontWeight: FontWeight.w700,
                 fontSize: 18,
@@ -102,7 +102,7 @@ class _PinDialogState extends State<_PinDialog> {
                                   ),
                                   child: Text(
                                     key == '<' ? '⌫' : key,
-                                    style: GoogleFonts.bebasNeue(
+                                    style: AppFonts.system(
                                       color: AppColors.textPrimary,
                                       fontSize: 24,
                                     ),

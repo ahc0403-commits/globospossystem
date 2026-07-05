@@ -180,14 +180,14 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
           .onPostgresChanges(
             event: PostgresChangeEvent.insert,
             schema: 'public',
-            table: 'einvoice_jobs',
+            table: 'meinvoice_jobs',
             filter: LiveSyncScope.entityFilter('order_id', orderId),
             callback: (_) => _refreshDetailFromRealtime(),
           )
           .onPostgresChanges(
             event: PostgresChangeEvent.update,
             schema: 'public',
-            table: 'einvoice_jobs',
+            table: 'meinvoice_jobs',
             filter: LiveSyncScope.entityFilter('order_id', orderId),
             callback: (_) => _refreshDetailFromRealtime(),
           );

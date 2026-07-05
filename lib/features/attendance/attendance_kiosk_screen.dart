@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/layout/platform_info.dart';
@@ -257,7 +257,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                         const SizedBox(width: 12),
                         Text(
                           '${_nowVn.hour.toString().padLeft(2, '0')}:${_nowVn.minute.toString().padLeft(2, '0')}',
-                          style: GoogleFonts.bebasNeue(
+                          style: AppFonts.system(
                             color: AppColors.textPrimary,
                             fontSize: 42,
                           ),
@@ -270,7 +270,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                     left: 20,
                     child: Text(
                       'KIOSK',
-                      style: GoogleFonts.bebasNeue(
+                      style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 26,
                       ),
@@ -325,7 +325,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
           children: [
             Text(
               'Select a name',
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textPrimary,
                 fontSize: 20,
                 fontWeight: FontWeight.w800,
@@ -334,7 +334,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
             const SizedBox(height: 4),
             Text(
               'Choose a team member to start the attendance flow.',
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 13,
               ),
@@ -380,7 +380,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                               child: Text(
                                 staff['full_name']?.toString() ?? '-',
                                 textAlign: TextAlign.center,
-                                style: GoogleFonts.notoSansKr(
+                                style: AppFonts.system(
                                   color: AppColors.textPrimary,
                                   fontSize: columns == 1 ? 20 : 24,
                                   fontWeight: FontWeight.w700,
@@ -428,7 +428,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                   ),
                   child: Text(
                     'Clock In',
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       fontSize: 28,
                       fontWeight: FontWeight.w700,
                     ),
@@ -450,7 +450,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                   ),
                   child: Text(
                     'Clock Out',
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: AppColors.textPrimary,
                       fontSize: 28,
                       fontWeight: FontWeight.w700,
@@ -469,7 +469,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                   Text(
                     selectedName,
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: AppColors.textPrimary,
                       fontSize: 36,
                       fontWeight: FontWeight.w800,
@@ -479,7 +479,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                   Text(
                     'Select the attendance action to continue.',
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: AppColors.textSecondary,
                       fontSize: 13,
                     ),
@@ -508,7 +508,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                     Text(
                       'Available after internet connection',
                       textAlign: TextAlign.center,
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.statusOccupied,
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
@@ -520,7 +520,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                     onPressed: _backToIdle,
                     child: Text(
                       '← Back',
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 14,
                       ),
@@ -564,7 +564,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                       alignment: Alignment.center,
                       child: Text(
                         '$_countdown',
-                        style: GoogleFonts.bebasNeue(
+                        style: AppFonts.system(
                           color: Colors.white,
                           fontSize: 100,
                         ),
@@ -580,7 +580,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                 child: Text(
                   'Align your face within the circle',
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: Colors.white,
                     fontSize: 16,
                   ),
@@ -625,7 +625,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                         ),
                         child: Text(
                           'Retake',
-                          style: GoogleFonts.notoSansKr(fontSize: 16),
+                          style: AppFonts.system(fontSize: 16),
                         ),
                       ),
                     ),
@@ -640,7 +640,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                         ),
                         child: Text(
                           'Confirm ✓',
-                          style: GoogleFonts.notoSansKr(
+                          style: AppFonts.system(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                           ),
@@ -671,7 +671,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
               const SizedBox(height: 14),
               Text(
                 'Recording...',
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textPrimary,
                   fontSize: 18,
                 ),
@@ -703,7 +703,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
               Text(
                 isIn ? 'Clock-in complete' : 'Clock-out complete',
                 textAlign: TextAlign.center,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textPrimary,
                   fontSize: 32,
                   fontWeight: FontWeight.w800,

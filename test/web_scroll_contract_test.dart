@@ -140,10 +140,16 @@ void main() {
       expect(sidebar, contains('final useCompactShell'));
       expect(sidebar, contains('viewport.shortestSide < 600'));
       expect(sidebar, contains('class _ToastSidebarCompactNav'));
+      expect(sidebar, contains('class _ToastSidebarCompactSelectNav'));
+      expect(sidebar, contains("Key('toast_compact_section_selector')"));
+      expect(sidebar, contains('DropdownButton<int>'));
       expect(sidebar, contains('scrollDirection: Axis.horizontal'));
 
       expect(admin, contains('final useDesktopShell'));
       expect(admin, contains('viewport.shortestSide >= 600'));
+      expect(admin, contains('Widget _buildMobileLayout'));
+      expect(admin, contains('return ToastSidebar('));
+      expect(admin, isNot(contains('BottomNavigationBar(')));
     },
   );
 
@@ -206,6 +212,19 @@ void main() {
     }
   });
 
+  test(
+    'cashier mobile empty states fit the viewport instead of overscrolling',
+    () {
+      final cashier = readRepoFile('lib/features/cashier/cashier_screen.dart');
+
+      expect(cashier, contains('fitToViewportWhenNarrow: true'));
+      expect(
+        cashier,
+        contains("Key('cashier_no_payable_orders_operational_empty')"),
+      );
+    },
+  );
+
   test('toast action buttons clamp labels in tight rows', () {
     final primitives = readRepoFile('lib/core/ui/toast/toast_primitives.dart');
 
@@ -229,7 +248,9 @@ void main() {
     expect(topbar, contains('alignment: Alignment.centerRight'));
     expect(appNav, contains('LayoutBuilder('));
     expect(appNav, contains('final availableWidth'));
+    expect(appNav, contains('final phoneChrome = viewportWidth < 560'));
     expect(appNav, contains('final showStore'));
+    expect(appNav, contains('!phoneChrome && availableWidth >= 290'));
     expect(appNav, contains('final showLanguage'));
     expect(appNav, contains('width: 170'));
     expect(appNav, contains('maxWidth: 170'));

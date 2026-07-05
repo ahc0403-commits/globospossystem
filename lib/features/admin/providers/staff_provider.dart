@@ -169,7 +169,7 @@ class StaffNotifier extends StateNotifier<StaffState> {
     } catch (error) {
       state = state.copyWith(
         isCreating: false,
-        error: 'Failed to create staff: $error',
+        error: _cleanException(error),
       );
     }
   }
@@ -278,3 +278,7 @@ final attendanceProvider =
     StateNotifierProvider<AttendanceNotifier, AttendanceState>(
       (ref) => AttendanceNotifier(),
     );
+
+String _cleanException(Object error) {
+  return error.toString().replaceFirst(RegExp(r'^Exception:\s*'), '').trim();
+}

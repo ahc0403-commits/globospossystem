@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../app_theme.dart';
 import '../pos_design_tokens.dart';
@@ -167,6 +167,16 @@ class _ToastSidebarCompactNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final viewport = MediaQuery.sizeOf(context);
+    if (viewport.width < 560 && entries.length > 5) {
+      return _ToastSidebarCompactSelectNav(
+        entries: entries,
+        selectedIndex: selectedIndex,
+        onItemSelected: onItemSelected,
+        bottomItems: bottomItems,
+      );
+    }
+
     final items = <Widget>[
       for (final entry in entries)
         _ToastSidebarCompactNavItem(
@@ -202,6 +212,147 @@ class _ToastSidebarCompactNav extends StatelessWidget {
         separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (context, index) => items[index],
       ),
+    );
+  }
+}
+
+class _ToastSidebarCompactSelectNav extends StatelessWidget {
+  const _ToastSidebarCompactSelectNav({
+    required this.entries,
+    required this.selectedIndex,
+    required this.onItemSelected,
+    required this.bottomItems,
+  });
+
+  final List<_ToastSidebarEntry> entries;
+  final int selectedIndex;
+  final ValueChanged<int> onItemSelected;
+  final List<ToastSidebarItem> bottomItems;
+
+  @override
+  Widget build(BuildContext context) {
+    final safeValue = entries.any((entry) => entry.flatIndex == selectedIndex)
+        ? selectedIndex
+        : entries.isEmpty
+        ? null
+        : entries.first.flatIndex;
+
+    return Container(
+      height: 64,
+      decoration: const BoxDecoration(
+        color: PosColors.surface,
+        border: Border(bottom: BorderSide(color: PosColors.border)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 48,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: PosColors.accentMuted,
+                borderRadius: AppRadius.md,
+                border: Border.all(color: PosColors.accent),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int>(
+                  key: const Key('toast_compact_section_selector'),
+                  value: safeValue,
+                  isExpanded: true,
+                  borderRadius: AppRadius.md,
+                  dropdownColor: PosColors.surface,
+                  icon: const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: PosColors.accent,
+                  ),
+                  style: AppFonts.system(
+                    color: PosColors.textPrimary,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800,
+                  ),
+                  selectedItemBuilder: (context) => [
+                    for (final entry in entries)
+                      _ToastSidebarCompactSelectLabel(
+                        icon: entry.item.icon,
+                        label: entry.item.label,
+                        selected: true,
+                      ),
+                  ],
+                  items: [
+                    for (final entry in entries)
+                      DropdownMenuItem<int>(
+                        value: entry.flatIndex,
+                        child: _ToastSidebarCompactSelectLabel(
+                          icon: entry.item.icon,
+                          label: entry.item.label,
+                          selected: entry.flatIndex == selectedIndex,
+                        ),
+                      ),
+                  ],
+                  onChanged: (index) {
+                    if (index != null) {
+                      onItemSelected(index);
+                    }
+                  },
+                ),
+              ),
+            ),
+          ),
+          for (final item in bottomItems) ...[
+            const SizedBox(width: 8),
+            Tooltip(
+              message: item.label,
+              child: IconButton.filledTonal(
+                key: item.itemKey,
+                onPressed: item.onTap ?? () {},
+                icon: Icon(item.icon),
+                color: PosColors.textSecondary,
+                style: IconButton.styleFrom(
+                  fixedSize: const Size(48, 48),
+                  backgroundColor: PosColors.mutedSurface,
+                  shape: RoundedRectangleBorder(borderRadius: AppRadius.md),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ToastSidebarCompactSelectLabel extends StatelessWidget {
+  const _ToastSidebarCompactSelectLabel({
+    required this.icon,
+    required this.label,
+    required this.selected,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? PosColors.accent : PosColors.textSecondary;
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppFonts.system(
+              color: selected ? PosColors.text : PosColors.textSecondary,
+              fontSize: 13.5,
+              fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -249,7 +400,7 @@ class _ToastSidebarCompactNavItem extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: selected ? PosColors.accent : PosColors.textSecondary,
                   fontSize: 12.5,
                   fontWeight: FontWeight.w800,
@@ -329,11 +480,11 @@ class _ToastSidebarRail extends StatelessWidget {
                         title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: PosColors.text,
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
-                          letterSpacing: -0.1,
+                          letterSpacing: 0,
                         ),
                       ),
                     ],
@@ -362,7 +513,7 @@ class _ToastSidebarRail extends StatelessWidget {
                         ),
                         child: Text(
                           entry.sectionTitle!.toUpperCase(),
-                          style: GoogleFonts.notoSansKr(
+                          style: AppFonts.system(
                             color: PosColors.textMuted,
                             fontSize: 10.5,
                             fontWeight: FontWeight.w700,
@@ -447,7 +598,7 @@ class _ToastSidebarNavItem extends StatelessWidget {
               item.label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: selected ? PosColors.text : PosColors.textSecondary,
                 fontSize: 14,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
@@ -500,7 +651,7 @@ class _ToastSidebarBadge extends StatelessWidget {
       child: Text(
         '$value',
         textAlign: TextAlign.center,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: selected ? color : PosColors.textSecondary,
           fontSize: 10.5,
           fontWeight: FontWeight.w800,

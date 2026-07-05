@@ -43,6 +43,7 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
   WaiterTableNotifier() : super(const WaiterTableState());
 
   static const _autoRefreshInterval = Duration(seconds: 2);
+  static const _fallbackPollInterval = Duration(seconds: 15);
 
   RealtimeChannel? _channel;
   String? _subscribedRestaurantId;
@@ -187,13 +188,19 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
   }
 
   void _ensureAutoRefresh(String storeId) {
+    if (_realtimeConnected) {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+      return;
+    }
+
     if (_pollTimer != null && _pollStoreId == storeId) {
       return;
     }
 
     _pollTimer?.cancel();
     _pollStoreId = storeId;
-    _pollTimer = Timer.periodic(_autoRefreshInterval, (_) {
+    _pollTimer = Timer.periodic(_fallbackPollInterval, (_) {
       if (mounted && _subscribedRestaurantId == storeId) {
         unawaited(loadTables(storeId, showLoading: false));
       }

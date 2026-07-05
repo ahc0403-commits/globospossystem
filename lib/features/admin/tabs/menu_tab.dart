@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
@@ -75,7 +75,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
             children: [
               Text(
                 l10n.menuLoadFailed,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.statusCancelled,
                   fontSize: 14,
                 ),
@@ -326,11 +326,11 @@ class _MenuTabState extends ConsumerState<MenuTab> {
           backgroundColor: AppColors.surface1,
           title: Text(
             l10n.menuAddCategory,
-            style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+            style: AppFonts.system(color: AppColors.textPrimary),
           ),
           content: TextField(
             controller: nameController,
-            style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+            style: AppFonts.system(color: AppColors.textPrimary),
             decoration: InputDecoration(labelText: l10n.menuCategoryName),
           ),
           actions: [
@@ -388,21 +388,21 @@ class _MenuTabState extends ConsumerState<MenuTab> {
           backgroundColor: AppColors.surface1,
           title: Text(
             l10n.menuAddMenu,
-            style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+            style: AppFonts.system(color: AppColors.textPrimary),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: nameController,
-                style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                style: AppFonts.system(color: AppColors.textPrimary),
                 decoration: InputDecoration(labelText: l10n.menuMenuName),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: priceController,
                 keyboardType: TextInputType.number,
-                style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                style: AppFonts.system(color: AppColors.textPrimary),
                 decoration: InputDecoration(labelText: l10n.menuPrice),
               ),
             ],
@@ -478,14 +478,14 @@ class _MenuTabState extends ConsumerState<MenuTab> {
           backgroundColor: AppColors.surface1,
           title: Text(
             l10n.menuEditMenu,
-            style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+            style: AppFonts.system(color: AppColors.textPrimary),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: nameController,
-                style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                style: AppFonts.system(color: AppColors.textPrimary),
                 decoration: InputDecoration(labelText: l10n.menuMenuName),
               ),
               const SizedBox(height: 12),
@@ -494,7 +494,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
-                style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                style: AppFonts.system(color: AppColors.textPrimary),
                 decoration: InputDecoration(labelText: l10n.menuPrice),
               ),
             ],
@@ -586,7 +586,7 @@ class _CategoryPanel extends StatelessWidget {
                 onTap: categoryId.isEmpty ? null : () => onSelect(categoryId),
                 child: Text(
                   category['name']?.toString() ?? '-',
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.textPrimary,
                     fontSize: 15,
                     fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
@@ -701,7 +701,7 @@ class _ItemsPanel extends StatelessWidget {
                                 name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.notoSansKr(
+                                style: AppFonts.system(
                                   color: AppColors.textPrimary,
                                   fontSize: 15,
                                   fontWeight: FontWeight.w700,
@@ -710,7 +710,7 @@ class _ItemsPanel extends StatelessWidget {
                               const SizedBox(height: 4),
                               Text(
                                 '₫${numberFormat.format(priceValue)}',
-                                style: GoogleFonts.notoSansKr(
+                                style: AppFonts.system(
                                   color: AppColors.textSecondary,
                                   fontSize: 13,
                                 ),
@@ -793,7 +793,7 @@ class _MenuAuditDisclosure extends StatelessWidget {
         collapsedIconColor: AppColors.textSecondary,
         title: Text(
           l10n.changeHistory,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textPrimary,
             fontSize: 13,
             fontWeight: FontWeight.w800,
@@ -803,7 +803,7 @@ class _MenuAuditDisclosure extends StatelessWidget {
           l10n.menuRecentChangesHint,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textSecondary,
             fontSize: 11,
           ),
@@ -832,7 +832,7 @@ class _RestaurantMissingView extends StatelessWidget {
       body: Center(
         child: Text(
           context.l10n.menuNoLinkedStoreMessage,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.statusCancelled,
             fontSize: 14,
           ),

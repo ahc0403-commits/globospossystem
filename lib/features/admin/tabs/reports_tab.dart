@@ -5,7 +5,7 @@ import 'dart:typed_data';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
@@ -131,10 +131,10 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
 
     Widget compactReportBody() {
       if (reportState.isLoading) {
-        return const SizedBox(
+        return SizedBox(
           height: 320,
           child: ToastOperationalLoadingState(
-            label: PosLoadingCopy.loadingReport,
+            label: PosLoadingCopy.loadingReport(context.l10n),
           ),
         );
       }
@@ -146,7 +146,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
             children: [
               Text(
                 reportState.error!,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.statusCancelled,
                   fontSize: 14,
                 ),
@@ -293,8 +293,8 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
             ],
             Expanded(
               child: reportState.isLoading
-                  ? const ToastOperationalLoadingState(
-                      label: PosLoadingCopy.loadingReport,
+                  ? ToastOperationalLoadingState(
+                      label: PosLoadingCopy.loadingReport(context.l10n),
                     )
                   : reportState.error != null
                   ? Center(
@@ -303,7 +303,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                         children: [
                           Text(
                             reportState.error!,
-                            style: GoogleFonts.notoSansKr(
+                            style: AppFonts.system(
                               color: AppColors.statusCancelled,
                               fontSize: 14,
                             ),
@@ -623,27 +623,37 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
             ],
           ),
           const SizedBox(height: 14),
-          ToastMetricStrip(
-            metrics: [
-              ToastMetric(label: l10n.reportsTotalSales, value: totalRevenue),
-              ToastMetric(
-                label: l10n.reportsTotalOrders,
-                value: summary == null ? '—' : '${summary.totalOrders}',
-                tone: PosColors.info,
-              ),
-              ToastMetric(
-                label: l10n.reportsAverageOrderAmount,
-                value: averageOrder,
-                tone: PosColors.success,
-              ),
-              ToastMetric(
-                label: l10n.reportsCanceledAmount,
-                value: summary == null
-                    ? '—'
-                    : l10n.countCases(summary.cancelledOrders),
-                tone: cancellationTone,
-              ),
-            ],
+          KeyedSubtree(
+            key: const Key('reports_order_accuracy_metrics'),
+            child: ToastMetricStrip(
+              metrics: [
+                ToastMetric(label: l10n.reportsTotalSales, value: totalRevenue),
+                ToastMetric(
+                  label: l10n.reportsTotalOrders,
+                  value: summary == null ? '—' : '${summary.totalOrders}',
+                  tone: PosColors.info,
+                ),
+                ToastMetric(
+                  label: l10n.pending,
+                  value: summary == null ? '—' : '${summary.openOrders}',
+                  tone: (summary?.openOrders ?? 0) > 0
+                      ? PosColors.warning
+                      : PosColors.textSecondary,
+                ),
+                ToastMetric(
+                  label: l10n.reportsAverageOrderAmount,
+                  value: averageOrder,
+                  tone: PosColors.success,
+                ),
+                ToastMetric(
+                  label: l10n.reportsCanceledAmount,
+                  value: summary == null
+                      ? '—'
+                      : l10n.countCases(summary.cancelledOrders),
+                  tone: cancellationTone,
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -746,7 +756,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
         ),
         child: Text(
           label,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textPrimary,
             fontSize: 12,
             fontWeight: FontWeight.w600,
@@ -1475,7 +1485,7 @@ class _SummaryGrid extends StatelessWidget {
         children: [
           Text(
             title,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -1484,7 +1494,7 @@ class _SummaryGrid extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             value,
-            style: GoogleFonts.bebasNeue(
+            style: AppFonts.system(
               color: valueColor,
               fontSize: valueFontSize,
               letterSpacing: 1.0,
@@ -1505,7 +1515,7 @@ class _SummaryGrid extends StatelessWidget {
       alignment: Alignment.center,
       child: Text(
         context.l10n.reportsNoDataSelectedPeriod,
-        style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
+        style: AppFonts.system(color: AppColors.textSecondary),
       ),
     );
   }
@@ -1527,7 +1537,7 @@ class _DailyTable extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 20),
           child: Text(
             l10n.reportsNoDataSelectedPeriod,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 14,
             ),
@@ -1596,7 +1606,7 @@ class _OrderCountRow extends StatelessWidget {
         children: [
           Text(
             l10n.reportsOrdersCount(summary.totalOrders),
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontSize: 13,
               fontWeight: FontWeight.w700,
@@ -1605,7 +1615,7 @@ class _OrderCountRow extends StatelessWidget {
           const SizedBox(width: 12),
           Text(
             l10n.reportsDoneCount(summary.completedOrders),
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.statusAvailable,
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -1620,7 +1630,7 @@ class _OrderCountRow extends StatelessWidget {
                     summary.completedOrders -
                     summary.cancelledOrders,
               ),
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.amber500,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -1634,7 +1644,7 @@ class _OrderCountRow extends StatelessWidget {
                 summary.cancelledOrders,
                 summary.cancelledItems,
               ),
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.statusCancelled,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -1666,7 +1676,7 @@ class _PaymentMethodRow extends StatelessWidget {
         children: [
           Text(
             l10n.reportsPaymentMethod,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -1675,7 +1685,7 @@ class _PaymentMethodRow extends StatelessWidget {
           const SizedBox(width: 12),
           Text(
             '${l10n.cash} ${_formatVnd(currency, summary.cashTotal)}',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -1684,7 +1694,7 @@ class _PaymentMethodRow extends StatelessWidget {
           const SizedBox(width: 12),
           Text(
             '${l10n.cashierCardMethod} ${_formatVnd(currency, summary.cardTotal)}',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -1694,7 +1704,7 @@ class _PaymentMethodRow extends StatelessWidget {
             const SizedBox(width: 12),
             Text(
               '${l10n.pay} ${_formatVnd(currency, summary.payTotal)}',
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textPrimary,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -1732,7 +1742,7 @@ class _ReportsOperationalSignalsDetail extends StatelessWidget {
         ),
         title: Text(
           l10n.reportsOperationalAttentionTitle,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textPrimary,
             fontSize: 13,
             fontWeight: FontWeight.w800,
@@ -1742,7 +1752,7 @@ class _ReportsOperationalSignalsDetail extends StatelessWidget {
           l10n.reportsOperationalBoundary,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textSecondary,
             fontSize: 11.5,
           ),
@@ -1801,7 +1811,7 @@ class _OperationalAttentionSection extends StatelessWidget {
         children: [
           Text(
             l10n.reportsOperationalAttentionTitle,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontSize: 14,
               fontWeight: FontWeight.w700,
@@ -1810,7 +1820,7 @@ class _OperationalAttentionSection extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             l10n.reportsOperationalAttentionSubtitle,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -1962,7 +1972,7 @@ class _OperationalAttentionSection extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             _attentionNarrative(context),
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontSize: 12,
               height: 1.45,
@@ -1987,7 +1997,7 @@ class _OperationalAttentionSection extends StatelessWidget {
         children: [
           Text(
             label,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -1996,7 +2006,7 @@ class _OperationalAttentionSection extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             value,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: color,
               fontSize: 12,
               fontWeight: FontWeight.w700,
@@ -2018,7 +2028,7 @@ class _OperationalAttentionSection extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: color,
           fontSize: 12,
           fontWeight: FontWeight.w700,
@@ -2046,7 +2056,7 @@ class _OperationalAttentionSection extends StatelessWidget {
         children: [
           Text(
             title,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -2055,7 +2065,7 @@ class _OperationalAttentionSection extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             headline,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: color,
               fontSize: 12,
               fontWeight: FontWeight.w700,
@@ -2065,7 +2075,7 @@ class _OperationalAttentionSection extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             body,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontSize: 12,
               height: 1.4,
@@ -2094,7 +2104,7 @@ class _OperationalAttentionSection extends StatelessWidget {
       ),
       child: RichText(
         text: TextSpan(
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textSecondary,
             fontSize: 11,
             fontWeight: FontWeight.w600,
@@ -2103,7 +2113,7 @@ class _OperationalAttentionSection extends StatelessWidget {
             TextSpan(text: '$label '),
             TextSpan(
               text: value,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: color,
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
@@ -2123,7 +2133,7 @@ class _OperationalAttentionSection extends StatelessWidget {
           width: 108,
           child: Text(
             label,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 11,
               fontWeight: FontWeight.w700,
@@ -2133,7 +2143,7 @@ class _OperationalAttentionSection extends StatelessWidget {
         Expanded(
           child: Text(
             body,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontSize: 12,
               height: 1.45,
@@ -2236,7 +2246,7 @@ class _TodaySummarySection extends ConsumerWidget {
           children: [
             Text(
               context.l10n.reportsTodaysOperations,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textPrimary,
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
@@ -2344,7 +2354,7 @@ class _TodaySummarySection extends ConsumerWidget {
         children: [
           Text(
             label,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -2353,7 +2363,7 @@ class _TodaySummarySection extends ConsumerWidget {
           const SizedBox(height: 4),
           Text(
             value,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: valueColor,
               fontSize: 14,
               fontWeight: FontWeight.w700,
@@ -2385,7 +2395,7 @@ class _HourlyRevenueSection extends StatelessWidget {
       children: [
         Text(
           context.l10n.reportsRevenueByHour,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textPrimary,
             fontSize: 14,
             fontWeight: FontWeight.w700,
@@ -2409,7 +2419,7 @@ class _HourlyRevenueSection extends StatelessWidget {
                       width: 36,
                       child: Text(
                         '${h.hour.toString().padLeft(2, '0')}:00',
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: AppColors.textSecondary,
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -2447,7 +2457,7 @@ class _HourlyRevenueSection extends StatelessWidget {
                       width: 104,
                       child: Text(
                         _formatVnd(currency, h.amount),
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: AppColors.textPrimary,
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -2531,7 +2541,7 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
           children: [
             Text(
               context.l10n.reportsDailyClose,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textPrimary,
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
@@ -2564,7 +2574,7 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
                 const SizedBox(width: 4),
                 Text(
                   context.l10n.reportsClosingComplete,
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.statusAvailable,
                     fontSize: 12,
                   ),
@@ -2578,10 +2588,7 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
             padding: const EdgeInsets.only(bottom: 6),
             child: Text(
               context.l10n.reportsTodayAlreadyComplete,
-              style: GoogleFonts.notoSansKr(
-                color: AppColors.amber500,
-                fontSize: 12,
-              ),
+              style: AppFonts.system(color: AppColors.amber500, fontSize: 12),
             ),
           ),
         historyAsync.when(
@@ -2595,7 +2602,7 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
                   child: Center(
                     child: Text(
                       context.l10n.reportsNoClosingHistory,
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 13,
                       ),
@@ -2642,7 +2649,7 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
             child: Center(
               child: Text(
                 mapDailyClosingError(e),
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.statusCancelled,
                   fontSize: 13,
                 ),
@@ -2710,7 +2717,7 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
       flex: flex,
       child: Text(
         text,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: AppColors.textPrimary,
           fontSize: 11,
           fontWeight: FontWeight.w700,
@@ -2724,7 +2731,7 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
       flex: flex,
       child: Text(
         text,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: AppColors.textPrimary,
           fontSize: 11,
           fontWeight: FontWeight.w500,

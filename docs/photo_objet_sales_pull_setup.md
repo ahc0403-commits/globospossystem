@@ -6,10 +6,31 @@ This repository now includes the Photo Objet sales pull workflow and parser:
 - `scripts/package.json`
 - `scripts/pull_moers_sales.js`
 
-The pull job reads sales from `moersinc.com` and upserts into:
+The pull job reads sales from `moersinc.com`, stores raw rows first, and then
+updates the dashboard aggregate:
 
+- `public.photo_objet_sales_raw`
+- `public.photo_objet_sales_pull_runs`
 - `public.photo_objet_sales`
 - `public.v_photo_objet_daily_summary`
+
+New raw rows are queued into `public.meinvoice_jobs` as Photo Objet cash-register
+invoice jobs. The crawler does not call MISA directly.
+
+## Current schedule
+
+The GitHub Actions workflow runs every 10 minutes:
+
+```yaml
+cron: '*/10 * * * *'
+```
+
+D7 is disabled by default because its Excel download path is expected to change.
+Enable it only after the Korean-side Moers account behavior is corrected:
+
+```bash
+PHOTO_OBJET_D7_ENABLED=true
+```
 
 ## Required GitHub Actions secrets
 
@@ -72,6 +93,20 @@ As of 2026-04-17, the linked POS database does not yet contain the 7 Photo
 Objet restaurants as exact-name rows. This setup now seeds a dedicated
 `PHOTO OBJET` brand plus the 7 store anchors with deterministic ids, so the
 workflow can avoid fragile name matching.
+
+## Raw ledger behavior
+
+The collector builds `source_hash` from store, date, device, time, amount, type,
+row index, and raw row content. This makes the 10-minute pull idempotent:
+
+- already-seen rows update `last_seen_at`
+- newly-seen rows insert into `photo_objet_sales_raw`
+- only newly inserted raw rows trigger meInvoice queue creation
+- all Photo Objet rows are treated as `payment_method = CASH`
+- VNPAY/QR wallet data must not be mixed into this ledger
+
+The existing `photo_objet_sales` table remains a dashboard/day-machine
+aggregate. It is not the tax-reporting source of truth.
 
 ## Current execution status
 

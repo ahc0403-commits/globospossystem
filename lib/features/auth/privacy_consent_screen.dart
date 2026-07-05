@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/ui/app_theme.dart';
@@ -74,7 +74,7 @@ class _PrivacyConsentScreenState extends ConsumerState<PrivacyConsentScreen> {
                               children: [
                                 Text(
                                   l10n.privacyConsentTitle,
-                                  style: GoogleFonts.notoSansKr(
+                                  style: AppFonts.system(
                                     fontSize: 24,
                                     fontWeight: FontWeight.w900,
                                     color: PosColors.text,
@@ -83,7 +83,7 @@ class _PrivacyConsentScreenState extends ConsumerState<PrivacyConsentScreen> {
                                 const SizedBox(height: AppSpacing.xs),
                                 Text(
                                   l10n.privacyConsentSubtitle,
-                                  style: GoogleFonts.notoSansKr(
+                                  style: AppFonts.system(
                                     fontSize: 13.5,
                                     height: 1.45,
                                     color: PosColors.textSecondary,
@@ -152,7 +152,7 @@ class _PrivacyConsentScreenState extends ConsumerState<PrivacyConsentScreen> {
                                   authState.errorMessage!,
                                 ),
                                 key: const Key('privacy_consent_error_text'),
-                                style: GoogleFonts.notoSansKr(
+                                style: AppFonts.system(
                                   fontSize: 13,
                                   color: PosColors.danger,
                                   fontWeight: FontWeight.w700,
@@ -181,7 +181,7 @@ class _PrivacyConsentScreenState extends ConsumerState<PrivacyConsentScreen> {
                             contentPadding: EdgeInsets.zero,
                             title: Text(
                               l10n.privacyConsentAgreeCheckbox,
-                              style: GoogleFonts.notoSansKr(
+                              style: AppFonts.system(
                                 fontSize: 13.5,
                                 color: PosColors.text,
                                 fontWeight: FontWeight.w800,
@@ -276,7 +276,7 @@ class _ConsentSection extends StatelessWidget {
         children: [
           Text(
             title,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: PosColors.text,
               fontSize: 15,
               fontWeight: FontWeight.w900,
@@ -310,7 +310,7 @@ class _BulletText extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 fontSize: 13,
                 height: 1.45,
                 color: PosColors.textSecondary,
@@ -340,7 +340,7 @@ class _NoticeBox extends StatelessWidget {
       ),
       child: Text(
         text,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           fontSize: 13,
           height: 1.5,
           color: PosColors.text,
@@ -368,7 +368,7 @@ class _PledgeBox extends StatelessWidget {
       ),
       child: Text(
         text,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           fontSize: 13,
           height: 1.55,
           color: PosColors.text,

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/i18n/locale_extensions.dart';
@@ -270,6 +270,7 @@ class _InventoryPurchaseScreenState
       2 => _buildPurchaseManagementPage(
         storeId: storeId,
         snapshot: snapshot,
+        orders: orders,
         supplierCatalog: supplierCatalog,
         runState: runState,
         adjustmentState: adjustmentState,
@@ -515,6 +516,7 @@ class _InventoryPurchaseScreenState
   Widget _buildPurchaseManagementPage({
     required String storeId,
     required InventoryPurchaseRecommendationSnapshotState snapshot,
+    required InventoryPurchaseOrderSummaryState orders,
     required InventoryPurchaseSupplierCatalogState supplierCatalog,
     required InventoryPurchaseRecommendationRunState runState,
     required InventoryPurchaseRecommendationAdjustmentState adjustmentState,
@@ -523,6 +525,61 @@ class _InventoryPurchaseScreenState
     final l10n = context.l10n;
     final runId = snapshot.run?['id']?.toString();
     final canCreateOrders = runId != null && snapshot.lines.isNotEmpty;
+    final canCreateManualOrder =
+        supplierCatalog.suppliers.isNotEmpty &&
+        supplierCatalog.supplierItems.isNotEmpty;
+    final recommendedTotal = snapshot.lines.fold<num>(
+      0,
+      (sum, line) => sum + _recommendationEstimatedAmount(line),
+    );
+    final pendingOfficeApprovalCount = orders.orders
+        .where((order) => _string(order['status']) == 'submitted')
+        .length;
+
+    Future<void> runRecommendation() async {
+      final input = await _showRecommendationRunDialog();
+      if (!mounted || input == null) return;
+      final ok = await ref
+          .read(inventoryPurchaseRecommendationRunProvider.notifier)
+          .run(
+            storeId: storeId,
+            targetStockDays: input.targetStockDays,
+            asOfDate: input.asOfDate,
+          );
+      if (!mounted) return;
+      if (ok) {
+        await ref
+            .read(inventoryPurchaseRecommendationSnapshotProvider.notifier)
+            .loadLatest(storeId);
+      }
+    }
+
+    Future<void> createSupplierOrders() async {
+      if (runId == null) return;
+      final ok = await ref
+          .read(inventoryPurchaseOrderCreationProvider.notifier)
+          .createFromRecommendation(
+            runId: runId,
+            requestedDeliveryDate: DateTime.now().add(const Duration(days: 2)),
+          );
+      if (!mounted) return;
+      if (ok) {
+        await ref
+            .read(inventoryPurchaseOrderSummaryProvider.notifier)
+            .load(storeId);
+        await ref
+            .read(inventoryPurchaseOverviewProvider.notifier)
+            .load(storeId);
+      }
+    }
+
+    void showManualOrderDialog() {
+      _showManualPurchaseOrderDialog(
+        storeId: storeId,
+        suppliers: supplierCatalog.suppliers,
+        supplierItems: supplierCatalog.supplierItems,
+      );
+    }
 
     return _PageShell(
       title: l10n.inventoryPurchaseManagementTitle,
@@ -539,77 +596,39 @@ class _InventoryPurchaseScreenState
           tone: PosActionTone.primary,
           icon: Icons.auto_graph_outlined,
           loading: runState.isRunning,
-          onPressed: runState.isRunning
-              ? null
-              : () async {
-                  final ok = await ref
-                      .read(inventoryPurchaseRecommendationRunProvider.notifier)
-                      .run(
-                        storeId: storeId,
-                        targetStockDays: 3,
-                        asOfDate: DateTime.now(),
-                      );
-                  if (!mounted) return;
-                  if (ok) {
-                    await ref
-                        .read(
-                          inventoryPurchaseRecommendationSnapshotProvider
-                              .notifier,
-                        )
-                        .loadLatest(storeId);
-                  }
-                },
+          onPressed: runState.isRunning ? null : runRecommendation,
         ),
-        PosActionButton(
-          label: l10n.inventoryPurchaseCreateSupplierOrders,
-          tone: PosActionTone.affirm,
-          icon: Icons.assignment_turned_in_outlined,
-          loading: creationState.isCreating,
-          disabledReason: canCreateOrders
-              ? null
-              : PosActionDisabledReason.upstreamPending,
-          onPressed: canCreateOrders && !creationState.isCreating
-              ? () async {
-                  final ok = await ref
-                      .read(inventoryPurchaseOrderCreationProvider.notifier)
-                      .createFromRecommendation(
-                        runId: runId,
-                        requestedDeliveryDate: DateTime.now().add(
-                          const Duration(days: 2),
-                        ),
-                      );
-                  if (!mounted) return;
-                  if (ok) {
-                    await ref
-                        .read(inventoryPurchaseOrderSummaryProvider.notifier)
-                        .load(storeId);
-                    await ref
-                        .read(inventoryPurchaseOverviewProvider.notifier)
-                        .load(storeId);
-                  }
-                }
-              : null,
+        SizedBox(
+          width: 260,
+          child: PosActionTile(
+            key: const Key('inventory_purchase_create_order_action'),
+            label: l10n.inventoryPurchaseCreateSupplierOrders,
+            helper: l10n.inventoryPurchaseCreateOrderActionHelper(
+              snapshot.lines.length,
+              _money(recommendedTotal),
+            ),
+            icon: Icons.assignment_turned_in_outlined,
+            state: creationState.isCreating
+                ? PosActionTileState.processing
+                : canCreateOrders
+                ? PosActionTileState.selected
+                : PosActionTileState.disabled,
+            onTap: canCreateOrders && !creationState.isCreating
+                ? createSupplierOrders
+                : null,
+          ),
         ),
         PosActionButton(
           label: l10n.inventoryPurchaseManualOrder,
           tone: PosActionTone.secondary,
           icon: Icons.edit_note_outlined,
           loading: creationState.isCreating,
-          disabledReason:
-              supplierCatalog.suppliers.isEmpty ||
-                  supplierCatalog.supplierItems.isEmpty
+          disabledReason: !canCreateManualOrder
               ? PosActionDisabledReason.upstreamPending
               : PosActionDisabledReason.noSelection,
-          onPressed:
-              creationState.isCreating ||
-                  supplierCatalog.suppliers.isEmpty ||
-                  supplierCatalog.supplierItems.isEmpty
+          onPressed: creationState.isCreating || !canCreateManualOrder
               ? null
-              : () => _showManualPurchaseOrderDialog(
-                  storeId: storeId,
-                  suppliers: supplierCatalog.suppliers,
-                  supplierItems: supplierCatalog.supplierItems,
-                ),
+              : showManualOrderDialog,
           compact: true,
         ),
       ],
@@ -650,31 +669,20 @@ class _InventoryPurchaseScreenState
             color: ToastColorTokens.info,
             compact: true,
           ),
-          child: _SimpleDataTable(
-            columns: [
-              l10n.inventoryPurchaseProductName,
-              l10n.inventoryPurchaseSupplier,
-              l10n.inventoryPurchaseCurrent,
-              l10n.inventoryPurchaseDailyDepletion,
-              l10n.inventoryPurchaseRecommendedQuantity,
-              l10n.inventoryPurchaseOrderUnit,
-              l10n.inventoryPurchaseAdjustedUnit,
-              l10n.status,
-            ],
-            rows: snapshot.lines
-                .map(
-                  (line) => [
-                    _nestedName(line['product']),
-                    _nestedName(line['supplier']),
-                    _quantity(line['current_stock_base']),
-                    _quantity(line['avg_daily_consumption_base']),
-                    _quantity(line['recommended_quantity_base']),
-                    _quantity(line['recommended_order_units']),
-                    _quantity(line['adjusted_order_units']),
-                    _riskLabel(line['risk_status'], context),
-                  ],
-                )
-                .toList(),
+          child: _PurchaseRecommendationGrid(
+            lines: snapshot.lines,
+            snapshotDateLabel: runId == null
+                ? l10n.inventoryPurchaseNoSnapshotShort
+                : _date(snapshot.run?['run_date']),
+            targetDaysLabel: l10n.inventoryPurchaseDaysValue(
+              _number(snapshot.run?['target_stock_days'], fallback: '3'),
+            ),
+            pendingOfficeApprovalCount: pendingOfficeApprovalCount,
+            onRunRecommendation: runState.isRunning ? null : runRecommendation,
+            onCreateManualOrder:
+                creationState.isCreating || !canCreateManualOrder
+                ? null
+                : showManualOrderDialog,
           ),
         ),
         const SizedBox(height: ToastSpacingTokens.md),
@@ -690,6 +698,102 @@ class _InventoryPurchaseScreenState
           ),
         ),
       ],
+    );
+  }
+
+  Future<_RecommendationRunInput?> _showRecommendationRunDialog() async {
+    final targetDaysController = TextEditingController(text: '3');
+    final asOfDateController = TextEditingController(
+      text: DateTime.now().toIso8601String().split('T').first,
+    );
+    final l10n = context.l10n;
+    String? targetDaysError;
+    String? asOfDateError;
+
+    return showDialog<_RecommendationRunInput>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          void submit() {
+            final targetDays = parseDecimalInput(targetDaysController.text);
+            final asOfDate = _parseDateOrNull(asOfDateController.text);
+            setDialogState(() {
+              targetDaysError = targetDays == null || targetDays <= 0
+                  ? l10n.inventoryPurchaseRecommendationInvalidTargetDays
+                  : null;
+              asOfDateError = asOfDate == null
+                  ? l10n.inventoryPurchaseRecommendationInvalidDate
+                  : null;
+            });
+            if (targetDays == null || targetDays <= 0 || asOfDate == null) {
+              return;
+            }
+            Navigator.of(dialogContext).pop(
+              _RecommendationRunInput(
+                targetStockDays: targetDays.toDouble(),
+                asOfDate: asOfDate,
+              ),
+            );
+          }
+
+          return AlertDialog(
+            title: Text(l10n.inventoryPurchaseRecommendationInputTitle),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(l10n.inventoryPurchaseRecommendationInputHelp),
+                  const SizedBox(height: ToastSpacingTokens.md),
+                  TextField(
+                    key: const Key(
+                      'inventory_purchase_recommendation_target_days_field',
+                    ),
+                    controller: targetDaysController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: l10n.inventoryPurchaseTargetStockDays,
+                      errorText: targetDaysError,
+                    ),
+                    onSubmitted: (_) => submit(),
+                  ),
+                  const SizedBox(height: ToastSpacingTokens.sm),
+                  TextField(
+                    key: const Key(
+                      'inventory_purchase_recommendation_as_of_date_field',
+                    ),
+                    controller: asOfDateController,
+                    keyboardType: TextInputType.datetime,
+                    decoration: InputDecoration(
+                      labelText: l10n.inventoryPurchaseRecommendationAsOfDate,
+                      hintText: l10n.inventoryPurchaseDateHint,
+                      errorText: asOfDateError,
+                    ),
+                    onSubmitted: (_) => submit(),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton.icon(
+                key: const Key(
+                  'inventory_purchase_recommendation_submit_action',
+                ),
+                onPressed: submit,
+                icon: const Icon(Icons.auto_graph_outlined),
+                label: Text(l10n.inventoryPurchaseGenerateRecommendation),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -825,6 +929,9 @@ class _InventoryPurchaseScreenState
         _receivableStatus(order['status']) &&
         _num(order['total_remaining_quantity_base']) > 0 &&
         !receivingRuntime.isSubmitting;
+    final receivingBlockerMessage = order == null || canConfirmReceipt
+        ? null
+        : _receivingPilotBlockerMessage(order, context);
 
     return _PageShell(
       title: l10n.inventoryPurchaseHistoryTitle,
@@ -1002,6 +1109,41 @@ class _InventoryPurchaseScreenState
                     ),
                   ],
                 ),
+                if (receivingBlockerMessage != null) ...[
+                  const SizedBox(height: ToastSpacingTokens.sm),
+                  Container(
+                    key: const Key('inventory_receiving_office_gate_notice'),
+                    padding: const EdgeInsets.all(ToastSpacingTokens.sm),
+                    decoration: BoxDecoration(
+                      color: ToastColorTokens.warning.withValues(alpha: 0.08),
+                      borderRadius: ToastRadiusTokens.sm,
+                      border: Border.all(
+                        color: ToastColorTokens.warning.withValues(alpha: 0.36),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.lock_clock_outlined,
+                          size: 18,
+                          color: ToastColorTokens.warning,
+                        ),
+                        const SizedBox(width: ToastSpacingTokens.sm),
+                        Expanded(
+                          child: Text(
+                            receivingBlockerMessage,
+                            style: _textStyle(
+                              size: 12,
+                              weight: FontWeight.w700,
+                              color: ToastColorTokens.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: ToastSpacingTokens.md),
                 _SimpleDataTable(
                   columns: [
@@ -1920,6 +2062,16 @@ class _InventoryPurchaseScreenState
     );
     var isOrderable = product?['is_orderable'] != false;
     final l10n = context.l10n;
+    final existingCategories =
+        ref
+            .read(inventoryPurchaseProductCatalogProvider)
+            .products
+            .map((row) => _string(row['category']))
+            .where((category) => category.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    String? validationMessage;
 
     final saved = await showDialog<bool>(
       context: context,
@@ -1942,7 +2094,9 @@ class _InventoryPurchaseScreenState
                         TextField(
                           controller: codeController,
                           decoration: InputDecoration(
-                            labelText: l10n.inventoryPurchaseProductCode,
+                            labelText: '${l10n.inventoryPurchaseProductCode} *',
+                            helperText:
+                                'Unique per store. Use the agreed pilot product-code rule before saving.',
                           ),
                         ),
                         TextField(
@@ -1955,7 +2109,9 @@ class _InventoryPurchaseScreenState
                         TextField(
                           controller: categoryController,
                           decoration: InputDecoration(
-                            labelText: l10n.superAdminCategory,
+                            labelText: '${l10n.superAdminCategory} *',
+                            helperText:
+                                'Choose an existing category below or enter a new category name.',
                           ),
                         ),
                         TextField(
@@ -2001,11 +2157,54 @@ class _InventoryPurchaseScreenState
                           controller: shelfLifeController,
                           keyboardType: TextInputType.number,
                           decoration: InputDecoration(
-                            labelText: l10n.inventoryPurchaseShelfLifeDays,
+                            labelText:
+                                '${l10n.inventoryPurchaseShelfLifeDays} *',
+                            helperText:
+                                'Required for pilot receiving and expiry checks.',
                           ),
                         ),
                       ],
                     ),
+                    if (existingCategories.isNotEmpty) ...[
+                      const SizedBox(height: ToastSpacingTokens.sm),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Wrap(
+                          key: const Key(
+                            'inventory_product_category_quick_pick',
+                          ),
+                          spacing: ToastSpacingTokens.xs,
+                          runSpacing: ToastSpacingTokens.xs,
+                          children: [
+                            for (final category in existingCategories.take(8))
+                              ActionChip(
+                                label: Text(category),
+                                onPressed: () {
+                                  categoryController.text = category;
+                                  setDialogState(() {});
+                                },
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (validationMessage != null) ...[
+                      const SizedBox(height: ToastSpacingTokens.sm),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          key: const Key(
+                            'inventory_product_validation_message',
+                          ),
+                          validationMessage!,
+                          style: _textStyle(
+                            size: 12,
+                            weight: FontWeight.w700,
+                            color: ToastColorTokens.danger,
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: ToastSpacingTokens.md),
                     TextField(
                       controller: imageController,
@@ -2032,23 +2231,57 @@ class _InventoryPurchaseScreenState
               ),
               FilledButton(
                 onPressed: () async {
+                  final productCode = codeController.text.trim();
                   final name = nameController.text.trim();
+                  final category = categoryController.text.trim();
                   final stockUnit = stockUnitController.text.trim();
                   final factor = parseDecimalInput(factorController.text);
                   final shelfLife = shelfLifeController.text.trim().isEmpty
                       ? null
                       : parseIntInput(shelfLifeController.text);
-                  if (name.isEmpty || stockUnit.isEmpty || factor == null) {
+                  if (productCode.isEmpty) {
+                    setDialogState(() {
+                      validationMessage =
+                          'Product code is required so testers can identify the item consistently.';
+                    });
                     return;
                   }
+                  if (name.isEmpty) {
+                    setDialogState(() {
+                      validationMessage = 'Product name is required.';
+                    });
+                    return;
+                  }
+                  if (category.isEmpty) {
+                    setDialogState(() {
+                      validationMessage =
+                          'Category is required. Choose an existing category or type a new one.';
+                    });
+                    return;
+                  }
+                  if (stockUnit.isEmpty || factor == null) {
+                    setDialogState(() {
+                      validationMessage =
+                          'Display stock unit and base-unit factor are required.';
+                    });
+                    return;
+                  }
+                  if (shelfLife == null || shelfLife < 0) {
+                    setDialogState(() {
+                      validationMessage =
+                          'Shelf life days is required and must be zero or higher.';
+                    });
+                    return;
+                  }
+                  setDialogState(() => validationMessage = null);
                   final ok = await ref
                       .read(inventoryPurchaseProductCatalogProvider.notifier)
                       .saveProduct(
                         storeId: storeId,
                         productId: product?['id']?.toString(),
-                        productCode: _nullableText(codeController.text),
+                        productCode: productCode,
                         name: name,
-                        category: _nullableText(categoryController.text),
+                        category: category,
                         stockUnit: stockUnit,
                         baseUnit: baseUnit,
                         baseUnitFactor: factor,
@@ -3822,54 +4055,71 @@ class _PageShell extends StatelessWidget {
       clip: true,
       child: LayoutBuilder(
         builder: (context, constraints) {
+          final compactPhone = constraints.maxWidth < 430;
           final body = Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: children,
+          );
+          final titleBlock = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: _textStyle(
+                  size: compactPhone ? 21 : 24,
+                  weight: FontWeight.w900,
+                  color: ToastColorTokens.textPrimary,
+                ),
+              ),
+              const SizedBox(height: ToastSpacingTokens.xs),
+              Text(
+                subtitle,
+                style: _textStyle(
+                  size: compactPhone ? 12.5 : 13,
+                  weight: FontWeight.w500,
+                  color: ToastColorTokens.textSecondary,
+                ),
+              ),
+            ],
+          );
+          final actionWrap = Wrap(
+            spacing: ToastSpacingTokens.sm,
+            runSpacing: ToastSpacingTokens.sm,
+            alignment: compactPhone ? WrapAlignment.start : WrapAlignment.end,
+            children: actions,
           );
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
+                padding: EdgeInsets.fromLTRB(
+                  compactPhone ? 16 : 20,
+                  18,
+                  compactPhone ? 16 : 20,
+                  14,
+                ),
+                child: compactPhone
+                    ? Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            title,
-                            style: _textStyle(
-                              size: 24,
-                              weight: FontWeight.w900,
-                              color: ToastColorTokens.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: ToastSpacingTokens.xs),
-                          Text(
-                            subtitle,
-                            style: _textStyle(
-                              size: 13,
-                              weight: FontWeight.w500,
-                              color: ToastColorTokens.textSecondary,
-                            ),
-                          ),
+                          titleBlock,
+                          if (actions.isNotEmpty) ...[
+                            const SizedBox(height: ToastSpacingTokens.sm),
+                            actionWrap,
+                          ],
+                        ],
+                      )
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: titleBlock),
+                          if (actions.isNotEmpty) ...[
+                            const SizedBox(width: ToastSpacingTokens.md),
+                            actionWrap,
+                          ],
                         ],
                       ),
-                    ),
-                    if (actions.isNotEmpty) ...[
-                      const SizedBox(width: ToastSpacingTokens.md),
-                      Wrap(
-                        spacing: ToastSpacingTokens.sm,
-                        runSpacing: ToastSpacingTokens.sm,
-                        alignment: WrapAlignment.end,
-                        children: actions,
-                      ),
-                    ],
-                  ],
-                ),
               ),
               if (isLoading) const LinearProgressIndicator(minHeight: 2),
               if (error != null)
@@ -4833,9 +5083,8 @@ class _ProductDetailPanel extends StatelessWidget {
         _KeyValueRow(
           label: l10n.inventoryPurchaseCurrentStock,
           value: _quantity(inventoryItem['current_stock']),
-          helper: l10n.inventoryPurchaseReorderPoint(
-            _quantity(inventoryItem['reorder_point']),
-          ),
+          helper:
+              '${l10n.inventoryPurchaseReorderPoint(_quantity(inventoryItem['reorder_point']))} · ${l10n.inventoryNeedsReorder} when stock is below this value',
         ),
         const Divider(height: 1),
         _KeyValueRow(
@@ -5149,6 +5398,16 @@ class _RecommendationAdjustmentInput {
   final bool clear;
 }
 
+class _RecommendationRunInput {
+  const _RecommendationRunInput({
+    required this.targetStockDays,
+    required this.asOfDate,
+  });
+
+  final double targetStockDays;
+  final DateTime asOfDate;
+}
+
 class _StockAuditSubmitInput {
   const _StockAuditSubmitInput({
     required this.lines,
@@ -5384,6 +5643,504 @@ class _StockAuditInputRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PurchaseRecommendationGrid extends StatelessWidget {
+  const _PurchaseRecommendationGrid({
+    required this.lines,
+    required this.snapshotDateLabel,
+    required this.targetDaysLabel,
+    required this.pendingOfficeApprovalCount,
+    required this.onRunRecommendation,
+    required this.onCreateManualOrder,
+  });
+
+  final List<Map<String, dynamic>> lines;
+  final String snapshotDateLabel;
+  final String targetDaysLabel;
+  final int pendingOfficeApprovalCount;
+  final VoidCallback? onRunRecommendation;
+  final VoidCallback? onCreateManualOrder;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    if (lines.isEmpty) {
+      return _RecommendationEmptyPanel(
+        snapshotDateLabel: snapshotDateLabel,
+        targetDaysLabel: targetDaysLabel,
+        pendingOfficeApprovalCount: pendingOfficeApprovalCount,
+        onRunRecommendation: onRunRecommendation,
+        onCreateManualOrder: onCreateManualOrder,
+      );
+    }
+
+    final totalAmount = lines.fold<num>(
+      0,
+      (sum, line) => sum + _recommendationEstimatedAmount(line),
+    );
+    final supplierTotals = <String, num>{};
+    for (final line in lines) {
+      final supplier = _nestedName(line['supplier']);
+      supplierTotals[supplier] =
+          (supplierTotals[supplier] ?? 0) +
+          _recommendationEstimatedAmount(line);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _RecommendationTotalsBand(
+          lineCount: lines.length,
+          totalAmount: totalAmount,
+          supplierTotals: supplierTotals,
+        ),
+        const SizedBox(height: ToastSpacingTokens.md),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 1240),
+            child: Column(
+              children: [
+                PosDataGridRow(
+                  statusColor: ToastColorTokens.border,
+                  cells: [
+                    _RecommendationHeaderCell(
+                      l10n.inventoryPurchaseProductName,
+                    ),
+                    _RecommendationHeaderCell(
+                      l10n.inventoryPurchaseCurrentStock,
+                    ),
+                    _RecommendationHeaderCell(
+                      l10n.inventoryPurchaseRecommendedQuantity,
+                    ),
+                    _RecommendationHeaderCell(
+                      l10n.inventoryPurchaseEffectiveOrderUnit,
+                    ),
+                    _RecommendationHeaderCell(l10n.inventoryPurchasePackUnit),
+                    _RecommendationHeaderCell(l10n.inventoryPurchaseUnitPrice),
+                    _RecommendationHeaderCell(
+                      l10n.inventoryPurchaseEstimatedAmount,
+                    ),
+                    _RecommendationHeaderCell(l10n.status),
+                  ],
+                ),
+                const SizedBox(height: ToastSpacingTokens.xs),
+                for (final line in lines) ...[
+                  _PurchaseRecommendationRow(line: line),
+                  if (line != lines.last)
+                    const SizedBox(height: ToastSpacingTokens.xs),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RecommendationEmptyPanel extends StatelessWidget {
+  const _RecommendationEmptyPanel({
+    required this.snapshotDateLabel,
+    required this.targetDaysLabel,
+    required this.pendingOfficeApprovalCount,
+    required this.onRunRecommendation,
+    required this.onCreateManualOrder,
+  });
+
+  final String snapshotDateLabel;
+  final String targetDaysLabel;
+  final int pendingOfficeApprovalCount;
+  final VoidCallback? onRunRecommendation;
+  final VoidCallback? onCreateManualOrder;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+
+    return Container(
+      key: const Key('inventory_purchase_zero_recommendations_panel'),
+      padding: const EdgeInsets.all(ToastSpacingTokens.lg),
+      decoration: BoxDecoration(
+        color: PosSurfaceRole.background.fill,
+        borderRadius: ToastRadiusTokens.md,
+        border: Border.all(color: PosSurfaceRole.background.stroke),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: PosSurfaceRole.action.fill,
+                  borderRadius: ToastRadiusTokens.sm,
+                  border: Border.all(color: PosSurfaceRole.action.stroke),
+                ),
+                child: Icon(
+                  Icons.shopping_cart_checkout_outlined,
+                  color: PosSurfaceRole.action.text,
+                ),
+              ),
+              const SizedBox(width: ToastSpacingTokens.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.inventoryPurchaseZeroRecommendationTitle,
+                      style: _textStyle(
+                        size: 16,
+                        weight: FontWeight.w900,
+                        color: PosSurfaceRole.background.text,
+                      ),
+                    ),
+                    const SizedBox(height: ToastSpacingTokens.xs),
+                    Text(
+                      l10n.inventoryPurchaseZeroRecommendationDetail,
+                      style: _textStyle(
+                        size: 12,
+                        weight: FontWeight.w600,
+                        color: PosSurfaceRole.background.helper,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: ToastSpacingTokens.md),
+          Wrap(
+            spacing: ToastSpacingTokens.sm,
+            runSpacing: ToastSpacingTokens.sm,
+            children: [
+              ToastStatusBadge(
+                label: l10n.inventoryPurchaseSnapshotBasis(snapshotDateLabel),
+                color: ToastColorTokens.info,
+                compact: true,
+              ),
+              ToastStatusBadge(
+                label: l10n.inventoryPurchaseTargetStockDaysWithValue(
+                  targetDaysLabel,
+                ),
+                color: ToastColorTokens.accent,
+                compact: true,
+              ),
+              ToastStatusBadge(
+                label: l10n.inventoryPurchasePendingOfficeApprovalCount(
+                  pendingOfficeApprovalCount,
+                ),
+                color: pendingOfficeApprovalCount > 0
+                    ? ToastColorTokens.warning
+                    : ToastColorTokens.textSecondary,
+                compact: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: ToastSpacingTokens.md),
+          Wrap(
+            spacing: ToastSpacingTokens.sm,
+            runSpacing: ToastSpacingTokens.sm,
+            children: [
+              PosActionTile(
+                label: l10n.inventoryPurchaseGenerateRecommendation,
+                helper: l10n.inventoryPurchaseGenerateRecommendationHelp,
+                icon: Icons.auto_graph_outlined,
+                state: onRunRecommendation == null
+                    ? PosActionTileState.processing
+                    : PosActionTileState.idle,
+                onTap: onRunRecommendation,
+              ),
+              PosActionTile(
+                label: l10n.inventoryPurchaseManualOrder,
+                helper: l10n.inventoryPurchaseManualOrderHelp,
+                icon: Icons.edit_note_outlined,
+                state: onCreateManualOrder == null
+                    ? PosActionTileState.disabled
+                    : PosActionTileState.idle,
+                onTap: onCreateManualOrder,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecommendationTotalsBand extends StatelessWidget {
+  const _RecommendationTotalsBand({
+    required this.lineCount,
+    required this.totalAmount,
+    required this.supplierTotals,
+  });
+
+  final int lineCount;
+  final num totalAmount;
+  final Map<String, num> supplierTotals;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final visibleSupplierTotals = supplierTotals.entries.take(3).toList();
+
+    return Wrap(
+      spacing: ToastSpacingTokens.sm,
+      runSpacing: ToastSpacingTokens.sm,
+      children: [
+        SizedBox(
+          width: 260,
+          child: PosAmountAnchor(
+            label: l10n.inventoryPurchaseEstimatedAmount,
+            amount: _money(totalAmount),
+            helper: l10n.inventoryPurchaseCountItems(lineCount),
+            role: PosSurfaceRole.selected,
+            amountStyle: PosNumericText.amountLarge,
+          ),
+        ),
+        for (final entry in visibleSupplierTotals)
+          SizedBox(
+            width: 220,
+            child: PosAmountAnchor(
+              label: entry.key,
+              amount: _money(entry.value),
+              helper: l10n.inventoryPurchaseSupplier,
+              role: PosSurfaceRole.operating,
+              amountStyle: PosNumericText.amountLarge,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _PurchaseRecommendationRow extends StatelessWidget {
+  const _PurchaseRecommendationRow({required this.line});
+
+  final Map<String, dynamic> line;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final baseUnit = _recommendationBaseUnit(line);
+    final orderUnit = _recommendationOrderUnit(line);
+    final effectiveUnits =
+        line['adjusted_order_units'] ?? line['recommended_order_units'];
+    final adjusted = line['adjusted_order_units'] != null;
+    final unitPrice = _recommendationUnitPrice(line);
+    final estimatedAmount = _recommendationEstimatedAmount(line);
+    final packQuantity = _recommendationOrderUnitQuantityBase(line);
+    final hasSupplierItem = _recommendationHasSupplierItem(line);
+    final daysRemaining = _number(line['estimated_days_remaining']);
+
+    return PosDataGridRow(
+      statusColor: _riskColor(line['risk_status']).withValues(alpha: 0.72),
+      cells: [
+        _RecommendationValueCell(
+          value: _nestedName(line['product']),
+          helper: _nestedName(line['supplier']),
+          leading: Icons.inventory_2_outlined,
+        ),
+        _RecommendationValueCell(
+          value: _quantityWithUnit(line['current_stock_base'], baseUnit),
+          helper: l10n.inventoryPurchaseUsageWithUnit(
+            _quantityWithUnit(line['avg_daily_consumption_base'], baseUnit),
+          ),
+          valueStyle: PosNumericText.qtyUnit,
+        ),
+        _RecommendationValueCell(
+          value: _quantityWithUnit(line['recommended_quantity_base'], baseUnit),
+          helper: l10n.inventoryPurchaseDaysValue(
+            _number(line['target_stock_days'], fallback: '3'),
+          ),
+          valueStyle: PosNumericText.qtyUnit,
+        ),
+        _RecommendationValueCell(
+          value: _quantityWithUnit(effectiveUnits, orderUnit),
+          helper: adjusted
+              ? l10n.inventoryPurchaseAdjusted
+              : l10n.inventoryPurchaseRecommendedValue,
+          valueStyle: PosNumericText.qtyUnit,
+        ),
+        _RecommendationValueCell(
+          value: packQuantity == 0
+              ? l10n.inventoryPurchaseSupplierItemMissing
+              : _quantityWithUnit(packQuantity, baseUnit),
+          helper: hasSupplierItem
+              ? orderUnit
+              : l10n.inventoryPurchaseSupplierItemMissing,
+          valueStyle: PosNumericText.qtyUnit,
+        ),
+        _RecommendationValueCell(
+          value: _money(unitPrice),
+          helper: orderUnit == '-'
+              ? l10n.inventoryPurchaseSupplierItemMissing
+              : '/ $orderUnit',
+          alignEnd: true,
+          valueStyle: PosNumericText.unitPrice,
+        ),
+        _RecommendationValueCell(
+          value: _money(estimatedAmount),
+          helper: l10n.inventoryPurchaseSupplyAmount,
+          alignEnd: true,
+          amount: true,
+          valueStyle: PosNumericText.lineAmount,
+        ),
+        _RecommendationStatusCell(
+          label: _riskLabel(line['risk_status'], context),
+          color: _riskColor(line['risk_status']),
+          helper: daysRemaining == '-'
+              ? l10n.inventoryPurchaseEstimatedDays
+              : l10n.inventoryPurchaseDaysValue(daysRemaining),
+        ),
+      ],
+    );
+  }
+}
+
+class _RecommendationHeaderCell extends StatelessWidget {
+  const _RecommendationHeaderCell(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: _textStyle(
+        size: 11,
+        weight: FontWeight.w900,
+        color: ToastColorTokens.textSecondary,
+      ),
+    );
+  }
+}
+
+class _RecommendationValueCell extends StatelessWidget {
+  const _RecommendationValueCell({
+    required this.value,
+    required this.helper,
+    this.leading,
+    this.alignEnd = false,
+    this.amount = false,
+    this.valueStyle,
+  });
+
+  final String value;
+  final String helper;
+  final IconData? leading;
+  final bool alignEnd;
+  final bool amount;
+  final TextStyle? valueStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Column(
+      crossAxisAlignment: alignEnd
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: alignEnd ? Alignment.centerRight : Alignment.centerLeft,
+          child: Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.visible,
+            textAlign: alignEnd ? TextAlign.right : TextAlign.left,
+            style:
+                valueStyle?.copyWith(color: ToastColorTokens.textPrimary) ??
+                (amount
+                    ? PosNumericText.lineAmount.copyWith(
+                        color: ToastColorTokens.textPrimary,
+                      )
+                    : _textStyle(
+                        size: 12.5,
+                        weight: FontWeight.w900,
+                        color: ToastColorTokens.textPrimary,
+                      )),
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          helper,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: alignEnd ? TextAlign.right : TextAlign.left,
+          style: _textStyle(
+            size: 10.5,
+            weight: FontWeight.w700,
+            color: ToastColorTokens.textSecondary,
+          ),
+        ),
+      ],
+    );
+
+    if (leading == null) {
+      return Align(
+        alignment: alignEnd ? Alignment.centerRight : Alignment.centerLeft,
+        child: content,
+      );
+    }
+
+    return Row(
+      children: [
+        Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            color: ToastColorTokens.mutedSurface,
+            borderRadius: ToastRadiusTokens.sm,
+            border: Border.all(color: ToastColorTokens.border),
+          ),
+          child: Icon(leading, size: 16, color: ToastColorTokens.textSecondary),
+        ),
+        const SizedBox(width: ToastSpacingTokens.sm),
+        Expanded(child: content),
+      ],
+    );
+  }
+}
+
+class _RecommendationStatusCell extends StatelessWidget {
+  const _RecommendationStatusCell({
+    required this.label,
+    required this.color,
+    required this.helper,
+  });
+
+  final String label;
+  final Color color;
+  final String helper;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ToastStatusBadge(label: label, color: color, compact: true),
+        const SizedBox(height: 5),
+        Text(
+          helper,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: _textStyle(
+            size: 10.5,
+            weight: FontWeight.w700,
+            color: ToastColorTokens.textSecondary,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -5998,7 +6755,7 @@ TextStyle _textStyle({
   required FontWeight weight,
   required Color color,
 }) {
-  return GoogleFonts.notoSansKr(
+  return AppFonts.system(
     fontSize: size,
     fontWeight: weight,
     color: color,
@@ -6175,10 +6932,81 @@ String _nestedName(Object? value) {
   return _string(value, fallback: '-');
 }
 
+Map<String, dynamic> _nestedMap(Object? value) {
+  if (value is Map<String, dynamic>) {
+    return value;
+  }
+  if (value is Map) {
+    return Map<String, dynamic>.from(value);
+  }
+  return const <String, dynamic>{};
+}
+
 String _displayStock(Map<String, dynamic> row) {
   final unit = _string(row['stock_unit'], fallback: _string(row['base_unit']));
   final value = row['current_stock_display'] ?? row['current_stock_base'];
   return '${_quantity(value)} $unit'.trim();
+}
+
+String _quantityWithUnit(Object? value, String unit) {
+  final quantity = _quantity(value);
+  final cleanUnit = _string(unit);
+  return cleanUnit.isEmpty || cleanUnit == '-'
+      ? quantity
+      : '$quantity $cleanUnit';
+}
+
+String _recommendationBaseUnit(Map<String, dynamic> line) {
+  final product = _nestedMap(line['product']);
+  final supplierItem = _nestedMap(line['supplier_item']);
+  final supplierProduct = _nestedMap(supplierItem['product']);
+  return _string(
+    product['base_unit'] ??
+        product['stock_unit'] ??
+        supplierProduct['base_unit'] ??
+        supplierProduct['stock_unit'],
+    fallback: '-',
+  );
+}
+
+String _recommendationOrderUnit(Map<String, dynamic> line) {
+  final supplierItem = _nestedMap(line['supplier_item']);
+  return _string(
+    line['order_unit'] ?? supplierItem['order_unit'],
+    fallback: '-',
+  );
+}
+
+num _recommendationOrderUnitQuantityBase(Map<String, dynamic> line) {
+  final supplierItem = _nestedMap(line['supplier_item']);
+  return _num(
+    line['order_unit_quantity_base'] ??
+        supplierItem['order_unit_quantity_base'],
+  );
+}
+
+num _recommendationUnitPrice(Map<String, dynamic> line) {
+  final supplierItem = _nestedMap(line['supplier_item']);
+  return _num(line['unit_price'] ?? supplierItem['unit_price']);
+}
+
+num _recommendationEstimatedAmount(Map<String, dynamic> line) {
+  final savedEstimate = line['estimated_amount'];
+  if (savedEstimate != null) {
+    return _num(savedEstimate);
+  }
+  final effectiveUnits =
+      line['adjusted_order_units'] ?? line['recommended_order_units'];
+  return _num(effectiveUnits) * _recommendationUnitPrice(line);
+}
+
+bool _recommendationHasSupplierItem(Map<String, dynamic> line) {
+  if (_nestedMap(line['supplier_item']).isNotEmpty) {
+    return true;
+  }
+  return _string(line['order_unit']).isNotEmpty ||
+      _num(line['order_unit_quantity_base']) > 0 ||
+      _num(line['unit_price']) > 0;
 }
 
 String _riskLabel(Object? value, BuildContext context) {
@@ -6208,6 +7036,24 @@ bool _receivableStatus(Object? value) {
     'ordered',
     'partially_received',
   }.contains(_string(value));
+}
+
+String _receivingPilotBlockerMessage(
+  Map<String, dynamic> order,
+  BuildContext context,
+) {
+  final status = _string(order['status']);
+  final statusLabel = _statusLabel(status, context);
+  if (status == 'submitted' || status == 'office_returned') {
+    return '$statusLabel: Office approval is required before POS can confirm receiving or increase stock. Hand this order to the Office approval queue, then retest with office_approved or ordered status.';
+  }
+  if (status == 'office_rejected' || status == 'cancelled') {
+    return '$statusLabel: this purchase order cannot be received. Create or select an approved purchase order for the receiving test.';
+  }
+  if (_num(order['total_remaining_quantity_base']) <= 0) {
+    return '$statusLabel: no remaining quantity is available to receive.';
+  }
+  return '$statusLabel: POS can receive only office_approved, ordered, or partially_received purchase orders.';
 }
 
 String _receiptVisibilityLabel(Object? value, BuildContext context) {

@@ -338,13 +338,84 @@ class InventoryService {
     final result = await supabase
         .from('inventory_recommendation_lines')
         .select(
-          'id, product_id, supplier_id, current_stock_base, avg_daily_consumption_base, target_stock_days, recommended_quantity_base, recommended_order_units, adjusted_quantity_base, adjusted_order_units, adjustment_memo, adjusted_at, estimated_days_remaining, risk_status, created_at, product:inventory_products(name), supplier:inventory_suppliers(supplier_name)',
+          'id, product_id, supplier_id, current_stock_base, avg_daily_consumption_base, target_stock_days, recommended_quantity_base, recommended_order_units, adjusted_quantity_base, adjusted_order_units, adjustment_memo, adjusted_at, estimated_days_remaining, risk_status, created_at, product:inventory_products(id, name, stock_unit, base_unit, base_unit_factor), supplier:inventory_suppliers(id, supplier_name)',
         )
         .eq('run_id', runId)
         .order('recommended_order_units', ascending: false)
         .limit(8);
 
-    return List<Map<String, dynamic>>.from(result as List);
+    final lines = List<Map<String, dynamic>>.from(
+      result as List,
+    ).map(Map<String, dynamic>.from).toList();
+    if (lines.isEmpty) {
+      return lines;
+    }
+
+    final productIds = lines
+        .map((line) => line['product_id']?.toString())
+        .whereType<String>()
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList();
+    final supplierIds = lines
+        .map((line) => line['supplier_id']?.toString())
+        .whereType<String>()
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList();
+    if (productIds.isEmpty || supplierIds.isEmpty) {
+      return lines;
+    }
+
+    final supplierItemResult = await supabase
+        .from('inventory_supplier_items')
+        .select(
+          'id, supplier_id, product_id, supplier_sku, order_unit, order_unit_quantity_base, min_order_quantity, unit_price, tax_rate, lead_time_days, is_preferred, is_active, updated_at, product:inventory_products(id, name, stock_unit, base_unit, base_unit_factor), supplier:inventory_suppliers(id, supplier_name)',
+        )
+        .eq('is_active', true)
+        .inFilter('product_id', productIds)
+        .inFilter('supplier_id', supplierIds)
+        .order('is_preferred', ascending: false)
+        .order('updated_at', ascending: false);
+
+    final supplierItemByKey = <String, Map<String, dynamic>>{};
+    for (final item in List<Map<String, dynamic>>.from(
+      supplierItemResult as List,
+    )) {
+      final copy = Map<String, dynamic>.from(item);
+      final key = _supplierItemRecommendationKey(
+        copy['product_id'],
+        copy['supplier_id'],
+      );
+      if (key.isNotEmpty) {
+        supplierItemByKey.putIfAbsent(key, () => copy);
+      }
+    }
+
+    for (final line in lines) {
+      final supplierItem =
+          supplierItemByKey[_supplierItemRecommendationKey(
+            line['product_id'],
+            line['supplier_id'],
+          )];
+      if (supplierItem == null) {
+        continue;
+      }
+      line['supplier_item'] = supplierItem;
+      line['order_unit'] = supplierItem['order_unit'];
+      line['order_unit_quantity_base'] =
+          supplierItem['order_unit_quantity_base'];
+      line['min_order_quantity'] = supplierItem['min_order_quantity'];
+      line['unit_price'] = supplierItem['unit_price'];
+      line['tax_rate'] = supplierItem['tax_rate'];
+      line['estimated_amount'] =
+          _serviceNum(
+            line['adjusted_order_units'] ?? line['recommended_order_units'],
+          ) *
+          _serviceNum(supplierItem['unit_price']);
+    }
+
+    return lines;
   }
 
   Future<Map<String, dynamic>> updateInventoryRecommendationLineAdjustment({
@@ -1081,6 +1152,17 @@ class InventoryService {
   }) async {
     final result = await supabase.rpc(functionName, params: params);
     return List<Map<String, dynamic>>.from(result as List);
+  }
+
+  String _supplierItemRecommendationKey(Object? productId, Object? supplierId) {
+    final product = productId?.toString() ?? '';
+    final supplier = supplierId?.toString() ?? '';
+    return product.isEmpty || supplier.isEmpty ? '' : '$product::$supplier';
+  }
+
+  num _serviceNum(Object? value) {
+    if (value is num) return value;
+    return num.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   Future<List<Map<String, dynamic>>> _rpcListWithStoreCompat(

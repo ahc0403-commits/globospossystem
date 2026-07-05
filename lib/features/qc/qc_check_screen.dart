@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
@@ -234,7 +234,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
         body: Center(
           child: Text(
             context.l10n.qcNoPermission,
-            style: GoogleFonts.notoSansKr(color: PosColors.text, fontSize: 14),
+            style: AppFonts.system(color: PosColors.text, fontSize: 14),
           ),
         ),
       );
@@ -291,7 +291,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
           children: [
             Text(
               context.l10n.qcTitle,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: PosColors.text,
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
@@ -299,7 +299,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
             ),
             Text(
               DateFormat('yyyy-MM-dd').format(_todayVn),
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: PosColors.textMuted,
                 fontSize: 12,
               ),
@@ -321,7 +321,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                     children: [
                       Text(
                         context.l10n.qcTitle,
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: PosColors.text,
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
@@ -330,7 +330,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                       const SizedBox(height: 4),
                       Text(
                         '${DateFormat('yyyy-MM-dd').format(_todayVn)} · ${context.l10n.qcScopeHint}',
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: PosColors.textMuted,
                           fontSize: 12,
                           height: 1.4,
@@ -351,7 +351,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                         const SizedBox(height: 10),
                         Text(
                           templateState.error!,
-                          style: GoogleFonts.notoSansKr(
+                          style: AppFonts.system(
                             color: PosColors.danger,
                             fontSize: 13,
                           ),
@@ -361,7 +361,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                         const SizedBox(height: 10),
                         Text(
                           checkState.error!,
-                          style: GoogleFonts.notoSansKr(
+                          style: AppFonts.system(
                             color: PosColors.danger,
                             fontSize: 13,
                           ),
@@ -404,7 +404,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                               const SizedBox(width: 8),
                               Text(
                                 category,
-                                style: GoogleFonts.notoSansKr(
+                                style: AppFonts.system(
                                   color: PosColors.text,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -455,7 +455,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                                       child: Text(
                                         template['criteria_text']?.toString() ??
                                             '-',
-                                        style: GoogleFonts.notoSansKr(
+                                        style: AppFonts.system(
                                           color: PosColors.text,
                                           fontWeight: FontWeight.w700,
                                           fontSize: 15,
@@ -504,7 +504,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                                             ),
                                             child: Text(
                                               context.l10n.qcReferencePhoto,
-                                              style: GoogleFonts.notoSansKr(
+                                              style: AppFonts.system(
                                                 color: PosColors.accent,
                                                 fontSize: 11,
                                                 fontWeight: FontWeight.w700,
@@ -597,7 +597,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                                         draft.completed
                                             ? context.l10n.qscInputComplete
                                             : context.l10n.qscInputCompleteHint,
-                                        style: GoogleFonts.notoSansKr(
+                                        style: AppFonts.system(
                                           color: draft.completed
                                               ? PosColors.success
                                               : PosColors.textMuted,
@@ -755,7 +755,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                                 const SizedBox(height: 8),
                                 TextField(
                                   controller: draft.noteController,
-                                  style: GoogleFonts.notoSansKr(
+                                  style: AppFonts.system(
                                     color: PosColors.text,
                                     fontSize: 13,
                                   ),
@@ -789,7 +789,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                     ),
                     child: Text(
                       context.l10n.qcSaveButton,
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -815,7 +815,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
     return ChoiceChip(
       label: Text(
         label,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: selected ? color : PosColors.text,
           fontSize: 12,
           fontWeight: FontWeight.w800,
@@ -1040,7 +1040,7 @@ class _QcDraftPreview extends StatelessWidget {
               Expanded(
                 child: Text(
                   '${context.l10n.selected} ${context.l10n.qcTitle}',
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: PosColors.text,
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
@@ -1083,7 +1083,7 @@ class _QcDraftPreview extends StatelessWidget {
                         template['criteria_text']?.toString() ?? '-',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: PosColors.text,
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
@@ -1105,7 +1105,7 @@ class _QcDraftPreview extends StatelessWidget {
                                   : context.l10n.qscNoPhoto,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.notoSansKr(
+                              style: AppFonts.system(
                                 color: PosColors.textMuted,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,

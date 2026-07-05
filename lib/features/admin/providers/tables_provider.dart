@@ -57,7 +57,7 @@ class TablesNotifier extends StateNotifier<TablesState> {
   }
 
   final String storeId;
-  static const _autoRefreshInterval = Duration(seconds: 2);
+  static const _fallbackPollInterval = Duration(seconds: 15);
   RealtimeChannel? _channel;
   Timer? _pollTimer;
   bool _realtimeConnected = false;
@@ -196,11 +196,17 @@ class TablesNotifier extends StateNotifier<TablesState> {
   }
 
   void _ensureAutoRefresh() {
+    if (_realtimeConnected) {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+      return;
+    }
+
     if (_pollTimer != null) {
       return;
     }
 
-    _pollTimer = Timer.periodic(_autoRefreshInterval, (_) {
+    _pollTimer = Timer.periodic(_fallbackPollInterval, (_) {
       if (mounted) {
         unawaited(fetchTables(showLoading: false));
       }

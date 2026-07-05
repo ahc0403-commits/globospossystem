@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../core/i18n/locale_extensions.dart';
 import '../core/ui/app_theme.dart';
@@ -58,10 +58,12 @@ class AppNavBar extends ConsumerWidget {
             constraints.hasBoundedWidth && constraints.maxWidth.isFinite
             ? constraints.maxWidth
             : viewportWidth;
+        final phoneChrome = viewportWidth < 560;
         final veryCompact = availableWidth < 132 || viewportWidth < 420;
         final showForward = !veryCompact && availableWidth >= 132;
-        final showStore = !veryCompact && availableWidth >= 290;
-        final showLanguage = !veryCompact && availableWidth >= 460;
+        final showStore = !veryCompact && !phoneChrome && availableWidth >= 290;
+        final showLanguage =
+            !veryCompact && !phoneChrome && availableWidth >= 460;
         final compactLanguageSwitcher =
             availableWidth < 640 || viewportWidth < 1180;
 
@@ -208,7 +210,7 @@ class _StoreSwitcher extends StatelessWidget {
               : stores.first.id,
           dropdownColor: PosColors.surface,
           iconEnabledColor: PosColors.accent,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: PosColors.textPrimary,
             fontSize: 13,
             fontWeight: FontWeight.w700,
@@ -259,7 +261,7 @@ class _StorePill extends StatelessWidget {
         label,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: PosColors.textPrimary,
           fontSize: 13,
           fontWeight: FontWeight.w700,

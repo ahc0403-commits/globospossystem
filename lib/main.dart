@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/constants/app_constants.dart';
 import 'core/i18n/locale_controller.dart';
@@ -40,7 +39,6 @@ Future<void> main() async {
     url: AppConstants.supabaseUrl,
     anonKey: AppConstants.supabaseAnonKey,
   );
-  await _warmUpWebKoreanFonts();
 
   final container = ProviderContainer();
   final router = buildAppRouter(container);
@@ -51,24 +49,6 @@ Future<void> main() async {
       child: GlobosPosApp(router: router),
     ),
   );
-}
-
-Future<void> _warmUpWebKoreanFonts() async {
-  if (!kIsWeb) {
-    return;
-  }
-
-  try {
-    GoogleFonts.notoSansKr(fontWeight: FontWeight.w400);
-    GoogleFonts.notoSansKr(fontWeight: FontWeight.w500);
-    GoogleFonts.notoSansKr(fontWeight: FontWeight.w600);
-    GoogleFonts.notoSansKr(fontWeight: FontWeight.w700);
-    GoogleFonts.notoSansKr(fontWeight: FontWeight.w800);
-    GoogleFonts.notoSansKr(fontWeight: FontWeight.w900);
-    await GoogleFonts.pendingFonts().timeout(const Duration(seconds: 10));
-  } catch (_) {
-    // Do not block store operation if the font CDN is unreachable.
-  }
 }
 
 /// Supabase client 전역 접근용

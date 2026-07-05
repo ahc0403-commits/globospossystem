@@ -38,6 +38,14 @@
     const style = document.createElement('style');
     style.id = 'globos-web-shell-styles';
     style.textContent = `
+      @font-face {
+        font-family: "Pretendard";
+        src: url("assets/assets/fonts/PretendardVariable.ttf") format("truetype");
+        font-weight: 100 900;
+        font-style: normal;
+        font-display: swap;
+      }
+
       html, body {
         background: #F5F7FA;
         color: #111827;
@@ -46,7 +54,7 @@
         height: 100%;
         min-height: 100%;
         overflow: hidden;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
 
       body {

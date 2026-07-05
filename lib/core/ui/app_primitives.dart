@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../i18n/locale_extensions.dart';
 import 'app_theme.dart';
@@ -102,7 +102,7 @@ class AppStatusBadge extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: textColor,
           fontSize: 11,
           fontWeight: FontWeight.w800,

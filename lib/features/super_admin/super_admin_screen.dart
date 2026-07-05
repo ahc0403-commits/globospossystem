@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -311,7 +311,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
               l10n.superAdminSharedQcTitle,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.bebasNeue(
+              style: AppFonts.system(
                 color: AppColors.amber500,
                 fontSize: 30,
                 letterSpacing: 1,
@@ -356,9 +356,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
                 return Center(
                   child: Text(
                     l10n.superAdminNoSharedTemplates,
-                    style: GoogleFonts.notoSansKr(
-                      color: AppColors.textSecondary,
-                    ),
+                    style: AppFonts.system(color: AppColors.textSecondary),
                   ),
                 );
               }
@@ -388,7 +386,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
                       ),
                       child: Text(
                         category,
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: AppColors.amber500,
                           fontWeight: FontWeight.w700,
                         ),
@@ -430,7 +428,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
                                   Text(
                                     template['criteria_text']?.toString() ??
                                         '-',
-                                    style: GoogleFonts.notoSansKr(
+                                    style: AppFonts.system(
                                       color: AppColors.textPrimary,
                                       fontWeight: FontWeight.w700,
                                     ),
@@ -449,7 +447,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
                                     ),
                                     child: Text(
                                       l10n.superAdminSharedAcrossStores,
-                                      style: GoogleFonts.notoSansKr(
+                                      style: AppFonts.system(
                                         color: AppColors.amber500,
                                         fontSize: 11,
                                         fontWeight: FontWeight.w700,
@@ -497,7 +495,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
             error: (error, _) => Center(
               child: Text(
                 '$error',
-                style: GoogleFonts.notoSansKr(color: AppColors.statusCancelled),
+                style: AppFonts.system(color: AppColors.statusCancelled),
               ),
             ),
           ),
@@ -505,10 +503,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
         const SizedBox(height: 8),
         Text(
           l10n.superAdminSharedScopeHint,
-          style: GoogleFonts.notoSansKr(
-            color: AppColors.textSecondary,
-            fontSize: 12,
-          ),
+          style: AppFonts.system(color: AppColors.textSecondary, fontSize: 12),
         ),
       ],
     );
@@ -555,7 +550,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
                     isEdit
                         ? l10n.superAdminEditSharedCriterion
                         : l10n.superAdminAddSharedCriterion,
-                    style: GoogleFonts.bebasNeue(
+                    style: AppFonts.system(
                       color: AppColors.amber500,
                       fontSize: 30,
                     ),
@@ -563,7 +558,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
                   const SizedBox(height: 10),
                   TextField(
                     controller: categoryController,
-                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(
                       labelText: l10n.superAdminCategory,
                     ),
@@ -573,7 +568,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
                     controller: criteriaController,
                     minLines: 2,
                     maxLines: 4,
-                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(
                       labelText: l10n.superAdminCriterionDetails,
                     ),
@@ -701,7 +696,7 @@ class _QcOverviewTab extends ConsumerWidget {
       children: [
         Text(
           l10n.superAdminQcOverviewTitle,
-          style: GoogleFonts.bebasNeue(
+          style: AppFonts.system(
             color: AppColors.amber500,
             fontSize: 28,
             letterSpacing: 1,
@@ -715,9 +710,7 @@ class _QcOverviewTab extends ConsumerWidget {
                 return Center(
                   child: Text(
                     l10n.superAdminQcNoData,
-                    style: GoogleFonts.notoSansKr(
-                      color: AppColors.textSecondary,
-                    ),
+                    style: AppFonts.system(color: AppColors.textSecondary),
                   ),
                 );
               }
@@ -756,7 +749,7 @@ class _QcOverviewTab extends ConsumerWidget {
                             flex: 3,
                             child: Text(
                               restaurantName,
-                              style: GoogleFonts.notoSansKr(
+                              style: AppFonts.system(
                                 color: AppColors.textPrimary,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -766,7 +759,7 @@ class _QcOverviewTab extends ConsumerWidget {
                             flex: 2,
                             child: Text(
                               '${coverage.toStringAsFixed(0)}%',
-                              style: GoogleFonts.bebasNeue(
+                              style: AppFonts.system(
                                 color: AppColors.amber500,
                                 fontSize: 24,
                               ),
@@ -776,7 +769,7 @@ class _QcOverviewTab extends ConsumerWidget {
                             flex: 2,
                             child: Text(
                               failCount,
-                              style: GoogleFonts.notoSansKr(
+                              style: AppFonts.system(
                                 color: failCount == '0'
                                     ? AppColors.statusAvailable
                                     : AppColors.statusCancelled,
@@ -788,7 +781,7 @@ class _QcOverviewTab extends ConsumerWidget {
                             flex: 2,
                             child: Text(
                               latest,
-                              style: GoogleFonts.notoSansKr(
+                              style: AppFonts.system(
                                 color: AppColors.textSecondary,
                               ),
                             ),
@@ -806,7 +799,7 @@ class _QcOverviewTab extends ConsumerWidget {
             error: (error, _) => Center(
               child: Text(
                 '$error',
-                style: GoogleFonts.notoSansKr(color: AppColors.statusCancelled),
+                style: AppFonts.system(color: AppColors.statusCancelled),
               ),
             ),
           ),
@@ -843,7 +836,7 @@ class _RestaurantsTab extends StatelessWidget {
               l10n.superAdminStores,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.bebasNeue(
+              style: AppFonts.system(
                 color: AppColors.amber500,
                 fontSize: 28,
                 letterSpacing: 1.0,
@@ -922,7 +915,7 @@ class _RestaurantsTab extends StatelessWidget {
               const SizedBox(width: 16),
               Text(
                 l10n.superAdminBrand,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textSecondary,
                   fontSize: 12,
                 ),
@@ -933,25 +926,21 @@ class _RestaurantsTab extends StatelessWidget {
                 dropdownColor: AppColors.surface1,
                 hint: Text(
                   l10n.superAdminFilterAll,
-                  style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                  style: AppFonts.system(color: AppColors.textPrimary),
                 ),
                 items: [
                   DropdownMenuItem<String?>(
                     value: null,
                     child: Text(
                       l10n.superAdminFilterAll,
-                      style: GoogleFonts.notoSansKr(
-                        color: AppColors.textPrimary,
-                      ),
+                      style: AppFonts.system(color: AppColors.textPrimary),
                     ),
                   ),
                   DropdownMenuItem<String?>(
                     value: kUnclassifiedBrandFilter,
                     child: Text(
                       l10n.superAdminUncategorized,
-                      style: GoogleFonts.notoSansKr(
-                        color: AppColors.textPrimary,
-                      ),
+                      style: AppFonts.system(color: AppColors.textPrimary),
                     ),
                   ),
                   ...state.brands.map((brand) {
@@ -962,9 +951,7 @@ class _RestaurantsTab extends StatelessWidget {
                       value: id,
                       child: Text(
                         '$name ($code)',
-                        style: GoogleFonts.notoSansKr(
-                          color: AppColors.textPrimary,
-                        ),
+                        style: AppFonts.system(color: AppColors.textPrimary),
                       ),
                     );
                   }),
@@ -1013,14 +1000,14 @@ class _RestaurantsTab extends StatelessWidget {
                               children: [
                                 Text(
                                   restaurant.name,
-                                  style: GoogleFonts.bebasNeue(
+                                  style: AppFonts.system(
                                     color: AppColors.textPrimary,
                                     fontSize: 24,
                                   ),
                                 ),
                                 Text(
                                   '${restaurant.slug} • ${restaurant.address}',
-                                  style: GoogleFonts.notoSansKr(
+                                  style: AppFonts.system(
                                     color: AppColors.textSecondary,
                                     fontSize: 12,
                                   ),
@@ -1031,7 +1018,7 @@ class _RestaurantsTab extends StatelessWidget {
                                     restaurant.brandName ??
                                         l10n.superAdminUncategorized,
                                   ),
-                                  style: GoogleFonts.notoSansKr(
+                                  style: AppFonts.system(
                                     color: AppColors.textSecondary,
                                     fontSize: 11,
                                   ),
@@ -1078,7 +1065,7 @@ class _RestaurantsTab extends StatelessWidget {
     return ChoiceChip(
       label: Text(
         label,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: isSelected ? AppColors.surface0 : AppColors.textPrimary,
           fontSize: 12,
           fontWeight: FontWeight.w600,
@@ -1112,7 +1099,7 @@ class _RestaurantsTab extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: color,
           fontSize: 10,
           fontWeight: FontWeight.w700,
@@ -1143,7 +1130,7 @@ class _RestaurantsTab extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: AppColors.textPrimary,
           fontSize: 11,
           fontWeight: FontWeight.w700,
@@ -1175,7 +1162,15 @@ class _RestaurantsTab extends StatelessWidget {
         .toList(growable: false);
     String operationMode = initial?.operationMode ?? 'standard';
     String storeType = initial?.storeType ?? 'direct';
-    String? selectedBrandId = initial?.brandId;
+    final filterBrandId = state.selectedBrandId == kUnclassifiedBrandFilter
+        ? null
+        : state.selectedBrandId;
+    String? selectedBrandId =
+        initial?.brandId ??
+        filterBrandId ??
+        (availableBrands.length == 1
+            ? availableBrands.first['id']?.toString()
+            : null);
     if (selectedBrandId != null &&
         !availableBrands.any(
           (brand) => brand['id']?.toString() == selectedBrandId,
@@ -1249,7 +1244,7 @@ class _RestaurantsTab extends StatelessWidget {
                 children: [
                   Text(
                     isEdit ? l10n.superAdminEditStore : l10n.superAdminAddStore,
-                    style: GoogleFonts.bebasNeue(
+                    style: AppFonts.system(
                       color: AppColors.amber500,
                       fontSize: 30,
                     ),
@@ -1257,7 +1252,7 @@ class _RestaurantsTab extends StatelessWidget {
                   const SizedBox(height: 12),
                   TextField(
                     controller: nameController,
-                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(
                       labelText: l10n.superAdminStoreName,
                     ),
@@ -1270,7 +1265,7 @@ class _RestaurantsTab extends StatelessWidget {
                   const SizedBox(height: 10),
                   TextField(
                     controller: addressController,
-                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(
                       labelText: l10n.superAdminStoreAddress,
                     ),
@@ -1278,7 +1273,7 @@ class _RestaurantsTab extends StatelessWidget {
                   const SizedBox(height: 10),
                   TextField(
                     controller: slugController,
-                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(
                       labelText: l10n.superAdminStoreSlug,
                     ),
@@ -1287,7 +1282,7 @@ class _RestaurantsTab extends StatelessWidget {
                   DropdownButtonFormField<String>(
                     initialValue: operationMode,
                     dropdownColor: AppColors.surface1,
-                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(
                       labelText: l10n.superAdminOperationMode,
                     ),
@@ -1315,7 +1310,7 @@ class _RestaurantsTab extends StatelessWidget {
                   DropdownButtonFormField<String?>(
                     initialValue: selectedBrandId,
                     dropdownColor: AppColors.surface1,
-                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(
                       labelText: l10n.superAdminBrand,
                       hintText: l10n.superAdminSelectBrand,
@@ -1339,7 +1334,7 @@ class _RestaurantsTab extends StatelessWidget {
                   DropdownButtonFormField<String>(
                     initialValue: storeType,
                     dropdownColor: AppColors.surface1,
-                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(
                       labelText: l10n.superAdminStoreType,
                     ),
@@ -1367,9 +1362,7 @@ class _RestaurantsTab extends StatelessWidget {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
-                      style: GoogleFonts.notoSansKr(
-                        color: AppColors.textPrimary,
-                      ),
+                      style: AppFonts.system(color: AppColors.textPrimary),
                       decoration: InputDecoration(
                         labelText: l10n.superAdminPerPersonCharge,
                       ),
@@ -1507,10 +1500,7 @@ class _AllReportsTabState extends State<_AllReportsTab> {
           children: [
             Text(
               l10n.superAdminAllReportsTitle,
-              style: GoogleFonts.bebasNeue(
-                color: AppColors.amber500,
-                fontSize: 30,
-              ),
+              style: AppFonts.system(color: AppColors.amber500, fontSize: 30),
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -1523,16 +1513,14 @@ class _AllReportsTabState extends State<_AllReportsTab> {
                   dropdownColor: AppColors.surface1,
                   hint: Text(
                     l10n.superAdminAllStores,
-                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    style: AppFonts.system(color: AppColors.textPrimary),
                   ),
                   items: [
                     DropdownMenuItem<SuperRestaurant?>(
                       value: null,
                       child: Text(
                         l10n.superAdminAllStores,
-                        style: GoogleFonts.notoSansKr(
-                          color: AppColors.textPrimary,
-                        ),
+                        style: AppFonts.system(color: AppColors.textPrimary),
                       ),
                     ),
                     ...state.restaurants.map((restaurant) {
@@ -1540,9 +1528,7 @@ class _AllReportsTabState extends State<_AllReportsTab> {
                         value: restaurant,
                         child: Text(
                           restaurant.name,
-                          style: GoogleFonts.notoSansKr(
-                            color: AppColors.textPrimary,
-                          ),
+                          style: AppFonts.system(color: AppColors.textPrimary),
                         ),
                       );
                     }),
@@ -1562,18 +1548,14 @@ class _AllReportsTabState extends State<_AllReportsTab> {
                       value: false,
                       child: Text(
                         l10n.superAdminGroupByStore,
-                        style: GoogleFonts.notoSansKr(
-                          color: AppColors.textPrimary,
-                        ),
+                        style: AppFonts.system(color: AppColors.textPrimary),
                       ),
                     ),
                     DropdownMenuItem<bool>(
                       value: true,
                       child: Text(
                         l10n.superAdminGroupByBrand,
-                        style: GoogleFonts.notoSansKr(
-                          color: AppColors.textPrimary,
-                        ),
+                        style: AppFonts.system(color: AppColors.textPrimary),
                       ),
                     ),
                   ],
@@ -1641,7 +1623,7 @@ class _AllReportsTabState extends State<_AllReportsTab> {
                   ? Center(
                       child: Text(
                         l10n.superAdminNoReportData,
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: AppColors.textSecondary,
                           fontSize: 14,
                         ),
@@ -1750,17 +1732,14 @@ class _AllReportsTabState extends State<_AllReportsTab> {
         children: [
           Text(
             title,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
           ),
           Text(
             value,
-            style: GoogleFonts.bebasNeue(
-              color: AppColors.amber500,
-              fontSize: 30,
-            ),
+            style: AppFonts.system(color: AppColors.amber500, fontSize: 30),
           ),
         ],
       ),
@@ -1794,7 +1773,7 @@ class _AllReportsTabState extends State<_AllReportsTab> {
       flex: flex,
       child: Text(
         text,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: AppColors.textPrimary,
           fontSize: 12,
           fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
@@ -1895,7 +1874,7 @@ class _BrandRevenueChart extends StatelessWidget {
                         textAlign: TextAlign.right,
                         maxLines: 1,
                         overflow: TextOverflow.clip,
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: AppColors.textSecondary,
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
@@ -1925,7 +1904,7 @@ class _BrandRevenueChart extends StatelessWidget {
                         textAlign: TextAlign.center,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: AppColors.textSecondary,
                           fontSize: 10,
                           height: 1.15,
@@ -1987,10 +1966,7 @@ class _SystemSettingsTab extends StatelessWidget {
           children: [
             Text(
               l10n.superAdminSystemSettingsTitle,
-              style: GoogleFonts.bebasNeue(
-                color: AppColors.amber500,
-                fontSize: 30,
-              ),
+              style: AppFonts.system(color: AppColors.amber500, fontSize: 30),
             ),
             const SizedBox(height: 10),
             _infoRow(l10n.email, email),
@@ -2012,7 +1988,7 @@ class _SystemSettingsTab extends StatelessWidget {
             width: 110,
             child: Text(
               label,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -2021,7 +1997,7 @@ class _SystemSettingsTab extends StatelessWidget {
           Expanded(
             child: Text(
               value,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textPrimary,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,

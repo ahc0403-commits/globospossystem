@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/i18n/locale_extensions.dart';
@@ -103,7 +103,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
           children: [
             Text(
               l10n.paymentProofDirection(widget.methodLabel.toUpperCase()),
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 13,
                 height: 1.4,
@@ -123,7 +123,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
             const SizedBox(height: 12),
             Text(
               l10n.paymentProofUploadQueueHint,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 11,
               ),
@@ -137,7 +137,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
           onPressed: _isSaving ? null : () => Navigator.of(context).pop(null),
           child: Text(
             l10n.paymentProofSkipForNow,
-            style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
+            style: AppFonts.system(color: AppColors.textSecondary),
           ),
         ),
         OutlinedButton.icon(
@@ -147,7 +147,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
             _selectedFile == null
                 ? l10n.paymentProofCapture
                 : l10n.paymentProofRetake,
-            style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w700),
+            style: AppFonts.system(fontWeight: FontWeight.w700),
           ),
         ),
         FilledButton.icon(
@@ -168,7 +168,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
               : const Icon(Icons.cloud_upload_outlined, size: 16),
           label: Text(
             l10n.paymentProofSaveProof,
-            style: GoogleFonts.notoSansKr(fontWeight: FontWeight.w700),
+            style: AppFonts.system(fontWeight: FontWeight.w700),
           ),
         ),
       ],
@@ -196,7 +196,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
         const SizedBox(height: 12),
         Text(
           l10n.paymentProofNoPhotoYet,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textPrimary,
             fontSize: 15,
             fontWeight: FontWeight.w700,
@@ -206,7 +206,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
         Text(
           l10n.paymentProofEmptySubtitle,
           textAlign: TextAlign.center,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textSecondary,
             fontSize: 12,
             height: 1.4,
@@ -241,7 +241,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
         const SizedBox(height: 10),
         Text(
           l10n.paymentProofReadyToUpload,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textPrimary,
             fontSize: 14,
             fontWeight: FontWeight.w700,
@@ -250,7 +250,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
         const SizedBox(height: 4),
         Text(
           _fileLabel(file),
-          style: GoogleFonts.firaCode(
+          style: AppFonts.system(
             color: AppColors.textSecondary,
             fontSize: 11,
           ),

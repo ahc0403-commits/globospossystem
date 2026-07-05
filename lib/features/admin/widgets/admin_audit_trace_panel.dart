@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../main.dart';
@@ -46,7 +46,7 @@ class AdminAuditTracePanel extends ConsumerWidget {
           return _panelContainer(
             child: Text(
               emptyMessage,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: compact ? 12 : 13,
               ),
@@ -83,7 +83,7 @@ class AdminAuditTracePanel extends ConsumerWidget {
           children: [
             Text(
               mapAdminAuditError(error),
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.statusCancelled,
                 fontSize: compact ? 12 : 13,
               ),
@@ -150,7 +150,7 @@ class _AuditTraceRow extends StatelessWidget {
               Expanded(
                 child: Text(
                   '${_entityLabel(entityType)} · ${_actionLabel(action)}',
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.textPrimary,
                     fontSize: compact ? 12 : 13,
                     fontWeight: FontWeight.w700,
@@ -160,7 +160,7 @@ class _AuditTraceRow extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 timestamp,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textSecondary,
                   fontSize: compact ? 11 : 12,
                 ),
@@ -170,7 +170,7 @@ class _AuditTraceRow extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             'Actor: $actorName',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: compact ? 11 : 12,
             ),
@@ -179,7 +179,7 @@ class _AuditTraceRow extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'Changed fields: ${changedFields.join(', ')}',
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: compact ? 11 : 12,
               ),

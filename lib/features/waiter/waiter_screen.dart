@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/ui/pos_design_tokens.dart';
@@ -116,8 +116,9 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     }
 
     int? guestCount;
-    if (requireGuestCount) {
-      guestCount = await _showGuestCountDialog();
+    final shouldRequestGuestCount = requireGuestCount || table.isAvailable;
+    if (shouldRequestGuestCount) {
+      guestCount = await _showGuestCountDialog(maxGuests: table.seatCount);
       if (guestCount == null) {
         return;
       }
@@ -146,51 +147,113 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     });
   }
 
-  Future<int?> _showGuestCountDialog() async {
+  Future<int?> _showGuestCountDialog({int? maxGuests}) async {
     final l10n = context.l10n;
     final controller = TextEditingController(
       text: _selectedGuestCount?.toString() ?? '',
     );
+    String? guestCountError(String value) {
+      final guestCount = parseIntInput(value);
+      if (guestCount == null || guestCount < 1) {
+        return l10n.tablesInvalidTableAndSeat;
+      }
+      if (maxGuests != null && maxGuests > 0 && guestCount > maxGuests) {
+        return l10n.waiterGuestCountOverSeatLimit(maxGuests);
+      }
+      return null;
+    }
+
     final result = await showDialog<int>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppColors.surface1,
-          title: Text(
-            l10n.waiterGuestCountTitle,
-            style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-          ),
-          content: TextField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-            decoration: InputDecoration(labelText: l10n.waiterGuestCountField),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(l10n.cancel),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.amber500,
-                foregroundColor: AppColors.surface0,
+        var errorText = guestCountError(controller.text);
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface1,
+              title: Text(
+                l10n.waiterGuestCountTitle,
+                style: AppFonts.system(color: AppColors.textPrimary),
               ),
-              onPressed: () {
-                final guestCount = parseIntInput(controller.text);
-                if (guestCount == null || guestCount < 1) {
-                  return;
-                }
-                Navigator.of(context).pop(guestCount);
-              },
-              child: Text(l10n.confirm),
-            ),
-          ],
+              content: TextField(
+                key: const Key('waiter_guest_count_input'),
+                controller: controller,
+                keyboardType: TextInputType.number,
+                style: AppFonts.system(color: AppColors.textPrimary),
+                onChanged: (value) {
+                  setDialogState(() {
+                    errorText = guestCountError(value);
+                  });
+                },
+                decoration: InputDecoration(
+                  labelText: l10n.waiterGuestCountField,
+                  helperText: maxGuests != null && maxGuests > 0
+                      ? l10n.waiterSeatCount(maxGuests)
+                      : null,
+                  errorText: errorText,
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(l10n.cancel),
+                ),
+                FilledButton(
+                  key: const Key('waiter_guest_count_confirm'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.amber500,
+                    foregroundColor: AppColors.surface0,
+                  ),
+                  onPressed: errorText != null
+                      ? null
+                      : () {
+                          final guestCount = parseIntInput(controller.text);
+                          if (guestCount == null) {
+                            return;
+                          }
+                          Navigator.of(context).pop(guestCount);
+                        },
+                  child: Text(l10n.confirm),
+                ),
+              ],
+            );
+          },
         );
       },
     );
-    controller.dispose();
+    // Dispose only after the dialog's exit transition finishes — the closing
+    // frame still rebuilds the TextField, and disposing immediately throws
+    // "TextEditingController was used after being disposed", which error-boxes
+    // the whole waiter surface.
+    Future.delayed(const Duration(milliseconds: 400), controller.dispose);
     return result;
+  }
+
+  Future<void> _onChangeGuestCount(
+    String storeId,
+    OrderState orderState,
+  ) async {
+    final activeOrder = orderState.activeOrder;
+    if (activeOrder == null) {
+      return;
+    }
+
+    setState(() {
+      _selectedGuestCount = activeOrder.guestCount ?? _selectedGuestCount;
+    });
+    final guestCount = await _showGuestCountDialog(
+      maxGuests: _selectedTable?.seatCount,
+    );
+    if (guestCount == null) {
+      return;
+    }
+
+    setState(() {
+      _selectedGuestCount = guestCount;
+    });
+    await ref
+        .read(orderProvider.notifier)
+        .updateGuestCount(activeOrder.id, storeId, guestCount);
   }
 
   Future<bool> _showCancelOrderDialog({required String tableNumber}) async {
@@ -201,14 +264,14 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
         backgroundColor: AppColors.surface1,
         title: Text(
           l10n.waiterCancelOrderTitle,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textPrimary,
             fontWeight: FontWeight.w700,
           ),
         ),
         content: Text(
           l10n.waiterCancelOrderMessage(tableNumber),
-          style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
+          style: AppFonts.system(color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
@@ -216,6 +279,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
             child: Text(l10n.waiterBack),
           ),
           FilledButton.icon(
+            key: const Key('waiter_cancel_order_confirm_button'),
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.statusCancelled,
@@ -251,7 +315,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
         backgroundColor: AppColors.surface1,
         title: Text(
           l10n.waiterMoveTableTitle,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textPrimary,
             fontWeight: FontWeight.w700,
           ),
@@ -271,14 +335,14 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                 tileColor: AppColors.surface2,
                 title: Text(
                   l10n.waiterTableLabel(table.tableNumber),
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 subtitle: Text(
                   l10n.waiterSeatCount(table.seatCount ?? 0),
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.textSecondary,
                     fontSize: 12,
                   ),
@@ -304,7 +368,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
       SnackBar(
         content: Text(
           l10n.waiterOrderCancelled,
-          style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
+          style: AppFonts.system(color: Colors.white, fontSize: 14),
         ),
         backgroundColor: AppColors.statusOccupied,
         behavior: SnackBarBehavior.floating,
@@ -345,11 +409,13 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
   }) {
     final orderNotifier = ref.read(orderProvider.notifier);
     final l10n = context.l10n;
+    final guestCount =
+        orderState.activeOrder?.guestCount ?? _selectedGuestCount;
 
     return OrderWorkspace(
       key: ValueKey<String>('order-${selectedTable.id}-$_orderPanelNonce'),
       table: selectedTable,
-      guestCount: _selectedGuestCount,
+      guestCount: guestCount,
       menuState: menuState,
       menuNotifier: menuNotifier,
       orderState: orderState,
@@ -394,6 +460,9 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                 _selectedTable = newTable;
               });
             },
+      onChangeGuestCount: storeId == null || orderState.activeOrder == null
+          ? null
+          : () => _onChangeGuestCount(storeId, orderState),
       onCancelOrder: () async {
         final activeOrder = orderState.activeOrder;
         if (storeId == null || activeOrder == null) {
@@ -412,10 +481,13 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
           return;
         }
         if (nextState.error == null) {
-          await ref.read(waiterTableProvider.notifier).loadTables(storeId);
+          final tableNotifier = ref.read(waiterTableProvider.notifier);
+          await tableNotifier.loadTables(storeId, showLoading: false);
+          await tableNotifier.refreshOrderPreviews(storeId);
           if (!mounted) {
             return;
           }
+          ref.read(orderProvider.notifier).clearSession();
           _onCancelOrderPanel();
           _showOrderCancelledSnackBar();
         }
@@ -449,7 +521,9 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
           return;
         }
         if (ref.read(orderProvider).error == null) {
-          await ref.read(waiterTableProvider.notifier).loadTables(storeId);
+          final tableNotifier = ref.read(waiterTableProvider.notifier);
+          await tableNotifier.loadTables(storeId);
+          await tableNotifier.refreshOrderPreviews(storeId);
         }
       },
     );
@@ -953,7 +1027,7 @@ class _WaiterTopBar extends ConsumerWidget {
               children: [
                 Text(
                   l10n.waiterDiningFloor,
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.textSecondary,
                     fontSize: 10.5,
                     fontWeight: FontWeight.w700,
@@ -965,7 +1039,7 @@ class _WaiterTopBar extends ConsumerWidget {
                     name.isEmpty ? l10n.store : name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: AppColors.textPrimary,
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -975,7 +1049,7 @@ class _WaiterTopBar extends ConsumerWidget {
                     l10n.waiterLoading,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: AppColors.textSecondary,
                       fontSize: 14,
                     ),
@@ -984,7 +1058,7 @@ class _WaiterTopBar extends ConsumerWidget {
                     l10n.store,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: AppColors.textSecondary,
                       fontSize: 14,
                     ),
@@ -1038,7 +1112,7 @@ class _TableGridView extends StatelessWidget {
             children: [
               Text(
                 state.error!,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.statusCancelled,
                   fontSize: 14,
                 ),

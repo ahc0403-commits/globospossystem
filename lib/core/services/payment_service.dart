@@ -149,15 +149,23 @@ class PaymentService {
       }
 
       final jobs = await supabase
-          .from('einvoice_jobs')
+          .from('meinvoice_jobs')
           .select(
-            'id, ref_id, sid, status, cqt_report_status, issuance_status, lookup_url, redinvoice_requested, send_order_payload, request_einvoice_payload, created_at, updated_at',
+            'id, misa_ref_id, transaction_id, status, tax_authority_code, invoice_number, buyer_kind, buyer_snapshot, line_items_snapshot, created_at, updated_at',
           )
           .eq('order_id', orderId)
           .order('created_at', ascending: false)
           .limit(1);
       if (jobs.isNotEmpty) {
         jobMap = Map<String, dynamic>.from(jobs.first);
+        jobMap['ref_id'] = jobMap['misa_ref_id'] ?? jobMap['id'];
+        jobMap['sid'] = jobMap['transaction_id'];
+        jobMap['cqt_report_status'] = jobMap['tax_authority_code'];
+        jobMap['issuance_status'] =
+            jobMap['invoice_number'] ?? jobMap['status'];
+        jobMap['lookup_url'] = null;
+        jobMap['redinvoice_requested'] =
+            jobMap['buyer_kind']?.toString() != 'anonymous';
       }
     }
 

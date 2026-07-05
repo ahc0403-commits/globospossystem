@@ -19,6 +19,7 @@ class CashierOrder {
     required this.items,
     required this.totalAmount,
     required this.createdAt,
+    this.completedAt,
   });
 
   final String orderId;
@@ -28,11 +29,13 @@ class CashierOrder {
   final List<OrderItem> items;
   final double totalAmount;
   final DateTime createdAt;
+  final DateTime? completedAt;
 }
 
 class PaymentState {
   const PaymentState({
     this.orders = const [],
+    this.completedOrders = const [],
     this.selectedOrder,
     this.isProcessing = false,
     this.paymentSuccess = false,
@@ -40,6 +43,7 @@ class PaymentState {
   });
 
   final List<CashierOrder> orders;
+  final List<CashierOrder> completedOrders;
   final CashierOrder? selectedOrder;
   final bool isProcessing;
   final bool paymentSuccess;
@@ -47,6 +51,7 @@ class PaymentState {
 
   PaymentState copyWith({
     List<CashierOrder>? orders,
+    List<CashierOrder>? completedOrders,
     CashierOrder? selectedOrder,
     bool? isProcessing,
     bool? paymentSuccess,
@@ -57,6 +62,7 @@ class PaymentState {
   }) {
     return PaymentState(
       orders: orders ?? this.orders,
+      completedOrders: completedOrders ?? this.completedOrders,
       selectedOrder: clearSelectedOrder
           ? null
           : (selectedOrder ?? this.selectedOrder),
@@ -73,12 +79,13 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   PaymentNotifier() : super(const PaymentState());
 
   static const _autoRefreshInterval = Duration(seconds: 2);
+  static const _fallbackPollInterval = Duration(seconds: 15);
 
   RealtimeChannel? _ordersChannel;
   RealtimeChannel? _paymentsChannel;
   String? _restaurantId;
   // Realtime can be delayed or dropped on mobile web. Keep cashier payment
-  // readiness moving so served tables do not wait for a manual refresh.
+  // readiness moving so kitchen-ready tables do not wait for a manual refresh.
   Timer? _pollTimer;
   String? _pollStoreId;
   bool _realtimeConnected = false;
@@ -94,7 +101,10 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
             'id, table_id, status, created_at, tables(table_number), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, paying_amount_inc_tax, menu_items(name, vat_category))',
           )
           .eq('restaurant_id', storeId)
-          .not('status', 'in', '(completed,cancelled)')
+          // Payability is an order-status fact derived server-side by
+          // recalc_order_status (ORDER_LIFECYCLE_STATE_CONTRACT_2026_07_03):
+          // serving ⇔ every active item is ready|served.
+          .eq('status', 'serving')
           .order('created_at', ascending: true)
           .order('created_at', referencedTable: 'order_items', ascending: true)
           .order('id', referencedTable: 'order_items', ascending: true);
@@ -109,10 +119,6 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
                       .toList()
                 : <Map<String, dynamic>>[];
             itemRows.sort(_compareOrderItemRowsByCreatedAt);
-            final isPayable = _isCashierPayableItemRows(itemRows);
-            if (!isPayable) {
-              return null;
-            }
 
             final items = itemRows.map<OrderItem>(OrderItem.fromJson).toList();
 
@@ -145,6 +151,10 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
           .whereType<CashierOrder>()
           .where((order) => order.totalAmount > 0)
           .toList();
+      final completedOrders = await _fetchCompletedOrders(
+        storeId,
+        storePricing,
+      );
 
       final selected = state.selectedOrder;
       CashierOrder? updatedSelected;
@@ -159,6 +169,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
 
       state = state.copyWith(
         orders: orders,
+        completedOrders: completedOrders,
         selectedOrder: updatedSelected,
         clearSelectedOrder: selected != null && updatedSelected == null,
         clearError: true,
@@ -168,6 +179,75 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     } catch (error) {
       state = state.copyWith(error: 'Failed to load payable orders: $error');
     }
+  }
+
+  Future<List<CashierOrder>> _fetchCompletedOrders(
+    String storeId,
+    _CashierStorePricing storePricing,
+  ) async {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day).toIso8601String();
+    final response = await supabase
+        .from('orders')
+        .select(
+          'id, table_id, status, created_at, updated_at, tables(table_number), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, paying_amount_inc_tax, menu_items(name, vat_category))',
+        )
+        .eq('restaurant_id', storeId)
+        .eq('status', 'completed')
+        .gte('updated_at', todayStart)
+        .order('updated_at', ascending: false)
+        .order('created_at', referencedTable: 'order_items', ascending: true)
+        .order('id', referencedTable: 'order_items', ascending: true)
+        .limit(12);
+
+    return response
+        .map<CashierOrder>((row) {
+          final data = Map<String, dynamic>.from(row);
+          final itemsRaw = data['order_items'];
+          final itemRows = itemsRaw is List
+              ? itemsRaw
+                    .map((item) => Map<String, dynamic>.from(item as Map))
+                    .where(
+                      (item) =>
+                          item['status']?.toString().toLowerCase() !=
+                          'cancelled',
+                    )
+                    .toList()
+              : <Map<String, dynamic>>[];
+          itemRows.sort(_compareOrderItemRowsByCreatedAt);
+
+          final items = itemRows.map<OrderItem>(OrderItem.fromJson).toList();
+          final total = calculatePaymentQuote(
+            lines: itemRows.map(_paymentQuoteLineFromRow),
+            vatPricingMode: storePricing.vatPricingMode,
+            serviceChargeEnabled: storePricing.serviceChargeEnabled,
+            serviceChargeRate: storePricing.serviceChargeRate,
+          ).payableTotal;
+
+          final tableRaw = data['tables'];
+          final tableNumber = tableRaw is Map<String, dynamic>
+              ? tableRaw['table_number']?.toString() ?? '-'
+              : '-';
+          final createdAtRaw = data['created_at']?.toString();
+          final updatedAtRaw = data['updated_at']?.toString();
+
+          return CashierOrder(
+            orderId: data['id'].toString(),
+            tableNumber: tableNumber,
+            tableId: data['table_id'].toString(),
+            status: data['status']?.toString() ?? 'completed',
+            items: items,
+            totalAmount: total,
+            createdAt: createdAtRaw != null
+                ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
+                : DateTime.now(),
+            completedAt: updatedAtRaw != null
+                ? DateTime.tryParse(updatedAtRaw)
+                : null,
+          );
+        })
+        .where((order) => order.totalAmount > 0)
+        .toList();
   }
 
   void selectOrder(CashierOrder order) {
@@ -354,13 +434,19 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   }
 
   void _ensureAutoRefresh(String storeId) {
+    if (_realtimeConnected) {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+      return;
+    }
+
     if (_pollTimer != null && _pollStoreId == storeId) {
       return;
     }
 
     _pollTimer?.cancel();
     _pollStoreId = storeId;
-    _pollTimer = Timer.periodic(_autoRefreshInterval, (_) {
+    _pollTimer = Timer.periodic(_fallbackPollInterval, (_) {
       if (mounted && _restaurantId == storeId) {
         unawaited(loadOrders(storeId));
       }
@@ -511,18 +597,6 @@ PaymentQuoteLine _paymentQuoteLineFromRow(Map<String, dynamic> row) {
     itemType: row['item_type']?.toString() ?? 'menu_item',
     vatCategory: row['vat_category']?.toString() ?? vatCategory,
     payingAmountIncTax: _nullableDoubleValue(row['paying_amount_inc_tax']),
-  );
-}
-
-bool _isCashierPayableItemRows(List<Map<String, dynamic>> itemRows) {
-  final activeRows = itemRows.where(
-    (row) => row['status']?.toString().toLowerCase() != 'cancelled',
-  );
-  if (activeRows.isEmpty) {
-    return false;
-  }
-  return activeRows.every(
-    (row) => row['status']?.toString().toLowerCase() == 'served',
   );
 }
 

@@ -170,6 +170,17 @@ GoRouter buildAppRouter(ProviderContainer container) {
         return redirectTo;
       }
 
+      // Fall-through: enforce role matrix on any route not handled above
+      if (!canAccessRouteForRole(
+        role,
+        fullLocation,
+        extraPermissions: auth.extraPermissions,
+      )) {
+        redirectTo = homeRoute;
+        NavigationHistoryService.instance.push(redirectTo);
+        return redirectTo;
+      }
+
       NavigationHistoryService.instance.push(fullLocation);
       return null;
     },

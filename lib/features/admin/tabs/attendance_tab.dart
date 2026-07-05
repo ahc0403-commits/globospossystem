@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -1153,7 +1153,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                           collapsedIconColor: AppColors.textSecondary,
                           title: Text(
                             context.l10n.attendancePayrollSummaryTitle,
-                            style: GoogleFonts.notoSansKr(
+                            style: AppFonts.system(
                               color: AppColors.textPrimary,
                               fontSize: 14,
                               fontWeight: FontWeight.w800,
@@ -1169,7 +1169,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                                       .attendancePayrollSummaryReadySubtitle,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.notoSansKr(
+                            style: AppFonts.system(
                               color: AppColors.textSecondary,
                               fontSize: 12,
                             ),
@@ -1293,7 +1293,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         collapsedIconColor: AppColors.textSecondary,
         title: Text(
           context.l10n.attendanceKioskStatus,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textPrimary,
             fontSize: 14,
             fontWeight: FontWeight.w800,
@@ -1305,7 +1305,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
               : context.l10n.attendanceConnectionStable,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textSecondary,
             fontSize: 12,
           ),
@@ -1427,7 +1427,7 @@ class _DateButton extends StatelessWidget {
       icon: const Icon(Icons.calendar_month_outlined),
       label: Text(
         '$label ${DateFormat('yyyy-MM-dd').format(value)}',
-        style: GoogleFonts.notoSansKr(),
+        style: AppFonts.system(),
       ),
       style: OutlinedButton.styleFrom(
         foregroundColor: AppColors.textPrimary,

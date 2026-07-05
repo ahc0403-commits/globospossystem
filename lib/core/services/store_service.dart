@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../main.dart';
 
 class StoreService {
@@ -10,18 +12,25 @@ class StoreService {
     String? brandId,
     String storeType = 'direct',
   }) async {
-    final result = await supabase.rpc(
-      'admin_create_restaurant',
-      params: {
-        'p_name': name,
-        'p_slug': slug,
-        'p_operation_mode': operationMode.toLowerCase(),
-        'p_address': address,
-        'p_per_person_charge': perPersonCharge,
-        'p_brand_id': brandId,
-        'p_store_type': storeType,
-      },
-    );
+    final result = await supabase
+        .rpc(
+          'admin_create_restaurant',
+          params: {
+            'p_name': name,
+            'p_slug': slug,
+            'p_operation_mode': operationMode.toLowerCase(),
+            'p_address': address,
+            'p_per_person_charge': perPersonCharge,
+            'p_brand_id': brandId,
+            'p_store_type': storeType,
+          },
+        )
+        .timeout(
+          const Duration(seconds: 20),
+          onTimeout: () => throw TimeoutException(
+            'Store creation timed out before the server returned a result.',
+          ),
+        );
     return Map<String, dynamic>.from(result as Map);
   }
 
@@ -55,19 +64,26 @@ class StoreService {
     String? brandId,
     String storeType = 'direct',
   }) async {
-    await supabase.rpc(
-      'admin_update_restaurant',
-      params: {
-        'p_store_id': id,
-        'p_name': name,
-        'p_slug': slug,
-        'p_operation_mode': operationMode.toLowerCase(),
-        'p_address': address,
-        'p_per_person_charge': perPersonCharge,
-        'p_brand_id': brandId,
-        'p_store_type': storeType,
-      },
-    );
+    await supabase
+        .rpc(
+          'admin_update_restaurant',
+          params: {
+            'p_store_id': id,
+            'p_name': name,
+            'p_slug': slug,
+            'p_operation_mode': operationMode.toLowerCase(),
+            'p_address': address,
+            'p_per_person_charge': perPersonCharge,
+            'p_brand_id': brandId,
+            'p_store_type': storeType,
+          },
+        )
+        .timeout(
+          const Duration(seconds: 20),
+          onTimeout: () => throw TimeoutException(
+            'Store update timed out before the server returned a result.',
+          ),
+        );
   }
 
   Future<void> updateRestaurant({

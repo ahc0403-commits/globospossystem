@@ -238,7 +238,7 @@ void main() {
         contains('class InventoryPurchaseDocumentService'),
       );
       expect(documentService, contains('Printing.layoutPdf'));
-      expect(documentService, contains('PdfGoogleFonts.notoSansKRRegular'));
+      expect(documentService, contains('rootBundle.load(AppFonts.assetPath)'));
       expect(documentService, contains('l10n.inventoryPurchasePdfOfficeNote'));
       expect(
         documentService,

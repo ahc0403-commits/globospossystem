@@ -150,7 +150,8 @@ class PaymentProofService {
     final date = takenAt.toUtc();
     final dateStr =
         '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-    final path = '$taxEntityId/$storeId/$dateStr/$paymentId.jpg';
+    final objectId = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final path = '$taxEntityId/$storeId/$dateStr/$paymentId/$objectId.jpg';
 
     await supabase.storage
         .from('payment-proofs')
@@ -159,7 +160,7 @@ class PaymentProofService {
           compressed,
           fileOptions: const FileOptions(
             contentType: 'image/jpeg',
-            upsert: true,
+            upsert: false,
           ),
         );
 

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../ui/app_theme.dart';
 import '../ui/pos_design_tokens.dart';
@@ -158,11 +158,11 @@ class _SidebarRail extends StatelessWidget {
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: PosColors.text,
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      letterSpacing: -0.1,
+                      letterSpacing: 0,
                     ),
                   ),
                 ),
@@ -199,7 +199,7 @@ class _SidebarRail extends StatelessWidget {
                       ),
                       child: Text(
                         header.toUpperCase(),
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: PosColors.textMuted,
                           fontSize: 10.5,
                           fontWeight: FontWeight.w700,
@@ -277,7 +277,7 @@ class _SidebarRailItem extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: isSelected ? PosColors.text : PosColors.textSecondary,
                   fontSize: 14,
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,

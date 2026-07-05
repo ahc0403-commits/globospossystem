@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../../i18n/locale_extensions.dart';
 import '../app_theme.dart';
@@ -121,19 +121,19 @@ class ToastOperationalQueuePane extends StatelessWidget {
                         children: [
                           Text(
                             title,
-                            style: GoogleFonts.notoSansKr(
+                            style: AppFonts.system(
                               color: ToastColorTokens.textPrimary,
                               fontSize: 24,
                               fontWeight: FontWeight.w700,
                               height: 1.12,
-                              letterSpacing: -0.4,
+                              letterSpacing: 0,
                             ),
                           ),
                           if (subtitle != null) ...[
                             const SizedBox(height: ToastSpacingTokens.sm),
                             Text(
                               subtitle!,
-                              style: GoogleFonts.notoSansKr(
+                              style: AppFonts.system(
                                 color: ToastColorTokens.textSecondary,
                                 fontSize: 13.5,
                                 fontWeight: FontWeight.w400,
@@ -406,7 +406,7 @@ class ToastStatusBadge extends StatelessWidget {
           ],
           Text(
             label,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: textColor,
               fontSize: compact ? 11 : 11.5,
               fontWeight: FontWeight.w800,
@@ -633,7 +633,7 @@ class ToastTopbar extends StatelessWidget {
               title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: ToastColorTokens.textPrimary,
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
@@ -1523,7 +1523,7 @@ class ToastSidebarPanel extends StatelessWidget {
                         title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: PosColors.text,
                           fontSize: 16,
                           fontWeight: FontWeight.w800,
@@ -1539,7 +1539,7 @@ class ToastSidebarPanel extends StatelessWidget {
                     subtitle!,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: PosColors.textSecondary,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -1580,7 +1580,7 @@ class ToastSidebarPanel extends StatelessWidget {
                       ),
                       child: Text(
                         header.toUpperCase(),
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: PosColors.textMuted,
                           fontSize: 9.5,
                           fontWeight: FontWeight.w700,
@@ -1658,7 +1658,7 @@ class _PanelRailItem extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: isSelected ? PosColors.text : PosColors.textSecondary,
                   fontSize: 13.5,
                   fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
@@ -1705,7 +1705,7 @@ class _ToastMetricCell extends StatelessWidget {
                   item.label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: ToastColorTokens.textMuted,
                     fontSize: compact ? 9.8 : 10.8,
                     fontWeight: FontWeight.w700,
@@ -1721,7 +1721,7 @@ class _ToastMetricCell extends StatelessWidget {
             item.value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: valueColor,
               fontSize: compact ? 12.5 : 16,
               fontWeight: compact ? FontWeight.w800 : FontWeight.w900,
@@ -1932,7 +1932,7 @@ class ToastActionStackItem extends StatelessWidget {
                 const SizedBox(width: AppSpacing.xs),
                 Text(
                   label,
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: PosColors.text,
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -2139,7 +2139,7 @@ class ToastActionButton extends StatelessWidget {
                 ],
                 Text(
                   label,
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: foreground,
                     fontSize: compact ? 12.5 : 13.5,
                     fontWeight: compact ? FontWeight.w700 : FontWeight.w800,

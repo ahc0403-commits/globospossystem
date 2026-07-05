@@ -1,5 +1,28 @@
 import 'permission_utils.dart';
 
+/// Every role the POS client can route. auth_provider refuses to keep a
+/// session whose role is outside this set, so `homeRouteForRole`'s '/login'
+/// fallback can no longer trap an authenticated user in a redirect loop
+/// (STAFF_ACCOUNT_LOGIN_GATE_CONTRACT_2026_07_03 P0-3).
+const Set<String> kKnownPosRoles = {
+  'super_admin',
+  'brand_admin',
+  'store_admin',
+  'admin',
+  'waiter',
+  'kitchen',
+  'cashier',
+  'photo_objet_master',
+  'photo_objet_store_admin',
+};
+
+/// Cross-store roles that may log in without an accessible-store scope
+/// (contract AC6). Every other role is refused when its store list is empty.
+const Set<String> kStoreScopeExemptRoles = {
+  'super_admin',
+  'photo_objet_master',
+};
+
 String homeRouteForRole(String? role) {
   return switch (role) {
     'super_admin' => '/super-admin',
@@ -20,7 +43,9 @@ bool canAccessRouteForRole(
   final path = Uri.parse(location).path;
 
   if (role == null) return path == '/login';
-  if (path == '/login' || path == '/onboarding') return true;
+  if (path == '/login' || path == '/onboarding' || path == '/privacy-consent') {
+    return true;
+  }
   if (path == '/attendance-kiosk') return false;
   if (path == '/qc-check') {
     return PermissionUtils.canDoQcCheck(role, extraPermissions);

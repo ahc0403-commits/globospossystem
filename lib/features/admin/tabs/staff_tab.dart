@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
+import '../../../core/utils/staff_role_utils.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
@@ -57,7 +58,10 @@ class _StaffTabState extends ConsumerState<StaffTab> {
       _lastError = staffState.error;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          showErrorToast(context, staffState.error!);
+          showErrorToast(
+            context,
+            _localizedStaffCreationMessage(context, staffState.error!),
+          );
         }
       });
     }
@@ -767,7 +771,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                   backgroundColor: PosColors.accentMuted,
                   child: Text(
                     _initialsForName(row.member.fullName),
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: PosColors.accent,
                       fontWeight: FontWeight.w800,
                       fontSize: 14,
@@ -903,7 +907,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                 backgroundColor: PosColors.accentMuted,
                 child: Text(
                   _initialsForName(row.member.fullName),
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: PosColors.accent,
                     fontWeight: FontWeight.w800,
                     fontSize: 15,
@@ -1104,12 +1108,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
   }
 
   bool _canEditPermissionsForRole(String role) {
-    return role != 'admin' &&
-        role != 'store_admin' &&
-        role != 'brand_admin' &&
-        role != 'photo_objet_master' &&
-        role != 'photo_objet_store_admin' &&
-        role != 'super_admin';
+    return canManageExtraPermissions(role);
   }
 
   String _attendanceTypeLabel(String type) {
@@ -1184,7 +1183,9 @@ class _StaffTabState extends ConsumerState<StaffTab> {
     final emailController = TextEditingController();
     final passwordController = TextEditingController();
     String role = 'waiter';
+    String? validationMessage;
     final notifier = ref.read(staffProvider.notifier);
+    final rootContext = context;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -1212,20 +1213,20 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: fullNameController,
-                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(labelText: context.l10n.name),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: emailController,
-                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(labelText: context.l10n.email),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: passwordController,
                     obscureText: true,
-                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(
                       labelText: context.l10n.password,
                       hintText: context.l10n.staffPasswordHint,
@@ -1235,7 +1236,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                   DropdownButtonFormField<String>(
                     initialValue: role,
                     dropdownColor: AppColors.surface1,
-                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    style: AppFonts.system(color: AppColors.textPrimary),
                     items: _availableRoleOptions(context, viewerRole),
                     onChanged: (value) {
                       if (value != null) {
@@ -1243,6 +1244,17 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                       }
                     },
                   ),
+                  if (validationMessage != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      key: const Key('staff_create_validation_message'),
+                      validationMessage!,
+                      style: AppFonts.system(
+                        color: AppColors.statusCancelled,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
@@ -1256,8 +1268,31 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                               if (fullName.isEmpty ||
                                   email.isEmpty ||
                                   password.isEmpty) {
+                                setModalState(() {
+                                  validationMessage =
+                                      context
+                                          .l10n
+                                          .staffCreateValidationRequired;
+                                });
                                 return;
                               }
+                              if (!email.contains('@')) {
+                                setModalState(() {
+                                  validationMessage =
+                                      context.l10n.redInvoiceInvalidEmail;
+                                });
+                                return;
+                              }
+                              if (password.length < 6) {
+                                setModalState(() {
+                                  validationMessage =
+                                      context
+                                          .l10n
+                                          .staffCreateValidationPasswordLength;
+                                });
+                                return;
+                              }
+                              setModalState(() => validationMessage = null);
 
                               await notifier.createStaff(
                                 storeId: storeId,
@@ -1269,11 +1304,27 @@ class _StaffTabState extends ConsumerState<StaffTab> {
 
                               if (!context.mounted) return;
                               final nextState = ref.read(staffProvider);
-                              if (nextState.error != null) return;
+                              if (nextState.error != null) {
+                                setModalState(() {
+                                  validationMessage =
+                                      _localizedStaffCreationMessage(
+                                        context,
+                                        nextState.error!,
+                                        genericForUnknown: true,
+                                      );
+                                });
+                                return;
+                              }
                               Navigator.of(context).pop();
+                              if (!rootContext.mounted) return;
                               showSuccessToast(
-                                context,
-                                context.l10n.staffCreatedMessage,
+                                rootContext,
+                                rootContext.l10n.staffCreatedMessage,
+                              );
+                              await _showStaffCredentialDialog(
+                                rootContext,
+                                email: email,
+                                password: password,
                               );
                             },
                       child: isCreating
@@ -1306,6 +1357,45 @@ class _StaffTabState extends ConsumerState<StaffTab> {
     passwordController.dispose();
   }
 
+  Future<void> _showStaffCredentialDialog(
+    BuildContext context, {
+    required String email,
+    required String password,
+  }) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        final l10n = context.l10n;
+        return AlertDialog(
+          key: const Key('staff_created_credentials_dialog'),
+          backgroundColor: AppColors.surface1,
+          title: Text(
+            l10n.staffCreatedMessage,
+            style: AppFonts.system(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _CredentialValueRow(label: l10n.email, value: email),
+              const SizedBox(height: 10),
+              _CredentialValueRow(label: l10n.password, value: password),
+            ],
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.close),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _showPermissionDialog({
     required BuildContext context,
     required String storeId,
@@ -1324,7 +1414,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
               backgroundColor: AppColors.surface1,
               title: Text(
                 context.l10n.staffPermissionDialogTitle(member.fullName),
-                style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                style: AppFonts.system(color: AppColors.textPrimary),
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -1334,7 +1424,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                     activeColor: AppColors.amber500,
                     title: Text(
                       context.l10n.staffQcPermission,
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontSize: 14,
                       ),
@@ -1348,7 +1438,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                     activeColor: AppColors.amber500,
                     title: Text(
                       context.l10n.staffInventoryCountPermission,
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontSize: 14,
                       ),
@@ -1393,6 +1483,42 @@ class _StaffTabState extends ConsumerState<StaffTab> {
       },
     );
   }
+}
+
+String _localizedStaffCreationMessage(
+  BuildContext context,
+  String raw, {
+  bool genericForUnknown = false,
+}) {
+  final lower = raw.toLowerCase();
+  final l10n = context.l10n;
+  if (lower.contains('missing required')) {
+    return l10n.staffCreateErrorMissingRequired;
+  }
+  if (lower.contains('unsupported role')) {
+    return l10n.staffCreateErrorUnsupportedRole;
+  }
+  if (lower.contains('cannot create admin accounts') ||
+      lower.contains('cannot create this role')) {
+    return l10n.staffCreateErrorElevatedRoleForbidden;
+  }
+  if (lower.contains('another store') || lower.contains('another brand')) {
+    return l10n.staffCreateErrorScope;
+  }
+  if (lower.contains('target store not found') ||
+      lower.contains('target store is inactive')) {
+    return l10n.staffCreateErrorStoreInactive;
+  }
+  if (lower.contains('already') || lower.contains('duplicate')) {
+    return l10n.staffCreateErrorDuplicate;
+  }
+  if (lower.contains('auth user') || lower.contains('unauthorized')) {
+    return l10n.staffCreateErrorAuth;
+  }
+  if (lower.contains('timed out')) {
+    return l10n.staffCreateErrorTimedOut;
+  }
+  return genericForUnknown ? l10n.staffCreateErrorGeneric : raw;
 }
 
 class _StaffBoardRow {
@@ -1455,7 +1581,7 @@ class _StaffDetailDisclosure extends StatelessWidget {
         collapsedIconColor: AppColors.textSecondary,
         title: Text(
           context.l10n.staffQuickActions,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textPrimary,
             fontSize: 14,
             fontWeight: FontWeight.w800,
@@ -1465,7 +1591,7 @@ class _StaffDetailDisclosure extends StatelessWidget {
           '${context.l10n.staffViewAttendanceLog} · ${context.l10n.staffChangePermission}',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textSecondary,
             fontSize: 11,
             fontWeight: FontWeight.w700,
@@ -1565,6 +1691,46 @@ class _StaffDetailDisclosure extends StatelessWidget {
   }
 }
 
+class _CredentialValueRow extends StatelessWidget {
+  const _CredentialValueRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: PosSurfaceRole.action.fill,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: PosSurfaceRole.action.stroke),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: PosColors.textSecondary,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          SelectableText(
+            value,
+            style: AppFonts.system(
+              color: PosColors.textPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _RoleBadge extends StatelessWidget {
   const _RoleBadge({required this.role});
 
@@ -1595,7 +1761,7 @@ class _RoleBadge extends StatelessWidget {
       ),
       child: Text(
         _roleLabelKo(context, normalized),
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: color,
           fontSize: 11,
           fontWeight: FontWeight.w700,
@@ -1625,53 +1791,8 @@ List<DropdownMenuItem<String>> _availableRoleOptions(
   BuildContext context,
   String? viewerRole,
 ) {
-  final l10n = context.l10n;
-  final baseRoles = [
-    DropdownMenuItem(value: 'waiter', child: Text(l10n.staffRoleWaiter)),
-    DropdownMenuItem(value: 'kitchen', child: Text(l10n.staffRoleKitchen)),
-    DropdownMenuItem(value: 'cashier', child: Text(l10n.staffRoleCashier)),
-  ];
-
-  if (viewerRole == 'super_admin') {
-    return [
-      ...baseRoles,
-      DropdownMenuItem(value: 'admin', child: Text(l10n.staffRoleAdmin)),
-      DropdownMenuItem(
-        value: 'store_admin',
-        child: Text(l10n.staffRoleStoreAdmin),
-      ),
-      DropdownMenuItem(
-        value: 'brand_admin',
-        child: Text(l10n.staffRoleBrandAdmin),
-      ),
-      DropdownMenuItem(
-        value: 'photo_objet_master',
-        child: Text(l10n.staffRolePhotoMaster),
-      ),
-      DropdownMenuItem(
-        value: 'photo_objet_store_admin',
-        child: Text(l10n.staffRolePhotoStoreAdmin),
-      ),
-    ];
-  }
-
-  if (viewerRole == 'brand_admin') {
-    return [
-      ...baseRoles,
-      DropdownMenuItem(value: 'admin', child: Text(l10n.staffRoleAdmin)),
-      DropdownMenuItem(
-        value: 'store_admin',
-        child: Text(l10n.staffRoleStoreAdmin),
-      ),
-      DropdownMenuItem(
-        value: 'photo_objet_store_admin',
-        child: Text(l10n.staffRolePhotoStoreAdmin),
-      ),
-    ];
-  }
-
   return [
-    ...baseRoles,
-    DropdownMenuItem(value: 'admin', child: Text(l10n.staffRoleAdmin)),
+    for (final role in assignableRolesForViewer(viewerRole))
+      DropdownMenuItem(value: role, child: Text(_roleLabelKo(context, role))),
   ];
 }

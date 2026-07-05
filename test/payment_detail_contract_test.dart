@@ -64,6 +64,7 @@ void main() {
     expect(screen, contains("LiveSyncScope.entityFilter('order_id', orderId)"));
     expect(screen, contains('Timer.periodic(_autoRefreshInterval'));
     expect(screen, contains("table: 'payment_adjustments'"));
+    expect(screen, contains("table: 'meinvoice_jobs'"));
     expect(
       screen,
       contains("LiveSyncScope.entityFilter('payment_id', widget.paymentId)"),
@@ -165,6 +166,7 @@ void main() {
     expect(paymentService, contains('String? storeId'));
     expect(paymentService, contains(".eq('restaurant_id', storeId)"));
     expect(paymentService, contains(".from('payment_adjustments')"));
+    expect(paymentService, contains(".from('meinvoice_jobs')"));
     expect(paymentService, contains("'adjustments': adjustments"));
     expect(
       paymentService,

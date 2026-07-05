@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/ui/app_primitives.dart';
@@ -408,7 +408,7 @@ class _HeroBanner extends StatelessWidget {
         children: [
           Text(
             context.l10n.photoOpsHeroEyebrow,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: PosColors.textMuted,
               fontSize: 13,
               fontWeight: FontWeight.w700,
@@ -417,7 +417,7 @@ class _HeroBanner extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             context.l10n.photoOpsHeroTitle,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: PosColors.textPrimary,
               fontSize: 20,
               fontWeight: FontWeight.w900,
@@ -516,7 +516,7 @@ class _MetaPill extends StatelessWidget {
       ),
       child: Text(
         '$label: $value',
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: PosColors.textSecondary,
           fontSize: 12,
           fontWeight: FontWeight.w700,
@@ -617,7 +617,7 @@ class _WarningSurface extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: PosColors.textPrimary,
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
@@ -913,7 +913,7 @@ class _SimpleRow extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: PosColors.textPrimary,
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
@@ -922,7 +922,7 @@ class _SimpleRow extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     subtitle,
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: PosColors.textSecondary,
                       fontSize: 12,
                     ),
@@ -933,7 +933,7 @@ class _SimpleRow extends StatelessWidget {
             const SizedBox(width: 12),
             Text(
               trailing,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: PosColors.accent,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
@@ -957,7 +957,7 @@ class _EmptyLabel extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 14),
       child: Text(
         text,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: PosColors.textSecondary,
           fontSize: 13,
         ),
@@ -979,7 +979,7 @@ class _ErrorCard extends StatelessWidget {
         children: [
           Text(
             message,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: PosColors.textPrimary,
               fontSize: 14,
             ),

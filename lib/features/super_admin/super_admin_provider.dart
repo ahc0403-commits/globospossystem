@@ -248,6 +248,13 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     String? brandId,
     String storeType = 'direct',
   }) async {
+    if (brandId == null || brandId.isEmpty) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to create restaurant: brand is required.',
+      );
+      return false;
+    }
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       await restaurantService.createRestaurant(
@@ -280,6 +287,13 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     String? brandId,
     String storeType = 'direct',
   }) async {
+    if (brandId == null || brandId.isEmpty) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to update restaurant: brand is required.',
+      );
+      return false;
+    }
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       await restaurantService.updateRestaurant(

@@ -108,7 +108,6 @@ serve(async (req) => {
       'waiter',
       'kitchen',
       'cashier',
-      'admin',
       'store_admin',
       'brand_admin',
       'photo_objet_master',

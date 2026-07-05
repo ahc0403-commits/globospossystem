@@ -24,6 +24,9 @@ void main() {
           ) +
           readRepoFile(
             'supabase/migrations/20260604001000_pos_payment_refund_void_adjustments.sql',
+          ) +
+          readRepoFile(
+            'supabase/migrations/20260609000000_office_pos_sales_photo_objet_events.sql',
           );
       final deliberrySettlementFunction = readRepoFile(
         'supabase/functions/generate_delivery_settlement/index.ts',
@@ -55,6 +58,26 @@ void main() {
       expect(posSalesView, contains('record_payment_adjustment'));
       expect(posSalesView, contains('PAYMENT_ADJUSTMENTS_IMMUTABLE'));
       expect(posSalesView, contains("('external_sale:' || es.id::text)"));
+      expect(
+        posSalesView,
+        contains("'photo_objet_sales'::text as source_table"),
+      );
+      expect(
+        posSalesView,
+        contains("('photo_objet_sales:' || po.id::text || ':sale')"),
+      );
+      expect(
+        posSalesView,
+        contains("('photo_objet_sales:' || po.id::text || ':service')"),
+      );
+      expect(
+        posSalesView,
+        contains('coalesce(po.gross_sales, 0)::numeric(15,2)'),
+      );
+      expect(
+        posSalesView,
+        contains('coalesce(po.service_amount, 0)::numeric(15,2)'),
+      );
       expect(posSalesView, contains("'pay'::text as payment_bucket"));
       expect(
         posSalesView,
@@ -72,6 +95,12 @@ void main() {
         posSalesView,
         contains('grant select on public.v_office_pos_sales_bucket_summary'),
       );
+      expect(posSalesView, contains('to authenticated, service_role'));
+      expect(
+        posSalesView,
+        contains('sum(transaction_count)::integer as transaction_count'),
+      );
+      expect(posSalesView, contains('count(*)::integer as event_count'));
 
       expect(deliberrySettlementFunction, contains(".from('external_sales')"));
       expect(

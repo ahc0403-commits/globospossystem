@@ -1,4 +1,5 @@
 // Barrel file for Toast operational primitives.
+export '../pos_terminal_primitives.dart';
 export 'toast_primitives.dart';
 export 'toast_primitives_extended.dart';
 export 'toast_sidebar.dart';

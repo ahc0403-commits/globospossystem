@@ -12,13 +12,171 @@ import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
 
 class _EinvoiceOpsFlags {
-  const _EinvoiceOpsFlags({
-    required this.pollingEnabled,
-    required this.dispatchEnabled,
+  const _EinvoiceOpsFlags({required this.dispatchEnabled});
+
+  final bool dispatchEnabled;
+}
+
+class _MeInvoiceReadiness {
+  const _MeInvoiceReadiness({
+    required this.taxEntityId,
+    required this.taxCode,
+    required this.sellerName,
+    required this.integrationStatus,
+    required this.pendingManualConfigCount,
+    required this.dispatchPausedCount,
+    required this.readyToDispatch,
+    required this.blockingReasons,
   });
 
-  final bool pollingEnabled;
-  final bool dispatchEnabled;
+  factory _MeInvoiceReadiness.fromJson(Map<String, dynamic> json) {
+    final reasonsRaw = json['blocking_reasons'];
+    final reasons = reasonsRaw is List
+        ? reasonsRaw.map((reason) => reason.toString()).toList()
+        : const <String>[];
+
+    return _MeInvoiceReadiness(
+      taxEntityId: json['tax_entity_id']?.toString() ?? '',
+      taxCode: json['tax_code']?.toString() ?? '',
+      sellerName: json['seller_name']?.toString() ?? '',
+      integrationStatus:
+          json['integration_status']?.toString() ?? 'needs_vendor_activation',
+      pendingManualConfigCount: _toInt(json['pending_manual_config_count']),
+      dispatchPausedCount: _toInt(json['dispatch_paused_count']),
+      readyToDispatch: json['ready_to_dispatch'] == true,
+      blockingReasons: reasons,
+    );
+  }
+
+  final String taxEntityId;
+  final String taxCode;
+  final String sellerName;
+  final String integrationStatus;
+  final int pendingManualConfigCount;
+  final int dispatchPausedCount;
+  final bool readyToDispatch;
+  final List<String> blockingReasons;
+
+  bool get configReady =>
+      !blockingReasons.contains('integration_not_active') &&
+      !blockingReasons.contains('app_id_missing') &&
+      !blockingReasons.contains('invoice_series_missing');
+
+  bool get hasSetupBlockedJobs =>
+      pendingManualConfigCount > 0 || dispatchPausedCount > 0;
+
+  String optionLabel(BuildContext context) {
+    final name = sellerName.isEmpty ? context.l10n.store : sellerName;
+    if (taxCode.isEmpty) return name;
+    return '$name · $taxCode';
+  }
+}
+
+class _MeInvoiceSellerConfig {
+  const _MeInvoiceSellerConfig({
+    required this.taxEntityId,
+    required this.taxCode,
+    required this.sellerName,
+    required this.authBaseUrl,
+    required this.apiBaseUrl,
+    required this.appId,
+    required this.invoiceSeries,
+    required this.paymentMethodCash,
+    required this.paymentMethodCard,
+    required this.paymentMethodPay,
+    required this.paymentMethodMixed,
+    required this.integrationStatus,
+  });
+
+  factory _MeInvoiceSellerConfig.fromReadiness(_MeInvoiceReadiness profile) {
+    return _MeInvoiceSellerConfig(
+      taxEntityId: profile.taxEntityId,
+      taxCode: profile.taxCode,
+      sellerName: profile.sellerName,
+      authBaseUrl: 'https://api.meinvoice.vn/api/integration',
+      apiBaseUrl: 'https://api.meinvoice.vn/api/integration/invoice',
+      appId: '',
+      invoiceSeries: '',
+      paymentMethodCash: 'Tiền mặt',
+      paymentMethodCard: 'Thẻ quốc tế',
+      paymentMethodPay: 'Ví điện tử/QR',
+      paymentMethodMixed: 'Tiền mặt/Thẻ/Ví điện tử',
+      integrationStatus: profile.integrationStatus,
+    );
+  }
+
+  factory _MeInvoiceSellerConfig.fromJson(Map<String, dynamic> json) {
+    final taxEntityRaw = json['tax_entity'];
+    final taxEntity = taxEntityRaw is Map<String, dynamic>
+        ? taxEntityRaw
+        : taxEntityRaw is Map
+        ? Map<String, dynamic>.from(taxEntityRaw)
+        : const <String, dynamic>{};
+
+    return _MeInvoiceSellerConfig(
+      taxEntityId: json['tax_entity_id']?.toString() ?? '',
+      taxCode: taxEntity['tax_code']?.toString() ?? '',
+      sellerName: taxEntity['name']?.toString() ?? '',
+      authBaseUrl:
+          json['auth_base_url']?.toString() ??
+          'https://api.meinvoice.vn/api/integration',
+      apiBaseUrl:
+          json['api_base_url']?.toString() ??
+          'https://api.meinvoice.vn/api/integration/invoice',
+      appId: json['app_id']?.toString() ?? '',
+      invoiceSeries: json['invoice_series']?.toString() ?? '',
+      paymentMethodCash: json['payment_method_cash']?.toString() ?? 'Tiền mặt',
+      paymentMethodCard:
+          json['payment_method_card']?.toString() ?? 'Thẻ quốc tế',
+      paymentMethodPay:
+          json['payment_method_pay']?.toString() ?? 'Ví điện tử/QR',
+      paymentMethodMixed:
+          json['payment_method_mixed']?.toString() ?? 'Tiền mặt/Thẻ/Ví điện tử',
+      integrationStatus:
+          json['integration_status']?.toString() ?? 'needs_vendor_activation',
+    );
+  }
+
+  final String taxEntityId;
+  final String taxCode;
+  final String sellerName;
+  final String authBaseUrl;
+  final String apiBaseUrl;
+  final String appId;
+  final String invoiceSeries;
+  final String paymentMethodCash;
+  final String paymentMethodCard;
+  final String paymentMethodPay;
+  final String paymentMethodMixed;
+  final String integrationStatus;
+}
+
+class _MeInvoiceJobEvent {
+  const _MeInvoiceJobEvent({
+    required this.id,
+    required this.eventType,
+    required this.description,
+    required this.retryCount,
+    required this.createdAt,
+  });
+
+  factory _MeInvoiceJobEvent.fromJson(Map<String, dynamic> json) {
+    return _MeInvoiceJobEvent(
+      id: json['id']?.toString() ?? '',
+      eventType: json['event_type']?.toString() ?? '',
+      description: json['description']?.toString(),
+      retryCount: _toInt(json['retry_count']),
+      createdAt: _toDateTime(json['created_at']),
+    );
+  }
+
+  final String id;
+  final String eventType;
+  final String? description;
+  final int retryCount;
+  final DateTime createdAt;
+
+  String get title => eventType.isEmpty ? '-' : eventType.replaceAll('_', ' ');
 }
 
 class _EinvoiceQueueItem {
@@ -61,7 +219,8 @@ class _EinvoiceQueueItem {
         : tableRaw is Map
         ? Map<String, dynamic>.from(tableRaw)
         : null;
-    final itemsRaw = order?['order_items'];
+    final snapshotRaw = json['line_items_snapshot'];
+    final itemsRaw = snapshotRaw is List ? snapshotRaw : order?['order_items'];
     final items = itemsRaw is List
         ? itemsRaw
               .whereType<Map>()
@@ -79,32 +238,54 @@ class _EinvoiceQueueItem {
       final supply = _toDouble(item['total_amount_ex_tax']);
       final vat = _toDouble(item['vat_amount']);
       final total = _toDouble(item['paying_amount_inc_tax']);
-      supplyAmount += supply;
-      vatAmount += vat;
-      totalAmount += total > 0 ? total : (supply + vat);
+      final snapshotSupply = _toDouble(item['AmountWithoutVAT']);
+      final snapshotVat = _toDouble(item['VATAmount']);
+      final snapshotTotal = _toDouble(item['AmountAfterTax']);
+      final resolvedSupply = supply > 0 ? supply : snapshotSupply;
+      final resolvedVat = vat > 0 ? vat : snapshotVat;
+      final resolvedTotal = total > 0 ? total : snapshotTotal;
+      supplyAmount += resolvedSupply;
+      vatAmount += resolvedVat;
+      totalAmount += resolvedTotal > 0
+          ? resolvedTotal
+          : (resolvedSupply + resolvedVat);
     }
+    final buyerKind = json['buyer_kind']?.toString() ?? 'anonymous';
+    final status = json['status']?.toString() ?? 'pending_manual_config';
+    final refValue = json['misa_ref_id']?.toString();
 
     return _EinvoiceQueueItem(
       id: json['id']?.toString() ?? '',
-      refId: json['ref_id']?.toString() ?? '',
-      status: json['status']?.toString() ?? 'pending',
-      sid: json['sid']?.toString(),
-      errorClassification: json['error_classification']?.toString(),
+      refId: refValue != null && refValue.isNotEmpty
+          ? refValue
+          : json['id']?.toString() ?? '',
+      status: status,
+      sid: json['transaction_id']?.toString(),
+      errorClassification: json['manual_action_type']?.toString(),
       errorMessage: json['error_message']?.toString(),
       dispatchAttempts: _toInt(json['dispatch_attempts']),
-      retryCount: _toInt(json['request_einvoice_retry_count']),
+      retryCount: _toInt(json['dispatch_attempts']),
       createdAt: _toDateTime(json['created_at']),
       updatedAt: _toDateTime(json['updated_at'] ?? json['created_at']),
-      dispatchedAt: _toNullableDateTime(json['dispatched_at']),
-      lookupUrl: json['lookup_url']?.toString(),
-      redinvoiceRequested: json['redinvoice_requested'] == true,
-      orderId: order?['id']?.toString() ?? '',
-      storeId: order?['restaurant_id']?.toString() ?? '',
+      dispatchedAt: _toNullableDateTime(
+        json['sent_at'] ?? json['last_dispatch_at'],
+      ),
+      lookupUrl: null,
+      redinvoiceRequested: buyerKind != 'anonymous',
+      orderId: order?['id']?.toString() ?? json['order_id']?.toString() ?? '',
+      storeId:
+          order?['restaurant_id']?.toString() ??
+          json['store_id']?.toString() ??
+          '',
       tableNumber: table?['table_number']?.toString(),
       taxCode: (json['tax_entity'] as Map?)?['tax_code']?.toString(),
       salesChannel: order?['sales_channel']?.toString() ?? 'dine_in',
-      issuanceStatus: json['issuance_status']?.toString(),
-      cqtReportStatus: json['cqt_report_status']?.toString(),
+      issuanceStatus: json['invoice_number']?.toString().isNotEmpty == true
+          ? json['invoice_number'].toString()
+          : status,
+      cqtReportStatus: json['tax_authority_code']?.toString().isNotEmpty == true
+          ? json['tax_authority_code'].toString()
+          : status,
       supplyAmount: supplyAmount,
       vatAmount: vatAmount,
       totalAmount: totalAmount,
@@ -135,10 +316,14 @@ class _EinvoiceQueueItem {
   final double vatAmount;
   final double totalAmount;
 
-  bool get isResolved => errorClassification == 'manual_resolved';
-  bool get isFailed => status == 'failed_terminal' || status == 'stale';
-  bool get isPendingPolling => status == 'dispatched_polling_disabled';
-  bool get isCompleted => status == 'reported' || status == 'issued_by_portal';
+  bool get isResolved => status == 'resolved';
+  bool get isFailed => status == 'failed' || status == 'manual_action_required';
+  bool get isPendingPolling =>
+      status == 'dispatch_paused' || status == 'pending_manual_config';
+  bool get isCompleted =>
+      status == 'valid_invoice' ||
+      status == 'sent_to_tax_authority' ||
+      status == 'sent_to_misa';
 
   String get groupStatus {
     if (isResolved) return 'resolved';
@@ -151,11 +336,13 @@ class _EinvoiceQueueItem {
     final l10n = context.l10n;
     if (isResolved) return l10n.einvoiceProcessed;
     return switch (status) {
-      'pending' || 'dispatched' => l10n.einvoicePendingIssue,
-      'dispatched_polling_disabled' => l10n.deliveryRetryRequired,
-      'reported' || 'issued_by_portal' => l10n.einvoiceSentComplete,
-      'failed_terminal' => l10n.einvoiceFailed,
-      'stale' => l10n.einvoiceRejected,
+      'pending' => l10n.einvoicePendingIssue,
+      'pending_manual_config' ||
+      'dispatch_paused' => l10n.deliveryRetryRequired,
+      'sent_to_misa' || 'sent_to_tax_authority' => l10n.einvoiceSentComplete,
+      'valid_invoice' => l10n.einvoiceIssued,
+      'failed' => l10n.einvoiceFailed,
+      'manual_action_required' => l10n.einvoiceImmediateReview,
       _ => l10n.einvoicePendingIssue,
     };
   }
@@ -261,16 +448,17 @@ String _normalizeExternalStatus(
 final _einvoiceJobsProvider =
     FutureProvider.autoDispose<List<_EinvoiceQueueItem>>((ref) async {
       final result = await supabase
-          .from('einvoice_jobs')
+          .from('meinvoice_jobs')
           .select('''
-            id, ref_id, status, sid, error_classification, error_message,
-            dispatch_attempts, request_einvoice_retry_count,
-            dispatched_at, created_at, updated_at, lookup_url,
-            redinvoice_requested, issuance_status, cqt_report_status,
+            id, status, buyer_kind, buyer_snapshot, payment_method_snapshot,
+            line_items_snapshot, manual_action_type, manual_action_note,
+            error_message, dispatch_attempts, last_dispatch_at, sent_at,
+            created_at, updated_at, misa_ref_id, transaction_id,
+            invoice_series, invoice_number, tax_authority_code, search_code,
+            order_id, store_id, tax_entity_id,
             orders (
               id, restaurant_id, sales_channel, created_at,
-              tables ( table_number ),
-              order_items ( status, total_amount_ex_tax, vat_amount, paying_amount_inc_tax )
+              tables ( table_number )
             ),
             tax_entity ( tax_code )
           ''')
@@ -290,10 +478,7 @@ final _einvoiceOpsFlagsProvider =
         final result = await supabase
             .from('system_config')
             .select('key, value')
-            .inFilter('key', [
-              'wetax_polling_enabled',
-              'wetax_dispatch_enabled',
-            ]);
+            .inFilter('key', ['meinvoice_dispatch_enabled']);
 
         final rows = (result as List)
             .map((entry) => Map<String, dynamic>.from(entry))
@@ -304,12 +489,70 @@ final _einvoiceOpsFlagsProvider =
         };
 
         return _EinvoiceOpsFlags(
-          pollingEnabled: _parseFlag(values['wetax_polling_enabled']),
-          dispatchEnabled: _parseFlag(values['wetax_dispatch_enabled']),
+          dispatchEnabled: _parseFlag(values['meinvoice_dispatch_enabled']),
         );
       } catch (_) {
         return null;
       }
+    });
+
+final _meinvoiceReadinessProvider =
+    FutureProvider.autoDispose<List<_MeInvoiceReadiness>>((ref) async {
+      try {
+        final result = await supabase.rpc('get_meinvoice_readiness');
+        final rows = result is List ? result : const [];
+        return rows
+            .whereType<Map>()
+            .map(
+              (entry) => _MeInvoiceReadiness.fromJson(
+                Map<String, dynamic>.from(entry),
+              ),
+            )
+            .toList();
+      } catch (_) {
+        return const <_MeInvoiceReadiness>[];
+      }
+    });
+
+final _meinvoiceSellerConfigsProvider =
+    FutureProvider.autoDispose<Map<String, _MeInvoiceSellerConfig>>((
+      ref,
+    ) async {
+      final result = await supabase.from('meinvoice_tax_entity_config').select(
+        '''
+            tax_entity_id, auth_base_url, api_base_url, app_id,
+            invoice_series, payment_method_cash, payment_method_card,
+            payment_method_pay, payment_method_mixed, integration_status,
+            tax_entity ( tax_code, name )
+          ''',
+      );
+      final configs = <String, _MeInvoiceSellerConfig>{};
+      for (final row in result) {
+        final config = _MeInvoiceSellerConfig.fromJson(
+          Map<String, dynamic>.from(row),
+        );
+        if (config.taxEntityId.isNotEmpty) {
+          configs[config.taxEntityId] = config;
+        }
+      }
+      return configs;
+    });
+
+final _meinvoiceJobEventsProvider = FutureProvider.autoDispose
+    .family<List<_MeInvoiceJobEvent>, String>((ref, jobId) async {
+      if (jobId.isEmpty) return const <_MeInvoiceJobEvent>[];
+      final result = await supabase
+          .from('meinvoice_job_events')
+          .select('id, event_type, description, retry_count, created_at')
+          .eq('job_id', jobId)
+          .order('created_at', ascending: false)
+          .limit(8);
+      return (result as List)
+          .map(
+            (entry) =>
+                _MeInvoiceJobEvent.fromJson(Map<String, dynamic>.from(entry)),
+          )
+          .toList();
     });
 
 bool _parseFlag(String? value) {
@@ -330,6 +573,7 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
   String? _selectedJobId;
   String? _retryingJobId;
   String? _resolvingJobId;
+  bool _releasingReadyJobs = false;
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -342,6 +586,9 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
   Widget build(BuildContext context) {
     final jobsAsync = ref.watch(_einvoiceJobsProvider);
     final flags = ref.watch(_einvoiceOpsFlagsProvider).valueOrNull;
+    final readiness =
+        ref.watch(_meinvoiceReadinessProvider).valueOrNull ??
+        const <_MeInvoiceReadiness>[];
     final allJobs = jobsAsync.valueOrNull ?? const <_EinvoiceQueueItem>[];
     final filteredJobs = _filteredJobs(allJobs);
     final selectedJob = _resolveSelectedJob(filteredJobs);
@@ -368,12 +615,13 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
       failedCount: failedCount,
       monthTotal: monthTotal,
     );
-    final opsAlerts = flags == null
+    final alertWidgets = <Widget>[
+      if (flags != null) ..._buildOpsAlerts(flags, allJobs),
+      ..._buildReadinessAlerts(readiness),
+    ];
+    final opsAlerts = alertWidgets.isEmpty
         ? const <Widget>[]
-        : <Widget>[
-            ..._buildOpsAlerts(flags, allJobs),
-            const SizedBox(height: 12),
-          ];
+        : <Widget>[...alertWidgets, const SizedBox(height: 12)];
     final queueControls = _buildEinvoiceQueueControls(
       filteredCount: filteredJobs.length,
     );
@@ -394,10 +642,10 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
                 queueControls,
                 const SizedBox(height: 16),
                 jobsAsync.when(
-                  loading: () => const SizedBox(
+                  loading: () => SizedBox(
                     height: 320,
                     child: ToastOperationalLoadingState(
-                      label: PosLoadingCopy.loadingEinvoiceJobs,
+                      label: PosLoadingCopy.loadingEinvoiceJobs(context.l10n),
                     ),
                   ),
                   error: (error, _) => _buildErrorState(error),
@@ -437,8 +685,8 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
                 const SizedBox(height: 16),
                 Expanded(
                   child: jobsAsync.when(
-                    loading: () => const ToastOperationalLoadingState(
-                      label: PosLoadingCopy.loadingEinvoiceJobs,
+                    loading: () => ToastOperationalLoadingState(
+                      label: PosLoadingCopy.loadingEinvoiceJobs(context.l10n),
                     ),
                     error: (error, _) => _buildErrorState(error),
                     data: (_) {
@@ -653,6 +901,16 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
                 ? null
                 : () => _showDownloadHint(filteredCount),
           ),
+          PosSecondaryButton(
+            label: l10n.einvoiceMeInvoiceSettings,
+            icon: Icons.tune_outlined,
+            onPressed: _openMeInvoiceConfigDialog,
+          ),
+          PosSecondaryButton(
+            label: l10n.einvoiceMeInvoiceReleaseReadyJobs,
+            icon: Icons.playlist_add_check_outlined,
+            onPressed: _releasingReadyJobs ? null : _releaseReadyMeInvoiceJobs,
+          ),
         ],
       ),
     );
@@ -713,22 +971,57 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
         ),
       );
     }
-    if (!flags.pollingEnabled) {
-      final pendingCount = jobs.where((job) => job.isPendingPolling).length;
+    final pendingCount = jobs.where((job) => job.isPendingPolling).length;
+    if (pendingCount > 0) {
       alerts.add(
         PosExceptionAlert(
-          label: pendingCount > 0
-              ? l10n.einvoicePollingStopped
-              : l10n.einvoiceAutoPollingOff,
-          detail: pendingCount > 0
-              ? l10n.einvoicePendingPollingCount(pendingCount)
-              : l10n.einvoiceCheckTaxPortalDirectly,
+          label: l10n.einvoiceDispatchPaused,
+          detail: l10n.einvoiceDispatchPausedDetail,
           color: PosColors.warning,
-          icon: Icons.sync_disabled_rounded,
+          icon: Icons.settings_outlined,
         ),
       );
     }
     return alerts;
+  }
+
+  List<Widget> _buildReadinessAlerts(List<_MeInvoiceReadiness> profiles) {
+    final blocked = profiles
+        .where((profile) => !profile.readyToDispatch)
+        .toList(growable: false);
+    if (blocked.isEmpty) return const <Widget>[];
+
+    final reasons =
+        blocked.expand((profile) => profile.blockingReasons).toSet().toList()
+          ..sort();
+    final reasonSummary = reasons.isEmpty
+        ? '-'
+        : reasons.map(_readinessReasonLabel).join(', ');
+
+    return [
+      PosExceptionAlert(
+        label: context.l10n.einvoiceMeInvoiceSetupRequired,
+        detail: context.l10n.einvoiceMeInvoiceSetupRequiredDetail(
+          blocked.length,
+          reasonSummary,
+        ),
+        color: PosColors.warning,
+        icon: Icons.fact_check_outlined,
+      ),
+    ];
+  }
+
+  String _readinessReasonLabel(String reason) {
+    final l10n = context.l10n;
+    return switch (reason) {
+      'dispatch_disabled' => l10n.einvoiceMeInvoiceReasonDispatchDisabled,
+      'integration_not_active' =>
+        l10n.einvoiceMeInvoiceReasonIntegrationInactive,
+      'app_id_missing' => l10n.einvoiceMeInvoiceReasonAppIdMissing,
+      'invoice_series_missing' =>
+        l10n.einvoiceMeInvoiceReasonInvoiceSeriesMissing,
+      _ => reason.replaceAll('_', ' '),
+    };
   }
 
   Widget _toolbarChip({
@@ -891,6 +1184,7 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
 
     final isRetrying = _retryingJobId == job.id;
     final isResolving = _resolvingJobId == job.id;
+    final eventsAsync = ref.watch(_meinvoiceJobEventsProvider(job.id));
     final detailContent = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -985,6 +1279,7 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
         const SizedBox(height: 16),
         _EinvoiceJobSecondaryDetail(
           job: job,
+          eventsAsync: eventsAsync,
           onOpenPortal: job.lookupUrl?.isNotEmpty == true
               ? () => launchUrl(Uri.parse(job.lookupUrl!))
               : null,
@@ -1119,7 +1414,7 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
   }
 
   Future<void> _runPrimaryAction(_EinvoiceQueueItem job) async {
-    if (job.isFailed) {
+    if (job.isFailed || job.isPendingPolling) {
       await _retryJob(job);
       return;
     }
@@ -1137,10 +1432,12 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
     try {
       final storeId = await _requireStoreId(job);
       await supabase.rpc(
-        'admin_retry_einvoice_job',
+        'admin_retry_meinvoice_job',
         params: {'p_job_id': job.id, 'p_store_id': storeId},
       );
       ref.invalidate(_einvoiceJobsProvider);
+      ref.invalidate(_meinvoiceReadinessProvider);
+      ref.invalidate(_meinvoiceJobEventsProvider(job.id));
       if (!mounted) return;
       showSuccessToast(context, context.l10n.einvoiceRetryRequested);
     } catch (error) {
@@ -1162,10 +1459,12 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
     try {
       final storeId = await _requireStoreId(job);
       await supabase.rpc(
-        'admin_mark_resolved_einvoice_job',
+        'admin_mark_resolved_meinvoice_job',
         params: {'p_job_id': job.id, 'p_store_id': storeId},
       );
       ref.invalidate(_einvoiceJobsProvider);
+      ref.invalidate(_meinvoiceReadinessProvider);
+      ref.invalidate(_meinvoiceJobEventsProvider(job.id));
       if (!mounted) return;
       showSuccessToast(context, context.l10n.einvoiceExceptionResolved);
     } catch (error) {
@@ -1178,6 +1477,359 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
     } finally {
       if (mounted) {
         setState(() => _resolvingJobId = null);
+      }
+    }
+  }
+
+  Future<void> _openMeInvoiceConfigDialog() async {
+    final l10n = context.l10n;
+    late final List<_MeInvoiceReadiness> profiles;
+    late final Map<String, _MeInvoiceSellerConfig> configs;
+
+    try {
+      profiles = await ref.read(_meinvoiceReadinessProvider.future);
+      configs = await ref.read(_meinvoiceSellerConfigsProvider.future);
+    } catch (error) {
+      if (!mounted) return;
+      showErrorToast(
+        context,
+        l10n.einvoiceMeInvoiceConfigSaveFailedWithError('$error'),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    if (profiles.isEmpty) {
+      showErrorToast(context, l10n.einvoiceMeInvoiceNoSellerProfile);
+      return;
+    }
+
+    final appIdController = TextEditingController();
+    final invoiceSeriesController = TextEditingController();
+    final authBaseUrlController = TextEditingController();
+    final apiBaseUrlController = TextEditingController();
+    final cashLabelController = TextEditingController();
+    final cardLabelController = TextEditingController();
+    final payLabelController = TextEditingController();
+    final mixedLabelController = TextEditingController();
+
+    var selectedProfile = profiles.firstWhere(
+      (profile) => !profile.readyToDispatch,
+      orElse: () => profiles.first,
+    );
+    var integrationStatus = selectedProfile.integrationStatus;
+    var saving = false;
+
+    void loadProfile(_MeInvoiceReadiness profile) {
+      selectedProfile = profile;
+      final config =
+          configs[profile.taxEntityId] ??
+          _MeInvoiceSellerConfig.fromReadiness(profile);
+      appIdController.text = config.appId;
+      invoiceSeriesController.text = config.invoiceSeries;
+      authBaseUrlController.text = config.authBaseUrl;
+      apiBaseUrlController.text = config.apiBaseUrl;
+      cashLabelController.text = config.paymentMethodCash;
+      cardLabelController.text = config.paymentMethodCard;
+      payLabelController.text = config.paymentMethodPay;
+      mixedLabelController.text = config.paymentMethodMixed;
+      integrationStatus = config.integrationStatus;
+    }
+
+    loadProfile(selectedProfile);
+
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (dialogContext, setDialogState) {
+              Future<void> saveConfig() async {
+                if (integrationStatus == 'active' &&
+                    (appIdController.text.trim().isEmpty ||
+                        invoiceSeriesController.text.trim().isEmpty)) {
+                  showErrorToast(
+                    dialogContext,
+                    l10n.einvoiceMeInvoiceActiveRequiresConfig,
+                  );
+                  return;
+                }
+
+                setDialogState(() => saving = true);
+                try {
+                  await supabase.rpc(
+                    'admin_upsert_meinvoice_tax_entity_config',
+                    params: {
+                      'p_tax_entity_id': selectedProfile.taxEntityId,
+                      'p_app_id': appIdController.text.trim(),
+                      'p_invoice_series': invoiceSeriesController.text.trim(),
+                      'p_integration_status': integrationStatus,
+                      'p_auth_base_url': authBaseUrlController.text.trim(),
+                      'p_api_base_url': apiBaseUrlController.text.trim(),
+                      'p_payment_method_cash': cashLabelController.text.trim(),
+                      'p_payment_method_card': cardLabelController.text.trim(),
+                      'p_payment_method_pay': payLabelController.text.trim(),
+                      'p_payment_method_mixed': mixedLabelController.text
+                          .trim(),
+                    },
+                  );
+                  ref.invalidate(_meinvoiceSellerConfigsProvider);
+                  ref.invalidate(_meinvoiceReadinessProvider);
+                  ref.invalidate(_einvoiceJobsProvider);
+                  if (!dialogContext.mounted) return;
+                  Navigator.of(dialogContext).pop();
+                  if (!mounted) return;
+                  showSuccessToast(context, l10n.einvoiceMeInvoiceConfigSaved);
+                } catch (error) {
+                  if (dialogContext.mounted) {
+                    showErrorToast(
+                      dialogContext,
+                      l10n.einvoiceMeInvoiceConfigSaveFailedWithError('$error'),
+                    );
+                  }
+                } finally {
+                  if (dialogContext.mounted) {
+                    setDialogState(() => saving = false);
+                  }
+                }
+              }
+
+              return AlertDialog(
+                title: Text(l10n.einvoiceMeInvoiceSettingsTitle),
+                content: SizedBox(
+                  width: 640,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        DropdownButtonFormField<String>(
+                          key: const Key('meinvoice_seller_profile_select'),
+                          initialValue: selectedProfile.taxEntityId,
+                          decoration: InputDecoration(
+                            labelText: l10n.einvoiceMeInvoiceSellerProfile,
+                            border: const OutlineInputBorder(),
+                          ),
+                          items: profiles
+                              .map(
+                                (profile) => DropdownMenuItem(
+                                  value: profile.taxEntityId,
+                                  child: Text(
+                                    profile.optionLabel(context),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: saving
+                              ? null
+                              : (taxEntityId) {
+                                  final nextProfile = profiles.firstWhere(
+                                    (profile) =>
+                                        profile.taxEntityId == taxEntityId,
+                                    orElse: () => selectedProfile,
+                                  );
+                                  setDialogState(() {
+                                    loadProfile(nextProfile);
+                                  });
+                                },
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          key: ValueKey(
+                            'meinvoice_integration_status_${selectedProfile.taxEntityId}',
+                          ),
+                          initialValue: integrationStatus,
+                          decoration: InputDecoration(
+                            labelText: l10n.einvoiceMeInvoiceIntegrationStatus,
+                            border: const OutlineInputBorder(),
+                          ),
+                          items: [
+                            DropdownMenuItem(
+                              value: 'needs_vendor_activation',
+                              child: Text(
+                                l10n.einvoiceMeInvoiceStatusNeedsActivation,
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'configured',
+                              child: Text(
+                                l10n.einvoiceMeInvoiceStatusConfigured,
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'active',
+                              child: Text(l10n.einvoiceMeInvoiceStatusActive),
+                            ),
+                            DropdownMenuItem(
+                              value: 'paused',
+                              child: Text(l10n.einvoiceMeInvoiceStatusPaused),
+                            ),
+                          ],
+                          onChanged: saving
+                              ? null
+                              : (value) => setDialogState(
+                                  () => integrationStatus =
+                                      value ?? integrationStatus,
+                                ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          key: const Key('meinvoice_app_id_input'),
+                          controller: appIdController,
+                          decoration: InputDecoration(
+                            labelText: l10n.einvoiceMeInvoiceAppId,
+                            border: const OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          key: const Key('meinvoice_invoice_series_input'),
+                          controller: invoiceSeriesController,
+                          decoration: InputDecoration(
+                            labelText: l10n.einvoiceMeInvoiceInvoiceSeries,
+                            border: const OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          key: const Key('meinvoice_auth_base_url_input'),
+                          controller: authBaseUrlController,
+                          decoration: InputDecoration(
+                            labelText: l10n.einvoiceMeInvoiceAuthBaseUrl,
+                            border: const OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          key: const Key('meinvoice_api_base_url_input'),
+                          controller: apiBaseUrlController,
+                          decoration: InputDecoration(
+                            labelText: l10n.einvoiceMeInvoiceApiBaseUrl,
+                            border: const OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          key: const Key('meinvoice_cash_label_input'),
+                          controller: cashLabelController,
+                          decoration: InputDecoration(
+                            labelText: l10n.einvoiceMeInvoiceCashLabel,
+                            border: const OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          key: const Key('meinvoice_card_label_input'),
+                          controller: cardLabelController,
+                          decoration: InputDecoration(
+                            labelText: l10n.einvoiceMeInvoiceCardLabel,
+                            border: const OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          key: const Key('meinvoice_pay_label_input'),
+                          controller: payLabelController,
+                          decoration: InputDecoration(
+                            labelText: l10n.einvoiceMeInvoicePayLabel,
+                            border: const OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          key: const Key('meinvoice_mixed_label_input'),
+                          controller: mixedLabelController,
+                          decoration: InputDecoration(
+                            labelText: l10n.einvoiceMeInvoiceMixedLabel,
+                            border: const OutlineInputBorder(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: saving
+                        ? null
+                        : () => Navigator.of(dialogContext).pop(),
+                    child: Text(l10n.cancel),
+                  ),
+                  FilledButton.icon(
+                    onPressed: saving ? null : saveConfig,
+                    icon: saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save_outlined),
+                    label: Text(l10n.save),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      appIdController.dispose();
+      invoiceSeriesController.dispose();
+      authBaseUrlController.dispose();
+      apiBaseUrlController.dispose();
+      cashLabelController.dispose();
+      cardLabelController.dispose();
+      payLabelController.dispose();
+      mixedLabelController.dispose();
+    }
+  }
+
+  Future<void> _releaseReadyMeInvoiceJobs() async {
+    setState(() => _releasingReadyJobs = true);
+    try {
+      final profiles = await ref.read(_meinvoiceReadinessProvider.future);
+      final readyProfiles = profiles
+          .where(
+            (profile) => profile.configReady && profile.hasSetupBlockedJobs,
+          )
+          .toList(growable: false);
+
+      if (readyProfiles.isEmpty) {
+        if (!mounted) return;
+        showErrorToast(context, context.l10n.einvoiceMeInvoiceNoReadyJobs);
+        return;
+      }
+
+      var releasedCount = 0;
+      for (final profile in readyProfiles) {
+        final result = await supabase.rpc(
+          'admin_release_meinvoice_ready_jobs',
+          params: {'p_tax_entity_id': profile.taxEntityId, 'p_limit': 200},
+        );
+        if (result is Map) {
+          releasedCount += _toInt(result['released_count']);
+        }
+      }
+
+      ref.invalidate(_meinvoiceReadinessProvider);
+      ref.invalidate(_einvoiceJobsProvider);
+      if (!mounted) return;
+      showSuccessToast(
+        context,
+        context.l10n.einvoiceMeInvoiceReleaseReadyJobsDone(releasedCount),
+      );
+    } catch (error) {
+      if (mounted) {
+        showErrorToast(
+          context,
+          context.l10n.einvoiceMeInvoiceReleaseReadyJobsFailedWithError(
+            '$error',
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _releasingReadyJobs = false);
       }
     }
   }
@@ -1204,11 +1856,13 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
 class _EinvoiceJobSecondaryDetail extends StatelessWidget {
   const _EinvoiceJobSecondaryDetail({
     required this.job,
+    required this.eventsAsync,
     required this.onCopyRef,
     this.onOpenPortal,
   });
 
   final _EinvoiceQueueItem job;
+  final AsyncValue<List<_MeInvoiceJobEvent>> eventsAsync;
   final VoidCallback? onOpenPortal;
   final VoidCallback onCopyRef;
 
@@ -1275,6 +1929,8 @@ class _EinvoiceJobSecondaryDetail extends StatelessWidget {
             context.l10n.einvoiceRetryCountValue(job.retryCount),
           ),
           const SizedBox(height: 4),
+          _buildEventHistory(context),
+          const SizedBox(height: 4),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -1320,6 +1976,127 @@ class _EinvoiceJobSecondaryDetail extends StatelessWidget {
               ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEventHistory(BuildContext context) {
+    return Container(
+      key: const Key('meinvoice_job_event_history'),
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            context.l10n.einvoiceEventHistory,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: PosColors.textSecondary,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          eventsAsync.when(
+            loading: () => Row(
+              children: [
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  context.l10n.posLoadingSyncing,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: PosColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+            error: (_, _) => Text(
+              context.l10n.einvoiceEventHistoryLoadFailed,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: PosColors.danger),
+            ),
+            data: (events) {
+              if (events.isEmpty) {
+                return Text(
+                  context.l10n.einvoiceEventHistoryEmpty,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: PosColors.textSecondary,
+                  ),
+                );
+              }
+              return Column(
+                children: [
+                  for (final event in events)
+                    _eventRow(context: context, event: event),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _eventRow({
+    required BuildContext context,
+    required _MeInvoiceJobEvent event,
+  }) {
+    final detail = event.description?.trim();
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: PosColors.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: PosColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  event.title,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: PosColors.textPrimary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Text(
+                _formatDateTime(event.createdAt),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: PosColors.textSecondary,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            context.l10n.einvoiceEventRetryCount(event.retryCount),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
+          ),
+          if (detail != null && detail.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              detail,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
+            ),
+          ],
         ],
       ),
     );

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import 'pos_design_tokens.dart';
 
@@ -45,7 +45,7 @@ class AppRadius {
 
 class AppTheme {
   static ThemeData build() {
-    final baseTextTheme = GoogleFonts.notoSansKrTextTheme();
+    final baseTextTheme = AppFonts.textTheme();
 
     return ThemeData(
       brightness: Brightness.light,
@@ -67,31 +67,31 @@ class AppTheme {
           color: AppColors.textPrimary,
           fontSize: 32,
           fontWeight: FontWeight.w800,
-          letterSpacing: -0.6,
+          letterSpacing: 0,
         ),
         displayMedium: baseTextTheme.displayMedium?.copyWith(
           color: AppColors.textPrimary,
           fontSize: 28,
           fontWeight: FontWeight.w800,
-          letterSpacing: -0.5,
+          letterSpacing: 0,
         ),
         headlineLarge: baseTextTheme.headlineLarge?.copyWith(
           color: AppColors.textPrimary,
           fontSize: 24,
           fontWeight: FontWeight.w700,
-          letterSpacing: -0.4,
+          letterSpacing: 0,
         ),
         headlineMedium: baseTextTheme.headlineMedium?.copyWith(
           color: AppColors.textPrimary,
           fontSize: 20,
           fontWeight: FontWeight.w700,
-          letterSpacing: -0.3,
+          letterSpacing: 0,
         ),
         titleLarge: baseTextTheme.titleLarge?.copyWith(
           color: AppColors.textPrimary,
           fontSize: 18,
           fontWeight: FontWeight.w700,
-          letterSpacing: -0.2,
+          letterSpacing: 0,
         ),
         titleMedium: baseTextTheme.titleMedium?.copyWith(
           color: AppColors.textPrimary,
@@ -120,7 +120,7 @@ class AppTheme {
           color: AppColors.textPrimary,
           fontSize: 14,
           fontWeight: FontWeight.w700,
-          letterSpacing: -0.1,
+          letterSpacing: 0,
         ),
         labelMedium: baseTextTheme.labelMedium?.copyWith(
           color: AppColors.textSecondary,
@@ -137,7 +137,7 @@ class AppTheme {
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         centerTitle: false,
-        titleTextStyle: GoogleFonts.notoSansKr(
+        titleTextStyle: AppFonts.system(
           color: AppColors.textPrimary,
           fontSize: 15,
           fontWeight: FontWeight.w700,
@@ -255,10 +255,7 @@ class AppTheme {
       surfaceTintColor: Colors.transparent,
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       minimumSize: const Size(0, 46),
-      textStyle: GoogleFonts.notoSansKr(
-        fontSize: 14,
-        fontWeight: FontWeight.w700,
-      ),
+      textStyle: AppFonts.system(fontSize: 14, fontWeight: FontWeight.w700),
       shape: RoundedRectangleBorder(borderRadius: AppRadius.lg),
     );
   }
@@ -270,7 +267,7 @@ class AppTextStyles {
     double size = 28,
     double letterSpacing = -0.2,
   }) {
-    return GoogleFonts.notoSansKr(
+    return AppFonts.system(
       color: color,
       fontSize: size,
       letterSpacing: letterSpacing,
@@ -282,10 +279,6 @@ class AppTextStyles {
     Color color = AppColors.textSecondary,
     FontWeight fontWeight = FontWeight.w600,
   }) {
-    return GoogleFonts.notoSansKr(
-      color: color,
-      fontSize: 12,
-      fontWeight: fontWeight,
-    );
+    return AppFonts.system(color: color, fontSize: 12, fontWeight: fontWeight);
   }
 }

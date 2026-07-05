@@ -14,6 +14,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../../l10n/app_localizations.dart';
 import '../app_theme.dart';
 import '../pos_design_tokens.dart';
 
@@ -93,35 +94,24 @@ Widget iconWithLabel({
   );
 }
 
-/// Action verb vocabulary slots. Sourced from the two pilot surfaces
-/// (Sidebar, Order Workspace). New entries should only be added when a
-/// real surface needs them — do not invent operational concepts.
+/// Internal action verb identifiers. User-facing labels must come from l10n at
+/// the call site so fixed system words do not mix languages.
 class PosActionVerbs {
-  // Order Workspace — match the existing screen's user-facing labels so
-  // semantics are preserved (`SEND ORDER`, `CANCEL`, `Cancel Order`,
-  // `Move`, `Payment complete`).
-  static const String sendOrder = 'SEND ORDER';
-  static const String cancel = 'CANCEL';
-  static const String cancelOrder = 'Cancel Order';
-  static const String moveTable = 'Move';
-  static const String paymentComplete = 'Payment complete';
-
-  // Tables (admin tab) — preserves existing labels.
-  static const String addTable = 'Add Table';
-  static const String deleteTable = 'Delete';
-
-  // Kitchen — verbs derived from the existing status-cycle behaviour
-  // (pending → preparing → ready → served).
-  static const String startPrep = 'Start Prep';
-  static const String markReady = 'Mark Ready';
-  static const String markServed = 'Mark Served';
-  static const String advanceStatus = 'Advance';
-
-  // Cashier — preserves the existing user-facing labels.
-  static const String processPayment = 'PROCESS PAYMENT';
-  static const String serviceProcessed = 'Service processed';
-  static const String reprintReceipt = 'Reprint Receipt';
-  static const String todaysSettlement = "Today's Settlement";
+  static const String sendOrder = 'send_order';
+  static const String cancel = 'cancel';
+  static const String cancelOrder = 'cancel_order';
+  static const String moveTable = 'move_table';
+  static const String paymentComplete = 'payment_complete';
+  static const String addTable = 'add_table';
+  static const String deleteTable = 'delete_table';
+  static const String startPrep = 'start_prep';
+  static const String markReady = 'mark_ready';
+  static const String markServed = 'mark_served';
+  static const String advanceStatus = 'advance_status';
+  static const String processPayment = 'process_payment';
+  static const String serviceProcessed = 'service_processed';
+  static const String reprintReceipt = 'reprint_receipt';
+  static const String todaysSettlement = 'todays_settlement';
 }
 
 /// Action icon mapping. Mirrors the verbs above; icons match what the
@@ -145,24 +135,27 @@ class PosActionIcons {
 
 /// Disabled-state hover/help language slots.
 class PosDisabledCopy {
-  static String forReason(PosActionDisabledReason reason) {
+  static String forReason(
+    AppLocalizations l10n,
+    PosActionDisabledReason reason,
+  ) {
     switch (reason) {
       case PosActionDisabledReason.noSelection:
-        return 'Select a row to continue';
+        return l10n.posDisabledNoSelection;
       case PosActionDisabledReason.notReady:
-        return 'Not ready yet';
+        return l10n.posDisabledNotReady;
       case PosActionDisabledReason.permissionDenied:
-        return 'Not permitted for this role';
+        return l10n.posDisabledPermissionDenied;
       case PosActionDisabledReason.upstreamPending:
-        return 'Waiting on upstream step';
+        return l10n.posDisabledUpstreamPending;
       case PosActionDisabledReason.offline:
-        return 'Internet connection required';
+        return l10n.posDisabledOffline;
       case PosActionDisabledReason.cartEmpty:
-        return 'Add items before sending';
+        return l10n.posDisabledCartEmpty;
       case PosActionDisabledReason.cartHasUnsentItems:
-        return 'Send newly added items before payment';
+        return l10n.posDisabledCartHasUnsentItems;
       case PosActionDisabledReason.paymentMethodNotSelected:
-        return 'Select a payment method';
+        return l10n.posDisabledPaymentMethodNotSelected;
     }
   }
 }
@@ -170,59 +163,54 @@ class PosDisabledCopy {
 /// Operational empty-state disclosure language. Sourced from the pilot
 /// surfaces — extend per surface as screens migrate.
 class PosEmptyStateCopy {
-  static const String queueClear = 'Queue clear';
-  static const String noOpenIssues = 'No open issues';
-  static const String nothingSelected = 'Nothing selected';
-  // Order Workspace — preserves the original semantics of the inline
-  // strings being replaced ('No items added yet.', 'No menu items in
-  // this category', 'No categories').
-  static const String cartEmpty = 'No items added yet';
-  static const String menuCategoryEmpty = 'No items in this category';
-  static const String menuNoCategories = 'No categories';
-
-  // Tables (admin tab) — preserves the original phrasing.
-  static const String tablesEmpty = 'No tables. Add your first table.';
-
-  // Kitchen — preserves AppEmptyState copy used today.
-  static const String kitchenQueueClear = 'No active orders';
-  static const String kitchenQueueClearHelper =
-      'Incoming tickets will appear here as soon as the dining floor sends them.';
-  static const String kitchenNothingSelected = 'Select a ticket';
-  static const String kitchenNothingSelectedHelper =
-      'Choose a ticket from the queue to advance prep status.';
-
-  // Cashier — preserves AppEmptyState copy used today.
-  static const String cashierQueueClear = 'No payable orders';
-  static const String cashierQueueClearHelper =
-      'Completed table orders will appear here when they are ready for payment.';
-  static const String cashierNothingSelected = 'Select a table';
-  static const String cashierNothingSelectedHelper =
-      'Choose a payable order from the left to open the payment workspace.';
-
-  // Delivery settlement — preserves prior phrasing.
-  static const String settlementsEmpty = 'No settlements';
-  static const String settlementsFilterEmpty = 'No settlements in this status';
-
-  // E-invoice jobs (admin tab) — preserves prior phrasing.
-  static const String einvoiceJobsEmpty = 'No jobs';
+  static String queueClear(AppLocalizations l10n) => l10n.posEmptyQueueClear;
+  static String noOpenIssues(AppLocalizations l10n) =>
+      l10n.posEmptyNoOpenIssues;
+  static String nothingSelected(AppLocalizations l10n) =>
+      l10n.posEmptyNothingSelected;
+  static String cartEmpty(AppLocalizations l10n) =>
+      l10n.orderWorkspaceNoItemsAdded;
+  static String menuCategoryEmpty(AppLocalizations l10n) =>
+      l10n.orderWorkspaceNoItemsTitle;
+  static String menuNoCategories(AppLocalizations l10n) =>
+      l10n.menuNoCategories;
+  static String tablesEmpty(AppLocalizations l10n) => l10n.tablesNoTablesTitle;
+  static String kitchenQueueClear(AppLocalizations l10n) =>
+      l10n.kitchenNoActiveOrdersTitle;
+  static String kitchenQueueClearHelper(AppLocalizations l10n) =>
+      l10n.kitchenNoActiveOrdersMessage;
+  static String kitchenNothingSelected(AppLocalizations l10n) =>
+      l10n.posEmptyKitchenNothingSelected;
+  static String kitchenNothingSelectedHelper(AppLocalizations l10n) =>
+      l10n.posEmptyKitchenNothingSelectedHelper;
+  static String cashierQueueClear(AppLocalizations l10n) =>
+      l10n.cashierNoPayableOrdersTitle;
+  static String cashierQueueClearHelper(AppLocalizations l10n) =>
+      l10n.cashierNoPayableOrdersMessage;
+  static String cashierNothingSelected(AppLocalizations l10n) =>
+      l10n.cashierSelectTableTitle;
+  static String cashierNothingSelectedHelper(AppLocalizations l10n) =>
+      l10n.cashierSelectTableMessage;
+  static String settlementsEmpty(AppLocalizations l10n) =>
+      l10n.posEmptySettlements;
+  static String settlementsFilterEmpty(AppLocalizations l10n) =>
+      l10n.posEmptySettlementsInStatus;
+  static String einvoiceJobsEmpty(AppLocalizations l10n) =>
+      l10n.posEmptyEinvoiceJobs;
 }
 
 /// Operational loading-state disclosure language. Sourced from the pilot
 /// surfaces — extend per surface as screens migrate.
 class PosLoadingCopy {
-  static const String loadingQueue = 'Loading queue';
-  static const String loadingDetail = 'Loading detail';
-  static const String syncing = 'Syncing';
-  // Order Workspace — replaces 'Loading menu'.
-  static const String loadingMenu = 'Loading menu';
-  // Kitchen — preserves the existing AppLoadingView label.
-  static const String loadingKitchen = 'Loading kitchen orders';
-  // Tables — preserves prior loading semantics.
-  static const String loadingTables = 'Loading tables';
-  // Reports (admin tab).
-  static const String loadingReport = 'Loading report';
-  // Delivery settlement.
-  static const String loadingSettlements = 'Loading settlements';
-  // E-invoice jobs (admin tab).
-  static const String loadingEinvoiceJobs = 'Loading e-invoice jobs';
+  static String loadingQueue(AppLocalizations l10n) => l10n.posLoadingQueue;
+  static String loadingDetail(AppLocalizations l10n) => l10n.posLoadingDetail;
+  static String syncing(AppLocalizations l10n) => l10n.posLoadingSyncing;
+  static String loadingMenu(AppLocalizations l10n) => l10n.posLoadingMenu;
+  static String loadingKitchen(AppLocalizations l10n) => l10n.posLoadingKitchen;
+  static String loadingTables(AppLocalizations l10n) => l10n.posLoadingTables;
+  static String loadingReport(AppLocalizations l10n) => l10n.posLoadingReport;
+  static String loadingSettlements(AppLocalizations l10n) =>
+      l10n.posLoadingSettlements;
+  static String loadingEinvoiceJobs(AppLocalizations l10n) =>
+      l10n.posLoadingEinvoiceJobs;
 }

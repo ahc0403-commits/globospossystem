@@ -1,10 +1,12 @@
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../core/ui/app_fonts.dart';
 import '../../l10n/app_localizations.dart';
 
 class InventoryPurchaseDocumentService {
@@ -31,10 +33,10 @@ class InventoryPurchaseDocumentService {
     required List<Map<String, dynamic>> lines,
     required AppLocalizations l10n,
   }) async {
-    final regular = await PdfGoogleFonts.notoSansKRRegular();
-    final bold = await PdfGoogleFonts.notoSansKRBold();
+    final fontData = await rootBundle.load(AppFonts.assetPath);
+    final regular = pw.Font.ttf(fontData);
     final document = pw.Document(
-      theme: pw.ThemeData.withFont(base: regular, bold: bold),
+      theme: pw.ThemeData.withFont(base: regular, bold: regular),
     );
     final orderNo = _string(order['purchase_order_no'], fallback: '-');
     final supplierName = _nestedName(order['supplier']);

@@ -6,9 +6,20 @@ import 'package:supabase_flutter/supabase_flutter.dart'
 import '../../core/services/navigation_history_service.dart';
 import '../../core/utils/role_routes.dart';
 import '../../main.dart';
+import '../admin/providers/settings_provider.dart';
+import '../admin/providers/staff_provider.dart';
+import '../inventory/inventory_provider.dart';
+import '../kitchen/kitchen_provider.dart';
+import '../order/order_provider.dart';
+import '../payment/payment_provider.dart';
+import '../photo_ops/photo_ops_provider.dart';
+import '../qc/qc_provider.dart';
+import '../table/table_provider.dart';
 import 'auth_state.dart';
 
 const authErrorAccountDeactivated = 'auth/account-deactivated';
+const authErrorNoStoreScope = 'auth/no-store-scope';
+const authErrorUnknownRolePrefix = 'auth/unknown-role:';
 const authErrorGenericLogin = 'auth/login-generic';
 const authErrorProfileLoadFailed = 'auth/profile-load-failed';
 const authErrorProfileMissing = 'auth/profile-missing';
@@ -25,9 +36,11 @@ const authErrorPrivacyConsentSetupMissing =
 const privacyConsentDocumentVersion = 'vn-pdpl-2026-01';
 
 class AuthNotifier extends StateNotifier<PosAuthState> {
-  AuthNotifier() : super(const PosAuthState()) {
+  AuthNotifier({this.onLogout}) : super(const PosAuthState()) {
     _init();
   }
+
+  final void Function()? onLogout;
 
   static const _activeStorePrefsPrefix = 'active_store_';
   StreamSubscription<dynamic>? _authSub;
@@ -66,6 +79,12 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         return;
       }
 
+      final role = data['role'] as String?;
+      if (role == null || !kKnownPosRoles.contains(role)) {
+        await _signOutWithError('$authErrorUnknownRolePrefix${role ?? 'null'}');
+        return;
+      }
+
       final extraRaw = data['extra_permissions'];
       final extraPermissions = extraRaw is List
           ? extraRaw.map((e) => e.toString()).toList()
@@ -74,6 +93,13 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         user: user,
         fallbackStoreId: data['restaurant_id'] as String?,
       );
+      if (stores.isEmpty && !kStoreScopeExemptRoles.contains(role)) {
+        // A store-scoped role with no accessible store cannot operate any
+        // POS surface — refuse the session instead of landing with
+        // storeId=null (contract AC3 / harness C3).
+        await _signOutWithError(authErrorNoStoreScope);
+        return;
+      }
       final primaryStoreId = _resolvePrimaryStoreId(
         user: user,
         fallbackStoreId: data['restaurant_id'] as String?,
@@ -89,7 +115,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
       state = state.copyWith(
         isLoading: false,
         user: user,
-        role: data['role'] as String?,
+        role: role,
         storeId: activeStoreId,
         primaryStoreId: primaryStoreId,
         accessibleStores: stores,
@@ -98,7 +124,6 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         clearError: true,
       );
 
-      final role = data['role'] as String?;
       final homeRoute = homeRouteForRole(role);
       NavigationHistoryService.instance.push(homeRoute);
     } on PostgrestException catch (error) {
@@ -169,6 +194,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     await supabase.auth.signOut();
     NavigationHistoryService.instance.clear();
     state = const PosAuthState();
+    onLogout?.call();
   }
 
   Future<void> acceptPrivacyConsent({required String localeName}) async {
@@ -374,5 +400,20 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, PosAuthState>(
-  (ref) => AuthNotifier(),
+  (ref) => AuthNotifier(
+    onLogout: () {
+      ref.invalidate(orderProvider);
+      ref.invalidate(paymentProvider);
+      ref.invalidate(kitchenProvider);
+      ref.invalidate(waiterTableProvider);
+      ref.invalidate(staffProvider);
+      ref.invalidate(attendanceProvider);
+      ref.invalidate(settingsProvider);
+      ref.invalidate(recipeProvider);
+      ref.invalidate(ingredientProvider);
+      ref.invalidate(qcCheckProvider);
+      ref.invalidate(qcTemplateProvider);
+      ref.invalidate(photoOpsProvider);
+    },
+  ),
 );

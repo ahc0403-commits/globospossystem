@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
 import '../../../core/ui/pos_design_tokens.dart';
@@ -15,6 +15,9 @@ import '../../table/table_model.dart';
 import '../providers/admin_audit_provider.dart';
 import '../providers/tables_provider.dart';
 import '../widgets/admin_audit_trace_panel.dart';
+
+typedef _LayoutAdjustmentCallback =
+    void Function({double widthDelta, double heightDelta, int rotationDelta});
 
 class TablesTab extends ConsumerStatefulWidget {
   const TablesTab({super.key});
@@ -33,6 +36,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
   String? _lastTablesError;
   String? _lastOrderError;
   final Map<String, Rect> _draftLayoutByTableId = <String, Rect>{};
+  final Map<String, int> _draftRotationByTableId = <String, int>{};
 
   void _ensureLoaded(String? storeId) {
     if (storeId == null || _initializedRestaurantId == storeId) {
@@ -85,8 +89,15 @@ class _TablesTabState extends ConsumerState<TablesTab> {
 
   void _selectTableForLayout(Map<String, dynamic> table) {
     final resolvedTable = PosTable.fromJson(Map<String, dynamic>.from(table));
+    final draftRect = _draftLayoutByTableId[resolvedTable.id];
+    final draftRotation = _draftRotationByTableId[resolvedTable.id];
     setState(() {
-      _selectedTable = resolvedTable;
+      _selectedTable = draftRect == null && draftRotation == null
+          ? resolvedTable
+          : resolvedTable.copyWithLayout(
+              draftRect ?? resolvedTable.layoutRect,
+              layoutRotation: draftRotation,
+            );
       _showOrderPanel = false;
     });
   }
@@ -96,7 +107,13 @@ class _TablesTabState extends ConsumerState<TablesTab> {
         .map((row) => PosTable.fromJson(Map<String, dynamic>.from(row)))
         .map((table) {
           final draft = _draftLayoutByTableId[table.id];
-          return draft == null ? table : table.copyWithLayout(draft);
+          final rotation = _draftRotationByTableId[table.id];
+          return draft == null && rotation == null
+              ? table
+              : table.copyWithLayout(
+                  draft ?? table.layoutRect,
+                  layoutRotation: rotation,
+                );
         })
         .toList();
 
@@ -150,9 +167,51 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     }
     setState(() {
       _draftLayoutByTableId.clear();
+      _draftRotationByTableId.clear();
       _layoutEditMode = false;
     });
     showSuccessToast(context, context.l10n.tablesLayoutSaved);
+  }
+
+  Rect _clampLayoutRect(Rect rect) {
+    final width = rect.width.clamp(0.08, 0.4);
+    final height = rect.height.clamp(0.08, 0.32);
+    final left = rect.left.clamp(0.0, 1.0 - width);
+    final top = rect.top.clamp(0.0, 1.0 - height);
+    return Rect.fromLTWH(left, top, width, height);
+  }
+
+  void _adjustSelectedTableLayout(
+    PosTable table, {
+    double widthDelta = 0,
+    double heightDelta = 0,
+    int rotationDelta = 0,
+  }) {
+    final currentRect = _draftLayoutByTableId[table.id] ?? table.layoutRect;
+    final center = currentRect.center;
+    final nextWidth = (currentRect.width + widthDelta).clamp(0.08, 0.4);
+    final nextHeight = (currentRect.height + heightDelta).clamp(0.08, 0.32);
+    final nextRect = _clampLayoutRect(
+      Rect.fromCenter(
+        center: center,
+        width: nextWidth.toDouble(),
+        height: nextHeight.toDouble(),
+      ),
+    );
+    final baseRotation =
+        _draftRotationByTableId[table.id] ?? table.layoutRotation;
+    final nextRotation = PosTable.normalizeLayoutRotation(
+      baseRotation + rotationDelta,
+    );
+
+    setState(() {
+      _draftLayoutByTableId[table.id] = nextRect;
+      _draftRotationByTableId[table.id] = nextRotation;
+      _selectedTable = table.copyWithLayout(
+        nextRect,
+        layoutRotation: nextRotation,
+      );
+    });
   }
 
   @override
@@ -245,7 +304,13 @@ class _TablesTabState extends ConsumerState<TablesTab> {
       if (id != selected.id) continue;
       final resolved = PosTable.fromJson(Map<String, dynamic>.from(table));
       final draft = _draftLayoutByTableId[id];
-      return draft == null ? resolved : resolved.copyWithLayout(draft);
+      final rotation = _draftRotationByTableId[id];
+      return draft == null && rotation == null
+          ? resolved
+          : resolved.copyWithLayout(
+              draft ?? resolved.layoutRect,
+              layoutRotation: rotation,
+            );
     }
     return selected;
   }
@@ -294,7 +359,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
           children: [
             Text(
               context.l10n.tablesLoadFailed,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.statusCancelled,
                 fontSize: 14,
               ),
@@ -329,6 +394,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
         .where((table) => table.isReserved)
         .length;
     final emptyCount = layoutTables.length - occupiedCount - reservedCount;
+    final selectedTable = _resolveSelectedTable(tablesState.tables);
 
     return Column(
       key: key,
@@ -403,41 +469,100 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                     const minimumCanvasHeight = 320.0;
                     final needsScroll =
                         constraints.maxHeight < minimumCanvasHeight;
+                    final showInspector = constraints.maxWidth >= 980;
                     final floor = SizedBox(
                       height: needsScroll
                           ? minimumCanvasHeight
                           : constraints.maxHeight,
-                      child: FloorLayoutView(
-                        tables: filteredTables,
-                        selectedTableId: _selectedTable?.id,
-                        editable: _layoutEditMode,
-                        draftLayoutByTableId: _draftLayoutByTableId,
-                        onTapTable: (table) {
-                          final row = tablesState.tables.firstWhere(
-                            (item) => item['id']?.toString() == table.id,
-                          );
-                          if (_layoutEditMode) {
-                            _selectTableForLayout(row);
-                          } else {
-                            _onTapTable(row, storeId);
-                          }
-                        },
-                        onTableMoved: !_layoutEditMode
-                            ? null
-                            : (table, rect) {
-                                setState(() {
-                                  _selectedTable = table.copyWithLayout(rect);
-                                  _draftLayoutByTableId[table.id] = rect;
-                                });
-                              },
+                      child: PosFloorMapSurface(
+                        editMode: _layoutEditMode,
+                        padding: EdgeInsets.zero,
+                        child: FloorLayoutView(
+                          tables: filteredTables,
+                          selectedTableId: _selectedTable?.id,
+                          editable: _layoutEditMode,
+                          draftLayoutByTableId: _draftLayoutByTableId,
+                          onTapTable: (table) {
+                            final row = tablesState.tables.firstWhere(
+                              (item) => item['id']?.toString() == table.id,
+                            );
+                            if (_layoutEditMode) {
+                              _selectTableForLayout(row);
+                            } else {
+                              _onTapTable(row, storeId);
+                            }
+                          },
+                          onTableMoved: !_layoutEditMode
+                              ? null
+                              : (table, rect) {
+                                  final rotation =
+                                      _draftRotationByTableId[table.id];
+                                  setState(() {
+                                    _selectedTable = table.copyWithLayout(
+                                      rect,
+                                      layoutRotation: rotation,
+                                    );
+                                    _draftLayoutByTableId[table.id] = rect;
+                                  });
+                                },
+                        ),
                       ),
                     );
 
-                    if (!needsScroll) {
-                      return floor;
+                    final floorSurface = needsScroll
+                        ? SingleChildScrollView(child: floor)
+                        : floor;
+
+                    if (!showInspector) {
+                      return floorSurface;
                     }
 
-                    return SingleChildScrollView(child: floor);
+                    final inspector = selectedTable == null
+                        ? _AdminFloorOverviewInspector(
+                            totalCount: layoutTables.length,
+                            occupiedCount: occupiedCount,
+                            reservedCount: reservedCount,
+                            emptyCount: emptyCount,
+                            occupiedTables: layoutTables
+                                .where((table) => table.isOccupied)
+                                .toList(),
+                            onSelectTable: (table) {
+                              final row = tablesState.tables.firstWhere(
+                                (item) => item['id']?.toString() == table.id,
+                              );
+                              if (_layoutEditMode) {
+                                _selectTableForLayout(row);
+                              } else {
+                                _onTapTable(row, storeId);
+                              }
+                            },
+                          )
+                        : _AdminFloorSelectionInspector(
+                            table: selectedTable,
+                            layoutEditMode: _layoutEditMode,
+                            statusLabel: _tableStatusLabel(selectedTable),
+                            statusColor: _tableStatusColor(selectedTable),
+                            onAdjustLayout: _layoutEditMode
+                                ? ({
+                                    double heightDelta = 0,
+                                    int rotationDelta = 0,
+                                    double widthDelta = 0,
+                                  }) => _adjustSelectedTableLayout(
+                                    selectedTable,
+                                    widthDelta: widthDelta,
+                                    heightDelta: heightDelta,
+                                    rotationDelta: rotationDelta,
+                                  )
+                                : null,
+                          );
+
+                    return Row(
+                      children: [
+                        Expanded(child: floorSurface),
+                        const SizedBox(width: 12),
+                        inspector,
+                      ],
+                    );
                   },
                 ),
         ),
@@ -455,7 +580,8 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     required AsyncValue<List<Map<String, dynamic>>> auditTraceAsync,
   }) {
     final l10n = context.l10n;
-    final hasDraft = _draftLayoutByTableId.isNotEmpty;
+    final hasDraft =
+        _draftLayoutByTableId.isNotEmpty || _draftRotationByTableId.isNotEmpty;
     final selectedTable = _selectedTable;
 
     return ToastWorkSurface(
@@ -587,6 +713,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                   setState(() {
                     _layoutEditMode = values.first;
                     _draftLayoutByTableId.clear();
+                    _draftRotationByTableId.clear();
                     if (_layoutEditMode) {
                       _showOrderPanel = false;
                     }
@@ -652,13 +779,20 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                   ),
                 ),
               if (_layoutEditMode)
-                FilledButton.icon(
-                  onPressed: hasDraft
+                PosActionTile(
+                  key: const Key('admin_tables_save_layout_action'),
+                  label: l10n.tablesSaveLayout,
+                  helper: hasDraft
+                      ? l10n.tablesLayoutEditActiveTitle
+                      : l10n.tablesResetDraft,
+                  icon: Icons.save_outlined,
+                  state: hasDraft
+                      ? PosActionTileState.selected
+                      : PosActionTileState.disabled,
+                  onTap: hasDraft
                       ? () =>
                             _saveDraftLayout(tablesNotifier, tablesState.tables)
                       : null,
-                  icon: const Icon(Icons.save_outlined, size: 18),
-                  label: Text(l10n.tablesSaveLayout),
                 ),
               if (_layoutEditMode)
                 OutlinedButton.icon(
@@ -666,6 +800,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                       ? () {
                           setState(() {
                             _draftLayoutByTableId.clear();
+                            _draftRotationByTableId.clear();
                           });
                         }
                       : null,
@@ -685,6 +820,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                     }
                     setState(() {
                       _draftLayoutByTableId.remove(selectedId);
+                      _draftRotationByTableId.remove(selectedId);
                       _selectedTable = null;
                     });
                     showSuccessToast(
@@ -732,7 +868,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
         collapsedIconColor: AppColors.textSecondary,
         title: Text(
           l10n.tablesRecentChanges,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textPrimary,
             fontSize: 14,
             fontWeight: FontWeight.w800,
@@ -742,10 +878,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
           l10n.tablesRecentChangesHint,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.notoSansKr(
-            color: AppColors.textSecondary,
-            fontSize: 12,
-          ),
+          style: AppFonts.system(color: AppColors.textSecondary, fontSize: 12),
         ),
         children: [
           AdminAuditTracePanel(
@@ -775,21 +908,21 @@ class _TablesTabState extends ConsumerState<TablesTab> {
           backgroundColor: AppColors.surface1,
           title: Text(
             l10n.tablesAddTitle,
-            style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+            style: AppFonts.system(color: AppColors.textPrimary),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: tableController,
-                style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                style: AppFonts.system(color: AppColors.textPrimary),
                 decoration: InputDecoration(labelText: l10n.tablesTableNumber),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: seatController,
                 keyboardType: TextInputType.number,
-                style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                style: AppFonts.system(color: AppColors.textPrimary),
                 decoration: InputDecoration(labelText: l10n.tablesSeatCount),
               ),
             ],
@@ -837,6 +970,366 @@ class _TablesTabState extends ConsumerState<TablesTab> {
   }
 }
 
+class _AdminFloorOverviewInspector extends StatelessWidget {
+  const _AdminFloorOverviewInspector({
+    required this.totalCount,
+    required this.occupiedCount,
+    required this.reservedCount,
+    required this.emptyCount,
+    required this.occupiedTables,
+    required this.onSelectTable,
+  });
+
+  final int totalCount;
+  final int occupiedCount;
+  final int reservedCount;
+  final int emptyCount;
+  final List<PosTable> occupiedTables;
+  final ValueChanged<PosTable> onSelectTable;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+
+    return PosInspectorPanel(
+      title: l10n.tablesFloorOverviewTitle,
+      subtitle: l10n.tablesFloorOverviewSubtitle,
+      children: [
+        _AdminInspectorInfoRow(
+          label: l10n.tablesTotalTables,
+          value: '$totalCount',
+        ),
+        _AdminInspectorInfoRow(
+          label: l10n.tablesFilterOccupied,
+          value: '$occupiedCount',
+        ),
+        _AdminInspectorInfoRow(
+          label: l10n.tablesFilterReserved,
+          value: '$reservedCount',
+        ),
+        _AdminInspectorInfoRow(
+          label: l10n.tablesFilterEmpty,
+          value: '$emptyCount',
+        ),
+        const SizedBox(height: 12),
+        Text(
+          l10n.tablesOccupiedNow,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+            color: PosColors.textPrimary,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (occupiedTables.isEmpty)
+          PosExceptionAlert(
+            label: l10n.tablesNoOccupiedTables,
+            detail: l10n.tablesManagementMonitorSubtitle,
+            color: PosColors.success,
+            icon: Icons.event_seat_outlined,
+          )
+        else
+          ...occupiedTables.map(
+            (table) => _AdminOccupiedTableShortcut(
+              key: ValueKey<String>('admin_tables_occupied_${table.id}'),
+              table: table,
+              onTap: () => onSelectTable(table),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _AdminOccupiedTableShortcut extends StatelessWidget {
+  const _AdminOccupiedTableShortcut({
+    super.key,
+    required this.table,
+    required this.onTap,
+  });
+
+  final PosTable table;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: PosSurfaceRole.action.fill,
+        borderRadius: ToastRadiusTokens.sm,
+        child: InkWell(
+          borderRadius: ToastRadiusTokens.sm,
+          onTap: onTap,
+          child: Container(
+            constraints: const BoxConstraints(
+              minHeight: PosDensity.touchTargetMin,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: ToastRadiusTokens.sm,
+              border: Border.all(color: PosSurfaceRole.action.stroke),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    l10n.waiterTableLabel(table.tableNumber),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: PosNumericText.tableId.copyWith(
+                      color: PosColors.textPrimary,
+                      fontSize: 17,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ToastStatusBadge(
+                  label: l10n.tablesFilterOccupied,
+                  color: PosColors.info,
+                  compact: true,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AdminFloorSelectionInspector extends StatelessWidget {
+  const _AdminFloorSelectionInspector({
+    required this.table,
+    required this.layoutEditMode,
+    required this.statusLabel,
+    required this.statusColor,
+    required this.onAdjustLayout,
+  });
+
+  final PosTable table;
+  final bool layoutEditMode;
+  final String statusLabel;
+  final Color statusColor;
+  final _LayoutAdjustmentCallback? onAdjustLayout;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+
+    return PosInspectorPanel(
+      title: l10n.waiterTableLabel(table.tableNumber),
+      subtitle: layoutEditMode
+          ? l10n.tablesLayoutEditMode
+          : l10n.tablesSelectedStatusTitle,
+      children: [
+        _AdminInspectorInfoRow(
+          label: l10n.tablesTableNumber,
+          value: table.tableNumber,
+        ),
+        _AdminInspectorInfoRow(
+          label: l10n.tablesSeatCount,
+          value: l10n.waiterSeatCount(table.seatCount ?? 0),
+        ),
+        _AdminInspectorInfoRow(
+          label: l10n.status,
+          trailing: ToastStatusBadge(
+            label: statusLabel,
+            color: statusColor,
+            compact: true,
+          ),
+        ),
+        if (layoutEditMode && onAdjustLayout != null) ...[
+          const SizedBox(height: 2),
+          _AdminLayoutAdjustControls(
+            table: table,
+            onAdjustLayout: onAdjustLayout!,
+          ),
+        ],
+        const SizedBox(height: 12),
+        PosExceptionAlert(
+          label: layoutEditMode
+              ? l10n.tablesLayoutEditActiveTitle
+              : l10n.tablesRoleBoundaryTitle,
+          detail: layoutEditMode
+              ? l10n.tablesLayoutEditActiveDetail
+              : l10n.tablesRoleBoundaryDetail,
+          color: layoutEditMode ? PosColors.warning : PosColors.info,
+          icon: layoutEditMode
+              ? Icons.edit_location_alt_outlined
+              : Icons.admin_panel_settings_outlined,
+        ),
+      ],
+    );
+  }
+}
+
+class _AdminLayoutAdjustControls extends StatelessWidget {
+  const _AdminLayoutAdjustControls({
+    required this.table,
+    required this.onAdjustLayout,
+  });
+
+  final PosTable table;
+  final _LayoutAdjustmentCallback onAdjustLayout;
+
+  @override
+  Widget build(BuildContext context) {
+    final label =
+        'W ${(table.layoutW * 100).round()} / '
+        'H ${(table.layoutH * 100).round()} / '
+        'R ${table.layoutRotation}';
+
+    return Container(
+      key: const Key('admin_table_layout_adjust_controls'),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: PosSurfaceRole.action.fill,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: PosSurfaceRole.action.stroke),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: PosColors.textSecondary,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _LayoutIconButton(
+                keyName: 'admin_table_layout_width_decrease',
+                icon: Icons.swap_horiz_rounded,
+                onPressed: () => onAdjustLayout(widthDelta: -0.02),
+              ),
+              _LayoutIconButton(
+                keyName: 'admin_table_layout_width_increase',
+                icon: Icons.open_in_full_rounded,
+                onPressed: () => onAdjustLayout(widthDelta: 0.02),
+              ),
+              _LayoutIconButton(
+                keyName: 'admin_table_layout_height_decrease',
+                icon: Icons.swap_vert_rounded,
+                onPressed: () => onAdjustLayout(heightDelta: -0.02),
+              ),
+              _LayoutIconButton(
+                keyName: 'admin_table_layout_height_increase',
+                icon: Icons.unfold_more_rounded,
+                onPressed: () => onAdjustLayout(heightDelta: 0.02),
+              ),
+              _LayoutIconButton(
+                keyName: 'admin_table_layout_rotate_left',
+                icon: Icons.rotate_left_rounded,
+                onPressed: () => onAdjustLayout(rotationDelta: -15),
+              ),
+              _LayoutIconButton(
+                keyName: 'admin_table_layout_rotate_right',
+                icon: Icons.rotate_right_rounded,
+                onPressed: () => onAdjustLayout(rotationDelta: 15),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LayoutIconButton extends StatelessWidget {
+  const _LayoutIconButton({
+    required this.keyName,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String keyName;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton.outlined(
+      key: Key(keyName),
+      onPressed: onPressed,
+      icon: Icon(icon, size: 18),
+      style: IconButton.styleFrom(
+        minimumSize: const Size(
+          PosDensity.touchTargetMin,
+          PosDensity.touchTargetMin,
+        ),
+        foregroundColor: PosColors.accent,
+        side: BorderSide(color: PosSurfaceRole.action.stroke),
+      ),
+    );
+  }
+}
+
+class _AdminInspectorInfoRow extends StatelessWidget {
+  const _AdminInspectorInfoRow({
+    required this.label,
+    this.value,
+    this.trailing,
+  });
+
+  final String label;
+  final String? value;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: PosColors.mutedSurface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: PosColors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: PosColors.textSecondary,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          if (trailing != null)
+            trailing!
+          else
+            Text(
+              value ?? '',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: PosColors.textPrimary,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _AdminTableOperationsPanel extends StatelessWidget {
   const _AdminTableOperationsPanel({
     required this.table,
@@ -876,7 +1369,7 @@ class _AdminTableOperationsPanel extends StatelessWidget {
                   children: [
                     Text(
                       l10n.tablesSelectedStatusTitle,
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
@@ -885,7 +1378,7 @@ class _AdminTableOperationsPanel extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       l10n.waiterTableLabel(table.tableNumber),
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 13,
                       ),
@@ -998,7 +1491,7 @@ class _AdminTableEmptyOrder extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             l10n.tablesNoActiveOrderTitle,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontSize: 16,
               fontWeight: FontWeight.w700,
@@ -1008,7 +1501,7 @@ class _AdminTableEmptyOrder extends StatelessWidget {
           Text(
             l10n.tablesNoActiveOrderSubtitle(table.tableNumber),
             textAlign: TextAlign.center,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 13,
             ),
@@ -1054,7 +1547,7 @@ class _AdminTableOrderSummary extends StatelessWidget {
             l10n.tablesActiveOrderTitle(shortId),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontSize: 15,
               fontWeight: FontWeight.w800,
@@ -1064,7 +1557,7 @@ class _AdminTableOrderSummary extends StatelessWidget {
             l10n.tablesReadOnlyOrderSubtitle,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -1133,7 +1626,7 @@ class _AdminTableOrderLine extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.textPrimary,
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -1142,7 +1635,7 @@ class _AdminTableOrderLine extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   'x$quantity · $status',
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.textSecondary,
                     fontSize: 12,
                   ),
@@ -1152,7 +1645,7 @@ class _AdminTableOrderLine extends StatelessWidget {
           ),
           Text(
             '${amount.toStringAsFixed(0)} VND',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontSize: 13,
               fontWeight: FontWeight.w700,
@@ -1174,7 +1667,7 @@ class _RestaurantMissingView extends StatelessWidget {
       body: Center(
         child: Text(
           context.l10n.noLinkedStoreMessage,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.statusCancelled,
             fontSize: 14,
           ),

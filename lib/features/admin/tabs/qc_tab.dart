@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
@@ -419,7 +419,7 @@ class _TemplateManagementTab extends ConsumerWidget {
             alignment: Alignment.centerLeft,
             child: Text(
               context.l10n.qcTemplateBoardSubtitle,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -431,7 +431,7 @@ class _TemplateManagementTab extends ConsumerWidget {
               alignment: Alignment.centerLeft,
               child: Text(
                 state.error!,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.statusCancelled,
                   fontSize: 13,
                 ),
@@ -449,7 +449,7 @@ class _TemplateManagementTab extends ConsumerWidget {
             Center(
               child: Text(
                 context.l10n.qcNoTemplatesRegistered,
-                style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
+                style: AppFonts.system(color: AppColors.textSecondary),
               ),
             )
           else
@@ -512,7 +512,7 @@ class _TemplateManagementTab extends ConsumerWidget {
                           ),
                     title: Text(
                       text,
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w600,
                       ),
@@ -533,7 +533,7 @@ class _TemplateManagementTab extends ConsumerWidget {
                             ),
                             child: Text(
                               category,
-                              style: GoogleFonts.notoSansKr(
+                              style: AppFonts.system(
                                 color: PosColors.accent,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
@@ -544,7 +544,7 @@ class _TemplateManagementTab extends ConsumerWidget {
                             context.l10n.qcSortOrder(
                               template['sort_order'] ?? 0,
                             ),
-                            style: GoogleFonts.notoSansKr(
+                            style: AppFonts.system(
                               color: AppColors.textSecondary,
                               fontSize: 11,
                             ),
@@ -563,7 +563,7 @@ class _TemplateManagementTab extends ConsumerWidget {
                               ),
                               child: Text(
                                 context.l10n.qcSharedByHeadOffice,
-                                style: GoogleFonts.notoSansKr(
+                                style: AppFonts.system(
                                   color: AppColors.amber500,
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
@@ -672,7 +672,7 @@ class _TemplateManagementTab extends ConsumerWidget {
                   const SizedBox(height: 12),
                   TextField(
                     controller: categoryController,
-                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(
                       labelText: context.l10n.qcAdminCategory,
                     ),
@@ -682,7 +682,7 @@ class _TemplateManagementTab extends ConsumerWidget {
                     controller: criteriaController,
                     minLines: 2,
                     maxLines: 4,
-                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(
                       labelText: context.l10n.qcAdminCriterionText,
                     ),
@@ -691,7 +691,7 @@ class _TemplateManagementTab extends ConsumerWidget {
                   TextField(
                     controller: sortController,
                     keyboardType: TextInputType.number,
-                    style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                    style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(
                       labelText: context.l10n.qcAdminOrder,
                     ),
@@ -922,7 +922,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
             alignment: Alignment.centerLeft,
             child: Text(
               context.l10n.qcWeeklyScopeHint,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -955,7 +955,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
               alignment: Alignment.centerLeft,
               child: Text(
                 checkState.error!,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.statusCancelled,
                   fontSize: 13,
                 ),
@@ -984,7 +984,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                       Text(
                         '${DateFormat('yyyy-MM-dd').format(widget.weekStart)} ~ '
                         '${DateFormat('yyyy-MM-dd').format(widget.weekStart.add(const Duration(days: 6)))}',
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: AppColors.textPrimary,
                           fontWeight: FontWeight.w600,
                         ),
@@ -1029,7 +1029,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                                   color: AppColors.surface2,
                                   child: Text(
                                     context.l10n.qcCriterionShort,
-                                    style: GoogleFonts.notoSansKr(
+                                    style: AppFonts.system(
                                       color: AppColors.textSecondary,
                                       fontWeight: FontWeight.w700,
                                     ),
@@ -1055,7 +1055,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                                           ),
                                           child: Text(
                                             '[${row.category}]',
-                                            style: GoogleFonts.notoSansKr(
+                                            style: AppFonts.system(
                                               color: AppColors.amber500,
                                               fontWeight: FontWeight.w700,
                                               fontSize: 12,
@@ -1079,7 +1079,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                                         ),
                                         child: Text(
                                           row.criteria,
-                                          style: GoogleFonts.notoSansKr(
+                                          style: AppFonts.system(
                                             color: AppColors.textPrimary,
                                             fontSize: 12,
                                           ),
@@ -1119,7 +1119,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                                                       'ko',
                                                     ).format(day),
                                                     style:
-                                                        GoogleFonts.notoSansKr(
+                                                        AppFonts.system(
                                                           color: AppColors
                                                               .textSecondary,
                                                           fontSize: 11,
@@ -1130,7 +1130,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                                                       'M/d',
                                                     ).format(day),
                                                     style:
-                                                        GoogleFonts.notoSansKr(
+                                                        AppFonts.system(
                                                           color: AppColors
                                                               .textPrimary,
                                                           fontWeight:
@@ -1218,7 +1218,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                                                   ),
                                                   child: Text(
                                                     label,
-                                                    style: GoogleFonts.notoSansKr(
+                                                    style: AppFonts.system(
                                                       color: result == 'fail'
                                                           ? AppColors
                                                                 .statusCancelled
@@ -1290,7 +1290,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                 child: DropdownButtonFormField<String>(
                   initialValue: _resultFilter,
                   dropdownColor: AppColors.surface1,
-                  style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                  style: AppFonts.system(color: AppColors.textPrimary),
                   decoration: InputDecoration(
                     isDense: true,
                     labelText: context.l10n.qcAdminResult,
@@ -1324,7 +1324,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                 child: DropdownButtonFormField<String>(
                   initialValue: _categoryFilter,
                   dropdownColor: AppColors.surface1,
-                  style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                  style: AppFonts.system(color: AppColors.textPrimary),
                   decoration: InputDecoration(
                     isDense: true,
                     labelText: context.l10n.qcAdminCategory,
@@ -1358,7 +1358,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
               child: Center(
                 child: Text(
                   context.l10n.qcNoSearchResults,
-                  style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
+                  style: AppFonts.system(color: AppColors.textSecondary),
                 ),
               ),
             )
@@ -1390,7 +1390,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                           width: 90,
                           child: Text(
                             row['check_date']?.toString() ?? '-',
-                            style: GoogleFonts.notoSansKr(
+                            style: AppFonts.system(
                               color: AppColors.textSecondary,
                               fontSize: 12,
                             ),
@@ -1400,7 +1400,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                         Expanded(
                           child: Text(
                             '${template?['category'] ?? context.l10n.qcCategoryOther} | ${template?['criteria_text'] ?? '-'}',
-                            style: GoogleFonts.notoSansKr(
+                            style: AppFonts.system(
                               color: AppColors.textPrimary,
                               fontWeight: FontWeight.w600,
                             ),
@@ -1409,7 +1409,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                         const SizedBox(width: 8),
                         Text(
                           resultLabel,
-                          style: GoogleFonts.notoSansKr(
+                          style: AppFonts.system(
                             color: result == 'fail'
                                 ? AppColors.statusCancelled
                                 : AppColors.textPrimary,
@@ -1486,7 +1486,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
       ),
       child: Text(
         label,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: color,
           fontWeight: FontWeight.w700,
         ),
@@ -1546,7 +1546,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                 DateFormat.yMMMMEEEEd(
                   Localizations.localeOf(context).toLanguageTag(),
                 ).format(day),
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w700,
                 ),
@@ -1559,7 +1559,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                   children: [
                     Text(
                       context.l10n.qcCriterionLabel(row.criteria),
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textPrimary,
                       ),
                     ),
@@ -1567,7 +1567,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                     if (check == null)
                       Text(
                         context.l10n.qcNotInspectedOnDate,
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: AppColors.textSecondary,
                         ),
                       )
@@ -1579,7 +1579,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                           'na' => context.l10n.qcResultNa,
                           _ => '-',
                         }}',
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: result == 'fail'
                               ? AppColors.statusCancelled
                               : AppColors.textPrimary,
@@ -1605,7 +1605,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                         const SizedBox(height: 8),
                         Text(
                           context.l10n.inventoryMemoWithValue(note),
-                          style: GoogleFonts.notoSansKr(
+                          style: AppFonts.system(
                             color: AppColors.textSecondary,
                           ),
                         ),
@@ -1659,7 +1659,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                               ),
                               label: Text(
                                 context.l10n.qcCreateFollowUp,
-                                style: GoogleFonts.notoSansKr(fontSize: 12),
+                                style: AppFonts.system(fontSize: 12),
                               ),
                             ),
                           ),
@@ -1785,7 +1785,7 @@ class _FollowupStatusBadge extends StatelessWidget {
           const SizedBox(width: 4),
           Text(
             '${context.l10n.followUp}: $label',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: color,
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -1852,7 +1852,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
             children: [
               Text(
                 context.l10n.qcFollowupManagementTitle,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textPrimary,
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
@@ -1861,7 +1861,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
               const Spacer(),
               Text(
                 '${filtered.length}',
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textSecondary,
                   fontSize: 12,
                 ),
@@ -1887,7 +1887,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
           if (followupState.error != null) ...[
             Text(
               followupState.error!,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.statusCancelled,
                 fontSize: 13,
               ),
@@ -1907,7 +1907,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
               child: Center(
                 child: Text(
                   context.l10n.qcNoFollowUps,
-                  style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
+                  style: AppFonts.system(color: AppColors.textSecondary),
                 ),
               ),
             )
@@ -1980,7 +1980,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
               ),
               error: (e, _) => Text(
                 context.l10n.qcAnalyticsLoadFailed('$e'),
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.statusCancelled,
                   fontSize: 12,
                 ),
@@ -2012,7 +2012,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
       icon: const Icon(Icons.event, size: 16),
       label: Text(
         '$label ${DateFormat('yyyy-MM-dd').format(value)}',
-        style: GoogleFonts.notoSansKr(fontSize: 12),
+        style: AppFonts.system(fontSize: 12),
       ),
     );
   }
@@ -2109,7 +2109,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
       children: [
         Text(
           label,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textSecondary,
             fontSize: 11,
           ),
@@ -2117,7 +2117,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
         const SizedBox(height: 2),
         Text(
           value,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: color,
             fontSize: 16,
             fontWeight: FontWeight.w700,
@@ -2143,7 +2143,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
         ),
         child: Text(
           label,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: isSelected ? AppColors.surface0 : AppColors.textPrimary,
             fontSize: 12,
             fontWeight: FontWeight.w600,
@@ -2196,7 +2196,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
               const Spacer(),
               Text(
                 context.l10n.qcInspectionDate(checkDate),
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textSecondary,
                   fontSize: 11,
                 ),
@@ -2206,7 +2206,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
           const SizedBox(height: 8),
           Text(
             '$category | $criteria',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w600,
               fontSize: 13,
@@ -2216,7 +2216,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
             const SizedBox(height: 4),
             Text(
               context.l10n.qcAssignee(assignedTo),
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -2226,7 +2226,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
             const SizedBox(height: 4),
             Text(
               context.l10n.qcResolutionNotes(resolutionNotes),
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -2241,7 +2241,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
                       _formatTimestamp(createdAt),
                       _formatTimestamp(resolvedAt),
                     ),
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 11,
               ),
@@ -2261,7 +2261,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
                     ),
                     child: Text(
                       context.l10n.qcStartProgress,
-                      style: GoogleFonts.notoSansKr(fontSize: 12),
+                      style: AppFonts.system(fontSize: 12),
                     ),
                   ),
                 if (status == 'open') const SizedBox(width: 8),
@@ -2273,7 +2273,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
                   ),
                   child: Text(
                     context.l10n.resolved,
-                    style: GoogleFonts.notoSansKr(fontSize: 12),
+                    style: AppFonts.system(fontSize: 12),
                   ),
                 ),
               ],

@@ -1,8 +1,9 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
+import '../../core/i18n/locale_extensions.dart';
 import '../../core/models/pos_table.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../main.dart';
@@ -101,9 +102,19 @@ class _FloorLayoutViewState extends State<FloorLayoutView> {
       padding: widget.padding,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: AppColors.surface1,
+          color: widget.editable
+              ? Color.alphaBlend(
+                  PosColors.warning.withValues(alpha: 0.06),
+                  PosTerminalColors.floorCanvas,
+                )
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: AppColors.surface3),
+          border: Border.all(
+            color: widget.editable
+                ? PosColors.warning.withValues(alpha: 0.55)
+                : Colors.transparent,
+            width: widget.editable ? 1.5 : 1,
+          ),
         ),
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -273,8 +284,19 @@ class _FloorTableTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final occupied = table.isOccupied;
     final reserved = table.isReserved;
+    final statusLabel = occupied
+        ? l10n.tablesFilterOccupied
+        : reserved
+        ? l10n.tablesFilterReserved
+        : l10n.tablesFilterEmpty;
+    final statusColor = occupied
+        ? PosColors.info
+        : reserved
+        ? PosColors.warning
+        : PosColors.success;
     final borderColor = selected
         ? PosColors.accent
         : reserved
@@ -335,26 +357,23 @@ class _FloorTableTile extends StatelessWidget {
                     fit: BoxFit.scaleDown,
                     child: Text(
                       table.tableNumber,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
-                      style: GoogleFonts.notoSansKr(
+                      style: PosNumericText.tableId.copyWith(
                         color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 16,
+                        fontSize: 18,
                       ),
                     ),
                   ),
                   const SizedBox(height: 4),
                   if (activePreview == null)
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: occupied
-                            ? AppColors.statusInfo
-                            : reserved
-                            ? PosColors.warning
-                            : AppColors.statusAvailable,
-                        shape: BoxShape.circle,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: _FloorStatusBadge(
+                        label: statusLabel,
+                        color: statusColor,
+                        compact: true,
                       ),
                     )
                   else
@@ -371,21 +390,27 @@ class _FloorTableTile extends StatelessWidget {
             return Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  table.tableNumber,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.notoSansKr(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 20,
+                SizedBox(
+                  width: double.infinity,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      table.tableNumber,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: PosNumericText.tableId.copyWith(
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
                   ),
                 ),
                 if (activePreview == null) ...[
                   const SizedBox(height: 4),
                   Text(
-                    '${table.seatCount ?? 0} seats',
+                    l10n.waiterSeatCount(table.seatCount ?? 0),
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: AppColors.textSecondary,
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -397,41 +422,20 @@ class _FloorTableTile extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: occupied
-                            ? AppColors.statusInfo
-                            : reserved
-                            ? PosColors.warning
-                            : AppColors.statusAvailable,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
                     Flexible(
-                      child: Text(
-                        editable
-                            ? (occupied
-                                  ? 'Occupied · drag'
-                                  : reserved
-                                  ? 'Reserved · drag'
-                                  : 'Available · drag')
-                            : (occupied
-                                  ? 'Occupied'
-                                  : reserved
-                                  ? 'Reserved'
-                                  : 'Available'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.notoSansKr(
-                          color: AppColors.textSecondary,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      child: _FloorStatusBadge(
+                        label: statusLabel,
+                        color: statusColor,
                       ),
                     ),
+                    if (editable) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.open_with_rounded,
+                        size: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                    ],
                   ],
                 ),
                 if (activePreview != null) ...[
@@ -445,6 +449,56 @@ class _FloorTableTile extends StatelessWidget {
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+class _FloorStatusBadge extends StatelessWidget {
+  const _FloorStatusBadge({
+    required this.label,
+    required this.color,
+    this.compact = false,
+  });
+
+  final String label;
+  final Color color;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 6 : 8,
+        vertical: compact ? 3 : 4,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.42)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: compact ? 5 : 6,
+            height: compact ? 5 : 6,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppFonts.system(
+                color: color,
+                fontSize: compact ? 9 : 10,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -471,7 +525,7 @@ class _OrderCountBadge extends StatelessWidget {
           const SizedBox(width: 3),
           Text(
             '$count',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: PosColors.accent,
               fontSize: 10,
               fontWeight: FontWeight.w800,
@@ -511,7 +565,7 @@ class _TableOrderPreviewChip extends StatelessWidget {
               const SizedBox(width: 4),
               Text(
                 '${preview.itemCount}',
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: PosColors.accent,
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
@@ -524,7 +578,7 @@ class _TableOrderPreviewChip extends StatelessWidget {
               '${line.label} x${line.quantity}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: PosColors.textSecondary,
                 fontSize: 9.5,
                 fontWeight: FontWeight.w600,
@@ -535,7 +589,7 @@ class _TableOrderPreviewChip extends StatelessWidget {
               '+$hiddenCount',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: PosColors.textMuted,
                 fontSize: 9,
                 fontWeight: FontWeight.w700,

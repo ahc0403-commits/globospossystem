@@ -40,6 +40,20 @@ void main() {
     expect(cashier, contains('_buildCashierCommandHeader'));
     expect(cashier, contains('ToastMetricStrip('));
     expect(cashier, contains("key: const Key('cashier_payment_surface')"));
+    expect(cashier, contains('PosAmountAnchor('));
+    expect(cashier, contains('PosNumericText.amountHero'));
+    expect(cashier, contains('PosActionTile('));
+    expect(cashier, contains('PosActionTileState.processing'));
+    expect(cashier, contains('PosActionTileState.offlineBlocked'));
+    expect(cashier, contains('class _CashierNoPayableOrdersPanel'));
+    expect(
+      cashier,
+      contains("Key('cashier_no_payable_orders_operational_empty')"),
+    );
+    expect(cashier, contains('notifier.loadOrders(storeId)'));
+    expect(cashier, contains('l10n.cashierTerminalOnline'));
+    expect(cashier, contains('l10n.cashierTerminalOffline'));
+    expect(cashier, isNot(contains('PosMoneyBlock(')));
     expect(cashier, isNot(contains('PosPageHeader(')));
     expect(cashier, isNot(contains('PosStatCard(')));
     expect(cashier, contains('PaymentProofModal('));
@@ -129,7 +143,7 @@ void main() {
       expect(cashier, contains('_showPaymentQueueOnCompact = false'));
       expect(cashier, contains('Expanded('));
       expect(cashier, contains('showCompactQueue'));
-      expect(cashier, contains('? queuePane'));
+      expect(cashier, contains('? queueWithHistory'));
       expect(cashier, contains(': detailPane'));
       expect(cashier, contains('final useCompactChrome = !useWideLayout'));
       expect(cashier, contains('compact: useCompactChrome'));
@@ -170,29 +184,28 @@ void main() {
   );
 
   test(
-    'cashier payment queue follows kitchen served handoff and short landscape scroll',
+    'cashier payment queue follows kitchen ready handoff and short landscape scroll',
     () {
       final cashier = readRepoFile('lib/features/cashier/cashier_screen.dart');
       final provider = readRepoFile(
         'lib/features/payment/payment_provider.dart',
       );
-      final migration = readRepoFile(
-        'supabase/migrations/20260525000000_kitchen_served_items_open_cashier_payment.sql',
+      final readyHandoffMigration = readRepoFile(
+        'supabase/migrations/20260703000000_cashier_ready_items_open_payment.sql',
       );
 
-      expect(provider, contains('_isCashierPayableItemRows(itemRows)'));
+      // ORDER_LIFECYCLE_STATE_CONTRACT_2026_07_03: payability is the
+      // server-derived order status (serving), not a client-side item scan.
+      expect(provider, contains(".eq('status', 'serving')"));
+      expect(provider, isNot(contains('_isCashierPayableItemRows')));
       expect(provider, contains("status: 'serving'"));
-      expect(
-        provider,
-        contains("row['status']?.toString().toLowerCase() == 'served'"),
-      );
       expect(provider, contains("table: 'order_items'"));
       expect(provider, contains('PostgresChangeEvent.update'));
       expect(provider, contains('PostgresChangeEvent.insert'));
       expect(provider, contains('PostgresChangeEvent.delete'));
       expect(provider, contains('static const _autoRefreshInterval'));
       expect(provider, contains('_ensureAutoRefresh(storeId)'));
-      expect(provider, contains('Timer.periodic(_autoRefreshInterval'));
+      expect(provider, contains('Timer.periodic(_fallbackPollInterval'));
       expect(provider, contains('_refreshPaymentOrdersFromRealtime(storeId)'));
       expect(
         provider,
@@ -221,12 +234,18 @@ void main() {
       expect(cashier, contains("'serving' => l10n.cashierPendingStatus"));
 
       expect(
-        migration,
+        readyHandoffMigration,
         contains('CREATE OR REPLACE FUNCTION public.update_order_item_status'),
       );
-      expect(migration, contains("v_next_order_status := 'serving'"));
-      expect(migration, contains("AND oi.status <> 'served'"));
-      expect(migration, contains('UPDATE orders o'));
+      expect(
+        readyHandoffMigration,
+        contains("v_next_order_status := 'serving'"),
+      );
+      expect(
+        readyHandoffMigration,
+        contains("AND oi.status NOT IN ('ready', 'served')"),
+      );
+      expect(readyHandoffMigration, contains('UPDATE orders o'));
     },
   );
 
@@ -264,19 +283,13 @@ void main() {
     },
   );
 
-  test(
-    'order workspace keeps sent kitchen items as secondary detail by default',
-    () {
-      final workspace = readRepoFile('lib/widgets/order_workspace.dart');
+  test('order workspace keeps sent kitchen items visible by default', () {
+    final workspace = readRepoFile('lib/widgets/order_workspace.dart');
 
-      expect(
-        workspace,
-        contains("key: const Key('order_sent_items_secondary_detail')"),
-      );
-      expect(workspace, contains('initiallyExpanded: false'));
-      expect(workspace, contains('l10n.orderWorkspaceSentToKitchen'));
-    },
-  );
+    expect(workspace, contains('order_sent_items_always_visible_detail'));
+    expect(workspace, contains('initiallyExpanded: true'));
+    expect(workspace, contains('l10n.orderWorkspaceSentToKitchen'));
+  });
 
   test(
     'order workspace keeps kitchen send action visible before payment total',
@@ -299,6 +312,11 @@ void main() {
         contains("key: const Key('cart_submit_order_sticky_footer')"),
       );
       expect(workspace, contains("key: const Key('cart_submit_order')"));
+      expect(workspace, contains('PosActionTile('));
+      expect(workspace, contains('PosActionTileState.processing'));
+      expect(workspace, contains('PosActionTileState.offlineBlocked'));
+      expect(workspace, contains('allowOfflineBlockedTap: canSendOrder'));
+      expect(workspace, contains('unawaited(onSendOrder())'));
       expect(workspace, contains('l10n.orderWorkspaceTapItemToAdd'));
       expect(
         workspace,
@@ -350,8 +368,10 @@ void main() {
     final waiter = readRepoFile('lib/features/waiter/waiter_screen.dart');
 
     expect(workspace, contains('constraints.maxWidth >= 760'));
-    expect(workspace, contains('flex: 7'));
-    expect(workspace, contains('flex: 3'));
+    expect(workspace, contains("Key('order_terminal_table_strip')"));
+    expect(workspace, contains('final orderRailWidth'));
+    expect(workspace, contains('PosDensity.orderRailWidth'));
+    expect(workspace, contains('SizedBox(width: orderRailWidth'));
     expect(workspace, contains('flex: 8'));
     expect(workspace, contains('flex: 2'));
     expect(workspace, contains('useCompactPanel'));
@@ -381,5 +401,23 @@ void main() {
       workspace.indexOf('order: state.activeOrder!', compactPanelIndex),
       isNonNegative,
     );
+  });
+
+  test('operational premium v2 gate records web tabular-number evidence', () {
+    final gate = readRepoFile(
+      'docs/pos/POS_OPERATIONAL_PREMIUM_V2_PHASE_GATE_2026_06_11.md',
+    );
+    final followUps = readRepoFile(
+      'docs/pos/POS_OPERATIONAL_PREMIUM_V2_DATA_FOLLOWUPS.md',
+    );
+
+    expect(gate, contains('flutter test --platform chrome'));
+    expect(gate, contains('FontFeature.tabularFigures'));
+    expect(gate, contains('Admin Tables Phase 1'));
+    expect(gate, contains('Inventory Phase 1'));
+    expect(followUps, contains('Last completed payment'));
+    expect(followUps, contains('Per-table revenue'));
+    expect(followUps, contains('Explanation for zero recommendations'));
+    expect(followUps, contains('frontend-only'));
   });
 }

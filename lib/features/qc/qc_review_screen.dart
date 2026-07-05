@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
@@ -75,7 +75,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
         body: Center(
           child: Text(
             context.l10n.qscNoReviewPermission,
-            style: GoogleFonts.notoSansKr(color: PosColors.text, fontSize: 14),
+            style: AppFonts.system(color: PosColors.text, fontSize: 14),
           ),
         ),
       );
@@ -134,7 +134,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
           children: [
             Text(
               context.l10n.qscReviewTitle,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: PosColors.text,
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
@@ -142,7 +142,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
             ),
             Text(
               _weekLabel(),
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: PosColors.textMuted,
                 fontSize: 12,
               ),
@@ -164,7 +164,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                     children: [
                       Text(
                         context.l10n.qscReviewHeader,
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: PosColors.text,
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
@@ -173,7 +173,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                       const SizedBox(height: 4),
                       Text(
                         context.l10n.qscReviewSubtitle,
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: PosColors.textMuted,
                           fontSize: 12,
                           height: 1.4,
@@ -220,7 +220,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                       child: Center(
                         child: Text(
                           _weekLabel(),
-                          style: GoogleFonts.notoSansKr(
+                          style: AppFonts.system(
                             color: PosColors.text,
                             fontWeight: FontWeight.w700,
                           ),
@@ -260,7 +260,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                 if (checkState.error != null) ...[
                   Text(
                     checkState.error!,
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: PosColors.danger,
                       fontSize: 13,
                     ),
@@ -272,7 +272,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                     padding: const EdgeInsets.all(20),
                     child: Text(
                       context.l10n.qscNoSvReviewTargets,
-                      style: GoogleFonts.notoSansKr(color: PosColors.textMuted),
+                      style: AppFonts.system(color: PosColors.textMuted),
                     ),
                   )
                 else
@@ -315,7 +315,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
               Expanded(
                 child: Text(
                   template?['criteria_text']?.toString() ?? '-',
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: PosColors.text,
                     fontWeight: FontWeight.w700,
                     fontSize: 15,
@@ -383,13 +383,13 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
             const SizedBox(height: 10),
             _fieldLabel(context.l10n.qscStaffNote),
             const SizedBox(height: 4),
-            Text(note, style: GoogleFonts.notoSansKr(color: PosColors.text)),
+            Text(note, style: AppFonts.system(color: PosColors.text)),
           ],
           if (svScore != null && svScore.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(
               context.l10n.qscSvScoreValue(svScore),
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: PosColors.text,
                 fontWeight: FontWeight.w700,
               ),
@@ -399,7 +399,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
             const SizedBox(height: 8),
             _fieldLabel(context.l10n.qscSvNote),
             const SizedBox(height: 4),
-            Text(svNote, style: GoogleFonts.notoSansKr(color: PosColors.text)),
+            Text(svNote, style: AppFonts.system(color: PosColors.text)),
           ],
           const SizedBox(height: 12),
           Row(
@@ -473,7 +473,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                 status == 'reviewed'
                     ? context.l10n.qscMarkReviewed
                     : context.l10n.qscNeedsFollowUp,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: PosColors.text,
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
@@ -485,7 +485,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
-                style: GoogleFonts.notoSansKr(color: PosColors.text),
+                style: AppFonts.system(color: PosColors.text),
                 decoration: InputDecoration(labelText: context.l10n.qscSvScore),
               ),
               const SizedBox(height: 10),
@@ -493,7 +493,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                 controller: noteController,
                 minLines: 2,
                 maxLines: 4,
-                style: GoogleFonts.notoSansKr(color: PosColors.text),
+                style: AppFonts.system(color: PosColors.text),
                 decoration: InputDecoration(labelText: context.l10n.qscSvNote),
               ),
               const SizedBox(height: 14),
@@ -631,7 +631,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
         ),
         child: Text(
           label,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: selected ? PosColors.accent : PosColors.textMuted,
             fontWeight: FontWeight.w700,
           ),
@@ -651,7 +651,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
   Widget _fieldLabel(String value) {
     return Text(
       value,
-      style: GoogleFonts.notoSansKr(
+      style: AppFonts.system(
         color: PosColors.textMuted,
         fontSize: 11,
         fontWeight: FontWeight.w700,

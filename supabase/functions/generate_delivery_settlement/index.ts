@@ -15,6 +15,17 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 const PLATFORM_COMMISSION_RATE = 0.015  // 1.5%
 const ESTIMATED_PAYMENT_FEE_RATE = 0.015  // ~1.5% (카드/페이 평균)
 
+function isMerchantCollectedOffline(payload: unknown): boolean {
+  if (payload == null || typeof payload !== 'object') return false
+
+  const record = payload as Record<string, unknown>
+  if (record.settlement_collection_mode === 'merchant_collected_offline') {
+    return true
+  }
+
+  return record.offline_collection_acknowledgment != null
+}
+
 serve(async (req) => {
   try {
     // 인증: CRON_SECRET 또는 service_role JWT 필수
@@ -75,7 +86,7 @@ serve(async (req) => {
     // 2. 미정산 주문이 있는 레스토랑 조회
     const { data: restaurants, error: restError } = await supabase
       .from('external_sales')
-      .select('restaurant_id, gross_amount')
+      .select('restaurant_id, gross_amount, payload')
       .eq('is_revenue', true)
       .eq('order_status', 'completed')
       .is('settlement_id', null)
@@ -91,10 +102,20 @@ serve(async (req) => {
     }
 
     // 레스토랑별 그룹핑
-    const byRestaurant = new Map<string, { gross: number }>()
+    const byRestaurant = new Map<string, {
+      gross: number
+      merchantOfflineCollection: number
+    }>()
     for (const row of restaurants) {
-      const entry = byRestaurant.get(row.restaurant_id) ?? { gross: 0 }
-      entry.gross += Number(row.gross_amount)
+      const grossAmount = Number(row.gross_amount)
+      const entry = byRestaurant.get(row.restaurant_id) ?? {
+        gross: 0,
+        merchantOfflineCollection: 0,
+      }
+      entry.gross += grossAmount
+      if (isMerchantCollectedOffline(row.payload)) {
+        entry.merchantOfflineCollection += grossAmount
+      }
       byRestaurant.set(row.restaurant_id, entry)
     }
 
@@ -123,14 +144,24 @@ serve(async (req) => {
         }
 
         const grossTotal = Number(summary.gross.toFixed(2))
+        const merchantOfflineCollection = Number(
+          summary.merchantOfflineCollection.toFixed(2),
+        )
+        const platformPayableGross = Number(
+          Math.max(0, grossTotal - merchantOfflineCollection).toFixed(2),
+        )
         const platformCommission = Number(
-          (grossTotal * PLATFORM_COMMISSION_RATE).toFixed(2),
+          (platformPayableGross * PLATFORM_COMMISSION_RATE).toFixed(2),
         )
         const paymentFee = Number(
-          (grossTotal * ESTIMATED_PAYMENT_FEE_RATE).toFixed(2),
+          (platformPayableGross * ESTIMATED_PAYMENT_FEE_RATE).toFixed(2),
         )
         const totalDeductions = Number(
-          (platformCommission + paymentFee).toFixed(2),
+          (
+            merchantOfflineCollection +
+            platformCommission +
+            paymentFee
+          ).toFixed(2),
         )
         const netSettlement = Number(
           (grossTotal - totalDeductions).toFixed(2),
@@ -157,13 +188,21 @@ serve(async (req) => {
         const { error: itemInsertError } = await supabase
           .from('delivery_settlement_items')
           .insert([
+            ...(merchantOfflineCollection > 0 ? [{
+              settlement_id: settlement.id,
+              item_type: 'merchant_offline_collection',
+              amount: merchantOfflineCollection,
+              description: '점주 직접 현금/계좌이체 수금분 정산 제외',
+              reference_rate: null,
+              reference_base: grossTotal,
+            }] : []),
             {
               settlement_id: settlement.id,
               item_type: 'platform_commission',
               amount: platformCommission,
               description: '플랫폼 수수료 1.5%',
               reference_rate: PLATFORM_COMMISSION_RATE,
-              reference_base: grossTotal,
+              reference_base: platformPayableGross,
             },
             {
               settlement_id: settlement.id,
@@ -171,7 +210,7 @@ serve(async (req) => {
               amount: paymentFee,
               description: '결제 수수료 (평균 1.5%)',
               reference_rate: ESTIMATED_PAYMENT_FEE_RATE,
-              reference_base: grossTotal,
+              reference_base: platformPayableGross,
             },
           ])
 
@@ -195,6 +234,8 @@ serve(async (req) => {
           settlement_id: settlement.id,
           period_label: settlement.period_label,
           gross_total: grossTotal,
+          merchant_offline_collection: merchantOfflineCollection,
+          platform_payable_gross: platformPayableGross,
           total_deductions: totalDeductions,
           net_settlement: netSettlement,
           order_count: updatedSales?.length ?? 0,

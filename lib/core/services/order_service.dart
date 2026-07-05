@@ -66,6 +66,22 @@ class OrderService {
     return Map<String, dynamic>.from(result as Map);
   }
 
+  Future<Map<String, dynamic>> updateOrderGuestCount({
+    required String orderId,
+    required String storeId,
+    required int guestCount,
+  }) async {
+    final result = await supabase.rpc(
+      'update_order_guest_count',
+      params: {
+        'p_order_id': orderId,
+        'p_store_id': storeId,
+        'p_guest_count': guestCount,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
   Future<List<Map<String, dynamic>>> addItemsToOrder({
     required String orderId,
     required String storeId,

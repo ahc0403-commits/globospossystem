@@ -14,11 +14,14 @@ class MenuService {
   }
 
   Future<List<Map<String, dynamic>>> fetchCategories(String storeId) async {
+    // postgrest-dart's order() defaults to DESCENDING; sort_order must be
+    // ascending or the menu browser auto-selects the last (often empty test)
+    // category and renders a blank menu.
     final response = await supabase
         .from('menu_categories')
         .select()
         .eq('restaurant_id', storeId)
-        .order('sort_order');
+        .order('sort_order', ascending: true);
     return response
         .map<Map<String, dynamic>>((c) => Map<String, dynamic>.from(c))
         .toList();
@@ -29,7 +32,7 @@ class MenuService {
         .from('menu_items')
         .select()
         .eq('restaurant_id', storeId)
-        .order('sort_order');
+        .order('sort_order', ascending: true);
     return response
         .map<Map<String, dynamic>>((i) => Map<String, dynamic>.from(i))
         .toList();

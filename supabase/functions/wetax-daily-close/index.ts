@@ -9,71 +9,21 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getToken, WETAX_BASE_URL } from "../_shared/wetax.ts";
 
-// Supabase returns bytea as hex "\\x313233..." — decode correctly
-function decodeByteaToString(v) {
-  if (!v) return "";
-  if (v instanceof Uint8Array) return new TextDecoder().decode(v);
-  const s = String(v);
-  const hexMatch = s.match(/^[\\\\]?x([0-9a-fA-F]+)$/);
-  if (hexMatch) {
-    const bytes = new Uint8Array(hexMatch[1].length / 2);
-    for (let i = 0; i < hexMatch[1].length; i += 2)
-      bytes[i / 2] = parseInt(hexMatch[1].substring(i, i + 2), 16);
-    return new TextDecoder().decode(bytes);
-  }
-  try { return atob(s); } catch { return s; }
-}
-
-
-const WETAX_BASE_URL = Deno.env.get("WETAX_BASE_URL") ??
-  "https://apitest.wetax.com.vn";
-
-async function getToken(supabase: any): Promise<string> {
-  const { data: cred } = await supabase
-    .from("partner_credentials")
-    .select("id,user_id,password_value,current_token,token_expires_at")
-    .eq("data_source", "VNPT_EPAY")
-    .single();
-
-  if (!cred) throw new Error("partner_credentials not found");
-
-  const now = new Date();
-  const expiresAt = cred.token_expires_at ? new Date(cred.token_expires_at) : null;
-  const threshold = expiresAt ? new Date(expiresAt.getTime() - 15 * 60 * 1000) : now;
-
-  if (cred.current_token && expiresAt && now < threshold) return cred.current_token;
-
-  const password = decodeByteaToString(cred.password_value);
-
-  const loginRes = await fetch(`${WETAX_BASE_URL}/api/wtx/pa/v1/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id: cred.user_id, password }),
-  });
-  const loginBody = await loginRes.json();
-  if (!loginRes.ok || !loginBody?.data?.access_token) {
-    throw new Error(`WT00 failed: ${loginRes.status}`);
-  }
-  const token = loginBody.data.access_token;
-  const expiresIn = loginBody.data.expires_in ?? 86400;
-  await supabase.from("partner_credentials").update({
-    current_token: token,
-    token_expires_at: new Date(now.getTime() + expiresIn * 1000).toISOString(),
-    last_verified_at: now.toISOString(),
-    updated_at: now.toISOString(),
-  }).eq("id", cred.id);
-  await supabase.from("partner_credential_access_log").insert({
-    credential_id: cred.id, access_reason: "daily_close_token_refresh",
-    accessed_by_function: "wetax-daily-close", success: true,
-  });
-  return token;
-}
+const TOKEN_OPTIONS = {
+  functionName: "wetax-daily-close",
+  accessReason: "daily_close_token_refresh",
+  formatLoginError: (status: number) => `WT00 failed: ${status}`,
+};
 
 serve(async (req: Request) => {
   const authHeader = req.headers.get("Authorization");
   const cronSecret = Deno.env.get("CRON_SECRET");
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret) {
+    return new Response("CRON_SECRET not configured", { status: 503 });
+  }
+  if (authHeader !== `Bearer ${cronSecret}`) {
     return new Response("Unauthorized", { status: 401 });
   }
 
@@ -90,13 +40,21 @@ serve(async (req: Request) => {
     const hcmcYesterday = new Date(hcmcNow);
     hcmcYesterday.setDate(hcmcYesterday.getDate() - 1);
 
-    const closingDate = hcmcYesterday.toISOString().slice(0, 10).replace(/-/g, ""); // yyyymmdd
+    const closingDate = hcmcYesterday.toISOString().slice(0, 10).replace(
+      /-/g,
+      "",
+    ); // yyyymmdd
     const closingTime = `${closingDate}235959`; // 14-char format
 
     // Date range for counting orders (previous day in HCMC)
     const dayStartUTC = new Date(Date.UTC(
-      hcmcYesterday.getUTCFullYear(), hcmcYesterday.getUTCMonth(), hcmcYesterday.getUTCDate(),
-      0 - 7, 0, 0, 0, // midnight HCMC = 17:00 UTC previous day
+      hcmcYesterday.getUTCFullYear(),
+      hcmcYesterday.getUTCMonth(),
+      hcmcYesterday.getUTCDate(),
+      0 - 7,
+      0,
+      0,
+      0, // midnight HCMC = 17:00 UTC previous day
     ));
     const dayEndUTC = new Date(dayStartUTC.getTime() + 24 * 60 * 60 * 1000 - 1);
 
@@ -113,15 +71,19 @@ serve(async (req: Request) => {
       .eq("is_active", true);
 
     if (!stores?.length) {
-      return new Response(JSON.stringify({ closed: 0, message: "no active stores" }), {
-        status: 200, headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ closed: 0, message: "no active stores" }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     }
 
-    const token = await getToken(supabase);
+    const token = await getToken(supabase, TOKEN_OPTIONS);
     const results = [];
 
-    for (const store of stores) {
+    for (const store of stores as any[]) {
       // Skip stores with placeholder or no tax entity (not onboarded yet)
       const te = store.tax_entity;
       if (!te || te.tax_code === "PLACEHOLDER_DEV_000") {
@@ -173,7 +135,9 @@ serve(async (req: Request) => {
       const wt08Body = await wt08Res.json().catch(() => null);
       const success = wt08Res.ok && wt08Body?.status?.success !== false;
 
-      console.log(`Daily close [${store.name}]: HTTP ${wt08Res.status}, orders=${totalOrderCount}, ok=${success}`);
+      console.log(
+        `Daily close [${store.name}]: HTTP ${wt08Res.status}, orders=${totalOrderCount}, ok=${success}`,
+      );
 
       results.push({
         store_id: store.id,
@@ -190,16 +154,21 @@ serve(async (req: Request) => {
     const succeeded = results.filter((r: any) => r.success).length;
     const failed = results.filter((r: any) => !r.success && !r.skipped).length;
 
-    return new Response(JSON.stringify({
-      closing_date: closingDate,
-      total_stores: stores.length,
-      succeeded, failed,
-      results,
-    }), { status: 200, headers: { "Content-Type": "application/json" } });
+    return new Response(
+      JSON.stringify({
+        closing_date: closingDate,
+        total_stores: stores.length,
+        succeeded,
+        failed,
+        results,
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
   } catch (err) {
     console.error("Daily close error:", err);
     return new Response(JSON.stringify({ error: (err as Error).message }), {
-      status: 500, headers: { "Content-Type": "application/json" },
+      status: 500,
+      headers: { "Content-Type": "application/json" },
     });
   }
 });

@@ -54,7 +54,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
     _refreshOfflineQueueCount();
   }
 
-  static const _autoRefreshInterval = Duration(seconds: 2);
+  static const _fallbackPollInterval = Duration(seconds: 15);
 
   RealtimeChannel? _orderItemsChannel;
   String? _subscribedOrderId;
@@ -150,7 +150,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
       final response = await supabase
           .from('orders')
           .select(
-            'id, table_id, status, created_at, order_items(id, created_at, menu_item_id, label, unit_price, quantity, status, item_type, menu_items(name))',
+            'id, table_id, status, created_at, guest_count, order_items(id, created_at, menu_item_id, label, unit_price, quantity, status, item_type, menu_items(name))',
           )
           .eq('table_id', tableId)
           .eq('restaurant_id', storeId)
@@ -290,6 +290,12 @@ class OrderNotifier extends StateNotifier<OrderState> {
   }
 
   void _ensureAutoRefresh(String tableId, String storeId) {
+    if (_realtimeConnected) {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+      return;
+    }
+
     if (_pollTimer != null &&
         _subscribedTableId == tableId &&
         _subscribedStoreId == storeId) {
@@ -297,7 +303,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
     }
 
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(_autoRefreshInterval, (_) {
+    _pollTimer = Timer.periodic(_fallbackPollInterval, (_) {
       if (mounted &&
           _subscribedTableId == tableId &&
           _subscribedStoreId == storeId) {
@@ -432,6 +438,37 @@ class OrderNotifier extends StateNotifier<OrderState> {
     } catch (error) {
       state = state.copyWith(
         error: _mapOrderError(error, 'Failed to submit buffet order'),
+      );
+    } finally {
+      state = state.copyWith(isSubmitting: false);
+    }
+  }
+
+  Future<void> updateGuestCount(
+    String orderId,
+    String storeId,
+    int guestCount,
+  ) async {
+    if (guestCount < 1) {
+      state = state.copyWith(error: 'Guest count must be at least 1.');
+      return;
+    }
+
+    final tableId = state.activeOrder?.tableId;
+    state = state.copyWith(isSubmitting: true, clearError: true);
+
+    try {
+      await orderService.updateOrderGuestCount(
+        orderId: orderId,
+        storeId: storeId,
+        guestCount: guestCount,
+      );
+      if (tableId != null) {
+        await loadActiveOrder(tableId, storeId);
+      }
+    } catch (error) {
+      state = state.copyWith(
+        error: _mapOrderError(error, 'Failed to update guest count'),
       );
     } finally {
       state = state.copyWith(isSubmitting: false);

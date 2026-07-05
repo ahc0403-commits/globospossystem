@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/layout/platform_info.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import '../../../core/hardware/printer_service.dart';
 import '../../../core/hardware/receipt_builder.dart';
 import '../../../core/i18n/locale_extensions.dart';
@@ -77,7 +77,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
               backgroundColor: AppColors.surface1,
               title: Text(
                 l10n.settingsPayrollPinTitle,
-                style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                style: AppFonts.system(color: AppColors.textPrimary),
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -103,7 +103,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                     const SizedBox(height: 8),
                     Text(
                       validationMessage!,
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.statusCancelled,
                         fontSize: 12,
                       ),
@@ -153,7 +153,9 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                             if (pageContext.mounted) {
                               showErrorToast(
                                 pageContext,
-                                l10n.settingsPayrollPinSaveFailed('$e'),
+                                l10n.settingsPayrollPinSaveFailed(
+                                  _payrollPinPilotSaveError(e),
+                                ),
                               );
                             }
                           } finally {
@@ -666,20 +668,20 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
             const SizedBox(height: 14),
             TextField(
               controller: _restaurantNameController,
-              style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+              style: AppFonts.system(color: AppColors.textPrimary),
               decoration: InputDecoration(labelText: context.l10n.storeName),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: _addressController,
-              style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+              style: AppFonts.system(color: AppColors.textPrimary),
               decoration: InputDecoration(labelText: context.l10n.address),
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
               initialValue: _operationMode,
               dropdownColor: AppColors.surface1,
-              style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+              style: AppFonts.system(color: AppColors.textPrimary),
               decoration: InputDecoration(
                 labelText: context.l10n.settingsOperationMode,
               ),
@@ -710,7 +712,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
-                style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                style: AppFonts.system(color: AppColors.textPrimary),
                 decoration: InputDecoration(
                   labelText: context.l10n.settingsPerPersonCharge,
                 ),
@@ -819,7 +821,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
             const SizedBox(height: 12),
             TextField(
               controller: _fullNameController,
-              style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+              style: AppFonts.system(color: AppColors.textPrimary),
               decoration: InputDecoration(
                 labelText: context.l10n.settingsOperatorName,
               ),
@@ -990,7 +992,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
               controller: _printerIpController,
               keyboardType: TextInputType.number,
               onChanged: (value) => printerNotifier.setIp(value),
-              style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+              style: AppFonts.system(color: AppColors.textPrimary),
               decoration: InputDecoration(
                 labelText: context.l10n.settingsPrinterIpAddress,
                 hintText: context.l10n.settingsPrinterIpExample,
@@ -1199,7 +1201,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
       ),
       child: Text(
         label,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: AppColors.textPrimary,
           fontSize: 12,
           fontWeight: FontWeight.w700,
@@ -1230,10 +1232,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
         const SizedBox(width: 8),
         Text(
           label,
-          style: GoogleFonts.notoSansKr(
-            color: AppColors.textSecondary,
-            fontSize: 12,
-          ),
+          style: AppFonts.system(color: AppColors.textSecondary, fontSize: 12),
         ),
       ],
     );
@@ -1266,6 +1265,35 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
         return role;
     }
   }
+}
+
+String _payrollPinPilotSaveError(Object error) {
+  final raw = error
+      .toString()
+      .replaceFirst(RegExp(r'^Exception:\s*'), '')
+      .trim();
+  final lower = raw.toLowerCase();
+  if (lower.contains('permission') ||
+      lower.contains('forbidden') ||
+      lower.contains('admin')) {
+    return 'Admin permission failed. Use a store admin, brand admin, or super admin pilot account. Detail: $raw';
+  }
+  if (lower.contains('restaurant') ||
+      lower.contains('store') ||
+      lower.contains('not found')) {
+    return 'Store settings row could not be matched. Switch to the correct pilot store and retry. Detail: $raw';
+  }
+  if (lower.contains('conflict') ||
+      lower.contains('unique') ||
+      lower.contains('constraint')) {
+    return 'PIN settings save conflict. Check restaurant_settings restaurant_id uniqueness before retrying. Detail: $raw';
+  }
+  if (lower.contains('function') ||
+      lower.contains('rpc') ||
+      lower.contains('set_payroll_pin')) {
+    return 'Payroll PIN RPC is missing or not deployed for this environment. Detail: $raw';
+  }
+  return 'PIN was not saved. Confirm the pilot admin account, active store, and DB function deployment. Detail: $raw';
 }
 
 class _SettingsCategory {

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
@@ -111,7 +111,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
                 child: Text(
                   'G',
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
@@ -125,7 +125,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   children: [
                     Text(
                       'GLOBOS Operations',
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         fontSize: 17,
                         color: PosColors.text,
                         fontWeight: FontWeight.w900,
@@ -156,7 +156,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               children: [
                 Text(
                   l10n.loginBrandTitle,
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     fontSize: 22,
                     color: PosColors.text,
                     fontWeight: FontWeight.w900,
@@ -165,7 +165,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   l10n.loginBrandDescription,
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     fontSize: 13,
                     color: PosColors.textSecondary,
                     height: 1.45,
@@ -179,7 +179,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           const SizedBox(height: AppSpacing.md),
           Text(
             l10n.loginShiftFocus,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               fontSize: 12,
               color: PosColors.textMuted,
               fontWeight: FontWeight.w800,
@@ -265,7 +265,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const SizedBox(height: AppSpacing.md),
               Text(
                 l10n.loginStartShift,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   fontSize: 24,
                   color: PosColors.text,
                   fontWeight: FontWeight.w900,
@@ -274,7 +274,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const SizedBox(height: AppSpacing.xs),
               Text(
                 l10n.loginStartShiftDescription,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   fontSize: 14,
                   color: PosColors.textMuted,
                   height: 1.45,
@@ -356,7 +356,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 Text(
                   _localizedAuthError(context, authState.errorMessage!),
                   key: const Key('auth_error_text'),
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     fontSize: 13,
                     color: PosColors.danger,
                   ),
@@ -388,7 +388,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         )
                       : Text(
                           l10n.loginOpenTerminal,
-                          style: GoogleFonts.notoSansKr(
+                          style: AppFonts.system(
                             fontSize: 15,
                             color: Colors.white,
                             fontWeight: FontWeight.w900,
@@ -421,7 +421,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               children: [
                 Text(
                   title,
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     fontSize: 14,
                     color: PosColors.text,
                     fontWeight: FontWeight.w800,
@@ -430,7 +430,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     fontSize: 12,
                     color: PosColors.textMuted,
                   ),
@@ -461,6 +461,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       authErrorProfileLoadFailed => l10n.loginProfileLoadFailed,
       'An error occurred during login.' => l10n.loginGenericError,
       authErrorGenericLogin => l10n.loginGenericError,
+      authErrorNoStoreScope => l10n.loginNoStoreScope,
+      _ when rawMessage.startsWith(authErrorUnknownRolePrefix) =>
+        l10n.loginUnknownRole,
       _
           when rawMessage.startsWith(
             'Login succeeded, but the POS profile lookup failed:',

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/ui/app_primitives.dart';
@@ -64,7 +64,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       padding: const EdgeInsets.only(bottom: AppSpacing.md),
                       child: Text(
                         _localizedOnboardingError(context, state.error!),
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: PosColors.danger,
                           fontSize: 13,
                         ),
@@ -100,7 +100,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           ),
           Text(
             context.l10n.onboardingCreateStoreSubtitle,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: PosColors.textSecondary,
               fontSize: 14,
             ),
@@ -108,7 +108,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           const SizedBox(height: 18),
           TextField(
             controller: _storeNameController,
-            style: GoogleFonts.notoSansKr(color: PosColors.textPrimary),
+            style: AppFonts.system(color: PosColors.textPrimary),
             decoration: InputDecoration(
               labelText: context.l10n.onboardingStoreName,
               prefixIcon: Icon(Icons.storefront_outlined),
@@ -117,7 +117,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           const SizedBox(height: 10),
           TextField(
             controller: _addressController,
-            style: GoogleFonts.notoSansKr(color: PosColors.textPrimary),
+            style: AppFonts.system(color: PosColors.textPrimary),
             decoration: InputDecoration(
               labelText: context.l10n.address,
               prefixIcon: Icon(Icons.location_on_outlined),
@@ -127,7 +127,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           DropdownButtonFormField<String>(
             initialValue: _operationMode,
             dropdownColor: PosColors.surface,
-            style: GoogleFonts.notoSansKr(color: PosColors.textPrimary),
+            style: AppFonts.system(color: PosColors.textPrimary),
             decoration: InputDecoration(
               labelText: context.l10n.superAdminOperationMode,
               prefixIcon: Icon(Icons.tune),
@@ -159,7 +159,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              style: GoogleFonts.notoSansKr(color: PosColors.textPrimary),
+              style: AppFonts.system(color: PosColors.textPrimary),
               decoration: InputDecoration(
                 labelText: context.l10n.superAdminPerPersonCharge,
                 prefixIcon: Icon(Icons.payments_outlined),
@@ -199,7 +199,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     )
                   : Text(
                       context.l10n.onboardingNext,
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         fontSize: 14,
                         fontWeight: FontWeight.w900,
                       ),
@@ -223,7 +223,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           const SizedBox(height: 18),
           TextField(
             controller: _fullNameController,
-            style: GoogleFonts.notoSansKr(color: PosColors.textPrimary),
+            style: AppFonts.system(color: PosColors.textPrimary),
             decoration: InputDecoration(
               labelText: context.l10n.onboardingFullName,
               prefixIcon: Icon(Icons.badge_outlined),
@@ -239,7 +239,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             ),
             child: Text(
               context.l10n.roleSuperAdminDisplay,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: PosColors.textSecondary,
                 fontWeight: FontWeight.w700,
               ),
@@ -273,7 +273,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     )
                   : Text(
                       context.l10n.onboardingCompleteSetup,
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         fontSize: 14,
                         fontWeight: FontWeight.w900,
                       ),
@@ -294,7 +294,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           const SizedBox(height: 10),
           Text(
             context.l10n.onboardingDoneTitle,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: PosColors.accent,
               fontSize: 28,
               fontWeight: FontWeight.w900,
@@ -303,7 +303,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           if (state.createdStoreName != null)
             Text(
               state.createdStoreName!,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: PosColors.textSecondary,
                 fontSize: 16,
               ),
@@ -340,7 +340,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     )
                   : Text(
                       context.l10n.onboardingGoToDashboard,
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         fontSize: 14,
                         fontWeight: FontWeight.w900,
                       ),

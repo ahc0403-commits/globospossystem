@@ -13,29 +13,38 @@ class KitchenItem {
     required this.label,
     required this.quantity,
     required this.status,
+    required this.createdAt,
+    this.isSupplemental = false,
   });
 
   final String itemId;
   final String label;
   final int quantity;
   final String status;
+  final DateTime createdAt;
+  final bool isSupplemental;
 
   KitchenItem copyWith({
     String? itemId,
     String? label,
     int? quantity,
     String? status,
+    DateTime? createdAt,
+    bool? isSupplemental,
   }) {
     return KitchenItem(
       itemId: itemId ?? this.itemId,
       label: label ?? this.label,
       quantity: quantity ?? this.quantity,
       status: status ?? this.status,
+      createdAt: createdAt ?? this.createdAt,
+      isSupplemental: isSupplemental ?? this.isSupplemental,
     );
   }
 
   factory KitchenItem.fromJson(Map<String, dynamic> json) {
     final quantityRaw = json['quantity'];
+    final createdAtRaw = json['created_at']?.toString();
     final menuItemRaw = json['menu_items'];
     String? menuItemName;
     if (menuItemRaw is Map<String, dynamic>) {
@@ -55,6 +64,9 @@ class KitchenItem {
         _ => 0,
       },
       status: json['status']?.toString() ?? 'pending',
+      createdAt: createdAtRaw != null
+          ? DateTime.tryParse(createdAtRaw) ?? DateTime.now().toUtc()
+          : DateTime.now().toUtc(),
     );
   }
 }
@@ -90,22 +102,26 @@ class KitchenOrder {
 class KitchenState {
   const KitchenState({
     this.orders = const [],
+    this.completedOrders = const [],
     this.isLoading = false,
     this.error,
   });
 
   final List<KitchenOrder> orders;
+  final List<KitchenOrder> completedOrders;
   final bool isLoading;
   final String? error;
 
   KitchenState copyWith({
     List<KitchenOrder>? orders,
+    List<KitchenOrder>? completedOrders,
     bool? isLoading,
     String? error,
     bool clearError = false,
   }) {
     return KitchenState(
       orders: orders ?? this.orders,
+      completedOrders: completedOrders ?? this.completedOrders,
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
     );
@@ -116,6 +132,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
   KitchenNotifier() : super(const KitchenState());
 
   static const _autoRefreshInterval = Duration(seconds: 2);
+  static const _fallbackPollInterval = Duration(seconds: 15);
 
   RealtimeChannel? _ordersChannel;
   String? _restaurantId;
@@ -139,51 +156,94 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
             'id, created_at, status, tables(table_number), order_items(id, created_at, label, quantity, status, menu_items(name))',
           )
           .eq('restaurant_id', storeId)
-          .inFilter('status', ['pending', 'confirmed', 'serving'])
+          .inFilter('status', ['pending', 'confirmed', 'serving', 'completed'])
           .order('created_at', ascending: true)
           .order('created_at', referencedTable: 'order_items', ascending: true)
           .order('id', referencedTable: 'order_items', ascending: true);
 
-      final orders = response
-          .map<KitchenOrder>((row) {
-            final data = Map<String, dynamic>.from(row);
-            final orderItems = data['order_items'];
-            final itemRows = orderItems is List
-                ? orderItems
-                      .map((item) => Map<String, dynamic>.from(item as Map))
-                      .toList()
-                : <Map<String, dynamic>>[];
-            itemRows.sort(_compareOrderItemRowsByCreatedAt);
-            final items = itemRows
-                .map<KitchenItem>(KitchenItem.fromJson)
-                .where(
-                  (item) =>
-                      item.status != 'served' && item.status != 'cancelled',
-                )
-                .toList();
+      // Lane eligibility is an ORDER-status fact
+      // (ORDER_LIFECYCLE_STATE_CONTRACT: kitchen never shows completed).
+      // Item-status-only partitioning left paid orders with never-served
+      // items in the active lanes forever.
+      final statusByOrderId = <String, String>{
+        for (final row in response)
+          row['id'].toString(): row['status']?.toString() ?? 'pending',
+      };
 
-            final tableData = data['tables'];
-            String tableNumber = '-';
-            if (tableData is Map<String, dynamic>) {
-              tableNumber = tableData['table_number']?.toString() ?? '-';
-            }
+      final allOrders = response.map<KitchenOrder>((row) {
+        final data = Map<String, dynamic>.from(row);
+        final orderItems = data['order_items'];
+        final itemRows = orderItems is List
+            ? orderItems
+                  .map((item) => Map<String, dynamic>.from(item as Map))
+                  .toList()
+            : <Map<String, dynamic>>[];
+        itemRows.sort(_compareOrderItemRowsByCreatedAt);
+        final items = itemRows.map<KitchenItem>(KitchenItem.fromJson).toList();
 
-            final createdAtRaw = data['created_at']?.toString();
+        final tableData = data['tables'];
+        String tableNumber = '-';
+        if (tableData is Map<String, dynamic>) {
+          tableNumber = tableData['table_number']?.toString() ?? '-';
+        }
 
-            return KitchenOrder(
-              orderId: data['id'].toString(),
-              tableNumber: tableNumber,
-              createdAt: createdAtRaw != null
-                  ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
-                  : DateTime.now(),
-              items: items,
-            );
-          })
+        final createdAtRaw = data['created_at']?.toString();
+        final createdAt = createdAtRaw != null
+            ? DateTime.tryParse(createdAtRaw) ?? DateTime.now().toUtc()
+            : DateTime.now().toUtc();
+        final firstItemCreatedAt = items.isEmpty
+            ? createdAt
+            : items
+                  .map((item) => item.createdAt.toUtc())
+                  .reduce((a, b) => a.isBefore(b) ? a : b);
+        final itemsWithSupplementFlags = items
+            .map(
+              (item) => item.copyWith(
+                isSupplemental:
+                    item.createdAt.toUtc().difference(firstItemCreatedAt) >
+                    const Duration(seconds: 10),
+              ),
+            )
+            .toList();
+
+        return KitchenOrder(
+          orderId: data['id'].toString(),
+          tableNumber: tableNumber,
+          createdAt: createdAt,
+          items: itemsWithSupplementFlags,
+        );
+      }).toList();
+      final orders = allOrders
+          .where((order) => statusByOrderId[order.orderId] != 'completed')
+          .map(
+            (order) => order.copyWith(
+              items: order.items
+                  .where(
+                    (item) =>
+                        item.status != 'served' && item.status != 'cancelled',
+                  )
+                  .toList(),
+            ),
+          )
           .where((order) => order.items.isNotEmpty)
+          .toList();
+      final completedOrders = allOrders
+          .where((order) => statusByOrderId[order.orderId] == 'completed')
+          .map(
+            (order) => order.copyWith(
+              items: order.items
+                  .where((item) => item.status != 'cancelled')
+                  .toList(),
+            ),
+          )
+          .toList()
+          .reversed
+          .take(12)
           .toList();
 
       state = state.copyWith(
         orders: orders,
+        completedOrders: completedOrders,
         isLoading: false,
         clearError: true,
       );
@@ -276,13 +336,19 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
   }
 
   void _ensureAutoRefresh(String storeId) {
+    if (_realtimeConnected) {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+      return;
+    }
+
     if (_pollTimer != null && _pollStoreId == storeId) {
       return;
     }
 
     _pollTimer?.cancel();
     _pollStoreId = storeId;
-    _pollTimer = Timer.periodic(_autoRefreshInterval, (_) {
+    _pollTimer = Timer.periodic(_fallbackPollInterval, (_) {
       if (mounted && _restaurantId == storeId) {
         unawaited(loadOrders(storeId, showLoading: false));
       }

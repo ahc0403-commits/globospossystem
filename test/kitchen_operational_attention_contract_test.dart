@@ -31,7 +31,9 @@ void main() {
 
     expect(
       provider,
-      contains(".inFilter('status', ['pending', 'confirmed', 'serving'])"),
+      contains(
+        ".inFilter('status', ['pending', 'confirmed', 'serving', 'completed'])",
+      ),
     );
     expect(
       provider,
@@ -47,6 +49,8 @@ void main() {
     expect(provider, contains('Duration(seconds: 2)'));
     expect(provider, contains('_ensureAutoRefresh(storeId)'));
     expect(provider, contains('showLoading: false'));
+    expect(provider, contains('completedOrders'));
+    expect(screen, contains("Key('kitchen_completed_history_panel')"));
 
     expect(screen, isNot(contains("path: '/kitchen/attention'")));
     expect(screen, isNot(contains('Navigator.push(')));
@@ -85,6 +89,7 @@ void main() {
     expect(screen, contains('onItemAction: () => onItemAction(item)'));
     expect(screen, contains('onPressed: isProcessing ? null : onItemAction'));
     expect(screen, contains('CircularProgressIndicator(strokeWidth: 2)'));
+    expect(screen, contains('PosDensity.touchTargetMin'));
     expect(screen, contains("return item.status == 'pending' ||"));
     expect(screen, contains("item.status == 'preparing' ||"));
     expect(screen, contains("item.status == 'ready';"));
@@ -112,6 +117,37 @@ void main() {
   });
 
   test(
+    'kitchen v2 uses bright ticket-rail tokens without dark board creep',
+    () {
+      final screen = readRepoFile('lib/features/kitchen/kitchen_screen.dart');
+
+      expect(screen, contains('PosNumericText.tableId'));
+      expect(screen, contains('PosNumericText.elapsedPrimary'));
+      expect(screen, contains('PosNumericText.elapsedOverdue'));
+      expect(screen, contains('PosNumericText.qtyUnit'));
+      expect(screen, contains('PosSurfaceRole.background'));
+      expect(screen, contains('PosSurfaceRole.operating'));
+      expect(screen, contains('PosSurfaceRole.action'));
+      expect(screen, contains('PosStatusPalette.delayed'));
+      expect(screen, contains('PosStatusPalette.newOrder'));
+      expect(screen, contains('PosStatusPalette.preparing'));
+      expect(screen, contains('PosStatusPalette.handoffReady'));
+      expect(screen, contains('_KitchenStatusCue'));
+      expect(screen, contains('_kitchenStatusIcon'));
+      expect(screen, contains('icon: _kitchenStatusIcon(normalized)'));
+      expect(screen, contains("Key('kitchen_empty_lane_slim_rail')"));
+      expect(
+        screen,
+        contains('constraints: const BoxConstraints(minHeight: 72)'),
+      );
+      expect(screen, isNot(contains('PosKdsDark')));
+      expect(screen, isNot(contains('dark mode')));
+      expect(screen, isNot(contains('darkMode')));
+      expect(screen, isNot(contains('brightness: Brightness.dark')));
+    },
+  );
+
+  test(
     'kitchen item status changes force a silent refresh after rpc success',
     () {
       final provider = readRepoFile(
@@ -137,10 +173,9 @@ void main() {
         contains('context.l10n.kitchenTableLabel(order.tableNumber)'),
       );
       expect(screen, contains('overflow: TextOverflow.ellipsis'));
-      expect(screen, contains('Flexible('));
-      expect(screen, contains('fit: FlexFit.loose'));
-      expect(screen, contains('FittedBox('));
-      expect(screen, contains('BoxFit.scaleDown'));
+      expect(screen, contains('Expanded('));
+      expect(screen, contains('_KitchenStatusCue(status: orderSummary.status)'));
+      expect(screen, contains('Wrap('));
       expect(screen, contains('ToastStatusBadge.kitchen('));
     },
   );

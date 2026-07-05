@@ -120,6 +120,7 @@ class Order {
     required this.status,
     required this.createdAt,
     required this.items,
+    this.guestCount,
   });
 
   final String id;
@@ -127,6 +128,7 @@ class Order {
   final String status;
   final DateTime createdAt;
   final List<OrderItem> items;
+  final int? guestCount;
 
   Order copyWith({
     String? id,
@@ -134,6 +136,7 @@ class Order {
     String? status,
     DateTime? createdAt,
     List<OrderItem>? items,
+    int? guestCount,
   }) {
     return Order(
       id: id ?? this.id,
@@ -141,6 +144,7 @@ class Order {
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       items: items ?? this.items,
+      guestCount: guestCount ?? this.guestCount,
     );
   }
 
@@ -164,6 +168,12 @@ class Order {
                 DateTime.fromMillisecondsSinceEpoch(0)
           : DateTime.fromMillisecondsSinceEpoch(0),
       items: items,
+      guestCount: switch (json['guest_count']) {
+        int value => value,
+        num value => value.toInt(),
+        String value => int.tryParse(value),
+        _ => null,
+      },
     );
   }
 }

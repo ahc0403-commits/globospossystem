@@ -37,7 +37,20 @@ class PosTable {
 
   Rect get layoutRect => Rect.fromLTWH(layoutX, layoutY, layoutW, layoutH);
 
-  PosTable copyWithLayout(Rect rect, {int? layoutSortOrder}) {
+  static int normalizeLayoutRotation(int value) {
+    var normalized = value % 360;
+    if (normalized > 180) {
+      normalized -= 360;
+    }
+    return normalized;
+  }
+
+  PosTable copyWithLayout(
+    Rect rect, {
+    int? layoutRotation,
+    PosTableShape? layoutShape,
+    int? layoutSortOrder,
+  }) {
     return PosTable(
       id: id,
       storeId: storeId,
@@ -48,8 +61,10 @@ class PosTable {
       layoutY: rect.top,
       layoutW: rect.width,
       layoutH: rect.height,
-      layoutRotation: layoutRotation,
-      layoutShape: layoutShape,
+      layoutRotation: normalizeLayoutRotation(
+        layoutRotation ?? this.layoutRotation,
+      ),
+      layoutShape: layoutShape ?? this.layoutShape,
       layoutSortOrder: layoutSortOrder ?? this.layoutSortOrder,
     );
   }
@@ -105,7 +120,9 @@ class PosTable {
       layoutY: _doubleValue(json['layout_y'], 0),
       layoutW: _doubleValue(json['layout_w'], 0.18),
       layoutH: _doubleValue(json['layout_h'], 0.14),
-      layoutRotation: _intValue(json['layout_rotation'], 0),
+      layoutRotation: normalizeLayoutRotation(
+        _intValue(json['layout_rotation'], 0),
+      ),
       layoutShape: _shapeValue(json['layout_shape']),
       layoutSortOrder: _intValue(json['layout_sort_order'], 0),
     );

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
@@ -54,15 +54,15 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
         key: const Key('delivery_settlement_root'),
         child: Text(
           l10n.deliveryAdminOnlyMessage,
-          style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
+          style: AppFonts.system(color: AppColors.textSecondary),
         ),
       );
     }
 
     if (state.isLoading) {
-      return const ToastOperationalLoadingState(
-        key: Key('delivery_settlement_root'),
-        label: PosLoadingCopy.loadingSettlements,
+      return ToastOperationalLoadingState(
+        key: const Key('delivery_settlement_root'),
+        label: PosLoadingCopy.loadingSettlements(l10n),
       );
     }
 
@@ -159,7 +159,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
             children: [
               Text(
                 l10n.deliverySettlementHistory,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textPrimary,
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
@@ -169,7 +169,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
               if (state.settlements.isNotEmpty)
                 Text(
                   '${filtered.length}',
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.textSecondary,
                     fontSize: 12,
                   ),
@@ -184,7 +184,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
                 filteredCount: filtered.length,
                 totalCount: state.settlements.length,
               ),
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -196,8 +196,8 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
               padding: const EdgeInsets.all(32),
               child: ToastOperationalEmptyState(
                 headline: _statusFilter != null
-                    ? PosEmptyStateCopy.settlementsFilterEmpty
-                    : PosEmptyStateCopy.settlementsEmpty,
+                    ? PosEmptyStateCopy.settlementsFilterEmpty(l10n)
+                    : PosEmptyStateCopy.settlementsEmpty(l10n),
               ),
             )
           else
@@ -454,7 +454,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
               Expanded(
                 child: Text(
                   l10n.deliverySettlementAttentionTitle,
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.textPrimary,
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -463,7 +463,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
               ),
               Text(
                 context.l10n.deliveryFollowUpCount(followUpSignals.length),
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: followUpSignals.isNotEmpty
                       ? AppColors.statusCancelled
                       : AppColors.statusAvailable,
@@ -537,7 +537,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
               _fmtVnd(atRiskNet),
               settledCount,
             ),
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -557,7 +557,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
       ),
       child: Text(
         label,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: color,
           fontSize: 12,
           fontWeight: FontWeight.w700,
@@ -574,7 +574,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
           width: 108,
           child: Text(
             label,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 11,
               fontWeight: FontWeight.w700,
@@ -584,7 +584,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
         Expanded(
           child: Text(
             body,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontSize: 12,
               height: 1.45,
@@ -681,7 +681,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
         children: [
           Text(
             context.l10n.deliveryAggregateSummary,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -768,7 +768,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
       children: [
         Text(
           label,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textSecondary,
             fontSize: 11,
           ),
@@ -776,7 +776,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
         const SizedBox(height: 2),
         Text(
           value,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: color,
             fontSize: 14,
             fontWeight: FontWeight.w700,
@@ -799,7 +799,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
         children: [
           Text(
             label,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 11,
             ),
@@ -807,7 +807,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
           const SizedBox(height: 2),
           Text(
             value,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: color,
               fontSize: 12,
               fontWeight: FontWeight.w700,
@@ -857,7 +857,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
               children: [
                 Text(
                   l10n.deliverySettlementWaiting,
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.amber500,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -866,7 +866,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
                 const SizedBox(height: 4),
                 Text(
                   _fmtVnd(u.revenue),
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.textPrimary,
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -874,7 +874,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
                 ),
                 Text(
                   '${u.orderCount}',
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.textSecondary,
                     fontSize: 13,
                   ),
@@ -916,7 +916,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
                 children: [
                   Text(
                     '${s.periodLabel}  ($dateRange)',
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: AppColors.textPrimary,
                       fontWeight: FontWeight.w600,
                       fontSize: 15,
@@ -925,7 +925,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
                   const SizedBox(height: 2),
                   Text(
                     statusLabel,
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: AppColors.textSecondary,
                       fontSize: 12,
                     ),
@@ -953,7 +953,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
             ),
             Text(
               _fmtVnd(s.netSettlement),
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.statusAvailable,
                 fontWeight: FontWeight.bold,
                 fontSize: 15,
@@ -1043,7 +1043,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
               padding: const EdgeInsets.only(top: 8),
               child: Text(
                 l10n.deliveryOrderCount(s.orderCount),
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textSecondary,
                   fontSize: 12,
                 ),
@@ -1084,7 +1084,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
         children: [
           Text(
             label,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 13,
               fontWeight: bold ? FontWeight.w600 : FontWeight.normal,
@@ -1092,7 +1092,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
           ),
           Text(
             value,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: color ?? AppColors.textPrimary,
               fontSize: 13,
               fontWeight: bold ? FontWeight.w600 : FontWeight.normal,
@@ -1117,7 +1117,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
         children: [
           Text(
             label,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 11,
             ),
@@ -1125,7 +1125,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
           const SizedBox(height: 4),
           Text(
             value,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: color,
               fontSize: 12,
               fontWeight: FontWeight.w700,
@@ -1146,7 +1146,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
       ),
       child: Text(
         label,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: color,
           fontSize: 11,
           fontWeight: FontWeight.w700,

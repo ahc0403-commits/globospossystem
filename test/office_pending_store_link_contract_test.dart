@@ -31,6 +31,11 @@ void main() {
     );
 
     expect(screen, contains('l10n.superAdminBrandRequiredBeforeStore'));
+    expect(
+      screen,
+      contains('state.selectedBrandId == kUnclassifiedBrandFilter'),
+    );
+    expect(screen, contains('availableBrands.length == 1'));
     expect(screen, contains('final brandId = selectedBrandId!;'));
     expect(screen, isNot(contains("child: Text('Uncategorized')")));
   });

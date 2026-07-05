@@ -63,7 +63,7 @@ void main() {
     expect(tableProvider, contains('orderPreviewByTableId'));
     expect(tableProvider, contains('static const _autoRefreshInterval'));
     expect(tableProvider, contains('_ensureAutoRefresh(storeId)'));
-    expect(tableProvider, contains('Timer.periodic(_autoRefreshInterval'));
+    expect(tableProvider, contains('Timer.periodic(_fallbackPollInterval'));
     expect(tableProvider, contains('loadTables(storeId, showLoading: false)'));
     expect(tableProvider, contains('_refreshTablesFromRealtime(storeId)'));
     expect(
@@ -112,6 +112,18 @@ void main() {
     expect(workspace, contains('final useSingleColumn'));
     expect(workspace, contains('gridConstraints.maxWidth < 420'));
   });
+
+  test(
+    'floor table cards clamp long table numbers without wrapping overflow',
+    () {
+      final floorLayout = readRepoFile('lib/features/table/floor_layout.dart');
+
+      expect(floorLayout, contains('fit: BoxFit.scaleDown'));
+      expect(floorLayout, contains('table.tableNumber'));
+      expect(floorLayout, contains('maxLines: 1'));
+      expect(floorLayout, contains('overflow: TextOverflow.ellipsis'));
+    },
+  );
 
   test('waiter smoke table target prefers the first available table', () {
     final floorLayout = readRepoFile('lib/features/table/floor_layout.dart');

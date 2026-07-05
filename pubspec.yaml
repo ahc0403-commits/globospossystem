@@ -39,7 +39,6 @@ dependencies:
   intl: ^0.20.2
   uuid: ^4.5.1
   flutter_dotenv: ^6.0.0
-  google_fonts: ^8.0.2
   shared_preferences: ^2.3.2
   zkfinger10:
     git:
@@ -74,16 +73,7 @@ flutter:
   assets:
     - assets/images/
     - assets/fonts/
-  # fonts: 폰트 파일 추가 후 활성화
-  # - family: BebasNeue
-  #   fonts:
-  #     - asset: assets/fonts/BebasNeue-Regular.ttf
-  # - family: NotoSansKR
-  #   fonts:
-  #     - asset: assets/fonts/NotoSansKR-Regular.ttf
-  #       weight: 400
-  #     - asset: assets/fonts/NotoSansKR-Bold.ttf
-  #       weight: 700
-  # - family: JetBrainsMono
-  #   fonts:
-  #     - asset: assets/fonts/JetBrainsMono-Regular.ttf
+  fonts:
+    - family: Pretendard
+      fonts:
+        - asset: assets/fonts/PretendardVariable.ttf

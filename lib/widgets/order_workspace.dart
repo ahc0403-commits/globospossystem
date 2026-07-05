@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -12,7 +14,6 @@ import '../features/admin/providers/menu_provider.dart';
 import '../features/order/order_model.dart';
 import '../features/order/order_provider.dart';
 import '../features/table/table_model.dart';
-import '../main.dart';
 
 enum _OrderPanelOverflowAction { moveTable, cancelOrder }
 
@@ -39,6 +40,7 @@ class OrderWorkspace extends StatelessWidget {
     this.onCancelOrderItem,
     this.onEditOrderItemQuantity,
     this.onTransferTable,
+    this.onChangeGuestCount,
   });
 
   final PosTable table;
@@ -63,6 +65,7 @@ class OrderWorkspace extends StatelessWidget {
   final Future<void> Function(String itemId, int newQuantity)?
   onEditOrderItemQuantity;
   final VoidCallback? onTransferTable;
+  final Future<void> Function()? onChangeGuestCount;
 
   @override
   Widget build(BuildContext context) {
@@ -91,46 +94,60 @@ class OrderWorkspace extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth >= 760;
+        final orderPanel = _CurrentOrderPanel(
+          table: table,
+          guestCount: guestCount,
+          state: orderState,
+          allowSubmitWithoutCart: allowSubmitWithoutCart,
+          onIncrementCartItem: onIncrementCartItem,
+          onDecrementCartItem: onDecrementCartItem,
+          onCancel: onCancel,
+          onCancelOrder: onCancelOrder,
+          onSendOrder: onSendOrder,
+          canManageSentItems: canManageSentItems,
+          onCycleSentItemStatus: onCycleSentItemStatus,
+          showPaymentActions: showPaymentActions,
+          onProcessPayment: onProcessPayment,
+          isProcessingPayment: isProcessingPayment,
+          onCancelOrderItem: onCancelOrderItem,
+          onEditOrderItemQuantity: onEditOrderItemQuantity,
+          onTransferTable: onTransferTable,
+          onChangeGuestCount: onChangeGuestCount,
+        );
+
         if (isWide) {
-          return Row(
+          final orderRailWidth = constraints.maxWidth >= 1180
+              ? 376.0
+              : PosDensity.orderRailWidth;
+          return Column(
             children: [
-              Expanded(
-                flex: 7,
-                child: _MenuBrowser(
-                  menuLoading: menuLoading,
-                  menuError: menuError,
-                  categories: categories,
-                  selectedCategoryId: selectedCategoryId,
-                  filteredItems: filteredItems,
-                  cart: orderState.cart,
-                  onSelectCategory: (categoryId) =>
-                      menuNotifier?.selectCategory(categoryId),
-                  onAddItem: onAddToCart,
-                  onIncrementCartItem: onIncrementCartItem,
-                  onDecrementCartItem: onDecrementCartItem,
-                ),
+              _OrderTerminalTableStrip(
+                table: table,
+                guestCount: guestCount,
+                state: orderState,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(height: 10),
               Expanded(
-                flex: 3,
-                child: _CurrentOrderPanel(
-                  table: table,
-                  guestCount: guestCount,
-                  state: orderState,
-                  allowSubmitWithoutCart: allowSubmitWithoutCart,
-                  onIncrementCartItem: onIncrementCartItem,
-                  onDecrementCartItem: onDecrementCartItem,
-                  onCancel: onCancel,
-                  onCancelOrder: onCancelOrder,
-                  onSendOrder: onSendOrder,
-                  canManageSentItems: canManageSentItems,
-                  onCycleSentItemStatus: onCycleSentItemStatus,
-                  showPaymentActions: showPaymentActions,
-                  onProcessPayment: onProcessPayment,
-                  isProcessingPayment: isProcessingPayment,
-                  onCancelOrderItem: onCancelOrderItem,
-                  onEditOrderItemQuantity: onEditOrderItemQuantity,
-                  onTransferTable: onTransferTable,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _MenuBrowser(
+                        menuLoading: menuLoading,
+                        menuError: menuError,
+                        categories: categories,
+                        selectedCategoryId: selectedCategoryId,
+                        filteredItems: filteredItems,
+                        cart: orderState.cart,
+                        onSelectCategory: (categoryId) =>
+                            menuNotifier?.selectCategory(categoryId),
+                        onAddItem: onAddToCart,
+                        onIncrementCartItem: onIncrementCartItem,
+                        onDecrementCartItem: onDecrementCartItem,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(width: orderRailWidth, child: orderPanel),
+                  ],
                 ),
               ),
             ],
@@ -139,6 +156,13 @@ class OrderWorkspace extends StatelessWidget {
 
         return Column(
           children: [
+            _OrderTerminalTableStrip(
+              table: table,
+              guestCount: guestCount,
+              state: orderState,
+              compact: true,
+            ),
+            const SizedBox(height: 8),
             Expanded(
               flex: 8,
               child: _MenuBrowser(
@@ -155,31 +179,115 @@ class OrderWorkspace extends StatelessWidget {
                 onDecrementCartItem: onDecrementCartItem,
               ),
             ),
-            Expanded(
-              flex: 2,
-              child: _CurrentOrderPanel(
-                table: table,
-                guestCount: guestCount,
-                state: orderState,
-                allowSubmitWithoutCart: allowSubmitWithoutCart,
-                onIncrementCartItem: onIncrementCartItem,
-                onDecrementCartItem: onDecrementCartItem,
-                onCancel: onCancel,
-                onCancelOrder: onCancelOrder,
-                onSendOrder: onSendOrder,
-                canManageSentItems: canManageSentItems,
-                onCycleSentItemStatus: onCycleSentItemStatus,
-                showPaymentActions: showPaymentActions,
-                onProcessPayment: onProcessPayment,
-                isProcessingPayment: isProcessingPayment,
-                onCancelOrderItem: onCancelOrderItem,
-                onEditOrderItemQuantity: onEditOrderItemQuantity,
-                onTransferTable: onTransferTable,
-              ),
-            ),
+            Expanded(flex: 2, child: orderPanel),
           ],
         );
       },
+    );
+  }
+}
+
+class _OrderTerminalTableStrip extends StatelessWidget {
+  const _OrderTerminalTableStrip({
+    required this.table,
+    required this.guestCount,
+    required this.state,
+    this.compact = false,
+  });
+
+  final PosTable table;
+  final int? guestCount;
+  final OrderState state;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final pendingCount = state.cart.fold<int>(
+      0,
+      (sum, item) => sum + item.quantity,
+    );
+    final sentCount = (state.activeOrder?.items ?? const <OrderItem>[])
+        .where((item) => item.status != 'cancelled')
+        .fold<int>(0, (sum, item) => sum + item.quantity);
+    final statusColor = state.activeOrder == null
+        ? PosColors.success
+        : pendingCount > 0
+        ? PosColors.warning
+        : PosColors.info;
+    final statusLabel = state.activeOrder == null
+        ? l10n.waiterStatusAvailable
+        : pendingCount > 0
+        ? l10n.orderWorkspaceNewItems
+        : l10n.orderWorkspaceCurrentCheck;
+
+    return ToastWorkSurface(
+      key: const Key('order_terminal_table_strip'),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 10 : 14,
+        vertical: compact ? 8 : 10,
+      ),
+      backgroundColor: PosTerminalColors.lightPanel,
+      child: Row(
+        children: [
+          Container(
+            width: compact ? 36 : 42,
+            height: compact ? 36 : 42,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: statusColor.withValues(alpha: 0.42)),
+            ),
+            child: Icon(
+              Icons.table_restaurant_outlined,
+              size: compact ? 18 : 20,
+              color: statusColor,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  l10n.waiterTableLabel(table.tableNumber),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: PosNumericText.tableId.copyWith(
+                    color: PosColors.textPrimary,
+                  ),
+                ),
+                if (!compact) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    [
+                      l10n.waiterSeatCount(table.seatCount ?? 0),
+                      if (guestCount != null)
+                        l10n.orderWorkspaceGuestCount(guestCount!),
+                      l10n.orderWorkspaceItemsCount(pendingCount + sentCount),
+                    ].join(' • '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: PosColors.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ToastStatusBadge(
+            label: statusLabel,
+            color: statusColor,
+            compact: true,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -277,7 +385,10 @@ class _MenuBrowser extends StatelessWidget {
                       final selected = selectedCategoryId == categoryId;
 
                       return ToastFilterChip(
-                        label: category['name']?.toString() ?? '-',
+                        label: _localizedMenuDataLabel(
+                          context,
+                          category['name'],
+                        ),
                         selected: selected,
                         onSelected: categoryId.isEmpty
                             ? () {}
@@ -321,16 +432,22 @@ class _MenuBrowser extends StatelessWidget {
                           crossAxisCount: crossAxisCount,
                           mainAxisSpacing: 10,
                           crossAxisSpacing: 10,
+                          // Slightly taller cards: the two-line name + price
+                          // column overflowed by ~5px at the previous ratios.
                           childAspectRatio: useSingleColumn
-                              ? 3.15
+                              ? 2.95
                               : useThreeColumns
-                              ? 2.15
-                              : 2.35,
+                              ? 2.05
+                              : 2.25,
                         ),
                         itemBuilder: (context, index) {
                           final item = filteredItems[index];
                           final menuItemId = item['id']?.toString() ?? '';
                           final name = item['name']?.toString() ?? '-';
+                          final displayName = _localizedMenuDataLabel(
+                            context,
+                            name,
+                          );
                           final rawPrice = item['price'];
                           final price = switch (rawPrice) {
                             num value => value.toDouble(),
@@ -379,28 +496,27 @@ class _MenuBrowser extends StatelessWidget {
                                           mainAxisAlignment:
                                               MainAxisAlignment.center,
                                           children: [
-                                            Text(
-                                              name,
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodyMedium
-                                                  ?.copyWith(
-                                                    fontSize: 15,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
+                                            Flexible(
+                                              child: Text(
+                                                displayName,
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodyMedium
+                                                    ?.copyWith(
+                                                      fontSize: 15,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                              ),
                                             ),
-                                            const SizedBox(height: 6),
+                                            const SizedBox(height: 4),
                                             Text(
                                               '₫${currency.format(price)}',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .titleMedium
-                                                  ?.copyWith(
+                                              style: PosNumericText.amountLine
+                                                  .copyWith(
                                                     color: PosColors.accent,
-                                                    fontWeight: FontWeight.w800,
-                                                    letterSpacing: -0.2,
                                                   ),
                                             ),
                                           ],
@@ -408,8 +524,8 @@ class _MenuBrowser extends StatelessWidget {
                                       ),
                                       const SizedBox(width: 8),
                                       Container(
-                                        width: 36,
-                                        height: 36,
+                                        width: PosDensity.touchTargetMin,
+                                        height: PosDensity.touchTargetMin,
                                         decoration: BoxDecoration(
                                           color: addItem == null
                                               ? PosColors.textMuted
@@ -498,10 +614,8 @@ class _SelectedMenuList extends StatelessWidget {
                     '$itemCount',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    style: PosNumericText.qtyUnit.copyWith(
                       color: PosColors.accent,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
                     ),
                   ),
                 ],
@@ -575,10 +689,8 @@ class _SelectedMenuListItem extends StatelessWidget {
                   '₫${formatter.format(item.price)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  style: PosNumericText.amountCompact.copyWith(
                     color: PosColors.accent,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ],
@@ -592,13 +704,7 @@ class _SelectedMenuListItem extends StatelessWidget {
             icon: const Icon(Icons.remove_circle_outline, size: 16),
             color: PosColors.textSecondary,
           ),
-          Text(
-            '${item.quantity}',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
+          Text('${item.quantity}', style: PosNumericText.qtyUnit),
           IconButton(
             visualDensity: VisualDensity.compact,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
@@ -673,10 +779,8 @@ class _PendingOrderReview extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 '₫${formatter.format(total)}',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                style: PosNumericText.amountLine.copyWith(
                   color: PosColors.accent,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
                 ),
               ),
             ],
@@ -742,10 +846,8 @@ class _PendingOrderReviewLine extends StatelessWidget {
                   '₫${formatter.format(item.price)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  style: PosNumericText.unitPrice.copyWith(
                     color: PosColors.textSecondary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
@@ -764,10 +866,7 @@ class _PendingOrderReviewLine extends StatelessWidget {
             child: Text(
               '${item.quantity}',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontSize: 13,
-                fontWeight: FontWeight.w900,
-              ),
+              style: PosNumericText.qtyUnit,
             ),
           ),
           IconButton(
@@ -785,10 +884,8 @@ class _PendingOrderReviewLine extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.right,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              style: PosNumericText.lineAmount.copyWith(
                 color: PosColors.accent,
-                fontSize: 12,
-                fontWeight: FontWeight.w900,
               ),
             ),
           ),
@@ -817,6 +914,7 @@ class _CurrentOrderPanel extends ConsumerStatefulWidget {
     this.onCancelOrderItem,
     this.onEditOrderItemQuantity,
     this.onTransferTable,
+    this.onChangeGuestCount,
   });
 
   final PosTable table;
@@ -838,6 +936,7 @@ class _CurrentOrderPanel extends ConsumerStatefulWidget {
   final Future<void> Function(String itemId, int newQuantity)?
   onEditOrderItemQuantity;
   final VoidCallback? onTransferTable;
+  final Future<void> Function()? onChangeGuestCount;
 
   @override
   ConsumerState<_CurrentOrderPanel> createState() => _CurrentOrderPanelState();
@@ -871,7 +970,10 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              item.label ?? l10n.orderWorkspaceItemFallback,
+              _localizedMenuDataLabel(
+                context,
+                item.label ?? l10n.orderWorkspaceItemFallback,
+              ),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: PosColors.textSecondary,
                 fontSize: 13,
@@ -909,10 +1011,44 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
         ],
       ),
     );
-    controller.dispose();
+    // Dispose only after the dialog's exit transition finishes — disposing
+    // immediately throws "TextEditingController was used after being
+    // disposed" during the closing frame and error-boxes the surface.
+    Future.delayed(const Duration(milliseconds: 400), controller.dispose);
     if (result != null && result != item.quantity) {
       await widget.onEditOrderItemQuantity!(item.id, result);
     }
+  }
+
+  Future<void> _showCurrentTicketSheet() async {
+    final activeOrder = widget.state.activeOrder;
+    if (activeOrder == null) {
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: PosColors.surface,
+      builder: (sheetContext) {
+        return _CurrentTicketDetailSheet(
+          order: activeOrder,
+          onEditQuantity: widget.onEditOrderItemQuantity == null
+              ? null
+              : (item) async {
+                  Navigator.of(sheetContext).pop();
+                  await _showEditQuantityDialog(item);
+                },
+          onCancelItem: widget.onCancelOrderItem == null
+              ? null
+              : (item) async {
+                  Navigator.of(sheetContext).pop();
+                  await widget.onCancelOrderItem!(item.id);
+                },
+        );
+      },
+    );
   }
 
   @override
@@ -920,13 +1056,20 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
     final l10n = context.l10n;
     final isOnline = ref.watch(connectivityProvider).asData?.value ?? true;
     final formatter = NumberFormat('#,###', 'vi_VN');
-    final total = widget.state.cart.fold<double>(
+    final cartTotal = widget.state.cart.fold<double>(
       0,
       (sum, item) => sum + (item.price * item.quantity),
     );
     final activeTotal = (widget.state.activeOrder?.items ?? const <OrderItem>[])
         .where((item) => item.status != 'cancelled')
         .fold<double>(0, (sum, item) => sum + (item.unitPrice * item.quantity));
+    final readyItemCount =
+        (widget.state.activeOrder?.items ?? const <OrderItem>[])
+            .where((item) => item.status == 'ready')
+            .fold<int>(0, (sum, item) => sum + item.quantity);
+    final summaryTotal = widget.showPaymentActions
+        ? activeTotal
+        : activeTotal + cartTotal;
     final activeStatus = widget.state.activeOrder?.status.toLowerCase();
     final canCancelOrder =
         widget.state.activeOrder != null &&
@@ -979,7 +1122,9 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
             onCancel: widget.onCancel,
             onCancelOrder: widget.onCancelOrder,
             onSendOrder: widget.onSendOrder,
+            onViewCurrentTicket: _showCurrentTicketSheet,
             onTransferTable: widget.onTransferTable,
+            onChangeGuestCount: widget.onChangeGuestCount,
           );
         }
 
@@ -998,10 +1143,13 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     if (widget.state.activeOrder != null)
-                      ToastStatusBadge(
-                        label: l10n.orderWorkspaceCurrentCheck,
-                        color: PosColors.info,
-                        compact: true,
+                      OutlinedButton.icon(
+                        key: const Key('order_current_ticket_detail_action'),
+                        onPressed: widget.state.isSubmitting
+                            ? null
+                            : () => unawaited(_showCurrentTicketSheet()),
+                        icon: const Icon(Icons.receipt_long_outlined, size: 16),
+                        label: Text(l10n.orderWorkspaceCurrentCheck),
                       ),
                     if (widget.guestCount != null &&
                         widget.state.activeOrder == null)
@@ -1012,7 +1160,34 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                         color: PosColors.warning,
                         compact: true,
                       ),
-                    if (widget.onTransferTable != null || canCancelOrder)
+                    if (widget.onChangeGuestCount != null)
+                      IconButton(
+                        key: const Key('order_guest_count_edit_action'),
+                        tooltip: l10n.waiterGuestCountTitle,
+                        visualDensity: VisualDensity.compact,
+                        onPressed: widget.state.isSubmitting
+                            ? null
+                            : () => unawaited(widget.onChangeGuestCount!()),
+                        icon: const Icon(
+                          Icons.group_add_outlined,
+                          size: 18,
+                          color: PosColors.textSecondary,
+                        ),
+                      ),
+                    if (canCancelOrder)
+                      OutlinedButton.icon(
+                        key: const Key('order_cancel_order_direct_action'),
+                        onPressed: widget.state.isSubmitting
+                            ? null
+                            : () => unawaited(widget.onCancelOrder()),
+                        icon: const Icon(Icons.cancel_outlined, size: 16),
+                        label: Text(l10n.waiterCancelOrderAction),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: PosColors.danger,
+                          side: const BorderSide(color: PosColors.danger),
+                        ),
+                      ),
+                    if (widget.onTransferTable != null)
                       PopupMenuButton<_OrderPanelOverflowAction>(
                         tooltip: l10n.moreActions,
                         enabled: !widget.state.isSubmitting,
@@ -1038,26 +1213,6 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                                 ],
                               ),
                             ),
-                          if (canCancelOrder)
-                            PopupMenuItem(
-                              value: _OrderPanelOverflowAction.cancelOrder,
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.cancel_outlined,
-                                    size: 18,
-                                    color: PosColors.danger,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    PosActionVerbs.cancelOrder,
-                                    style: const TextStyle(
-                                      color: PosColors.danger,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
                         ],
                         child: Container(
                           padding: const EdgeInsets.all(6),
@@ -1080,6 +1235,10 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                   !widget.state.isSubmitting) ...[
                 const SizedBox(height: 6),
                 _OrderCreateSuccessBanner(order: widget.state.activeOrder!),
+              ],
+              if (readyItemCount > 0) ...[
+                const SizedBox(height: 6),
+                _WaiterReadyHandoffNotice(readyItemCount: readyItemCount),
               ],
               const SizedBox(height: 10),
               Expanded(
@@ -1107,12 +1266,17 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                           context,
                         ).copyWith(dividerColor: Colors.transparent),
                         child: ExpansionTile(
-                          key: const Key('order_sent_items_secondary_detail'),
-                          initiallyExpanded: false,
+                          key: const Key(
+                            'order_sent_items_always_visible_detail',
+                          ),
+                          initiallyExpanded: true,
                           tilePadding: EdgeInsets.zero,
                           childrenPadding: EdgeInsets.zero,
                           title: Text(
-                            l10n.orderWorkspaceSentToKitchen,
+                            '${l10n.orderWorkspaceSentToKitchen} · ${l10n.orderWorkspaceCurrentCheckDetails}',
+                            key: const Key(
+                              'order_current_ticket_reconfirm_header',
+                            ),
                             style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(
                                   color: PosColors.textSecondary,
@@ -1121,9 +1285,67 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                                 ),
                           ),
                           children: [
+                            Padding(
+                              key: const Key(
+                                'order_current_ticket_reconfirm_hint',
+                              ),
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.receipt_long_outlined,
+                                    size: 16,
+                                    color: PosColors.info,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      '${l10n.orderWorkspaceCurrentCheckReconfirmHint} · ${l10n.orderWorkspaceItemsCount(widget.state.activeOrder!.items.length)}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: PosColors.textSecondary,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton.icon(
+                                key: const Key(
+                                  'order_current_ticket_open_detail_button',
+                                ),
+                                onPressed: widget.state.isSubmitting
+                                    ? null
+                                    : () =>
+                                          unawaited(_showCurrentTicketSheet()),
+                                icon: const Icon(
+                                  Icons.receipt_long_outlined,
+                                  size: 16,
+                                ),
+                                label: Text(
+                                  l10n.orderWorkspaceCurrentCheckDetails,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
                             ...widget.state.activeOrder!.items.map((item) {
-                              final label = item.label ?? 'Item';
+                              final label = _localizedMenuDataLabel(
+                                context,
+                                item.label ?? 'Item',
+                              );
                               final isCancelled = item.status == 'cancelled';
+                              final statusLabel = _orderItemStatusLabel(
+                                context,
+                                item.status,
+                              );
                               final canCancel =
                                   !isCancelled &&
                                   item.status != 'ready' &&
@@ -1148,49 +1370,84 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                                   child: Row(
                                     children: [
                                       Expanded(
-                                        child: Row(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
-                                            Flexible(
-                                              child: Text(
-                                                '$label x${item.quantity}',
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .bodyMedium
-                                                    ?.copyWith(
-                                                      color: isCancelled
-                                                          ? PosColors.danger
-                                                          : PosColors
-                                                                .textSecondary,
-                                                      fontSize: 13,
-                                                      decoration: isCancelled
-                                                          ? TextDecoration
-                                                                .lineThrough
-                                                          : null,
-                                                    ),
-                                              ),
-                                            ),
-                                            if (canEditQty) ...[
-                                              const SizedBox(width: 4),
-                                              InkWell(
-                                                onTap: widget.state.isSubmitting
-                                                    ? null
-                                                    : () =>
-                                                          _showEditQuantityDialog(
-                                                            item,
-                                                          ),
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                                child: const Padding(
-                                                  padding: EdgeInsets.all(2),
-                                                  child: Icon(
-                                                    Icons.edit,
-                                                    size: 14,
-                                                    color:
-                                                        PosColors.textSecondary,
+                                            Row(
+                                              children: [
+                                                Flexible(
+                                                  child: Text(
+                                                    label,
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: Theme.of(context)
+                                                        .textTheme
+                                                        .bodyMedium
+                                                        ?.copyWith(
+                                                          color: isCancelled
+                                                              ? PosColors.danger
+                                                              : PosColors
+                                                                    .textSecondary,
+                                                          fontSize: 13,
+                                                          decoration:
+                                                              isCancelled
+                                                              ? TextDecoration
+                                                                    .lineThrough
+                                                              : null,
+                                                        ),
                                                   ),
                                                 ),
+                                                if (canEditQty) ...[
+                                                  const SizedBox(width: 4),
+                                                  InkWell(
+                                                    onTap:
+                                                        widget
+                                                            .state
+                                                            .isSubmitting
+                                                        ? null
+                                                        : () =>
+                                                              _showEditQuantityDialog(
+                                                                item,
+                                                              ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          10,
+                                                        ),
+                                                    child: const Padding(
+                                                      padding: EdgeInsets.all(
+                                                        2,
+                                                      ),
+                                                      child: Icon(
+                                                        Icons.edit,
+                                                        size: 14,
+                                                        color: PosColors
+                                                            .textSecondary,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              key: ValueKey<String>(
+                                                'order_sent_item_reconfirm_${item.id}',
                                               ),
-                                            ],
+                                              '${l10n.orderWorkspaceItemsCount(item.quantity)} · $statusLabel',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall
+                                                  ?.copyWith(
+                                                    color:
+                                                        PosColors.textSecondary,
+                                                    fontSize: 11.5,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                            ),
                                           ],
                                         ),
                                       ),
@@ -1250,41 +1507,58 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
               const SizedBox(height: 8),
               orderSubmissionActions,
               if (widget.state.isSubmitting)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
                   child: ToastOperationalLoadingState(
-                    label: PosLoadingCopy.syncing,
+                    label: PosLoadingCopy.syncing(l10n),
                   ),
                 ),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Text(
-                    l10n.orderWorkspacePaymentDue,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: PosColors.textSecondary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
+              Container(
+                key: const Key('order_summary_amount'),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: PosSurfaceRole.background.fill,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: PosSurfaceRole.background.stroke),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.showPaymentActions
+                            ? l10n.orderWorkspacePaymentDue
+                            : l10n.orderWorkspaceSubtotal,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: PosSurfaceRole.background.helper,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '₫${formatter.format(total)}',
-                    style: AppTextStyles.operationalTitle(
-                      size: 28,
-                      color: PosColors.accent,
+                    const SizedBox(width: 10),
+                    Text(
+                      '₫${formatter.format(summaryTotal)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: PosNumericText.amountLarge.copyWith(
+                        color: PosColors.accent,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               if (canProcessPayment) ...[
                 const SizedBox(height: 12),
                 Text(
                   '${l10n.orderWorkspacePaymentDue} (₫${formatter.format(activeTotal)})',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  style: PosNumericText.unitPrice.copyWith(
                     color: PosColors.textSecondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -1336,10 +1610,10 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                   ),
                 ),
                 if (widget.isProcessingPayment)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
                     child: ToastOperationalLoadingState(
-                      label: PosLoadingCopy.syncing,
+                      label: PosLoadingCopy.syncing(l10n),
                     ),
                   ),
               ],
@@ -1371,9 +1645,7 @@ class _OrderCreateSuccessBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final shortOrderId = order.id.length >= 8
-        ? order.id.substring(0, 8)
-        : order.id;
+    final shortOrderId = _shortOrderTicketCode(order.id);
 
     return Container(
       key: const Key('order_create_success_banner'),
@@ -1415,6 +1687,294 @@ class _OrderCreateSuccessBanner extends StatelessWidget {
   }
 }
 
+class _WaiterReadyHandoffNotice extends StatelessWidget {
+  const _WaiterReadyHandoffNotice({
+    required this.readyItemCount,
+    this.compact = false,
+  });
+
+  final int readyItemCount;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Container(
+      key: const Key('order_waiter_ready_handoff_notice'),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 8 : 10,
+        vertical: compact ? 6 : 8,
+      ),
+      decoration: BoxDecoration(
+        color: PosColors.success.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: PosColors.success.withValues(alpha: 0.32)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.room_service_outlined,
+            color: PosColors.success,
+            size: compact ? 16 : 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${l10n.kitchenReadyHandoff} · ${l10n.orderWorkspaceItemsCount(readyItemCount)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: PosColors.success,
+                    fontWeight: FontWeight.w900,
+                    fontSize: compact ? 11.5 : 12.5,
+                  ),
+                ),
+                Text(
+                  l10n.kitchenReadySupport,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: PosColors.textSecondary,
+                    fontSize: compact ? 10.5 : 11.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CurrentTicketDetailSheet extends StatelessWidget {
+  const _CurrentTicketDetailSheet({
+    required this.order,
+    required this.onEditQuantity,
+    required this.onCancelItem,
+  });
+
+  final Order order;
+  final Future<void> Function(OrderItem item)? onEditQuantity;
+  final Future<void> Function(OrderItem item)? onCancelItem;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final formatter = NumberFormat('#,###', 'vi_VN');
+    final activeItems = order.items
+        .where((item) => item.status != 'cancelled')
+        .toList();
+    final subtotal = activeItems.fold<double>(
+      0,
+      (sum, item) => sum + (item.unitPrice * item.quantity),
+    );
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 620),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l10n.orderWorkspaceCurrentCheckDetails,
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          l10n.orderWorkspaceTicketCode(
+                            _shortOrderTicketCode(order.id),
+                          ),
+                          key: const Key('order_current_ticket_code_text'),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: PosColors.textSecondary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ToastStatusBadge(
+                    label: l10n.orderWorkspaceItemsCount(activeItems.length),
+                    color: PosColors.info,
+                    compact: true,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                l10n.orderWorkspaceCurrentCheckReconfirmHint,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: PosColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: order.items.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final item = order.items[index];
+                    final isCancelled = item.status == 'cancelled';
+                    final canEditQty =
+                        item.status == 'pending' && onEditQuantity != null;
+                    final canCancel =
+                        !isCancelled &&
+                        item.status != 'ready' &&
+                        item.status != 'served' &&
+                        onCancelItem != null;
+
+                    return Container(
+                      key: ValueKey<String>(
+                        'order_current_ticket_detail_item_${item.id}',
+                      ),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: PosSurfaceRole.background.fill,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isCancelled
+                              ? PosColors.danger.withValues(alpha: 0.28)
+                              : PosSurfaceRole.background.stroke,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _localizedMenuDataLabel(
+                                    context,
+                                    item.label ??
+                                        l10n.orderWorkspaceItemFallback,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(
+                                        decoration: isCancelled
+                                            ? TextDecoration.lineThrough
+                                            : null,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _OrderItemStatusChip(status: item.status),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${l10n.orderWorkspaceItemsCount(item.quantity)} · ₫${formatter.format(item.unitPrice * item.quantity)}',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: PosColors.textSecondary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                          if (!canEditQty && !isCancelled) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              l10n.orderWorkspaceItemLockedAfterKitchen,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: PosColors.textSecondary,
+                                    fontSize: 11.5,
+                                  ),
+                            ),
+                          ],
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            alignment: WrapAlignment.end,
+                            children: [
+                              OutlinedButton.icon(
+                                key: ValueKey<String>(
+                                  'order_current_ticket_edit_qty_${item.id}',
+                                ),
+                                onPressed: canEditQty
+                                    ? () => unawaited(onEditQuantity!(item))
+                                    : null,
+                                icon: const Icon(Icons.edit_outlined, size: 16),
+                                label: Text(
+                                  l10n.orderWorkspaceEditQuantityAction,
+                                ),
+                              ),
+                              OutlinedButton.icon(
+                                key: ValueKey<String>(
+                                  'order_current_ticket_cancel_item_${item.id}',
+                                ),
+                                onPressed: canCancel
+                                    ? () => unawaited(onCancelItem!(item))
+                                    : null,
+                                icon: const Icon(Icons.close_rounded, size: 16),
+                                label: Text(
+                                  l10n.orderWorkspaceCancelItemAction,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: PosColors.accent.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        l10n.orderWorkspaceSubtotal,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '₫${formatter.format(subtotal)}',
+                      style: PosNumericText.amountLarge.copyWith(
+                        color: PosColors.accent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _CompactCurrentOrderPanel extends StatelessWidget {
   const _CompactCurrentOrderPanel({
     required this.table,
@@ -1428,7 +1988,9 @@ class _CompactCurrentOrderPanel extends StatelessWidget {
     required this.onCancel,
     required this.onCancelOrder,
     required this.onSendOrder,
+    required this.onViewCurrentTicket,
     required this.onTransferTable,
+    required this.onChangeGuestCount,
   });
 
   final PosTable table;
@@ -1442,7 +2004,9 @@ class _CompactCurrentOrderPanel extends StatelessWidget {
   final VoidCallback onCancel;
   final Future<void> Function() onCancelOrder;
   final Future<void> Function() onSendOrder;
+  final Future<void> Function() onViewCurrentTicket;
   final VoidCallback? onTransferTable;
+  final Future<void> Function()? onChangeGuestCount;
 
   @override
   Widget build(BuildContext context) {
@@ -1453,6 +2017,9 @@ class _CompactCurrentOrderPanel extends StatelessWidget {
     );
     final sentCount = (state.activeOrder?.items ?? const <OrderItem>[])
         .where((item) => item.status != 'cancelled')
+        .fold<int>(0, (sum, item) => sum + item.quantity);
+    final readyItemCount = (state.activeOrder?.items ?? const <OrderItem>[])
+        .where((item) => item.status == 'ready')
         .fold<int>(0, (sum, item) => sum + item.quantity);
     final total = state.cart.fold<double>(
       0,
@@ -1473,8 +2040,8 @@ class _CompactCurrentOrderPanel extends StatelessWidget {
                     l10n.waiterTableLabel(table.tableNumber),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
+                    style: PosNumericText.tableId.copyWith(
+                      color: PosColors.textPrimary,
                     ),
                   ),
                 ),
@@ -1484,12 +2051,28 @@ class _CompactCurrentOrderPanel extends StatelessWidget {
                     color: PosColors.warning,
                     compact: true,
                   ),
+                if (onChangeGuestCount != null)
+                  IconButton(
+                    key: const Key('order_guest_count_edit_action_compact'),
+                    tooltip: l10n.waiterGuestCountTitle,
+                    visualDensity: VisualDensity.compact,
+                    onPressed: state.isSubmitting
+                        ? null
+                        : () => unawaited(onChangeGuestCount!()),
+                    icon: const Icon(Icons.group_add_outlined, size: 18),
+                  ),
                 if (state.activeOrder != null) ...[
                   const SizedBox(width: 6),
-                  ToastStatusBadge(
-                    label: l10n.orderWorkspaceCurrentCheck,
-                    color: PosColors.info,
-                    compact: true,
+                  IconButton(
+                    key: const Key(
+                      'order_current_ticket_detail_action_compact',
+                    ),
+                    tooltip: l10n.orderWorkspaceCurrentCheckDetails,
+                    visualDensity: VisualDensity.compact,
+                    onPressed: state.isSubmitting
+                        ? null
+                        : () => unawaited(onViewCurrentTicket()),
+                    icon: const Icon(Icons.receipt_long_outlined, size: 18),
                   ),
                 ],
               ],
@@ -1498,6 +2081,13 @@ class _CompactCurrentOrderPanel extends StatelessWidget {
               const SizedBox(height: 6),
               _OrderCreateSuccessBanner(
                 order: state.activeOrder!,
+                compact: true,
+              ),
+            ],
+            if (readyItemCount > 0) ...[
+              const SizedBox(height: 6),
+              _WaiterReadyHandoffNotice(
+                readyItemCount: readyItemCount,
                 compact: true,
               ),
             ],
@@ -1520,7 +2110,21 @@ class _CompactCurrentOrderPanel extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (onTransferTable != null || canCancelOrder)
+                if (canCancelOrder)
+                  IconButton(
+                    key: const Key('order_cancel_order_direct_action_compact'),
+                    tooltip: l10n.waiterCancelOrderAction,
+                    visualDensity: VisualDensity.compact,
+                    onPressed: state.isSubmitting
+                        ? null
+                        : () => unawaited(onCancelOrder()),
+                    icon: const Icon(
+                      Icons.cancel_outlined,
+                      size: 18,
+                      color: PosColors.danger,
+                    ),
+                  ),
+                if (onTransferTable != null)
                   PopupMenuButton<_OrderPanelOverflowAction>(
                     tooltip: l10n.moreActions,
                     enabled: !state.isSubmitting,
@@ -1539,11 +2143,6 @@ class _CompactCurrentOrderPanel extends StatelessWidget {
                         PopupMenuItem(
                           value: _OrderPanelOverflowAction.moveTable,
                           child: Text(l10n.orderWorkspaceMove),
-                        ),
-                      if (canCancelOrder)
-                        PopupMenuItem(
-                          value: _OrderPanelOverflowAction.cancelOrder,
-                          child: Text(PosActionVerbs.cancelOrder),
                         ),
                     ],
                     child: const Padding(
@@ -1615,6 +2214,22 @@ class _OrderSendFooter extends StatelessWidget {
       fontSize: compact ? 11 : 12,
       fontWeight: FontWeight.w700,
     );
+    final sendTileState = state.isSubmitting
+        ? PosActionTileState.processing
+        : !isOnline
+        ? PosActionTileState.offlineBlocked
+        : canSendOrder
+        ? PosActionTileState.idle
+        : PosActionTileState.disabled;
+    final sendHelper = state.isSubmitting
+        ? PosLoadingCopy.syncing(l10n)
+        : !isOnline
+        ? l10n.orderWorkspaceOfflineQueueMessage
+        : showEmptyHint
+        ? l10n.orderWorkspaceTapItemToAdd
+        : state.offlineQueueCount > 0
+        ? l10n.orderWorkspaceQueuedOrderOperations(state.offlineQueueCount)
+        : null;
 
     return Container(
       key: const Key('cart_submit_order_sticky_footer'),
@@ -1630,7 +2245,8 @@ class _OrderSendFooter extends StatelessWidget {
               Expanded(
                 flex: compact ? 3 : 2,
                 child: PosActionButton(
-                  label: PosActionVerbs.cancel,
+                  key: const Key('order_workspace_cancel_button'),
+                  label: l10n.cancel,
                   tone: PosActionTone.secondary,
                   icon: PosActionIcons.cancel,
                   compact: compact,
@@ -1640,14 +2256,14 @@ class _OrderSendFooter extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 flex: compact ? 5 : 4,
-                child: PosActionButton(
+                child: PosActionTile(
                   key: const Key('cart_submit_order'),
                   label: l10n.orderWorkspaceSendToKitchen,
-                  tone: PosActionTone.primary,
+                  helper: sendHelper,
                   icon: PosActionIcons.sendOrder,
-                  compact: compact,
-                  loading: state.isSubmitting,
-                  onPressed: canSendOrder ? onSendOrder : null,
+                  state: sendTileState,
+                  allowOfflineBlockedTap: canSendOrder,
+                  onTap: canSendOrder ? () => unawaited(onSendOrder()) : null,
                 ),
               ),
             ],
@@ -1701,15 +2317,174 @@ class _OrderItemStatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final normalized = status.toLowerCase();
-    final l10n = context.l10n;
     final (color, label) = switch (normalized) {
-      'pending' => (PosColors.textSecondary, l10n.orderStatusPending),
-      'preparing' => (PosColors.accent, l10n.orderStatusPreparing),
-      'ready' => (PosColors.success, l10n.orderWorkspaceReady),
-      'served' => (PosColors.warning, l10n.orderStatusServed),
-      'cancelled' => (PosColors.danger, l10n.orderStatusCancelled),
+      'pending' => (
+        PosColors.textSecondary,
+        _orderItemStatusLabel(context, normalized),
+      ),
+      'preparing' => (
+        PosColors.accent,
+        _orderItemStatusLabel(context, normalized),
+      ),
+      'ready' => (
+        PosColors.success,
+        _orderItemStatusLabel(context, normalized),
+      ),
+      'served' => (
+        PosColors.warning,
+        _orderItemStatusLabel(context, normalized),
+      ),
+      'cancelled' => (
+        PosColors.danger,
+        _orderItemStatusLabel(context, normalized),
+      ),
       _ => (PosColors.textSecondary, normalized.toUpperCase()),
     };
     return ToastStatusChip(label: label, color: color);
   }
+}
+
+String _orderItemStatusLabel(BuildContext context, String status) {
+  final l10n = context.l10n;
+  return switch (status.toLowerCase()) {
+    'pending' => l10n.orderStatusPending,
+    'preparing' => l10n.orderStatusPreparing,
+    'ready' => l10n.orderWorkspaceReady,
+    'served' => l10n.orderStatusServed,
+    'cancelled' => l10n.orderStatusCancelled,
+    _ => status.toUpperCase(),
+  };
+}
+
+String _shortOrderTicketCode(String orderId) {
+  final normalized = orderId.trim();
+  return normalized.length >= 8 ? normalized.substring(0, 8) : normalized;
+}
+
+String _localizedMenuDataLabel(BuildContext context, Object? value) {
+  final raw = value?.toString().trim();
+  if (raw == null || raw.isEmpty) {
+    return '-';
+  }
+  final language = Localizations.localeOf(context).languageCode;
+  return switch (raw.toLowerCase()) {
+    'food' => switch (language) {
+      'vi' => 'Món ăn',
+      'ko' => '음식',
+      _ => 'Food',
+    },
+    'drinks' || 'drink' => switch (language) {
+      'vi' => 'Đồ uống',
+      'ko' => '음료',
+      _ => 'Drinks',
+    },
+    'desserts' || 'dessert' => switch (language) {
+      'vi' => 'Tráng miệng',
+      'ko' => '디저트',
+      _ => 'Desserts',
+    },
+    'waiter test menu' ||
+    '웨이터 테스트 메뉴' ||
+    'menu thử phục vụ' => switch (language) {
+      'vi' => 'Menu thử phục vụ',
+      'ko' => '웨이터 테스트 메뉴',
+      _ => 'Waiter test menu',
+    },
+    'qa test menu' => switch (language) {
+      'vi' => 'Menu thử nghiệm QA',
+      'ko' => 'QA 테스트 메뉴',
+      _ => 'QA Test Menu',
+    },
+    'qa iced tea' => switch (language) {
+      'vi' => 'Trà đá QA',
+      'ko' => 'QA 아이스티',
+      _ => 'QA Iced Tea',
+    },
+    'qa spring roll' => switch (language) {
+      'vi' => 'Chả giò QA',
+      'ko' => 'QA 스프링롤',
+      _ => 'QA Spring Roll',
+    },
+    'qa com rang' || 'qa cơm rang' => switch (language) {
+      'vi' => 'Cơm rang QA',
+      'ko' => 'QA 볶음밥',
+      _ => 'QA Fried Rice',
+    },
+    'qa banh mi' || 'qa bánh mì' => switch (language) {
+      'vi' => 'Bánh mì QA',
+      'ko' => 'QA 반미',
+      _ => 'QA Banh Mi',
+    },
+    'qa pho bo' || 'qa phở bò' => switch (language) {
+      'vi' => 'Phở bò QA',
+      'ko' => 'QA 쌀국수',
+      _ => 'QA Pho Bo',
+    },
+    '테스트 보리차' => switch (language) {
+      'vi' => 'Trà lúa mạch thử nghiệm',
+      'ko' => raw,
+      _ => 'Test barley tea',
+    },
+    '테스트 만두' => switch (language) {
+      'vi' => 'Mandu thử nghiệm',
+      'ko' => raw,
+      _ => 'Test dumplings',
+    },
+    '테스트 냉면' => switch (language) {
+      'vi' => 'Naengmyeon thử nghiệm',
+      'ko' => raw,
+      _ => 'Test cold noodles',
+    },
+    '테스트 치킨' => switch (language) {
+      'vi' => 'Gà rán thử nghiệm',
+      'ko' => raw,
+      _ => 'Test fried chicken',
+    },
+    '테스트 떡볶이' => switch (language) {
+      'vi' => 'Tteokbokki thử nghiệm',
+      'ko' => raw,
+      _ => 'Test tteokbokki',
+    },
+    '테스트 제육볶음' => switch (language) {
+      'vi' => 'Thịt heo xào cay thử nghiệm',
+      'ko' => raw,
+      _ => 'Test spicy pork',
+    },
+    '테스트 불고기덮밥' => switch (language) {
+      'vi' => 'Cơm bulgogi thử nghiệm',
+      'ko' => raw,
+      _ => 'Test bulgogi rice bowl',
+    },
+    '테스트 비빔밥' => switch (language) {
+      'vi' => 'Bibimbap thử nghiệm',
+      'ko' => raw,
+      _ => 'Test bibimbap',
+    },
+    '불백' || '불백2' || 'bulbaek' => switch (language) {
+      'vi' => 'Thịt nướng Hàn',
+      'ko' => raw,
+      _ => 'Korean BBQ pork',
+    },
+    '불고기밥' || 'bulgogi rice' => switch (language) {
+      'vi' => 'Cơm bulgogi',
+      'ko' => '불고기밥',
+      _ => 'Bulgogi Rice',
+    },
+    '떡볶이' || 'tteokbokki' => switch (language) {
+      'vi' => 'Bánh gạo cay',
+      'ko' => '떡볶이',
+      _ => 'Tteokbokki',
+    },
+    '김치찌개' || 'kimchi jjigae' => switch (language) {
+      'vi' => 'Canh kimchi',
+      'ko' => '김치찌개',
+      _ => 'Kimchi Jjigae',
+    },
+    '비빔밥' || 'bibimbap' => switch (language) {
+      'vi' => 'Bibimbap',
+      'ko' => '비빔밥',
+      _ => 'Bibimbap',
+    },
+    _ => raw,
+  };
 }
