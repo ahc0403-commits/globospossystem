@@ -54,6 +54,7 @@ class TablesService {
         row['layout_rotation'] ??= 0;
         row['layout_shape'] ??= 'rectangle';
         row['layout_sort_order'] ??= 0;
+        row['floor_label'] ??= '1F';
         final col = index % 4;
         final rowIndex = index ~/ 4;
         if ((row['layout_x'] as num?)?.toDouble() == 0.0 &&
@@ -73,6 +74,7 @@ class TablesService {
     String storeId,
     String tableNumber,
     int seatCount,
+    String floorLabel,
   ) async {
     try {
       await supabase.rpc(
@@ -81,6 +83,7 @@ class TablesService {
           'p_store_id': storeId,
           'p_table_number': tableNumber,
           'p_seat_count': seatCount,
+          'p_floor_label': floorLabel,
         },
       );
     } catch (error) {
@@ -88,10 +91,60 @@ class TablesService {
         rethrow;
       }
 
+      try {
+        await supabase.rpc(
+          'admin_create_table',
+          params: {
+            'p_store_id': storeId,
+            'p_table_number': tableNumber,
+            'p_seat_count': seatCount,
+          },
+        );
+        return;
+      } catch (legacyStoreError) {
+        if (!_isRpcSignatureMismatch(legacyStoreError, 'admin_create_table')) {
+          rethrow;
+        }
+      }
+
       await supabase.rpc(
         'admin_create_table',
         params: {
           'p_restaurant_id': storeId,
+          'p_table_number': tableNumber,
+          'p_seat_count': seatCount,
+        },
+      );
+    }
+  }
+
+  Future<void> updateTableDetails({
+    required String tableId,
+    required String storeId,
+    required String tableNumber,
+    required int seatCount,
+    required String floorLabel,
+  }) async {
+    try {
+      await supabase.rpc(
+        'admin_update_table',
+        params: {
+          'p_table_id': tableId,
+          'p_store_id': storeId,
+          'p_table_number': tableNumber,
+          'p_seat_count': seatCount,
+          'p_floor_label': floorLabel,
+        },
+      );
+    } catch (error) {
+      if (!_isRpcSignatureMismatch(error, 'admin_update_table')) {
+        rethrow;
+      }
+
+      await supabase.rpc(
+        'admin_update_table',
+        params: {
+          'p_table_id': tableId,
           'p_table_number': tableNumber,
           'p_seat_count': seatCount,
         },

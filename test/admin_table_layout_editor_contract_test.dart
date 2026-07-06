@@ -14,6 +14,11 @@ void main() {
       final provider = readRepoFile(
         'lib/features/admin/providers/tables_provider.dart',
       );
+      final service = readRepoFile('lib/core/services/tables_service.dart');
+      final tableModel = readRepoFile('lib/core/models/pos_table.dart');
+      final c2Migration = readRepoFile(
+        'supabase/migrations/20260706015000_print_routing_v1_c2_admin.sql',
+      );
       final audit = readRepoFile(
         'lib/features/admin/widgets/admin_audit_trace_panel.dart',
       );
@@ -78,8 +83,25 @@ void main() {
       expect(floorLayout, contains('class _FloorStatusBadge'));
       expect(floorLayout, contains('PosNumericText.tableId'));
       expect(provider, contains('Future<bool> updateTableLayout'));
+      expect(audit, contains("'floor_label' => 'Floor Label'"));
       expect(audit, contains("'layout_x' => 'Layout X'"));
       expect(audit, contains("'layout_y' => 'Layout Y'"));
+      expect(tableModel, contains('final String floorLabel;'));
+      expect(tableModel, contains("json['floor_label']"));
+      expect(service, contains("'p_floor_label': floorLabel"));
+      expect(provider, contains('Future<bool> updateTableDetails'));
+      expect(adminTables, contains("Key('admin_table_floor_label_field')"));
+      expect(
+        adminTables,
+        contains("Key('admin_table_edit_floor_label_field')"),
+      );
+      expect(
+        adminTables,
+        contains("Key('admin_tables_edit_floor_label_action')"),
+      );
+      expect(adminTables, contains('value: table.floorLabel'));
+      expect(c2Migration, contains('p_floor_label text DEFAULT'));
+      expect(c2Migration, contains('floor_label = v_floor_label'));
     },
   );
 }

@@ -68,6 +68,7 @@ assets/fonts/SourceHanSerif-VF.otf.ttc
 
 # Local tooling state (Claude Code session, Vercel CLI project link)
 .claude/
+.flare/
 .vercel/
 
 # Flutter gen-l10n output (generated from lib/l10n/*.arb at flutter pub get time

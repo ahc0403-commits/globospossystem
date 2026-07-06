@@ -9,6 +9,7 @@ class PosTable {
     required this.tableNumber,
     required this.seatCount,
     required this.status,
+    this.floorLabel = '1F',
     this.layoutX = 0,
     this.layoutY = 0,
     this.layoutW = 0.18,
@@ -23,6 +24,7 @@ class PosTable {
   final String tableNumber;
   final int? seatCount;
   final String status;
+  final String floorLabel;
   final double layoutX;
   final double layoutY;
   final double layoutW;
@@ -57,6 +59,7 @@ class PosTable {
       tableNumber: tableNumber,
       seatCount: seatCount,
       status: status,
+      floorLabel: floorLabel,
       layoutX: rect.left,
       layoutY: rect.top,
       layoutW: rect.width,
@@ -116,6 +119,7 @@ class PosTable {
         _ => null,
       },
       status: resolvedStatus.toLowerCase(),
+      floorLabel: json['floor_label']?.toString() ?? '1F',
       layoutX: _doubleValue(json['layout_x'], 0),
       layoutY: _doubleValue(json['layout_y'], 0),
       layoutW: _doubleValue(json['layout_w'], 0.18),

@@ -47,6 +47,12 @@ bool canAccessRouteForRole(
     return true;
   }
   if (path == '/attendance-kiosk') return false;
+  if (path == '/print-station') {
+    return switch (role) {
+      'super_admin' || 'store_admin' || 'admin' || 'kitchen' => true,
+      _ => false,
+    };
+  }
   if (path == '/qc-check') {
     return PermissionUtils.canDoQcCheck(role, extraPermissions);
   }

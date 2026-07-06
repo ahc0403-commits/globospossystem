@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/services/connectivity_service.dart';
+import '../../core/services/order_service.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/utils/number_input_utils.dart';
 import '../../main.dart';
@@ -829,10 +831,206 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     );
   }
 
+  Future<void> _showStaffMealDialog({
+    required String storeId,
+    required List<Map<String, dynamic>> menuItems,
+    required bool isOnline,
+  }) async {
+    final l10n = context.l10n;
+    if (!isOnline) {
+      showErrorToast(context, l10n.posDisabledOffline);
+      return;
+    }
+    if (menuItems.isEmpty) {
+      showErrorToast(context, l10n.orderWorkspaceNoItemsAdded);
+      return;
+    }
+
+    final quantities = <String, int>{};
+    final reasonController = TextEditingController();
+    final pinController = TextEditingController();
+    var isSaving = false;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final selectedCount = quantities.values.fold<int>(
+              0,
+              (sum, quantity) => sum + quantity,
+            );
+            return AlertDialog(
+              backgroundColor: AppColors.surface1,
+              title: Text(
+                l10n.waiterStaffMealTitle,
+                style: AppFonts.system(color: AppColors.textPrimary),
+              ),
+              content: SizedBox(
+                width: 520,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 320),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: menuItems.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final item = menuItems[index];
+                          final id = item['id']?.toString() ?? '';
+                          final name = item['name']?.toString() ?? 'Item';
+                          final quantity = quantities[id] ?? 0;
+                          return ListTile(
+                            title: Text(
+                              name,
+                              style: AppFonts.system(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  onPressed: quantity <= 0 || isSaving
+                                      ? null
+                                      : () => setModalState(() {
+                                          if (quantity <= 1) {
+                                            quantities.remove(id);
+                                          } else {
+                                            quantities[id] = quantity - 1;
+                                          }
+                                        }),
+                                  icon: const Icon(Icons.remove_circle_outline),
+                                ),
+                                SizedBox(
+                                  width: 28,
+                                  child: Text(
+                                    '$quantity',
+                                    textAlign: TextAlign.center,
+                                    style: AppFonts.system(
+                                      color: AppColors.textPrimary,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: isSaving
+                                      ? null
+                                      : () => setModalState(
+                                          () => quantities[id] = quantity + 1,
+                                        ),
+                                  icon: const Icon(Icons.add_circle_outline),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: reasonController,
+                      decoration: InputDecoration(
+                        labelText: l10n.waiterStaffMealReason,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: pinController,
+                      keyboardType: TextInputType.number,
+                      obscureText: true,
+                      decoration: InputDecoration(
+                        labelText: l10n.cashierDiscountManagerPin,
+                      ),
+                    ),
+                    if (!isOnline) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        l10n.posDisabledOffline,
+                        style: AppFonts.system(
+                          color: PosColors.warning,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSaving
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
+                  child: Text(l10n.cancel),
+                ),
+                FilledButton.icon(
+                  key: const Key('waiter_staff_meal_submit'),
+                  onPressed: isSaving || selectedCount == 0 || !isOnline
+                      ? null
+                      : () async {
+                          setModalState(() => isSaving = true);
+                          try {
+                            final payload = quantities.entries
+                                .where((entry) => entry.value > 0)
+                                .map(
+                                  (entry) => {
+                                    'menu_item_id': entry.key,
+                                    'quantity': entry.value,
+                                  },
+                                )
+                                .toList();
+                            await orderService.createStaffMealOrder(
+                              storeId: storeId,
+                              items: payload,
+                              reason: reasonController.text.trim(),
+                              managerPin: pinController.text.trim(),
+                            );
+                            if (!dialogContext.mounted || !context.mounted) {
+                              return;
+                            }
+                            Navigator.of(dialogContext).pop();
+                            showSuccessToast(
+                              context,
+                              l10n.waiterStaffMealCreated,
+                            );
+                          } catch (e) {
+                            if (!context.mounted) return;
+                            setModalState(() => isSaving = false);
+                            showErrorToast(
+                              context,
+                              l10n.waiterStaffMealFailed('$e'),
+                            );
+                          }
+                        },
+                  icon: isSaving
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 1.8),
+                        )
+                      : const Icon(Icons.restaurant_menu_outlined, size: 16),
+                  label: Text(l10n.waiterStaffMealAction),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    reasonController.dispose();
+    pinController.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final storeId = authState.storeId;
+    final isOnline = ref.watch(connectivityProvider).asData?.value ?? true;
 
     _ensureRestaurantLoaded(storeId);
 
@@ -879,6 +1077,14 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                   storeId: storeId,
                   showOrderWorkspace: showOrderWorkspace,
                   onReturnToFloor: _onCancelOrderPanel,
+                  isOnline: isOnline,
+                  onCreateStaffMeal: storeId == null || !isOnline
+                      ? null
+                      : () => _showStaffMealDialog(
+                          storeId: storeId,
+                          menuItems: menuState.items.valueOrNull ?? const [],
+                          isOnline: isOnline,
+                        ),
                 ),
                 Expanded(
                   child: LayoutBuilder(
@@ -991,11 +1197,15 @@ class _WaiterTopBar extends ConsumerWidget {
     required this.storeId,
     required this.showOrderWorkspace,
     required this.onReturnToFloor,
+    required this.isOnline,
+    required this.onCreateStaffMeal,
   });
 
   final String? storeId;
   final bool showOrderWorkspace;
   final VoidCallback onReturnToFloor;
+  final bool isOnline;
+  final VoidCallback? onCreateStaffMeal;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1067,6 +1277,22 @@ class _WaiterTopBar extends ConsumerWidget {
               ],
             ),
           ),
+          Tooltip(
+            message: isOnline
+                ? l10n.waiterStaffMealAction
+                : l10n.posDisabledOffline,
+            child: TextButton.icon(
+              key: const Key('waiter_staff_meal_action'),
+              onPressed: onCreateStaffMeal,
+              icon: const Icon(Icons.restaurant_menu_outlined, size: 17),
+              label: Text(l10n.waiterStaffMealAction),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.amber500,
+                textStyle: AppFonts.system(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
           IconButton(
             key: const Key('logout_button'),
             onPressed: () => ref.read(authProvider.notifier).logout(),

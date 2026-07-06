@@ -16,20 +16,65 @@ class CashierOrder {
     required this.tableNumber,
     required this.tableId,
     required this.status,
+    required this.orderPurpose,
     required this.items,
+    required this.menuSubtotal,
+    required this.serviceChargeTotal,
+    required this.discountTotal,
     required this.totalAmount,
+    required this.paidTotal,
+    required this.remainingDue,
     required this.createdAt,
     this.completedAt,
+    this.activeDiscount,
   });
 
   final String orderId;
   final String tableNumber;
   final String tableId;
   final String status;
+  final String orderPurpose;
   final List<OrderItem> items;
+  final double menuSubtotal;
+  final double serviceChargeTotal;
+  final double discountTotal;
   final double totalAmount;
+  final double paidTotal;
+  final double remainingDue;
   final DateTime createdAt;
   final DateTime? completedAt;
+  final ActiveOrderDiscount? activeDiscount;
+
+  bool get isStaffMeal => orderPurpose == 'staff_meal';
+}
+
+class ActiveOrderDiscount {
+  const ActiveOrderDiscount({
+    required this.id,
+    required this.type,
+    required this.mode,
+    required this.value,
+    required this.amount,
+    required this.status,
+  });
+
+  final String id;
+  final String type;
+  final String mode;
+  final double value;
+  final double amount;
+  final String status;
+
+  factory ActiveOrderDiscount.fromJson(Map<String, dynamic> json) {
+    return ActiveOrderDiscount(
+      id: json['id'].toString(),
+      type: json['discount_type']?.toString() ?? 'manual',
+      mode: json['discount_mode']?.toString() ?? 'amount',
+      value: _toDoubleValue(json['discount_value']),
+      amount: _toDoubleValue(json['discount_amount']),
+      status: json['status']?.toString() ?? 'active',
+    );
+  }
 }
 
 class PaymentState {
@@ -98,7 +143,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       final response = await supabase
           .from('orders')
           .select(
-            'id, table_id, status, created_at, tables(table_number), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, paying_amount_inc_tax, menu_items(name, vat_category))',
+            'id, table_id, status, order_purpose, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, paying_amount_inc_tax, menu_items(name, vat_category))',
           )
           .eq('restaurant_id', storeId)
           // Payability is an order-status fact derived server-side by
@@ -122,16 +167,24 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
 
             final items = itemRows.map<OrderItem>(OrderItem.fromJson).toList();
 
-            final total = calculatePaymentQuote(
+            final activeDiscount = _activeDiscountFromRaw(
+              data['order_discounts'],
+            );
+            final quote = calculatePaymentQuote(
               lines: itemRows.map(_paymentQuoteLineFromRow),
               vatPricingMode: storePricing.vatPricingMode,
               serviceChargeEnabled: storePricing.serviceChargeEnabled,
               serviceChargeRate: storePricing.serviceChargeRate,
-            ).payableTotal;
+              discountTotal: activeDiscount?.amount ?? 0,
+            );
+            final paidTotal = _paidTotalFromRaw(data['payments']);
+            final remainingDue = _remainingDue(quote.payableTotal, paidTotal);
 
             final tableRaw = data['tables'];
             final tableNumber = tableRaw is Map<String, dynamic>
                 ? tableRaw['table_number']?.toString() ?? '-'
+                : data['order_purpose']?.toString() == 'staff_meal'
+                ? 'STAFF'
                 : '-';
 
             final createdAtRaw = data['created_at']?.toString();
@@ -139,17 +192,24 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
             return CashierOrder(
               orderId: data['id'].toString(),
               tableNumber: tableNumber,
-              tableId: data['table_id'].toString(),
+              tableId: data['table_id']?.toString() ?? '',
               status: 'serving',
+              orderPurpose: data['order_purpose']?.toString() ?? 'customer',
               items: items,
-              totalAmount: total,
+              menuSubtotal: quote.menuSubtotal,
+              serviceChargeTotal: quote.serviceChargeTotal,
+              discountTotal: quote.discountTotal,
+              totalAmount: quote.payableTotal,
+              paidTotal: paidTotal,
+              remainingDue: remainingDue,
               createdAt: createdAtRaw != null
                   ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
                   : DateTime.now(),
+              activeDiscount: activeDiscount,
             );
           })
           .whereType<CashierOrder>()
-          .where((order) => order.totalAmount > 0)
+          .where(_shouldShowCashierOrder)
           .toList();
       final completedOrders = await _fetchCompletedOrders(
         storeId,
@@ -190,7 +250,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     final response = await supabase
         .from('orders')
         .select(
-          'id, table_id, status, created_at, updated_at, tables(table_number), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, paying_amount_inc_tax, menu_items(name, vat_category))',
+          'id, table_id, status, order_purpose, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, paying_amount_inc_tax, menu_items(name, vat_category))',
         )
         .eq('restaurant_id', storeId)
         .eq('status', 'completed')
@@ -200,54 +260,64 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         .order('id', referencedTable: 'order_items', ascending: true)
         .limit(12);
 
-    return response
-        .map<CashierOrder>((row) {
-          final data = Map<String, dynamic>.from(row);
-          final itemsRaw = data['order_items'];
-          final itemRows = itemsRaw is List
-              ? itemsRaw
-                    .map((item) => Map<String, dynamic>.from(item as Map))
-                    .where(
-                      (item) =>
-                          item['status']?.toString().toLowerCase() !=
-                          'cancelled',
-                    )
-                    .toList()
-              : <Map<String, dynamic>>[];
-          itemRows.sort(_compareOrderItemRowsByCreatedAt);
+    return response.map<CashierOrder>((row) {
+      final data = Map<String, dynamic>.from(row);
+      final itemsRaw = data['order_items'];
+      final itemRows = itemsRaw is List
+          ? itemsRaw
+                .map((item) => Map<String, dynamic>.from(item as Map))
+                .where(
+                  (item) =>
+                      item['status']?.toString().toLowerCase() != 'cancelled',
+                )
+                .toList()
+          : <Map<String, dynamic>>[];
+      itemRows.sort(_compareOrderItemRowsByCreatedAt);
 
-          final items = itemRows.map<OrderItem>(OrderItem.fromJson).toList();
-          final total = calculatePaymentQuote(
-            lines: itemRows.map(_paymentQuoteLineFromRow),
-            vatPricingMode: storePricing.vatPricingMode,
-            serviceChargeEnabled: storePricing.serviceChargeEnabled,
-            serviceChargeRate: storePricing.serviceChargeRate,
-          ).payableTotal;
+      final items = itemRows.map<OrderItem>(OrderItem.fromJson).toList();
+      final consumedDiscount = _consumedDiscountFromRaw(
+        data['order_discounts'],
+      );
+      final quote = calculatePaymentQuote(
+        lines: itemRows.map(_paymentQuoteLineFromRow),
+        vatPricingMode: storePricing.vatPricingMode,
+        serviceChargeEnabled: storePricing.serviceChargeEnabled,
+        serviceChargeRate: storePricing.serviceChargeRate,
+        discountTotal: consumedDiscount?.amount ?? 0,
+      );
+      final paidTotal = _paidTotalFromRaw(data['payments']);
 
-          final tableRaw = data['tables'];
-          final tableNumber = tableRaw is Map<String, dynamic>
-              ? tableRaw['table_number']?.toString() ?? '-'
-              : '-';
-          final createdAtRaw = data['created_at']?.toString();
-          final updatedAtRaw = data['updated_at']?.toString();
+      final tableRaw = data['tables'];
+      final tableNumber = tableRaw is Map<String, dynamic>
+          ? tableRaw['table_number']?.toString() ?? '-'
+          : data['order_purpose']?.toString() == 'staff_meal'
+          ? 'STAFF'
+          : '-';
+      final createdAtRaw = data['created_at']?.toString();
+      final updatedAtRaw = data['updated_at']?.toString();
 
-          return CashierOrder(
-            orderId: data['id'].toString(),
-            tableNumber: tableNumber,
-            tableId: data['table_id'].toString(),
-            status: data['status']?.toString() ?? 'completed',
-            items: items,
-            totalAmount: total,
-            createdAt: createdAtRaw != null
-                ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
-                : DateTime.now(),
-            completedAt: updatedAtRaw != null
-                ? DateTime.tryParse(updatedAtRaw)
-                : null,
-          );
-        })
-        .where((order) => order.totalAmount > 0)
-        .toList();
+      return CashierOrder(
+        orderId: data['id'].toString(),
+        tableNumber: tableNumber,
+        tableId: data['table_id']?.toString() ?? '',
+        status: data['status']?.toString() ?? 'completed',
+        items: items,
+        orderPurpose: data['order_purpose']?.toString() ?? 'customer',
+        menuSubtotal: quote.menuSubtotal,
+        serviceChargeTotal: quote.serviceChargeTotal,
+        discountTotal: quote.discountTotal,
+        totalAmount: quote.payableTotal,
+        paidTotal: paidTotal,
+        remainingDue: _remainingDue(quote.payableTotal, paidTotal),
+        createdAt: createdAtRaw != null
+            ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
+            : DateTime.now(),
+        completedAt: updatedAtRaw != null
+            ? DateTime.tryParse(updatedAtRaw)
+            : null,
+        activeDiscount: consumedDiscount,
+      );
+    }).toList();
   }
 
   void selectOrder(CashierOrder order) {
@@ -301,6 +371,43 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       state = state.copyWith(
         isProcessing: false,
         error: _mapPaymentError(error, 'Failed to process payment'),
+      );
+      return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>?> processPaymentSplits(
+    String storeId,
+    String orderId,
+    double orderTotal,
+    List<PaymentSplitInput> splits,
+  ) async {
+    state = state.copyWith(
+      isProcessing: true,
+      paymentSuccess: false,
+      clearError: true,
+    );
+
+    try {
+      final payments = await paymentService.processPaymentSplits(
+        orderId: orderId,
+        storeId: storeId,
+        orderTotal: orderTotal,
+        splits: splits,
+      );
+
+      await loadOrders(storeId);
+
+      state = state.copyWith(
+        isProcessing: false,
+        paymentSuccess: true,
+        clearSelectedOrder: true,
+      );
+      return payments;
+    } catch (error) {
+      state = state.copyWith(
+        isProcessing: false,
+        error: _mapPaymentError(error, 'Failed to process split payment'),
       );
       return null;
     }
@@ -479,6 +586,9 @@ class CashierTodaySummary {
     required this.paymentsPay,
     required this.serviceCount,
     required this.serviceTotal,
+    required this.staffMealCount,
+    required this.staffMealTotal,
+    required this.discountTotal,
     required this.ordersCompleted,
     required this.ordersCancelled,
     required this.ordersActive,
@@ -491,6 +601,9 @@ class CashierTodaySummary {
   final double paymentsPay;
   final int serviceCount;
   final double serviceTotal;
+  final int staffMealCount;
+  final double staffMealTotal;
+  final double discountTotal;
   final int ordersCompleted;
   final int ordersCancelled;
   final int ordersActive;
@@ -504,6 +617,9 @@ class CashierTodaySummary {
       paymentsPay: _toDouble(json['payments_pay']),
       serviceCount: _toInt(json['service_count']),
       serviceTotal: _toDouble(json['service_total']),
+      staffMealCount: _toInt(json['staff_meal_count']),
+      staffMealTotal: _toDouble(json['staff_meal_total']),
+      discountTotal: _toDouble(json['discount_total']),
       ordersCompleted: _toInt(json['orders_completed']),
       ordersCancelled: _toInt(json['orders_cancelled']),
       ordersActive: _toInt(json['orders_active']),
@@ -548,6 +664,17 @@ String _mapPaymentError(Object error, String fallbackPrefix) {
         'The payment amount is higher than the remaining order total.',
       'PAYMENT_AMOUNT_MISMATCH' =>
         'The payment amount no longer matches the current order total.',
+      'DISCOUNT_PIN_REJECTED' => 'Manager PIN is incorrect.',
+      'DISCOUNT_PIN_NOT_CONFIGURED' =>
+        'Set a discount manager PIN before applying discounts.',
+      'DISCOUNT_PROOF_REQUIRED' => 'A discount proof photo is required.',
+      'DISCOUNT_ALREADY_ACTIVE' => 'This order already has an active discount.',
+      'DISCOUNT_ORDER_NOT_PAYABLE' =>
+        'Discounts can be applied only when the order is ready for payment.',
+      'STAFF_MEAL_SERVICE_REQUIRED' =>
+        'Staff meals must be closed with SERVICE.',
+      'STAFF_MEAL_FORBIDDEN' =>
+        'You do not have permission to create staff meals.',
       'ORDER_NOT_CANCELLABLE' =>
         'Only pending or confirmed orders can be cancelled.',
       'ORDER_MUTATION_FORBIDDEN' =>
@@ -598,6 +725,44 @@ PaymentQuoteLine _paymentQuoteLineFromRow(Map<String, dynamic> row) {
     vatCategory: row['vat_category']?.toString() ?? vatCategory,
     payingAmountIncTax: _nullableDoubleValue(row['paying_amount_inc_tax']),
   );
+}
+
+ActiveOrderDiscount? _activeDiscountFromRaw(dynamic raw) {
+  return _discountFromRaw(raw, 'active');
+}
+
+ActiveOrderDiscount? _consumedDiscountFromRaw(dynamic raw) {
+  return _discountFromRaw(raw, 'consumed');
+}
+
+bool _shouldShowCashierOrder(CashierOrder order) {
+  return order.remainingDue > 0 || order.discountTotal > 0 || order.isStaffMeal;
+}
+
+double _paidTotalFromRaw(dynamic raw) {
+  if (raw is! List) return 0;
+  return raw.fold<double>(0, (sum, item) {
+    if (item is! Map) return sum;
+    final row = Map<String, dynamic>.from(item);
+    return sum + _toDoubleValue(row['amount_portion']);
+  });
+}
+
+double _remainingDue(double totalAmount, double paidTotal) {
+  final remaining = totalAmount - paidTotal;
+  return remaining <= 0.01 ? 0 : remaining;
+}
+
+ActiveOrderDiscount? _discountFromRaw(dynamic raw, String status) {
+  if (raw is! List) return null;
+  for (final item in raw) {
+    if (item is! Map) continue;
+    final row = Map<String, dynamic>.from(item);
+    if ((row['status']?.toString() ?? '') == status) {
+      return ActiveOrderDiscount.fromJson(row);
+    }
+  }
+  return null;
 }
 
 class _CashierStorePricing {

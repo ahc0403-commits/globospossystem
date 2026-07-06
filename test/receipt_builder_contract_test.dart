@@ -42,4 +42,62 @@ void main() {
     expect(text, contains('Service Provision'));
     expect(text, contains('not counted in revenue'));
   });
+
+  test('floor and tray tickets lead with large floor table header', () async {
+    const ticket = PrintTicket(
+      ticket: 'floor',
+      floorLabel: '2F',
+      tableNumber: 'T07',
+      ticketCode: 'abc12345',
+      batchNo: 2,
+      printedReason: 'added_items',
+      printedAt: '2026-07-06T12:00:00+07:00',
+      items: [
+        PrintTicketItem(
+          label: 'Phở bò',
+          quantity: 2,
+          notes: 'No onion',
+          supplemental: true,
+        ),
+      ],
+    );
+
+    final floorBytes = await ReceiptBuilder.buildFloorTicket(ticket);
+    final trayBytes = await ReceiptBuilder.buildTrayLabel(ticket);
+
+    final floorText = String.fromCharCodes(floorBytes);
+    final trayText = String.fromCharCodes(trayBytes);
+
+    expect(floorText.indexOf('2F / T07'), lessThan(floorText.indexOf('FLOOR')));
+    expect(trayText.indexOf('2F / T07'), lessThan(trayText.indexOf('TRAY')));
+    expect(floorText, contains('*** ADDED ITEMS (batch 2) ***'));
+    expect(floorText, contains('Pho bo'));
+    expect(floorText, contains('No onion'));
+    expect(trayText, contains('DUMBWAITER'));
+    expect(floorBytes, contains(0x1d));
+    expect(floorBytes, contains(0x56));
+  });
+
+  test('print ticket payload preserves DB labels and defaults', () {
+    final ticket = PrintTicket.fromPayload({
+      'ticket': 'kitchen',
+      'floor_label': '3F',
+      'table_number': 'T11',
+      'ticket_code': 'feedface',
+      'batch_no': '3',
+      'printed_reason': 'serving',
+      'at': '2026-07-06T12:10:00+07:00',
+      'items': [
+        {'label': 'Bún chả', 'qty': '1', 'supplemental': 'true'},
+      ],
+    });
+
+    expect(ticket.ticket, 'kitchen');
+    expect(ticket.floorLabel, '3F');
+    expect(ticket.tableNumber, 'T11');
+    expect(ticket.batchNo, 3);
+    expect(ticket.items.single.label, 'Bún chả');
+    expect(ticket.items.single.quantity, 1);
+    expect(ticket.items.single.supplemental, isTrue);
+  });
 }

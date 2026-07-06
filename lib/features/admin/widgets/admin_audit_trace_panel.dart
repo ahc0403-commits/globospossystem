@@ -251,6 +251,7 @@ class _AuditTraceRow extends StatelessWidget {
       'is_active' => 'Active Status',
       'table_number' => 'Table Number',
       'seat_count' => 'Seat Count',
+      'floor_label' => 'Floor Label',
       'status' => 'Status',
       'layout_x' => 'Layout X',
       'layout_y' => 'Layout Y',

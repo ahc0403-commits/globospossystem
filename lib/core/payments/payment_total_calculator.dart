@@ -23,11 +23,13 @@ class PaymentQuoteResult {
   const PaymentQuoteResult({
     required this.menuSubtotal,
     required this.serviceChargeTotal,
+    required this.discountTotal,
     required this.payableTotal,
   });
 
   final double menuSubtotal;
   final double serviceChargeTotal;
+  final double discountTotal;
   final double payableTotal;
 }
 
@@ -36,6 +38,7 @@ PaymentQuoteResult calculatePaymentQuote({
   required String vatPricingMode,
   required bool serviceChargeEnabled,
   required double serviceChargeRate,
+  double discountTotal = 0,
 }) {
   var menuSubtotal = 0.0;
   var foodPretaxSubtotal = 0.0;
@@ -90,10 +93,17 @@ PaymentQuoteResult calculatePaymentQuote({
           alcoholPretaxSubtotal: alcoholPretaxSubtotal,
         );
 
+  final resolvedDiscount = _roundMoney(
+    discountTotal.clamp(0, menuSubtotal).toDouble(),
+  );
+
   return PaymentQuoteResult(
     menuSubtotal: _roundMoney(menuSubtotal),
     serviceChargeTotal: _roundMoney(serviceChargeTotal),
-    payableTotal: _roundMoney(menuSubtotal + serviceChargeTotal),
+    discountTotal: resolvedDiscount,
+    payableTotal: _roundMoney(
+      menuSubtotal + serviceChargeTotal - resolvedDiscount,
+    ),
   );
 }
 

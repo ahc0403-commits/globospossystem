@@ -121,7 +121,7 @@ New behavior, single transaction:
 | Screen | Loads Orders With Status | Payable/Actionable Rule | Can Trigger | Must NOT See |
 |--------|--------------------------|-------------------------|-------------|--------------|
 | Waiter | `pending, confirmed, serving` (own store) | edit qty: item `pending`; cancel item: item `pending/preparing/ready` | create_order, add_items_to_order, cancel_order_item, cancel_order | completed, cancelled |
-| Kitchen | `pending, confirmed, serving` — **remove `completed` from filter** (`kitchen_provider.dart:159`) | act on items `pending/preparing/ready` | update_order_item_status | completed, cancelled orders |
+| Kitchen | active lanes: `pending, confirmed, serving`; optional read-only completed-history panel may query `completed` separately | act on items `pending/preparing/ready` | update_order_item_status | completed/cancelled orders in active lanes |
 | Cashier | `serving` ONLY — **replace client-side `_isCashierPayableItemRows` every() check with the single order-status criterion** (`payment_provider.dart:348`) | payable ⇔ `status = 'serving'` | process_payment, cancel_order (admin) | pending, confirmed (kitchen not done) |
 | Tables map | table `occupied` ⇔ ∃ order in `pending/confirmed/serving` | — | — | — |
 

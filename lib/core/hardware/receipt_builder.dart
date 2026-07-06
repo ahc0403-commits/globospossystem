@@ -138,6 +138,143 @@ class ReceiptBuilder {
     return bytes;
   }
 
+  static Future<List<int>> buildKitchenTicket(PrintTicket ticket) async {
+    final profile = await CapabilityProfile.load();
+    final generator = Generator(PaperSize.mm80, profile);
+    final bytes = <int>[];
+
+    bytes.addAll(
+      generator.text(
+        _escText('KITCHEN TICKET'),
+        styles: const PosStyles(
+          bold: true,
+          align: PosAlign.center,
+          height: PosTextSize.size2,
+          width: PosTextSize.size2,
+        ),
+      ),
+    );
+    bytes.addAll(generator.text(_escText('#${ticket.ticketCode}')));
+    bytes.addAll(
+      generator.text(
+        _escText('${ticket.floorLabel} / ${ticket.tableNumber}'),
+        styles: const PosStyles(bold: true),
+      ),
+    );
+    bytes.addAll(_buildTicketBody(generator, ticket));
+    return bytes;
+  }
+
+  static Future<List<int>> buildFloorTicket(PrintTicket ticket) async {
+    final profile = await CapabilityProfile.load();
+    final generator = Generator(PaperSize.mm80, profile);
+    final bytes = <int>[];
+
+    bytes.addAll(_buildLargeTableHeader(generator, ticket));
+    bytes.addAll(
+      generator.text(
+        _escText('FLOOR COPY #${ticket.ticketCode}'),
+        styles: const PosStyles(align: PosAlign.center),
+      ),
+    );
+    bytes.addAll(_buildTicketBody(generator, ticket));
+    return bytes;
+  }
+
+  static Future<List<int>> buildTrayLabel(PrintTicket ticket) async {
+    final profile = await CapabilityProfile.load();
+    final generator = Generator(PaperSize.mm80, profile);
+    final bytes = <int>[];
+
+    bytes.addAll(_buildLargeTableHeader(generator, ticket));
+    bytes.addAll(
+      generator.text(
+        _escText('TRAY / DUMBWAITER'),
+        styles: const PosStyles(bold: true, align: PosAlign.center),
+      ),
+    );
+    bytes.addAll(_buildTicketBody(generator, ticket, compact: true));
+    return bytes;
+  }
+
+  static List<int> _buildLargeTableHeader(
+    Generator generator,
+    PrintTicket ticket,
+  ) {
+    final bytes = <int>[];
+    bytes.addAll(
+      generator.text(
+        _escText('${ticket.floorLabel} / ${ticket.tableNumber}'),
+        styles: const PosStyles(
+          bold: true,
+          align: PosAlign.center,
+          height: PosTextSize.size2,
+          width: PosTextSize.size2,
+        ),
+      ),
+    );
+    bytes.addAll(generator.hr());
+    return bytes;
+  }
+
+  static List<int> _buildTicketBody(
+    Generator generator,
+    PrintTicket ticket, {
+    bool compact = false,
+  }) {
+    final bytes = <int>[];
+    if (ticket.printedReason == 'added_items') {
+      bytes.addAll(
+        generator.text(
+          _escText('*** ADDED ITEMS (batch ${ticket.batchNo}) ***'),
+          styles: const PosStyles(bold: true, align: PosAlign.center),
+        ),
+      );
+    } else {
+      bytes.addAll(
+        generator.text(
+          _escText('Batch ${ticket.batchNo} / ${ticket.printedReason}'),
+          styles: const PosStyles(align: PosAlign.center),
+        ),
+      );
+    }
+    bytes.addAll(generator.hr());
+
+    for (final item in ticket.items) {
+      final linePrefix = item.supplemental ? '+ ' : '';
+      bytes.addAll(
+        generator.row([
+          PosColumn(
+            text: _escText('$linePrefix${item.label}'),
+            width: compact ? 8 : 9,
+            styles: const PosStyles(bold: true),
+          ),
+          PosColumn(
+            text: 'x${item.quantity}',
+            width: compact ? 4 : 3,
+            styles: const PosStyles(align: PosAlign.right, bold: true),
+          ),
+        ]),
+      );
+      final notes = item.notes?.trim();
+      if (notes != null && notes.isNotEmpty) {
+        bytes.addAll(generator.text(_escText('  * $notes')));
+      }
+    }
+
+    final orderNotes = ticket.orderNotes?.trim();
+    if (orderNotes != null && orderNotes.isNotEmpty) {
+      bytes.addAll(generator.hr());
+      bytes.addAll(generator.text(_escText('Note: $orderNotes')));
+    }
+
+    bytes.addAll(generator.hr());
+    bytes.addAll(generator.text(_escText(ticket.printedAt)));
+    bytes.addAll(generator.feed(2));
+    bytes.addAll(generator.cut());
+    return bytes;
+  }
+
   static String _formatVnd(double amount) {
     final n = amount.toInt();
     final s = n.toString();
@@ -318,6 +455,89 @@ class ReceiptBuilder {
       }
     }
     return buffer.toString();
+  }
+}
+
+class PrintTicket {
+  const PrintTicket({
+    required this.ticket,
+    required this.floorLabel,
+    required this.tableNumber,
+    required this.ticketCode,
+    required this.batchNo,
+    required this.printedReason,
+    required this.printedAt,
+    required this.items,
+    this.orderNotes,
+  });
+
+  final String ticket;
+  final String floorLabel;
+  final String tableNumber;
+  final String ticketCode;
+  final int batchNo;
+  final String printedReason;
+  final String printedAt;
+  final List<PrintTicketItem> items;
+  final String? orderNotes;
+
+  factory PrintTicket.fromPayload(Map<String, dynamic> payload) {
+    final rawItems = payload['items'];
+    final itemRows = rawItems is List ? rawItems : const <Object?>[];
+    return PrintTicket(
+      ticket: payload['ticket']?.toString() ?? 'kitchen',
+      floorLabel: payload['floor_label']?.toString() ?? '-',
+      tableNumber: payload['table_number']?.toString() ?? '-',
+      ticketCode: payload['ticket_code']?.toString() ?? '-',
+      batchNo: switch (payload['batch_no']) {
+        int value => value,
+        num value => value.toInt(),
+        String value => int.tryParse(value) ?? 1,
+        _ => 1,
+      },
+      printedReason: payload['printed_reason']?.toString() ?? 'initial',
+      printedAt: payload['at']?.toString() ?? '',
+      items: itemRows
+          .whereType<Map>()
+          .map(
+            (item) =>
+                PrintTicketItem.fromPayload(Map<String, dynamic>.from(item)),
+          )
+          .toList(),
+      orderNotes: payload['order_notes']?.toString(),
+    );
+  }
+}
+
+class PrintTicketItem {
+  const PrintTicketItem({
+    required this.label,
+    required this.quantity,
+    this.notes,
+    this.supplemental = false,
+  });
+
+  final String label;
+  final int quantity;
+  final String? notes;
+  final bool supplemental;
+
+  factory PrintTicketItem.fromPayload(Map<String, dynamic> payload) {
+    return PrintTicketItem(
+      label: payload['label']?.toString() ?? 'Item',
+      quantity: switch (payload['qty'] ?? payload['quantity']) {
+        int value => value,
+        num value => value.toInt(),
+        String value => int.tryParse(value) ?? 1,
+        _ => 1,
+      },
+      notes: payload['notes']?.toString(),
+      supplemental: switch (payload['supplemental']) {
+        bool value => value,
+        String value => value.toLowerCase() == 'true',
+        _ => false,
+      },
+    );
   }
 }
 

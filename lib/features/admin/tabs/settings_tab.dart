@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
-import '../../../core/layout/platform_info.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/hardware/printer_service.dart';
 import '../../../core/hardware/receipt_builder.dart';
 import '../../../core/i18n/locale_extensions.dart';
+import '../../../core/layout/platform_info.dart';
+import '../../../core/services/printer_destination_service.dart';
 import '../../../core/services/pin_service.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
 import '../../../core/utils/number_input_utils.dart';
+import '../../../core/utils/role_routes.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../../widgets/pin_dialog.dart';
@@ -16,6 +19,7 @@ import '../../auth/auth_provider.dart';
 import '../../auth/auth_state.dart';
 import '../../settings/printer_provider.dart';
 import '../providers/admin_audit_provider.dart';
+import '../providers/printer_destinations_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/admin_audit_trace_panel.dart';
 
@@ -32,12 +36,15 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
   final _perPersonController = TextEditingController();
   final _fullNameController = TextEditingController();
   final _printerIpController = TextEditingController();
+  final Set<String> _testingDestinationIds = <String>{};
   String _operationMode = 'standard';
   String? _initializedRestaurantId;
   String? _lastError;
   String? _lastPrinterError;
   bool? _hasPayrollPin;
+  bool? _hasDiscountManagerPin;
   bool _isSavingPayrollPin = false;
+  bool _isSavingDiscountManagerPin = false;
   String _selectedCategory = 'store';
 
   @override
@@ -58,6 +65,17 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _hasPayrollPin = false);
+    }
+  }
+
+  Future<void> _loadDiscountManagerPinStatus(String storeId) async {
+    try {
+      final hasPin = await pinService.hasDiscountManagerPin(storeId);
+      if (!mounted) return;
+      setState(() => _hasDiscountManagerPin = hasPin);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _hasDiscountManagerPin = false);
     }
   }
 
@@ -187,6 +205,137 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     confirmController.dispose();
   }
 
+  Future<void> _showSetDiscountManagerPinDialog(String storeId) async {
+    final pageContext = context;
+    final l10n = context.l10n;
+    final pinController = TextEditingController();
+    final confirmController = TextEditingController();
+    String? validationMessage;
+
+    await showDialog<void>(
+      context: context,
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface1,
+              title: Text(
+                l10n.settingsDiscountManagerPinTitle,
+                style: AppFonts.system(color: AppColors.textPrimary),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: pinController,
+                    keyboardType: TextInputType.number,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: l10n.settingsDiscountManagerPinNew,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: confirmController,
+                    keyboardType: TextInputType.number,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: l10n.settingsDiscountManagerPinConfirm,
+                    ),
+                  ),
+                  if (validationMessage != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      validationMessage!,
+                      style: AppFonts.system(
+                        color: AppColors.statusCancelled,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(l10n.cancel),
+                ),
+                FilledButton(
+                  onPressed: _isSavingDiscountManagerPin
+                      ? null
+                      : () async {
+                          final pin = pinController.text.trim();
+                          final confirm = confirmController.text.trim();
+                          final validPin = RegExp(r'^\d{4,8}$').hasMatch(pin);
+                          if (!validPin) {
+                            setModalState(
+                              () => validationMessage =
+                                  l10n.settingsDiscountManagerPinMustBeDigits,
+                            );
+                            return;
+                          }
+                          if (pin != confirm) {
+                            setModalState(
+                              () => validationMessage = l10n
+                                  .settingsDiscountManagerPinConfirmMismatch,
+                            );
+                            return;
+                          }
+
+                          setState(() => _isSavingDiscountManagerPin = true);
+                          try {
+                            await pinService.setDiscountManagerPin(
+                              storeId,
+                              pin,
+                            );
+                            if (!pageContext.mounted) return;
+                            Navigator.of(pageContext).pop();
+                            await _loadDiscountManagerPinStatus(storeId);
+                            if (!pageContext.mounted) return;
+                            showSuccessToast(
+                              pageContext,
+                              l10n.settingsDiscountManagerPinSaved,
+                            );
+                          } catch (e) {
+                            if (pageContext.mounted) {
+                              showErrorToast(
+                                pageContext,
+                                l10n.settingsDiscountManagerPinSaveFailed(
+                                  _discountManagerPinSaveError(e),
+                                ),
+                              );
+                            }
+                          } finally {
+                            if (mounted) {
+                              setState(
+                                () => _isSavingDiscountManagerPin = false,
+                              );
+                            }
+                          }
+                        },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.amber500,
+                    foregroundColor: AppColors.surface0,
+                  ),
+                  child: _isSavingDiscountManagerPin
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(l10n.save),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    pinController.dispose();
+    confirmController.dispose();
+  }
+
   Future<void> _clearPayrollPin(String storeId) async {
     final entered = await showPinDialog(
       context,
@@ -217,6 +366,26 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     }
   }
 
+  Future<void> _clearDiscountManagerPin(String storeId) async {
+    try {
+      await pinService.clearDiscountManagerPin(storeId);
+      await _loadDiscountManagerPinStatus(storeId);
+      if (mounted) {
+        showSuccessToast(
+          context,
+          context.l10n.settingsDiscountManagerPinDeleted,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        showErrorToast(
+          context,
+          context.l10n.settingsDiscountManagerPinDeleteFailed('$e'),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -238,6 +407,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
       Future.microtask(() async {
         await notifier.loadSettings(storeId, authUid);
         await _loadPayrollPinStatus(storeId);
+        await _loadDiscountManagerPinStatus(storeId);
       });
     }
 
@@ -610,6 +780,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
       case 'receipt':
         return _buildReceiptPanel(
           context: context,
+          storeId: storeId,
           printerState: printerState,
           printerNotifier: printerNotifier,
           settingsState: settingsState,
@@ -869,11 +1040,30 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
   }
 
   Widget _buildPaymentPanel({required String? storeId}) {
-    final pinLabel = _hasPayrollPin == true
+    final allPinsSet = _hasPayrollPin == true && _hasDiscountManagerPin == true;
+    final anyPinUnknown =
+        _hasPayrollPin == null || _hasDiscountManagerPin == null;
+    final protectionLabel = anyPinUnknown
+        ? context.l10n.settingsChecking
+        : allPinsSet
+        ? context.l10n.settingsProtected
+        : context.l10n.settingsNotSet;
+    final protectionColor = anyPinUnknown
+        ? PosColors.textSecondary
+        : allPinsSet
+        ? PosColors.success
+        : PosColors.warning;
+    final payrollPinLabel = _hasPayrollPin == true
         ? context.l10n.settingsProtected
         : _hasPayrollPin == false
         ? context.l10n.settingsNotSet
         : context.l10n.settingsChecking;
+    final discountPinLabel = _hasDiscountManagerPin == true
+        ? context.l10n.settingsProtected
+        : _hasDiscountManagerPin == false
+        ? context.l10n.settingsNotSet
+        : context.l10n.settingsChecking;
+
     return ToastWorkSurface(
       padding: const EdgeInsets.all(18),
       child: Column(
@@ -883,12 +1073,8 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
             title: context.l10n.settingsPaymentProtection,
             summary: context.l10n.settingsPaymentProtectionSummary,
             badge: ToastStatusBadge(
-              label: pinLabel,
-              color: _hasPayrollPin == true
-                  ? PosColors.success
-                  : _hasPayrollPin == false
-                  ? PosColors.warning
-                  : PosColors.textSecondary,
+              label: protectionLabel,
+              color: protectionColor,
               compact: true,
             ),
           ),
@@ -911,6 +1097,16 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                   ),
                 ),
                 const SizedBox(height: 6),
+                ToastStatusBadge(
+                  label: payrollPinLabel,
+                  color: _hasPayrollPin == true
+                      ? PosColors.success
+                      : _hasPayrollPin == false
+                      ? PosColors.warning
+                      : PosColors.textSecondary,
+                  compact: true,
+                ),
+                const SizedBox(height: 8),
                 Text(
                   _hasPayrollPin == true
                       ? context.l10n.settingsPayrollPinSetMessage
@@ -944,6 +1140,69 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
               ],
             ),
           ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: PosColors.panelMuted,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: PosColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.l10n.settingsDiscountManagerPinTitle,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: PosColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                ToastStatusBadge(
+                  label: discountPinLabel,
+                  color: _hasDiscountManagerPin == true
+                      ? PosColors.success
+                      : _hasDiscountManagerPin == false
+                      ? PosColors.warning
+                      : PosColors.textSecondary,
+                  compact: true,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _hasDiscountManagerPin == true
+                      ? context.l10n.settingsDiscountManagerPinSetMessage
+                      : _hasDiscountManagerPin == false
+                      ? context.l10n.settingsDiscountManagerPinUnsetMessage
+                      : context.l10n.settingsDiscountManagerPinCheckingMessage,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: storeId == null
+                            ? null
+                            : () => _showSetDiscountManagerPinDialog(storeId),
+                        child: Text(context.l10n.settingsChangePin),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed:
+                            storeId == null || _hasDiscountManagerPin != true
+                            ? null
+                            : () => _clearDiscountManagerPin(storeId),
+                        child: Text(context.l10n.settingsDeletePin),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -951,6 +1210,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
 
   Widget _buildReceiptPanel({
     required BuildContext context,
+    required String? storeId,
     required PrinterState printerState,
     required PrinterNotifier printerNotifier,
     required SettingsState settingsState,
@@ -1093,10 +1353,497 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
             ),
             const SizedBox(height: 10),
             _printerStatusRow(printerState.lastTestResult),
+            const SizedBox(height: 18),
+            _buildPrinterDestinationsSection(storeId: storeId),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _testPrinterDestination(
+    PrinterDestinationConfig destination,
+  ) async {
+    if (_testingDestinationIds.contains(destination.id)) {
+      return;
+    }
+    setState(() {
+      _testingDestinationIds.add(destination.id);
+    });
+    try {
+      final queued = await ref
+          .read(printerDestinationsProvider(destination.storeId).notifier)
+          .enqueueTestPrintJob(destination.id);
+      if (!mounted) {
+        return;
+      }
+      if (queued) {
+        showSuccessToast(context, context.l10n.kitchenReprintQueued);
+      } else {
+        showErrorToast(
+          context,
+          context.l10n.settingsPrintDestinationTestFailed,
+        );
+      }
+    } finally {
+      if (!mounted) {
+        _testingDestinationIds.remove(destination.id);
+      } else {
+        setState(() {
+          _testingDestinationIds.remove(destination.id);
+        });
+      }
+    }
+  }
+
+  Widget _buildPrinterDestinationsSection({required String? storeId}) {
+    if (storeId == null) {
+      return PosExceptionAlert(
+        label: context.l10n.settingsPrintRoutingUnavailable,
+        detail: context.l10n.settingsPrintRoutingUnavailableDetail,
+        color: PosColors.warning,
+        icon: Icons.print_disabled_outlined,
+      );
+    }
+
+    final destinationState = ref.watch(printerDestinationsProvider(storeId));
+    final destinationNotifier = ref.read(
+      printerDestinationsProvider(storeId).notifier,
+    );
+    final canOpenPrintStation =
+        PlatformInfo.isPrinterSupported &&
+        canAccessRouteForRole(ref.watch(authProvider).role, '/print-station');
+    final activeCount = destinationState.destinations
+        .where((destination) => destination.isActive)
+        .length;
+
+    return Container(
+      key: const Key('settings_printer_destinations_section'),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.l10n.settingsPrintRoutingDestinationsTitle,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      context.l10n.settingsPrintRoutingDestinationsSummary,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              ToastStatusBadge(
+                label: context.l10n.settingsPrintRoutingActiveCount(
+                  activeCount,
+                ),
+                color: activeCount > 0 ? PosColors.success : PosColors.warning,
+                compact: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (destinationState.error != null) ...[
+            PosExceptionAlert(
+              label: context.l10n.settingsPrintRoutingNeedsReview,
+              detail: _printerDestinationErrorDetail(destinationState.error!),
+              color: PosColors.warning,
+              icon: Icons.warning_amber_outlined,
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (destinationState.isLoading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(18),
+                child: CircularProgressIndicator(color: AppColors.amber500),
+              ),
+            )
+          else if (destinationState.destinations.isEmpty)
+            PosExceptionAlert(
+              label: context.l10n.settingsPrintRoutingEmptyTitle,
+              detail: context.l10n.settingsPrintRoutingEmptyDetail,
+              color: PosColors.info,
+              icon: Icons.print_outlined,
+            )
+          else
+            ...destinationState.destinations.map(
+              (destination) => _printerDestinationCard(
+                key: ValueKey<String>(
+                  'settings_printer_destination_${destination.id}',
+                ),
+                storeId: storeId,
+                destination: destination,
+                saving: destinationState.isSaving,
+                notifier: destinationNotifier,
+              ),
+            ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.end,
+            children: [
+              if (canOpenPrintStation)
+                OutlinedButton.icon(
+                  key: const Key('settings_print_station_open'),
+                  onPressed: () => context.go('/print-station'),
+                  icon: const Icon(Icons.print_outlined, size: 18),
+                  label: Text(context.l10n.printStationOpen),
+                ),
+              OutlinedButton.icon(
+                key: const Key('settings_printer_destination_add'),
+                onPressed: destinationState.isSaving
+                    ? null
+                    : () => _showPrinterDestinationDialog(storeId: storeId),
+                icon: const Icon(Icons.add, size: 18),
+                label: Text(context.l10n.settingsPrintDestinationAdd),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _printerDestinationCard({
+    required Key key,
+    required String storeId,
+    required PrinterDestinationConfig destination,
+    required bool saving,
+    required PrinterDestinationsNotifier notifier,
+  }) {
+    final label = [
+      _printerDestinationPurposeLabel(context, destination.purpose),
+      if (destination.floorLabel != null && destination.floorLabel!.isNotEmpty)
+        destination.floorLabel!,
+    ].join(' / ');
+    final isTesting = _testingDestinationIds.contains(destination.id);
+
+    return Container(
+      key: key,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            destination.isFloorDestination
+                ? Icons.layers_outlined
+                : Icons.print_outlined,
+            color: destination.isActive
+                ? AppColors.textPrimary
+                : AppColors.textSecondary,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  destination.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppFonts.system(
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${destination.ip}:${destination.port}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppFonts.system(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    ToastStatusBadge(
+                      label: label,
+                      color: PosColors.info,
+                      compact: true,
+                    ),
+                    ToastStatusBadge(
+                      label: destination.isActive
+                          ? context.l10n.settingsPrintDestinationActiveStatus
+                          : context.l10n.settingsPrintDestinationInactiveStatus,
+                      color: destination.isActive
+                          ? PosColors.success
+                          : PosColors.textSecondary,
+                      compact: true,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton.outlined(
+            key: const Key('settings_printer_destination_test'),
+            onPressed: saving || isTesting
+                ? null
+                : () => _testPrinterDestination(destination),
+            icon: isTesting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.receipt_long_outlined, size: 18),
+            tooltip: context.l10n.settingsPrintDestinationTestTooltip,
+          ),
+          const SizedBox(width: 6),
+          IconButton.outlined(
+            key: const Key('settings_printer_destination_edit'),
+            onPressed: saving
+                ? null
+                : () => _showPrinterDestinationDialog(
+                    storeId: storeId,
+                    destination: destination,
+                  ),
+            icon: const Icon(Icons.edit_outlined, size: 18),
+            tooltip: context.l10n.settingsPrintDestinationEditTooltip,
+          ),
+          const SizedBox(width: 6),
+          IconButton.outlined(
+            key: const Key('settings_printer_destination_remove'),
+            onPressed: saving
+                ? null
+                : () async {
+                    final success = await notifier.deleteDestination(
+                      destination.id,
+                    );
+                    if (!mounted || !success) {
+                      return;
+                    }
+                    showSuccessToast(
+                      context,
+                      context.l10n.settingsPrintDestinationDisabledToast,
+                    );
+                  },
+            icon: const Icon(Icons.delete_outline, size: 18),
+            tooltip: context.l10n.settingsPrintDestinationDisableTooltip,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showPrinterDestinationDialog({
+    required String storeId,
+    PrinterDestinationConfig? destination,
+  }) async {
+    final pageContext = context;
+    final l10n = context.l10n;
+    final nameController = TextEditingController(text: destination?.name ?? '');
+    final ipController = TextEditingController(text: destination?.ip ?? '');
+    final portController = TextEditingController(
+      text: (destination?.port ?? 9100).toString(),
+    );
+    final floorController = TextEditingController(
+      text: destination?.floorLabel ?? '1F',
+    );
+    var purpose = destination?.purpose ?? 'kitchen';
+    var isActive = destination?.isActive ?? true;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface1,
+              title: Text(
+                destination == null
+                    ? l10n.settingsPrintDestinationAdd
+                    : l10n.settingsPrintDestinationEdit,
+                style: AppFonts.system(color: AppColors.textPrimary),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      key: const Key('settings_printer_destination_name'),
+                      controller: nameController,
+                      style: AppFonts.system(color: AppColors.textPrimary),
+                      decoration: InputDecoration(
+                        labelText: l10n.settingsPrintDestinationName,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      key: const Key('settings_printer_destination_ip'),
+                      controller: ipController,
+                      style: AppFonts.system(color: AppColors.textPrimary),
+                      decoration: InputDecoration(
+                        labelText: l10n.settingsPrintDestinationIp,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      key: const Key('settings_printer_destination_port'),
+                      controller: portController,
+                      keyboardType: TextInputType.number,
+                      style: AppFonts.system(color: AppColors.textPrimary),
+                      decoration: InputDecoration(
+                        labelText: l10n.settingsPrintDestinationPort,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      key: const Key('settings_printer_destination_purpose'),
+                      initialValue: purpose,
+                      dropdownColor: AppColors.surface1,
+                      style: AppFonts.system(color: AppColors.textPrimary),
+                      decoration: InputDecoration(
+                        labelText: l10n.settingsPrintDestinationPurpose,
+                      ),
+                      items: [
+                        DropdownMenuItem(
+                          value: 'kitchen',
+                          child: Text(l10n.settingsPrintDestinationKitchen),
+                        ),
+                        DropdownMenuItem(
+                          value: 'floor',
+                          child: Text(l10n.settingsPrintDestinationFloor),
+                        ),
+                        DropdownMenuItem(
+                          value: 'tray',
+                          child: Text(l10n.settingsPrintDestinationTray),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setDialogState(() => purpose = value);
+                      },
+                    ),
+                    if (purpose == 'floor') ...[
+                      const SizedBox(height: 12),
+                      TextField(
+                        key: const Key(
+                          'settings_printer_destination_floor_label',
+                        ),
+                        controller: floorController,
+                        textCapitalization: TextCapitalization.characters,
+                        style: AppFonts.system(color: AppColors.textPrimary),
+                        decoration: InputDecoration(
+                          labelText: l10n.tablesFloorLabel,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    CheckboxListTile(
+                      value: isActive,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        l10n.settingsPrintDestinationActive,
+                        style: AppFonts.system(color: AppColors.textPrimary),
+                      ),
+                      onChanged: (value) {
+                        setDialogState(() => isActive = value ?? true);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(context.l10n.cancel),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.amber500,
+                    foregroundColor: AppColors.surface0,
+                  ),
+                  onPressed: () async {
+                    final name = nameController.text.trim();
+                    final ip = ipController.text.trim();
+                    final port = parseIntInput(portController.text);
+                    final floorLabel = floorController.text.trim();
+                    if (name.isEmpty ||
+                        ip.isEmpty ||
+                        port == null ||
+                        port <= 0 ||
+                        (purpose == 'floor' && floorLabel.isEmpty)) {
+                      showErrorToast(
+                        dialogContext,
+                        l10n.settingsPrintDestinationInputError,
+                      );
+                      return;
+                    }
+
+                    final success = await ref
+                        .read(printerDestinationsProvider(storeId).notifier)
+                        .upsertDestination(
+                          PrinterDestinationDraft(
+                            id: destination?.id,
+                            name: name,
+                            ip: ip,
+                            port: port,
+                            purpose: purpose,
+                            floorLabel: purpose == 'floor' ? floorLabel : null,
+                            isActive: isActive,
+                          ),
+                        );
+                    if (!dialogContext.mounted || !success) {
+                      return;
+                    }
+                    Navigator.of(dialogContext).pop();
+                    if (mounted) {
+                      showSuccessToast(
+                        pageContext,
+                        l10n.settingsPrintDestinationSavedToast,
+                      );
+                    }
+                  },
+                  child: Text(context.l10n.save),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    nameController.dispose();
+    ipController.dispose();
+    portController.dispose();
+    floorController.dispose();
   }
 
   Widget _buildSystemPanel({
@@ -1238,6 +1985,39 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     );
   }
 
+  String _printerDestinationPurposeLabel(BuildContext context, String purpose) {
+    return switch (purpose) {
+      'floor' => context.l10n.settingsPrintDestinationFloor,
+      'tray' => context.l10n.settingsPrintDestinationTray,
+      _ => context.l10n.settingsPrintDestinationKitchen,
+    };
+  }
+
+  String _printerDestinationErrorDetail(String code) {
+    final l10n = context.l10n;
+    return switch (code) {
+      PrinterDestinationErrorCodes.nameRequired =>
+        l10n.settingsPrintDestinationNameRequired,
+      PrinterDestinationErrorCodes.ipRequired =>
+        l10n.settingsPrintDestinationIpRequired,
+      PrinterDestinationErrorCodes.portInvalid =>
+        l10n.settingsPrintDestinationPortInvalid,
+      PrinterDestinationErrorCodes.purposeInvalid =>
+        l10n.settingsPrintDestinationPurposeInvalid,
+      PrinterDestinationErrorCodes.floorRequired =>
+        l10n.settingsPrintDestinationFloorRequired,
+      PrinterDestinationErrorCodes.permissionDenied =>
+        l10n.settingsPrintDestinationPermissionDenied,
+      PrinterDestinationErrorCodes.saveFailed =>
+        l10n.settingsPrintRoutingSaveFailed,
+      PrinterDestinationErrorCodes.removeFailed =>
+        l10n.settingsPrintRoutingRemoveFailed,
+      PrinterDestinationErrorCodes.loadFailed =>
+        l10n.settingsPrintRoutingLoadFailed,
+      _ => l10n.settingsPrintRoutingNeedsReview,
+    };
+  }
+
   String _settingsRoleLabel(String? role) {
     switch (role) {
       case 'waiter':
@@ -1294,6 +2074,34 @@ String _payrollPinPilotSaveError(Object error) {
     return 'Payroll PIN RPC is missing or not deployed for this environment. Detail: $raw';
   }
   return 'PIN was not saved. Confirm the pilot admin account, active store, and DB function deployment. Detail: $raw';
+}
+
+String _discountManagerPinSaveError(Object error) {
+  final raw = error
+      .toString()
+      .replaceFirst(RegExp(r'^Exception:\s*'), '')
+      .trim();
+  final lower = raw.toLowerCase();
+  if (lower.contains('permission') ||
+      lower.contains('forbidden') ||
+      lower.contains('admin')) {
+    return 'Admin permission failed. Use a store admin, brand admin, or super admin account. Detail: $raw';
+  }
+  if (lower.contains('restaurant') ||
+      lower.contains('store') ||
+      lower.contains('not found')) {
+    return 'Store settings row could not be matched. Switch to the correct store and retry. Detail: $raw';
+  }
+  if (lower.contains('discount_pin_invalid') ||
+      lower.contains('pin') && lower.contains('invalid')) {
+    return 'Discount manager PIN must be 4 to 8 digits. Detail: $raw';
+  }
+  if (lower.contains('function') ||
+      lower.contains('rpc') ||
+      lower.contains('set_discount_manager_pin')) {
+    return 'Discount manager PIN RPC is missing or not deployed for this environment. Detail: $raw';
+  }
+  return 'Discount manager PIN was not saved. Confirm the admin account, active store, and DB function deployment. Detail: $raw';
 }
 
 class _SettingsCategory {

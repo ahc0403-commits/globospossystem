@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/layout/platform_info.dart';
 import '../../core/utils/time_utils.dart';
 
 import '../../core/ui/app_primitives.dart';
@@ -1011,7 +1013,9 @@ class _KitchenOrderCard extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        context.l10n.kitchenTableLabel(order.tableNumber),
+                        order.isStaffMeal
+                            ? context.l10n.cashierStaffMealBadge
+                            : context.l10n.kitchenTableLabel(order.tableNumber),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: PosNumericText.tableId.copyWith(
@@ -1038,6 +1042,13 @@ class _KitchenOrderCard extends StatelessWidget {
                       color: PosColors.info,
                       compact: true,
                     ),
+                    if (order.isStaffMeal)
+                      ToastStatusBadge(
+                        key: Key('staff_meal_badge_${order.orderId}'),
+                        label: context.l10n.cashierStaffMealBadge,
+                        color: PosColors.warning,
+                        compact: true,
+                      ),
                     if (hasSupplementalItems) ...[
                       ToastStatusBadge(
                         key: Key(
@@ -1634,7 +1645,9 @@ class _KitchenCompletedHistoryPanel extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              l10n.kitchenTableLabel(order.tableNumber),
+                              order.isStaffMeal
+                                  ? l10n.cashierStaffMealBadge
+                                  : l10n.kitchenTableLabel(order.tableNumber),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.bodyMedium
@@ -1753,6 +1766,23 @@ class _KitchenTopBar extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 8),
+          if (storeId != null) ...[
+            if (PlatformInfo.isPrinterSupported) ...[
+              IconButton.outlined(
+                key: const Key('kitchen_print_station_entry'),
+                tooltip: l10n.printStationOpen,
+                onPressed: () => context.go('/print-station'),
+                icon: const Icon(
+                  Icons.print_outlined,
+                  color: AppColors.textSecondary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            _KitchenFailedPrintJobsButton(storeId: storeId!),
+            const SizedBox(width: 8),
+          ],
           IconButton(
             key: const Key('logout_button'),
             icon: const Icon(Icons.logout, color: AppColors.textSecondary),
@@ -1760,6 +1790,214 @@ class _KitchenTopBar extends ConsumerWidget {
             onPressed: () async {
               await ref.read(authProvider.notifier).logout();
             },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _KitchenFailedPrintJobsButton extends ConsumerWidget {
+  const _KitchenFailedPrintJobsButton({required this.storeId});
+
+  final String storeId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final failedJobs = ref.watch(failedPrintJobsProvider(storeId));
+    final count = failedJobs.maybeWhen(
+      data: (jobs) => jobs.length,
+      orElse: () => 0,
+    );
+    final color = count > 0 ? PosColors.warning : AppColors.textSecondary;
+
+    return IconButton.outlined(
+      key: const Key('kitchen_failed_print_jobs_button'),
+      tooltip: context.l10n.kitchenFailedPrintJobs,
+      onPressed: () => _showFailedPrintJobsDialog(context, ref, storeId),
+      icon: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Icon(Icons.print_disabled_outlined, color: color, size: 20),
+          if (count > 0)
+            Positioned(
+              right: -8,
+              top: -8,
+              child: Container(
+                key: const Key('kitchen_failed_print_jobs_badge'),
+                constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                padding: const EdgeInsets.symmetric(horizontal: 5),
+                decoration: BoxDecoration(
+                  color: PosColors.warning,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  '$count',
+                  style: AppFonts.system(
+                    color: AppColors.surface0,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showFailedPrintJobsDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String storeId,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return Consumer(
+          builder: (context, ref, _) {
+            final failedJobs = ref.watch(failedPrintJobsProvider(storeId));
+
+            return AlertDialog(
+              key: const Key('kitchen_failed_print_jobs_dialog'),
+              backgroundColor: AppColors.surface1,
+              title: Text(
+                context.l10n.kitchenFailedPrintJobs,
+                style: AppFonts.system(color: AppColors.textPrimary),
+              ),
+              content: SizedBox(
+                width: 420,
+                child: failedJobs.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.all(18),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.amber500,
+                      ),
+                    ),
+                  ),
+                  error: (error, _) => PosExceptionAlert(
+                    label: context.l10n.kitchenPrintQueueUnavailable,
+                    detail: '$error',
+                    color: PosColors.warning,
+                    icon: Icons.warning_amber_outlined,
+                  ),
+                  data: (jobs) {
+                    if (jobs.isEmpty) {
+                      return PosExceptionAlert(
+                        label: context.l10n.kitchenNoFailedPrintJobs,
+                        detail: context.l10n.kitchenNoFailedPrintJobsDetail,
+                        color: PosColors.success,
+                        icon: Icons.check_circle_outline,
+                      );
+                    }
+
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final job in jobs)
+                          _KitchenFailedPrintJobRow(
+                            job: job,
+                            onReprint: () async {
+                              await ref
+                                  .read(kitchenProvider.notifier)
+                                  .reprintPrintJob(job.id);
+                              ref.invalidate(failedPrintJobsProvider(storeId));
+                              if (dialogContext.mounted) {
+                                showSuccessToast(
+                                  dialogContext,
+                                  context.l10n.kitchenReprintQueued,
+                                );
+                              }
+                            },
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(context.l10n.close),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _KitchenFailedPrintJobRow extends StatelessWidget {
+  const _KitchenFailedPrintJobRow({required this.job, required this.onReprint});
+
+  final FailedPrintJob job;
+  final Future<void> Function() onReprint;
+
+  @override
+  Widget build(BuildContext context) {
+    final updatedAt = TimeUtils.toVietnam(job.updatedAt);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${job.floorLabel} / ${job.tableNumber} / ${job.copyType}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppFonts.system(
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  context.l10n.kitchenPrintJobBatch(
+                    job.batchNo,
+                    DateFormat('HH:mm').format(updatedAt),
+                  ),
+                  style: AppFonts.system(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+                if (job.lastError != null && job.lastError!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    job.lastError!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppFonts.system(
+                      color: PosColors.warning,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          OutlinedButton.icon(
+            key: const Key('kitchen_reprint_print_job_button'),
+            onPressed: onReprint,
+            icon: const Icon(Icons.refresh_outlined, size: 16),
+            label: Text(context.l10n.cashierReprint),
           ),
         ],
       ),
@@ -1822,6 +2060,7 @@ List<KitchenOrder> _filterKitchenOrders(
       order.orderId,
       ticketCode,
       order.tableNumber,
+      if (order.isStaffMeal) 'staff meal',
       ...order.items.map((item) => item.label),
     ].map(_normalizeKitchenSearch).join(' ');
     return haystack.contains(normalizedQuery);

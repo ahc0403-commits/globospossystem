@@ -174,7 +174,10 @@ void main() {
       );
       expect(screen, contains('overflow: TextOverflow.ellipsis'));
       expect(screen, contains('Expanded('));
-      expect(screen, contains('_KitchenStatusCue(status: orderSummary.status)'));
+      expect(
+        screen,
+        contains('_KitchenStatusCue(status: orderSummary.status)'),
+      );
       expect(screen, contains('Wrap('));
       expect(screen, contains('ToastStatusBadge.kitchen('));
     },
@@ -192,4 +195,37 @@ void main() {
       expect(screen, isNot(contains('height: 420')));
     },
   );
+
+  test('kitchen exposes failed print jobs and reprint action in place', () {
+    final screen = readRepoFile('lib/features/kitchen/kitchen_screen.dart');
+    final provider = readRepoFile('lib/features/kitchen/kitchen_provider.dart');
+
+    expect(provider, contains('class FailedPrintJob'));
+    expect(provider, contains('failedPrintJobsProvider'));
+    expect(provider, contains('printStationJobsProvider'));
+    expect(provider, contains(".from('print_jobs')"));
+    expect(provider, contains(".eq('status', 'failed')"));
+    expect(
+      provider,
+      contains(".inFilter('status', ['pending', 'printing', 'failed'])"),
+    );
+    expect(provider, contains("'reprint_print_job'"));
+    expect(screen, contains('class _KitchenFailedPrintJobsButton'));
+    expect(screen, contains("Key('kitchen_failed_print_jobs_button')"));
+    expect(screen, contains("Key('kitchen_failed_print_jobs_badge')"));
+    expect(screen, contains("Key('kitchen_failed_print_jobs_dialog')"));
+    expect(screen, contains("Key('kitchen_reprint_print_job_button')"));
+    expect(screen, contains("Key('kitchen_print_station_entry')"));
+    expect(screen, contains('PlatformInfo.isPrinterSupported'));
+    expect(screen, contains("context.go('/print-station')"));
+    expect(screen, contains('context.l10n.kitchenFailedPrintJobs'));
+    expect(screen, contains('context.l10n.kitchenPrintQueueUnavailable'));
+    expect(screen, contains('context.l10n.kitchenReprintQueued'));
+    expect(
+      screen,
+      contains('ref.invalidate(failedPrintJobsProvider(storeId))'),
+    );
+    expect(screen, isNot(contains("path: '/kitchen/print-jobs'")));
+    expect(screen, isNot(contains('Navigator.push(')));
+  });
 }

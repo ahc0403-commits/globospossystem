@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/layout/platform_info.dart';
 import '../../core/services/navigation_history_service.dart';
 import '../../core/utils/permission_utils.dart';
 import '../../core/utils/role_routes.dart';
@@ -14,6 +15,7 @@ import '../../features/kitchen/kitchen_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
 import '../../features/photo_ops/photo_ops_screen.dart';
 import '../../features/payment/payment_detail_screen.dart';
+import '../../features/print_station/print_station_screen.dart';
 import '../../features/attendance/attendance_kiosk_screen.dart';
 import '../../features/qc/qc_check_screen.dart';
 import '../../features/qc/qc_review_screen.dart';
@@ -155,6 +157,12 @@ GoRouter buildAppRouter(ProviderContainer container) {
         return redirectTo;
       }
 
+      if (location == '/print-station' && !PlatformInfo.isPrinterSupported) {
+        redirectTo = homeRoute;
+        NavigationHistoryService.instance.push(redirectTo);
+        return redirectTo;
+      }
+
       // 7. /qc-check 접근 제한
       if (location == '/qc-check' &&
           !PermissionUtils.canDoQcCheck(role, auth.extraPermissions)) {
@@ -196,6 +204,10 @@ GoRouter buildAppRouter(ProviderContainer container) {
       ),
       GoRoute(path: '/waiter', builder: (_, __) => const WaiterScreen()),
       GoRoute(path: '/kitchen', builder: (_, __) => const KitchenScreen()),
+      GoRoute(
+        path: '/print-station',
+        builder: (_, __) => const PrintStationScreen(),
+      ),
       GoRoute(path: '/cashier', builder: (_, __) => const CashierScreen()),
       GoRoute(
         path: '/attendance-kiosk',

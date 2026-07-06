@@ -21,6 +21,9 @@
 
 BEGIN;
 
+CREATE EXTENSION IF NOT EXISTS pgtap;
+SELECT plan(6);
+
 CREATE TEMP TABLE _gate2_results (
   scenario text,
   ok boolean,
@@ -49,8 +52,17 @@ $$;
 \set menu_a      '''e2e00000-0000-4000-8000-0000000000f1'''
 \set menu_b      '''e2e00000-0000-4000-8000-0000000000f2'''
 
-INSERT INTO restaurants (id, name, address, is_active)
-VALUES (:store_id, 'Gate2 Contract Test Store', 'test', true);
+INSERT INTO restaurants (id, name, address, is_active, brand_id, tax_entity_id)
+SELECT
+  :store_id,
+  'Gate2 Contract Test Store',
+  'test',
+  true,
+  b.id,
+  '00000000-0000-0000-0000-000000000011'::uuid
+FROM public.brands b
+WHERE b.code = 'globos_default'
+LIMIT 1;
 
 INSERT INTO auth.users (id, email)
 VALUES
@@ -327,30 +339,10 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $s6$;
 
--- ---------------------------------------------------------------------------
--- Summary + verdict (before rollback so the temp table still exists)
--- ---------------------------------------------------------------------------
-DO $summary$
-DECLARE
-  r record;
-  v_fail int := 0;
-  v_total int := 0;
-BEGIN
-  RAISE NOTICE '==== Gate 2 — Order Lifecycle Contract ====';
-  FOR r IN SELECT * FROM _gate2_results LOOP
-    v_total := v_total + 1;
-    IF r.ok THEN
-      RAISE NOTICE 'PASS  %  — %', r.scenario, r.detail;
-    ELSE
-      v_fail := v_fail + 1;
-      RAISE NOTICE 'FAIL  %  — %', r.scenario, r.detail;
-    END IF;
-  END LOOP;
-  RAISE NOTICE '==== % scenarios, % failed ====', v_total, v_fail;
-  IF v_fail > 0 THEN
-    RAISE EXCEPTION 'GATE2_FAILED: % of % scenarios failed', v_fail, v_total;
-  END IF;
-END;
-$summary$;
+SELECT ok(ok, scenario || ': ' || detail)
+FROM _gate2_results
+ORDER BY scenario;
+
+SELECT * FROM finish();
 
 ROLLBACK;

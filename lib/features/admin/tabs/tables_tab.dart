@@ -64,6 +64,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
               tableNumber: resolvedTable.tableNumber,
               seatCount: resolvedTable.seatCount,
               status: resolvedTable.status,
+              floorLabel: resolvedTable.floorLabel,
               layoutX: resolvedTable.layoutX,
               layoutY: resolvedTable.layoutY,
               layoutW: resolvedTable.layoutW,
@@ -725,6 +726,17 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                 icon: const Icon(Icons.add, size: 18),
                 label: Text(l10n.tablesAddTitle),
               ),
+              if (!_layoutEditMode && selectedTable != null)
+                OutlinedButton.icon(
+                  key: const Key('admin_tables_edit_floor_label_action'),
+                  onPressed: () => _showEditTableDialog(
+                    context,
+                    tablesNotifier,
+                    selectedTable,
+                  ),
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  label: Text(l10n.tablesEditTable),
+                ),
               if (!_layoutEditMode &&
                   selectedTable != null &&
                   !selectedTable.isOccupied)
@@ -748,6 +760,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                         tableNumber: selectedTable.tableNumber,
                         seatCount: selectedTable.seatCount,
                         status: nextStatus,
+                        floorLabel: selectedTable.floorLabel,
                         layoutX: selectedTable.layoutX,
                         layoutY: selectedTable.layoutY,
                         layoutW: selectedTable.layoutW,
@@ -900,6 +913,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     final l10n = context.l10n;
     final tableController = TextEditingController();
     final seatController = TextEditingController();
+    final floorController = TextEditingController(text: '1F');
 
     await showDialog<void>(
       context: context,
@@ -925,6 +939,14 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                 style: AppFonts.system(color: AppColors.textPrimary),
                 decoration: InputDecoration(labelText: l10n.tablesSeatCount),
               ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('admin_table_floor_label_field'),
+                controller: floorController,
+                textCapitalization: TextCapitalization.characters,
+                style: AppFonts.system(color: AppColors.textPrimary),
+                decoration: InputDecoration(labelText: l10n.tablesFloorLabel),
+              ),
             ],
           ),
           actions: [
@@ -940,9 +962,11 @@ class _TablesTabState extends ConsumerState<TablesTab> {
               onPressed: () async {
                 final tableNumber = tableController.text.trim();
                 final seatCount = parseIntInput(seatController.text);
+                final floorLabel = floorController.text.trim();
                 if (tableNumber.isEmpty ||
                     seatCount == null ||
-                    seatCount <= 0) {
+                    seatCount <= 0 ||
+                    floorLabel.isEmpty) {
                   showErrorToast(context, l10n.tablesInvalidTableAndSeat);
                   return;
                 }
@@ -950,6 +974,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                 final success = await tablesNotifier.addTable(
                   tableNumber,
                   seatCount,
+                  floorLabel: floorLabel,
                 );
                 if (context.mounted) {
                   if (success) {
@@ -967,6 +992,116 @@ class _TablesTabState extends ConsumerState<TablesTab> {
 
     tableController.dispose();
     seatController.dispose();
+    floorController.dispose();
+  }
+
+  Future<void> _showEditTableDialog(
+    BuildContext context,
+    TablesNotifier tablesNotifier,
+    PosTable table,
+  ) async {
+    final l10n = context.l10n;
+    final tableController = TextEditingController(text: table.tableNumber);
+    final seatController = TextEditingController(
+      text: (table.seatCount ?? 0).toString(),
+    );
+    final floorController = TextEditingController(text: table.floorLabel);
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface1,
+          title: Text(
+            l10n.tablesEditTable,
+            style: AppFonts.system(color: AppColors.textPrimary),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: tableController,
+                style: AppFonts.system(color: AppColors.textPrimary),
+                decoration: InputDecoration(labelText: l10n.tablesTableNumber),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: seatController,
+                keyboardType: TextInputType.number,
+                style: AppFonts.system(color: AppColors.textPrimary),
+                decoration: InputDecoration(labelText: l10n.tablesSeatCount),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('admin_table_edit_floor_label_field'),
+                controller: floorController,
+                textCapitalization: TextCapitalization.characters,
+                style: AppFonts.system(color: AppColors.textPrimary),
+                decoration: InputDecoration(labelText: l10n.tablesFloorLabel),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.amber500,
+                foregroundColor: AppColors.surface0,
+              ),
+              onPressed: () async {
+                final tableNumber = tableController.text.trim();
+                final seatCount = parseIntInput(seatController.text);
+                final floorLabel = floorController.text.trim();
+                if (tableNumber.isEmpty ||
+                    seatCount == null ||
+                    seatCount <= 0 ||
+                    floorLabel.isEmpty) {
+                  showErrorToast(context, l10n.tablesInvalidTableAndSeat);
+                  return;
+                }
+
+                final success = await tablesNotifier.updateTableDetails(
+                  tableId: table.id,
+                  tableNumber: tableNumber,
+                  seatCount: seatCount,
+                  floorLabel: floorLabel,
+                );
+                if (!context.mounted || !success) {
+                  return;
+                }
+                Navigator.of(context).pop();
+                setState(() {
+                  _selectedTable = PosTable(
+                    id: table.id,
+                    storeId: table.storeId,
+                    tableNumber: tableNumber,
+                    seatCount: seatCount,
+                    status: table.status,
+                    floorLabel: floorLabel,
+                    layoutX: table.layoutX,
+                    layoutY: table.layoutY,
+                    layoutW: table.layoutW,
+                    layoutH: table.layoutH,
+                    layoutRotation: table.layoutRotation,
+                    layoutShape: table.layoutShape,
+                    layoutSortOrder: table.layoutSortOrder,
+                  );
+                });
+                showSuccessToast(context, l10n.tablesUpdated);
+              },
+              child: Text(l10n.save),
+            ),
+          ],
+        );
+      },
+    );
+
+    tableController.dispose();
+    seatController.dispose();
+    floorController.dispose();
   }
 }
 
@@ -1133,6 +1268,10 @@ class _AdminFloorSelectionInspector extends StatelessWidget {
         _AdminInspectorInfoRow(
           label: l10n.tablesSeatCount,
           value: l10n.waiterSeatCount(table.seatCount ?? 0),
+        ),
+        _AdminInspectorInfoRow(
+          label: l10n.tablesFloorLabel,
+          value: table.floorLabel,
         ),
         _AdminInspectorInfoRow(
           label: l10n.status,

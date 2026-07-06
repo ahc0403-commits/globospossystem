@@ -21,7 +21,9 @@ import '../auth/auth_provider.dart';
 import '../payment/payment_provider.dart';
 import '../payment/einvoice_status_badge.dart';
 import '../settings/printer_provider.dart';
+import '../../core/services/payment_service.dart';
 import '../../core/services/payment_proof_service.dart';
+import 'discount_modal.dart';
 import 'payment_proof_modal.dart';
 import 'red_invoice_modal.dart';
 
@@ -151,6 +153,16 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     return result ?? false;
   }
 
+  Future<List<PaymentSplitInput>?> _showSplitPaymentDialog({
+    required double totalAmount,
+  }) {
+    return showDialog<List<PaymentSplitInput>?>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _SplitPaymentDialog(totalAmount: totalAmount),
+    );
+  }
+
   Future<void> _printReceipt({
     required CashierOrder order,
     required String method,
@@ -201,6 +213,11 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     final storeId = authState.storeId;
     final role = authState.role ?? '';
     final isAdmin = PermissionUtils.isAdminLike(role);
+    final canApplyDiscount = PermissionUtils.hasPermission(
+      role,
+      authState.extraPermissions,
+      'discount_apply',
+    );
     _ensureLoaded(storeId);
 
     final paymentState = ref.watch(paymentProvider);
@@ -217,7 +234,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     final selectedOrder = paymentState.selectedOrder;
     final queueTotalAmount = paymentState.orders.fold<double>(
       0,
-      (sum, order) => sum + order.totalAmount,
+      (sum, order) => sum + order.remainingDue,
     );
     final queuePane = PosDataPanel(
       key: const Key('cashier_pending_payment_list'),
@@ -320,7 +337,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       Align(
                         alignment: Alignment.centerRight,
                         child: Text(
-                          '₫${currency.format(order.totalAmount)}',
+                          '₫${currency.format(order.remainingDue)}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.right,
@@ -350,10 +367,41 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                   order: selectedOrder,
                   selectedMethod: _selectedMethod,
                   isAdmin: isAdmin,
+                  canApplyDiscount: canApplyDiscount,
                   isProcessing: paymentState.isProcessing,
                   isOnline: isOnline,
                   onSelectMethod: (method) {
                     setState(() => _selectedMethod = method);
+                  },
+                  onApplyDiscount: () async {
+                    final selectedOrder = paymentState.selectedOrder;
+                    if (storeId == null || selectedOrder == null) {
+                      return;
+                    }
+                    if (!isOnline) {
+                      showErrorToast(
+                        context,
+                        context.l10n.cashierDiscountOffline,
+                      );
+                      return;
+                    }
+                    final result = await showDialog<Map<String, dynamic>?>(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (_) => DiscountModal(
+                        orderId: selectedOrder.orderId,
+                        storeId: storeId,
+                        menuSubtotal: selectedOrder.menuSubtotal,
+                        serviceChargeTotal: selectedOrder.serviceChargeTotal,
+                      ),
+                    );
+                    if (result != null && context.mounted) {
+                      showSuccessToast(
+                        context,
+                        context.l10n.cashierDiscountApplied,
+                      );
+                      await notifier.loadOrders(storeId);
+                    }
                   },
                   onProcess: (method) async {
                     final selectedOrder = paymentState.selectedOrder;
@@ -370,7 +418,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                     final payment = await notifier.processPayment(
                       storeId,
                       selectedOrder.orderId,
-                      selectedOrder.totalAmount,
+                      selectedOrder.remainingDue,
                       method,
                     );
                     if (mounted && ref.read(paymentProvider).paymentSuccess) {
@@ -447,6 +495,90 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
 
                       if (paymentId != null && context.mounted) {
                         context.go('/payments/$paymentId');
+                      }
+                    }
+                  },
+                  onProcessSplit: () async {
+                    final selectedOrder = paymentState.selectedOrder;
+                    if (storeId == null || selectedOrder == null) {
+                      return;
+                    }
+                    if (selectedOrder.isStaffMeal) {
+                      return;
+                    }
+                    final splits = await _showSplitPaymentDialog(
+                      totalAmount: selectedOrder.remainingDue,
+                    );
+                    if (splits == null || splits.isEmpty) {
+                      return;
+                    }
+
+                    final payments = await notifier.processPaymentSplits(
+                      storeId,
+                      selectedOrder.orderId,
+                      selectedOrder.remainingDue,
+                      splits,
+                    );
+                    if (mounted && ref.read(paymentProvider).paymentSuccess) {
+                      await _printReceipt(
+                        order: selectedOrder,
+                        method: 'SPLIT',
+                      );
+                      setState(() {
+                        _selectedMethod = null;
+                        _lastCompletedOrderId = selectedOrder.orderId;
+                        _showPaymentQueueOnCompact = true;
+                      });
+
+                      if (payments != null) {
+                        for (
+                          var i = 0;
+                          i < payments.length && i < splits.length;
+                          i++
+                        ) {
+                          final method = splits[i].method;
+                          if (!requiresPaymentProof(method)) {
+                            continue;
+                          }
+                          final paymentId = payments[i]['id']?.toString();
+                          if (paymentId == null || !context.mounted) {
+                            continue;
+                          }
+                          await paymentProofService.markProofRequired(
+                            paymentId: paymentId,
+                            storeId: storeId,
+                          );
+                          if (!context.mounted) {
+                            return;
+                          }
+                          await showDialog<PaymentProofSaveResult?>(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (_) => PaymentProofModal(
+                              paymentId: paymentId,
+                              storeId: storeId,
+                              methodLabel: paymentMethodDisplayLabel(method),
+                            ),
+                          );
+                        }
+                      }
+
+                      if (context.mounted) {
+                        await showDialog<bool>(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (_) => RedInvoiceModal(
+                            orderId: selectedOrder.orderId,
+                            storeId: storeId,
+                          ),
+                        );
+                      }
+
+                      final lastPaymentId = payments?.isNotEmpty == true
+                          ? payments!.last['id']?.toString()
+                          : null;
+                      if (lastPaymentId != null && context.mounted) {
+                        context.go('/payments/$lastPaymentId');
                       }
                     }
                   },
@@ -610,7 +742,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
 
     final selectedAmount = selectedOrder == null
         ? '—'
-        : '₫${currency.format(selectedOrder.totalAmount)}';
+        : '₫${currency.format(selectedOrder.remainingDue)}';
     final titleBlock = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1061,10 +1193,13 @@ class _SelectedOrderView extends StatelessWidget {
     required this.order,
     required this.selectedMethod,
     required this.isAdmin,
+    required this.canApplyDiscount,
     required this.isProcessing,
     required this.isOnline,
     required this.onSelectMethod,
+    required this.onApplyDiscount,
     required this.onProcess,
+    required this.onProcessSplit,
     required this.onCancelOrder,
     required this.onReprint,
   });
@@ -1072,10 +1207,13 @@ class _SelectedOrderView extends StatelessWidget {
   final CashierOrder order;
   final String? selectedMethod;
   final bool isAdmin;
+  final bool canApplyDiscount;
   final bool isProcessing;
   final bool isOnline;
   final ValueChanged<String> onSelectMethod;
+  final Future<void> Function() onApplyDiscount;
   final Future<void> Function(String method) onProcess;
+  final Future<void> Function() onProcessSplit;
   final Future<void> Function() onCancelOrder;
   final Future<void> Function() onReprint;
 
@@ -1103,22 +1241,29 @@ class _SelectedOrderView extends StatelessWidget {
       ),
     ];
     final canCancelOrder = isAdmin && order.status.toLowerCase() != 'completed';
-    final isServiceSelected = isServicePaymentMethod(selectedMethod ?? '');
+    final effectiveSelectedMethod =
+        selectedMethod ?? (order.isStaffMeal ? paymentMethodService : null);
+    final isServiceSelected = isServicePaymentMethod(
+      effectiveSelectedMethod ?? '',
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final orderSummary = _CashierOrderSummarySurface(order: order);
         final paymentRail = _CashierPaymentRail(
           order: order,
-          selectedMethod: selectedMethod,
+          selectedMethod: effectiveSelectedMethod,
           regularMethods: regularMethods,
           isAdmin: isAdmin,
+          canApplyDiscount: canApplyDiscount,
           isServiceSelected: isServiceSelected,
           isProcessing: isProcessing,
           isOnline: isOnline,
           canCancelOrder: canCancelOrder,
           onSelectMethod: onSelectMethod,
+          onApplyDiscount: onApplyDiscount,
           onProcess: onProcess,
+          onProcessSplit: onProcessSplit,
           onCancelOrder: onCancelOrder,
           onReprint: onReprint,
         );
@@ -1137,16 +1282,19 @@ class _SelectedOrderView extends StatelessWidget {
                 const SizedBox(height: 12),
                 _CashierPaymentRail(
                   order: order,
-                  selectedMethod: selectedMethod,
+                  selectedMethod: effectiveSelectedMethod,
                   regularMethods: regularMethods,
                   isAdmin: isAdmin,
+                  canApplyDiscount: canApplyDiscount,
                   isServiceSelected: isServiceSelected,
                   isProcessing: isProcessing,
                   isOnline: isOnline,
                   canCancelOrder: canCancelOrder,
                   expandMethodSection: false,
                   onSelectMethod: onSelectMethod,
+                  onApplyDiscount: onApplyDiscount,
                   onProcess: onProcess,
+                  onProcessSplit: onProcessSplit,
                   onCancelOrder: onCancelOrder,
                   onReprint: onReprint,
                 ),
@@ -1193,6 +1341,15 @@ class _CashierOrderSummarySurface extends StatelessWidget {
                 l10n.cashierCheckItems,
                 style: Theme.of(context).textTheme.titleLarge,
               ),
+              if (order.isStaffMeal) ...[
+                const SizedBox(width: 8),
+                ToastStatusBadge(
+                  key: const Key('staff_meal_badge'),
+                  label: l10n.cashierStaffMealBadge,
+                  color: PosColors.warning,
+                  compact: true,
+                ),
+              ],
               const Spacer(),
               Text(
                 l10n.cashierItemsCount(order.items.length),
@@ -1209,23 +1366,67 @@ class _CashierOrderSummarySurface extends StatelessWidget {
           else
             Expanded(child: _CashierOrderItemsPanel(order: order)),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Text(
-                l10n.cashierSubtotal,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: PosColors.textSecondary,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '₫${currency.format(order.totalAmount)}',
-                style: PosNumericText.amountLarge.copyWith(
-                  color: PosColors.textPrimary,
-                ),
-              ),
-            ],
+          _AmountLine(
+            label: l10n.cashierSubtotal,
+            value: '₫${currency.format(order.menuSubtotal)}',
+          ),
+          if (order.serviceChargeTotal > 0)
+            _AmountLine(
+              label: l10n.cashierServiceCharge,
+              value: '₫${currency.format(order.serviceChargeTotal)}',
+            ),
+          if (order.discountTotal > 0)
+            _AmountLine(
+              label: l10n.cashierDiscountSummary,
+              value: '-₫${currency.format(order.discountTotal)}',
+              valueColor: PosColors.success,
+            ),
+          const SizedBox(height: 4),
+          _AmountLine(
+            label: l10n.cashierPaymentDue,
+            value: '₫${currency.format(order.remainingDue)}',
+            prominent: true,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AmountLine extends StatelessWidget {
+  const _AmountLine({
+    required this.label,
+    required this.value,
+    this.valueColor,
+    this.prominent = false,
+  });
+
+  final String label;
+  final String value;
+  final Color? valueColor;
+  final bool prominent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: PosColors.textSecondary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            value,
+            style:
+                (prominent
+                        ? PosNumericText.amountLarge
+                        : PosNumericText.amountLine)
+                    .copyWith(color: valueColor ?? PosColors.textPrimary),
           ),
         ],
       ),
@@ -1332,13 +1533,16 @@ class _CashierPaymentRail extends StatelessWidget {
     required this.selectedMethod,
     required this.regularMethods,
     required this.isAdmin,
+    required this.canApplyDiscount,
     required this.isServiceSelected,
     required this.isProcessing,
     required this.isOnline,
     required this.canCancelOrder,
     this.expandMethodSection = true,
     required this.onSelectMethod,
+    required this.onApplyDiscount,
     required this.onProcess,
+    required this.onProcessSplit,
     required this.onCancelOrder,
     required this.onReprint,
   });
@@ -1347,13 +1551,16 @@ class _CashierPaymentRail extends StatelessWidget {
   final String? selectedMethod;
   final List<_PaymentMethod> regularMethods;
   final bool isAdmin;
+  final bool canApplyDiscount;
   final bool isServiceSelected;
   final bool isProcessing;
   final bool isOnline;
   final bool canCancelOrder;
   final bool expandMethodSection;
   final ValueChanged<String> onSelectMethod;
+  final Future<void> Function() onApplyDiscount;
   final Future<void> Function(String method) onProcess;
+  final Future<void> Function() onProcessSplit;
   final Future<void> Function() onCancelOrder;
   final Future<void> Function() onReprint;
 
@@ -1361,21 +1568,24 @@ class _CashierPaymentRail extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final currency = NumberFormat('#,###', 'vi_VN');
-    final paymentOptions = [
-      ...regularMethods,
-      if (isAdmin)
-        _PaymentMethod(
-          paymentMethodService,
-          l10n.cashierServiceAction,
-          Color(0xFF0F766E),
-          Icons.volunteer_activism_rounded,
-        ),
-    ];
+    final serviceMethod = _PaymentMethod(
+      paymentMethodService,
+      l10n.cashierServiceAction,
+      Color(0xFF0F766E),
+      Icons.volunteer_activism_rounded,
+    );
+    final paymentOptions = order.isStaffMeal
+        ? [serviceMethod]
+        : [...regularMethods, if (isAdmin) serviceMethod];
     final selectedMethodData = selectedMethod == null
         ? null
         : paymentOptions.firstWhere((method) => method.value == selectedMethod);
     final selectedLabel = selectedMethodData?.label;
-    final amountText = '₫${currency.format(order.totalAmount)}';
+    final amountText = '₫${currency.format(order.remainingDue)}';
+    final subtotalText = '₫${currency.format(order.menuSubtotal)}';
+    final amountHelper = order.discountTotal > 0
+        ? '${l10n.cashierSubtotal} $subtotalText · ${l10n.cashierDiscountSummary} -₫${currency.format(order.discountTotal)}'
+        : '${l10n.cashierSubtotal} $subtotalText';
     final methodActions = _CashierPaymentActions(
       paymentOptions: paymentOptions,
       selectedMethod: selectedMethod,
@@ -1383,8 +1593,12 @@ class _CashierPaymentRail extends StatelessWidget {
       isProcessing: isProcessing,
       isOnline: isOnline,
       canCancelOrder: canCancelOrder,
+      canApplyDiscount: canApplyDiscount && !order.isStaffMeal,
+      canProcessSplit: !order.isStaffMeal && order.remainingDue > 0,
       scrollable: expandMethodSection,
       onSelectMethod: onSelectMethod,
+      onApplyDiscount: onApplyDiscount,
+      onProcessSplit: onProcessSplit,
       onCancelOrder: onCancelOrder,
       onReprint: onReprint,
     );
@@ -1399,7 +1613,7 @@ class _CashierPaymentRail extends StatelessWidget {
       if (selectedMethod == null) {
         final method = await showDialog<String>(
           context: context,
-          builder: (_) => _CashierPaymentMethodDialog(methods: regularMethods),
+          builder: (_) => _CashierPaymentMethodDialog(methods: paymentOptions),
         );
         if (method == null) {
           return;
@@ -1461,7 +1675,9 @@ class _CashierPaymentRail extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        l10n.cashierTableLabel(order.tableNumber),
+                        order.isStaffMeal
+                            ? l10n.cashierStaffMealBadge
+                            : l10n.cashierTableLabel(order.tableNumber),
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w800,
                           color: PosColors.textPrimary,
@@ -1469,7 +1685,9 @@ class _CashierPaymentRail extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        l10n.cashierItemsCount(order.items.length),
+                        order.isStaffMeal
+                            ? l10n.cashierStaffMealServiceDefault
+                            : l10n.cashierItemsCount(order.items.length),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: PosColors.textSecondary,
                           fontWeight: FontWeight.w600,
@@ -1502,7 +1720,7 @@ class _CashierPaymentRail extends StatelessWidget {
                       child: PosAmountAnchor(
                         label: l10n.cashierPaymentDue,
                         amount: amountText,
-                        helper: '${l10n.cashierSubtotal} $amountText',
+                        helper: amountHelper,
                         role: PosSurfaceRole.selected,
                         amountStyle: PosNumericText.amountHero,
                       ),
@@ -1583,8 +1801,12 @@ class _CashierPaymentActions extends StatelessWidget {
     required this.isProcessing,
     required this.isOnline,
     required this.canCancelOrder,
+    required this.canApplyDiscount,
+    required this.canProcessSplit,
     required this.scrollable,
     required this.onSelectMethod,
+    required this.onApplyDiscount,
+    required this.onProcessSplit,
     required this.onCancelOrder,
     required this.onReprint,
   });
@@ -1595,8 +1817,12 @@ class _CashierPaymentActions extends StatelessWidget {
   final bool isProcessing;
   final bool isOnline;
   final bool canCancelOrder;
+  final bool canApplyDiscount;
+  final bool canProcessSplit;
   final bool scrollable;
   final ValueChanged<String> onSelectMethod;
+  final Future<void> Function() onApplyDiscount;
+  final Future<void> Function() onProcessSplit;
   final Future<void> Function() onCancelOrder;
   final Future<void> Function() onReprint;
 
@@ -1658,6 +1884,50 @@ class _CashierPaymentActions extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 10),
+        if (canApplyDiscount) ...[
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              key: const Key('cashier_discount_button'),
+              onPressed: isProcessing || !isOnline ? null : onApplyDiscount,
+              icon: const Icon(Icons.local_offer_outlined, size: 16),
+              label: Text(l10n.cashierDiscountAction),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: PosColors.accent,
+                side: BorderSide(
+                  color: PosColors.accent.withValues(alpha: 0.46),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 11),
+                textStyle: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+        if (canProcessSplit) ...[
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              key: const Key('cashier_split_payment_button'),
+              onPressed: isProcessing || !isOnline ? null : onProcessSplit,
+              icon: const Icon(Icons.call_split_rounded, size: 16),
+              label: Text(l10n.cashierSplitPaymentTitle),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: PosColors.accent,
+                side: BorderSide(
+                  color: PosColors.accent.withValues(alpha: 0.36),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 11),
+                textStyle: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
         Row(
           children: [
             Expanded(
@@ -2082,6 +2352,199 @@ class _CashierNoPayableOrdersPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SplitPaymentDialog extends StatefulWidget {
+  const _SplitPaymentDialog({required this.totalAmount});
+
+  final double totalAmount;
+
+  @override
+  State<_SplitPaymentDialog> createState() => _SplitPaymentDialogState();
+}
+
+class _SplitPaymentDialogState extends State<_SplitPaymentDialog> {
+  late final List<_SplitPaymentDraft> _rows;
+
+  static const _methods = <String>[
+    paymentMethodCash,
+    paymentMethodCreditCard,
+    paymentMethodMomo,
+    paymentMethodBankTransfer,
+    paymentMethodOther,
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    final half = (widget.totalAmount / 2).roundToDouble();
+    _rows = [
+      _SplitPaymentDraft(paymentMethodCash, half),
+      _SplitPaymentDraft(paymentMethodOther, widget.totalAmount - half),
+    ];
+  }
+
+  @override
+  void dispose() {
+    for (final row in _rows) {
+      row.dispose();
+    }
+    super.dispose();
+  }
+
+  double get _sum => _rows.fold<double>(0, (sum, row) => sum + row.amount);
+
+  void _submit() {
+    final splits = _rows
+        .where((row) => row.amount > 0)
+        .map((row) => PaymentSplitInput(method: row.method, amount: row.amount))
+        .toList();
+    final error = validatePaymentSplits(splits, widget.totalAmount);
+    if (error != null) {
+      showErrorToast(context, error);
+      return;
+    }
+    Navigator.of(context).pop(splits);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final currency = NumberFormat('#,###', 'vi_VN');
+    final totalText = currency.format(widget.totalAmount);
+    final remaining = widget.totalAmount - _sum;
+
+    return AlertDialog(
+      backgroundColor: PosColors.surface,
+      title: Text(l10n.cashierSplitPaymentTitle),
+      content: SizedBox(
+        width: 520,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                l10n.cashierTotalLabel(totalText),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: PosColors.textPrimary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: _rows.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final row = _rows[index];
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: row.method,
+                          decoration: InputDecoration(
+                            labelText: l10n.cashierMethodLabel,
+                          ),
+                          items: [
+                            for (final method in _methods)
+                              DropdownMenuItem(
+                                value: method,
+                                child: Text(paymentMethodDisplayLabel(method)),
+                              ),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => row.method = value);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: row.amountController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: InputDecoration(
+                            labelText: l10n.cashierAmountLabel,
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _rows.length <= 2
+                            ? null
+                            : () {
+                                setState(() {
+                                  final removed = _rows.removeAt(index);
+                                  removed.dispose();
+                                });
+                              },
+                        icon: const Icon(Icons.remove_circle_outline),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _rows.add(_SplitPaymentDraft(paymentMethodCash, 0));
+                    });
+                  },
+                  icon: const Icon(Icons.add_circle_outline),
+                  label: Text(l10n.cashierAddMethod),
+                ),
+                const Spacer(),
+                Text(
+                  '₫${currency.format(remaining)}',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: remaining.abs() <= 0.01
+                        ? PosColors.success
+                        : PosColors.warning,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: Text(l10n.cancel),
+        ),
+        FilledButton.icon(
+          onPressed: _submit,
+          icon: const Icon(Icons.call_split_rounded, size: 16),
+          label: Text(l10n.cashierProcessSplit),
+        ),
+      ],
+    );
+  }
+}
+
+class _SplitPaymentDraft {
+  _SplitPaymentDraft(this.method, double amount)
+    : amountController = TextEditingController(text: amount.toStringAsFixed(0));
+
+  String method;
+  final TextEditingController amountController;
+
+  double get amount {
+    final normalized = amountController.text.replaceAll(',', '').trim();
+    return double.tryParse(normalized) ?? 0;
+  }
+
+  void dispose() => amountController.dispose();
 }
 
 class _PaymentMethod {

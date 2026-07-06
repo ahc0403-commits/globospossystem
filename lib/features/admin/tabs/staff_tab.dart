@@ -587,7 +587,9 @@ class _StaffTabState extends ConsumerState<StaffTab> {
           !_isKnownRole(member.role) ||
           member.extraPermissions.any(
             (permission) =>
-                permission != 'qc_check' && permission != 'inventory_count',
+                permission != 'qc_check' &&
+                permission != 'inventory_count' &&
+                permission != 'discount_apply',
           );
 
       final statusKey = !member.isActive
@@ -1269,10 +1271,9 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                                   email.isEmpty ||
                                   password.isEmpty) {
                                 setModalState(() {
-                                  validationMessage =
-                                      context
-                                          .l10n
-                                          .staffCreateValidationRequired;
+                                  validationMessage = context
+                                      .l10n
+                                      .staffCreateValidationRequired;
                                 });
                                 return;
                               }
@@ -1285,10 +1286,9 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                               }
                               if (password.length < 6) {
                                 setModalState(() {
-                                  validationMessage =
-                                      context
-                                          .l10n
-                                          .staffCreateValidationPasswordLength;
+                                  validationMessage = context
+                                      .l10n
+                                      .staffCreateValidationPasswordLength;
                                 });
                                 return;
                               }
@@ -1404,6 +1404,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
     final notifier = ref.read(staffProvider.notifier);
     bool canQc = member.extraPermissions.contains('qc_check');
     bool canCount = member.extraPermissions.contains('inventory_count');
+    bool canApplyDiscount = member.extraPermissions.contains('discount_apply');
 
     await showDialog<void>(
       context: context,
@@ -1447,6 +1448,20 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                     onChanged: (value) =>
                         setModalState(() => canCount = value ?? false),
                   ),
+                  CheckboxListTile(
+                    value: canApplyDiscount,
+                    activeColor: AppColors.amber500,
+                    title: Text(
+                      context.l10n.staffDiscountApplyPermission,
+                      style: AppFonts.system(
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                      ),
+                    ),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    onChanged: (value) =>
+                        setModalState(() => canApplyDiscount = value ?? false),
+                  ),
                 ],
               ),
               actions: [
@@ -1459,6 +1474,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                     final permissions = <String>[
                       if (canQc) 'qc_check',
                       if (canCount) 'inventory_count',
+                      if (canApplyDiscount) 'discount_apply',
                     ];
                     await notifier.updateExtraPermissions(
                       userId: member.id,

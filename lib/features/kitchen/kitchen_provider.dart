@@ -75,24 +75,30 @@ class KitchenOrder {
   const KitchenOrder({
     required this.orderId,
     required this.tableNumber,
+    required this.orderPurpose,
     required this.createdAt,
     required this.items,
   });
 
   final String orderId;
   final String tableNumber;
+  final String orderPurpose;
   final DateTime createdAt;
   final List<KitchenItem> items;
+
+  bool get isStaffMeal => orderPurpose == 'staff_meal';
 
   KitchenOrder copyWith({
     String? orderId,
     String? tableNumber,
+    String? orderPurpose,
     DateTime? createdAt,
     List<KitchenItem>? items,
   }) {
     return KitchenOrder(
       orderId: orderId ?? this.orderId,
       tableNumber: tableNumber ?? this.tableNumber,
+      orderPurpose: orderPurpose ?? this.orderPurpose,
       createdAt: createdAt ?? this.createdAt,
       items: items ?? this.items,
     );
@@ -128,6 +134,55 @@ class KitchenState {
   }
 }
 
+class FailedPrintJob {
+  const FailedPrintJob({
+    required this.id,
+    required this.copyType,
+    required this.batchNo,
+    required this.tableNumber,
+    required this.floorLabel,
+    required this.status,
+    required this.updatedAt,
+    this.lastError,
+  });
+
+  final String id;
+  final String copyType;
+  final int batchNo;
+  final String tableNumber;
+  final String floorLabel;
+  final String status;
+  final DateTime updatedAt;
+  final String? lastError;
+
+  factory FailedPrintJob.fromJson(Map<String, dynamic> json) {
+    final payloadRaw = json['payload'];
+    final payload = payloadRaw is Map
+        ? Map<String, dynamic>.from(payloadRaw)
+        : <String, dynamic>{};
+    final batchRaw = json['batch_no'];
+    final updatedAtRaw = json['updated_at']?.toString();
+
+    return FailedPrintJob(
+      id: json['id']?.toString() ?? '',
+      copyType: json['copy_type']?.toString() ?? 'kitchen',
+      batchNo: switch (batchRaw) {
+        int value => value,
+        num value => value.toInt(),
+        String value => int.tryParse(value) ?? 1,
+        _ => 1,
+      },
+      tableNumber: payload['table_number']?.toString() ?? '-',
+      floorLabel: payload['floor_label']?.toString() ?? '-',
+      status: json['status']?.toString() ?? 'failed',
+      updatedAt: updatedAtRaw == null
+          ? DateTime.now().toUtc()
+          : DateTime.tryParse(updatedAtRaw) ?? DateTime.now().toUtc(),
+      lastError: json['last_error']?.toString(),
+    );
+  }
+}
+
 class KitchenNotifier extends StateNotifier<KitchenState> {
   KitchenNotifier() : super(const KitchenState());
 
@@ -153,7 +208,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
       final response = await supabase
           .from('orders')
           .select(
-            'id, created_at, status, tables(table_number), order_items(id, created_at, label, quantity, status, menu_items(name))',
+            'id, created_at, status, order_purpose, tables(table_number), order_items(id, created_at, label, quantity, status, menu_items(name))',
           )
           .eq('restaurant_id', storeId)
           .inFilter('status', ['pending', 'confirmed', 'serving', 'completed'])
@@ -185,6 +240,8 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
         String tableNumber = '-';
         if (tableData is Map<String, dynamic>) {
           tableNumber = tableData['table_number']?.toString() ?? '-';
+        } else if (data['order_purpose']?.toString() == 'staff_meal') {
+          tableNumber = 'STAFF';
         }
 
         final createdAtRaw = data['created_at']?.toString();
@@ -209,6 +266,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
         return KitchenOrder(
           orderId: data['id'].toString(),
           tableNumber: tableNumber,
+          orderPurpose: data['order_purpose']?.toString() ?? 'customer',
           createdAt: createdAt,
           items: itemsWithSupplementFlags,
         );
@@ -409,6 +467,10 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
     }
   }
 
+  Future<void> reprintPrintJob(String jobId) async {
+    await supabase.rpc('reprint_print_job', params: {'p_job_id': jobId});
+  }
+
   @override
   void dispose() {
     _pollTimer?.cancel();
@@ -448,3 +510,41 @@ int _compareOrderItemRowsByCreatedAt(
 final kitchenProvider = StateNotifierProvider<KitchenNotifier, KitchenState>(
   (ref) => KitchenNotifier(),
 );
+
+final failedPrintJobsProvider = FutureProvider.autoDispose
+    .family<List<FailedPrintJob>, String>((ref, storeId) async {
+      final rows = await supabase
+          .from('print_jobs')
+          .select(
+            'id, copy_type, batch_no, payload, status, last_error, updated_at',
+          )
+          .eq('restaurant_id', storeId)
+          .eq('status', 'failed')
+          .order('updated_at', ascending: false)
+          .limit(8);
+
+      return rows
+          .map<FailedPrintJob>(
+            (row) => FailedPrintJob.fromJson(Map<String, dynamic>.from(row)),
+          )
+          .toList();
+    });
+
+final printStationJobsProvider = FutureProvider.autoDispose
+    .family<List<FailedPrintJob>, String>((ref, storeId) async {
+      final rows = await supabase
+          .from('print_jobs')
+          .select(
+            'id, copy_type, batch_no, payload, status, last_error, updated_at',
+          )
+          .eq('restaurant_id', storeId)
+          .inFilter('status', ['pending', 'printing', 'failed'])
+          .order('updated_at', ascending: false)
+          .limit(12);
+
+      return rows
+          .map<FailedPrintJob>(
+            (row) => FailedPrintJob.fromJson(Map<String, dynamic>.from(row)),
+          )
+          .toList();
+    });

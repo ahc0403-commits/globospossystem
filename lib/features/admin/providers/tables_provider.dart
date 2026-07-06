@@ -80,6 +80,9 @@ class TablesNotifier extends StateNotifier<TablesState> {
     if (message.contains('TABLE_STATUS_INVALID')) {
       return 'Unsupported table status.';
     }
+    if (message.contains('TABLE_FLOOR_LABEL_REQUIRED')) {
+      return 'Enter a floor label.';
+    }
     if (message.contains('duplicate key value') || message.contains('23505')) {
       return 'A table with the same number already exists.';
     }
@@ -213,9 +216,13 @@ class TablesNotifier extends StateNotifier<TablesState> {
     });
   }
 
-  Future<bool> addTable(String tableNumber, int seatCount) async {
+  Future<bool> addTable(
+    String tableNumber,
+    int seatCount, {
+    String floorLabel = '1F',
+  }) async {
     try {
-      await tablesService.addTable(storeId, tableNumber, seatCount);
+      await tablesService.addTable(storeId, tableNumber, seatCount, floorLabel);
       await fetchTables();
       return true;
     } catch (error) {
@@ -234,6 +241,30 @@ class TablesNotifier extends StateNotifier<TablesState> {
     } catch (error) {
       state = state.copyWith(
         error: _mapTablesError(error, 'Failed to delete table.'),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> updateTableDetails({
+    required String tableId,
+    required String tableNumber,
+    required int seatCount,
+    required String floorLabel,
+  }) async {
+    try {
+      await tablesService.updateTableDetails(
+        tableId: tableId,
+        storeId: storeId,
+        tableNumber: tableNumber,
+        seatCount: seatCount,
+        floorLabel: floorLabel,
+      );
+      await fetchTables();
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        error: _mapTablesError(error, 'Failed to update table.'),
       );
       return false;
     }

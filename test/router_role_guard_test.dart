@@ -8,6 +8,7 @@ void main() {
         '/super-admin': true,
         '/admin/some-store-id': true,
         '/payments/some-id': true,
+        '/print-station': true,
         '/photo-ops': true,
         '/admin': false,
         '/waiter': false,
@@ -17,6 +18,7 @@ void main() {
       'admin': {
         '/admin': true,
         '/payments/some-id': true,
+        '/print-station': true,
         '/super-admin': false,
         '/waiter': false,
         '/kitchen': false,
@@ -27,6 +29,7 @@ void main() {
       'brand_admin': {
         '/admin': true,
         '/payments/some-id': true,
+        '/print-station': false,
         '/super-admin': false,
         '/waiter': false,
         '/kitchen': false,
@@ -35,12 +38,14 @@ void main() {
       'store_admin': {
         '/admin': true,
         '/payments/some-id': true,
+        '/print-station': true,
         '/super-admin': false,
         '/waiter': false,
         '/kitchen': false,
       },
       'waiter': {
         '/waiter': true,
+        '/print-station': false,
         '/cashier': false,
         '/kitchen': false,
         '/admin': false,
@@ -49,6 +54,7 @@ void main() {
       },
       'kitchen': {
         '/kitchen': true,
+        '/print-station': true,
         '/waiter': false,
         '/cashier': false,
         '/admin': false,
@@ -58,6 +64,7 @@ void main() {
       'cashier': {
         '/cashier': true,
         '/payments/some-id': true,
+        '/print-station': false,
         '/waiter': false,
         '/kitchen': false,
         '/admin': false,
@@ -65,6 +72,7 @@ void main() {
       },
       'photo_objet_master': {
         '/photo-ops': true,
+        '/print-station': false,
         '/admin': false,
         '/super-admin': false,
         '/waiter': false,
@@ -72,6 +80,7 @@ void main() {
       },
       'photo_objet_store_admin': {
         '/photo-ops': true,
+        '/print-station': false,
         '/admin': false,
         '/super-admin': false,
       },
@@ -94,7 +103,13 @@ void main() {
     }
 
     test('all roles can access /login', () {
-      for (final role in ['super_admin', 'admin', 'waiter', 'kitchen', 'cashier']) {
+      for (final role in [
+        'super_admin',
+        'admin',
+        'waiter',
+        'kitchen',
+        'cashier',
+      ]) {
         expect(canAccessRouteForRole(role, '/login'), isTrue);
       }
     });
@@ -106,7 +121,13 @@ void main() {
     });
 
     test('no role can access /attendance-kiosk', () {
-      for (final role in ['super_admin', 'admin', 'waiter', 'kitchen', 'cashier']) {
+      for (final role in [
+        'super_admin',
+        'admin',
+        'waiter',
+        'kitchen',
+        'cashier',
+      ]) {
         expect(canAccessRouteForRole(role, '/attendance-kiosk'), isFalse);
       }
     });
@@ -133,8 +154,11 @@ void main() {
     test('waiter needs qc_check extra permission', () {
       expect(canAccessRouteForRole('waiter', '/qc-check'), isFalse);
       expect(
-        canAccessRouteForRole('waiter', '/qc-check',
-            extraPermissions: ['qc_check']),
+        canAccessRouteForRole(
+          'waiter',
+          '/qc-check',
+          extraPermissions: ['qc_check'],
+        ),
         isTrue,
       );
     });
@@ -142,8 +166,11 @@ void main() {
     test('waiter needs qc_visit_review extra permission', () {
       expect(canAccessRouteForRole('waiter', '/qc-review'), isFalse);
       expect(
-        canAccessRouteForRole('waiter', '/qc-review',
-            extraPermissions: ['qc_visit_review']),
+        canAccessRouteForRole(
+          'waiter',
+          '/qc-review',
+          extraPermissions: ['qc_visit_review'],
+        ),
         isTrue,
       );
     });
@@ -151,8 +178,11 @@ void main() {
     test('cashier needs qc_check extra permission', () {
       expect(canAccessRouteForRole('cashier', '/qc-check'), isFalse);
       expect(
-        canAccessRouteForRole('cashier', '/qc-check',
-            extraPermissions: ['qc_check']),
+        canAccessRouteForRole(
+          'cashier',
+          '/qc-check',
+          extraPermissions: ['qc_check'],
+        ),
         isTrue,
       );
     });
