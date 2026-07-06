@@ -1,7 +1,7 @@
 # Discount + Staff Meal V1 — Revised Implementation Plan
 
 Date: 2026-07-04
-Status: LOCAL IMPLEMENTATION VERIFIED (production deploy not claimed)
+Status: PRODUCTION DEPLOYED 2026-07-06 (DB + Vercel; pilot smoke still required)
 Supersedes: the draft plan reviewed 2026-07-04 (approach A retained; details corrected)
 Binding contracts: `ORDER_LIFECYCLE_STATE_CONTRACT_2026_07_03.md`,
 CLAUDE.md §4 (payment never depends on e-invoice vendor), §7 invariants.

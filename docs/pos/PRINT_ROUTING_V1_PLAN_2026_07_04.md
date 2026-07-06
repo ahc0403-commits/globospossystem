@@ -1,7 +1,7 @@
 # Floor/Station Print Routing V1 — Revised Implementation Plan
 
 Date: 2026-07-04
-Status: LOCAL IMPLEMENTATION VERIFIED (production deploy not claimed)
+Status: PRODUCTION DEPLOYED 2026-07-06 (DB + Vercel; pilot printer setup/smoke still required)
 Supersedes: draft print-routing proposal reviewed 2026-07-04
 Binding contracts: `ORDER_LIFECYCLE_STATE_CONTRACT_2026_07_03.md` (recalc is
 the single serving-transition point), CLAUDE.md §4 (order/payment flows never
