@@ -153,5 +153,24 @@ void main() {
         ),
       );
     });
+
+    test('recalc_order_status is no longer client executable', () {
+      final migration = readRepoFile(
+        'supabase/migrations/20260708000000_recalc_order_status_acl_closure.sql',
+      );
+
+      expect(
+        migration,
+        contains('REVOKE EXECUTE ON FUNCTION public.recalc_order_status(uuid)'),
+      );
+      expect(migration, contains('FROM PUBLIC, anon, authenticated'));
+      expect(
+        migration,
+        contains('GRANT EXECUTE ON FUNCTION public.recalc_order_status(uuid)'),
+      );
+      expect(migration, contains('TO service_role'));
+      expect(migration, isNot(contains('TO authenticated')));
+      expect(migration, isNot(contains('TO anon')));
+    });
   });
 }
