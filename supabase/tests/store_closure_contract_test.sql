@@ -1,11 +1,11 @@
 -- store_closure_contract_test.sql
 -- Contract test for STORE_CLOSURE_V1 (20260709000000). Runs entirely inside a
--- transaction and rolls back — no data persists. Fails (non-zero) if any
+-- transaction and rolls back — no data persists. Fails (non-zero) only if any
 -- scenario does not meet the contract.
 --
 -- Run against a fully migrated database:
 --   psql "$DB_URL" -f supabase/tests/store_closure_contract_test.sql
--- or via Supabase MCP execute_sql (final RAISE surfaces the report).
+-- or via Supabase MCP execute_sql (final NOTICE surfaces the pass report).
 
 BEGIN;
 
@@ -121,7 +121,10 @@ BEGIN
   SELECT string_agg((CASE WHEN ok THEN 'PASS ' ELSE 'FAIL ' END) || scenario || CASE WHEN ok THEN '' ELSE ' :: ' || detail END, ' | ' ORDER BY scenario),
          count(*) FILTER (WHERE NOT ok)
   INTO r, f FROM _r;
-  RAISE EXCEPTION 'STORE_CLOSURE_CONTRACT fail=% >>> %', f, r;
+  IF f > 0 THEN
+    RAISE EXCEPTION 'STORE_CLOSURE_CONTRACT fail=% >>> %', f, r;
+  END IF;
+  RAISE NOTICE 'STORE_CLOSURE_CONTRACT fail=% >>> %', f, r;
 END;
 $report$;
 

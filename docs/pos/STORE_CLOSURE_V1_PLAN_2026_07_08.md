@@ -1,7 +1,7 @@
 # Store Closure (폐업 처리) V1 — Implementation Plan
 
 Date: 2026-07-08
-Status: PLAN (no code changes yet)
+Status: IMPLEMENTED + PROD DB APPLIED (`20260709000000_store_closure_v1`)
 Supersedes: soft-deactivation analysis reviewed 2026-07-08
 Binding: CLAUDE.md §5 (Office coupling: `restaurants.is_active` semantics must
 stay), §4 (MISA portal owns post-issuance lifecycle),
@@ -73,8 +73,8 @@ close_store 플로우로 교체. 재개업은 기존 `admin_update_restaurant`(i
 true) + `user_store_access` 재활성 + claims refresh — V1은 수동 절차 문서화만
 (§5-D2).
 
-## 2. Migration (single file, `2026070900xxxx_store_closure_v1.sql` — 번호는
-remote 히스토리 확인 후 확정)
+## 2. Migration (single file,
+`20260709000000_store_closure_v1.sql`)
 
 - `CREATE OR REPLACE user_accessible_stores` — **live prosrc 기반** 재생성 +
   두 분기에 `JOIN public.restaurants r ON r.id = … AND r.is_active` 추가;
@@ -93,7 +93,7 @@ Rollout: DB-first는 **행동 변경**을 동반함(Layer 1이 비활성 매장 
 
 | Surface | Change |
 |---|---|
-| super_admin_screen | "삭제 (비활성화)" 버튼 → "매장 폐업 처리" 플로우: 확인 다이얼로그(매장명 재입력 confirm-phrase + 사유 필수) → `admin_close_store` → 결과 요약 토스트. 열린 주문 에러는 개수와 함께 안내 |
+| super_admin_screen | "삭제 (비활성화)" 버튼은 레거시로 유지하고, 별도 "매장 폐업 처리" 플로우 추가: 사유 필수 확인 다이얼로그 → `admin_close_store` → 성공/실패 토스트. 열린 주문 에러는 전용 메시지로 안내 |
 | store_service | `closeStore(id, reason)` 추가; `deactivateStore`는 유지(레거시) |
 | auth_provider `_resolveAccessibleStores` | `.eq('is_active', true)` 필터 추가 (S2 — 방어적; 주 통제는 Layer 1/claims) |
 | l10n | en/ko/vi 신규 문자열 동시 추가 |
