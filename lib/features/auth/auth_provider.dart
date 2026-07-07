@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
@@ -262,6 +263,17 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     final claimedStoreIds = rawStoreIds is List
         ? rawStoreIds.map((item) => item.toString()).toSet().toList()
         : [];
+    final usesFallbackStore =
+        claimedStoreIds.isEmpty &&
+        fallbackStoreId != null &&
+        fallbackStoreId.isNotEmpty;
+
+    if (usesFallbackStore) {
+      debugPrint(
+        'claims_fallback_used auth_user_id=${user.id} '
+        'email=${user.email ?? 'unknown'} store_id=$fallbackStoreId',
+      );
+    }
 
     final storeIds = {
       ...claimedStoreIds,

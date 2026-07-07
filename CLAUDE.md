@@ -103,9 +103,10 @@ This means:
   build new behavior on it.
 - `meinvoice_jobs` is the current queue for first-issuance cash-register
   invoices.
-- `process_payment` RPC at
-  `supabase/migrations/20260409000000_dine_in_sales_contract_closure.sql`
-  is the atomic payment anchor. E-invoice dispatch must remain async.
+- `process_payment` is the atomic payment anchor. The original dine-in
+  closure migration introduced it, but later migrations may redefine the
+  live body; inspect the latest migration or `pg_get_functiondef` before
+  changing payment math. E-invoice dispatch must remain async.
 - Daily close is fixed 00:00 Asia/Ho_Chi_Minh, not per-store
 - MISA meInvoice portal handles post-issuance exception lifecycle. POS does
   not duplicate.

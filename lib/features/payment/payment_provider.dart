@@ -20,9 +20,11 @@ class CashierOrder {
     required this.items,
     required this.menuSubtotal,
     required this.serviceChargeTotal,
+    required this.serviceItemTotal,
     required this.discountTotal,
     required this.totalAmount,
     required this.paidTotal,
+    required this.paymentCount,
     required this.remainingDue,
     required this.createdAt,
     this.completedAt,
@@ -37,15 +39,23 @@ class CashierOrder {
   final List<OrderItem> items;
   final double menuSubtotal;
   final double serviceChargeTotal;
+  final double serviceItemTotal;
   final double discountTotal;
   final double totalAmount;
   final double paidTotal;
+  final int paymentCount;
   final double remainingDue;
   final DateTime createdAt;
   final DateTime? completedAt;
   final ActiveOrderDiscount? activeDiscount;
 
   bool get isStaffMeal => orderPurpose == 'staff_meal';
+  int get serviceItemCount => items
+      .where(
+        (item) =>
+            item.isServiceItem && item.status.toLowerCase() != 'cancelled',
+      )
+      .length;
 }
 
 class ActiveOrderDiscount {
@@ -143,7 +153,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       final response = await supabase
           .from('orders')
           .select(
-            'id, table_id, status, order_purpose, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, paying_amount_inc_tax, menu_items(name, vat_category))',
+            'id, table_id, status, order_purpose, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, paying_amount_inc_tax, menu_items(name, vat_category))',
           )
           .eq('restaurant_id', storeId)
           // Payability is an order-status fact derived server-side by
@@ -178,6 +188,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
               discountTotal: activeDiscount?.amount ?? 0,
             );
             final paidTotal = _paidTotalFromRaw(data['payments']);
+            final paymentCount = _paymentCountFromRaw(data['payments']);
             final remainingDue = _remainingDue(quote.payableTotal, paidTotal);
 
             final tableRaw = data['tables'];
@@ -198,9 +209,11 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
               items: items,
               menuSubtotal: quote.menuSubtotal,
               serviceChargeTotal: quote.serviceChargeTotal,
+              serviceItemTotal: quote.serviceItemTotal,
               discountTotal: quote.discountTotal,
               totalAmount: quote.payableTotal,
               paidTotal: paidTotal,
+              paymentCount: paymentCount,
               remainingDue: remainingDue,
               createdAt: createdAtRaw != null
                   ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
@@ -250,7 +263,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     final response = await supabase
         .from('orders')
         .select(
-          'id, table_id, status, order_purpose, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, paying_amount_inc_tax, menu_items(name, vat_category))',
+          'id, table_id, status, order_purpose, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, paying_amount_inc_tax, menu_items(name, vat_category))',
         )
         .eq('restaurant_id', storeId)
         .eq('status', 'completed')
@@ -286,6 +299,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         discountTotal: consumedDiscount?.amount ?? 0,
       );
       final paidTotal = _paidTotalFromRaw(data['payments']);
+      final paymentCount = _paymentCountFromRaw(data['payments']);
 
       final tableRaw = data['tables'];
       final tableNumber = tableRaw is Map<String, dynamic>
@@ -305,9 +319,11 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         orderPurpose: data['order_purpose']?.toString() ?? 'customer',
         menuSubtotal: quote.menuSubtotal,
         serviceChargeTotal: quote.serviceChargeTotal,
+        serviceItemTotal: quote.serviceItemTotal,
         discountTotal: quote.discountTotal,
         totalAmount: quote.payableTotal,
         paidTotal: paidTotal,
+        paymentCount: paymentCount,
         remainingDue: _remainingDue(quote.payableTotal, paidTotal),
         createdAt: createdAtRaw != null
             ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
@@ -410,6 +426,58 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         error: _mapPaymentError(error, 'Failed to process split payment'),
       );
       return null;
+    }
+  }
+
+  Future<bool> markOrderItemService({
+    required String storeId,
+    required String itemId,
+    required String reason,
+    required String managerPin,
+  }) async {
+    state = state.copyWith(isProcessing: true, clearError: true);
+    try {
+      await paymentService.markOrderItemService(
+        itemId: itemId,
+        storeId: storeId,
+        reason: reason,
+        managerPin: managerPin,
+      );
+      await loadOrders(storeId);
+      state = state.copyWith(isProcessing: false, clearError: true);
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        isProcessing: false,
+        error: _mapPaymentError(error, 'Failed to mark service item'),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> unmarkOrderItemService({
+    required String storeId,
+    required String itemId,
+    required String reason,
+    required String managerPin,
+  }) async {
+    state = state.copyWith(isProcessing: true, clearError: true);
+    try {
+      await paymentService.unmarkOrderItemService(
+        itemId: itemId,
+        storeId: storeId,
+        reason: reason,
+        managerPin: managerPin,
+      );
+      await loadOrders(storeId);
+      state = state.copyWith(isProcessing: false, clearError: true);
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        isProcessing: false,
+        error: _mapPaymentError(error, 'Failed to unmark service item'),
+      );
+      return false;
     }
   }
 
@@ -675,6 +743,22 @@ String _mapPaymentError(Object error, String fallbackPrefix) {
         'Staff meals must be closed with SERVICE.',
       'STAFF_MEAL_FORBIDDEN' =>
         'You do not have permission to create staff meals.',
+      'SERVICE_MARK_FORBIDDEN' =>
+        'You do not have permission to mark service items.',
+      'SERVICE_REASON_REQUIRED' => 'Enter a reason for the service item.',
+      'SERVICE_MARK_AFTER_PAYMENT' =>
+        'Service items cannot be changed after payment has started.',
+      'SERVICE_MARK_PURPOSE_UNSUPPORTED' =>
+        'Staff meals already close as service payments.',
+      'FULL_SERVICE_NOT_ALLOWED' =>
+        'Use SERVICE payment when the whole order is service.',
+      'SERVICE_MARK_ITEM_TYPE' => 'Only menu items can be marked as service.',
+      'SERVICE_MARK_ITEM_CANCELLED' =>
+        'Cancelled items cannot be marked as service.',
+      'SERVICE_MARK_ITEM_NOT_PROVIDED' =>
+        'Only ready or served items can be marked as service.',
+      'SERVICE_MARK_ALREADY' => 'This item is already marked as service.',
+      'SERVICE_MARK_NOT_SET' => 'This item is not marked as service.',
       'ORDER_NOT_CANCELLABLE' =>
         'Only pending or confirmed orders can be cancelled.',
       'ORDER_MUTATION_FORBIDDEN' =>
@@ -722,6 +806,11 @@ PaymentQuoteLine _paymentQuoteLineFromRow(Map<String, dynamic> row) {
     quantity: _toIntValue(row['quantity']),
     status: row['status']?.toString() ?? 'pending',
     itemType: row['item_type']?.toString() ?? 'menu_item',
+    isServiceItem: switch (row['is_service_item']) {
+      bool value => value,
+      String value => value.toLowerCase() == 'true',
+      _ => false,
+    },
     vatCategory: row['vat_category']?.toString() ?? vatCategory,
     payingAmountIncTax: _nullableDoubleValue(row['paying_amount_inc_tax']),
   );
@@ -746,6 +835,11 @@ double _paidTotalFromRaw(dynamic raw) {
     final row = Map<String, dynamic>.from(item);
     return sum + _toDoubleValue(row['amount_portion']);
   });
+}
+
+int _paymentCountFromRaw(dynamic raw) {
+  if (raw is! List) return 0;
+  return raw.whereType<Map>().length;
 }
 
 double _remainingDue(double totalAmount, double paidTotal) {

@@ -43,6 +43,31 @@ void main() {
     expect(text, contains('not counted in revenue'));
   });
 
+  test('service item lines are excluded from customer receipt body', () async {
+    final bytes = await ReceiptBuilder.buildPaymentReceipt(
+      restaurantName: 'GLOBOS POS',
+      tableNumber: 'A1',
+      items: const [
+        ReceiptItem(name: 'Pho bo', quantity: 1, unitPrice: 30000),
+        ReceiptItem(
+          name: 'Service dessert',
+          quantity: 2,
+          unitPrice: 15000,
+          isServiceItem: true,
+        ),
+      ],
+      totalAmount: 30000,
+      paymentMethod: 'cash',
+      paidAt: DateTime.utc(2026, 7, 7, 10, 30),
+    );
+
+    final text = String.fromCharCodes(bytes);
+    expect(text, contains('Pho bo'));
+    expect(text, isNot(contains('Service dessert')));
+    expect(text, contains('Service provided: 2 item(s)'));
+    expect(text, contains('Mon phuc vu: 2'));
+  });
+
   test('floor and tray tickets lead with large floor table header', () async {
     const ticket = PrintTicket(
       ticket: 'floor',

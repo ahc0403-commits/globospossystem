@@ -7,6 +7,7 @@ class PaymentQuoteLine {
     required this.quantity,
     required this.status,
     required this.itemType,
+    this.isServiceItem = false,
     this.vatCategory,
     this.payingAmountIncTax,
   });
@@ -15,6 +16,7 @@ class PaymentQuoteLine {
   final int quantity;
   final String status;
   final String itemType;
+  final bool isServiceItem;
   final String? vatCategory;
   final double? payingAmountIncTax;
 }
@@ -23,12 +25,14 @@ class PaymentQuoteResult {
   const PaymentQuoteResult({
     required this.menuSubtotal,
     required this.serviceChargeTotal,
+    required this.serviceItemTotal,
     required this.discountTotal,
     required this.payableTotal,
   });
 
   final double menuSubtotal;
   final double serviceChargeTotal;
+  final double serviceItemTotal;
   final double discountTotal;
   final double payableTotal;
 }
@@ -44,6 +48,7 @@ PaymentQuoteResult calculatePaymentQuote({
   var foodPretaxSubtotal = 0.0;
   var alcoholPretaxSubtotal = 0.0;
   var existingServiceChargeTotal = 0.0;
+  var serviceItemTotal = 0.0;
   var hasExistingServiceCharge = false;
 
   for (final line in lines) {
@@ -52,6 +57,11 @@ PaymentQuoteResult calculatePaymentQuote({
     }
 
     final itemType = line.itemType.toLowerCase();
+    if (itemType == 'menu_item' && line.isServiceItem) {
+      serviceItemTotal += _roundMoney(line.unitPrice * line.quantity);
+      continue;
+    }
+
     if (itemType != 'menu_item') {
       if (itemType == 'service_charge') {
         hasExistingServiceCharge = true;
@@ -100,6 +110,7 @@ PaymentQuoteResult calculatePaymentQuote({
   return PaymentQuoteResult(
     menuSubtotal: _roundMoney(menuSubtotal),
     serviceChargeTotal: _roundMoney(serviceChargeTotal),
+    serviceItemTotal: _roundMoney(serviceItemTotal),
     discountTotal: resolvedDiscount,
     payableTotal: _roundMoney(
       menuSubtotal + serviceChargeTotal - resolvedDiscount,

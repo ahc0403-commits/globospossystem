@@ -966,6 +966,7 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
                 : fallbackLabel,
             quantity: _intValue(item['quantity']),
             unitPrice: _numValue(item['unit_price']).toDouble(),
+            isServiceItem: _boolValue(item['is_service_item']),
           );
         })
         .toList();
@@ -982,6 +983,12 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
     if (value is num) return value.toInt();
     if (value is String) return int.tryParse(value) ?? 0;
     return 0;
+  }
+
+  bool _boolValue(dynamic value) {
+    if (value is bool) return value;
+    if (value is String) return value.toLowerCase() == 'true';
+    return false;
   }
 
   DateTime? _dateValue(dynamic value) {

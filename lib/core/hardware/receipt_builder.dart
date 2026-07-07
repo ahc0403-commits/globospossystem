@@ -72,7 +72,14 @@ class ReceiptBuilder {
     );
     bytes.addAll(generator.hr());
 
-    for (final item in items) {
+    final serviceItemCount = items
+        .where((item) => item.isServiceItem)
+        .fold<int>(0, (sum, item) => sum + item.quantity);
+    final billableItems = items
+        .where((item) => !item.isServiceItem)
+        .toList(growable: false);
+
+    for (final item in billableItems) {
       bytes.addAll(
         generator.row([
           PosColumn(text: _escText(item.name), width: 6),
@@ -120,6 +127,22 @@ class ReceiptBuilder {
       bytes.addAll(
         generator.text(
           '* Phuc vu noi bo - Khong tinh doanh thu',
+          styles: const PosStyles(align: PosAlign.center),
+        ),
+      );
+    }
+
+    if (serviceItemCount > 0) {
+      bytes.addAll(generator.hr());
+      bytes.addAll(
+        generator.text(
+          '* Service provided: $serviceItemCount item(s)',
+          styles: const PosStyles(align: PosAlign.center),
+        ),
+      );
+      bytes.addAll(
+        generator.text(
+          '* Mon phuc vu: $serviceItemCount',
           styles: const PosStyles(align: PosAlign.center),
         ),
       );
@@ -546,9 +569,11 @@ class ReceiptItem {
     required this.name,
     required this.quantity,
     required this.unitPrice,
+    this.isServiceItem = false,
   });
 
   final String name;
   final int quantity;
   final double unitPrice;
+  final bool isServiceItem;
 }

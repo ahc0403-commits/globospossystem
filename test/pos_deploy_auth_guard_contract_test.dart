@@ -10,7 +10,9 @@ void main() {
     final checker = readRepoFile('scripts/check_pilot_auth_accounts.sh');
     final authProvider = readRepoFile('lib/features/auth/auth_provider.dart');
     final loginSmoke = readRepoFile('scripts/smoke_pilot_login.sh');
-    final runbook = readRepoFile('docs/pos/POS_PRODUCTION_DEPLOYMENT_RUNBOOK.md');
+    final runbook = readRepoFile(
+      'docs/pos/POS_PRODUCTION_DEPLOYMENT_RUNBOOK.md',
+    );
     final provisioningRunbook = readRepoFile(
       'docs/manual_test/pos_pilot_auth_provisioning_runbook.md',
     );
@@ -47,13 +49,25 @@ void main() {
     expect(checker, contains('MISSING_AUTH'));
     expect(checker, contains('MISSING_POS_PROFILE'));
     expect(checker, contains('UNCONFIRMED_AUTH'));
+    expect(checker, contains('INACTIVE_POS_PROFILE'));
+    expect(checker, contains('UNKNOWN_ROLE'));
+    expect(checker, contains('MISSING_STORE_SCOPE'));
+    expect(checker, contains('INVALID_STORE_SCOPE'));
+    expect(checker, contains('raw_app_meta_data'));
+    expect(checker, contains('jsonb_array_elements_text'));
+    expect(checker, contains('accessible_store_ids'));
+    expect(checker, contains('public.restaurants'));
     expect(checker, contains('ROOT_CAUSE: Required POS pilot identity state'));
     expect(checker, contains('NEXT_ACTION MISSING_AUTH'));
     expect(checker, contains('NEXT_ACTION UNCONFIRMED_AUTH'));
     expect(checker, contains('NEXT_ACTION MISSING_POS_PROFILE'));
+    expect(checker, contains('NEXT_ACTION INACTIVE_POS_PROFILE'));
+    expect(checker, contains('NEXT_ACTION UNKNOWN_ROLE'));
+    expect(checker, contains('NEXT_ACTION MISSING_STORE_SCOPE'));
+    expect(checker, contains('NEXT_ACTION INVALID_STORE_SCOPE'));
     expect(checker, contains('APP_PROFILE_LOOKUP'));
     expect(checker, contains('pos_pilot_auth_provisioning_runbook.md'));
-    expect(checker, contains('never reads, prints, creates, or'));
+    expect(checker, contains('reads, prints, creates, or resets passwords'));
     expect(checker, contains('resets passwords'));
 
     expect(loginSmoke, contains('PILOT_SMOKE_EMAIL'));
@@ -71,6 +85,11 @@ void main() {
     expect(runbook, contains('public.users.auth_id'));
     expect(runbook, contains('public.users.id ='));
     expect(runbook, contains('MISSING_AUTH'));
+    expect(runbook, contains('INACTIVE_POS_PROFILE'));
+    expect(runbook, contains('UNKNOWN_ROLE'));
+    expect(runbook, contains('MISSING_STORE_SCOPE'));
+    expect(runbook, contains('INVALID_STORE_SCOPE'));
+    expect(runbook, contains('app_metadata.accessible_store_ids'));
     expect(runbook, contains('A frontend deploy cannot create'));
     expect(runbook, contains('manual live URL check'));
     expect(runbook, contains('pos_pilot_auth_provisioning_runbook.md'));
@@ -93,5 +112,7 @@ void main() {
     expect(accounts, isNot(contains('!')));
 
     expect(authProvider, contains(".eq('auth_id', user.id)"));
+    expect(authProvider, contains('claims_fallback_used'));
+    expect(authProvider, contains('debugPrint'));
   });
 }

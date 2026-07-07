@@ -123,4 +123,36 @@ void main() {
       expect(quote.payableTotal, 10800);
     },
   );
+
+  test('service items are excluded from payable and discount bases', () {
+    final quote = calculatePaymentQuote(
+      vatPricingMode: vatPricingModeExclusive,
+      serviceChargeEnabled: true,
+      serviceChargeRate: 10,
+      discountTotal: 200000,
+      lines: const [
+        PaymentQuoteLine(
+          unitPrice: 100000,
+          quantity: 1,
+          status: 'served',
+          itemType: 'menu_item',
+          vatCategory: 'food',
+        ),
+        PaymentQuoteLine(
+          unitPrice: 50000,
+          quantity: 1,
+          status: 'served',
+          itemType: 'menu_item',
+          isServiceItem: true,
+          vatCategory: 'food',
+        ),
+      ],
+    );
+
+    expect(quote.menuSubtotal, 108000);
+    expect(quote.serviceChargeTotal, 10800);
+    expect(quote.serviceItemTotal, 50000);
+    expect(quote.discountTotal, 108000);
+    expect(quote.payableTotal, 10800);
+  });
 }

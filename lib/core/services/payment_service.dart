@@ -40,6 +40,14 @@ class PaymentService {
     };
   }
 
+  bool _toBool(dynamic value) {
+    return switch (value) {
+      bool v => v,
+      String v => v.toLowerCase() == 'true',
+      _ => false,
+    };
+  }
+
   Future<Map<String, dynamic>> processPayment({
     required String orderId,
     required String storeId,
@@ -54,6 +62,42 @@ class PaymentService {
         'p_store_id': storeId,
         'p_amount': amount,
         'p_method': normalizedMethod,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<Map<String, dynamic>> markOrderItemService({
+    required String itemId,
+    required String storeId,
+    required String reason,
+    required String managerPin,
+  }) async {
+    final result = await supabase.rpc(
+      'mark_order_item_service',
+      params: {
+        'p_item_id': itemId,
+        'p_store_id': storeId,
+        'p_reason': reason,
+        'p_manager_pin': managerPin,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<Map<String, dynamic>> unmarkOrderItemService({
+    required String itemId,
+    required String storeId,
+    required String reason,
+    required String managerPin,
+  }) async {
+    final result = await supabase.rpc(
+      'unmark_order_item_service',
+      params: {
+        'p_item_id': itemId,
+        'p_store_id': storeId,
+        'p_reason': reason,
+        'p_manager_pin': managerPin,
       },
     );
     return Map<String, dynamic>.from(result as Map);
@@ -81,7 +125,7 @@ class PaymentService {
       final orderQuery = supabase
           .from('orders')
           .select(
-            'id, restaurant_id, table_id, status, created_at, updated_at, tables(table_number), order_items(id, created_at, status, label, unit_price, quantity, paying_amount_inc_tax, menu_items(name))',
+            'id, restaurant_id, table_id, status, created_at, updated_at, tables(table_number), order_items(id, created_at, status, label, unit_price, quantity, is_service_item, service_reason, paying_amount_inc_tax, menu_items(name))',
           )
           .eq('id', orderId);
       final order = scopedStoreId == null || scopedStoreId.isEmpty
@@ -125,27 +169,30 @@ class PaymentService {
             : <Map<String, dynamic>>[];
         itemRows.sort(_compareOrderItemRowsByCreatedAt);
         orderMap['order_items'] = itemRows;
-        final orderTotal = itemRows
-            .where((item) => item['status']?.toString() != 'cancelled')
-            .fold<double>(
-              0,
-              (sum, item) =>
-                  sum +
-                  _toDouble(
-                    item['paying_amount_inc_tax'],
-                  ).clamp(0, double.infinity),
-            );
+        final billableItemRows = itemRows
+            .where(
+              (item) =>
+                  item['status']?.toString().toLowerCase() != 'cancelled' &&
+                  !_toBool(item['is_service_item']),
+            )
+            .toList(growable: false);
+        final orderTotal = billableItemRows.fold<double>(
+          0,
+          (sum, item) =>
+              sum +
+              _toDouble(
+                item['paying_amount_inc_tax'],
+              ).clamp(0, double.infinity),
+        );
         orderMap['order_total_amount'] = orderTotal > 0
             ? orderTotal
-            : itemRows
-                  .where((item) => item['status']?.toString() != 'cancelled')
-                  .fold<double>(
-                    0,
-                    (sum, item) =>
-                        sum +
-                        (_toDouble(item['unit_price']) *
-                            _toDouble(item['quantity'])),
-                  );
+            : billableItemRows.fold<double>(
+                0,
+                (sum, item) =>
+                    sum +
+                    (_toDouble(item['unit_price']) *
+                        _toDouble(item['quantity'])),
+              );
       }
 
       final jobs = await supabase

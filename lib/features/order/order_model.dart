@@ -35,6 +35,8 @@ class OrderItem {
     required this.quantity,
     required this.status,
     required this.itemType,
+    this.isServiceItem = false,
+    this.serviceReason,
     this.vatCategory,
     this.payingAmountIncTax,
   });
@@ -46,6 +48,8 @@ class OrderItem {
   final int quantity;
   final String status;
   final String itemType;
+  final bool isServiceItem;
+  final String? serviceReason;
   final String? vatCategory;
   final double? payingAmountIncTax;
 
@@ -57,6 +61,8 @@ class OrderItem {
     int? quantity,
     String? status,
     String? itemType,
+    bool? isServiceItem,
+    String? serviceReason,
     String? vatCategory,
     double? payingAmountIncTax,
   }) {
@@ -68,6 +74,8 @@ class OrderItem {
       quantity: quantity ?? this.quantity,
       status: status ?? this.status,
       itemType: itemType ?? this.itemType,
+      isServiceItem: isServiceItem ?? this.isServiceItem,
+      serviceReason: serviceReason ?? this.serviceReason,
       vatCategory: vatCategory ?? this.vatCategory,
       payingAmountIncTax: payingAmountIncTax ?? this.payingAmountIncTax,
     );
@@ -103,6 +111,12 @@ class OrderItem {
       },
       status: json['status']?.toString() ?? 'pending',
       itemType: json['item_type']?.toString() ?? 'menu_item',
+      isServiceItem: switch (json['is_service_item']) {
+        bool value => value,
+        String value => value.toLowerCase() == 'true',
+        _ => false,
+      },
+      serviceReason: json['service_reason']?.toString(),
       vatCategory: json['vat_category']?.toString() ?? vatCategory,
       payingAmountIncTax: switch (payingAmountRaw) {
         num value => value.toDouble(),

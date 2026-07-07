@@ -60,7 +60,9 @@ This default path runs:
 9. Pilot login smoke with `scripts/smoke_pilot_login.sh`.
 
 The Auth readiness check verifies required pilot emails exist in production
-`auth.users` and have readable POS profiles in `public.users`. The profile link
+`auth.users`, are confirmed, have active POS profiles in `public.users`, use a
+supported POS role, and carry non-empty `app_metadata.accessible_store_ids`
+claims whose referenced rows exist in `public.restaurants`. The profile link
 must follow the app login path: `auth.users.email -> auth.users.id ->
 public.users.auth_id`. Do not diagnose readiness with `public.users.id =
 auth.users.id`; that is not the POS login lookup. The check never reads,
@@ -72,10 +74,12 @@ Provisioning and repair instructions live in:
 docs/manual_test/pos_pilot_auth_provisioning_runbook.md
 ```
 
-If the check reports `MISSING_AUTH`, `UNCONFIRMED_AUTH`, or
-`MISSING_POS_PROFILE`, stop before Vercel deploy. This is production account
-provisioning work. A frontend deploy cannot create, confirm, restore, or relink
-Supabase Auth accounts.
+If the check reports `MISSING_AUTH`, `UNCONFIRMED_AUTH`,
+`MISSING_POS_PROFILE`, `INACTIVE_POS_PROFILE`, `UNKNOWN_ROLE`,
+`MISSING_STORE_SCOPE`, or `INVALID_STORE_SCOPE`, stop before Vercel deploy.
+This is production account provisioning work. A frontend deploy cannot create,
+confirm, restore, relink, reactivate, re-role, or repair Supabase Auth/POS
+account scope.
 
 The login smoke requires one assigned pilot credential supplied securely via
 environment variables:

@@ -12,9 +12,10 @@ usage() {
 Usage:
   scripts/check_pilot_auth_accounts.sh [options]
 
-Checks that required POS pilot emails exist in production Supabase Auth and
-have a POS public.users profile linked by public.users.auth_id. This check
-never reads, prints, creates, or resets passwords.
+Checks that required POS pilot emails exist in production Supabase Auth,
+have an active POS public.users profile linked by public.users.auth_id, and
+carry loginable app_metadata.accessible_store_ids claims. This check never
+reads, prints, creates, or resets passwords.
 
 Failure output is intentionally provisioning-oriented: Vercel cannot fix
 missing Auth users or profile links.
@@ -109,27 +110,59 @@ matched as (
     r.email,
     au.id as auth_user_id,
     au.email_confirmed_at,
+    au.raw_app_meta_data,
     pu.id as pos_user_id,
     pu.role,
-    pu.restaurant_id
+    pu.restaurant_id,
+    pu.is_active
   from required r
   left join auth.users au
     on lower(au.email) = r.email
   left join public.users pu
     on pu.auth_id = au.id
+),
+scope as (
+  select
+    m.email,
+    count(scope_id.store_id) as accessible_store_count,
+    count(rs.id) as valid_store_count
+  from matched m
+  left join lateral jsonb_array_elements_text(
+    case
+      when jsonb_typeof(m.raw_app_meta_data->'accessible_store_ids') = 'array'
+        then m.raw_app_meta_data->'accessible_store_ids'
+      else '[]'::jsonb
+    end
+  ) as scope_id(store_id) on true
+  left join public.restaurants rs
+    on rs.id::text = scope_id.store_id
+  group by m.email
 )
 select
-  email,
+  m.email,
   case
-    when auth_user_id is null then 'MISSING_AUTH'
-    when email_confirmed_at is null then 'UNCONFIRMED_AUTH'
-    when pos_user_id is null then 'MISSING_POS_PROFILE'
+    when m.auth_user_id is null then 'MISSING_AUTH'
+    when m.email_confirmed_at is null then 'UNCONFIRMED_AUTH'
+    when m.pos_user_id is null then 'MISSING_POS_PROFILE'
+    when m.is_active is distinct from true then 'INACTIVE_POS_PROFILE'
+    when coalesce(m.role::text, '') not in (
+      'super_admin', 'brand_admin', 'store_admin', 'admin',
+      'waiter', 'kitchen', 'cashier',
+      'photo_objet_master', 'photo_objet_store_admin'
+    ) then 'UNKNOWN_ROLE'
+    when coalesce(s.accessible_store_count, 0) = 0 then 'MISSING_STORE_SCOPE'
+    when coalesce(s.valid_store_count, 0) <> coalesce(s.accessible_store_count, 0)
+      then 'INVALID_STORE_SCOPE'
     else 'OK'
   end as status,
-  coalesce(role::text, '') as role,
-  coalesce(restaurant_id::text, '') as restaurant_id
-from matched
-order by email;
+  coalesce(m.role::text, '') as role,
+  coalesce(m.restaurant_id::text, '') as restaurant_id,
+  coalesce(s.accessible_store_count, 0)::text as accessible_store_count,
+  coalesce(s.valid_store_count, 0)::text as valid_store_count
+from matched m
+left join scope s
+  on s.email = m.email
+order by m.email;
 SQL
   } > "$QUERY_FILE"
 }
@@ -152,7 +185,14 @@ if not isinstance(rows, list):
     sys.exit("Supabase CLI JSON did not contain a rows list.")
 
 for row in rows:
-    print("\t".join(str(row.get(key) or "") for key in ("email", "status", "role", "restaurant_id")))
+    print("\t".join(str(row.get(key) or "") for key in (
+        "email",
+        "status",
+        "role",
+        "restaurant_id",
+        "accessible_store_count",
+        "valid_store_count",
+    )))
 PY
 }
 
@@ -160,6 +200,10 @@ print_blocker_report() {
   local missing_auth="$1"
   local unconfirmed_auth="$2"
   local missing_profile="$3"
+  local inactive_profile="$4"
+  local unknown_role="$5"
+  local missing_scope="$6"
+  local invalid_scope="$7"
 
   printf '\nROOT_CAUSE: Required POS pilot identity state is missing from production Supabase, not from the Vercel frontend.\n' >&2
   printf 'PROJECT: %s\n' "$EXPECTED_PROJECT_REF" >&2
@@ -183,6 +227,34 @@ print_blocker_report() {
   if [[ -n "$missing_profile" ]]; then
     printf 'NEXT_ACTION MISSING_POS_PROFILE: create or repair the POS public.users row linked by auth_id.\n' >&2
     printf '%s\n' "$missing_profile" | while IFS= read -r email; do
+      [[ -n "$email" ]] && printf '  - %s\n' "$email" >&2
+    done
+  fi
+
+  if [[ -n "$inactive_profile" ]]; then
+    printf 'NEXT_ACTION INACTIVE_POS_PROFILE: reactivate the POS public.users row or remove the pilot email from the required list.\n' >&2
+    printf '%s\n' "$inactive_profile" | while IFS= read -r email; do
+      [[ -n "$email" ]] && printf '  - %s\n' "$email" >&2
+    done
+  fi
+
+  if [[ -n "$unknown_role" ]]; then
+    printf 'NEXT_ACTION UNKNOWN_ROLE: set public.users.role to a supported POS role before deploying.\n' >&2
+    printf '%s\n' "$unknown_role" | while IFS= read -r email; do
+      [[ -n "$email" ]] && printf '  - %s\n' "$email" >&2
+    done
+  fi
+
+  if [[ -n "$missing_scope" ]]; then
+    printf 'NEXT_ACTION MISSING_STORE_SCOPE: run refresh_user_claims after repairing user_store_access; accessible_store_ids empty.\n' >&2
+    printf '%s\n' "$missing_scope" | while IFS= read -r email; do
+      [[ -n "$email" ]] && printf '  - %s\n' "$email" >&2
+    done
+  fi
+
+  if [[ -n "$invalid_scope" ]]; then
+    printf 'NEXT_ACTION INVALID_STORE_SCOPE: remove stale accessible_store_ids or repair the referenced restaurants rows.\n' >&2
+    printf '%s\n' "$invalid_scope" | while IFS= read -r email; do
       [[ -n "$email" ]] && printf '  - %s\n' "$email" >&2
     done
   fi
@@ -212,14 +284,20 @@ check_accounts() {
   local missing_auth=""
   local unconfirmed_auth=""
   local missing_profile=""
+  local inactive_profile=""
+  local unknown_role=""
+  local missing_scope=""
+  local invalid_scope=""
   local email
   local status
   local role
   local restaurant_id
-  while IFS=$'\t' read -r email status role restaurant_id; do
+  local accessible_store_count
+  local valid_store_count
+  while IFS=$'\t' read -r email status role restaurant_id accessible_store_count valid_store_count; do
     [[ -z "$email" ]] && continue
     if [[ "$status" == "OK" ]]; then
-      printf 'OK: %s role=%s store=%s\n' "$email" "${role:-unknown}" "${restaurant_id:-unknown}"
+      printf 'OK: %s role=%s store=%s scope=%s/%s\n' "$email" "${role:-unknown}" "${restaurant_id:-unknown}" "${valid_store_count:-0}" "${accessible_store_count:-0}"
     else
       printf 'BLOCKER: %s %s\n' "$email" "$status" >&2
       case "$status" in
@@ -232,13 +310,25 @@ check_accounts() {
         MISSING_POS_PROFILE)
           missing_profile="${missing_profile}${email}"$'\n'
           ;;
+        INACTIVE_POS_PROFILE)
+          inactive_profile="${inactive_profile}${email}"$'\n'
+          ;;
+        UNKNOWN_ROLE)
+          unknown_role="${unknown_role}${email}"$'\n'
+          ;;
+        MISSING_STORE_SCOPE)
+          missing_scope="${missing_scope}${email}"$'\n'
+          ;;
+        INVALID_STORE_SCOPE)
+          invalid_scope="${invalid_scope}${email}"$'\n'
+          ;;
       esac
       has_failure=1
     fi
   done <<< "$rows_tsv"
 
   if [[ "$has_failure" != "0" ]]; then
-    print_blocker_report "$missing_auth" "$unconfirmed_auth" "$missing_profile"
+    print_blocker_report "$missing_auth" "$unconfirmed_auth" "$missing_profile" "$inactive_profile" "$unknown_role" "$missing_scope" "$invalid_scope"
     fail "Required POS pilot Auth accounts are not ready. Fix accounts in Supabase Auth before deploying."
   fi
 }

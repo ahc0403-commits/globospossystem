@@ -157,14 +157,10 @@ void main() {
         contains('_CashierCompactCommandBar(isOnline: isOnline)'),
       );
       expect(cashier, contains('SizedBox(height: useCompactChrome ? 8 : 12)'));
-      expect(
-        cashier,
-        contains('_CashierOrderSummarySurface(order: order, compact: true)'),
-      );
-      expect(
-        cashier,
-        contains('_CashierOrderItemsPanel(order: order, scrollable: false)'),
-      );
+      expect(cashier, contains('_CashierOrderSummarySurface('));
+      expect(cashier, contains('compact: true'));
+      expect(cashier, contains('_CashierOrderItemsPanel('));
+      expect(cashier, contains('scrollable: !compact'));
       expect(cashier, contains('NeverScrollableScrollPhysics'));
       expect(cashier, contains('expandMethodSection: false'));
       expect(

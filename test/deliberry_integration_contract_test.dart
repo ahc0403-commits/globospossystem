@@ -11,10 +11,18 @@ void main() {
       final migration = File(
         'supabase/migrations/299_deliberry_integration_security_closure.sql',
       );
+      final closureMigration = File(
+        'supabase/migrations/20260707011000_external_store_view_security_schema_closure.sql',
+      );
+      final schema = File('supabase/schema.sql');
 
       expect(migration.existsSync(), isTrue);
+      expect(closureMigration.existsSync(), isTrue);
+      expect(schema.existsSync(), isTrue);
 
       final sql = migration.readAsStringSync();
+      final closureSql = closureMigration.readAsStringSync();
+      final schemaSql = schema.readAsStringSync();
       for (final viewName in [
         'v_external_store_sales',
         'v_external_store_overview',
@@ -29,6 +37,51 @@ void main() {
           reason: '$viewName must not bypass table RLS through view ownership.',
         );
       }
+
+      for (final viewName in [
+        'v_external_store_sales',
+        'v_external_store_overview',
+      ]) {
+        expect(closureSql, contains('CREATE OR REPLACE VIEW public.$viewName'));
+        expect(closureSql, contains('WITH (security_invoker = true) AS'));
+        expect(closureSql, contains('AND public.is_super_admin()'));
+        expect(
+          closureSql,
+          contains(
+            'REVOKE ALL ON public.$viewName FROM PUBLIC, anon, authenticated',
+          ),
+        );
+        expect(
+          closureSql,
+          contains(
+            'GRANT SELECT ON public.$viewName TO authenticated, service_role',
+          ),
+        );
+        expect(
+          schemaSql,
+          contains(
+            'CREATE OR REPLACE VIEW "public"."$viewName" WITH ("security_invoker"=',
+          ),
+        );
+      }
+
+      expect(schemaSql, contains('"public"."is_super_admin"()'));
+      expect(
+        schemaSql,
+        isNot(
+          contains(
+            'GRANT ALL ON TABLE "public"."v_external_store_sales" TO "anon"',
+          ),
+        ),
+      );
+      expect(
+        schemaSql,
+        isNot(
+          contains(
+            'GRANT ALL ON TABLE "public"."v_external_store_overview" TO "anon"',
+          ),
+        ),
+      );
     });
 
     test('settlement summary exposes the active store_id contract', () {

@@ -18,6 +18,7 @@ import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
+import '../order/order_model.dart';
 import '../payment/payment_provider.dart';
 import '../payment/einvoice_status_badge.dart';
 import '../settings/printer_provider.dart';
@@ -153,6 +154,76 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     return result ?? false;
   }
 
+  Future<Map<String, String>?> _showServiceItemDialog({
+    required bool isMarked,
+  }) async {
+    final l10n = context.l10n;
+    final reasonController = TextEditingController();
+    final pinController = TextEditingController();
+    try {
+      return showDialog<Map<String, String>?>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return AlertDialog(
+            title: Text(
+              isMarked
+                  ? l10n.cashierServiceItemUnmarkTitle
+                  : l10n.cashierServiceItemMarkTitle,
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  key: const Key('cashier_service_item_reason_input'),
+                  controller: reasonController,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    labelText: l10n.cashierServiceItemReason,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('cashier_service_item_pin_input'),
+                  controller: pinController,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: l10n.cashierDiscountManagerPin,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton(
+                key: const Key('cashier_service_item_confirm'),
+                onPressed: () {
+                  final reason = reasonController.text.trim();
+                  final pin = pinController.text.trim();
+                  if (reason.isEmpty || pin.isEmpty) return;
+                  Navigator.of(
+                    context,
+                  ).pop({'reason': reason, 'managerPin': pin});
+                },
+                child: Text(
+                  isMarked
+                      ? l10n.cashierServiceItemUnmarkAction
+                      : l10n.cashierServiceItemMarkAction,
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    } finally {
+      reasonController.dispose();
+      pinController.dispose();
+    }
+  }
+
   Future<List<PaymentSplitInput>?> _showSplitPaymentDialog({
     required double totalAmount,
   }) {
@@ -188,6 +259,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
               name: item.label ?? l10n.cashierItemFallback,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
+              isServiceItem: item.isServiceItem,
             ),
           )
           .toList(),
@@ -218,6 +290,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       authState.extraPermissions,
       'discount_apply',
     );
+    final canManageServiceItems = isAdmin || canApplyDiscount;
     _ensureLoaded(storeId);
 
     final paymentState = ref.watch(paymentProvider);
@@ -368,6 +441,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                   selectedMethod: _selectedMethod,
                   isAdmin: isAdmin,
                   canApplyDiscount: canApplyDiscount,
+                  canManageServiceItems: canManageServiceItems,
                   isProcessing: paymentState.isProcessing,
                   isOnline: isOnline,
                   onSelectMethod: (method) {
@@ -401,6 +475,46 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                         context.l10n.cashierDiscountApplied,
                       );
                       await notifier.loadOrders(storeId);
+                    }
+                  },
+                  onToggleServiceItem: (item) async {
+                    final selectedOrder = paymentState.selectedOrder;
+                    if (storeId == null || selectedOrder == null) {
+                      return;
+                    }
+                    if (!isOnline) {
+                      showErrorToast(
+                        context,
+                        context.l10n.cashierInternetRequired,
+                      );
+                      return;
+                    }
+                    final input = await _showServiceItemDialog(
+                      isMarked: item.isServiceItem,
+                    );
+                    if (input == null) {
+                      return;
+                    }
+                    final success = item.isServiceItem
+                        ? await notifier.unmarkOrderItemService(
+                            storeId: storeId,
+                            itemId: item.id,
+                            reason: input['reason'] ?? '',
+                            managerPin: input['managerPin'] ?? '',
+                          )
+                        : await notifier.markOrderItemService(
+                            storeId: storeId,
+                            itemId: item.id,
+                            reason: input['reason'] ?? '',
+                            managerPin: input['managerPin'] ?? '',
+                          );
+                    if (success && context.mounted) {
+                      showSuccessToast(
+                        context,
+                        item.isServiceItem
+                            ? context.l10n.cashierServiceItemUnmarked
+                            : context.l10n.cashierServiceItemMarked,
+                      );
                     }
                   },
                   onProcess: (method) async {
@@ -1194,10 +1308,12 @@ class _SelectedOrderView extends StatelessWidget {
     required this.selectedMethod,
     required this.isAdmin,
     required this.canApplyDiscount,
+    required this.canManageServiceItems,
     required this.isProcessing,
     required this.isOnline,
     required this.onSelectMethod,
     required this.onApplyDiscount,
+    required this.onToggleServiceItem,
     required this.onProcess,
     required this.onProcessSplit,
     required this.onCancelOrder,
@@ -1208,10 +1324,12 @@ class _SelectedOrderView extends StatelessWidget {
   final String? selectedMethod;
   final bool isAdmin;
   final bool canApplyDiscount;
+  final bool canManageServiceItems;
   final bool isProcessing;
   final bool isOnline;
   final ValueChanged<String> onSelectMethod;
   final Future<void> Function() onApplyDiscount;
+  final Future<void> Function(OrderItem item) onToggleServiceItem;
   final Future<void> Function(String method) onProcess;
   final Future<void> Function() onProcessSplit;
   final Future<void> Function() onCancelOrder;
@@ -1249,7 +1367,13 @@ class _SelectedOrderView extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final orderSummary = _CashierOrderSummarySurface(order: order);
+        final orderSummary = _CashierOrderSummarySurface(
+          order: order,
+          canManageServiceItems: canManageServiceItems,
+          isProcessing: isProcessing,
+          isOnline: isOnline,
+          onToggleServiceItem: onToggleServiceItem,
+        );
         final paymentRail = _CashierPaymentRail(
           order: order,
           selectedMethod: effectiveSelectedMethod,
@@ -1278,7 +1402,14 @@ class _SelectedOrderView extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 16),
             child: Column(
               children: [
-                _CashierOrderSummarySurface(order: order, compact: true),
+                _CashierOrderSummarySurface(
+                  order: order,
+                  compact: true,
+                  canManageServiceItems: canManageServiceItems,
+                  isProcessing: isProcessing,
+                  isOnline: isOnline,
+                  onToggleServiceItem: onToggleServiceItem,
+                ),
                 const SizedBox(height: 12),
                 _CashierPaymentRail(
                   order: order,
@@ -1319,15 +1450,31 @@ class _CashierOrderSummarySurface extends StatelessWidget {
   const _CashierOrderSummarySurface({
     required this.order,
     this.compact = false,
+    this.canManageServiceItems = false,
+    this.isProcessing = false,
+    this.isOnline = true,
+    this.onToggleServiceItem,
   });
 
   final CashierOrder order;
   final bool compact;
+  final bool canManageServiceItems;
+  final bool isProcessing;
+  final bool isOnline;
+  final Future<void> Function(OrderItem item)? onToggleServiceItem;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final currency = NumberFormat('#,###', 'vi_VN');
+    final itemsPanel = _CashierOrderItemsPanel(
+      order: order,
+      scrollable: !compact,
+      canManageServiceItems: canManageServiceItems,
+      isProcessing: isProcessing,
+      isOnline: isOnline,
+      onToggleServiceItem: onToggleServiceItem,
+    );
 
     return ToastWorkSurface(
       key: const Key('cashier_payment_surface'),
@@ -1361,10 +1508,7 @@ class _CashierOrderSummarySurface extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          if (compact)
-            _CashierOrderItemsPanel(order: order, scrollable: false)
-          else
-            Expanded(child: _CashierOrderItemsPanel(order: order)),
+          if (compact) itemsPanel else Expanded(child: itemsPanel),
           const SizedBox(height: 12),
           _AmountLine(
             label: l10n.cashierSubtotal,
@@ -1374,6 +1518,12 @@ class _CashierOrderSummarySurface extends StatelessWidget {
             _AmountLine(
               label: l10n.cashierServiceCharge,
               value: '₫${currency.format(order.serviceChargeTotal)}',
+            ),
+          if (order.serviceItemTotal > 0)
+            _AmountLine(
+              label: l10n.cashierServiceItemFooter(order.serviceItemCount),
+              value: '₫${currency.format(order.serviceItemTotal)}',
+              valueColor: PosColors.warning,
             ),
           if (order.discountTotal > 0)
             _AmountLine(
@@ -1435,14 +1585,34 @@ class _AmountLine extends StatelessWidget {
 }
 
 class _CashierOrderItemsPanel extends StatelessWidget {
-  const _CashierOrderItemsPanel({required this.order, this.scrollable = true});
+  const _CashierOrderItemsPanel({
+    required this.order,
+    this.scrollable = true,
+    this.canManageServiceItems = false,
+    this.isProcessing = false,
+    this.isOnline = true,
+    this.onToggleServiceItem,
+  });
 
   final CashierOrder order;
   final bool scrollable;
+  final bool canManageServiceItems;
+  final bool isProcessing;
+  final bool isOnline;
+  final Future<void> Function(OrderItem item)? onToggleServiceItem;
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final currency = NumberFormat('#,###', 'vi_VN');
+    final billableMenuItemCount = order.items
+        .where(
+          (item) =>
+              item.status.toLowerCase() != 'cancelled' &&
+              item.itemType.toLowerCase() == 'menu_item' &&
+              !item.isServiceItem,
+        )
+        .length;
 
     return Container(
       constraints: scrollable ? null : const BoxConstraints(minHeight: 160),
@@ -1471,8 +1641,21 @@ class _CashierOrderItemsPanel extends StatelessWidget {
               separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final item = order.items[index];
-                final itemName = item.label ?? context.l10n.cashierItemFallback;
+                final itemName = item.label ?? l10n.cashierItemFallback;
                 final lineTotal = item.unitPrice * item.quantity;
+                final itemType = item.itemType.toLowerCase();
+                final isCancelled = item.status.toLowerCase() == 'cancelled';
+                final isMenuItem = itemType == 'menu_item';
+                final canToggleServiceItem =
+                    canManageServiceItems &&
+                    !isProcessing &&
+                    isOnline &&
+                    !order.isStaffMeal &&
+                    order.paymentCount == 0 &&
+                    isMenuItem &&
+                    !isCancelled &&
+                    onToggleServiceItem != null &&
+                    (item.isServiceItem || billableMenuItemCount > 1);
                 return Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
@@ -1502,22 +1685,98 @@ class _CashierOrderItemsPanel extends StatelessWidget {
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Text(
-                          itemName,
-                          style: Theme.of(context).textTheme.bodyLarge
-                              ?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: PosColors.textPrimary,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              itemName,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodyLarge
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: PosColors.textPrimary,
+                                  ),
+                            ),
+                            if (item.isServiceItem) ...[
+                              const SizedBox(height: 6),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: ToastStatusBadge(
+                                  key: const Key('cashier_service_item_badge'),
+                                  label: l10n.cashierServiceItemBadge,
+                                  color: PosColors.warning,
+                                  compact: true,
+                                ),
                               ),
+                              if ((item.serviceReason ?? '').isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  item.serviceReason!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: PosColors.textSecondary,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                ),
+                              ],
+                            ],
+                          ],
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Text(
-                        '₫${currency.format(lineTotal)}',
-                        style: PosNumericText.lineAmount.copyWith(
-                          color: PosColors.textPrimary,
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            item.isServiceItem
+                                ? l10n.cashierServiceItemExcluded
+                                : '₫${currency.format(lineTotal)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: PosNumericText.lineAmount.copyWith(
+                              color: item.isServiceItem
+                                  ? PosColors.warning
+                                  : PosColors.textPrimary,
+                            ),
+                          ),
+                          if (item.isServiceItem)
+                            Text(
+                              '₫${currency.format(lineTotal)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: PosColors.textMuted,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            ),
+                        ],
                       ),
+                      if (isMenuItem) ...[
+                        const SizedBox(width: 6),
+                        IconButton(
+                          key: ValueKey(
+                            'cashier_service_item_action_${item.id}',
+                          ),
+                          tooltip: item.isServiceItem
+                              ? l10n.cashierServiceItemUnmarkAction
+                              : l10n.cashierServiceItemMarkAction,
+                          onPressed: canToggleServiceItem
+                              ? () => onToggleServiceItem!(item)
+                              : null,
+                          icon: Icon(
+                            item.isServiceItem
+                                ? Icons.undo_rounded
+                                : Icons.volunteer_activism_rounded,
+                          ),
+                          color: item.isServiceItem
+                              ? PosColors.warning
+                              : PosColors.accent,
+                        ),
+                      ],
                     ],
                   ),
                 );
