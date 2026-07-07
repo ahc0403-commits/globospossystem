@@ -1406,6 +1406,20 @@ class _RestaurantsTab extends StatelessWidget {
                         child: Text(l10n.superAdminDeleteDeactivate),
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        key: const Key('super_admin_close_store_button'),
+                        onPressed: () =>
+                            _confirmAndCloseStore(context, notifier, initial),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.statusCancelled,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: Text(l10n.superAdminCloseStore),
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -1419,6 +1433,103 @@ class _RestaurantsTab extends StatelessWidget {
     addressController.dispose();
     slugController.dispose();
     chargeController.dispose();
+  }
+
+  Future<void> _confirmAndCloseStore(
+    BuildContext context,
+    SuperAdminNotifier notifier,
+    SuperRestaurant store,
+  ) async {
+    final l10n = context.l10n;
+    final reasonController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        String? errorText;
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface1,
+              title: Text(
+                l10n.superAdminCloseStoreTitle,
+                style: AppFonts.system(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.superAdminCloseStoreMessage,
+                    style: AppFonts.system(color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('super_admin_close_store_reason'),
+                    controller: reasonController,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      labelText: l10n.superAdminCloseStoreReasonLabel,
+                      errorText: errorText,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: Text(l10n.cancel),
+                ),
+                FilledButton(
+                  key: const Key('super_admin_close_store_confirm'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.statusCancelled,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    if (reasonController.text.trim().isEmpty) {
+                      setDialogState(() {
+                        errorText = l10n.superAdminCloseStoreReasonRequired;
+                      });
+                      return;
+                    }
+                    Navigator.of(dialogContext).pop(true);
+                  },
+                  child: Text(l10n.superAdminCloseStoreConfirm),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      reasonController.dispose();
+      return;
+    }
+
+    final result = await notifier.closeStore(
+      store.id,
+      reasonController.text.trim(),
+    );
+    reasonController.dispose();
+    if (!context.mounted) return;
+
+    if (result.isSuccess) {
+      showSuccessToast(context, l10n.superAdminStoreClosed);
+      Navigator.of(context).pop();
+    } else {
+      final error = result.error ?? '';
+      showErrorToast(
+        context,
+        error.contains('STORE_HAS_OPEN_ORDERS')
+            ? l10n.superAdminCloseStoreOpenOrders
+            : error,
+      );
+    }
   }
 
   String _slugify(String input) {

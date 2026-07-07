@@ -287,7 +287,11 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
       final rows = await supabase
           .from('restaurants')
           .select('id, name, brand_id, brands(name)')
-          .inFilter('id', storeIds);
+          .inFilter('id', storeIds)
+          // Closed stores must not appear in the client store list. The
+          // server-side guard (user_accessible_stores) and refreshed claims
+          // are the primary control; this filter keeps the UI consistent.
+          .eq('is_active', true);
 
       final stores = rows.map<AccessibleStore>((row) {
         final map = Map<String, dynamic>.from(row);

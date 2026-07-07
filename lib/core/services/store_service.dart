@@ -153,6 +153,18 @@ class StoreService {
   Future<void> deactivateRestaurant(String id) {
     return deactivateStore(id);
   }
+
+  /// Full store closure (폐업): open-order guard, staff access revoke, claims
+  /// refresh, printer teardown, and a point-in-time sales snapshot for
+  /// tax-audit preservation. Returns the RPC summary. Raw sales rows are
+  /// retained (soft closure) — super_admin/Office keep read access.
+  Future<Map<String, dynamic>> closeStore(String id, String reason) async {
+    final result = await supabase.rpc(
+      'admin_close_store',
+      params: {'p_store_id': id, 'p_reason': reason},
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
 }
 
 final storeService = StoreService();
