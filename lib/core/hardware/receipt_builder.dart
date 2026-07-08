@@ -230,6 +230,12 @@ class ReceiptBuilder {
     bytes.addAll(_buildTicketBody(generator, ticket, finish: false));
     bytes.addAll(
       generator.text(
+        _escText('Please bring this slip to cashier.'),
+        styles: const PosStyles(align: PosAlign.center),
+      ),
+    );
+    bytes.addAll(
+      generator.text(
         _escText('This is not a receipt. Payment at cashier only.'),
         styles: const PosStyles(bold: true, align: PosAlign.center),
       ),

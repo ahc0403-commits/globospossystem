@@ -25,11 +25,23 @@ void main() {
     expect(migration, contains('public.require_admin_actor_for_restaurant'));
     expect(
       migration,
+      contains(
+        "u.role IN ('admin', 'store_admin', 'brand_admin', 'super_admin')",
+      ),
+    );
+    expect(
+      migration,
       contains('CREATE OR REPLACE FUNCTION public.qr_get_menu'),
     );
     expect(
       migration,
       contains('CREATE OR REPLACE FUNCTION public.qr_place_order'),
+    );
+    expect(
+      migration,
+      contains(
+        'CREATE OR REPLACE FUNCTION public.search_active_order_for_cashier',
+      ),
     );
     expect(
       migration,
@@ -77,6 +89,27 @@ void main() {
     expect(migration, contains('v_item_count < 1 OR v_item_count > 20'));
     expect(migration, contains("(v_line.raw->>'quantity')::int > 20"));
     expect(migration, contains('QR_ORDER_PAYMENT_IN_PROGRESS'));
+    final placeOrderStart = migration.indexOf(
+      'CREATE OR REPLACE FUNCTION public.qr_place_order',
+    );
+    final tokenResolveIndex = migration.indexOf(
+      'FROM public.table_qr_tokens q',
+      placeOrderStart,
+    );
+    final tokenInvalidIndex = migration.indexOf(
+      "RAISE EXCEPTION 'QR_TOKEN_INVALID'",
+      tokenResolveIndex,
+    );
+    final idempotencyIndex = migration.indexOf(
+      'FROM public.qr_order_batches',
+      tokenInvalidIndex,
+    );
+    expect(placeOrderStart, greaterThanOrEqualTo(0));
+    expect(tokenResolveIndex, greaterThan(placeOrderStart));
+    expect(tokenInvalidIndex, greaterThan(tokenResolveIndex));
+    expect(idempotencyIndex, greaterThan(tokenInvalidIndex));
+    expect(migration, contains('AND restaurant_id = v_table.restaurant_id'));
+    expect(migration, contains('AND table_id = v_table.table_id'));
     expect(
       migration,
       contains('public.void_active_order_discount_for_item_change'),
@@ -113,6 +146,7 @@ void main() {
     );
     expect(receiptBuilder, contains('buildConfirmationSlip'));
     expect(receiptBuilder, contains('ORDER CONFIRMATION'));
+    expect(receiptBuilder, contains('Please bring this slip to cashier.'));
     expect(
       receiptBuilder,
       contains('This is not a receipt. Payment at cashier only.'),
@@ -150,6 +184,7 @@ void main() {
       'lib/features/admin/providers/tables_provider.dart',
     );
     final tablesTab = readRepoFile('lib/features/admin/tabs/tables_tab.dart');
+    final pubspec = readRepoFile('pubspec.yaml');
 
     expect(kitchenProvider, contains('order_source'));
     expect(
@@ -168,6 +203,7 @@ void main() {
       paymentProvider,
       contains(".inFilter('status', ['pending', 'confirmed', 'serving'])"),
     );
+    expect(paymentProvider, contains('search_active_order_for_cashier'));
     expect(paymentProvider, contains('tables(table_number)'));
     expect(cashierScreen, contains('cashier_qr_order_badge_'));
     expect(cashierScreen, contains("Key('cashier_order_search')"));
@@ -181,7 +217,12 @@ void main() {
     expect(menuTab, contains('admin_menu_qr_public_'));
     expect(tablesService, contains('admin_generate_table_qr'));
     expect(tablesProvider, contains('generateTableQr'));
+    expect(pubspec, contains('qr_flutter:'));
+    expect(tablesTab, contains('QrImageView'));
     expect(tablesTab, contains("Key('admin_tables_generate_qr_action')"));
+    expect(tablesTab, contains("Key('admin_table_qr_rotate_warning_dialog')"));
+    expect(tablesTab, contains("Key('admin_table_qr_rotate_warning')"));
+    expect(tablesTab, contains("Key('admin_table_qr_preview')"));
     expect(tablesTab, contains("Key('admin_table_qr_url')"));
   });
 }

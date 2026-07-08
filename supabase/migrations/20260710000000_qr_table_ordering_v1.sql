@@ -65,7 +65,7 @@ CREATE POLICY table_qr_tokens_admin_read
       JOIN public.users u ON u.auth_id = auth.uid()
       WHERE s.store_id = table_qr_tokens.restaurant_id
         AND u.is_active = true
-        AND u.role IN ('admin', 'store_admin', 'super_admin')
+        AND u.role IN ('admin', 'store_admin', 'brand_admin', 'super_admin')
     )
   );
 
@@ -492,15 +492,6 @@ BEGIN
     RAISE EXCEPTION 'QR_CLIENT_ORDER_ID_REQUIRED';
   END IF;
 
-  SELECT *
-  INTO v_existing_batch
-  FROM public.qr_order_batches
-  WHERE client_order_id = p_client_order_id;
-
-  IF FOUND THEN
-    RETURN v_existing_batch.result_snapshot;
-  END IF;
-
   SELECT
     q.restaurant_id,
     q.table_id,
@@ -520,6 +511,17 @@ BEGIN
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'QR_TOKEN_INVALID';
+  END IF;
+
+  SELECT *
+  INTO v_existing_batch
+  FROM public.qr_order_batches
+  WHERE client_order_id = p_client_order_id
+    AND restaurant_id = v_table.restaurant_id
+    AND table_id = v_table.table_id;
+
+  IF FOUND THEN
+    RETURN v_existing_batch.result_snapshot;
   END IF;
 
   IF jsonb_typeof(v_items) <> 'array' THEN
@@ -761,11 +763,82 @@ EXCEPTION
     SELECT *
     INTO v_existing_batch
     FROM public.qr_order_batches
-    WHERE client_order_id = p_client_order_id;
+    WHERE client_order_id = p_client_order_id
+      AND restaurant_id = v_table.restaurant_id
+      AND table_id = v_table.table_id;
     IF FOUND THEN
       RETURN v_existing_batch.result_snapshot;
     END IF;
     RAISE;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.search_active_order_for_cashier(
+  p_store_id uuid,
+  p_query text
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public', 'auth'
+AS $$
+DECLARE
+  v_query text := lower(replace(btrim(COALESCE(p_query, '')), '#', ''));
+  v_result jsonb;
+BEGIN
+  IF p_store_id IS NULL OR v_query = '' THEN
+    RETURN NULL;
+  END IF;
+
+  IF NOT (
+    public.is_super_admin()
+    OR EXISTS (
+      SELECT 1
+      FROM public.user_accessible_stores(auth.uid()) s(store_id)
+      WHERE s.store_id = p_store_id
+    )
+  ) THEN
+    RAISE EXCEPTION 'STORE_ACCESS_DENIED';
+  END IF;
+
+  SELECT jsonb_build_object(
+    'id', o.id::text,
+    'table_id', o.table_id::text,
+    'status', o.status,
+    'order_purpose', o.order_purpose,
+    'order_source', o.order_source,
+    'created_at', o.created_at,
+    'tables', jsonb_build_object(
+      'table_number',
+      CASE
+        WHEN o.order_purpose = 'staff_meal' THEN 'STAFF'
+        ELSE COALESCE(t.table_number, '-')
+      END
+    )
+  )
+  INTO v_result
+  FROM public.orders o
+  LEFT JOIN public.tables t
+    ON t.id = o.table_id
+   AND t.restaurant_id = o.restaurant_id
+  WHERE o.restaurant_id = p_store_id
+    AND o.status IN ('pending', 'confirmed', 'serving')
+    AND (
+      lower(substring(o.id::text from 1 for 8)) = v_query
+      OR lower(o.id::text) LIKE v_query || '%'
+      OR lower(COALESCE(t.table_number, '')) = v_query
+      OR lower(COALESCE(t.table_number, '')) LIKE '%' || v_query || '%'
+    )
+  ORDER BY
+    CASE
+      WHEN lower(substring(o.id::text from 1 for 8)) = v_query THEN 0
+      WHEN lower(COALESCE(t.table_number, '')) = v_query THEN 1
+      WHEN lower(o.id::text) LIKE v_query || '%' THEN 2
+      ELSE 3
+    END,
+    o.created_at DESC
+  LIMIT 1;
+
+  RETURN v_result;
 END;
 $$;
 
@@ -775,6 +848,8 @@ REVOKE ALL ON FUNCTION public.qr_get_menu(text)
   FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.qr_place_order(text, jsonb, uuid)
   FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.search_active_order_for_cashier(uuid, text)
+  FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION public.admin_generate_table_qr(uuid)
   TO authenticated, service_role;
@@ -782,5 +857,7 @@ GRANT EXECUTE ON FUNCTION public.qr_get_menu(text)
   TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.qr_place_order(text, jsonb, uuid)
   TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.search_active_order_for_cashier(uuid, text)
+  TO authenticated, service_role;
 
 COMMIT;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
 import '../../../core/ui/pos_design_tokens.dart';
@@ -1121,6 +1122,37 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     TablesNotifier tablesNotifier,
     PosTable table,
   ) async {
+    final shouldRotate = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        key: const Key('admin_table_qr_rotate_warning_dialog'),
+        backgroundColor: AppColors.surface1,
+        title: Text(
+          'Generate table QR',
+          style: AppFonts.system(color: AppColors.textPrimary),
+        ),
+        content: Text(
+          'Generating a new QR immediately invalidates any code already attached to this table.',
+          key: const Key('admin_table_qr_rotate_warning'),
+          style: AppFonts.system(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(context.l10n.cancel),
+          ),
+          FilledButton(
+            key: const Key('admin_table_qr_generate_confirm'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Generate'),
+          ),
+        ],
+      ),
+    );
+    if (shouldRotate != true || !context.mounted) {
+      return;
+    }
+
     final tokenRow = await tablesNotifier.generateTableQr(table.id);
     if (!context.mounted || tokenRow == null) {
       return;
@@ -1146,6 +1178,33 @@ class _TablesTabState extends ConsumerState<TablesTab> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Center(
+              child: Container(
+                key: const Key('admin_table_qr_preview'),
+                width: 220,
+                height: 220,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: PosColors.border),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: QrImageView(
+                  data: qrUrl,
+                  version: QrVersions.auto,
+                  backgroundColor: Colors.white,
+                  eyeStyle: const QrEyeStyle(
+                    eyeShape: QrEyeShape.square,
+                    color: Colors.black,
+                  ),
+                  dataModuleStyle: const QrDataModuleStyle(
+                    dataModuleShape: QrDataModuleShape.square,
+                    color: Colors.black,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
             Text(
               'Customer ordering URL',
               style: AppFonts.system(

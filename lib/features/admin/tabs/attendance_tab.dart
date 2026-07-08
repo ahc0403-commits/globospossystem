@@ -54,10 +54,18 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     ).subtract(Duration(days: weekday - 1));
   }
 
+  void _clearPayrollPreview() {
+    _payrolls = const [];
+    _payrollError = null;
+    _isPayrollLoading = false;
+  }
+
   Future<void> _initialize(String storeId) async {
     setState(() {
       _isLogsLoading = true;
       _logsError = null;
+      _selectedAttendanceUserId = null;
+      _clearPayrollPreview();
     });
 
     try {
@@ -102,6 +110,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
       setState(() {
         _logs = logs;
         _isLogsLoading = false;
+        _clearPayrollPreview();
       });
     } catch (e) {
       if (!mounted) return;
@@ -117,6 +126,9 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
   }
 
   Future<void> _loadPayrollPreview(String storeId) async {
+    final periodStart = _logFrom;
+    final periodEnd = _logTo;
+
     setState(() {
       _isPayrollLoading = true;
       _payrollError = null;
@@ -125,16 +137,18 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     try {
       final payrolls = await payrollService.calculatePayroll(
         storeId: storeId,
-        periodStart: _logFrom,
-        periodEnd: _logTo,
+        periodStart: periodStart,
+        periodEnd: periodEnd,
       );
       if (!mounted) return;
+      if (periodStart != _logFrom || periodEnd != _logTo) return;
       setState(() {
         _payrolls = payrolls;
         _isPayrollLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
+      if (periodStart != _logFrom || periodEnd != _logTo) return;
       setState(() {
         _isPayrollLoading = false;
         _payrollError = _mapPayrollError(
@@ -910,13 +924,14 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                     lastDate: TimeUtils.nowVietnam(),
                   );
                   if (picked != null) {
-                    setState(
-                      () => _logFrom = DateTime(
+                    setState(() {
+                      _logFrom = DateTime(
                         picked.year,
                         picked.month,
                         picked.day,
-                      ),
-                    );
+                      );
+                      _clearPayrollPreview();
+                    });
                   }
                 },
               ),
@@ -940,6 +955,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                         59,
                         59,
                       );
+                      _clearPayrollPreview();
                     });
                   }
                 },
@@ -1305,10 +1321,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
               : context.l10n.attendanceConnectionStable,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: AppFonts.system(
-            color: AppColors.textSecondary,
-            fontSize: 12,
-          ),
+          style: AppFonts.system(color: AppColors.textSecondary, fontSize: 12),
         ),
         children: [
           Wrap(

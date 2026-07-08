@@ -50,4 +50,17 @@ void main() {
       isNot(contains('run_inventory_purchase_recommendation')),
     );
   });
+
+  test(
+    'attendance tab clears payroll preview when attendance scope changes',
+    () {
+      final attendanceTab = readRepoFile(
+        'lib/features/admin/tabs/attendance_tab.dart',
+      );
+
+      expect(attendanceTab, contains('void _clearPayrollPreview()'));
+      expect(attendanceTab, contains('_clearPayrollPreview();'));
+      expect(attendanceTab, contains('_payrolls = const [];'));
+    },
+  );
 }

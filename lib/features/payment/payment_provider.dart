@@ -401,6 +401,18 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       return null;
     }
 
+    try {
+      final rpcResult = await supabase.rpc(
+        'search_active_order_for_cashier',
+        params: {'p_store_id': storeId, 'p_query': query},
+      );
+      return _cashierOrderSearchResultFromRpc(rpcResult);
+    } catch (error) {
+      if (!_isCashierSearchRpcMissing(error)) {
+        rethrow;
+      }
+    }
+
     final rows = await supabase
         .from('orders')
         .select(
@@ -435,6 +447,34 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     }
 
     return partialMatch;
+  }
+
+  CashierOrderSearchResult? _cashierOrderSearchResultFromRpc(Object? raw) {
+    if (raw == null) {
+      return null;
+    }
+    if (raw is Map<String, dynamic>) {
+      return CashierOrderSearchResult.fromJson(raw);
+    }
+    if (raw is Map) {
+      return CashierOrderSearchResult.fromJson(Map<String, dynamic>.from(raw));
+    }
+    return null;
+  }
+
+  bool _isCashierSearchRpcMissing(Object error) {
+    final message = error.toString().toLowerCase();
+    final functionName = 'search_active_order_for_cashier';
+    if (!message.contains(functionName)) {
+      return false;
+    }
+    if (error is PostgrestException && error.code == 'PGRST202') {
+      return true;
+    }
+    return message.contains('could not find the function') ||
+        message.contains('function public.') ||
+        message.contains('does not exist') ||
+        message.contains('no function matches');
   }
 
   Future<_CashierStorePricing> _loadStorePricing(String storeId) async {

@@ -171,7 +171,13 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
     final storeId = ref.read(authProvider).storeId;
     final selected = _selectedStaff;
     final selectedType = _selectedType;
-    if (storeId == null || selected == null || selectedType == null) {
+    final selectedUserId =
+        selected?['user_id']?.toString() ?? selected?['id']?.toString();
+    if (storeId == null ||
+        selected == null ||
+        selectedType == null ||
+        selectedUserId == null ||
+        selectedUserId.isEmpty) {
       _backToIdle();
       return;
     }
@@ -181,7 +187,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
     final success = await ref
         .read(attendanceKioskProvider.notifier)
         .recordAttendance(
-          userId: selected['id'].toString(),
+          userId: selectedUserId,
           storeId: storeId,
           type: selectedType,
           photoFile: photoFile,
@@ -580,10 +586,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                 child: Text(
                   'Align your face within the circle',
                   textAlign: TextAlign.center,
-                  style: AppFonts.system(
-                    color: Colors.white,
-                    fontSize: 16,
-                  ),
+                  style: AppFonts.system(color: Colors.white, fontSize: 16),
                 ),
               ),
             ],
