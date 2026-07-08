@@ -71,12 +71,6 @@ const supabase = createClient(
 
 const STORES = [
   {
-    storeName: 'D7',
-    user: process.env.MOERS_D7_USER,
-    pass: process.env.MOERS_D7_PASS,
-    storeId: process.env.PHOTO_OBJET_D7_STORE_ID,
-  },
-  {
     storeName: 'BIEN HOA',
     user: process.env.MOERS_BIENHOA_USER,
     pass: process.env.MOERS_BIENHOA_PASS,
