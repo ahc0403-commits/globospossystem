@@ -25,12 +25,8 @@ The GitHub Actions workflow runs every 10 minutes:
 cron: '*/10 * * * *'
 ```
 
-D7 is disabled by default because its Excel download path is expected to change.
-Enable it only after the Korean-side Moers account behavior is corrected:
-
-```bash
-PHOTO_OBJET_D7_ENABLED=true
-```
+D7 is removed from the active pull list because the store is scheduled to close.
+Historical POS rows and seeded anchors are retained for audit continuity.
 
 ## Required GitHub Actions secrets
 
@@ -38,7 +34,6 @@ Set these in GitHub repository settings:
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_KEY`
-- `MOERS_D7_PASS`
 - `MOERS_BIENHOA_PASS`
 - `MOERS_DIAN_PASS`
 - `MOERS_LONGTHANH_PASS`
@@ -49,9 +44,8 @@ Set these in GitHub repository settings:
 ## Required store id secrets
 
 Because the POS project does not currently expose a safe exact-name mapping
-for the 7 Photo Objet stores, the workflow uses explicit store id secrets:
+for the active Photo Objet stores, the workflow uses explicit store id secrets:
 
-- `PHOTO_OBJET_D7_STORE_ID`
 - `PHOTO_OBJET_BIENHOA_STORE_ID`
 - `PHOTO_OBJET_DIAN_STORE_ID`
 - `PHOTO_OBJET_LONGTHANH_STORE_ID`
@@ -64,7 +58,6 @@ upserted Photo Objet sales rows.
 
 Current linked-project mapping:
 
-- `PHOTO_OBJET_D7_STORE_ID` → `77000000-0000-0000-0000-000000000101`
 - `PHOTO_OBJET_BIENHOA_STORE_ID` → `77000000-0000-0000-0000-000000000102`
 - `PHOTO_OBJET_DIAN_STORE_ID` → `77000000-0000-0000-0000-000000000103`
 - `PHOTO_OBJET_LONGTHANH_STORE_ID` → `77000000-0000-0000-0000-000000000104`
@@ -89,10 +82,10 @@ The script supports both:
 
 ## Current linked-environment note
 
-As of 2026-04-17, the linked POS database does not yet contain the 7 Photo
-Objet restaurants as exact-name rows. This setup now seeds a dedicated
-`PHOTO OBJET` brand plus the 7 store anchors with deterministic ids, so the
-workflow can avoid fragile name matching.
+As of 2026-04-17, the linked POS database does not yet contain the active Photo
+Objet restaurants as exact-name rows. This setup seeds a dedicated
+`PHOTO OBJET` brand plus deterministic store anchors, so the workflow can avoid
+fragile name matching.
 
 ## Raw ledger behavior
 

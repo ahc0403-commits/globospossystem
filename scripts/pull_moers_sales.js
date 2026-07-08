@@ -201,13 +201,6 @@ const supabase = createClient(
 
 const STORES = [
   {
-    storeName: 'D7',
-    enabled: envFlag('PHOTO_OBJET_D7_ENABLED', false),
-    user: process.env.MOERS_D7_USER,
-    pass: process.env.MOERS_D7_PASS,
-    storeId: process.env.PHOTO_OBJET_D7_STORE_ID,
-  },
-  {
     storeName: 'BIEN HOA',
     enabled: envFlag('PHOTO_OBJET_BIENHOA_ENABLED', true),
     user: process.env.MOERS_BIENHOA_USER,

@@ -76,14 +76,14 @@ Photo Objet is different from restaurant POS:
 - Sales are pulled from Moers.
 - All Photo Objet sales are treated as cash.
 - VNPAY/QR wallet data must not be mixed into this ledger.
-- D7 is disabled by default until the Excel download behavior is fixed.
+- D7 is removed from the active pull list because the store is scheduled to close.
 
 Current pull workflow:
 
 - Workflow: `.github/workflows/photo_objet_sales.yml`
 - Script: `scripts/pull_moers_sales.js`
 - Schedule: every 10 minutes
-- D7 flag: `PHOTO_OBJET_D7_ENABLED=false`
+- Active stores: Bien Hoa, Di An, Long Thanh, Thao Dien, Quang Trung, Now Zone
 
 Photo flow:
 
@@ -263,12 +263,6 @@ Moers/GitHub Actions secrets:
 - `PHOTO_OBJET_QUANGTRUNG_STORE_ID`
 - `PHOTO_OBJET_NOWZONE_STORE_ID`
 
-D7 later:
-
-- `MOERS_D7_PASS`
-- `PHOTO_OBJET_D7_STORE_ID`
-- `PHOTO_OBJET_D7_ENABLED=true`
-
 ## 8. Operational Activation Checklist
 
 Before live dispatch:
@@ -405,7 +399,7 @@ Operational blockers:
 - Edge Function must be deployed.
 - Runtime secrets must be configured.
 - `SUPABASE_SERVICE_KEY` must exist for Photo Objet GitHub Actions.
-- D7 Excel download behavior must be fixed before enabling D7.
+- D7 Moers secrets are not required for the active pull.
 
 Risk notes:
 
@@ -418,7 +412,7 @@ Risk notes:
 Next safest sequence:
 
 1. Apply migrations in staging.
-2. Configure Moers secrets and run one manual workflow for non-D7 stores.
+2. Configure Moers secrets and run one manual workflow for active stores.
 3. Compare Moers Excel total vs `photo_objet_sales_raw`.
 4. Configure MISA AppID and invoice series when received.
 5. Run meInvoice dispatcher `dry_run`.

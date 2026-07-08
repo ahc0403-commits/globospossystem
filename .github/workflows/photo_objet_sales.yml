@@ -53,10 +53,6 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           PHOTO_OBJET_INCLUDE_YESTERDAY: 'false'
-          PHOTO_OBJET_D7_ENABLED: 'false'
-          MOERS_D7_USER: tob003
-          MOERS_D7_PASS: ${{ secrets.MOERS_D7_PASS }}
-          PHOTO_OBJET_D7_STORE_ID: ${{ secrets.PHOTO_OBJET_D7_STORE_ID }}
           MOERS_BIENHOA_USER: tob009
           MOERS_BIENHOA_PASS: ${{ secrets.MOERS_BIENHOA_PASS }}
           PHOTO_OBJET_BIENHOA_STORE_ID: ${{ secrets.PHOTO_OBJET_BIENHOA_STORE_ID }}

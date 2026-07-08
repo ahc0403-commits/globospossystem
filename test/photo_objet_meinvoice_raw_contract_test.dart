@@ -47,7 +47,8 @@ void main() {
     final source = readRepoFile(scriptPath);
 
     expect(source, contains("const crypto = require('crypto');"));
-    expect(source, contains("PHOTO_OBJET_D7_ENABLED', false"));
+    expect(source, isNot(contains('MOERS_D7')));
+    expect(source, isNot(contains('PHOTO_OBJET_D7')));
     expect(source, contains("PHOTO_OBJET_BIENHOA_ENABLED', true"));
     expect(source, contains('Asia/Ho_Chi_Minh'));
     expect(source, contains('getTargetDates'));
@@ -68,13 +69,14 @@ void main() {
     expect(source, isNot(contains('MISA_MEINVOICE_PASSWORD')));
   });
 
-  test('Photo Objet workflow runs every 10 minutes with D7 disabled', () {
+  test('Photo Objet workflow runs every 10 minutes without D7', () {
     final workflow = readRepoFile(workflowPath);
 
     expect(workflow, contains("cron: '*/10 * * * *'"));
     expect(workflow, contains('concurrency:'));
     expect(workflow, contains('cancel-in-progress: false'));
-    expect(workflow, contains("PHOTO_OBJET_D7_ENABLED: 'false'"));
+    expect(workflow, isNot(contains('MOERS_D7')));
+    expect(workflow, isNot(contains('PHOTO_OBJET_D7')));
     expect(workflow, contains('defaults to today in Asia/Ho_Chi_Minh'));
     expect(workflow, contains('node pull_moers_sales.js'));
   });
@@ -87,7 +89,8 @@ void main() {
     expect(docs, contains('meinvoice_jobs'));
     expect(docs, contains('The crawler does not call MISA directly.'));
     expect(docs, contains("cron: '*/10 * * * *'"));
-    expect(docs, contains('D7 is disabled by default'));
+    expect(docs, isNot(contains('MOERS_D7')));
+    expect(docs, isNot(contains('PHOTO_OBJET_D7')));
     expect(docs, contains('payment_method = CASH'));
     expect(docs, contains('VNPAY/QR wallet data must not be mixed'));
   });
