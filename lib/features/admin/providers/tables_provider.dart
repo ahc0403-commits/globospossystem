@@ -318,6 +318,19 @@ class TablesNotifier extends StateNotifier<TablesState> {
     }
   }
 
+  Future<Map<String, dynamic>?> generateTableQr(String tableId) async {
+    try {
+      final token = await tablesService.generateTableQr(tableId);
+      state = state.copyWith(clearError: true);
+      return token;
+    } catch (error) {
+      state = state.copyWith(
+        error: _mapTablesError(error, 'Failed to generate table QR.'),
+      );
+      return null;
+    }
+  }
+
   @override
   void dispose() {
     _pollTimer?.cancel();

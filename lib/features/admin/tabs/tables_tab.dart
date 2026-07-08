@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
@@ -737,6 +738,17 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                   icon: const Icon(Icons.edit_outlined, size: 18),
                   label: Text(l10n.tablesEditTable),
                 ),
+              if (!_layoutEditMode && selectedTable != null)
+                OutlinedButton.icon(
+                  key: const Key('admin_tables_generate_qr_action'),
+                  onPressed: () => _showTableQrDialog(
+                    context,
+                    tablesNotifier,
+                    selectedTable,
+                  ),
+                  icon: const Icon(Icons.qr_code_2_rounded, size: 18),
+                  label: const Text('QR'),
+                ),
               if (!_layoutEditMode &&
                   selectedTable != null &&
                   !selectedTable.isOccupied)
@@ -1102,6 +1114,78 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     tableController.dispose();
     seatController.dispose();
     floorController.dispose();
+  }
+
+  Future<void> _showTableQrDialog(
+    BuildContext context,
+    TablesNotifier tablesNotifier,
+    PosTable table,
+  ) async {
+    final tokenRow = await tablesNotifier.generateTableQr(table.id);
+    if (!context.mounted || tokenRow == null) {
+      return;
+    }
+
+    final token = tokenRow['token']?.toString() ?? '';
+    final base = Uri.base;
+    final origin = base.hasScheme && base.hasAuthority
+        ? '${base.scheme}://${base.authority}'
+        : '';
+    final qrUrl = origin.isEmpty ? '/qr/$token' : '$origin/qr/$token';
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        key: const Key('admin_table_qr_dialog'),
+        backgroundColor: AppColors.surface1,
+        title: Text(
+          'Table ${table.tableNumber} QR',
+          style: AppFonts.system(color: AppColors.textPrimary),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Customer ordering URL',
+              style: AppFonts.system(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            SelectableText(
+              qrUrl,
+              key: const Key('admin_table_qr_url'),
+              style: AppFonts.system(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(context.l10n.close),
+          ),
+          FilledButton.icon(
+            key: const Key('admin_table_qr_copy_action'),
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: qrUrl));
+              if (!context.mounted) {
+                return;
+              }
+              Navigator.of(context).pop();
+              showSuccessToast(context, 'QR URL copied');
+            },
+            icon: const Icon(Icons.copy_rounded, size: 18),
+            label: const Text('Copy'),
+          ),
+        ],
+      ),
+    );
   }
 }
 

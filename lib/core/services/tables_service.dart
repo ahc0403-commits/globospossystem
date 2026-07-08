@@ -232,6 +232,14 @@ class TablesService {
       await supabase.rpc('admin_update_table', params: legacyLayoutParams);
     }
   }
+
+  Future<Map<String, dynamic>> generateTableQr(String tableId) async {
+    final response = await supabase.rpc(
+      'admin_generate_table_qr',
+      params: {'p_table_id': tableId},
+    );
+    return Map<String, dynamic>.from(response as Map);
+  }
 }
 
 final tablesService = TablesService();

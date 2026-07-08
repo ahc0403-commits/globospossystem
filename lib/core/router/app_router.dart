@@ -16,6 +16,7 @@ import '../../features/onboarding/onboarding_screen.dart';
 import '../../features/photo_ops/photo_ops_screen.dart';
 import '../../features/payment/payment_detail_screen.dart';
 import '../../features/print_station/print_station_screen.dart';
+import '../../features/qr_order/qr_order_screen.dart';
 import '../../features/attendance/attendance_kiosk_screen.dart';
 import '../../features/qc/qc_check_screen.dart';
 import '../../features/qc/qc_review_screen.dart';
@@ -48,6 +49,11 @@ GoRouter buildAppRouter(ProviderContainer container) {
       final fullLocation = state.uri.toString();
       final path = state.uri.path;
       String? redirectTo;
+
+      if (path.startsWith('/qr/')) {
+        NavigationHistoryService.instance.push(fullLocation);
+        return null;
+      }
 
       // 1. 비로그인 → 로그인 화면
       if (!isLoggedIn) {
@@ -193,6 +199,11 @@ GoRouter buildAppRouter(ProviderContainer container) {
       return null;
     },
     routes: [
+      GoRoute(
+        path: '/qr/:token',
+        builder: (_, state) =>
+            QrOrderScreen(token: state.pathParameters['token'] ?? ''),
+      ),
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
       GoRoute(
         path: '/privacy-consent',

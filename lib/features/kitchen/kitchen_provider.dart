@@ -76,6 +76,7 @@ class KitchenOrder {
     required this.orderId,
     required this.tableNumber,
     required this.orderPurpose,
+    required this.orderSource,
     required this.createdAt,
     required this.items,
   });
@@ -83,15 +84,18 @@ class KitchenOrder {
   final String orderId;
   final String tableNumber;
   final String orderPurpose;
+  final String orderSource;
   final DateTime createdAt;
   final List<KitchenItem> items;
 
   bool get isStaffMeal => orderPurpose == 'staff_meal';
+  bool get isQrOrder => orderSource == 'qr';
 
   KitchenOrder copyWith({
     String? orderId,
     String? tableNumber,
     String? orderPurpose,
+    String? orderSource,
     DateTime? createdAt,
     List<KitchenItem>? items,
   }) {
@@ -99,6 +103,7 @@ class KitchenOrder {
       orderId: orderId ?? this.orderId,
       tableNumber: tableNumber ?? this.tableNumber,
       orderPurpose: orderPurpose ?? this.orderPurpose,
+      orderSource: orderSource ?? this.orderSource,
       createdAt: createdAt ?? this.createdAt,
       items: items ?? this.items,
     );
@@ -208,7 +213,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
       final response = await supabase
           .from('orders')
           .select(
-            'id, created_at, status, order_purpose, tables(table_number), order_items(id, created_at, label, quantity, status, menu_items(name))',
+            'id, created_at, status, order_purpose, order_source, tables(table_number), order_items(id, created_at, label, quantity, status, menu_items(name))',
           )
           .eq('restaurant_id', storeId)
           .inFilter('status', ['pending', 'confirmed', 'serving', 'completed'])
@@ -267,6 +272,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
           orderId: data['id'].toString(),
           tableNumber: tableNumber,
           orderPurpose: data['order_purpose']?.toString() ?? 'customer',
+          orderSource: data['order_source']?.toString() ?? 'staff',
           createdAt: createdAt,
           items: itemsWithSupplementFlags,
         );

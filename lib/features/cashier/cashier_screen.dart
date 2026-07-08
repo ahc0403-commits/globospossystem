@@ -44,11 +44,24 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   bool _isFlushingProofQueue = false;
   bool _hasAttemptedProofFlush = false;
   bool _showPaymentQueueOnCompact = true;
+  bool _isOrderSearchLoading = false;
+  final TextEditingController _orderSearchController = TextEditingController();
+  CashierOrderSearchResult? _orderSearchResult;
+  String? _orderSearchFeedback;
   late final ProviderSubscription<PaymentState> _paymentSub;
 
   @override
   void initState() {
     super.initState();
+    _orderSearchController.addListener(() {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _orderSearchResult = null;
+        _orderSearchFeedback = null;
+      });
+    });
     _paymentSub = ref.listenManual<PaymentState>(paymentProvider, (prev, next) {
       if ((prev?.paymentSuccess ?? false) == false && next.paymentSuccess) {
         _successTimer?.cancel();
@@ -101,6 +114,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   @override
   void dispose() {
     _successTimer?.cancel();
+    _orderSearchController.dispose();
     _paymentSub.close();
     super.dispose();
   }
@@ -234,6 +248,98 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     );
   }
 
+  Future<void> _handleOrderSearch({
+    required String? storeId,
+    required PaymentNotifier notifier,
+  }) async {
+    final query = _orderSearchController.text.trim();
+    if (query.isEmpty || _isOrderSearchLoading) {
+      return;
+    }
+    if (storeId == null) {
+      showErrorToast(context, 'Store context missing.');
+      return;
+    }
+
+    setState(() {
+      _isOrderSearchLoading = true;
+      _orderSearchResult = null;
+      _orderSearchFeedback = null;
+    });
+
+    try {
+      final result = await notifier.searchActiveOrderForCashier(
+        storeId: storeId,
+        query: query,
+      );
+      if (!mounted) {
+        return;
+      }
+
+      if (result == null) {
+        setState(() {
+          _orderSearchFeedback = 'No active order found for "$query".';
+          _isOrderSearchLoading = false;
+        });
+        return;
+      }
+
+      if (!result.isPayable) {
+        setState(() {
+          _orderSearchResult = result;
+          _orderSearchFeedback =
+              'Kitchen in progress. This order will appear here when every active item is ready.';
+          _isOrderSearchLoading = false;
+        });
+        return;
+      }
+
+      var payableOrder = _findCashierOrderById(
+        ref.read(paymentProvider).orders,
+        result.orderId,
+      );
+      if (payableOrder == null) {
+        await notifier.loadOrders(storeId);
+        payableOrder = _findCashierOrderById(
+          ref.read(paymentProvider).orders,
+          result.orderId,
+        );
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      if (payableOrder == null) {
+        setState(() {
+          _orderSearchResult = result;
+          _orderSearchFeedback =
+              'Kitchen in progress. This order is not payable yet.';
+          _isOrderSearchLoading = false;
+        });
+        return;
+      }
+
+      setState(() {
+        _selectedMethod = null;
+        _showPaymentQueueOnCompact = false;
+        _orderSearchResult = result;
+        _orderSearchFeedback = 'Order ready for cashier payment.';
+        _isOrderSearchLoading = false;
+      });
+      notifier.selectOrder(payableOrder);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _orderSearchFeedback = 'Order search failed. Please retry.';
+        _isOrderSearchLoading = false;
+      });
+      showErrorToast(context, 'Order search failed: $error');
+    }
+  }
+
   Future<void> _printReceipt({
     required CashierOrder order,
     required String method,
@@ -309,6 +415,11 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       0,
       (sum, order) => sum + order.remainingDue,
     );
+    final orderSearchQuery = _orderSearchController.text.trim();
+    final visiblePaymentOrders = _filterCashierOrders(
+      paymentState.orders,
+      orderSearchQuery,
+    );
     final queuePane = PosDataPanel(
       key: const Key('cashier_pending_payment_list'),
       title: l10n.cashierPendingStatus,
@@ -320,110 +431,153 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
               color: PosColors.accent,
               compact: true,
             ),
-      child: paymentState.orders.isEmpty
-          ? _CashierNoPayableOrdersPanel(
-              title: l10n.cashierNoPayableOrdersTitle,
-              subtitle: l10n.cashierNoPayableOrdersMessage,
-              isOnline: isOnline,
-              onRefresh: storeId == null
-                  ? null
-                  : () => unawaited(notifier.loadOrders(storeId)),
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.only(bottom: 12),
-              itemCount: paymentState.orders.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                final order = paymentState.orders[index];
-                final selected =
-                    paymentState.selectedOrder?.orderId == order.orderId;
-                return KeyedSubtree(
-                  key: Key('cashier_order_${order.orderId}'),
-                  child: PosDataGridRow(
-                    key: index == 0
-                        ? const Key('payment_first_candidate')
-                        : null,
-                    selected: selected,
-                    statusColor: selected ? PosColors.accent : null,
-                    onTap: () {
-                      setState(() {
-                        _selectedMethod = null;
-                        _showPaymentQueueOnCompact = false;
-                      });
-                      notifier.selectOrder(order);
-                    },
-                    cells: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            '#${_shortCashierOrderId(order.orderId)}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: PosNumericText.orderId.copyWith(
-                              color: PosColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _formatCashierOrderAge(context, order.createdAt),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: PosColors.textSecondary,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                          ),
-                        ],
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            l10n.cashierTableLabel(order.tableNumber),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(fontWeight: FontWeight.w800),
-                          ),
-                          const SizedBox(height: 2),
-                          _OrderStatusBadge(status: order.status),
-                        ],
-                      ),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          l10n.cashierItemsCount(order.items.length),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: PosColors.textSecondary,
-                                fontWeight: FontWeight.w800,
-                              ),
-                        ),
-                      ),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          '₫${currency.format(order.remainingDue)}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.right,
-                          style: PosNumericText.amountLine.copyWith(
-                            color: PosColors.accent,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _CashierOrderSearchToolbar(
+            controller: _orderSearchController,
+            isSearching: _isOrderSearchLoading,
+            onSearch: () =>
+                _handleOrderSearch(storeId: storeId, notifier: notifier),
+            onClear: () => _orderSearchController.clear(),
+          ),
+          if (_orderSearchFeedback != null) ...[
+            const SizedBox(height: 10),
+            _CashierOrderSearchFeedback(
+              key: const Key('cashier_order_search_status'),
+              result: _orderSearchResult,
+              message: _orderSearchFeedback!,
             ),
+          ],
+          const SizedBox(height: 12),
+          Expanded(
+            child: visiblePaymentOrders.isEmpty
+                ? _CashierNoPayableOrdersPanel(
+                    title: l10n.cashierNoPayableOrdersTitle,
+                    subtitle: orderSearchQuery.isEmpty
+                        ? l10n.cashierNoPayableOrdersMessage
+                        : 'No payable order in the cashier queue for "$orderSearchQuery".',
+                    isOnline: isOnline,
+                    onRefresh: storeId == null
+                        ? null
+                        : () => unawaited(notifier.loadOrders(storeId)),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    itemCount: visiblePaymentOrders.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final order = visiblePaymentOrders[index];
+                      final selected =
+                          paymentState.selectedOrder?.orderId == order.orderId;
+                      return KeyedSubtree(
+                        key: Key('cashier_order_${order.orderId}'),
+                        child: PosDataGridRow(
+                          key: index == 0
+                              ? const Key('payment_first_candidate')
+                              : null,
+                          selected: selected,
+                          statusColor: selected ? PosColors.accent : null,
+                          onTap: () {
+                            setState(() {
+                              _selectedMethod = null;
+                              _showPaymentQueueOnCompact = false;
+                            });
+                            notifier.selectOrder(order);
+                          },
+                          cells: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  '#${_shortCashierOrderId(order.orderId)}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: PosNumericText.orderId.copyWith(
+                                    color: PosColors.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _formatCashierOrderAge(
+                                    context,
+                                    order.createdAt,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: PosColors.textSecondary,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
+                              ],
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  l10n.cashierTableLabel(order.tableNumber),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(fontWeight: FontWeight.w800),
+                                ),
+                                const SizedBox(height: 2),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  children: [
+                                    _OrderStatusBadge(status: order.status),
+                                    if (order.isQrOrder)
+                                      ToastStatusBadge(
+                                        key: Key(
+                                          'cashier_qr_order_badge_${order.orderId}',
+                                        ),
+                                        label: 'QR',
+                                        color: PosColors.accent,
+                                        compact: true,
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                l10n.cashierItemsCount(order.items.length),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: PosColors.textSecondary,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                '₫${currency.format(order.remainingDue)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.right,
+                                style: PosNumericText.amountLine.copyWith(
+                                  color: PosColors.accent,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
     final queueWithHistory = _CashierQueueWithHistory(
       queuePane: queuePane,
@@ -1142,6 +1296,39 @@ String _shortCashierOrderId(String orderId) {
     return orderId;
   }
   return orderId.substring(0, 8);
+}
+
+CashierOrder? _findCashierOrderById(List<CashierOrder> orders, String orderId) {
+  for (final order in orders) {
+    if (order.orderId == orderId) {
+      return order;
+    }
+  }
+  return null;
+}
+
+List<CashierOrder> _filterCashierOrders(
+  List<CashierOrder> orders,
+  String query,
+) {
+  final normalizedQuery = _normalizeCashierOrderSearch(query);
+  if (normalizedQuery.isEmpty) {
+    return orders;
+  }
+
+  return orders.where((order) {
+    final haystack = [
+      order.orderId,
+      _shortCashierOrderId(order.orderId),
+      order.tableNumber,
+      if (order.isQrOrder) 'qr',
+    ].map(_normalizeCashierOrderSearch).join(' ');
+    return haystack.contains(normalizedQuery);
+  }).toList();
+}
+
+String _normalizeCashierOrderSearch(String raw) {
+  return raw.trim().replaceAll('#', '').toLowerCase();
 }
 
 String _formatCashierOrderAge(BuildContext context, DateTime createdAt) {
@@ -2502,6 +2689,99 @@ class _OrderStatusBadge extends StatelessWidget {
       _ => normalized,
     };
     return ToastStatusChip(label: label, color: color);
+  }
+}
+
+class _CashierOrderSearchToolbar extends StatelessWidget {
+  const _CashierOrderSearchToolbar({
+    required this.controller,
+    required this.isSearching,
+    required this.onSearch,
+    required this.onClear,
+  });
+
+  final TextEditingController controller;
+  final bool isSearching;
+  final VoidCallback onSearch;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasQuery = controller.text.trim().isNotEmpty;
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            key: const Key('cashier_order_search'),
+            controller: controller,
+            textInputAction: TextInputAction.search,
+            onSubmitted: (_) => onSearch(),
+            decoration: InputDecoration(
+              labelText: 'Order or table search',
+              hintText: '8-char order code or table number',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: hasQuery
+                  ? IconButton(
+                      key: const Key('cashier_order_search_clear'),
+                      tooltip: 'Clear search',
+                      onPressed: onClear,
+                      icon: const Icon(Icons.close_rounded),
+                    )
+                  : null,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton.filledTonal(
+          key: const Key('cashier_order_search_action'),
+          tooltip: 'Search order',
+          onPressed: isSearching ? null : onSearch,
+          icon: isSearching
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.manage_search_rounded),
+        ),
+      ],
+    );
+  }
+}
+
+class _CashierOrderSearchFeedback extends StatelessWidget {
+  const _CashierOrderSearchFeedback({
+    super.key,
+    required this.result,
+    required this.message,
+  });
+
+  final CashierOrderSearchResult? result;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final result = this.result;
+    final color = result == null
+        ? PosColors.warning
+        : result.isPayable
+        ? PosColors.success
+        : PosColors.info;
+
+    return PosExceptionAlert(
+      label: result == null
+          ? 'Order search'
+          : '#${result.orderCode} · Table ${result.tableNumber}',
+      detail: result == null
+          ? message
+          : '$message ${result.isQrOrder ? 'QR order.' : 'Staff order.'}',
+      color: color,
+      icon: result == null
+          ? Icons.search_off_rounded
+          : result.isPayable
+          ? Icons.point_of_sale_rounded
+          : Icons.restaurant_menu_rounded,
+    );
   }
 }
 

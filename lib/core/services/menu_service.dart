@@ -107,6 +107,16 @@ class MenuService {
     );
   }
 
+  Future<void> togglePublicVisibility(
+    String itemId,
+    bool isVisiblePublic,
+  ) async {
+    await supabase.rpc(
+      'admin_update_menu_item',
+      params: {'p_item_id': itemId, 'p_is_visible_public': isVisiblePublic},
+    );
+  }
+
   Future<void> updateMenuItem({
     required String itemId,
     required String name,

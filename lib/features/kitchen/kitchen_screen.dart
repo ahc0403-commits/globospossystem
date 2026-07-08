@@ -1049,6 +1049,13 @@ class _KitchenOrderCard extends StatelessWidget {
                         color: PosColors.warning,
                         compact: true,
                       ),
+                    if (order.isQrOrder)
+                      ToastStatusBadge(
+                        key: Key('kitchen_qr_order_badge_${order.orderId}'),
+                        label: 'QR',
+                        color: PosColors.accent,
+                        compact: true,
+                      ),
                     if (hasSupplementalItems) ...[
                       ToastStatusBadge(
                         key: Key(
@@ -2061,6 +2068,7 @@ List<KitchenOrder> _filterKitchenOrders(
       ticketCode,
       order.tableNumber,
       if (order.isStaffMeal) 'staff meal',
+      if (order.isQrOrder) 'qr table order',
       ...order.items.map((item) => item.label),
     ].map(_normalizeKitchenSearch).join(' ');
     return haystack.contains(normalizedQuery);

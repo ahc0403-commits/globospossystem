@@ -136,6 +136,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       numberFormat: numberFormat,
       scrollable: scrollable,
       onToggleAvailability: menuNotifier.toggleAvailability,
+      onTogglePublicVisibility: menuNotifier.togglePublicVisibility,
       onEditItem: (item) => _showEditItemDialog(context, item, menuNotifier),
     );
 
@@ -618,6 +619,7 @@ class _ItemsPanel extends StatelessWidget {
     required this.selectedCategoryId,
     required this.numberFormat,
     required this.onToggleAvailability,
+    required this.onTogglePublicVisibility,
     required this.onEditItem,
     this.scrollable = true,
   });
@@ -627,6 +629,8 @@ class _ItemsPanel extends StatelessWidget {
   final NumberFormat numberFormat;
   final Future<bool> Function(String itemId, bool isAvailable)
   onToggleAvailability;
+  final Future<bool> Function(String itemId, bool isVisiblePublic)
+  onTogglePublicVisibility;
   final ValueChanged<Map<String, dynamic>> onEditItem;
   final bool scrollable;
 
@@ -676,6 +680,7 @@ class _ItemsPanel extends StatelessWidget {
                   final name = item['name']?.toString() ?? '-';
                   final priceRaw = item['price'];
                   final isAvailable = item['is_available'] == true;
+                  final isVisiblePublic = item['is_visible_public'] != false;
                   final priceValue = switch (priceRaw) {
                     num value => value.toDouble(),
                     _ => 0.0,
@@ -727,6 +732,46 @@ class _ItemsPanel extends StatelessWidget {
                               ? PosColors.success
                               : PosColors.textSecondary,
                           compact: true,
+                        ),
+                        const SizedBox(width: 8),
+                        Tooltip(
+                          message: 'Show on QR menu',
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text(
+                                'QR',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              Switch(
+                                key: Key('admin_menu_qr_public_$itemId'),
+                                value: isVisiblePublic,
+                                activeThumbColor: AppColors.amber500,
+                                onChanged: itemId.isEmpty
+                                    ? null
+                                    : (value) async {
+                                        final success =
+                                            await onTogglePublicVisibility(
+                                              itemId,
+                                              value,
+                                            );
+                                        if (!context.mounted || !success) {
+                                          return;
+                                        }
+                                        showSuccessToast(
+                                          context,
+                                          value
+                                              ? '$name visible on QR menu'
+                                              : '$name hidden from QR menu',
+                                        );
+                                      },
+                              ),
+                            ],
+                          ),
                         ),
                         const SizedBox(width: 8),
                         Switch(
@@ -803,10 +848,7 @@ class _MenuAuditDisclosure extends StatelessWidget {
           l10n.menuRecentChangesHint,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: AppFonts.system(
-            color: AppColors.textSecondary,
-            fontSize: 11,
-          ),
+          style: AppFonts.system(color: AppColors.textSecondary, fontSize: 11),
         ),
         children: [
           AdminAuditTracePanel(

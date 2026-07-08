@@ -147,6 +147,7 @@ class PrintJobAgentService {
     return switch (ticket.ticket) {
       'floor' => ReceiptBuilder.buildFloorTicket(ticket),
       'tray' => ReceiptBuilder.buildTrayLabel(ticket),
+      'confirmation' => ReceiptBuilder.buildConfirmationSlip(ticket),
       _ => ReceiptBuilder.buildKitchenTicket(ticket),
     };
   }

@@ -204,6 +204,41 @@ class ReceiptBuilder {
     return bytes;
   }
 
+  static Future<List<int>> buildConfirmationSlip(PrintTicket ticket) async {
+    final profile = await CapabilityProfile.load();
+    final generator = Generator(PaperSize.mm80, profile);
+    final bytes = <int>[];
+
+    bytes.addAll(_buildLargeTableHeader(generator, ticket));
+    bytes.addAll(
+      generator.text(
+        _escText('ORDER CONFIRMATION #${ticket.ticketCode}'),
+        styles: const PosStyles(
+          bold: true,
+          align: PosAlign.center,
+          height: PosTextSize.size2,
+          width: PosTextSize.size2,
+        ),
+      ),
+    );
+    bytes.addAll(
+      generator.text(
+        _escText('Payment at cashier only'),
+        styles: const PosStyles(align: PosAlign.center),
+      ),
+    );
+    bytes.addAll(_buildTicketBody(generator, ticket, finish: false));
+    bytes.addAll(
+      generator.text(
+        _escText('This is not a receipt. Payment at cashier only.'),
+        styles: const PosStyles(bold: true, align: PosAlign.center),
+      ),
+    );
+    bytes.addAll(generator.feed(2));
+    bytes.addAll(generator.cut());
+    return bytes;
+  }
+
   static Future<List<int>> buildTrayLabel(PrintTicket ticket) async {
     final profile = await CapabilityProfile.load();
     final generator = Generator(PaperSize.mm80, profile);
@@ -244,6 +279,7 @@ class ReceiptBuilder {
     Generator generator,
     PrintTicket ticket, {
     bool compact = false,
+    bool finish = true,
   }) {
     final bytes = <int>[];
     if (ticket.printedReason == 'added_items') {
@@ -293,8 +329,12 @@ class ReceiptBuilder {
 
     bytes.addAll(generator.hr());
     bytes.addAll(generator.text(_escText(ticket.printedAt)));
-    bytes.addAll(generator.feed(2));
-    bytes.addAll(generator.cut());
+    if (finish) {
+      bytes.addAll(generator.feed(2));
+      bytes.addAll(generator.cut());
+    } else {
+      bytes.addAll(generator.hr());
+    }
     return bytes;
   }
 
