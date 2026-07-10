@@ -16,6 +16,7 @@ class CashierOrder {
     required this.tableNumber,
     required this.tableId,
     required this.status,
+    required this.salesChannel,
     required this.orderPurpose,
     required this.orderSource,
     required this.items,
@@ -36,6 +37,7 @@ class CashierOrder {
   final String tableNumber;
   final String tableId;
   final String status;
+  final String salesChannel;
   final String orderPurpose;
   final String orderSource;
   final List<OrderItem> items;
@@ -53,6 +55,7 @@ class CashierOrder {
 
   bool get isStaffMeal => orderPurpose == 'staff_meal';
   bool get isQrOrder => orderSource == 'qr';
+  bool get isDeliveryOrder => salesChannel == 'delivery';
   int get serviceItemCount => items
       .where(
         (item) =>
@@ -95,6 +98,7 @@ class CashierOrderSearchResult {
     required this.orderId,
     required this.tableNumber,
     required this.status,
+    required this.salesChannel,
     required this.orderSource,
     required this.createdAt,
   });
@@ -102,6 +106,7 @@ class CashierOrderSearchResult {
   final String orderId;
   final String tableNumber;
   final String status;
+  final String salesChannel;
   final String orderSource;
   final DateTime createdAt;
 
@@ -111,12 +116,15 @@ class CashierOrderSearchResult {
   }
 
   bool get isQrOrder => orderSource == 'qr';
+  bool get isDeliveryOrder => salesChannel == 'delivery';
   bool get isPayable => status == 'serving';
 
   factory CashierOrderSearchResult.fromJson(Map<String, dynamic> json) {
     final tableRaw = json['tables'];
     final tableNumber = tableRaw is Map<String, dynamic>
         ? tableRaw['table_number']?.toString() ?? '-'
+        : json['sales_channel']?.toString() == 'delivery'
+        ? 'DELIVERY'
         : json['order_purpose']?.toString() == 'staff_meal'
         ? 'STAFF'
         : '-';
@@ -125,6 +133,7 @@ class CashierOrderSearchResult {
       orderId: json['id']?.toString() ?? '',
       tableNumber: tableNumber,
       status: json['status']?.toString() ?? 'pending',
+      salesChannel: json['sales_channel']?.toString() ?? 'dine_in',
       orderSource: json['order_source']?.toString() ?? 'staff',
       createdAt: createdAtRaw == null
           ? DateTime.now()
@@ -199,7 +208,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       final response = await supabase
           .from('orders')
           .select(
-            'id, table_id, status, order_purpose, order_source, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, paying_amount_inc_tax, menu_items(name, vat_category))',
+            'id, table_id, status, sales_channel, order_purpose, order_source, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, paying_amount_inc_tax, menu_items(name, vat_category))',
           )
           .eq('restaurant_id', storeId)
           // Payability is an order-status fact derived server-side by
@@ -240,6 +249,8 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
             final tableRaw = data['tables'];
             final tableNumber = tableRaw is Map<String, dynamic>
                 ? tableRaw['table_number']?.toString() ?? '-'
+                : data['sales_channel']?.toString() == 'delivery'
+                ? 'DELIVERY'
                 : data['order_purpose']?.toString() == 'staff_meal'
                 ? 'STAFF'
                 : '-';
@@ -251,6 +262,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
               tableNumber: tableNumber,
               tableId: data['table_id']?.toString() ?? '',
               status: 'serving',
+              salesChannel: data['sales_channel']?.toString() ?? 'dine_in',
               orderPurpose: data['order_purpose']?.toString() ?? 'customer',
               orderSource: data['order_source']?.toString() ?? 'staff',
               items: items,
@@ -310,7 +322,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     final response = await supabase
         .from('orders')
         .select(
-          'id, table_id, status, order_purpose, order_source, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, paying_amount_inc_tax, menu_items(name, vat_category))',
+          'id, table_id, status, sales_channel, order_purpose, order_source, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, paying_amount_inc_tax, menu_items(name, vat_category))',
         )
         .eq('restaurant_id', storeId)
         .eq('status', 'completed')
@@ -351,6 +363,8 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       final tableRaw = data['tables'];
       final tableNumber = tableRaw is Map<String, dynamic>
           ? tableRaw['table_number']?.toString() ?? '-'
+          : data['sales_channel']?.toString() == 'delivery'
+          ? 'DELIVERY'
           : data['order_purpose']?.toString() == 'staff_meal'
           ? 'STAFF'
           : '-';
@@ -362,6 +376,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         tableNumber: tableNumber,
         tableId: data['table_id']?.toString() ?? '',
         status: data['status']?.toString() ?? 'completed',
+        salesChannel: data['sales_channel']?.toString() ?? 'dine_in',
         items: items,
         orderPurpose: data['order_purpose']?.toString() ?? 'customer',
         orderSource: data['order_source']?.toString() ?? 'staff',
@@ -416,7 +431,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     final rows = await supabase
         .from('orders')
         .select(
-          'id, table_id, status, order_purpose, order_source, created_at, tables(table_number)',
+          'id, table_id, status, sales_channel, order_purpose, order_source, created_at, tables(table_number)',
         )
         .eq('restaurant_id', storeId)
         .inFilter('status', ['pending', 'confirmed', 'serving'])
@@ -432,16 +447,21 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       final normalizedCode = _normalizeCashierSearch(orderCode);
       final normalizedId = _normalizeCashierSearch(result.orderId);
       final normalizedTable = _normalizeCashierSearch(result.tableNumber);
+      final normalizedSalesChannel = _normalizeCashierSearch(
+        result.salesChannel,
+      );
 
       if (normalizedCode == normalizedQuery ||
           normalizedId.startsWith(normalizedQuery) ||
-          normalizedTable == normalizedQuery) {
+          normalizedTable == normalizedQuery ||
+          normalizedSalesChannel == normalizedQuery) {
         return result;
       }
 
       if (partialMatch == null &&
           (normalizedCode.contains(normalizedQuery) ||
-              normalizedTable.contains(normalizedQuery))) {
+              normalizedTable.contains(normalizedQuery) ||
+              normalizedSalesChannel.contains(normalizedQuery))) {
         partialMatch = result;
       }
     }

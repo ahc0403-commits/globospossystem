@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/payments/payment_method_contract.dart';
 import '../../core/services/connectivity_service.dart';
+import '../../core/services/order_service.dart';
 import '../../core/layout/platform_info.dart';
 import '../../core/hardware/printer_service.dart';
 import '../../core/hardware/receipt_builder.dart';
@@ -18,6 +19,7 @@ import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
+import '../admin/providers/menu_provider.dart';
 import '../order/order_model.dart';
 import '../payment/payment_provider.dart';
 import '../payment/einvoice_status_badge.dart';
@@ -155,6 +157,28 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       ),
     );
     return result ?? false;
+  }
+
+  Future<void> _showDeliveryOrderDialog({
+    required String storeId,
+    required bool isOnline,
+  }) async {
+    if (!isOnline) {
+      showErrorToast(context, context.l10n.cashierInternetRequired);
+      return;
+    }
+
+    final created = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _CashierDeliveryOrderDialog(storeId: storeId),
+    );
+    if (created != true || !mounted) {
+      return;
+    }
+
+    showSuccessToast(context, context.l10n.cashierDeliveryOrderSent);
+    await ref.read(paymentProvider.notifier).loadOrders(storeId);
   }
 
   Future<bool> _showServiceConfirmDialog() async {
@@ -441,13 +465,32 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       key: const Key('cashier_pending_payment_list'),
       title: l10n.cashierPendingStatus,
       subtitle: l10n.cashierSelectOrderToPay,
-      trailing: selectedOrder == null
-          ? null
-          : ToastStatusBadge(
+      trailing: Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          if (selectedOrder != null)
+            ToastStatusBadge(
               label: l10n.selected,
               color: PosColors.accent,
               compact: true,
             ),
+          FilledButton.icon(
+            key: const Key('cashier_new_delivery_order'),
+            onPressed: storeId == null
+                ? null
+                : () => unawaited(
+                    _showDeliveryOrderDialog(
+                      storeId: storeId,
+                      isOnline: isOnline,
+                    ),
+                  ),
+            icon: const Icon(Icons.delivery_dining_outlined, size: 17),
+            label: Text(l10n.cashierNewDeliveryOrder),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -537,7 +580,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Text(
-                                  l10n.cashierTableLabel(order.tableNumber),
+                                  _cashierOrderLocationLabel(context, order),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: Theme.of(context).textTheme.bodyMedium
@@ -556,6 +599,15 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                         ),
                                         label: 'QR',
                                         color: PosColors.accent,
+                                        compact: true,
+                                      ),
+                                    if (order.isDeliveryOrder)
+                                      ToastStatusBadge(
+                                        key: Key(
+                                          'cashier_delivery_order_badge_${order.orderId}',
+                                        ),
+                                        label: l10n.delivery,
+                                        color: PosColors.warning,
                                         compact: true,
                                       ),
                                   ],
@@ -1273,7 +1325,7 @@ class _CashierCompletedOrderHistory extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              l10n.cashierTableLabel(order.tableNumber),
+                              _cashierOrderLocationLabel(context, order),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.bodyMedium
@@ -1343,6 +1395,7 @@ List<CashierOrder> _filterCashierOrders(
       _shortCashierOrderId(order.orderId),
       order.tableNumber,
       if (order.isQrOrder) 'qr',
+      if (order.isDeliveryOrder) 'delivery 배달',
     ].map(_normalizeCashierOrderSearch).join(' ');
     return haystack.contains(normalizedQuery);
   }).toList();
@@ -1350,6 +1403,12 @@ List<CashierOrder> _filterCashierOrders(
 
 String _normalizeCashierOrderSearch(String raw) {
   return raw.trim().replaceAll('#', '').toLowerCase();
+}
+
+String _cashierOrderLocationLabel(BuildContext context, CashierOrder order) {
+  return order.isDeliveryOrder
+      ? context.l10n.delivery
+      : context.l10n.cashierTableLabel(order.tableNumber);
 }
 
 String _formatCashierOrderAge(BuildContext context, DateTime createdAt) {
@@ -1701,6 +1760,15 @@ class _CashierOrderSummarySurface extends StatelessWidget {
                 ToastStatusBadge(
                   key: const Key('staff_meal_badge'),
                   label: l10n.cashierStaffMealBadge,
+                  color: PosColors.warning,
+                  compact: true,
+                ),
+              ],
+              if (order.isDeliveryOrder) ...[
+                const SizedBox(width: 8),
+                ToastStatusBadge(
+                  key: const Key('cashier_selected_delivery_badge'),
+                  label: l10n.delivery,
                   color: PosColors.warning,
                   compact: true,
                 ),
@@ -2142,7 +2210,9 @@ class _CashierPaymentRail extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        order.isStaffMeal
+                        order.isDeliveryOrder
+                            ? l10n.delivery
+                            : order.isStaffMeal
                             ? l10n.cashierStaffMealBadge
                             : l10n.cashierTableLabel(order.tableNumber),
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -2500,7 +2570,7 @@ Future<void> _showCashierOrderItemsSheet(
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            l10n.cashierTableLabel(order.tableNumber),
+                            _cashierOrderLocationLabel(context, order),
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
                                   color: PosColors.textSecondary,
@@ -2714,6 +2784,524 @@ class _OrderStatusBadge extends StatelessWidget {
   }
 }
 
+class _CashierDeliveryOrderDialog extends ConsumerStatefulWidget {
+  const _CashierDeliveryOrderDialog({required this.storeId});
+
+  final String storeId;
+
+  @override
+  ConsumerState<_CashierDeliveryOrderDialog> createState() =>
+      _CashierDeliveryOrderDialogState();
+}
+
+class _CashierDeliveryOrderDialogState
+    extends ConsumerState<_CashierDeliveryOrderDialog> {
+  final Map<String, int> _quantities = <String, int>{};
+  bool _isSubmitting = false;
+  String? _error;
+
+  void _changeQuantity(String itemId, int delta) {
+    if (_isSubmitting) {
+      return;
+    }
+    final next = (_quantities[itemId] ?? 0) + delta;
+    setState(() {
+      if (next <= 0) {
+        _quantities.remove(itemId);
+      } else {
+        _quantities[itemId] = next;
+      }
+      _error = null;
+    });
+  }
+
+  Future<void> _submit(List<Map<String, dynamic>> menuItems) async {
+    final payload = menuItems
+        .where((item) => (_quantities[item['id']?.toString()] ?? 0) > 0)
+        .map(
+          (item) => {
+            'menu_item_id': item['id'].toString(),
+            'quantity': _quantities[item['id'].toString()],
+          },
+        )
+        .toList();
+    if (payload.isEmpty || _isSubmitting) {
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _error = null;
+    });
+    try {
+      await orderService.createDeliveryOrder(
+        storeId: widget.storeId,
+        items: payload,
+      );
+      if (mounted) {
+        Navigator.of(context).pop(true);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+          _error = context.l10n.cashierDeliveryOrderFailed;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final menuState = ref.watch(menuProvider(widget.storeId));
+    final menuNotifier = ref.read(menuProvider(widget.storeId).notifier);
+    final categories =
+        menuState.categories.valueOrNull ?? const <Map<String, dynamic>>[];
+    final menuItems =
+        menuState.items.valueOrNull ?? const <Map<String, dynamic>>[];
+    final selectedCategoryId = menuState.selectedCategoryId;
+    final visibleItems = menuItems.where((item) {
+      return item['category_id']?.toString() == selectedCategoryId &&
+          item['is_available'] != false;
+    }).toList();
+    final cartItems = menuItems.where((item) {
+      return (_quantities[item['id']?.toString()] ?? 0) > 0;
+    }).toList();
+    final total = cartItems.fold<double>(0, (sum, item) {
+      final quantity = _quantities[item['id']?.toString()] ?? 0;
+      return sum + (_cashierMenuItemPrice(item) * quantity);
+    });
+    final currency = NumberFormat('#,###', 'vi_VN');
+    final size = MediaQuery.sizeOf(context);
+
+    return Dialog(
+      key: const Key('cashier_delivery_order_dialog'),
+      insetPadding: const EdgeInsets.all(12),
+      backgroundColor: PosColors.surface,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 960, maxHeight: 760),
+        child: SizedBox(
+          width: size.width * 0.94,
+          height: size.height * 0.9,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 12, 14),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.delivery_dining_outlined,
+                      color: PosColors.warning,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        l10n.cashierNewDeliveryOrder,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    ToastStatusBadge(
+                      label: l10n.delivery,
+                      color: PosColors.warning,
+                      compact: true,
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      tooltip: l10n.cancel,
+                      onPressed: _isSubmitting
+                          ? null
+                          : () => Navigator.of(context).pop(false),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child:
+                    menuState.categories.isLoading || menuState.items.isLoading
+                    ? Center(child: Text(l10n.posLoadingMenu))
+                    : menuState.categories.hasError || menuState.items.hasError
+                    ? ToastOperationalEmptyState(
+                        headline: l10n.orderWorkspaceMenuOfflineTitle,
+                        helper: l10n.orderWorkspaceMenuOfflineMessage,
+                        icon: Icons.cloud_off_outlined,
+                      )
+                    : LayoutBuilder(
+                        builder: (context, constraints) {
+                          final menuPane = _DeliveryMenuPane(
+                            categories: categories,
+                            selectedCategoryId: selectedCategoryId,
+                            visibleItems: visibleItems,
+                            quantities: _quantities,
+                            currency: currency,
+                            onSelectCategory: menuNotifier.selectCategory,
+                            onAddItem: (itemId) => _changeQuantity(itemId, 1),
+                          );
+                          final cartPane = _DeliveryCartPane(
+                            items: cartItems,
+                            quantities: _quantities,
+                            currency: currency,
+                            total: total,
+                            error: _error,
+                            isSubmitting: _isSubmitting,
+                            onDecrement: (itemId) =>
+                                _changeQuantity(itemId, -1),
+                            onIncrement: (itemId) => _changeQuantity(itemId, 1),
+                            onCancel: () => Navigator.of(context).pop(false),
+                            onSubmit: cartItems.isEmpty
+                                ? null
+                                : () => _submit(menuItems),
+                          );
+
+                          if (constraints.maxWidth >= 720) {
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(child: menuPane),
+                                SizedBox(width: 330, child: cartPane),
+                              ],
+                            );
+                          }
+
+                          return Column(
+                            children: [
+                              Expanded(flex: 3, child: menuPane),
+                              Expanded(flex: 2, child: cartPane),
+                            ],
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DeliveryMenuPane extends StatelessWidget {
+  const _DeliveryMenuPane({
+    required this.categories,
+    required this.selectedCategoryId,
+    required this.visibleItems,
+    required this.quantities,
+    required this.currency,
+    required this.onSelectCategory,
+    required this.onAddItem,
+  });
+
+  final List<Map<String, dynamic>> categories;
+  final String? selectedCategoryId;
+  final List<Map<String, dynamic>> visibleItems;
+  final Map<String, int> quantities;
+  final NumberFormat currency;
+  final ValueChanged<String> onSelectCategory;
+  final ValueChanged<String> onAddItem;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: 36,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: categories.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final category = categories[index];
+                final categoryId = category['id']?.toString() ?? '';
+                return ToastFilterChip(
+                  label: category['name']?.toString() ?? '-',
+                  selected: categoryId == selectedCategoryId,
+                  onSelected: () => onSelectCategory(categoryId),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: visibleItems.isEmpty
+                ? ToastOperationalEmptyState(
+                    headline: l10n.orderWorkspaceNoItemsTitle,
+                    helper: l10n.orderWorkspaceNoItemsMessage,
+                    icon: Icons.inventory_2_outlined,
+                  )
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      final columns = constraints.maxWidth >= 620 ? 3 : 2;
+                      return GridView.builder(
+                        key: const Key('cashier_delivery_menu_grid'),
+                        itemCount: visibleItems.length,
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: columns,
+                          mainAxisSpacing: 10,
+                          crossAxisSpacing: 10,
+                          childAspectRatio: columns == 3 ? 1.45 : 1.65,
+                        ),
+                        itemBuilder: (context, index) {
+                          final item = visibleItems[index];
+                          final itemId = item['id']?.toString() ?? '';
+                          final quantity = quantities[itemId] ?? 0;
+                          return Material(
+                            color: quantity > 0
+                                ? PosColors.warning.withValues(alpha: 0.1)
+                                : PosColors.canvasAlt,
+                            borderRadius: BorderRadius.circular(8),
+                            child: InkWell(
+                              key: index == 0
+                                  ? const Key('cashier_delivery_first_item')
+                                  : null,
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: itemId.isEmpty
+                                  ? null
+                                  : () => onAddItem(itemId),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        item['name']?.toString() ?? '-',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                      ),
+                                    ),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            '₫${currency.format(_cashierMenuItemPrice(item))}',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: PosNumericText.amountLine,
+                                          ),
+                                        ),
+                                        if (quantity > 0)
+                                          ToastStatusBadge(
+                                            label: '×$quantity',
+                                            color: PosColors.warning,
+                                            compact: true,
+                                          ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeliveryCartPane extends StatelessWidget {
+  const _DeliveryCartPane({
+    required this.items,
+    required this.quantities,
+    required this.currency,
+    required this.total,
+    required this.error,
+    required this.isSubmitting,
+    required this.onDecrement,
+    required this.onIncrement,
+    required this.onCancel,
+    required this.onSubmit,
+  });
+
+  final List<Map<String, dynamic>> items;
+  final Map<String, int> quantities;
+  final NumberFormat currency;
+  final double total;
+  final String? error;
+  final bool isSubmitting;
+  final ValueChanged<String> onDecrement;
+  final ValueChanged<String> onIncrement;
+  final VoidCallback onCancel;
+  final VoidCallback? onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Container(
+      key: const Key('cashier_delivery_cart'),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: PosColors.canvasAlt,
+        border: Border(left: BorderSide(color: PosColors.border)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            l10n.cashierCheckItems,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: items.isEmpty
+                ? Center(
+                    child: Text(
+                      l10n.orderWorkspaceTapItemToAdd,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.textSecondary,
+                      ),
+                    ),
+                  )
+                : ListView.separated(
+                    itemCount: items.length,
+                    separatorBuilder: (_, _) => const Divider(height: 14),
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      final itemId = item['id']?.toString() ?? '';
+                      final quantity = quantities[itemId] ?? 0;
+                      return Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item['name']?.toString() ?? '-',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(fontWeight: FontWeight.w800),
+                                ),
+                                Text(
+                                  '₫${currency.format(_cashierMenuItemPrice(item) * quantity)}',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: PosColors.textSecondary,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => onDecrement(itemId),
+                            icon: const Icon(Icons.remove_circle_outline),
+                          ),
+                          SizedBox(
+                            width: 24,
+                            child: Text(
+                              '$quantity',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => onIncrement(itemId),
+                            icon: const Icon(Icons.add_circle_outline),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+          ),
+          if (error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              error!,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: PosColors.danger),
+            ),
+          ],
+          const Divider(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  l10n.orderWorkspaceSubtotal,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+              Text(
+                '₫${currency.format(total)}',
+                style: PosNumericText.amountLarge.copyWith(
+                  color: PosColors.accent,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: isSubmitting ? null : onCancel,
+                  child: Text(l10n.cancel),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: FilledButton.icon(
+                  key: const Key('cashier_delivery_submit'),
+                  onPressed: isSubmitting ? null : onSubmit,
+                  icon: isSubmitting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.send_rounded, size: 17),
+                  label: Text(l10n.orderWorkspaceSendToKitchen),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+double _cashierMenuItemPrice(Map<String, dynamic> item) {
+  return switch (item['price']) {
+    num value => value.toDouble(),
+    String value => double.tryParse(value) ?? 0,
+    _ => 0,
+  };
+}
+
 class _CashierOrderSearchToolbar extends StatelessWidget {
   const _CashierOrderSearchToolbar({
     required this.controller,
@@ -2793,10 +3381,16 @@ class _CashierOrderSearchFeedback extends StatelessWidget {
     return PosExceptionAlert(
       label: result == null
           ? 'Order search'
+          : result.isDeliveryOrder
+          ? '#${result.orderCode} · ${context.l10n.delivery}'
           : '#${result.orderCode} · Table ${result.tableNumber}',
       detail: result == null
           ? message
-          : '$message ${result.isQrOrder ? 'QR order.' : 'Staff order.'}',
+          : '$message ${result.isDeliveryOrder
+                ? '${context.l10n.delivery}.'
+                : result.isQrOrder
+                ? 'QR order.'
+                : 'Staff order.'}',
       color: color,
       icon: result == null
           ? Icons.search_off_rounded

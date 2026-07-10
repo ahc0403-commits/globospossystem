@@ -137,7 +137,7 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
       return;
     }
     final message =
-        '${context.l10n.kitchenNewOrders} · ${context.l10n.kitchenTableLabel(order.tableNumber)}';
+        '${context.l10n.kitchenNewOrders} · ${order.isDeliveryOrder ? context.l10n.delivery : context.l10n.kitchenTableLabel(order.tableNumber)}';
     showSuccessToast(context, message);
   }
 
@@ -1013,7 +1013,9 @@ class _KitchenOrderCard extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        order.isStaffMeal
+                        order.isDeliveryOrder
+                            ? context.l10n.delivery
+                            : order.isStaffMeal
                             ? context.l10n.cashierStaffMealBadge
                             : context.l10n.kitchenTableLabel(order.tableNumber),
                         maxLines: 1,
@@ -1046,6 +1048,15 @@ class _KitchenOrderCard extends StatelessWidget {
                       ToastStatusBadge(
                         key: Key('staff_meal_badge_${order.orderId}'),
                         label: context.l10n.cashierStaffMealBadge,
+                        color: PosColors.warning,
+                        compact: true,
+                      ),
+                    if (order.isDeliveryOrder)
+                      ToastStatusBadge(
+                        key: Key(
+                          'kitchen_delivery_order_badge_${order.orderId}',
+                        ),
+                        label: context.l10n.delivery,
                         color: PosColors.warning,
                         compact: true,
                       ),
@@ -1652,7 +1663,9 @@ class _KitchenCompletedHistoryPanel extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              order.isStaffMeal
+                              order.isDeliveryOrder
+                                  ? l10n.delivery
+                                  : order.isStaffMeal
                                   ? l10n.cashierStaffMealBadge
                                   : l10n.kitchenTableLabel(order.tableNumber),
                               maxLines: 1,

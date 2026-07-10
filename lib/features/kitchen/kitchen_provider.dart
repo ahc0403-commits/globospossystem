@@ -75,6 +75,7 @@ class KitchenOrder {
   const KitchenOrder({
     required this.orderId,
     required this.tableNumber,
+    required this.salesChannel,
     required this.orderPurpose,
     required this.orderSource,
     required this.createdAt,
@@ -83,6 +84,7 @@ class KitchenOrder {
 
   final String orderId;
   final String tableNumber;
+  final String salesChannel;
   final String orderPurpose;
   final String orderSource;
   final DateTime createdAt;
@@ -90,10 +92,12 @@ class KitchenOrder {
 
   bool get isStaffMeal => orderPurpose == 'staff_meal';
   bool get isQrOrder => orderSource == 'qr';
+  bool get isDeliveryOrder => salesChannel == 'delivery';
 
   KitchenOrder copyWith({
     String? orderId,
     String? tableNumber,
+    String? salesChannel,
     String? orderPurpose,
     String? orderSource,
     DateTime? createdAt,
@@ -102,6 +106,7 @@ class KitchenOrder {
     return KitchenOrder(
       orderId: orderId ?? this.orderId,
       tableNumber: tableNumber ?? this.tableNumber,
+      salesChannel: salesChannel ?? this.salesChannel,
       orderPurpose: orderPurpose ?? this.orderPurpose,
       orderSource: orderSource ?? this.orderSource,
       createdAt: createdAt ?? this.createdAt,
@@ -213,7 +218,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
       final response = await supabase
           .from('orders')
           .select(
-            'id, created_at, status, order_purpose, order_source, tables(table_number), order_items(id, created_at, label, quantity, status, menu_items(name))',
+            'id, created_at, status, sales_channel, order_purpose, order_source, tables(table_number), order_items(id, created_at, label, quantity, status, menu_items(name))',
           )
           .eq('restaurant_id', storeId)
           .inFilter('status', ['pending', 'confirmed', 'serving', 'completed'])
@@ -245,6 +250,8 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
         String tableNumber = '-';
         if (tableData is Map<String, dynamic>) {
           tableNumber = tableData['table_number']?.toString() ?? '-';
+        } else if (data['sales_channel']?.toString() == 'delivery') {
+          tableNumber = 'DELIVERY';
         } else if (data['order_purpose']?.toString() == 'staff_meal') {
           tableNumber = 'STAFF';
         }
@@ -271,6 +278,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
         return KitchenOrder(
           orderId: data['id'].toString(),
           tableNumber: tableNumber,
+          salesChannel: data['sales_channel']?.toString() ?? 'dine_in',
           orderPurpose: data['order_purpose']?.toString() ?? 'customer',
           orderSource: data['order_source']?.toString() ?? 'staff',
           createdAt: createdAt,

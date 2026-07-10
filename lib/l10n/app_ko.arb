@@ -2659,5 +2659,8 @@
   "posEmptyKitchenNothingSelectedHelper": "대기열에서 티켓을 선택해 조리 상태를 진행하세요.",
   "posEmptySettlements": "정산 없음",
   "posEmptySettlementsInStatus": "이 상태의 정산이 없습니다",
-  "posEmptyEinvoiceJobs": "작업 없음"
+  "posEmptyEinvoiceJobs": "작업 없음",
+  "cashierNewDeliveryOrder": "배달 주문 등록",
+  "cashierDeliveryOrderSent": "배달 주문을 주방에 전송했습니다",
+  "cashierDeliveryOrderFailed": "배달 주문을 전송하지 못했습니다"
 }

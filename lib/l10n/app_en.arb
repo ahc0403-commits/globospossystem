@@ -2660,5 +2660,8 @@
   "posEmptyKitchenNothingSelectedHelper": "Choose a ticket from the queue to advance prep status.",
   "posEmptySettlements": "No settlements",
   "posEmptySettlementsInStatus": "No settlements in this status",
-  "posEmptyEinvoiceJobs": "No jobs"
+  "posEmptyEinvoiceJobs": "No jobs",
+  "cashierNewDeliveryOrder": "New delivery order",
+  "cashierDeliveryOrderSent": "Delivery order sent to kitchen",
+  "cashierDeliveryOrderFailed": "Could not send the delivery order"
 }

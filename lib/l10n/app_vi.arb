@@ -2659,5 +2659,8 @@
   "posEmptyKitchenNothingSelectedHelper": "Chọn một phiếu trong hàng đợi để chuyển trạng thái bếp.",
   "posEmptySettlements": "Không có đối soát",
   "posEmptySettlementsInStatus": "Không có đối soát ở trạng thái này",
-  "posEmptyEinvoiceJobs": "Không có tác vụ"
+  "posEmptyEinvoiceJobs": "Không có tác vụ",
+  "cashierNewDeliveryOrder": "Tạo đơn giao hàng",
+  "cashierDeliveryOrderSent": "Đã gửi đơn giao hàng xuống bếp",
+  "cashierDeliveryOrderFailed": "Không thể gửi đơn giao hàng"
 }
