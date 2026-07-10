@@ -11,8 +11,10 @@ import '../../widgets/app_nav_bar.dart';
 import '../../widgets/offline_banner.dart';
 import '../../core/utils/permission_utils.dart';
 import '../auth/auth_provider.dart';
+import '../auth/auth_state.dart';
 import 'tabs/attendance_tab.dart';
 import 'tabs/menu_tab.dart';
+import 'tabs/owner_overview_tab.dart';
 import 'tabs/qc_tab.dart';
 import 'tabs/reports_tab.dart';
 import 'tabs/settings_tab.dart';
@@ -57,7 +59,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   @override
   Widget build(BuildContext context) {
     final isSuperAdminView = widget.overrideRestaurantId != null;
-    final role = ref.watch(authProvider).role;
+    final authState = ref.watch(authProvider);
+    final role = authState.role;
+    final storeId = widget.overrideRestaurantId ?? authState.storeId;
+    final storeName = _storeNameFor(authState.accessibleStores, storeId);
     final viewport = MediaQuery.sizeOf(context);
     final useDesktopShell =
         PlatformInfo.isWebOrDesktop &&
@@ -65,14 +70,43 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         viewport.shortestSide >= 600;
 
     if (useDesktopShell) {
-      return _buildWebDesktopLayout(context, isSuperAdminView, role);
+      return _buildWebDesktopLayout(
+        context,
+        isSuperAdminView,
+        role,
+        storeId,
+        storeName,
+      );
     }
 
-    return _buildMobileLayout(context, isSuperAdminView, role);
+    return _buildMobileLayout(
+      context,
+      isSuperAdminView,
+      role,
+      storeId,
+      storeName,
+    );
   }
 
-  List<Widget> _tabsForRole(String? role) {
+  String? _storeNameFor(List<AccessibleStore> stores, String? storeId) {
+    if (storeId == null) return null;
+    for (final store in stores) {
+      if (store.id == storeId) return store.name;
+    }
+    return null;
+  }
+
+  List<Widget> _tabsForRole(
+    String? role, {
+    required String? storeId,
+    required String? storeName,
+  }) {
     final tabs = <Widget>[
+      OwnerOverviewTab(
+        storeId: storeId,
+        storeName: storeName,
+        onSelectTab: (index) => setState(() => _currentIndex = index),
+      ),
       const TablesTab(),
       const MenuTab(),
       const StaffTab(),
@@ -92,7 +126,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   }
 
   /// Operational sidebar groups. Order across groups MUST match the
-  /// existing flat tab order (Tables, Menu, Staff, Reports, Attendance,
+  /// existing flat tab order (Overview, Tables, Menu, Staff, Reports, Attendance,
   /// Inventory, QC, Settings, [Deliberry], E-Invoice) because the
   /// selected-index/tab mapping is positional. Grouping is expressive
   /// only — the `ToastSidebar` adapter flattens groups while preserving
@@ -100,6 +134,13 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   List<ToastSidebarGroup> _sidebarGroupsForRole(String? role) {
     final l10n = context.l10n;
     final liveOps = <ToastSidebarItem>[
+      ToastSidebarItem(
+        icon: Icons.space_dashboard_outlined,
+        label: l10n.adminOverviewNavLabel,
+        urgency: ToastSidebarUrgency.live,
+        helperLabel: l10n.adminOverviewNavHelper,
+        itemKey: const Key('nav_overview'),
+      ),
       ToastSidebarItem(
         icon: Icons.table_restaurant,
         label: l10n.tables,
@@ -197,8 +238,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     BuildContext context,
     bool isSuperAdminView,
     String? role,
+    String? storeId,
+    String? storeName,
   ) {
-    final tabs = _tabsForRole(role);
+    final tabs = _tabsForRole(role, storeId: storeId, storeName: storeName);
     final groups = _sidebarGroupsForRole(role);
     final safeIndex = _currentIndex.clamp(0, tabs.length - 1);
 
@@ -257,8 +300,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     BuildContext context,
     bool isSuperAdminView,
     String? role,
+    String? storeId,
+    String? storeName,
   ) {
-    final tabs = _tabsForRole(role);
+    final tabs = _tabsForRole(role, storeId: storeId, storeName: storeName);
     final groups = _sidebarGroupsForRole(role);
     final safeIndex = _currentIndex.clamp(0, tabs.length - 1);
 

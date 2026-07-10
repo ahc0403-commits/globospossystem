@@ -120,6 +120,9 @@ class SuperAdminState {
   final bool isLoading;
   final String? error;
 
+  int get activeRestaurantCount =>
+      restaurants.where((restaurant) => restaurant.isActive).length;
+
   /// Returns restaurants filtered by selected brand and store type
   List<SuperRestaurant> get filteredRestaurants {
     var list = restaurants;

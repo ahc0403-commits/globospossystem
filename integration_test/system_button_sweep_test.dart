@@ -39,6 +39,7 @@ const _accounts = <_AccountRoutes>[
     email: 'gate3.admin@globos.test',
     rootKey: 'admin_root',
     routes: [
+      '/admin?tab=overview',
       '/admin?tab=tables',
       '/admin?tab=menu',
       '/admin?tab=staff',

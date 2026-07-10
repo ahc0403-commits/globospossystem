@@ -79,6 +79,7 @@ void main() {
     );
 
     expectInOrder(admin, const [
+      "Key('nav_overview')",
       "Key('nav_tables')",
       "Key('nav_menu')",
       "Key('nav_staff')",
@@ -91,6 +92,7 @@ void main() {
       "Key('nav_einvoice')",
     ]);
     expectInOrder(admin, const [
+      'OwnerOverviewTab(',
       'const TablesTab()',
       'const MenuTab()',
       'const StaffTab()',

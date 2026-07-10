@@ -295,16 +295,18 @@ GoRouter buildAppRouter(ProviderContainer container) {
 int _tabIndexFromQuery(String? value) {
   if (value == null) return 0;
   return switch (value.toLowerCase()) {
-    'tables' => 0,
-    'menu' => 1,
-    'staff' => 2,
-    'reports' => 3,
-    'attendance' => 4,
-    'inventory' => 5,
-    'qc' => 6,
-    'settings' => 7,
-    'delivery' || 'settlement' => 8,
-    'einvoice' || 'e-invoice' || 'invoice' => 9,
+    'overview' => 0,
+    'home' => 0,
+    'tables' => 1,
+    'menu' => 2,
+    'staff' => 3,
+    'reports' => 4,
+    'attendance' => 5,
+    'inventory' => 6,
+    'qc' => 7,
+    'settings' => 8,
+    'delivery' || 'settlement' => 9,
+    'einvoice' || 'e-invoice' || 'invoice' => 10,
     _ => 0,
   };
 }

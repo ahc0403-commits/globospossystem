@@ -11,8 +11,8 @@ void main() {
       final router = readRepoFile('lib/core/router/app_router.dart');
       final adminScreen = readRepoFile('lib/features/admin/admin_screen.dart');
 
-      expect(router, contains("'delivery' || 'settlement' => 8"));
-      expect(router, contains("'einvoice' || 'e-invoice' || 'invoice' => 9"));
+      expect(router, contains("'delivery' || 'settlement' => 9"));
+      expect(router, contains("'einvoice' || 'e-invoice' || 'invoice' => 10"));
       expect(adminScreen, contains('tabs.add(const DeliverySettlementTab())'));
       expect(adminScreen, contains('tabs.add(const EinvoiceTab())'));
     },

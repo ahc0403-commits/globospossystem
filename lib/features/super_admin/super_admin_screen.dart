@@ -81,7 +81,7 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
       topBarTrailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const AppNavBar(),
+          const Flexible(child: AppNavBar()),
           const SizedBox(width: 10),
           ToastStatusBadge(
             label: l10n.superAdminHq,
@@ -132,16 +132,16 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
                       metrics: [
                         ToastMetric(
                           label: l10n.superAdminStores,
-                          value: '${state.filteredRestaurants.length}',
+                          value: '${state.restaurants.length}',
+                        ),
+                        ToastMetric(
+                          label: l10n.superAdminActiveStores,
+                          value: '${state.activeRestaurantCount}',
+                          tone: AppColors.statusAvailable,
                         ),
                         ToastMetric(
                           label: l10n.superAdminBrands,
                           value: '${state.brands.length}',
-                        ),
-                        ToastMetric(
-                          label: l10n.superAdminSurface,
-                          value: '${safeIndex + 1}/${items.length}',
-                          tone: _superAdminUrgencyColor(selected.urgency),
                         ),
                       ],
                     ),
@@ -809,7 +809,7 @@ class _QcOverviewTab extends ConsumerWidget {
   }
 }
 
-class _RestaurantsTab extends StatelessWidget {
+class _RestaurantsTab extends StatefulWidget {
   const _RestaurantsTab({
     required this.state,
     required this.notifier,
@@ -820,6 +820,36 @@ class _RestaurantsTab extends StatelessWidget {
   final SuperAdminNotifier notifier;
   final void Function(String storeId) onGoToAdmin;
 
+  @override
+  State<_RestaurantsTab> createState() => _RestaurantsTabState();
+}
+
+class _RestaurantsTabState extends State<_RestaurantsTab> {
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
+
+  SuperAdminState get state => widget.state;
+  SuperAdminNotifier get notifier => widget.notifier;
+  void Function(String storeId) get onGoToAdmin => widget.onGoToAdmin;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  bool _matchesSearch(SuperRestaurant restaurant) {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return true;
+    return [
+      restaurant.name,
+      restaurant.slug,
+      restaurant.address,
+      restaurant.brandName ?? '',
+      restaurant.brandCode ?? '',
+    ].any((value) => value.toLowerCase().contains(query));
+  }
+
   Future<void> _openOfficeSystem() async {
     final uri = Uri.parse(AppConstants.officeSystemUrl);
     await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -828,6 +858,9 @@ class _RestaurantsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final visibleRestaurants = state.filteredRestaurants
+        .where(_matchesSearch)
+        .toList(growable: false);
     return Column(
       children: [
         LayoutBuilder(
@@ -891,6 +924,53 @@ class _RestaurantsTab extends StatelessWidget {
           },
         ),
         const SizedBox(height: 12),
+        TextField(
+          key: const Key('super_admin_store_search'),
+          controller: _searchController,
+          onChanged: (value) => setState(() => _query = value),
+          style: AppFonts.system(
+            color: AppColors.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+          decoration: InputDecoration(
+            hintText: l10n.superAdminStoreSearchHint,
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _query.isEmpty
+                ? null
+                : IconButton(
+                    key: const Key('super_admin_store_search_clear'),
+                    tooltip: l10n.clear,
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() => _query = '');
+                    },
+                    icon: const Icon(Icons.close),
+                  ),
+            filled: true,
+            fillColor: AppColors.surface1,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 13,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: AppColors.surface3),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: AppColors.surface3),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(
+                color: AppColors.amber500,
+                width: 1.5,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
@@ -961,106 +1041,203 @@ class _RestaurantsTab extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            l10n.superAdminStoreSearchCount(
+              visibleRestaurants.length,
+              state.restaurants.length,
+            ),
+            style: AppFonts.system(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
         Expanded(
           child: state.isLoading && state.restaurants.isEmpty
               ? const Center(
                   child: CircularProgressIndicator(color: AppColors.amber500),
                 )
+              : visibleRestaurants.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.search_off,
+                          color: AppColors.textSecondary,
+                          size: 34,
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          l10n.superAdminStoreSearchEmpty,
+                          textAlign: TextAlign.center,
+                          style: AppFonts.system(
+                            color: AppColors.textSecondary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
               : ListView.separated(
                   primary: false,
                   physics: _superAdminScrollPhysics,
                   padding: _superAdminScrollPadding,
-                  itemCount: state.filteredRestaurants.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
+                  itemCount: visibleRestaurants.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
                   itemBuilder: (context, index) {
-                    final restaurant = state.filteredRestaurants[index];
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.surface1,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.all(14),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 10,
-                            height: 10,
-                            decoration: BoxDecoration(
-                              color: restaurant.isActive
-                                  ? AppColors.statusAvailable
-                                  : AppColors.textSecondary,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  restaurant.name,
-                                  style: AppFonts.system(
-                                    color: AppColors.textPrimary,
-                                    fontSize: 24,
-                                  ),
-                                ),
-                                Text(
-                                  '${restaurant.slug} • ${restaurant.address}',
-                                  style: AppFonts.system(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  l10n.superAdminBrandPrefix(
-                                    restaurant.brandName ??
-                                        l10n.superAdminUncategorized,
-                                  ),
-                                  style: AppFonts.system(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          _storeTypeBadge(context, restaurant.storeType),
-                          const SizedBox(width: 6),
-                          _modeBadge(context, restaurant.operationMode),
-                          const SizedBox(width: 10),
-                          OutlinedButton(
-                            key: Key('super_admin_manage_${restaurant.id}'),
-                            onPressed: () => _showRestaurantSheet(
-                              context,
-                              notifier: notifier,
-                              initial: restaurant,
-                            ),
-                            child: Text(l10n.superAdminManageStore),
-                          ),
-                          const SizedBox(width: 8),
-                          FilledButton(
-                            key: Key(
-                              'super_admin_go_to_admin_${restaurant.id}',
-                            ),
-                            onPressed: () {
-                              notifier.selectRestaurant(restaurant);
-                              onGoToAdmin(restaurant.id);
-                            },
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppColors.amber500,
-                              foregroundColor: AppColors.surface0,
-                            ),
-                            child: Text(l10n.superAdminGoToAdmin),
-                          ),
-                        ],
-                      ),
+                    return _buildRestaurantRow(
+                      context,
+                      visibleRestaurants[index],
                     );
                   },
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _buildRestaurantRow(BuildContext context, SuperRestaurant restaurant) {
+    final l10n = context.l10n;
+    final details = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 9,
+          height: 9,
+          margin: const EdgeInsets.only(top: 5),
+          decoration: BoxDecoration(
+            color: restaurant.isActive
+                ? AppColors.statusAvailable
+                : AppColors.textSecondary,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                restaurant.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppFonts.system(
+                  color: AppColors.textPrimary,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                '${restaurant.slug} · ${restaurant.address}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppFonts.system(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                  letterSpacing: 0,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                l10n.superAdminBrandPrefix(
+                  restaurant.brandName ?? l10n.superAdminUncategorized,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppFonts.system(
+                  color: AppColors.textSecondary,
+                  fontSize: 11,
+                  letterSpacing: 0,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+    final badges = Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        _storeTypeBadge(context, restaurant.storeType),
+        _modeBadge(context, restaurant.operationMode),
+      ],
+    );
+    final actions = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      alignment: WrapAlignment.end,
+      children: [
+        OutlinedButton.icon(
+          key: Key('super_admin_manage_${restaurant.id}'),
+          onPressed: () => _showRestaurantSheet(
+            context,
+            notifier: notifier,
+            initial: restaurant,
+          ),
+          icon: const Icon(Icons.tune, size: 17),
+          label: Text(l10n.superAdminManageStore),
+        ),
+        FilledButton.icon(
+          key: Key('super_admin_go_to_admin_${restaurant.id}'),
+          onPressed: () {
+            notifier.selectRestaurant(restaurant);
+            onGoToAdmin(restaurant.id);
+          },
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.amber500,
+            foregroundColor: AppColors.surface0,
+          ),
+          icon: const Icon(Icons.open_in_new, size: 17),
+          label: Text(l10n.superAdminGoToAdmin),
+        ),
+      ],
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.surface3),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 820) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                details,
+                const SizedBox(height: 10),
+                badges,
+                const SizedBox(height: 10),
+                Align(alignment: Alignment.centerRight, child: actions),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: details),
+              const SizedBox(width: 12),
+              badges,
+              const SizedBox(width: 12),
+              actions,
+            ],
+          );
+        },
+      ),
     );
   }
 
