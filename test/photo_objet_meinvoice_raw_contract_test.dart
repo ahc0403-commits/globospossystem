@@ -69,19 +69,25 @@ void main() {
     expect(source, isNot(contains('MISA_MEINVOICE_PASSWORD')));
   });
 
-  test('Photo Objet workflow runs hourly from 09:00 through 22:00 HCM', () {
-    final workflow = readRepoFile(workflowPath);
+  test(
+    'Photo Objet workflow ends collection and invoice queueing at 22:30 HCM',
+    () {
+      final workflow = readRepoFile(workflowPath);
+      final cronExpressions = RegExp(
+        r"cron: '([^']+)'",
+      ).allMatches(workflow).map((match) => match.group(1)).toList();
 
-    expect(workflow, contains("cron: '0 2-15 * * *'"));
-    expect(workflow, contains('09:00-22:00 Asia/Ho_Chi_Minh'));
-    expect(workflow, contains("node-version: '22'"));
-    expect(workflow, contains('concurrency:'));
-    expect(workflow, contains('cancel-in-progress: false'));
-    expect(workflow, isNot(contains('MOERS_D7')));
-    expect(workflow, isNot(contains('PHOTO_OBJET_D7')));
-    expect(workflow, contains('defaults to today in Asia/Ho_Chi_Minh'));
-    expect(workflow, contains('node pull_moers_sales.js'));
-  });
+      expect(cronExpressions, ['0 2-15 * * *', '30 15 * * *']);
+      expect(workflow, contains('09:00-22:30 Asia/Ho_Chi_Minh'));
+      expect(workflow, contains("node-version: '22'"));
+      expect(workflow, contains('concurrency:'));
+      expect(workflow, contains('cancel-in-progress: false'));
+      expect(workflow, isNot(contains('MOERS_D7')));
+      expect(workflow, isNot(contains('PHOTO_OBJET_D7')));
+      expect(workflow, contains('defaults to today in Asia/Ho_Chi_Minh'));
+      expect(workflow, contains('node pull_moers_sales.js'));
+    },
+  );
 
   test('Photo Objet setup docs describe raw ledger and queue boundaries', () {
     final docs = readRepoFile(docsPath);
@@ -91,7 +97,9 @@ void main() {
     expect(docs, contains('meinvoice_jobs'));
     expect(docs, contains('The crawler does not call MISA directly.'));
     expect(docs, contains("cron: '0 2-15 * * *'"));
-    expect(docs, contains('09:00 through 22:00'));
+    expect(docs, contains("cron: '30 15 * * *'"));
+    expect(docs, contains('09:00 through 22:30'));
+    expect(docs, contains('final sales collection and invoice queueing run'));
     expect(docs, isNot(contains('MOERS_D7')));
     expect(docs, isNot(contains('PHOTO_OBJET_D7')));
     expect(docs, contains('payment_method = CASH'));
