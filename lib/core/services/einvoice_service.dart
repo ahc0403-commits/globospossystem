@@ -1,45 +1,6 @@
 import '../../main.dart';
 
 class EinvoiceService {
-  Future<Map<String, String?>?> lookupCompanyByTaxCode(String taxCode) async {
-    final response = await supabase.functions.invoke(
-      'wetax-onboarding',
-      body: {'operation': 'company_lookup', 'tax_code': taxCode},
-    );
-
-    if (response.status != 200) {
-      throw Exception('WT09 lookup failed');
-    }
-
-    final payload = response.data;
-    if (payload is! Map) return null;
-    final result = Map<String, dynamic>.from(payload);
-    final inner = result['result'];
-    if (inner is! Map) return null;
-
-    final httpStatus = inner['http_status'];
-    if (httpStatus is int && httpStatus >= 400) {
-      return null;
-    }
-
-    final body = inner['body'];
-    if (body is! Map) return null;
-    final data = body['data'];
-    if (data is! Map) return null;
-
-    final normalized = Map<String, dynamic>.from(data);
-    return {
-      'tax_company_name':
-          normalized['vietnam_name']?.toString() ??
-          normalized['english_name']?.toString(),
-      'tax_address': normalized['address']?.toString(),
-      'receiver_email': normalized['email']?.toString(),
-      'tax_id':
-          normalized['tax_id']?.toString() ??
-          normalized['tax_code']?.toString(),
-    };
-  }
-
   /// Request a red invoice for an already-paid order.
   /// Returns the job_id on success.
   Future<String> requestRedInvoice({
@@ -51,6 +12,10 @@ class EinvoiceService {
     String? buyerAddress,
     String? receiverEmailCc,
     String? buyerTel,
+    String? unitCode,
+    String? unitName,
+    String? buyerFullName,
+    String? buyerId,
   }) async {
     final result = await supabase.rpc(
       'request_red_invoice',
@@ -63,6 +28,10 @@ class EinvoiceService {
         'p_receiver_email': receiverEmail,
         'p_receiver_email_cc': receiverEmailCc,
         'p_buyer_tel': buyerTel,
+        'p_unit_code': unitCode,
+        'p_unit_name': unitName,
+        'p_buyer_full_name': buyerFullName,
+        'p_buyer_id': buyerId,
       },
     );
     final map = Map<String, dynamic>.from(result as Map);
@@ -83,8 +52,14 @@ class EinvoiceService {
     if (result == null) return null;
     final map = Map<String, dynamic>.from(result as Map);
     return {
+      'buyer_tax_code': map['buyer_tax_code']?.toString(),
+      'buyer_unit_code': map['buyer_unit_code']?.toString(),
       'tax_company_name': map['tax_company_name']?.toString(),
       'tax_address': map['tax_address']?.toString(),
+      'tax_buyer_name': map['tax_buyer_name']?.toString(),
+      'buyer_full_name': map['buyer_full_name']?.toString(),
+      'buyer_id': map['buyer_id']?.toString(),
+      'buyer_phone': map['buyer_phone']?.toString(),
       'receiver_email': map['receiver_email']?.toString(),
       'receiver_email_cc': map['receiver_email_cc']?.toString(),
     };

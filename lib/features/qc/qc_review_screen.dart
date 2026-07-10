@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/services/qc_service.dart';
+import '../../core/ui/pos_design_tokens.dart';
+import '../../core/ui/toast/toast_primitives_extended.dart';
+import '../../core/utils/number_input_utils.dart';
 import '../../core/utils/permission_utils.dart';
 import '../../core/utils/role_routes.dart';
 import '../../core/utils/time_utils.dart';
-import '../../core/ui/pos_design_tokens.dart';
-import '../../core/ui/toast/toast_primitives_extended.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../auth/auth_provider.dart';
-import '../../core/services/qc_service.dart';
 import 'qc_provider.dart';
 
 class QcReviewScreen extends ConsumerStatefulWidget {
@@ -28,15 +29,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
   String? _initializedRestaurantId;
   bool _didHandleUnauthorized = false;
   String _filter = 'pending';
-  String _sortMode = 'pending_first';
-  String _domainFilter = 'all';
-  String _photoFilter = 'all';
-  String _svRequirementFilter = 'required';
-  String _issueSeverityFilter = 'all';
-  String _issueSubmissionFilter = 'all';
   DateTime _weekStart = _startOfWeek(TimeUtils.nowVietnam());
-  final Set<String> _selectedCheckIds = <String>{};
-  String? _selectedIssueId;
 
   static DateTime _startOfWeek(DateTime now) {
     final day = DateTime(now.year, now.month, now.day);
@@ -48,7 +41,6 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
     await ref
         .read(qcCheckProvider.notifier)
         .loadWeek(storeId: storeId, weekStart: _weekStart);
-    await ref.read(qcIssueQueueProvider.notifier).load(storeId);
   }
 
   Future<void> _loadWeek(String storeId, DateTime start) async {
@@ -56,31 +48,6 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
     await ref
         .read(qcCheckProvider.notifier)
         .loadWeek(storeId: storeId, weekStart: start);
-  }
-
-  void _toggleCheckSelection(String checkId, bool selected) {
-    setState(() {
-      if (selected) {
-        _selectedCheckIds.add(checkId);
-      } else {
-        _selectedCheckIds.remove(checkId);
-      }
-    });
-  }
-
-  void _toggleAllVisible(List<Map<String, dynamic>> checks, bool selected) {
-    setState(() {
-      final ids = checks
-          .map((check) => check['id']?.toString())
-          .whereType<String>()
-          .where((id) => id.isNotEmpty)
-          .toList();
-      if (selected) {
-        _selectedCheckIds.addAll(ids);
-      } else {
-        _selectedCheckIds.removeAll(ids);
-      }
-    });
   }
 
   @override
@@ -92,7 +59,6 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
       auth.extraPermissions,
     );
     final checkState = ref.watch(qcCheckProvider);
-    final issueQueueState = ref.watch(qcIssueQueueProvider);
 
     if (!canReview) {
       if (!_didHandleUnauthorized) {
@@ -104,11 +70,12 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
         });
       }
       return Scaffold(
+        key: const Key('qc_review_root'),
         backgroundColor: PosColors.canvas,
         body: Center(
           child: Text(
-            'No permission to review QSC inspections.',
-            style: GoogleFonts.notoSansKr(color: PosColors.text, fontSize: 14),
+            context.l10n.qscNoReviewPermission,
+            style: AppFonts.system(color: PosColors.text, fontSize: 14),
           ),
         ),
       );
@@ -118,6 +85,26 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
       _initializedRestaurantId = storeId;
       Future.microtask(() => _initialize(storeId));
     }
+
+    final reviewChecks =
+        checkState.checks.where((check) {
+          final status = _effectiveSvStatus(check);
+          final matchesFilter = switch (_filter) {
+            'pending' => status == 'pending',
+            'reviewed' => status == 'reviewed',
+            'rejected' => status == 'rejected',
+            'all' => true,
+            _ => true,
+          };
+          return status != 'not_required' && matchesFilter;
+        }).toList()..sort((a, b) {
+          final aStatus = _effectiveSvStatus(a) == 'pending' ? 0 : 1;
+          final bStatus = _effectiveSvStatus(b) == 'pending' ? 0 : 1;
+          if (aStatus != bStatus) return aStatus.compareTo(bStatus);
+          final aDate = a['check_date']?.toString() ?? '';
+          final bDate = b['check_date']?.toString() ?? '';
+          return bDate.compareTo(aDate);
+        });
 
     final pendingCount = checkState.checks
         .where((check) => _effectiveSvStatus(check) == 'pending')
@@ -129,167 +116,13 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
         .where((check) => _effectiveSvStatus(check) == 'rejected')
         .length;
 
-    final domainOptions = <String>{
-      'all',
-      ...checkState.checks.map((check) {
-        final template = check['qc_templates'] as Map<String, dynamic>?;
-        return template?['qsc_domain']?.toString() ?? 'quality';
-      }),
-    }.toList();
-
-    final filteredChecks = checkState.checks.where((check) {
-      final status = _effectiveSvStatus(check);
-      final template = check['qc_templates'] as Map<String, dynamic>?;
-      final domain = template?['qsc_domain']?.toString() ?? 'quality';
-      final isSvRequired = template?['is_sv_required'] == true;
-      final photoRequiredCount = _readInt(check['photo_required_count']) ?? 0;
-      final photoUploadedCount = _readInt(check['photo_uploaded_count']) ?? 0;
-
-      final matchesStatus = switch (_filter) {
-        'pending' => status == 'pending',
-        'reviewed' => status == 'reviewed',
-        'rejected' => status == 'rejected',
-        'all' => true,
-        _ => true,
-      };
-      final matchesDomain = _domainFilter == 'all' || domain == _domainFilter;
-      final matchesPhoto = switch (_photoFilter) {
-        'missing' =>
-          photoRequiredCount > 0 && photoUploadedCount < photoRequiredCount,
-        'complete' =>
-          photoRequiredCount > 0 && photoUploadedCount >= photoRequiredCount,
-        'not_required' => photoRequiredCount == 0,
-        _ => true,
-      };
-      final matchesSvRequirement = switch (_svRequirementFilter) {
-        'required' => isSvRequired,
-        'not_required' => !isSvRequired,
-        _ => true,
-      };
-      return matchesStatus &&
-          matchesDomain &&
-          matchesPhoto &&
-          matchesSvRequirement;
-    }).toList();
-
-    filteredChecks.sort((a, b) {
-      switch (_sortMode) {
-        case 'risk_first':
-          final gradeOrder = {'risk': 0, 'caution': 1, 'good': 2};
-          final aGrade = gradeOrder[a['grade']?.toString()] ?? 9;
-          final bGrade = gradeOrder[b['grade']?.toString()] ?? 9;
-          if (aGrade != bGrade) return aGrade.compareTo(bGrade);
-          break;
-        case 'date_desc':
-          final aDate = a['check_date']?.toString() ?? '';
-          final bDate = b['check_date']?.toString() ?? '';
-          final dateCompare = bDate.compareTo(aDate);
-          if (dateCompare != 0) return dateCompare;
-          break;
-        case 'pending_first':
-        default:
-          final aPending = _effectiveSvStatus(a) == 'pending' ? 0 : 1;
-          final bPending = _effectiveSvStatus(b) == 'pending' ? 0 : 1;
-          if (aPending != bPending) return aPending.compareTo(bPending);
-          final aDate = a['check_date']?.toString() ?? '';
-          final bDate = b['check_date']?.toString() ?? '';
-          final dateCompare = bDate.compareTo(aDate);
-          if (dateCompare != 0) return dateCompare;
-      }
-      final aText =
-          (a['qc_templates'] as Map<String, dynamic>?)?['criteria_text']
-              ?.toString() ??
-          '';
-      final bText =
-          (b['qc_templates'] as Map<String, dynamic>?)?['criteria_text']
-              ?.toString() ??
-          '';
-      return aText.compareTo(bText);
-    });
-
-    final visibleIds = filteredChecks
-        .map((check) => check['id']?.toString())
-        .whereType<String>()
-        .where((id) => id.isNotEmpty)
-        .toList();
-    final selectedVisibleCount = visibleIds
-        .where((id) => _selectedCheckIds.contains(id))
-        .length;
-    final allVisibleSelected =
-        visibleIds.isNotEmpty && selectedVisibleCount == visibleIds.length;
-
-    final groupedByDate = <String, List<Map<String, dynamic>>>{};
-    for (final check in filteredChecks) {
-      final date = check['check_date']?.toString() ?? '-';
-      groupedByDate.putIfAbsent(date, () => []).add(check);
-    }
-
-    final queueIssues =
-        issueQueueState.issues.where((issue) {
-          final severity = issue['severity']?.toString() ?? 'info';
-          final domain = issue['qsc_domain']?.toString() ?? 'quality';
-          final photoStatus = issue['photo_status']?.toString() ?? 'na';
-          final submissionStatus =
-              issue['submission_status']?.toString() ?? 'pending';
-
-          final matchesSeverity =
-              _issueSeverityFilter == 'all' || severity == _issueSeverityFilter;
-          final matchesDomain =
-              _domainFilter == 'all' || domain == _domainFilter;
-          final matchesPhoto = switch (_photoFilter) {
-            'missing' => photoStatus == 'missing' || photoStatus == 'partial',
-            'complete' => photoStatus == 'complete',
-            'not_required' => photoStatus == 'na',
-            _ => true,
-          };
-          final matchesSubmission =
-              _issueSubmissionFilter == 'all' ||
-              submissionStatus == _issueSubmissionFilter;
-
-          return matchesSeverity &&
-              matchesDomain &&
-              matchesPhoto &&
-              matchesSubmission;
-        }).toList()..sort((a, b) {
-          final aSeverity = _issueSeverityRank(a['severity']?.toString());
-          final bSeverity = _issueSeverityRank(b['severity']?.toString());
-          if (aSeverity != bSeverity) return aSeverity.compareTo(bSeverity);
-          final aDate = a['check_date']?.toString() ?? '';
-          final bDate = b['check_date']?.toString() ?? '';
-          final dateCompare = bDate.compareTo(aDate);
-          if (dateCompare != 0) return dateCompare;
-          final aCreated = a['created_at']?.toString() ?? '';
-          final bCreated = b['created_at']?.toString() ?? '';
-          return bCreated.compareTo(aCreated);
-        });
-
-    Map<String, dynamic>? selectedIssue;
-    if (queueIssues.isNotEmpty) {
-      for (final issue in queueIssues) {
-        if (issue['check_id']?.toString() == _selectedIssueId) {
-          selectedIssue = issue;
-          break;
-        }
-      }
-      selectedIssue ??= queueIssues.first;
-    }
-
-    final criticalIssueCount = queueIssues
-        .where((issue) => issue['severity']?.toString() == 'critical')
-        .length;
-    final overdueIssueCount = queueIssues
-        .where((issue) => issue['submission_status']?.toString() == 'overdue')
-        .length;
-    final missingPhotoIssueCount = queueIssues.where((issue) {
-      final status = issue['photo_status']?.toString();
-      return status == 'missing' || status == 'partial';
-    }).length;
-
     return Scaffold(
+      key: const Key('qc_review_root'),
       backgroundColor: PosColors.canvas,
       appBar: AppBar(
-        backgroundColor: PosColors.canvas,
-        elevation: 0,
+        backgroundColor: PosColors.topbarSurface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 1,
         actions: const [
           Padding(
             padding: EdgeInsets.only(right: 12),
@@ -300,8 +133,8 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'QSC Review',
-              style: GoogleFonts.notoSansKr(
+              context.l10n.qscReviewTitle,
+              style: AppFonts.system(
                 color: PosColors.text,
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
@@ -309,7 +142,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
             ),
             Text(
               _weekLabel(),
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: PosColors.textMuted,
                 fontSize: 12,
               ),
@@ -321,9 +154,54 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
           ? const Center(
               child: CircularProgressIndicator(color: PosColors.accent),
             )
-          : ListView(
-              padding: const EdgeInsets.all(16),
+          : ToastResponsiveScrollBody(
+              maxWidth: 760,
               children: [
+                ToastWorkSurface(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.l10n.qscReviewHeader,
+                        style: AppFonts.system(
+                          color: PosColors.text,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        context.l10n.qscReviewSubtitle,
+                        style: AppFonts.system(
+                          color: PosColors.textMuted,
+                          fontSize: 12,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _summaryChip(
+                            context.l10n.qscPendingCount(pendingCount),
+                            PosColors.accent,
+                          ),
+                          _summaryChip(
+                            context.l10n.qscReviewedCount(reviewedCount),
+                            PosColors.success,
+                          ),
+                          _summaryChip(
+                            context.l10n.qscRejectedCount(rejectedCount),
+                            PosColors.danger,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     IconButton(
@@ -342,7 +220,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                       child: Center(
                         child: Text(
                           _weekLabel(),
-                          style: GoogleFonts.notoSansKr(
+                          style: AppFonts.system(
                             color: PosColors.text,
                             fontWeight: FontWeight.w700,
                           ),
@@ -364,414 +242,6 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _summaryChip(
-                      context.l10n.qscPendingCount(pendingCount),
-                      PosColors.accent,
-                    ),
-                    _summaryChip(
-                      context.l10n.qscReviewedCount(reviewedCount),
-                      PosColors.success,
-                    ),
-                    _summaryChip(
-                      context.l10n.qscRejectedCount(rejectedCount),
-                      PosColors.danger,
-                    ),
-                    _summaryChip(
-                      context.l10n.qscSelectedCount(_selectedCheckIds.length),
-                      PosColors.info,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: PosColors.panelStrong,
-                    borderRadius: ToastRadiusTokens.xs,
-                    border: Border.all(color: PosColors.border),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Issue Queue',
-                                  style: GoogleFonts.notoSansKr(
-                                    color: PosColors.text,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Read-only exception queue from the tracked QSC issue view.',
-                                  style: GoogleFonts.notoSansKr(
-                                    color: PosColors.textMuted,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          TextButton.icon(
-                            onPressed: storeId == null
-                                ? null
-                                : () => ref
-                                      .read(qcIssueQueueProvider.notifier)
-                                      .load(storeId),
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Refresh Issue Queue'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _summaryChip(
-                            'Critical $criticalIssueCount',
-                            PosColors.danger,
-                          ),
-                          _summaryChip(
-                            'Overdue $overdueIssueCount',
-                            PosColors.accent,
-                          ),
-                          _summaryChip(
-                            'Photo gap $missingPhotoIssueCount',
-                            PosColors.info,
-                          ),
-                          _summaryChip(
-                            'Queue ${queueIssues.length}',
-                            PosColors.textMuted,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: PosColors.canvas,
-                          borderRadius: ToastRadiusTokens.xs,
-                          border: Border.all(color: PosColors.border),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Review Focus',
-                              style: GoogleFonts.notoSansKr(
-                                color: PosColors.text,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'This queue is exception-first. Prioritize critical severity, overdue submissions, and missing photo evidence before standard review cleanup.',
-                              style: GoogleFonts.notoSansKr(
-                                color: PosColors.textMuted,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: [
-                          _queueMetricCard(
-                            label: 'Visible queue',
-                            value: '${queueIssues.length}',
-                            color: queueIssues.isNotEmpty
-                                ? PosColors.text
-                                : PosColors.textMuted,
-                          ),
-                          _queueMetricCard(
-                            label: 'Follow-up now',
-                            value:
-                                '$criticalIssueCount critical · $overdueIssueCount overdue',
-                            color: criticalIssueCount > 0
-                                ? PosColors.danger
-                                : overdueIssueCount > 0
-                                ? PosColors.accent
-                                : PosColors.success,
-                          ),
-                          _queueMetricCard(
-                            label: 'Evidence gap',
-                            value: '$missingPhotoIssueCount photo gaps',
-                            color: missingPhotoIssueCount > 0
-                                ? PosColors.info
-                                : PosColors.success,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      _queueSupportRow(
-                        'Queue focus',
-                        _queueFocusCopy(
-                          criticalIssueCount: criticalIssueCount,
-                          overdueIssueCount: overdueIssueCount,
-                          missingPhotoIssueCount: missingPhotoIssueCount,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      _queueSupportRow(
-                        'Healthy baseline',
-                        _queueHealthyCopy(
-                          totalIssues: queueIssues.length,
-                          criticalIssueCount: criticalIssueCount,
-                          overdueIssueCount: overdueIssueCount,
-                          missingPhotoIssueCount: missingPhotoIssueCount,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      _queueSupportRow(
-                        'Filter context',
-                        _queueFilterContext(queueIssues.length),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              initialValue: _issueSeverityFilter,
-                              decoration: const InputDecoration(
-                                labelText: 'Severity',
-                              ),
-                              items: const [
-                                DropdownMenuItem(
-                                  value: 'all',
-                                  child: Text('All severities'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'critical',
-                                  child: Text('Critical'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'high',
-                                  child: Text('High'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'medium',
-                                  child: Text('Medium'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'low',
-                                  child: Text('Low'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'info',
-                                  child: Text('Info'),
-                                ),
-                              ],
-                              onChanged: (value) {
-                                if (value == null) return;
-                                setState(() => _issueSeverityFilter = value);
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              initialValue: _issueSubmissionFilter,
-                              decoration: const InputDecoration(
-                                labelText: 'Submission',
-                              ),
-                              items: const [
-                                DropdownMenuItem(
-                                  value: 'all',
-                                  child: Text('All submissions'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'pending',
-                                  child: Text('Pending'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'overdue',
-                                  child: Text('Overdue'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'submitted',
-                                  child: Text('Submitted'),
-                                ),
-                              ],
-                              onChanged: (value) {
-                                if (value == null) return;
-                                setState(() => _issueSubmissionFilter = value);
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      if (issueQueueState.error != null) ...[
-                        Text(
-                          issueQueueState.error!,
-                          style: GoogleFonts.notoSansKr(
-                            color: PosColors.danger,
-                            fontSize: 13,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                      if (issueQueueState.isLoading &&
-                          issueQueueState.issues.isEmpty)
-                        const Center(
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(vertical: 24),
-                            child: CircularProgressIndicator(
-                              color: PosColors.accent,
-                            ),
-                          ),
-                        )
-                      else if (queueIssues.isEmpty)
-                        Text(
-                          'No issue queue items match the current filters.',
-                          style: GoogleFonts.notoSansKr(
-                            color: PosColors.textMuted,
-                          ),
-                        )
-                      else
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final vertical = constraints.maxWidth < 960;
-                            final listPane = _issueQueueList(queueIssues);
-                            final detailPane = _issueQueueDetail(selectedIssue);
-
-                            if (vertical) {
-                              return Column(
-                                children: [
-                                  SizedBox(height: 260, child: listPane),
-                                  const SizedBox(height: 12),
-                                  detailPane,
-                                ],
-                              );
-                            }
-
-                            return Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  flex: 5,
-                                  child: SizedBox(height: 360, child: listPane),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(flex: 4, child: detailPane),
-                              ],
-                            );
-                          },
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _domainFilter,
-                        decoration: InputDecoration(
-                          labelText: context.l10n.qscDomain,
-                        ),
-                        items: domainOptions
-                            .map(
-                              (value) => DropdownMenuItem(
-                                value: value,
-                                child: Text(switch (value) {
-                                  'quality' => context.l10n.qscDomainQuality,
-                                  'service' => context.l10n.qscDomainService,
-                                  'cleanliness' =>
-                                    context.l10n.qscDomainCleanliness,
-                                  _ => context.l10n.all,
-                                }),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setState(() => _domainFilter = value);
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _photoFilter,
-                        decoration: InputDecoration(
-                          labelText: context.l10n.qscPhotoStatus,
-                        ),
-                        items: [
-                          DropdownMenuItem(
-                            value: 'all',
-                            child: Text(context.l10n.all),
-                          ),
-                          DropdownMenuItem(
-                            value: 'missing',
-                            child: Text(context.l10n.qscMissingPhoto),
-                          ),
-                          DropdownMenuItem(
-                            value: 'complete',
-                            child: Text(context.l10n.qscPhotoComplete),
-                          ),
-                          DropdownMenuItem(
-                            value: 'not_required',
-                            child: Text(context.l10n.qscPhotoNa),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setState(() => _photoFilter = value);
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _svRequirementFilter,
-                        decoration: InputDecoration(
-                          labelText: context.l10n.qscSvRequirement,
-                        ),
-                        items: [
-                          DropdownMenuItem(
-                            value: 'required',
-                            child: Text(context.l10n.qscSvRequired),
-                          ),
-                          DropdownMenuItem(
-                            value: 'not_required',
-                            child: Text(context.l10n.qscSvNotRequired),
-                          ),
-                          DropdownMenuItem(
-                            value: 'all',
-                            child: Text(context.l10n.all),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setState(() => _svRequirementFilter = value);
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(child: Container()),
-                  ],
-                ),
-                const SizedBox(height: 12),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
@@ -787,213 +257,46 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _sortMode,
-                        decoration: InputDecoration(
-                          labelText: context.l10n.qscSort,
-                        ),
-                        items: [
-                          DropdownMenuItem(
-                            value: 'pending_first',
-                            child: Text(context.l10n.qscPendingFirst),
-                          ),
-                          DropdownMenuItem(
-                            value: 'date_desc',
-                            child: Text(context.l10n.qscNewestFirst),
-                          ),
-                          DropdownMenuItem(
-                            value: 'risk_first',
-                            child: Text(context.l10n.qscRiskFirst),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setState(() => _sortMode = value);
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (filteredChecks.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: PosColors.panelStrong,
-                      borderRadius: ToastRadiusTokens.xs,
-                      border: Border.all(color: PosColors.border),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Checkbox(
-                              value: allVisibleSelected,
-                              onChanged: (value) => _toggleAllVisible(
-                                filteredChecks,
-                                value ?? false,
-                              ),
-                              activeColor: PosColors.accent,
-                            ),
-                            Expanded(
-                              child: Text(
-                                'Select visible inspections',
-                                style: GoogleFonts.notoSansKr(
-                                  color: PosColors.text,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              '$selectedVisibleCount / ${visibleIds.length}',
-                              style: GoogleFonts.notoSansKr(
-                                color: PosColors.textMuted,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed:
-                                    _selectedCheckIds.isEmpty || storeId == null
-                                    ? null
-                                    : () => _openBulkReviewSheet(
-                                        context: context,
-                                        auth: auth,
-                                        status: 'rejected',
-                                      ),
-                                icon: const Icon(Icons.error_outline),
-                                label: Text(context.l10n.qscBulkFollowUp),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: FilledButton.icon(
-                                onPressed:
-                                    _selectedCheckIds.isEmpty || storeId == null
-                                    ? null
-                                    : () => _openBulkReviewSheet(
-                                        context: context,
-                                        auth: auth,
-                                        status: 'reviewed',
-                                      ),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: PosColors.accent,
-                                  foregroundColor: Colors.white,
-                                ),
-                                icon: const Icon(Icons.verified_outlined),
-                                label: Text(context.l10n.qscBulkReview),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                if (filteredChecks.isNotEmpty) const SizedBox(height: 12),
                 if (checkState.error != null) ...[
                   Text(
                     checkState.error!,
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: PosColors.danger,
                       fontSize: 13,
                     ),
                   ),
                   const SizedBox(height: 10),
                 ],
-                if (filteredChecks.isEmpty)
-                  Container(
+                if (reviewChecks.isEmpty)
+                  ToastWorkSurface(
                     padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: PosColors.panelStrong,
-                      borderRadius: ToastRadiusTokens.xs,
-                      border: Border.all(color: PosColors.border),
-                    ),
                     child: Text(
-                      'No QSC reviews found for this filter.',
-                      style: GoogleFonts.notoSansKr(color: PosColors.textMuted),
+                      context.l10n.qscNoSvReviewTargets,
+                      style: AppFonts.system(color: PosColors.textMuted),
                     ),
+                  )
+                else
+                  ...reviewChecks.map(
+                    (check) => _reviewCard(context, auth, check),
                   ),
-                for (final entry in groupedByDate.entries) ...[
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8, bottom: 8),
-                    child: Text(
-                      entry.key,
-                      style: GoogleFonts.notoSansKr(
-                        color: PosColors.accent,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  ...entry.value.map((check) {
-                    final checkId = check['id']?.toString() ?? '';
-                    return _reviewCard(
-                      context,
-                      auth,
-                      check,
-                      isSelected: _selectedCheckIds.contains(checkId),
-                      onSelected: checkId.isEmpty
-                          ? null
-                          : (selected) =>
-                                _toggleCheckSelection(checkId, selected),
-                    );
-                  }),
-                ],
                 const SizedBox(height: 16),
               ],
             ),
     );
   }
 
-  Widget _filterChip(String value, String label) {
-    final selected = _filter == value;
-    return InkWell(
-      onTap: () => setState(() => _filter = value),
-      borderRadius: BorderRadius.circular(999),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected
-              ? PosColors.accent.withValues(alpha: 0.16)
-              : PosColors.panelStrong,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: selected ? PosColors.accent : PosColors.border,
-          ),
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.notoSansKr(
-            color: selected ? PosColors.accent : PosColors.textMuted,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _reviewCard(
     BuildContext context,
     dynamic auth,
-    Map<String, dynamic> check, {
-    required bool isSelected,
-    required ValueChanged<bool>? onSelected,
-  }) {
+    Map<String, dynamic> check,
+  ) {
     final template = check['qc_templates'] as Map<String, dynamic>?;
     final effectiveStatus = _effectiveSvStatus(check);
-    final canReview = effectiveStatus != 'not_required';
     final photoUrl = check['evidence_photo_url']?.toString();
     final uploadedPhotoCount = _readInt(check['photo_uploaded_count']) ?? 0;
-    final scoreText = check['sv_score']?.toString();
+    final requiredPhotoCount = _readInt(check['photo_required_count']) ?? 0;
     final note = check['note']?.toString();
+    final svScore = check['sv_score']?.toString();
     final svNote = check['sv_note']?.toString();
 
     return Container(
@@ -1009,17 +312,10 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
         children: [
           Row(
             children: [
-              Checkbox(
-                value: isSelected,
-                onChanged: onSelected == null
-                    ? null
-                    : (value) => onSelected(value ?? false),
-                activeColor: PosColors.accent,
-              ),
               Expanded(
                 child: Text(
                   template?['criteria_text']?.toString() ?? '-',
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: PosColors.text,
                     fontWeight: FontWeight.w700,
                     fontSize: 15,
@@ -1038,22 +334,23 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
             runSpacing: 8,
             children: [
               _statusChip(
-                (template?['category']?.toString() ??
-                    context.l10n.qcCategoryOther),
+                template?['category']?.toString() ??
+                    context.l10n.qcCategoryOther,
                 PosColors.textMuted,
               ),
               _statusChip(
-                (check['result']?.toString() ?? '-').toUpperCase(),
-                _resultColor(check['result']?.toString()),
-              ),
-              if (check['grade']?.toString().isNotEmpty == true)
-                _statusChip(
-                  check['grade'].toString().toUpperCase(),
-                  _gradeColor(check['grade']?.toString()),
-                ),
-              _statusChip(
-                'Photo ${_readInt(check['photo_uploaded_count']) ?? 0}/${_readInt(check['photo_required_count']) ?? 0}',
+                _domainLabel(template?['qsc_domain']?.toString()),
                 PosColors.info,
+              ),
+              _statusChip(
+                'Photo $uploadedPhotoCount/$requiredPhotoCount',
+                uploadedPhotoCount < requiredPhotoCount
+                    ? PosColors.accent
+                    : PosColors.success,
+              ),
+              _statusChip(
+                check['submission_status']?.toString() ?? 'submitted',
+                PosColors.textMuted,
               ),
             ],
           ),
@@ -1065,9 +362,11 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                 borderRadius: BorderRadius.circular(8),
                 child: Image.network(
                   photoUrl,
-                  height: 120,
+                  height: 160,
                   width: double.infinity,
                   fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) =>
+                      _imageLoadFallback(height: 160, width: double.infinity),
                 ),
               ),
             ),
@@ -1082,22 +381,15 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
           ],
           if (note != null && note.isNotEmpty) ...[
             const SizedBox(height: 10),
-            Text(
-              context.l10n.qscStaffNote,
-              style: GoogleFonts.notoSansKr(
-                color: PosColors.textMuted,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            _fieldLabel(context.l10n.qscStaffNote),
             const SizedBox(height: 4),
-            Text(note, style: GoogleFonts.notoSansKr(color: PosColors.text)),
+            Text(note, style: AppFonts.system(color: PosColors.text)),
           ],
-          if (scoreText != null && scoreText.isNotEmpty) ...[
+          if (svScore != null && svScore.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(
-              context.l10n.qscSvScoreValue(scoreText),
-              style: GoogleFonts.notoSansKr(
+              context.l10n.qscSvScoreValue(svScore),
+              style: AppFonts.system(
                 color: PosColors.text,
                 fontWeight: FontWeight.w700,
               ),
@@ -1105,168 +397,47 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
           ],
           if (svNote != null && svNote.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(
-              context.l10n.qscSvNote,
-              style: GoogleFonts.notoSansKr(
-                color: PosColors.textMuted,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            _fieldLabel(context.l10n.qscSvNote),
             const SizedBox(height: 4),
-            Text(svNote, style: GoogleFonts.notoSansKr(color: PosColors.text)),
+            Text(svNote, style: AppFonts.system(color: PosColors.text)),
           ],
-          if (canReview) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _openReviewSheet(
-                      context: context,
-                      auth: auth,
-                      check: check,
-                      status: 'rejected',
-                    ),
-                    icon: const Icon(Icons.error_outline),
-                    label: Text(context.l10n.qscNeedsFollowUp),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () => _openReviewSheet(
-                      context: context,
-                      auth: auth,
-                      check: check,
-                      status: 'reviewed',
-                    ),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: PosColors.accent,
-                      foregroundColor: Colors.white,
-                    ),
-                    icon: const Icon(Icons.verified_outlined),
-                    label: Text(context.l10n.qscMarkReviewed),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Future<void> _openBulkReviewSheet({
-    required BuildContext context,
-    required dynamic auth,
-    required String status,
-  }) async {
-    final scoreController = TextEditingController();
-    final noteController = TextEditingController();
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: PosColors.panelStrong,
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 16,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: 12),
+          Row(
             children: [
-              Text(
-                status == 'reviewed'
-                    ? 'Bulk Mark Reviewed'
-                    : 'Bulk Needs Follow-up',
-                style: GoogleFonts.notoSansKr(
-                  color: PosColors.text,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _openReviewSheet(
+                    context: context,
+                    auth: auth,
+                    check: check,
+                    status: 'rejected',
+                  ),
+                  icon: const Icon(Icons.error_outline),
+                  label: Text(context.l10n.qscNeedsFollowUp),
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                '${_selectedCheckIds.length} inspections selected',
-                style: GoogleFonts.notoSansKr(
-                  color: PosColors.textMuted,
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: scoreController,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                style: GoogleFonts.notoSansKr(color: PosColors.text),
-                decoration: InputDecoration(labelText: context.l10n.qscSvScore),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: noteController,
-                minLines: 2,
-                maxLines: 4,
-                style: GoogleFonts.notoSansKr(color: PosColors.text),
-                decoration: InputDecoration(labelText: context.l10n.qscSvNote),
-              ),
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () async {
-                    final storeId = auth.storeId;
-                    if (storeId == null || _selectedCheckIds.isEmpty) return;
-                    try {
-                      await ref
-                          .read(qcCheckProvider.notifier)
-                          .submitVisitReview(
-                            storeId: storeId,
-                            checkIds: _selectedCheckIds.toList(),
-                            svReviewStatus: status,
-                            svScore: double.tryParse(
-                              scoreController.text.trim(),
-                            ),
-                            svNote: noteController.text.trim().isEmpty
-                                ? null
-                                : noteController.text.trim(),
-                            visitSessionId: const Uuid().v4(),
-                            reviewedAt: DateTime.now(),
-                            reviewedBy: auth.user?.id,
-                          );
-                      if (!context.mounted) return;
-                      setState(() => _selectedCheckIds.clear());
-                      Navigator.of(context).pop();
-                      showSuccessToast(
-                        context,
-                        context.l10n.qscBulkReviewSaved,
-                      );
-                    } catch (e) {
-                      if (!context.mounted) return;
-                      showErrorToast(context, e.toString());
-                    }
-                  },
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () => _openReviewSheet(
+                    context: context,
+                    auth: auth,
+                    check: check,
+                    status: 'reviewed',
+                  ),
                   style: FilledButton.styleFrom(
                     backgroundColor: PosColors.accent,
                     foregroundColor: Colors.white,
                   ),
-                  child: Text(context.l10n.qscSaveBulkReview),
+                  icon: const Icon(Icons.verified_outlined),
+                  label: Text(context.l10n.qscMarkReviewed),
                 ),
               ),
             ],
           ),
-        );
-      },
+        ],
+      ),
     );
-
-    scoreController.dispose();
-    noteController.dispose();
   }
 
   Future<void> _openReviewSheet({
@@ -1302,7 +473,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                 status == 'reviewed'
                     ? context.l10n.qscMarkReviewed
                     : context.l10n.qscNeedsFollowUp,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: PosColors.text,
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
@@ -1314,7 +485,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
-                style: GoogleFonts.notoSansKr(color: PosColors.text),
+                style: AppFonts.system(color: PosColors.text),
                 decoration: InputDecoration(labelText: context.l10n.qscSvScore),
               ),
               const SizedBox(height: 10),
@@ -1322,7 +493,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                 controller: noteController,
                 minLines: 2,
                 maxLines: 4,
-                style: GoogleFonts.notoSansKr(color: PosColors.text),
+                style: AppFonts.system(color: PosColors.text),
                 decoration: InputDecoration(labelText: context.l10n.qscSvNote),
               ),
               const SizedBox(height: 14),
@@ -1342,9 +513,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
                             storeId: storeId,
                             checkIds: [checkId],
                             svReviewStatus: status,
-                            svScore: double.tryParse(
-                              scoreController.text.trim(),
-                            ),
+                            svScore: parseDecimalInput(scoreController.text),
                             svNote: noteController.text.trim().isEmpty
                                 ? null
                                 : noteController.text.trim(),
@@ -1377,99 +546,63 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
     noteController.dispose();
   }
 
-  Widget _issueQueueList(List<Map<String, dynamic>> issues) {
-    return ListView.separated(
-      itemCount: issues.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final issue = issues[index];
-        final checkId = issue['check_id']?.toString() ?? '';
-        final selected =
-            (checkId.isNotEmpty && checkId == _selectedIssueId) ||
-            (_selectedIssueId == null && index == 0);
-        final severity = issue['severity']?.toString();
+  Future<void> _openPhotoGallery(Map<String, dynamic> check) async {
+    final checkId = check['id']?.toString();
+    if (checkId == null || checkId.isEmpty) return;
 
-        return InkWell(
-          onTap: () => setState(() => _selectedIssueId = checkId),
-          borderRadius: ToastRadiusTokens.xs,
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: selected
-                  ? PosColors.accent.withValues(alpha: 0.10)
-                  : PosColors.canvas,
-              borderRadius: ToastRadiusTokens.xs,
-              border: Border.all(
-                color: selected ? PosColors.accent : PosColors.border,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    late final List<Map<String, dynamic>> photos;
+    try {
+      photos = await qcService.fetchCheckPhotos(
+        checkId: checkId,
+        fallbackPhotoUrl: check['evidence_photo_url']?.toString(),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      showErrorToast(context, context.l10n.qscFailedLoadPhotos);
+      return;
+    }
+
+    if (!mounted) return;
+    if (photos.isEmpty) {
+      showErrorToast(context, context.l10n.qscNoPhotosAvailable);
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.black,
+          insetPadding: const EdgeInsets.all(20),
+          child: SizedBox(
+            width: double.maxFinite,
+            height: MediaQuery.of(context).size.height * 0.72,
+            child: Stack(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        issue['criteria_text']?.toString() ?? '-',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.notoSansKr(
-                          color: PosColors.text,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    _statusChip(
-                      (severity ?? 'info').toUpperCase(),
-                      _issueSeverityColor(severity),
-                    ),
-                  ],
+                PageView(
+                  children: photos.map((photo) {
+                    final url = photo['photo_url']?.toString();
+                    return InteractiveViewer(
+                      minScale: 0.8,
+                      maxScale: 4,
+                      child: url == null || url.isEmpty
+                          ? const SizedBox.shrink()
+                          : Image.network(
+                              url,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => _imageLoadFallback(
+                                color: Colors.white.withValues(alpha: 0.78),
+                              ),
+                            ),
+                    );
+                  }).toList(),
                 ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _statusChip(
-                      issue['category']?.toString() ?? 'Other',
-                      PosColors.textMuted,
-                    ),
-                    _statusChip(
-                      issue['photo_status']?.toString() ?? 'na',
-                      PosColors.info,
-                    ),
-                    _statusChip(
-                      issue['submission_status']?.toString() ?? 'pending',
-                      PosColors.accent,
-                    ),
-                    _statusChip(
-                      issue['sv_review_status']?.toString() ?? 'pending',
-                      _svStatusColor(
-                        issue['sv_review_status']?.toString() ?? 'pending',
-                      ),
-                    ),
-                    _statusChip(
-                      _scoreGradeText(issue),
-                      _gradeColor(issue['grade']?.toString()),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '${issue['store_name'] ?? '-'} · ${issue['check_date'] ?? '-'}',
-                  style: GoogleFonts.notoSansKr(
-                    color: PosColors.textMuted,
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  _queueRowNarrative(issue),
-                  style: GoogleFonts.notoSansKr(
-                    color: PosColors.textMuted,
-                    fontSize: 12,
-                    height: 1.35,
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close, color: Colors.white),
                   ),
                 ),
               ],
@@ -1480,155 +613,63 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
     );
   }
 
-  Widget _issueQueueDetail(Map<String, dynamic>? issue) {
-    if (issue == null) {
-      return Container(
-        padding: const EdgeInsets.all(16),
+  Widget _filterChip(String value, String label) {
+    final selected = _filter == value;
+    return InkWell(
+      onTap: () => setState(() => _filter = value),
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: PosColors.canvas,
-          borderRadius: ToastRadiusTokens.xs,
-          border: Border.all(color: PosColors.border),
+          color: selected
+              ? PosColors.accent.withValues(alpha: 0.16)
+              : PosColors.panelStrong,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected ? PosColors.accent : PosColors.border,
+          ),
         ),
         child: Text(
-          'Queue Detail appears when you select an issue.',
-          style: GoogleFonts.notoSansKr(color: PosColors.textMuted),
+          label,
+          style: AppFonts.system(
+            color: selected ? PosColors.accent : PosColors.textMuted,
+            fontWeight: FontWeight.w700,
+          ),
         ),
-      );
-    }
-
-    final photoUrl = issue['evidence_photo_url']?.toString();
-    final severity = issue['severity']?.toString();
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: PosColors.canvas,
-        borderRadius: ToastRadiusTokens.xs,
-        border: Border.all(color: PosColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Queue Detail',
-                  style: GoogleFonts.notoSansKr(
-                    color: PosColors.text,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              _statusChip(
-                (severity ?? 'info').toUpperCase(),
-                _issueSeverityColor(severity),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            issue['criteria_text']?.toString() ?? '-',
-            style: GoogleFonts.notoSansKr(
-              color: PosColors.text,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _issueField('Store', issue['store_name']?.toString() ?? '-'),
-          _issueField('Domain', issue['qsc_domain']?.toString() ?? '-'),
-          _issueField('Check Date', issue['check_date']?.toString() ?? '-'),
-          _issueField('Result', issue['result']?.toString() ?? '-'),
-          _issueField(
-            'Follow-up Status',
-            issue['followup_status']?.toString() ?? '-',
-          ),
-          _issueField(
-            'Submitted At',
-            _formatIssueTimestamp(issue['submitted_at']) ?? 'Not submitted',
-          ),
-          _issueField(
-            'Created At',
-            _formatIssueTimestamp(issue['created_at']) ?? '-',
-          ),
-          _issueField('Score / Grade', _scoreGradeText(issue)),
-          _issueField(
-            'Evidence',
-            photoUrl != null && photoUrl.isNotEmpty
-                ? 'Photo available via tracked evidence URL'
-                : 'Photo not attached',
-          ),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _summaryChip(
-                issue['submission_status']?.toString() ?? 'pending',
-                _issueSubmissionColor(issue['submission_status']?.toString()),
-              ),
-              _summaryChip(
-                issue['photo_status']?.toString() ?? 'na',
-                _issuePhotoColor(issue['photo_status']?.toString()),
-              ),
-              _summaryChip(
-                issue['qsc_domain']?.toString() ?? 'quality',
-                PosColors.textMuted,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _issueField('Queue Signal', _queueRowNarrative(issue)),
-          _issueField(
-            'Review Boundary',
-            'Read-only queue surface only. Follow-up and review mutation stay outside this slice.',
-          ),
-          if (issue['note']?.toString().isNotEmpty == true) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Note',
-              style: GoogleFonts.notoSansKr(
-                color: PosColors.textMuted,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              issue['note'].toString(),
-              style: GoogleFonts.notoSansKr(color: PosColors.text),
-            ),
-          ],
-        ],
       ),
     );
   }
 
-  Widget _issueField(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 108,
-            child: Text(
-              label,
-              style: GoogleFonts.notoSansKr(
-                color: PosColors.textMuted,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: GoogleFonts.notoSansKr(color: PosColors.text),
-            ),
-          ),
-        ],
+  Widget _summaryChip(String label, Color color) {
+    return ToastStatusBadge(label: label, color: color);
+  }
+
+  Widget _statusChip(String label, Color color) {
+    return ToastStatusBadge(label: label, color: color);
+  }
+
+  Widget _fieldLabel(String value) {
+    return Text(
+      value,
+      style: AppFonts.system(
+        color: PosColors.textMuted,
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+      ),
+    );
+  }
+
+  Widget _imageLoadFallback({
+    double? width,
+    double? height,
+    Color color = PosColors.textMuted,
+  }) {
+    return Container(
+      width: width,
+      height: height,
+      color: PosColors.canvasAlt,
+      child: Center(
+        child: Icon(Icons.broken_image_outlined, color: color, size: 22),
       ),
     );
   }
@@ -1650,14 +691,14 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
   String _svStatusLabel(String status) {
     switch (status) {
       case 'reviewed':
-        return 'SV Reviewed';
+        return context.l10n.qscSvStatusReviewed;
       case 'rejected':
-        return 'SV Rejected';
+        return context.l10n.qscSvStatusRejected;
       case 'not_required':
-        return 'SV N/A';
+        return context.l10n.qscSvStatusNotRequired;
       case 'pending':
       default:
-        return 'SV Pending';
+        return context.l10n.qscSvStatusPending;
     }
   }
 
@@ -1675,526 +716,21 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
     }
   }
 
-  Color _resultColor(String? result) {
-    switch (result) {
-      case 'pass':
-        return PosColors.success;
-      case 'fail':
-        return PosColors.danger;
-      case 'na':
+  String _domainLabel(String? value) {
+    switch (value) {
+      case 'service':
+        return context.l10n.qscDomainService;
+      case 'cleanliness':
+        return context.l10n.qscDomainCleanliness;
+      case 'quality':
       default:
-        return PosColors.textMuted;
+        return context.l10n.qscDomainQuality;
     }
-  }
-
-  Color _gradeColor(String? grade) {
-    switch (grade) {
-      case 'good':
-        return PosColors.success;
-      case 'caution':
-        return PosColors.accent;
-      case 'risk':
-        return PosColors.danger;
-      default:
-        return PosColors.textMuted;
-    }
-  }
-
-  int _issueSeverityRank(String? severity) {
-    switch (severity) {
-      case 'critical':
-        return 0;
-      case 'high':
-        return 1;
-      case 'medium':
-        return 2;
-      case 'low':
-        return 3;
-      case 'info':
-      default:
-        return 4;
-    }
-  }
-
-  Color _issueSeverityColor(String? severity) {
-    switch (severity) {
-      case 'critical':
-        return PosColors.danger;
-      case 'high':
-        return Colors.deepOrangeAccent;
-      case 'medium':
-        return PosColors.accent;
-      case 'low':
-        return PosColors.info;
-      case 'info':
-      default:
-        return PosColors.textMuted;
-    }
-  }
-
-  String _scoreGradeText(Map<String, dynamic> issue) {
-    final score = issue['score']?.toString();
-    final grade = issue['grade']?.toString();
-    if ((score == null || score.isEmpty) && (grade == null || grade.isEmpty)) {
-      return '-';
-    }
-    if (score != null &&
-        score.isNotEmpty &&
-        grade != null &&
-        grade.isNotEmpty) {
-      return '$score / ${grade.toUpperCase()}';
-    }
-    return score?.isNotEmpty == true ? score! : grade!.toUpperCase();
-  }
-
-  String? _formatIssueTimestamp(dynamic value) {
-    final text = value?.toString();
-    if (text == null || text.isEmpty) return null;
-    final parsed = DateTime.tryParse(text);
-    if (parsed == null) return text;
-    return DateFormat('MM/dd HH:mm').format(parsed.toLocal());
   }
 
   int? _readInt(dynamic value) {
     if (value is int) return value;
     if (value is num) return value.toInt();
     return int.tryParse('${value ?? ''}');
-  }
-
-  Widget _statusChip(String label, Color color) {
-    return ToastStatusBadge(label: label, color: color);
-  }
-
-  Widget _summaryChip(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: ToastRadiusTokens.xs,
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Text(
-        label,
-        style: GoogleFonts.notoSansKr(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-
-  Widget _queueMetricCard({
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 150, maxWidth: 220),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: PosColors.canvas,
-        borderRadius: ToastRadiusTokens.xs,
-        border: Border.all(color: PosColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: GoogleFonts.notoSansKr(
-              color: PosColors.textMuted,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: GoogleFonts.notoSansKr(
-              color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              height: 1.35,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _queueSupportRow(String label, String body) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 108,
-          child: Text(
-            label,
-            style: GoogleFonts.notoSansKr(
-              color: PosColors.textMuted,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            body,
-            style: GoogleFonts.notoSansKr(
-              color: PosColors.text,
-              fontSize: 12,
-              height: 1.45,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  String _queueFocusCopy({
-    required int criticalIssueCount,
-    required int overdueIssueCount,
-    required int missingPhotoIssueCount,
-  }) {
-    if (criticalIssueCount > 0) {
-      return '$criticalIssueCount critical issues are leading the queue and should be reviewed before lower-severity cleanup.';
-    }
-    if (overdueIssueCount > 0) {
-      return '$overdueIssueCount overdue submissions are now the next review point inside the tracked issue queue.';
-    }
-    if (missingPhotoIssueCount > 0) {
-      return '$missingPhotoIssueCount items still show missing or partial photo evidence and should be clarified during review.';
-    }
-    return 'The current queue has no immediate critical, overdue, or photo-gap signal ahead of the others.';
-  }
-
-  String _queueHealthyCopy({
-    required int totalIssues,
-    required int criticalIssueCount,
-    required int overdueIssueCount,
-    required int missingPhotoIssueCount,
-  }) {
-    if (totalIssues == 0) {
-      return 'No tracked QSC issues are visible for the current filters, so the queue is currently clear.';
-    }
-    final stableCount =
-        totalIssues -
-        criticalIssueCount -
-        overdueIssueCount -
-        missingPhotoIssueCount;
-    if (stableCount > 0) {
-      return '$stableCount queue items are still visible, but they sit behind the current exception-first follow-up signals.';
-    }
-    return 'Every visible queue item currently belongs to an active exception category, so operators should stay in queue-first triage mode.';
-  }
-
-  String _queueFilterContext(int visibleCount) {
-    final severity = _issueSeverityFilter == 'all'
-        ? 'all severities'
-        : _issueSeverityFilter;
-    final submission = _issueSubmissionFilter == 'all'
-        ? 'all submissions'
-        : _issueSubmissionFilter;
-    return '$visibleCount issue rows match the current severity filter ($severity) and submission filter ($submission).';
-  }
-
-  String _queueRowNarrative(Map<String, dynamic> issue) {
-    final severity = issue['severity']?.toString() ?? 'info';
-    final photoStatus = issue['photo_status']?.toString() ?? 'na';
-    final submissionStatus =
-        issue['submission_status']?.toString() ?? 'pending';
-
-    if (severity == 'critical') {
-      return 'Critical issue in the tracked queue. Review this before lower-severity cleanup.';
-    }
-    if (submissionStatus == 'overdue') {
-      return 'Submission is overdue, so this issue should stay visible until the tracked review path catches up.';
-    }
-    if (photoStatus == 'missing' || photoStatus == 'partial') {
-      return 'Evidence is incomplete, so this issue stays in the queue as a photo-gap exception.';
-    }
-    return 'Tracked queue item is still visible, but it is not currently leading the exception-first review order.';
-  }
-
-  Color _issueSubmissionColor(String? status) {
-    switch (status) {
-      case 'overdue':
-        return PosColors.danger;
-      case 'submitted':
-        return PosColors.success;
-      case 'pending':
-      default:
-        return PosColors.accent;
-    }
-  }
-
-  Color _issuePhotoColor(String? status) {
-    switch (status) {
-      case 'missing':
-        return PosColors.danger;
-      case 'partial':
-        return PosColors.info;
-      case 'complete':
-        return PosColors.success;
-      case 'na':
-      default:
-        return PosColors.textMuted;
-    }
-  }
-
-  Future<void> _showImageDialog(String path) async {
-    await showDialog<void>(
-      context: context,
-      builder: (context) {
-        return Dialog(
-          backgroundColor: Colors.black,
-          insetPadding: const EdgeInsets.all(20),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: InteractiveViewer(
-                  minScale: 0.8,
-                  maxScale: 4,
-                  child: Image.network(path, fit: BoxFit.contain),
-                ),
-              ),
-              Positioned(
-                top: 8,
-                right: 8,
-                child: IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close, color: Colors.white),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _openPhotoGallery(Map<String, dynamic> check) async {
-    final checkId = check['id']?.toString();
-    if (checkId == null || checkId.isEmpty) {
-      final fallback = check['evidence_photo_url']?.toString();
-      if (fallback != null && fallback.isNotEmpty) {
-        await _showImageDialog(fallback);
-      }
-      return;
-    }
-
-    final photosFuture = qcService.fetchCheckPhotos(
-      checkId: checkId,
-      fallbackPhotoUrl: check['evidence_photo_url']?.toString(),
-    );
-
-    await showDialog<void>(
-      context: context,
-      builder: (context) {
-        final pageController = PageController();
-        var currentIndex = 0;
-
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return Dialog(
-              backgroundColor: Colors.black,
-              insetPadding: const EdgeInsets.all(16),
-              child: SizedBox(
-                width: double.maxFinite,
-                height: MediaQuery.of(context).size.height * 0.78,
-                child: FutureBuilder<List<Map<String, dynamic>>>(
-                  future: photosFuture,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState != ConnectionState.done) {
-                      return const Center(
-                        child: CircularProgressIndicator(
-                          color: PosColors.accent,
-                        ),
-                      );
-                    }
-
-                    if (snapshot.hasError) {
-                      return _galleryScaffold(
-                        context: context,
-                        child: Center(
-                          child: Text(
-                            'Failed to load photos.',
-                            style: GoogleFonts.notoSansKr(color: Colors.white),
-                          ),
-                        ),
-                      );
-                    }
-
-                    final photos = snapshot.data ?? const [];
-                    if (photos.isEmpty) {
-                      return _galleryScaffold(
-                        context: context,
-                        child: Center(
-                          child: Text(
-                            'No photos available.',
-                            style: GoogleFonts.notoSansKr(color: Colors.white),
-                          ),
-                        ),
-                      );
-                    }
-
-                    final activePhoto = photos[currentIndex];
-
-                    return _galleryScaffold(
-                      context: context,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    'Photo ${currentIndex + 1} / ${photos.length}',
-                                    style: GoogleFonts.notoSansKr(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                                if ((activePhoto['photo_role']?.toString() ??
-                                        '')
-                                    .isNotEmpty)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.14,
-                                      ),
-                                      borderRadius: BorderRadius.circular(999),
-                                    ),
-                                    child: Text(
-                                      activePhoto['photo_role']
-                                          .toString()
-                                          .toUpperCase(),
-                                      style: GoogleFonts.notoSansKr(
-                                        color: Colors.white,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          Expanded(
-                            child: PageView.builder(
-                              controller: pageController,
-                              itemCount: photos.length,
-                              onPageChanged: (index) {
-                                setDialogState(() => currentIndex = index);
-                              },
-                              itemBuilder: (context, index) {
-                                final url =
-                                    photos[index]['photo_url']?.toString() ??
-                                    '';
-                                return InteractiveViewer(
-                                  minScale: 0.8,
-                                  maxScale: 4,
-                                  child: Image.network(
-                                    url,
-                                    fit: BoxFit.contain,
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          if ((activePhoto['caption']?.toString() ?? '')
-                              .isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                              child: Text(
-                                activePhoto['caption'].toString(),
-                                style: GoogleFonts.notoSansKr(
-                                  color: Colors.white70,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          if (photos.length > 1)
-                            SizedBox(
-                              height: 88,
-                              child: ListView.separated(
-                                padding: const EdgeInsets.all(12),
-                                scrollDirection: Axis.horizontal,
-                                itemCount: photos.length,
-                                separatorBuilder: (_, __) =>
-                                    const SizedBox(width: 8),
-                                itemBuilder: (context, index) {
-                                  final url =
-                                      photos[index]['photo_url']?.toString() ??
-                                      '';
-                                  final selected = index == currentIndex;
-                                  return GestureDetector(
-                                    onTap: () {
-                                      pageController.jumpToPage(index);
-                                      setDialogState(
-                                        () => currentIndex = index,
-                                      );
-                                    },
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        border: Border.all(
-                                          color: selected
-                                              ? PosColors.accent
-                                              : Colors.white24,
-                                          width: selected ? 2 : 1,
-                                        ),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(7),
-                                        child: Image.network(
-                                          url,
-                                          width: 64,
-                                          height: 64,
-                                          fit: BoxFit.cover,
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _galleryScaffold({
-    required BuildContext context,
-    required Widget child,
-  }) {
-    return Stack(
-      children: [
-        Positioned.fill(child: child),
-        Positioned(
-          top: 8,
-          right: 8,
-          child: IconButton(
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.close, color: Colors.white),
-          ),
-        ),
-      ],
-    );
   }
 }

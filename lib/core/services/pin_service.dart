@@ -23,6 +23,18 @@ class PinService {
     }
   }
 
+  Future<bool> hasDiscountManagerPin(String storeId) async {
+    try {
+      final result = await supabase.rpc(
+        'has_discount_manager_pin',
+        params: {'p_store_id': storeId},
+      );
+      return result == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<bool> verifyPin(String storeId, String enteredPin) async {
     final stored = await fetchPinHash(storeId);
     if (stored == null) return true;
@@ -38,6 +50,20 @@ class PinService {
 
   Future<void> clearPin(String storeId) async {
     await supabase.rpc('clear_payroll_pin', params: {'p_store_id': storeId});
+  }
+
+  Future<void> setDiscountManagerPin(String storeId, String pin) async {
+    await supabase.rpc(
+      'set_discount_manager_pin',
+      params: {'p_store_id': storeId, 'p_pin': pin},
+    );
+  }
+
+  Future<void> clearDiscountManagerPin(String storeId) async {
+    await supabase.rpc(
+      'clear_discount_manager_pin',
+      params: {'p_store_id': storeId},
+    );
   }
 }
 

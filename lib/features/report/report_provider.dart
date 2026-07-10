@@ -53,6 +53,7 @@ class ReportSummary {
     required this.totalRevenue,
     required this.totalOrders,
     required this.completedOrders,
+    required this.openOrders,
     required this.dailyBreakdown,
     this.cashTotal = 0,
     this.cardTotal = 0,
@@ -74,6 +75,7 @@ class ReportSummary {
   final double totalRevenue;
   final int totalOrders;
   final int completedOrders;
+  final int openOrders;
   final List<DailyRevenue> dailyBreakdown;
   final double cashTotal;
   final double cardTotal;
@@ -229,6 +231,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
           .order('created_at', ascending: false);
 
       double dineInRevenue = 0;
+      double deliveryRevenue = 0;
       double cashTotal = 0;
       double cardTotal = 0;
       double payTotal = 0;
@@ -307,13 +310,13 @@ class ReportNotifier extends StateNotifier<ReportState> {
         final normalized = channel.toLowerCase();
         if (normalized == 'delivery') {
           accumulator.delivery += amount;
+          deliveryRevenue += amount;
         } else {
           accumulator.dineIn += amount;
           dineInRevenue += amount;
         }
       }
 
-      double deliveryRevenue = 0;
       for (final row in externalSalesResponse) {
         final external = Map<String, dynamic>.from(row);
         final amount = _toDouble(external['net_amount']);
@@ -351,6 +354,10 @@ class ReportNotifier extends StateNotifier<ReportState> {
             (order) => order['status']?.toString().toLowerCase() == 'cancelled',
           )
           .length;
+      final openOrders = ordersResponse.where((order) {
+        final status = order['status']?.toString().toLowerCase();
+        return status != 'completed' && status != 'cancelled';
+      }).length;
       final cancelledItems = cancelledItemsResponse.length;
       final failedEinvoiceJobsCount = einvoiceJobsResponse.where((row) {
         final job = Map<String, dynamic>.from(row);
@@ -440,6 +447,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
         totalRevenue: dineInRevenue + deliveryRevenue,
         totalOrders: totalOrders,
         completedOrders: completedOrders,
+        openOrders: openOrders,
         dailyBreakdown: breakdown,
         cashTotal: cashTotal,
         cardTotal: cardTotal,

@@ -17,7 +17,7 @@
 - `admin`은 새로운 권한 모델의 독립 역할이 아니라 `store_admin`의 레거시 호환 별칭으로 취급한다.
 - 신규 권한 부여, 신규 UI 분기, 신규 서버 검증은 기본적으로 `store_admin`/`brand_admin`을 기준으로 작성한다.
 - `admin` 문자열은 기존 사용자/기존 RPC와의 호환을 위해 과도기적으로만 유지한다.
-- 다만 현재 운영 호환상 신규 staff 생성에서 `admin` 생성 자체는 허용한다.
+- 기존 `admin` 행은 운영 호환을 위해 계속 유효하지만, 신규 staff 생성에서는 `admin`을 거부하고 `store_admin`/`brand_admin`을 사용한다.
 
 현재 shipped 해석:
 - Flutter는 claims 기반 accessible store 목록과 active store 선택을 사용한다.
@@ -108,6 +108,8 @@
 - `admin_update_staff_account`
 - `complete_onboarding_account_setup`
 - `process_payment`
+- `mark_order_item_service`
+- `unmark_order_item_service`
 - `get_cashier_today_summary`
 - `create_order`
 - `add_items_to_order`

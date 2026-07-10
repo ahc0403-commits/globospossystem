@@ -68,6 +68,7 @@ class _LanguageMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<AppLanguage>(
+      key: const Key('language_switcher_menu'),
       tooltip: context.l10n.language,
       onSelected: onSelected,
       color: PosColors.panel,

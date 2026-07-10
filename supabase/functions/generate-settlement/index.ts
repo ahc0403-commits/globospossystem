@@ -1,6 +1,17 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+function isMerchantCollectedOffline(payload: unknown): boolean {
+  if (payload == null || typeof payload !== "object") return false;
+
+  const record = payload as Record<string, unknown>;
+  if (record.settlement_collection_mode === "merchant_collected_offline") {
+    return true;
+  }
+
+  return record.offline_collection_acknowledgment != null;
+}
+
 serve(async (req: Request) => {
   // 인증 필수: CRON_SECRET이 설정되어야 함
   const authHeader = req.headers.get("Authorization");
@@ -76,6 +87,16 @@ serve(async (req: Request) => {
         (sum: number, s: any) => sum + Number(s.gross_amount),
         0,
       );
+      const merchantOfflineCollection = sales.reduce(
+        (sum: number, s: any) =>
+          sum +
+          (isMerchantCollectedOffline(s.payload) ? Number(s.gross_amount) : 0),
+        0,
+      );
+      const platformPayableGross = Math.max(
+        0,
+        grossTotal - merchantOfflineCollection,
+      );
 
       const { data: existingSettlement, error: existingError } = await supabase
         .from("delivery_settlements")
@@ -105,8 +126,8 @@ serve(async (req: Request) => {
           period_end: endIso.split("T")[0],
           period_label: periodLabel,
           gross_total: grossTotal,
-          total_deductions: 0,
-          net_settlement: grossTotal,
+          total_deductions: merchantOfflineCollection,
+          net_settlement: platformPayableGross,
           status: "calculated",
         })
         .select()
@@ -116,24 +137,35 @@ serve(async (req: Request) => {
 
       // 차감 항목 생성
       const items: any[] = [];
-      const platformFee = Math.round(grossTotal * 0.015);
+      if (merchantOfflineCollection > 0) {
+        items.push({
+          settlement_id: settlement.id,
+          item_type: "merchant_offline_collection",
+          amount: merchantOfflineCollection,
+          description: "점주 직접 현금/계좌이체 수금분 정산 제외",
+          reference_rate: null,
+          reference_base: grossTotal,
+        });
+      }
+
+      const platformFee = Math.round(platformPayableGross * 0.015);
       items.push({
         settlement_id: settlement.id,
         item_type: "platform_commission",
         amount: platformFee,
         description: "플랫폼 수수료 1.5%",
         reference_rate: 0.015,
-        reference_base: grossTotal,
+        reference_base: platformPayableGross,
       });
 
-      const paymentFee = Math.round(grossTotal * 0.015);
+      const paymentFee = Math.round(platformPayableGross * 0.015);
       items.push({
         settlement_id: settlement.id,
         item_type: "payment_fee",
         amount: paymentFee,
         description: "결제 수수료 (평균 1.5%)",
         reference_rate: 0.015,
-        reference_base: grossTotal,
+        reference_base: platformPayableGross,
       });
 
       if (items.length > 0) {
@@ -163,6 +195,8 @@ serve(async (req: Request) => {
         rid,
         periodLabel,
         grossTotal,
+        merchantOfflineCollection,
+        platformPayableGross,
         totalDeductions,
         netSettlement: grossTotal - totalDeductions,
         orderCount: sales.length,

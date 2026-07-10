@@ -89,7 +89,8 @@ serve(async (req) => {
     // 2. Parse request body
     const body = await req.json()
     const { email, password, full_name, role } = body
-    const targetStoreId = body.store_id ?? body.restaurant_id
+    const requestedStoreId = body.store_id ?? body.restaurant_id
+    const targetStoreId = requestedStoreId?.toString()
 
     if (!email || !password || !full_name || !role || !targetStoreId) {
       return new Response(
@@ -108,7 +109,6 @@ serve(async (req) => {
       'waiter',
       'kitchen',
       'cashier',
-      'admin',
       'store_admin',
       'brand_admin',
       'photo_objet_master',
@@ -315,6 +315,13 @@ serve(async (req) => {
       })
     }
 
+    const rollbackProvisionedStaff = async () => {
+      await serviceClient.from('user_brand_access').delete().eq('user_id', newUser.id)
+      await serviceClient.from('user_store_access').delete().eq('user_id', newUser.id)
+      await serviceClient.from('users').delete().eq('id', newUser.id)
+      await serviceClient.auth.admin.deleteUser(newAuthUser.user.id)
+    }
+
     if (role === 'brand_admin' || role === 'photo_objet_master') {
       const { error: brandAccessError } = await serviceClient
         .from('user_brand_access')
@@ -346,6 +353,11 @@ serve(async (req) => {
       )
       if (syncError) {
         console.error('sync_user_store_access error:', syncError)
+        await rollbackProvisionedStaff()
+        return new Response(JSON.stringify({ error: 'STORE_ACCESS_SYNC_FAILED' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
       }
     }
 
@@ -354,9 +366,45 @@ serve(async (req) => {
     })
     if (refreshClaimsError) {
       console.error('refresh_user_claims error:', refreshClaimsError)
+      await rollbackProvisionedStaff()
+      return new Response(JSON.stringify({ error: 'CLAIMS_REFRESH_FAILED' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
-    return new Response(JSON.stringify({ success: true, user: newUser }), {
+    const { data: refreshedAuthUser, error: refreshedAuthUserError } =
+      await serviceClient.auth.admin.getUserById(newAuthUser.user.id)
+    const rawAccessibleStoreIds =
+      refreshedAuthUser?.user?.app_metadata?.accessible_store_ids
+    const refreshedAccessibleStoreIds = Array.isArray(rawAccessibleStoreIds)
+      ? rawAccessibleStoreIds.map((storeId) => storeId.toString())
+      : []
+
+    if (
+      refreshedAuthUserError ||
+      refreshedAccessibleStoreIds.length === 0 ||
+      !refreshedAccessibleStoreIds.includes(targetStoreId)
+    ) {
+      console.error('refresh_user_claims verification failed:', {
+        refreshedAuthUserError,
+        accessibleStoreIds: refreshedAccessibleStoreIds,
+        targetStoreId,
+      })
+      await rollbackProvisionedStaff()
+      return new Response(JSON.stringify({ error: 'CLAIMS_REFRESH_FAILED' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      user: newUser,
+      auth_user_id: newAuthUser.user.id,
+      role,
+      accessible_store_ids: refreshedAccessibleStoreIds,
+    }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

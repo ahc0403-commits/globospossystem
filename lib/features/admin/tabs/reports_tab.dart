@@ -1,13 +1,16 @@
+// ignore_for_file: unused_element
+
 import 'dart:typed_data';
 
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
 import '../../../core/services/daily_closing_service.dart';
+import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
 import '../../../main.dart';
 import '../../auth/auth_provider.dart';
@@ -23,6 +26,10 @@ class ReportsTab extends ConsumerStatefulWidget {
   ConsumerState<ReportsTab> createState() => _ReportsTabState();
 }
 
+String _formatVnd(NumberFormat currency, num amount) {
+  return '${currency.format(amount)} VND';
+}
+
 class _ReportsTabState extends ConsumerState<ReportsTab> {
   DateTime? _pendingStart;
   DateTime? _pendingEnd;
@@ -30,11 +37,14 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final storeId = ref.watch(authProvider).storeId;
     final reportState = ref.watch(reportProvider);
     final reportNotifier = ref.read(reportProvider.notifier);
     final currency = NumberFormat('#,###', 'vi_VN');
     final dateFormat = DateFormat('dd/MM/yyyy');
+    final summary = reportState.summary;
+    final hasOperationalData = summary != null && summary.totalOrders > 0;
 
     if (_pendingStart == null || _pendingEnd == null) {
       _pendingStart ??= reportState.startDate;
@@ -46,243 +56,677 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       Future.microtask(() => reportNotifier.loadReport(storeId));
     }
 
+    final compactHeader = _buildReportsCommandHeader(
+      storeId: storeId,
+      reportState: reportState,
+      reportNotifier: reportNotifier,
+      summary: summary,
+      currency: currency,
+      dateFormat: dateFormat,
+    );
+
+    void applyQuickRange(DateTime start, DateTime end) {
+      if (storeId == null) return;
+      setState(() {
+        _pendingStart = start;
+        _pendingEnd = end;
+      });
+      reportNotifier.setDateRange(start, end, storeId);
+    }
+
+    Widget quickRangesCard() {
+      return PosActionCard(
+        title: l10n.reportsQuickRanges,
+        subtitle: l10n.reportsQuickRangesSubtitle,
+        action: storeId == null
+            ? null
+            : PosSecondaryButton(
+                label: l10n.refresh,
+                icon: Icons.refresh_rounded,
+                onPressed: () => reportNotifier.loadReport(storeId),
+              ),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _quickRangeChip(
+              l10n.today,
+              onTap: storeId == null
+                  ? null
+                  : () {
+                      final now = DateTime.now();
+                      applyQuickRange(
+                        DateTime(now.year, now.month, now.day),
+                        now,
+                      );
+                    },
+            ),
+            _quickRangeChip(
+              l10n.thisWeek,
+              onTap: storeId == null
+                  ? null
+                  : () {
+                      final now = DateTime.now();
+                      final start = DateTime(
+                        now.year,
+                        now.month,
+                        now.day,
+                      ).subtract(Duration(days: now.weekday - 1));
+                      applyQuickRange(start, now);
+                    },
+            ),
+            _quickRangeChip(
+              l10n.thisMonth,
+              onTap: storeId == null
+                  ? null
+                  : () {
+                      final now = DateTime.now();
+                      applyQuickRange(DateTime(now.year, now.month, 1), now);
+                    },
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget compactReportBody() {
+      if (reportState.isLoading) {
+        return SizedBox(
+          height: 320,
+          child: ToastOperationalLoadingState(
+            label: PosLoadingCopy.loadingReport(context.l10n),
+          ),
+        );
+      }
+
+      if (reportState.error != null) {
+        return ToastWorkSurface(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                reportState.error!,
+                style: AppFonts.system(
+                  color: AppColors.statusCancelled,
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: storeId == null
+                    ? null
+                    : () => reportNotifier.loadReport(storeId),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.amber500,
+                  foregroundColor: AppColors.surface0,
+                ),
+                child: Text(l10n.retry),
+              ),
+            ],
+          ),
+        );
+      }
+
+      if (!hasOperationalData) {
+        return SizedBox(
+          height: 180,
+          child: PosActionCard(
+            title: l10n.reportsNoDataTitle,
+            subtitle: l10n.reportsNoDataSubtitle,
+            action: storeId == null
+                ? null
+                : PosPrimaryButton(
+                    label: l10n.reportsReloadToday,
+                    icon: Icons.play_arrow_rounded,
+                    onPressed: () {
+                      final now = DateTime.now();
+                      applyQuickRange(
+                        DateTime(now.year, now.month, now.day),
+                        now,
+                      );
+                    },
+                  ),
+            child: Text(
+              l10n.reportsNoDataBody,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: PosColors.textSecondary,
+                height: 1.45,
+              ),
+            ),
+          ),
+        );
+      }
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PosDataPanel(
+            title: l10n.reportsHourlyOrderFocus,
+            subtitle: l10n.reportsHourlyOrderFocusSubtitle,
+            child: _ReportsHourlyOverview(summary: summary, currency: currency),
+          ),
+          const SizedBox(height: 12),
+          PosActionCard(
+            title: l10n.reportsImmediateSignals,
+            subtitle: l10n.reportsImmediateSignalsSubtitle,
+            badge: ToastStatusBadge(
+              label:
+                  summary.failedEinvoiceJobsCount > 0 ||
+                      summary.missingProofPhotosCount > 0
+                  ? l10n.reportsNeedsReviewShort
+                  : l10n.reportsHealthyShort,
+              color:
+                  summary.failedEinvoiceJobsCount > 0 ||
+                      summary.missingProofPhotosCount > 0
+                  ? PosColors.warning
+                  : PosColors.success,
+              compact: true,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _ReportsOperationalSignalsDetail(summary: summary),
+                const SizedBox(height: 12),
+                _ReportsBreakdownPanel(
+                  summary: summary,
+                  currency: currency,
+                  scrollable: false,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          quickRangesCard(),
+          const SizedBox(height: 12),
+          PosDataPanel(
+            title: l10n.reportsDailySalesTitle,
+            subtitle: l10n.reportsDailySalesSubtitle,
+            child: _DailyTable(summary: summary, currency: currency),
+          ),
+        ],
+      );
+    }
+
+    if (MediaQuery.sizeOf(context).width < 1080) {
+      return Scaffold(
+        key: const Key('reports_root'),
+        backgroundColor: AppColors.surface0,
+        body: ToastResponsiveScrollBody(
+          key: const Key('reports_compact_scroll'),
+          maxWidth: 1460,
+          padding: const EdgeInsets.all(16),
+          children: [
+            compactHeader,
+            if (summary != null) ...[
+              const SizedBox(height: 12),
+              _ReportsInsightRow(summary: summary),
+            ],
+            const SizedBox(height: 12),
+            compactReportBody(),
+            if (storeId != null) ...[
+              const SizedBox(height: 12),
+              _DailyClosingSection(storeId: storeId),
+            ],
+          ],
+        ),
+      );
+    }
+
     return Scaffold(
       key: const Key('reports_root'),
       backgroundColor: AppColors.surface0,
-      body: reportState.isLoading
-          ? const ToastOperationalLoadingState(
-              label: PosLoadingCopy.loadingReport,
-            )
-          : reportState.error != null
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    reportState.error!,
-                    style: GoogleFonts.notoSansKr(
-                      color: AppColors.statusCancelled,
-                      fontSize: 14,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 12),
-                  ElevatedButton(
-                    onPressed: storeId == null
-                        ? null
-                        : () => reportNotifier.loadReport(storeId),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.amber500,
-                      foregroundColor: AppColors.surface0,
-                    ),
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
-            )
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      OutlinedButton(
-                        onPressed: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: _pendingStart ?? reportState.startDate,
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime.now(),
-                          );
-                          if (picked != null) {
-                            setState(() => _pendingStart = picked);
-                          }
-                        },
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: AppColors.surface2),
-                        ),
-                        child: Text(
-                          'From ${dateFormat.format(_pendingStart ?? reportState.startDate)}',
-                          style: GoogleFonts.notoSansKr(
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                      OutlinedButton(
-                        onPressed: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: _pendingEnd ?? reportState.endDate,
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime.now(),
-                          );
-                          if (picked != null) {
-                            setState(() => _pendingEnd = picked);
-                          }
-                        },
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: AppColors.surface2),
-                        ),
-                        child: Text(
-                          'To ${dateFormat.format(_pendingEnd ?? reportState.endDate)}',
-                          style: GoogleFonts.notoSansKr(
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                      FilledButton(
-                        onPressed: storeId == null
-                            ? null
-                            : () {
-                                final start =
-                                    _pendingStart ?? reportState.startDate;
-                                final end = _pendingEnd ?? reportState.endDate;
-                                reportNotifier.setDateRange(
-                                  start,
-                                  end,
-                                  storeId,
-                                );
-                              },
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.amber500,
-                          foregroundColor: AppColors.surface0,
-                        ),
-                        child: const Text('Apply'),
-                      ),
-                      if (reportState.summary != null)
-                        OutlinedButton.icon(
-                          onPressed: () => _exportReport(reportNotifier),
-                          icon: const Icon(Icons.download, size: 16),
-                          label: const Text('Excel'),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: AppColors.surface2),
-                            foregroundColor: AppColors.textPrimary,
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _quickRangeChip(
-                        'Today',
-                        onTap: storeId == null
-                            ? null
-                            : () {
-                                final now = DateTime.now();
-                                final start = DateTime(
-                                  now.year,
-                                  now.month,
-                                  now.day,
-                                );
-                                setState(() {
-                                  _pendingStart = start;
-                                  _pendingEnd = now;
-                                });
-                                reportNotifier.setDateRange(
-                                  start,
-                                  now,
-                                  storeId,
-                                );
-                              },
-                      ),
-                      _quickRangeChip(
-                        'This Week',
-                        onTap: storeId == null
-                            ? null
-                            : () {
-                                final now = DateTime.now();
-                                final weekdayOffset = now.weekday - 1;
-                                final start = DateTime(
-                                  now.year,
-                                  now.month,
-                                  now.day,
-                                ).subtract(Duration(days: weekdayOffset));
-                                setState(() {
-                                  _pendingStart = start;
-                                  _pendingEnd = now;
-                                });
-                                reportNotifier.setDateRange(
-                                  start,
-                                  now,
-                                  storeId,
-                                );
-                              },
-                      ),
-                      _quickRangeChip(
-                        'This Month',
-                        onTap: storeId == null
-                            ? null
-                            : () {
-                                final now = DateTime.now();
-                                final start = DateTime(now.year, now.month, 1);
-                                setState(() {
-                                  _pendingStart = start;
-                                  _pendingEnd = now;
-                                });
-                                reportNotifier.setDateRange(
-                                  start,
-                                  now,
-                                  storeId,
-                                );
-                              },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  _SummaryGrid(
-                    summary: reportState.summary,
-                    currency: currency,
-                  ),
-                  if (reportState.summary != null) ...[
-                    const SizedBox(height: 8),
-                    _OrderCountRow(summary: reportState.summary!),
-                    const SizedBox(height: 8),
-                    _PaymentMethodRow(
-                      summary: reportState.summary!,
-                      currency: currency,
-                    ),
-                    const SizedBox(height: 8),
-                    _OperationalAttentionSection(summary: reportState.summary!),
-                  ],
-                  const SizedBox(height: 16),
-                  if (storeId != null) _TodaySummarySection(storeId: storeId),
-                  if (storeId != null) ...[
-                    const SizedBox(height: 16),
-                    _DailyClosingSection(storeId: storeId),
-                  ],
-                  const SizedBox(height: 16),
-                  _DailyTable(summary: reportState.summary, currency: currency),
-                  if (reportState.summary != null &&
-                      reportState.summary!.hourlyBreakdown.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    _HourlyRevenueSection(
-                      summary: reportState.summary!,
-                      currency: currency,
-                    ),
-                  ],
-                  if (storeId != null) ...[
-                    const SizedBox(height: 24),
-                    Text(
-                      'Recent Operations',
-                      style: GoogleFonts.notoSansKr(
-                        color: AppColors.textPrimary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    _ReportsAuditTraceSection(storeId: storeId),
-                  ],
-                ],
-              ),
+      body: ToastResponsiveBody(
+        maxWidth: 1460,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildReportsCommandHeader(
+              storeId: storeId,
+              reportState: reportState,
+              reportNotifier: reportNotifier,
+              summary: summary,
+              currency: currency,
+              dateFormat: dateFormat,
             ),
+            const SizedBox(height: 12),
+            if (summary != null) ...[
+              _ReportsInsightRow(summary: summary),
+              const SizedBox(height: 12),
+            ],
+            if (storeId != null) ...[
+              _DailyClosingSection(storeId: storeId),
+              const SizedBox(height: 12),
+            ],
+            Expanded(
+              child: reportState.isLoading
+                  ? ToastOperationalLoadingState(
+                      label: PosLoadingCopy.loadingReport(context.l10n),
+                    )
+                  : reportState.error != null
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            reportState.error!,
+                            style: AppFonts.system(
+                              color: AppColors.statusCancelled,
+                              fontSize: 14,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                          ElevatedButton(
+                            onPressed: storeId == null
+                                ? null
+                                : () => reportNotifier.loadReport(storeId),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.amber500,
+                              foregroundColor: AppColors.surface0,
+                            ),
+                            child: Text(l10n.retry),
+                          ),
+                        ],
+                      ),
+                    )
+                  : (hasOperationalData
+                        ? LayoutBuilder(
+                            builder: (context, reportConstraints) {
+                              const compactReportHeight =
+                                  520.0 + 12.0 + 520.0 + 12.0 + 272.0;
+                              final content = Column(
+                                children: [
+                                  Expanded(
+                                    child: PosSplitContent(
+                                      primary: PosDataPanel(
+                                        title: l10n.reportsHourlyOrderFocus,
+                                        subtitle: l10n
+                                            .reportsHourlyOrderFocusSubtitle,
+                                        child: _ReportsHourlyOverview(
+                                          summary: summary,
+                                          currency: currency,
+                                        ),
+                                      ),
+                                      secondary: Column(
+                                        children: [
+                                          Expanded(
+                                            child: PosActionCard(
+                                              title:
+                                                  l10n.reportsImmediateSignals,
+                                              subtitle: l10n
+                                                  .reportsImmediateSignalsSubtitle,
+                                              badge: ToastStatusBadge(
+                                                label:
+                                                    summary.failedEinvoiceJobsCount >
+                                                            0 ||
+                                                        summary.missingProofPhotosCount >
+                                                            0
+                                                    ? l10n.reportsNeedsReviewShort
+                                                    : l10n.reportsHealthyShort,
+                                                color:
+                                                    summary.failedEinvoiceJobsCount >
+                                                            0 ||
+                                                        summary.missingProofPhotosCount >
+                                                            0
+                                                    ? PosColors.warning
+                                                    : PosColors.success,
+                                                compact: true,
+                                              ),
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.stretch,
+                                                children: [
+                                                  _ReportsOperationalSignalsDetail(
+                                                    summary: summary,
+                                                  ),
+                                                  const SizedBox(height: 12),
+                                                  Expanded(
+                                                    child:
+                                                        _ReportsBreakdownPanel(
+                                                          summary: summary,
+                                                          currency: currency,
+                                                        ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          PosActionCard(
+                                            title: l10n.reportsQuickRanges,
+                                            subtitle:
+                                                l10n.reportsQuickRangesSubtitle,
+                                            action: storeId == null
+                                                ? null
+                                                : PosSecondaryButton(
+                                                    label: l10n.refresh,
+                                                    icon: Icons.refresh_rounded,
+                                                    onPressed: () {
+                                                      reportNotifier.loadReport(
+                                                        storeId,
+                                                      );
+                                                    },
+                                                  ),
+                                            child: Wrap(
+                                              spacing: 8,
+                                              runSpacing: 8,
+                                              children: [
+                                                _quickRangeChip(
+                                                  l10n.today,
+                                                  onTap: storeId == null
+                                                      ? null
+                                                      : () {
+                                                          final now =
+                                                              DateTime.now();
+                                                          final start =
+                                                              DateTime(
+                                                                now.year,
+                                                                now.month,
+                                                                now.day,
+                                                              );
+                                                          setState(() {
+                                                            _pendingStart =
+                                                                start;
+                                                            _pendingEnd = now;
+                                                          });
+                                                          reportNotifier
+                                                              .setDateRange(
+                                                                start,
+                                                                now,
+                                                                storeId,
+                                                              );
+                                                        },
+                                                ),
+                                                _quickRangeChip(
+                                                  l10n.thisWeek,
+                                                  onTap: storeId == null
+                                                      ? null
+                                                      : () {
+                                                          final now =
+                                                              DateTime.now();
+                                                          final weekdayOffset =
+                                                              now.weekday - 1;
+                                                          final start =
+                                                              DateTime(
+                                                                now.year,
+                                                                now.month,
+                                                                now.day,
+                                                              ).subtract(
+                                                                Duration(
+                                                                  days:
+                                                                      weekdayOffset,
+                                                                ),
+                                                              );
+                                                          setState(() {
+                                                            _pendingStart =
+                                                                start;
+                                                            _pendingEnd = now;
+                                                          });
+                                                          reportNotifier
+                                                              .setDateRange(
+                                                                start,
+                                                                now,
+                                                                storeId,
+                                                              );
+                                                        },
+                                                ),
+                                                _quickRangeChip(
+                                                  l10n.thisMonth,
+                                                  onTap: storeId == null
+                                                      ? null
+                                                      : () {
+                                                          final now =
+                                                              DateTime.now();
+                                                          final start =
+                                                              DateTime(
+                                                                now.year,
+                                                                now.month,
+                                                                1,
+                                                              );
+                                                          setState(() {
+                                                            _pendingStart =
+                                                                start;
+                                                            _pendingEnd = now;
+                                                          });
+                                                          reportNotifier
+                                                              .setDateRange(
+                                                                start,
+                                                                now,
+                                                                storeId,
+                                                              );
+                                                        },
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      spacing: 12,
+                                      compactSecondaryHeight: 520,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  SizedBox(
+                                    height: 272,
+                                    child: PosDataPanel(
+                                      title:
+                                          context.l10n.reportsDailySalesTitle,
+                                      subtitle: context
+                                          .l10n
+                                          .reportsDailySalesSubtitle,
+                                      child: _DailyTable(
+                                        summary: summary,
+                                        currency: currency,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+
+                              if (reportConstraints.maxWidth < 1080 ||
+                                  reportConstraints.maxHeight <
+                                      compactReportHeight) {
+                                return ListView(
+                                  key: const Key('reports_compact_scroll'),
+                                  keyboardDismissBehavior:
+                                      ScrollViewKeyboardDismissBehavior.onDrag,
+                                  children: [
+                                    SizedBox(
+                                      height: compactReportHeight,
+                                      child: content,
+                                    ),
+                                  ],
+                                );
+                              }
+
+                              return content;
+                            },
+                          )
+                        : _ReportsEmptyWorkspace(
+                            onReloadToday: storeId == null
+                                ? null
+                                : () {
+                                    final now = DateTime.now();
+                                    final start = DateTime(
+                                      now.year,
+                                      now.month,
+                                      now.day,
+                                    );
+                                    setState(() {
+                                      _pendingStart = start;
+                                      _pendingEnd = now;
+                                    });
+                                    reportNotifier.setDateRange(
+                                      start,
+                                      now,
+                                      storeId,
+                                    );
+                                  },
+                          )),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReportsCommandHeader({
+    required String? storeId,
+    required ReportState reportState,
+    required ReportNotifier reportNotifier,
+    required ReportSummary? summary,
+    required NumberFormat currency,
+    required DateFormat dateFormat,
+  }) {
+    final l10n = context.l10n;
+    final totalRevenue = summary == null
+        ? '—'
+        : _formatVnd(currency, summary.totalRevenue);
+    final averageOrder = summary == null || summary.totalOrders == 0
+        ? '—'
+        : _formatVnd(currency, summary.totalRevenue / summary.totalOrders);
+    final cancellationTone = summary == null || summary.cancelledOrders == 0
+        ? PosColors.textSecondary
+        : PosColors.warning;
+    final hasException =
+        (summary?.failedEinvoiceJobsCount ?? 0) > 0 ||
+        (summary?.missingProofPhotosCount ?? 0) > 0 ||
+        (summary?.cancelledOrders ?? 0) > 0;
+
+    return ToastWorkSurface(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+      backgroundColor: AppColors.surface1,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.reports,
+                      style: Theme.of(context).textTheme.headlineLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      l10n.reportsScreenSubtitle,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.textSecondary,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ToastStatusBadge(
+                label: hasException
+                    ? l10n.reportsNeedsReviewShort
+                    : l10n.reportsHealthyShort,
+                color: hasException ? PosColors.warning : PosColors.success,
+                compact: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          KeyedSubtree(
+            key: const Key('reports_order_accuracy_metrics'),
+            child: ToastMetricStrip(
+              metrics: [
+                ToastMetric(label: l10n.reportsTotalSales, value: totalRevenue),
+                ToastMetric(
+                  label: l10n.reportsTotalOrders,
+                  value: summary == null ? '—' : '${summary.totalOrders}',
+                  tone: PosColors.info,
+                ),
+                ToastMetric(
+                  label: l10n.pending,
+                  value: summary == null ? '—' : '${summary.openOrders}',
+                  tone: (summary?.openOrders ?? 0) > 0
+                      ? PosColors.warning
+                      : PosColors.textSecondary,
+                ),
+                ToastMetric(
+                  label: l10n.reportsAverageOrderAmount,
+                  value: averageOrder,
+                  tone: PosColors.success,
+                ),
+                ToastMetric(
+                  label: l10n.reportsCanceledAmount,
+                  value: summary == null
+                      ? '—'
+                      : l10n.countCases(summary.cancelledOrders),
+                  tone: cancellationTone,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _pendingStart ?? reportState.startDate,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null) {
+                    setState(() => _pendingStart = picked);
+                  }
+                },
+                icon: const Icon(Icons.event_outlined, size: 16),
+                label: Text(
+                  '${l10n.from} ${dateFormat.format(_pendingStart ?? reportState.startDate)}',
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _pendingEnd ?? reportState.endDate,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null) {
+                    setState(() => _pendingEnd = picked);
+                  }
+                },
+                icon: const Icon(Icons.event_available_outlined, size: 16),
+                label: Text(
+                  '${l10n.to} ${dateFormat.format(_pendingEnd ?? reportState.endDate)}',
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: storeId == null
+                    ? null
+                    : () {
+                        final start = _pendingStart ?? reportState.startDate;
+                        final end = _pendingEnd ?? reportState.endDate;
+                        reportNotifier.setDateRange(start, end, storeId);
+                      },
+                icon: const Icon(Icons.search, size: 16),
+                label: Text(l10n.lookup),
+              ),
+              OutlinedButton.icon(
+                onPressed: summary == null
+                    ? null
+                    : () => _exportReport(reportNotifier),
+                icon: const Icon(Icons.download_rounded, size: 16),
+                label: Text(l10n.reportsDownload),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -295,17 +739,25 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     final fileName =
         'report_${dateFormat.format(reportState.startDate)}_${dateFormat.format(reportState.endDate)}';
 
-    await FileSaver.instance.saveFile(
-      name: fileName,
-      bytes: Uint8List.fromList(bytes),
-      ext: 'xlsx',
-      mimeType: MimeType.microsoftExcel,
-    );
+    try {
+      await FileSaver.instance.saveFile(
+        name: fileName,
+        bytes: Uint8List.fromList(bytes),
+        ext: 'xlsx',
+        mimeType: MimeType.microsoftExcel,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.reportsSaveFailed('$error'))),
+      );
+      return;
+    }
 
     if (mounted) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Report saved.')));
+      ).showSnackBar(SnackBar(content: Text(context.l10n.reportsSaved)));
     }
   }
 
@@ -322,12 +774,656 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
         ),
         child: Text(
           label,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textPrimary,
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
         ),
+      ),
+    );
+  }
+}
+
+String _shareLabel(double amount, double total) {
+  if (total <= 0) {
+    return '0%';
+  }
+  return '${((amount / total) * 100).round()}%';
+}
+
+String _cancelRateLabel(ReportSummary summary) {
+  if (summary.totalOrders == 0) {
+    return '0%';
+  }
+  final rate = (summary.cancelledOrders / summary.totalOrders) * 100;
+  return '${rate.toStringAsFixed(rate >= 10 ? 0 : 1)}%';
+}
+
+String _peakHourLabel(BuildContext context, ReportSummary summary) {
+  if (summary.hourlyBreakdown.isEmpty) {
+    return context.l10n.reportsPeakHourUnavailable;
+  }
+  final peak = summary.hourlyBreakdown.reduce(
+    (current, next) => current.amount >= next.amount ? current : next,
+  );
+  return context.l10n.reportsHourLabel(peak.hour.toString().padLeft(2, '0'));
+}
+
+class _ReportsInsightRow extends StatelessWidget {
+  const _ReportsInsightRow({required this.summary});
+
+  final ReportSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final signals = <_ReportsInsightData>[
+      _ReportsInsightData(
+        title: _peakHourLabel(context, summary),
+        body: context.l10n.reportsInsightPeakBody,
+        tone: PosColors.accent,
+        icon: Icons.schedule_rounded,
+      ),
+      _ReportsInsightData(
+        title: summary.cancelledOrders > 0
+            ? context.l10n.reportsInsightCancelledOrders(
+                summary.cancelledOrders,
+              )
+            : context.l10n.reportsInsightCancelStable,
+        body: summary.cancelledOrders > 0
+            ? context.l10n.reportsInsightCancelNeedsReview(
+                _cancelRateLabel(summary),
+              )
+            : context.l10n.reportsInsightCancelHealthy,
+        tone: summary.cancelledOrders > 0
+            ? PosColors.warning
+            : PosColors.success,
+        icon: Icons.warning_amber_rounded,
+      ),
+      _ReportsInsightData(
+        title: summary.failedEinvoiceJobsCount > 0
+            ? context.l10n.reportsInsightFailedEinvoice(
+                summary.failedEinvoiceJobsCount,
+              )
+            : summary.missingProofPhotosCount > 0
+            ? context.l10n.reportsInsightMissingProof(
+                summary.missingProofPhotosCount,
+              )
+            : context.l10n.reportsInsightPaymentHealthy,
+        body: summary.failedEinvoiceJobsCount > 0
+            ? context.l10n.reportsInsightRetryBeforeClose
+            : summary.missingProofPhotosCount > 0
+            ? context.l10n.reportsInsightProofFirst
+            : context.l10n.reportsInsightSettlementHealthy,
+        tone:
+            summary.failedEinvoiceJobsCount > 0 ||
+                summary.missingProofPhotosCount > 0
+            ? PosColors.danger
+            : PosColors.info,
+        icon: Icons.monitor_heart_outlined,
+      ),
+    ];
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: signals
+          .map((signal) => _ReportsInsightTile(data: signal))
+          .toList(),
+    );
+  }
+}
+
+class _ReportsInsightData {
+  const _ReportsInsightData({
+    required this.title,
+    required this.body,
+    required this.tone,
+    required this.icon,
+  });
+
+  final String title;
+  final String body;
+  final Color tone;
+  final IconData icon;
+}
+
+class _ReportsInsightTile extends StatelessWidget {
+  const _ReportsInsightTile({required this.data});
+
+  final _ReportsInsightData data;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 280,
+      child: ToastWorkSurface(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        backgroundColor: PosColors.surface,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: data.tone.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(data.icon, size: 18, color: data.tone),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    data.title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: PosColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    data.body,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: PosColors.textSecondary,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReportsEmptyWorkspace extends StatelessWidget {
+  const _ReportsEmptyWorkspace({this.onReloadToday});
+
+  final VoidCallback? onReloadToday;
+
+  @override
+  Widget build(BuildContext context) {
+    final noDataCard = SizedBox(
+      height: 180,
+      child: PosActionCard(
+        title: context.l10n.reportsNoDataTitle,
+        subtitle: context.l10n.reportsNoDataSubtitle,
+        action: onReloadToday == null
+            ? null
+            : PosPrimaryButton(
+                label: context.l10n.reportsReloadToday,
+                icon: Icons.play_arrow_rounded,
+                onPressed: onReloadToday,
+              ),
+        child: Row(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: PosColors.accentMuted,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: const Icon(
+                Icons.insights_outlined,
+                color: PosColors.accent,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                context.l10n.reportsNoDataBody,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: PosColors.textSecondary,
+                  height: 1.45,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    final signalTiles = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _ReportsInsightTile(
+          data: _ReportsInsightData(
+            title: context.l10n.reportsPeakHourUnavailable,
+            body: context.l10n.reportsEmptyPeakBody,
+            tone: PosColors.info,
+            icon: Icons.schedule_rounded,
+          ),
+        ),
+        _ReportsInsightTile(
+          data: _ReportsInsightData(
+            title: context.l10n.reportsEmptyNoCancelOrFailure,
+            body: context.l10n.reportsEmptyNoCancelOrFailureBody,
+            tone: PosColors.success,
+            icon: Icons.check_circle_outline_rounded,
+          ),
+        ),
+        _ReportsInsightTile(
+          data: _ReportsInsightData(
+            title: context.l10n.reportsEmptyProofWaiting,
+            body: context.l10n.reportsEmptyProofWaitingBody,
+            tone: PosColors.warning,
+            icon: Icons.receipt_long_rounded,
+          ),
+        ),
+      ],
+    );
+    final liveSignalPanel = PosDataPanel(
+      title: context.l10n.reportsLiveSignalsReady,
+      subtitle: context.l10n.reportsLiveSignalsReadySubtitle,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            padding: EdgeInsets.zero,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 520),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: PosColors.mutedSurface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: PosColors.border),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.wifi_tethering_rounded,
+                        color: PosColors.textMuted,
+                        size: 24,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        context.l10n.reportsWaitingLiveSignals,
+                        style: Theme.of(context).textTheme.titleMedium,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        context.l10n.reportsWaitingLiveSignalsBody,
+                        style: Theme.of(context).textTheme.bodySmall,
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.hasBoundedHeight && constraints.maxHeight < 640) {
+          return ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              noDataCard,
+              const SizedBox(height: 12),
+              signalTiles,
+              const SizedBox(height: 12),
+              SizedBox(height: 220, child: liveSignalPanel),
+            ],
+          );
+        }
+
+        return Column(
+          children: [
+            noDataCard,
+            const SizedBox(height: 12),
+            signalTiles,
+            const SizedBox(height: 12),
+            Expanded(child: liveSignalPanel),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ReportsHourlyOverview extends StatelessWidget {
+  const _ReportsHourlyOverview({required this.summary, required this.currency});
+
+  final ReportSummary summary;
+  final NumberFormat currency;
+
+  @override
+  Widget build(BuildContext context) {
+    if (summary.hourlyBreakdown.isEmpty) {
+      return Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 420),
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: PosColors.mutedSurface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: PosColors.border),
+          ),
+          child: PosEmptyState(
+            title: context.l10n.reportsNoDataTitle,
+            subtitle: context.l10n.reportsNoDataSubtitle,
+            icon: Icons.timeline_outlined,
+          ),
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final chart = _HourlyRevenueSection(
+          summary: summary,
+          currency: currency,
+        );
+        return Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: _ReportsInlineMetric(
+                    label: context.l10n.reportsDineInRevenue,
+                    value: _formatVnd(currency, summary.dineInRevenue),
+                    tone: PosColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _ReportsInlineMetric(
+                    label: context.l10n.reportsDeliveryRevenue,
+                    value: _formatVnd(currency, summary.deliveryRevenue),
+                    tone: PosColors.accent,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _ReportsInlineMetric(
+                    label: context.l10n.reportsServiceExpenses,
+                    value: _formatVnd(currency, summary.serviceTotal),
+                    tone: PosColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (constraints.hasBoundedHeight) Expanded(child: chart) else chart,
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ReportsInlineMetric extends StatelessWidget {
+  const _ReportsInlineMetric({
+    required this.label,
+    required this.value,
+    required this.tone,
+  });
+
+  final String label;
+  final String value;
+  final Color tone;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: PosColors.mutedSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: PosColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: PosColors.textSecondary,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              color: tone,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReportsBreakdownPanel extends StatelessWidget {
+  const _ReportsBreakdownPanel({
+    required this.summary,
+    required this.currency,
+    this.scrollable = true,
+  });
+
+  final ReportSummary summary;
+  final NumberFormat currency;
+  final bool scrollable;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _ReportsSectionTitle(
+          title: context.l10n.reportsChannelMix,
+          action: Text(
+            context.l10n.reportsOrderCount(summary.totalOrders),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: PosColors.textSecondary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _ReportsInlineMetric(
+                label: context.l10n.dineIn,
+                value: _formatVnd(currency, summary.dineInRevenue),
+                tone: PosColors.textPrimary,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _ReportsInlineMetric(
+                label: context.l10n.delivery,
+                value: _formatVnd(currency, summary.deliveryRevenue),
+                tone: PosColors.accent,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _ReportsSectionTitle(title: context.l10n.cashierPaymentMethod),
+        const SizedBox(height: 10),
+        if (summary.paymentMethodBreakdown.isEmpty)
+          PosEmptyState(
+            title: context.l10n.reportsNoPaymentMethodData,
+            subtitle: context.l10n.reportsNoPaymentMethodDataSubtitle,
+            icon: Icons.payments_outlined,
+          )
+        else
+          ...summary.paymentMethodBreakdown.map(
+            (method) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: PosColors.mutedSurface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: PosColors.border),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        method.method,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      context.l10n.reportsOrderCount(method.count),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.textSecondary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 132,
+                      child: Text(
+                        _formatVnd(currency, method.totalAmount),
+                        textAlign: TextAlign.right,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        const SizedBox(height: 16),
+        _ReportsSectionTitle(title: context.l10n.reportsOperationalExceptions),
+        const SizedBox(height: 10),
+        _ReportsExceptionRow(
+          label: context.l10n.reportsMissingProof,
+          value: context.l10n.reportsOrderCount(
+            summary.missingProofPhotosCount,
+          ),
+          tone: summary.missingProofPhotosCount > 0
+              ? PosColors.warning
+              : PosColors.success,
+        ),
+        const SizedBox(height: 8),
+        _ReportsExceptionRow(
+          label: context.l10n.reportsFailedEinvoice,
+          value: context.l10n.reportsOrderCount(
+            summary.failedEinvoiceJobsCount,
+          ),
+          tone: summary.failedEinvoiceJobsCount > 0
+              ? PosColors.danger
+              : PosColors.success,
+        ),
+        const SizedBox(height: 8),
+        _ReportsExceptionRow(
+          label: context.l10n.reportsProofCompletion,
+          value: '${summary.proofCompletePercent.toStringAsFixed(0)}%',
+          tone: summary.proofCompletePercent < 100
+              ? PosColors.warning
+              : PosColors.success,
+        ),
+        const SizedBox(height: 8),
+        _ReportsExceptionRow(
+          label: context.l10n.reportsWt08Reported,
+          value: context.l10n.reportsOrderCount(summary.wetaxReportedCount),
+          tone: PosColors.info,
+        ),
+      ],
+    );
+
+    if (!scrollable) {
+      return content;
+    }
+
+    return SingleChildScrollView(child: content);
+  }
+}
+
+class _ReportsSectionTitle extends StatelessWidget {
+  const _ReportsSectionTitle({required this.title, this.action});
+
+  final String title;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          title,
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const Spacer(),
+        if (action != null) action!,
+      ],
+    );
+  }
+}
+
+class _ReportsExceptionRow extends StatelessWidget {
+  const _ReportsExceptionRow({
+    required this.label,
+    required this.value,
+    required this.tone,
+  });
+
+  final String label;
+  final String value;
+  final Color tone;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: tone.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: PosColors.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: tone,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -341,9 +1437,10 @@ class _SummaryGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final data = summary;
     if (data == null) {
-      return _noData();
+      return _noData(context);
     }
 
     return LayoutBuilder(
@@ -358,26 +1455,26 @@ class _SummaryGrid extends StatelessWidget {
           childAspectRatio: constraints.maxWidth < 700 ? 1.35 : 1.85,
           children: [
             _summaryCard(
-              title: 'Dine-in Revenue',
-              value: '₫${currency.format(data.dineInRevenue)}',
+              title: l10n.dineIn,
+              value: _formatVnd(currency, data.dineInRevenue),
               valueColor: AppColors.amber500,
               valueFontSize: 28,
             ),
             _summaryCard(
-              title: 'Delivery Revenue',
-              value: '₫${currency.format(data.deliveryRevenue)}',
+              title: l10n.delivery,
+              value: _formatVnd(currency, data.deliveryRevenue),
               valueColor: AppColors.statusAvailable,
               valueFontSize: 28,
             ),
             _summaryCard(
-              title: 'Service Expenses (not included in revenue)',
-              value: '₫${currency.format(data.serviceTotal)}',
+              title: l10n.reportsServiceExpensesHint,
+              value: _formatVnd(currency, data.serviceTotal),
               valueColor: AppColors.textSecondary,
               valueFontSize: 28,
             ),
             _summaryCard(
-              title: 'Total Revenue',
-              value: '₫${currency.format(data.totalRevenue)}',
+              title: l10n.reportsTotalSales,
+              value: _formatVnd(currency, data.totalRevenue),
               valueColor: AppColors.amber500,
               valueFontSize: 32,
             ),
@@ -395,8 +1492,9 @@ class _SummaryGrid extends StatelessWidget {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface1,
+        color: AppColors.surface2,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.surface3),
       ),
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -405,7 +1503,7 @@ class _SummaryGrid extends StatelessWidget {
         children: [
           Text(
             title,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -414,7 +1512,7 @@ class _SummaryGrid extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             value,
-            style: GoogleFonts.bebasNeue(
+            style: AppFonts.system(
               color: valueColor,
               fontSize: valueFontSize,
               letterSpacing: 1.0,
@@ -425,7 +1523,7 @@ class _SummaryGrid extends StatelessWidget {
     );
   }
 
-  Widget _noData() {
+  Widget _noData(BuildContext context) {
     return Container(
       height: 130,
       decoration: BoxDecoration(
@@ -434,8 +1532,8 @@ class _SummaryGrid extends StatelessWidget {
       ),
       alignment: Alignment.center,
       child: Text(
-        'No data for selected period',
-        style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
+        context.l10n.reportsNoDataSelectedPeriod,
+        style: AppFonts.system(color: AppColors.textSecondary),
       ),
     );
   }
@@ -449,14 +1547,15 @@ class _DailyTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final data = summary;
     if (data == null || data.dailyBreakdown.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 20),
           child: Text(
-            'No data for selected period',
-            style: GoogleFonts.notoSansKr(
+            l10n.reportsNoDataSelectedPeriod,
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 14,
             ),
@@ -465,17 +1564,17 @@ class _DailyTable extends StatelessWidget {
       );
     }
 
-    String vnd(double v) => '₫${currency.format(v)}';
+    String vnd(double v) => _formatVnd(currency, v);
 
     return ToastDenseDataTable(
-      columns: const [
-        ToastDenseColumn(label: 'Date', flex: 2),
-        ToastDenseColumn(label: 'Dine-in'),
-        ToastDenseColumn(label: 'Delivery'),
-        ToastDenseColumn(label: 'Total'),
-        ToastDenseColumn(label: 'Cash'),
-        ToastDenseColumn(label: 'Card'),
-        ToastDenseColumn(label: 'Pay'),
+      columns: [
+        ToastDenseColumn(label: l10n.date, flex: 2),
+        ToastDenseColumn(label: l10n.dineIn),
+        ToastDenseColumn(label: l10n.delivery),
+        ToastDenseColumn(label: l10n.total),
+        ToastDenseColumn(label: l10n.cash),
+        ToastDenseColumn(label: l10n.cashierCardMethod),
+        ToastDenseColumn(label: l10n.pay),
       ],
       rows: [
         for (final row in data.dailyBreakdown)
@@ -494,7 +1593,7 @@ class _DailyTable extends StatelessWidget {
       totalsRow: ToastDenseRow(
         bold: true,
         cells: [
-          'Total',
+          l10n.total,
           vnd(data.dineInRevenue),
           vnd(data.deliveryRevenue),
           vnd(data.totalRevenue),
@@ -514,6 +1613,7 @@ class _OrderCountRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
@@ -523,8 +1623,8 @@ class _OrderCountRow extends StatelessWidget {
       child: Row(
         children: [
           Text(
-            'Order ${summary.totalOrders}',
-            style: GoogleFonts.notoSansKr(
+            l10n.reportsOrdersCount(summary.totalOrders),
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontSize: 13,
               fontWeight: FontWeight.w700,
@@ -532,8 +1632,8 @@ class _OrderCountRow extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Text(
-            'Done ${summary.completedOrders}',
-            style: GoogleFonts.notoSansKr(
+            l10n.reportsDoneCount(summary.completedOrders),
+            style: AppFonts.system(
               color: AppColors.statusAvailable,
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -543,8 +1643,12 @@ class _OrderCountRow extends StatelessWidget {
               summary.completedOrders + summary.cancelledOrders) ...[
             const SizedBox(width: 12),
             Text(
-              'In Progress ${summary.totalOrders - summary.completedOrders - summary.cancelledOrders}',
-              style: GoogleFonts.notoSansKr(
+              l10n.reportsInProgressCount(
+                summary.totalOrders -
+                    summary.completedOrders -
+                    summary.cancelledOrders,
+              ),
+              style: AppFonts.system(
                 color: AppColors.amber500,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -554,8 +1658,11 @@ class _OrderCountRow extends StatelessWidget {
           if (summary.cancelledOrders > 0) ...[
             const SizedBox(width: 12),
             Text(
-              'Cancel ${summary.cancelledOrders} (items ${summary.cancelledItems})',
-              style: GoogleFonts.notoSansKr(
+              l10n.reportsCancelCount(
+                summary.cancelledOrders,
+                summary.cancelledItems,
+              ),
+              style: AppFonts.system(
                 color: AppColors.statusCancelled,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -576,6 +1683,7 @@ class _PaymentMethodRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
@@ -585,8 +1693,8 @@ class _PaymentMethodRow extends StatelessWidget {
       child: Row(
         children: [
           Text(
-            'Payment Method',
-            style: GoogleFonts.notoSansKr(
+            l10n.reportsPaymentMethod,
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -594,8 +1702,8 @@ class _PaymentMethodRow extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Text(
-            'Cash ₫${currency.format(summary.cashTotal)}',
-            style: GoogleFonts.notoSansKr(
+            '${l10n.cash} ${_formatVnd(currency, summary.cashTotal)}',
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -603,8 +1711,8 @@ class _PaymentMethodRow extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Text(
-            'Card ₫${currency.format(summary.cardTotal)}',
-            style: GoogleFonts.notoSansKr(
+            '${l10n.cashierCardMethod} ${_formatVnd(currency, summary.cardTotal)}',
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -613,8 +1721,8 @@ class _PaymentMethodRow extends StatelessWidget {
           if (summary.payTotal > 0) ...[
             const SizedBox(width: 12),
             Text(
-              'Pay ₫${currency.format(summary.payTotal)}',
-              style: GoogleFonts.notoSansKr(
+              '${l10n.pay} ${_formatVnd(currency, summary.payTotal)}',
+              style: AppFonts.system(
                 color: AppColors.textPrimary,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -622,6 +1730,59 @@ class _PaymentMethodRow extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _ReportsOperationalSignalsDetail extends StatelessWidget {
+  const _ReportsOperationalSignalsDetail({required this.summary});
+
+  final ReportSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final hasExceptions =
+        summary.failedEinvoiceJobsCount > 0 ||
+        summary.missingProofPhotosCount > 0;
+
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        key: const Key('reports_operational_signals_detail'),
+        initiallyExpanded: false,
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+        childrenPadding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
+        leading: Icon(
+          Icons.rule_folder_outlined,
+          color: hasExceptions ? PosColors.warning : PosColors.success,
+        ),
+        title: Text(
+          l10n.reportsOperationalAttentionTitle,
+          style: AppFonts.system(
+            color: AppColors.textPrimary,
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        subtitle: Text(
+          l10n.reportsOperationalBoundary,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppFonts.system(
+            color: AppColors.textSecondary,
+            fontSize: 11.5,
+          ),
+        ),
+        trailing: ToastStatusBadge(
+          label: hasExceptions
+              ? l10n.reportsNeedsReviewShort
+              : l10n.reportsHealthyShort,
+          color: hasExceptions ? PosColors.warning : PosColors.success,
+          compact: true,
+        ),
+        children: [_OperationalAttentionSection(summary: summary)],
       ),
     );
   }
@@ -668,7 +1829,7 @@ class _OperationalAttentionSection extends StatelessWidget {
         children: [
           Text(
             l10n.reportsOperationalAttentionTitle,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontSize: 14,
               fontWeight: FontWeight.w700,
@@ -677,7 +1838,7 @@ class _OperationalAttentionSection extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             l10n.reportsOperationalAttentionSubtitle,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -829,7 +1990,7 @@ class _OperationalAttentionSection extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             _attentionNarrative(context),
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontSize: 12,
               height: 1.45,
@@ -854,7 +2015,7 @@ class _OperationalAttentionSection extends StatelessWidget {
         children: [
           Text(
             label,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -863,7 +2024,7 @@ class _OperationalAttentionSection extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             value,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: color,
               fontSize: 12,
               fontWeight: FontWeight.w700,
@@ -885,7 +2046,7 @@ class _OperationalAttentionSection extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: color,
           fontSize: 12,
           fontWeight: FontWeight.w700,
@@ -904,16 +2065,16 @@ class _OperationalAttentionSection extends StatelessWidget {
       constraints: const BoxConstraints(minWidth: 180, maxWidth: 260),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
+        color: AppColors.surface2,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.24)),
+        border: Border.all(color: AppColors.surface3),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -922,7 +2083,7 @@ class _OperationalAttentionSection extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             headline,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: color,
               fontSize: 12,
               fontWeight: FontWeight.w700,
@@ -932,7 +2093,7 @@ class _OperationalAttentionSection extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             body,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontSize: 12,
               height: 1.4,
@@ -961,7 +2122,7 @@ class _OperationalAttentionSection extends StatelessWidget {
       ),
       child: RichText(
         text: TextSpan(
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textSecondary,
             fontSize: 11,
             fontWeight: FontWeight.w600,
@@ -970,7 +2131,7 @@ class _OperationalAttentionSection extends StatelessWidget {
             TextSpan(text: '$label '),
             TextSpan(
               text: value,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: color,
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
@@ -990,7 +2151,7 @@ class _OperationalAttentionSection extends StatelessWidget {
           width: 108,
           child: Text(
             label,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 11,
               fontWeight: FontWeight.w700,
@@ -1000,7 +2161,7 @@ class _OperationalAttentionSection extends StatelessWidget {
         Expanded(
           child: Text(
             body,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontSize: 12,
               height: 1.45,
@@ -1076,7 +2237,7 @@ class _TodaySummarySection extends ConsumerWidget {
     final currency = NumberFormat('#,###', 'vi_VN');
 
     return summaryAsync.when(
-      data: (summary) => _buildContent(summary, currency, ref),
+      data: (summary) => _buildContent(context, summary, currency, ref),
       loading: () => const SizedBox(
         height: 60,
         child: Center(
@@ -1091,6 +2252,7 @@ class _TodaySummarySection extends ConsumerWidget {
   }
 
   Widget _buildContent(
+    BuildContext context,
     TodaySummary summary,
     NumberFormat currency,
     WidgetRef ref,
@@ -1101,8 +2263,8 @@ class _TodaySummarySection extends ConsumerWidget {
         Row(
           children: [
             Text(
-              "Today's Operations",
-              style: GoogleFonts.notoSansKr(
+              context.l10n.reportsTodaysOperations,
+              style: AppFonts.system(
                 color: AppColors.textPrimary,
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
@@ -1136,47 +2298,53 @@ class _TodaySummarySection extends ConsumerWidget {
               childAspectRatio: constraints.maxWidth < 700 ? 2.0 : 2.5,
               children: [
                 _metricTile(
-                  'Order',
+                  context.l10n.reportsOrder,
                   '${summary.ordersTotal}',
                   AppColors.textPrimary,
                 ),
                 _metricTile(
-                  'Done',
+                  context.l10n.reportsDone,
                   '${summary.ordersCompleted}',
                   AppColors.statusAvailable,
                 ),
                 _metricTile(
-                  'In Progress',
+                  context.l10n.reportsInProgress,
                   '${summary.ordersPending + summary.ordersConfirmed + summary.ordersServing}',
                   AppColors.amber500,
                 ),
                 _metricTile(
-                  'Cancel',
-                  '${summary.ordersCancelled} (items ${summary.itemsCancelled})',
+                  context.l10n.reportsCancel,
+                  context.l10n.reportsCanceledItemsSummary(
+                    summary.ordersCancelled,
+                    summary.itemsCancelled,
+                  ),
                   AppColors.statusCancelled,
                 ),
                 _metricTile(
-                  'Payment',
+                  context.l10n.reportsPay,
                   '${summary.paymentsCount}',
                   AppColors.textPrimary,
                 ),
                 _metricTile(
-                  'Payment Total',
-                  '₫${currency.format(summary.paymentsTotal)}',
+                  context.l10n.reportsPaymentTotal,
+                  _formatVnd(currency, summary.paymentsTotal),
                   AppColors.amber500,
                 ),
                 _metricTile(
-                  'Cash / Card',
-                  '₫${currency.format(summary.paymentsCash)} / ₫${currency.format(summary.paymentsCard)}',
+                  context.l10n.reportsCashCard,
+                  '${_formatVnd(currency, summary.paymentsCash)} / ${_formatVnd(currency, summary.paymentsCard)}',
                   AppColors.textSecondary,
                 ),
                 _metricTile(
-                  'Table',
-                  '${summary.tablesOccupied} / ${summary.tablesTotal} in use',
+                  context.l10n.table,
+                  context.l10n.reportsTablesInUse(
+                    summary.tablesOccupied,
+                    summary.tablesTotal,
+                  ),
                   AppColors.statusOccupied,
                 ),
                 _metricTile(
-                  'Low Stock',
+                  context.l10n.reportsLowStock,
                   '${summary.lowStockCount}',
                   summary.lowStockCount > 0
                       ? AppColors.statusCancelled
@@ -1204,7 +2372,7 @@ class _TodaySummarySection extends ConsumerWidget {
         children: [
           Text(
             label,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -1213,7 +2381,7 @@ class _TodaySummarySection extends ConsumerWidget {
           const SizedBox(height: 4),
           Text(
             value,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: valueColor,
               fontSize: 14,
               fontWeight: FontWeight.w700,
@@ -1244,8 +2412,8 @@ class _HourlyRevenueSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Revenue by Hour',
-          style: GoogleFonts.notoSansKr(
+          context.l10n.reportsRevenueByHour,
+          style: AppFonts.system(
             color: AppColors.textPrimary,
             fontSize: 14,
             fontWeight: FontWeight.w700,
@@ -1269,7 +2437,7 @@ class _HourlyRevenueSection extends StatelessWidget {
                       width: 36,
                       child: Text(
                         '${h.hour.toString().padLeft(2, '0')}:00',
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: AppColors.textSecondary,
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -1304,10 +2472,10 @@ class _HourlyRevenueSection extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     SizedBox(
-                      width: 90,
+                      width: 104,
                       child: Text(
-                        '₫${currency.format(h.amount)}',
-                        style: GoogleFonts.notoSansKr(
+                        _formatVnd(currency, h.amount),
+                        style: AppFonts.system(
                           color: AppColors.textPrimary,
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -1344,9 +2512,9 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
   Future<void> _createClosing() async {
     final confirmed = await ToastConfirmDialog.show(
       context: context,
-      title: 'Close Today',
-      description: "Save today's operations data as a closing record?",
-      confirmLabel: 'Close',
+      title: context.l10n.reportsCloseToday,
+      description: context.l10n.reportsSaveClosingQuestion,
+      confirmLabel: context.l10n.close,
     );
 
     if (confirmed != true || !mounted) return;
@@ -1357,9 +2525,9 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
       ref.invalidate(dailyClosingHistoryProvider);
       if (mounted) {
         setState(() => _closingSucceeded = true);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Closing complete.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.reportsClosingComplete)),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -1390,8 +2558,8 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
           key: const Key('nav_daily_closing'),
           children: [
             Text(
-              'Daily Close',
-              style: GoogleFonts.notoSansKr(
+              context.l10n.reportsDailyClose,
+              style: AppFonts.system(
                 color: AppColors.textPrimary,
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
@@ -1400,7 +2568,7 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
             const Spacer(),
             PosActionButton(
               key: const Key('daily_closing_submit_button'),
-              label: 'Close Today',
+              label: context.l10n.reportsCloseToday,
               tone: PosActionTone.primary,
               icon: Icons.lock_clock,
               loading: _isClosing,
@@ -1423,8 +2591,8 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  'Closing complete.',
-                  style: GoogleFonts.notoSansKr(
+                  context.l10n.reportsClosingComplete,
+                  style: AppFonts.system(
                     color: AppColors.statusAvailable,
                     fontSize: 12,
                   ),
@@ -1437,11 +2605,8 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
             key: const Key('daily_closing_already_closed_banner'),
             padding: const EdgeInsets.only(bottom: 6),
             child: Text(
-              'Today is already complete.',
-              style: GoogleFonts.notoSansKr(
-                color: AppColors.amber500,
-                fontSize: 12,
-              ),
+              context.l10n.reportsTodayAlreadyComplete,
+              style: AppFonts.system(color: AppColors.amber500, fontSize: 12),
             ),
           ),
         historyAsync.when(
@@ -1454,8 +2619,8 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
                   ),
                   child: Center(
                     child: Text(
-                      'No closing history.',
-                      style: GoogleFonts.notoSansKr(
+                      context.l10n.reportsNoClosingHistory,
+                      style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 13,
                       ),
@@ -1463,6 +2628,7 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
                   ),
                 )
               : Container(
+                  height: 220,
                   decoration: BoxDecoration(
                     color: AppColors.surface1,
                     borderRadius: BorderRadius.circular(12),
@@ -1470,17 +2636,27 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
                   child: Column(
                     children: [
                       _closingTableHeader(),
-                      ...records.take(10).toList().asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final record = entry.value;
-                        return _closingTableRow(
-                          record: record,
-                          currency: currency,
-                          bgColor: index.isEven
-                              ? AppColors.surface1
-                              : AppColors.surface0,
-                        );
-                      }),
+                      Expanded(
+                        child: ListView(
+                          children: records
+                              .take(10)
+                              .toList()
+                              .asMap()
+                              .entries
+                              .map((entry) {
+                                final index = entry.key;
+                                final record = entry.value;
+                                return _closingTableRow(
+                                  record: record,
+                                  currency: currency,
+                                  bgColor: index.isEven
+                                      ? AppColors.surface1
+                                      : AppColors.surface0,
+                                );
+                              })
+                              .toList(),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1502,7 +2678,7 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
             child: Center(
               child: Text(
                 mapDailyClosingError(e),
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.statusCancelled,
                   fontSize: 13,
                 ),
@@ -1522,15 +2698,15 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
       ),
       child: Row(
         children: [
-          _hCell('Date', flex: 2),
-          _hCell('Order'),
-          _hCell('Done'),
-          _hCell('Cancel'),
-          _hCell('Revenue'),
-          _hCell('Cash'),
-          _hCell('Card'),
-          _hCell('Low'),
-          _hCell('Assignee'),
+          _hCell(context.l10n.reportsDate, flex: 2),
+          _hCell(context.l10n.reportsOrder),
+          _hCell(context.l10n.reportsDone),
+          _hCell(context.l10n.reportsCancel),
+          _hCell(context.l10n.reportsRevenue),
+          _hCell(context.l10n.reportsCash),
+          _hCell(context.l10n.reportsCard),
+          _hCell(context.l10n.reportsLow),
+          _hCell(context.l10n.reportsAssignee),
         ],
       ),
     );
@@ -1555,9 +2731,9 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
           _dCell('${record.ordersTotal}'),
           _dCell('${record.ordersCompleted}'),
           _dCell('${record.ordersCancelled}'),
-          _dCell('₫${currency.format(record.paymentsTotal)}'),
-          _dCell('₫${currency.format(record.paymentsCash)}'),
-          _dCell('₫${currency.format(record.paymentsCard)}'),
+          _dCell(_formatVnd(currency, record.paymentsTotal)),
+          _dCell(_formatVnd(currency, record.paymentsCash)),
+          _dCell(_formatVnd(currency, record.paymentsCard)),
           _dCell('${record.lowStockCount}'),
           _dCell(record.closedByName, overflow: true),
         ],
@@ -1570,7 +2746,7 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
       flex: flex,
       child: Text(
         text,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: AppColors.textPrimary,
           fontSize: 11,
           fontWeight: FontWeight.w700,
@@ -1584,7 +2760,7 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
       flex: flex,
       child: Text(
         text,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: AppColors.textPrimary,
           fontSize: 11,
           fontWeight: FontWeight.w500,
@@ -1611,7 +2787,7 @@ class _ReportsAuditTraceSection extends ConsumerWidget {
       maxItems: 10,
       compact: true,
       showRetry: true,
-      emptyMessage: 'No recent operations.',
+      emptyMessage: context.l10n.reportsNoRecentOperations,
     );
   }
 }

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/i18n/locale_extensions.dart';
+import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
+import '../../../core/utils/number_input_utils.dart';
 import '../../../core/utils/permission_utils.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
@@ -17,10 +20,18 @@ class InventoryTab extends ConsumerStatefulWidget {
   ConsumerState<InventoryTab> createState() => _InventoryTabState();
 }
 
+class _InventorySurfaceKey {
+  static const ingredient = 'ingredient';
+  static const recipe = 'recipe';
+  static const physicalCount = 'physical_count';
+  static const report = 'report';
+}
+
 class _InventoryTabState extends ConsumerState<InventoryTab>
     with TickerProviderStateMixin {
   TabController? _tabController;
   String? _initializedRestaurantId;
+  int _selectedSurfaceIndex = 0;
   String? _selectedMenuItemId;
   DateTime _countDate = DateTime.now();
   DateTime _reportFrom = DateTime.now().subtract(const Duration(days: 6));
@@ -50,6 +61,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     _tabController?.dispose();
     _tabController = TabController(length: length, vsync: this);
     _tabController!.index = previousIndex.clamp(0, length - 1);
+    _selectedSurfaceIndex = _tabController!.index;
+    _tabController!.addListener(() {
+      if (!mounted) return;
+      if (_selectedSurfaceIndex != _tabController!.index) {
+        setState(() => _selectedSurfaceIndex = _tabController!.index);
+      }
+    });
   }
 
   Future<void> _initialize(String storeId) async {
@@ -158,16 +176,20 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final storeId = auth.storeId;
+    final ingredientState = ref.watch(ingredientProvider);
+    final recipeState = ref.watch(recipeProvider);
+    final physicalCountState = ref.watch(physicalCountProvider);
+    final reportState = ref.watch(inventoryReportProvider);
     final canCount = PermissionUtils.canDoInventoryCount(
       auth.role,
       auth.extraPermissions,
     );
 
     final tabs = <String>[
-      'Ingredient Management',
-      'Recipe Management',
-      if (canCount) 'Physical Count',
-      'Inventory Report',
+      _InventorySurfaceKey.ingredient,
+      _InventorySurfaceKey.recipe,
+      if (canCount) _InventorySurfaceKey.physicalCount,
+      _InventorySurfaceKey.report,
     ];
     _ensureTabController(tabs.length);
 
@@ -184,34 +206,202 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     return Scaffold(
       key: const Key('inventory_root'),
       backgroundColor: AppColors.surface0,
-      body: Column(
+      body: ToastResponsiveBody(
+        maxWidth: 1480,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildInventoryCommandHeader(
+              controller: controller,
+              tabs: tabs,
+              ingredientState: ingredientState,
+              recipeState: recipeState,
+              physicalCountState: physicalCountState,
+              reportState: reportState,
+              canCount: canCount,
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ToastWorkSurface(
+                padding: EdgeInsets.zero,
+                child: TabBarView(
+                  controller: controller,
+                  children: [
+                    _buildIngredientsTab(storeId),
+                    _buildRecipeTab(storeId),
+                    if (canCount) _buildPhysicalCountTab(storeId),
+                    _buildReportTab(storeId),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInventoryCommandHeader({
+    required TabController controller,
+    required List<String> tabs,
+    required IngredientState ingredientState,
+    required RecipeState recipeState,
+    required PhysicalCountState physicalCountState,
+    required InventoryReportState reportState,
+    required bool canCount,
+  }) {
+    final l10n = context.l10n;
+    final selectedTab = tabs[_selectedSurfaceIndex];
+    // Contract anchor: title: l10n.inventoryManagementTitle; subtitle: l10n.inventoryManagementSubtitle.
+
+    return ToastWorkSurface(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+      backgroundColor: AppColors.surface1,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            color: AppColors.surface0,
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: TabBar(
-              controller: controller,
-              indicatorColor: AppColors.amber500,
-              labelColor: AppColors.amber500,
-              unselectedLabelColor: AppColors.textSecondary,
-              labelStyle: GoogleFonts.notoSansKr(fontWeight: FontWeight.w700),
-              tabs: tabs.map((t) => Tab(text: t)).toList(),
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.inventoryManagementTitle,
+                      style: Theme.of(context).textTheme.headlineLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      l10n.inventoryManagementSubtitle,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.textSecondary,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ToastStatusBadge(
+                label: _inventorySurfaceLabel(selectedTab),
+                color: _inventorySurfaceColor(selectedTab),
+                compact: true,
+              ),
+            ],
           ),
-          Expanded(
-            child: TabBarView(
-              controller: controller,
-              children: [
-                _buildIngredientsTab(storeId),
-                _buildRecipeTab(storeId),
-                if (canCount) _buildPhysicalCountTab(storeId),
-                _buildReportTab(storeId),
-              ],
-            ),
+          const SizedBox(height: 14),
+          ToastMetricStrip(
+            metrics: [
+              ToastMetric(
+                label: l10n.inventoryIngredientsStat,
+                value: '${ingredientState.items.length}',
+              ),
+              ToastMetric(
+                label: l10n.inventoryRecipeStat,
+                value: '${recipeState.allRecipes.length}',
+              ),
+              ToastMetric(
+                label: l10n.inventoryPhysicalCountEntry,
+                value: canCount
+                    ? '${physicalCountState.counts.length}'
+                    : l10n.inventoryLocked,
+                tone: canCount ? PosColors.info : PosColors.textSecondary,
+              ),
+              ToastMetric(
+                label: l10n.inventoryTransactionLog,
+                value: '${reportState.transactions.length}',
+                tone: PosColors.success,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (var index = 0; index < tabs.length; index++)
+                      _InventorySurfaceTab(
+                        label: _inventorySurfaceDisplayLabel(tabs[index]),
+                        selected: index == _selectedSurfaceIndex,
+                        onTap: () => controller.animateTo(index),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 14),
+              Flexible(
+                child: Text(
+                  _inventorySurfaceSummary(selectedTab),
+                  textAlign: TextAlign.right,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: PosColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
+  }
+
+  String _inventorySurfaceDisplayLabel(String tab) {
+    switch (tab) {
+      case _InventorySurfaceKey.ingredient:
+        return context.l10n.inventorySurfaceIngredient;
+      case _InventorySurfaceKey.recipe:
+        return context.l10n.inventorySurfaceRecipe;
+      case _InventorySurfaceKey.physicalCount:
+        return context.l10n.inventorySurfacePhysicalCount;
+      case _InventorySurfaceKey.report:
+        return context.l10n.inventorySurfaceReport;
+      default:
+        return tab;
+    }
+  }
+
+  String _inventorySurfaceLabel(String tab) {
+    final l10n = context.l10n;
+    switch (tab) {
+      case _InventorySurfaceKey.physicalCount:
+        return l10n.inventoryExceptionQueue;
+      case _InventorySurfaceKey.report:
+        return l10n.adminWorkflowBackOffice;
+      default:
+        return l10n.inventoryCatalogOps;
+    }
+  }
+
+  String _inventorySurfaceSummary(String tab) {
+    switch (tab) {
+      case _InventorySurfaceKey.ingredient:
+        return context.l10n.inventorySurfaceIngredientSummary;
+      case _InventorySurfaceKey.recipe:
+        return context.l10n.inventorySurfaceRecipeSummary;
+      case _InventorySurfaceKey.physicalCount:
+        return context.l10n.inventorySurfacePhysicalCountSummary;
+      case _InventorySurfaceKey.report:
+        return context.l10n.inventorySurfaceReportSummary;
+      default:
+        return context.l10n.inventorySurfaceDefaultSummary;
+    }
+  }
+
+  Color _inventorySurfaceColor(String tab) {
+    switch (tab) {
+      case _InventorySurfaceKey.physicalCount:
+        return PosColors.warning;
+      case _InventorySurfaceKey.report:
+        return PosColors.textSecondary;
+      default:
+        return PosColors.accent;
+    }
   }
 
   Widget _buildIngredientsTab(String? storeId) {
@@ -220,28 +410,21 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
 
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Column(
+      child: ListView(
         children: [
           Row(
             children: [
               Text(
-                'Ingredients',
-                style: GoogleFonts.bebasNeue(
-                  color: AppColors.textPrimary,
-                  fontSize: 30,
-                ),
+                context.l10n.inventoryIngredientListTitle,
+                style: Theme.of(context).textTheme.titleLarge,
               ),
               const Spacer(),
               FilledButton.icon(
                 onPressed: storeId == null
                     ? null
                     : () => _showIngredientDialog(context, storeId, notifier),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.amber500,
-                  foregroundColor: AppColors.surface0,
-                ),
                 icon: const Icon(Icons.add),
-                label: const Text('Add Ingredient'),
+                label: Text(context.l10n.inventoryAddIngredientAction),
               ),
             ],
           ),
@@ -249,45 +432,49 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'This catalog covers only basic ingredient information. Create/update events are recorded in the audit log.',
-              style: GoogleFonts.notoSansKr(
+              context.l10n.inventoryIngredientListSubtitle,
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
             ),
           ),
           const SizedBox(height: 12),
-          Expanded(
-            child: state.isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(color: AppColors.amber500),
-                  )
-                : state.error != null && state.items.isEmpty
-                ? _buildIngredientInfoState(
-                    icon: Icons.error_outline,
-                    title: 'Failed to load ingredient catalog.',
-                    message: state.error!,
-                  )
-                : state.items.isEmpty
-                ? _buildIngredientInfoState(
-                    icon: Icons.inventory_2_outlined,
-                    title: 'No ingredients registered.',
-                    message: 'Start the catalog by adding an ingredient.',
-                  )
-                : ListView.separated(
-                    itemCount: state.items.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final item = state.items[index];
-                      return _buildIngredientCard(
-                        context,
-                        storeId: storeId,
-                        notifier: notifier,
-                        item: item,
-                      );
-                    },
-                  ),
-          ),
+          if (state.isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 48),
+              child: Center(
+                child: CircularProgressIndicator(color: AppColors.amber500),
+              ),
+            )
+          else if (state.error != null && state.items.isEmpty)
+            _buildIngredientInfoState(
+              icon: Icons.error_outline,
+              title: context.l10n.inventoryFailedLoadIngredientCatalog,
+              message: state.error!,
+            )
+          else if (state.items.isEmpty)
+            _buildIngredientInfoState(
+              icon: Icons.inventory_2_outlined,
+              title: context.l10n.inventoryNoIngredientsRegistered,
+              message: context.l10n.inventoryStartCatalogByAddingIngredient,
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: state.items.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final item = state.items[index];
+                return _buildIngredientCard(
+                  context,
+                  storeId: storeId,
+                  notifier: notifier,
+                  item: item,
+                );
+              },
+            ),
         ],
       ),
     );
@@ -299,6 +486,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     required IngredientNotifier notifier,
     required Map<String, dynamic> item,
   }) {
+    final l10n = context.l10n;
     final stock = (item['current_stock'] as num?)?.toDouble() ?? 0;
     final reorder = (item['reorder_point'] as num?)?.toDouble();
     final cost = (item['cost_per_unit'] as num?)?.toDouble();
@@ -335,7 +523,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   children: [
                     Text(
                       item['name']?.toString() ?? '-',
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
                       ),
@@ -346,41 +534,53 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                       runSpacing: 8,
                       children: [
                         _buildIngredientMetaChip(
-                          'Inventory ${stock.toStringAsFixed(3)} $unit',
+                          l10n.inventoryStockWithUnit(
+                            stock.toStringAsFixed(3),
+                            unit,
+                          ),
                           color: stock <= 0
                               ? AppColors.statusCancelled
                               : AppColors.amber500,
                         ),
                         _buildIngredientMetaChip(
                           reorder == null
-                              ? 'Reorder threshold not set'
-                              : 'Reorder Threshold ${reorder.toStringAsFixed(3)} $unit',
+                              ? l10n.inventoryNoReorderPoint
+                              : l10n.inventoryReorderPointWithUnit(
+                                  reorder.toStringAsFixed(3),
+                                  unit,
+                                ),
                           color: needsReorder
                               ? AppColors.statusOccupied
                               : AppColors.surface2,
                         ),
                         _buildIngredientMetaChip(
                           cost == null
-                              ? 'Unit price not set'
-                              : 'Unit price ${NumberFormat('#,###', 'vi_VN').format(cost)} VND',
+                              ? l10n.inventoryUnitPriceUnset
+                              : l10n.inventoryUnitPriceValue(
+                                  NumberFormat('#,###', 'vi_VN').format(cost),
+                                ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     Text(
                       supplier == null || supplier.isEmpty
-                          ? 'No supplier info'
-                          : 'Supplier $supplier',
-                      style: GoogleFonts.notoSansKr(
+                          ? l10n.inventoryNoSupplierInfo
+                          : l10n.inventorySupplierName(supplier),
+                      style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
                       ),
                     ),
                     Text(
                       lastUpdated == null
-                          ? 'No recent updates'
-                          : 'Updated ${DateFormat('yyyy-MM-dd HH:mm').format(lastUpdated)}',
-                      style: GoogleFonts.notoSansKr(
+                          ? l10n.inventoryNoRecentChangeLog
+                          : l10n.inventoryUpdatedAt(
+                              DateFormat(
+                                'yyyy-MM-dd HH:mm',
+                              ).format(lastUpdated),
+                            ),
+                      style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
                       ),
@@ -389,8 +589,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
                         child: Text(
-                          stock <= 0 ? 'Out of stock' : 'Reorder needed',
-                          style: GoogleFonts.notoSansKr(
+                          stock <= 0
+                              ? l10n.inventoryOutOfStock
+                              : l10n.inventoryNeedsReorder,
+                          style: AppFonts.system(
                             color: stock <= 0
                                 ? AppColors.statusCancelled
                                 : AppColors.statusOccupied,
@@ -402,76 +604,59 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   ],
                 ),
               ),
-              IconButton(
-                onPressed: storeId == null
-                    ? null
-                    : () => _showIngredientDialog(
-                        context,
-                        storeId,
-                        notifier,
-                        initial: item,
-                      ),
-                icon: const Icon(Icons.edit_outlined),
-                color: AppColors.textSecondary,
-                tooltip: 'Edit Ingredient',
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: storeId == null
-                      ? null
-                      : () => _showRestockWasteDialog(
-                          context,
-                          storeId: storeId,
-                          ingredientId:
-                              item['ingredient_id']?.toString() ??
-                              item['id']?.toString() ??
-                              '',
-                          ingredientName: item['name']?.toString() ?? '',
-                          unit: item['unit']?.toString() ?? 'g',
-                          isWaste: false,
-                        ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.statusAvailable,
-                    side: const BorderSide(color: AppColors.statusAvailable),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    onPressed: storeId == null
+                        ? null
+                        : () => _showRestockWasteDialog(
+                            context,
+                            storeId: storeId,
+                            ingredientId:
+                                item['ingredient_id']?.toString() ??
+                                item['id']?.toString() ??
+                                '',
+                            ingredientName: item['name']?.toString() ?? '',
+                            unit: item['unit']?.toString() ?? 'g',
+                            isWaste: false,
+                          ),
+                    icon: const Icon(Icons.add_circle_outline, size: 20),
+                    color: AppColors.statusAvailable,
+                    tooltip: l10n.inventoryReceiving,
                   ),
-                  icon: const Icon(Icons.add_circle_outline, size: 16),
-                  label: Text(
-                    'Stock In',
-                    style: GoogleFonts.notoSansKr(fontSize: 12),
+                  IconButton(
+                    onPressed: storeId == null
+                        ? null
+                        : () => _showRestockWasteDialog(
+                            context,
+                            storeId: storeId,
+                            ingredientId:
+                                item['ingredient_id']?.toString() ??
+                                item['id']?.toString() ??
+                                '',
+                            ingredientName: item['name']?.toString() ?? '',
+                            unit: item['unit']?.toString() ?? 'g',
+                            isWaste: true,
+                          ),
+                    icon: const Icon(Icons.remove_circle_outline, size: 20),
+                    color: AppColors.statusCancelled,
+                    tooltip: l10n.inventoryDisposal,
                   ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: storeId == null
-                      ? null
-                      : () => _showRestockWasteDialog(
-                          context,
-                          storeId: storeId,
-                          ingredientId:
-                              item['ingredient_id']?.toString() ??
-                              item['id']?.toString() ??
-                              '',
-                          ingredientName: item['name']?.toString() ?? '',
-                          unit: item['unit']?.toString() ?? 'g',
-                          isWaste: true,
-                        ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.statusCancelled,
-                    side: const BorderSide(color: AppColors.statusCancelled),
+                  IconButton(
+                    onPressed: storeId == null
+                        ? null
+                        : () => _showIngredientDialog(
+                            context,
+                            storeId,
+                            notifier,
+                            initial: item,
+                          ),
+                    icon: const Icon(Icons.edit_outlined, size: 20),
+                    color: AppColors.textSecondary,
+                    tooltip: l10n.inventoryEditIngredient,
                   ),
-                  icon: const Icon(Icons.remove_circle_outline, size: 16),
-                  label: Text(
-                    'Waste',
-                    style: GoogleFonts.notoSansKr(fontSize: 12),
-                  ),
-                ),
+                ],
               ),
             ],
           ),
@@ -491,7 +676,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       ),
       child: Text(
         label,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: AppColors.textPrimary,
           fontSize: 12,
           fontWeight: FontWeight.w600,
@@ -523,7 +708,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               Text(
                 title,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textPrimary,
                   fontWeight: FontWeight.w700,
                 ),
@@ -532,7 +717,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               Text(
                 message,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textSecondary,
                   fontSize: 12,
                 ),
@@ -552,10 +737,15 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     required String unit,
     required bool isWaste,
   }) async {
+    final l10n = context.l10n;
     final qtyController = TextEditingController();
     final noteController = TextEditingController();
-    final title = isWaste ? 'Waste Record' : 'Stock-In Record';
-    final actionLabel = isWaste ? 'Waste' : 'Stock In';
+    final title = isWaste
+        ? l10n.inventoryDisposalRecord
+        : l10n.inventoryReceivingRecord;
+    final actionLabel = isWaste
+        ? l10n.inventoryRegisterDisposal
+        : l10n.inventoryRegisterReceiving;
 
     final confirmed = await ToastConfirmDialog.withContent(
       context: context,
@@ -571,7 +761,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             style: const TextStyle(color: AppColors.textPrimary),
             decoration: InputDecoration(
-              labelText: 'Quantity ($unit)',
+              labelText: l10n.inventoryQuantityWithUnit(unit),
               labelStyle: const TextStyle(color: AppColors.textSecondary),
               enabledBorder: const UnderlineInputBorder(
                 borderSide: BorderSide(color: AppColors.surface2),
@@ -585,13 +775,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           TextField(
             controller: noteController,
             style: const TextStyle(color: AppColors.textPrimary),
-            decoration: const InputDecoration(
-              labelText: 'Memo (optional)',
-              labelStyle: TextStyle(color: AppColors.textSecondary),
-              enabledBorder: UnderlineInputBorder(
+            decoration: InputDecoration(
+              labelText: l10n.memoOptional,
+              labelStyle: const TextStyle(color: AppColors.textSecondary),
+              enabledBorder: const UnderlineInputBorder(
                 borderSide: BorderSide(color: AppColors.surface2),
               ),
-              focusedBorder: UnderlineInputBorder(
+              focusedBorder: const UnderlineInputBorder(
                 borderSide: BorderSide(color: AppColors.amber500),
               ),
             ),
@@ -602,10 +792,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
 
     if (confirmed != true || !context.mounted) return;
 
-    final qty = double.tryParse(qtyController.text.trim());
+    final qty = parseDecimalInput(qtyController.text);
     if (qty == null || qty <= 0) {
       if (context.mounted) {
-        showErrorToast(context, 'Enter a quantity greater than 0.');
+        showErrorToast(context, l10n.inventoryEnterQuantityGreaterThanZero);
       }
       return;
     }
@@ -642,6 +832,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     final ingredientState = ref.watch(ingredientProvider);
     final recipeState = ref.watch(recipeProvider);
     final notifier = ref.read(recipeProvider.notifier);
+    final l10n = context.l10n;
     final menuItems = recipeState.menuItems;
     final gramIngredients = ingredientState.items
         .where((item) => item['unit']?.toString() == 'g')
@@ -671,11 +862,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           Row(
             children: [
               Text(
-                'Recipe Mapping',
-                style: GoogleFonts.bebasNeue(
-                  color: AppColors.textPrimary,
-                  fontSize: 30,
-                ),
+                l10n.inventorySurfaceRecipe,
+                style: Theme.of(context).textTheme.titleLarge,
               ),
               const Spacer(),
               FilledButton.icon(
@@ -689,27 +877,15 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                         ingredients: gramIngredients,
                         initialMenuItemId: _selectedMenuItemId,
                       ),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.amber500,
-                  foregroundColor: AppColors.surface0,
-                ),
                 icon: const Icon(Icons.add),
-                label: const Text('Add Recipe Mapping'),
+                label: Text(l10n.inventoryAddRecipeMapping),
               ),
             ],
           ),
           const SizedBox(height: 10),
           Text(
-            'v1 scope: only create/edit of menu-ingredient recipe mappings is supported. Only ingredients with unit g can be linked.',
-            style: GoogleFonts.notoSansKr(
-              color: AppColors.textSecondary,
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Save operations are recorded in the inventory_recipe_upserted audit log.',
-            style: GoogleFonts.notoSansKr(
+            l10n.inventorySurfaceRecipeSummary,
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -718,12 +894,14 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           DropdownButtonFormField<String?>(
             initialValue: _selectedMenuItemId,
             dropdownColor: AppColors.surface1,
-            style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-            decoration: const InputDecoration(labelText: 'Menu Filter'),
+            style: AppFonts.system(color: AppColors.textPrimary),
+            decoration: InputDecoration(
+              labelText: context.l10n.inventoryMenuFilter,
+            ),
             items: [
-              const DropdownMenuItem<String?>(
+              DropdownMenuItem<String?>(
                 value: null,
-                child: Text('All Menus'),
+                child: Text(context.l10n.inventoryAllMenus),
               ),
               ...menuItems.map(
                 (m) => DropdownMenuItem<String?>(
@@ -740,7 +918,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(
                 recipeState.error!,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.statusCancelled,
                   fontSize: 12,
                 ),
@@ -754,10 +932,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 : recipesForMenu.isEmpty
                 ? _buildIngredientInfoState(
                     icon: Icons.receipt_long_outlined,
-                    title: 'No recipe mappings.',
+                    title: context.l10n.inventoryNoRecipeMappings,
                     message: menuItems.isEmpty
-                        ? 'Prepare menus first, then add recipe mappings.'
-                        : 'Start by adding a recipe mapping.',
+                        ? context.l10n.inventoryPrepareMenusFirst
+                        : context.l10n.inventoryStartByAddingRecipeMapping,
                   )
                 : ListView.separated(
                     itemCount: recipesForMenu.length,
@@ -790,7 +968,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                                 children: [
                                   Text(
                                     row['menu_item_name']?.toString() ?? '-',
-                                    style: GoogleFonts.notoSansKr(
+                                    style: AppFonts.system(
                                       color: AppColors.textPrimary,
                                       fontWeight: FontWeight.w700,
                                     ),
@@ -798,23 +976,29 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                                   const SizedBox(height: 4),
                                   Text(
                                     '${row['ingredient_name'] ?? '-'} · ${quantity?.toStringAsFixed(3) ?? '-'} g',
-                                    style: GoogleFonts.notoSansKr(
+                                    style: AppFonts.system(
                                       color: AppColors.textPrimary,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Ingredients Unit: $ingredientUnit',
-                                    style: GoogleFonts.notoSansKr(
+                                    context.l10n.inventoryIngredientUnit(
+                                      ingredientUnit,
+                                    ),
+                                    style: AppFonts.system(
                                       color: AppColors.textSecondary,
                                       fontSize: 12,
                                     ),
                                   ),
                                   Text(
                                     lastUpdated == null
-                                        ? 'No recent updates'
-                                        : 'Updated ${DateFormat('yyyy-MM-dd HH:mm').format(lastUpdated)}',
-                                    style: GoogleFonts.notoSansKr(
+                                        ? context.l10n.inventoryNoRecentUpdates
+                                        : context.l10n.inventoryUpdatedAt(
+                                            DateFormat(
+                                              'yyyy-MM-dd HH:mm',
+                                            ).format(lastUpdated),
+                                          ),
+                                    style: AppFonts.system(
                                       color: AppColors.textSecondary,
                                       fontSize: 12,
                                     ),
@@ -839,7 +1023,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                                     ),
                               icon: const Icon(Icons.edit_outlined),
                               color: AppColors.textSecondary,
-                              tooltip: 'Edit Recipe',
+                              tooltip: context.l10n.inventoryEditRecipe,
                             ),
                           ],
                         ),
@@ -891,8 +1075,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
 
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Column(
+      child: ListView(
         children: [
+          Text(
+            context.l10n.inventoryCountSheetTitle,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
               OutlinedButton.icon(
@@ -943,12 +1132,12 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   backgroundColor: AppColors.amber500,
                   foregroundColor: AppColors.surface0,
                 ),
-                child: const Text('Start Physical Count'),
+                child: Text(context.l10n.inventoryStartPhysicalCount),
               ),
               const Spacer(),
               Text(
-                '$entered / ${sheetRows.length} entered',
-                style: GoogleFonts.notoSansKr(
+                context.l10n.inventoryEnteredCount(entered, sheetRows.length),
+                style: AppFonts.system(
                   color: AppColors.textSecondary,
                   fontSize: 12,
                 ),
@@ -961,7 +1150,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               alignment: Alignment.centerLeft,
               child: Text(
                 countState.error!,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.statusCancelled,
                   fontSize: 12,
                 ),
@@ -971,223 +1160,235 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'Applied line-by-line from a date-based physical count sheet. Application events are recorded in the inventory_physical_count_applied audit log.',
-              style: GoogleFonts.notoSansKr(
+              context.l10n.inventoryCountSheetSubtitle,
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
             ),
           ),
           const SizedBox(height: 10),
-          Expanded(
-            child: countState.isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(color: AppColors.amber500),
-                  )
-                : sheetRows.isEmpty
-                ? Center(
-                    child: Text(
-                      'No ingredients to count.',
-                      style: GoogleFonts.notoSansKr(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  )
-                : ListView.separated(
-                    itemCount: sheetRows.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final row = sheetRows[index];
-                      final id = row['ingredient_id']?.toString() ?? '';
-                      final theoretical =
-                          (row['theoretical_quantity_g'] as num?)?.toDouble() ??
-                          0;
-                      final unit = row['ingredient_unit']?.toString() ?? 'g';
-                      final actualController = _actualControllers[id];
-                      final noteController = _noteControllers[id];
-                      if (actualController == null || noteController == null) {
-                        return const SizedBox.shrink();
-                      }
-                      final existingActual = (row['actual_quantity_g'] as num?)
-                          ?.toDouble();
-                      final storedVariance =
-                          (row['variance_quantity_g'] as num?)?.toDouble();
-                      final countDateLabel =
-                          row['count_date']?.toString() ??
-                          DateFormat('yyyy-MM-dd').format(_countDate);
-                      final lastUpdatedRaw = row['last_updated']?.toString();
-                      final lastUpdated = lastUpdatedRaw == null
-                          ? null
-                          : DateTime.tryParse(lastUpdatedRaw)?.toLocal();
-                      final actual =
-                          (double.tryParse(actualController.text.trim()) ??
-                              existingActual) ??
-                          theoretical;
-                      final variance = actual - theoretical;
+          if (countState.isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 48),
+              child: Center(
+                child: CircularProgressIndicator(color: AppColors.amber500),
+              ),
+            )
+          else if (sheetRows.isEmpty)
+            Center(
+              child: Text(
+                context.l10n.inventoryNoIngredientsToCount,
+                style: AppFonts.system(color: AppColors.textSecondary),
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: sheetRows.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final row = sheetRows[index];
+                final id = row['ingredient_id']?.toString() ?? '';
+                final theoretical =
+                    (row['theoretical_quantity_g'] as num?)?.toDouble() ?? 0;
+                final unit = row['ingredient_unit']?.toString() ?? 'g';
+                final actualController = _actualControllers[id];
+                final noteController = _noteControllers[id];
+                if (actualController == null || noteController == null) {
+                  return const SizedBox.shrink();
+                }
+                final existingActual = (row['actual_quantity_g'] as num?)
+                    ?.toDouble();
+                final storedVariance = (row['variance_quantity_g'] as num?)
+                    ?.toDouble();
+                final countDateLabel =
+                    row['count_date']?.toString() ??
+                    DateFormat('yyyy-MM-dd').format(_countDate);
+                final lastUpdatedRaw = row['last_updated']?.toString();
+                final lastUpdated = lastUpdatedRaw == null
+                    ? null
+                    : DateTime.tryParse(lastUpdatedRaw)?.toLocal();
+                final actual =
+                    parseDecimalInput(actualController.text) ??
+                    existingActual ??
+                    theoretical;
+                final variance = actual - theoretical;
 
-                      return Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface1,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.surface2),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              row['ingredient_name']?.toString() ?? '-',
-                              style: GoogleFonts.notoSansKr(
-                                color: AppColors.textPrimary,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Theoretical ${theoretical.toStringAsFixed(3)} $unit',
-                              style: GoogleFonts.notoSansKr(
-                                color: AppColors.textSecondary,
-                                fontSize: 12,
-                              ),
-                            ),
-                            Text(
-                              existingActual == null
-                                  ? 'No recorded actual stock'
-                                  : 'Recorded actual ${existingActual.toStringAsFixed(3)} $unit',
-                              style: GoogleFonts.notoSansKr(
-                                color: AppColors.textSecondary,
-                                fontSize: 12,
-                              ),
-                            ),
-                            Text(
-                              storedVariance == null
-                                  ? 'No recorded variance'
-                                  : 'Recorded variance ${storedVariance.toStringAsFixed(3)} $unit',
-                              style: GoogleFonts.notoSansKr(
-                                color: AppColors.textSecondary,
-                                fontSize: 12,
-                              ),
-                            ),
-                            Text(
-                              'Count date $countDateLabel',
-                              style: GoogleFonts.notoSansKr(
-                                color: AppColors.textSecondary,
-                                fontSize: 12,
-                              ),
-                            ),
-                            Text(
-                              lastUpdated == null
-                                  ? 'No recent application'
-                                  : 'Last applied ${DateFormat('yyyy-MM-dd HH:mm').format(lastUpdated)}',
-                              style: GoogleFonts.notoSansKr(
-                                color: AppColors.textSecondary,
-                                fontSize: 12,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: actualController,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                    decimal: true,
-                                  ),
-                              decoration: InputDecoration(
-                                labelText: 'Actual ($unit)',
-                                hintText: existingActual?.toStringAsFixed(3),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: noteController,
-                              decoration: const InputDecoration(
-                                labelText: 'Memo (optional)',
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Pending variance ${variance.toStringAsFixed(3)} $unit',
-                              style: GoogleFonts.notoSansKr(
-                                color: variance.abs() < 0.001
-                                    ? AppColors.textSecondary
-                                    : AppColors.statusOccupied,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: FilledButton(
-                                onPressed: storeId == null
-                                    ? null
-                                    : () async {
-                                        final parsed = double.tryParse(
-                                          actualController.text.trim(),
-                                        );
-                                        if (parsed == null) {
-                                          showErrorToast(
-                                            context,
-                                            'Enter actual stock as a number.',
-                                          );
-                                          return;
-                                        }
-                                        if (parsed < 0) {
-                                          showErrorToast(
-                                            context,
-                                            'Actual stock must be 0 or greater.',
-                                          );
-                                          return;
-                                        }
-                                        await ref
-                                            .read(
-                                              physicalCountProvider.notifier,
-                                            )
-                                            .submit(
-                                              storeId: storeId,
-                                              ingredientId: id,
-                                              countDate: DateFormat(
-                                                'yyyy-MM-dd',
-                                              ).format(_countDate),
-                                              actualQty: parsed,
-                                              note:
-                                                  noteController.text
-                                                      .trim()
-                                                      .isEmpty
-                                                  ? null
-                                                  : noteController.text.trim(),
-                                            );
-                                        if (!context.mounted) return;
-                                        final latest = ref.read(
-                                          physicalCountProvider,
-                                        );
-                                        if (latest.error != null) {
-                                          showErrorToast(
-                                            context,
-                                            latest.error!,
-                                          );
-                                          return;
-                                        }
-                                        showSuccessToast(
-                                          context,
-                                          'Actual stock applied.',
-                                        );
-                                        await ref
-                                            .read(ingredientProvider.notifier)
-                                            .load(storeId);
-                                      },
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: AppColors.amber500,
-                                  foregroundColor: AppColors.surface0,
-                                ),
-                                child: const Text('Save Actual Stock'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface1,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.surface2),
                   ),
-          ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        row['ingredient_name']?.toString() ?? '-',
+                        style: AppFonts.system(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        context.l10n.inventoryTheoreticalWithUnit(
+                          theoretical.toStringAsFixed(3),
+                          unit,
+                        ),
+                        style: AppFonts.system(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        existingActual == null
+                            ? context.l10n.inventoryNoRecordedActualStock
+                            : context.l10n.inventoryRecordedActualWithUnit(
+                                existingActual.toStringAsFixed(3),
+                                unit,
+                              ),
+                        style: AppFonts.system(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        storedVariance == null
+                            ? context.l10n.inventoryNoRecordedVariance
+                            : context.l10n.inventoryRecordedVarianceWithUnit(
+                                storedVariance.toStringAsFixed(3),
+                                unit,
+                              ),
+                        style: AppFonts.system(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        context.l10n.inventoryCountDate(countDateLabel),
+                        style: AppFonts.system(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        lastUpdated == null
+                            ? context.l10n.inventoryNoRecentApplication
+                            : context.l10n.inventoryLastApplied(
+                                DateFormat(
+                                  'yyyy-MM-dd HH:mm',
+                                ).format(lastUpdated),
+                              ),
+                        style: AppFonts.system(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: actualController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: context.l10n.inventoryActualWithUnit(unit),
+                          hintText: existingActual?.toStringAsFixed(3),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: noteController,
+                        decoration: InputDecoration(
+                          labelText: context.l10n.inventoryMemoOptional,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        context.l10n.inventoryPendingVarianceWithUnit(
+                          variance.toStringAsFixed(3),
+                          unit,
+                        ),
+                        style: AppFonts.system(
+                          color: variance.abs() < 0.001
+                              ? AppColors.textSecondary
+                              : AppColors.statusOccupied,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton(
+                          onPressed: storeId == null
+                              ? null
+                              : () async {
+                                  final parsed = parseDecimalInput(
+                                    actualController.text,
+                                  );
+                                  if (parsed == null) {
+                                    showErrorToast(
+                                      context,
+                                      context
+                                          .l10n
+                                          .inventoryEnterActualStockNumber,
+                                    );
+                                    return;
+                                  }
+                                  if (parsed < 0) {
+                                    showErrorToast(
+                                      context,
+                                      context
+                                          .l10n
+                                          .inventoryActualStockNonNegative,
+                                    );
+                                    return;
+                                  }
+                                  await ref
+                                      .read(physicalCountProvider.notifier)
+                                      .submit(
+                                        storeId: storeId,
+                                        ingredientId: id,
+                                        countDate: DateFormat(
+                                          'yyyy-MM-dd',
+                                        ).format(_countDate),
+                                        actualQty: parsed,
+                                        note: noteController.text.trim().isEmpty
+                                            ? null
+                                            : noteController.text.trim(),
+                                      );
+                                  if (!context.mounted) return;
+                                  final latest = ref.read(
+                                    physicalCountProvider,
+                                  );
+                                  if (latest.error != null) {
+                                    showErrorToast(context, latest.error!);
+                                    return;
+                                  }
+                                  showSuccessToast(
+                                    context,
+                                    context.l10n.inventoryActualStockApplied,
+                                  );
+                                  await ref
+                                      .read(ingredientProvider.notifier)
+                                      .load(storeId);
+                                },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.amber500,
+                            foregroundColor: AppColors.surface0,
+                          ),
+                          child: Text(context.l10n.inventorySaveActualStock),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
         ],
       ),
     );
@@ -1235,35 +1436,28 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
 
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Column(
+      child: ListView(
         children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Inventory Transactions',
-              style: GoogleFonts.notoSansKr(
-                color: AppColors.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+          Text(
+            context.l10n.inventorySurfaceReport,
+            style: Theme.of(context).textTheme.titleLarge,
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'View deductions, stock-ins, waste, and adjustments for the selected period. Reorder status and physical counts are managed on other inventory screens.',
-              style: GoogleFonts.notoSansKr(
+              context.l10n.inventoryReportSubtitle,
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
             ),
           ),
           const SizedBox(height: 12),
-          _buildInventoryOperatingSummarySection(operatingSummary),
-          const SizedBox(height: 12),
-          _buildInventoryPurchaseOverview(
+          _buildInventoryPurchaseSecondaryDisclosure(
+            context: context,
             storeId: storeId,
+            operatingSummary: operatingSummary,
             overview: purchaseOverview,
             recommendationRun: recommendationRun,
             recommendationSnapshot: recommendationSnapshot,
@@ -1329,103 +1523,192 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   backgroundColor: AppColors.amber500,
                   foregroundColor: AppColors.surface0,
                 ),
-                child: const Text('Apply'),
+                child: Text(context.l10n.apply),
               ),
             ],
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              _summaryCard('Total Deducted', deduct),
+              Expanded(
+                child: _summaryCard(
+                  context.l10n.inventoryTotalDeducted,
+                  deduct,
+                ),
+              ),
               const SizedBox(width: 8),
-              _summaryCard('Total Stock-In', restock),
+              Expanded(
+                child: _summaryCard(
+                  context.l10n.inventoryTotalStockIn,
+                  restock,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
           Row(
             children: [
-              _summaryCard('Total Waste', waste),
+              Expanded(
+                child: _summaryCard(context.l10n.inventoryTotalWaste, waste),
+              ),
               const SizedBox(width: 8),
-              _summaryCard('Total Adjustment Loss', adjustLoss),
+              Expanded(
+                child: _summaryCard(
+                  context.l10n.inventoryTotalAdjustmentLoss,
+                  adjustLoss,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
-          Expanded(
-            child: report.isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(color: AppColors.amber500),
-                  )
-                : report.error != null
-                ? Center(
-                    child: Text(
-                      report.error!,
-                      style: GoogleFonts.notoSansKr(
-                        color: AppColors.statusOccupied,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      textAlign: TextAlign.center,
+          if (report.isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Center(
+                child: CircularProgressIndicator(color: AppColors.amber500),
+              ),
+            )
+          else if (report.error != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Center(
+                child: Text(
+                  report.error!,
+                  style: AppFonts.system(
+                    color: AppColors.statusOccupied,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            )
+          else if (report.transactions.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Center(
+                child: Text(
+                  context.l10n.inventoryNoTransactionsSelectedPeriod,
+                  style: AppFonts.system(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            )
+          else
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: report.transactions.length,
+              itemBuilder: (context, index) {
+                final row = report.transactions[index];
+                final qty = (row['quantity_g'] as num?)?.toDouble() ?? 0;
+                final unit =
+                    row['ingredient_unit']?.toString() ??
+                    row['unit']?.toString() ??
+                    'g';
+                final note = row['note']?.toString();
+                return ListTile(
+                  title: Text(
+                    row['ingredient_name']?.toString() ?? '-',
+                    style: AppFonts.system(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
                     ),
-                  )
-                : report.transactions.isEmpty
-                ? Center(
-                    child: Text(
-                      'No inventory transactions for the selected period.',
-                      style: GoogleFonts.notoSansKr(
-                        color: AppColors.textSecondary,
-                        fontSize: 13,
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${_txTypeLabel(row['transaction_type']?.toString() ?? '')}  ${qty.toStringAsFixed(3)} $unit',
+                        style: AppFonts.system(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: report.transactions.length,
-                    itemBuilder: (context, index) {
-                      final row = report.transactions[index];
-                      final qty = (row['quantity_g'] as num?)?.toDouble() ?? 0;
-                      final unit =
-                          row['ingredient_unit']?.toString() ??
-                          row['unit']?.toString() ??
-                          'g';
-                      final note = row['note']?.toString();
-                      return ListTile(
-                        title: Text(
-                          row['ingredient_name']?.toString() ?? '-',
-                          style: GoogleFonts.notoSansKr(
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${_txTypeLabel(row['transaction_type']?.toString() ?? '')}  ${qty.toStringAsFixed(3)} $unit',
-                              style: GoogleFonts.notoSansKr(
-                                color: AppColors.textSecondary,
-                                fontSize: 12,
-                              ),
-                            ),
-                            if (note != null && note.trim().isNotEmpty)
-                              Text(
-                                note,
-                                style: GoogleFonts.notoSansKr(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 11,
-                                ),
-                              ),
-                          ],
-                        ),
-                        trailing: Text(
-                          row['created_at']?.toString().substring(0, 16) ?? '-',
-                          style: GoogleFonts.notoSansKr(
+                      if (note != null && note.trim().isNotEmpty)
+                        Text(
+                          note,
+                          style: AppFonts.system(
                             color: AppColors.textSecondary,
                             fontSize: 11,
                           ),
                         ),
-                      );
-                    },
+                    ],
                   ),
+                  trailing: Text(
+                    row['created_at']?.toString().substring(0, 16) ?? '-',
+                    style: AppFonts.system(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInventoryPurchaseSecondaryDisclosure({
+    required BuildContext context,
+    required String? storeId,
+    required InventoryPurchaseOperatingSummary operatingSummary,
+    required InventoryPurchaseOverviewState overview,
+    required InventoryPurchaseRecommendationRunState recommendationRun,
+    required InventoryPurchaseRecommendationSnapshotState
+    recommendationSnapshot,
+    required InventoryPurchaseOrderCreationState orderCreation,
+    required InventoryPurchaseOrderSummaryState orderSummary,
+    required InventoryPurchaseOrderDetailState orderDetail,
+  }) {
+    final l10n = context.l10n;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: ExpansionTile(
+        key: const Key('inventory_purchase_secondary_detail'),
+        initiallyExpanded: false,
+        iconColor: AppColors.textSecondary,
+        collapsedIconColor: AppColors.textSecondary,
+        tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+        title: Text(
+          l10n.inventoryPurchaseOverviewTitle,
+          style: AppFonts.system(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w800,
+            fontSize: 14,
+          ),
+        ),
+        subtitle: Text(
+          l10n.inventoryPurchaseOverviewSubtitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppFonts.system(
+            color: AppColors.textSecondary,
+            fontSize: 12,
+          ),
+        ),
+        children: [
+          _buildInventoryOperatingSummarySection(context, operatingSummary),
+          const SizedBox(height: 12),
+          _buildInventoryPurchaseOverview(
+            context: context,
+            storeId: storeId,
+            overview: overview,
+            recommendationRun: recommendationRun,
+            recommendationSnapshot: recommendationSnapshot,
+            orderCreation: orderCreation,
+            orderSummary: orderSummary,
+            orderDetail: orderDetail,
           ),
         ],
       ),
@@ -1433,6 +1716,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   }
 
   Widget _buildInventoryPurchaseOverview({
+    required BuildContext context,
     required String? storeId,
     required InventoryPurchaseOverviewState overview,
     required InventoryPurchaseRecommendationRunState recommendationRun,
@@ -1442,6 +1726,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     required InventoryPurchaseOrderSummaryState orderSummary,
     required InventoryPurchaseOrderDetailState orderDetail,
   }) {
+    final l10n = context.l10n;
     final dashboard = overview.dashboard;
     final storeCount = (dashboard?['store_count'] as num?)?.toInt() ?? 0;
     final lowStockCount = (dashboard?['low_stock_count'] as num?)?.toInt() ?? 0;
@@ -1470,8 +1755,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Purchase Overview',
-                      style: GoogleFonts.notoSansKr(
+                      l10n.inventoryPurchaseOverviewTitle,
+                      style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
                         fontSize: 16,
@@ -1479,8 +1764,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Review supporting purchase metrics and generate a scoped recommendation snapshot after working the visible queue, selected runtime state, and next operator action above.',
-                      style: GoogleFonts.notoSansKr(
+                      l10n.inventoryPurchaseOverviewSubtitle,
+                      style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
                       ),
@@ -1497,7 +1782,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     : () => ref
                           .read(inventoryPurchaseOverviewProvider.notifier)
                           .load(storeId),
-                tooltip: 'Refresh Purchase Overview',
+                tooltip: l10n.inventoryPurchaseRefreshOverview,
                 icon: overview.isLoading
                     ? const SizedBox(
                         width: 18,
@@ -1536,8 +1821,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                       : const Icon(Icons.auto_graph),
                   label: Text(
                     recommendationRun.isRunning
-                        ? 'Generating Recommendation...'
-                        : 'Generate Recommendation Snapshot',
+                        ? l10n.inventoryPurchaseGenerating
+                        : l10n.inventoryPurchaseGenerateRecommendationSnapshot,
                   ),
                 ),
               ),
@@ -1547,7 +1832,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             const SizedBox(height: 12),
             Text(
               overview.error!,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.statusOccupied,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -1556,8 +1841,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ] else if (dashboard == null) ...[
             const SizedBox(height: 12),
             Text(
-              'Purchase overview will appear after a store-scoped dashboard load.',
-              style: GoogleFonts.notoSansKr(
+              l10n.inventoryPurchaseOverviewAwaitingDashboard,
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -1566,41 +1851,60 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             const SizedBox(height: 12),
             Row(
               children: [
-                _purchaseMetricCard('Store Scope', '$storeCount store(s)'),
+                Expanded(
+                  child: _purchaseMetricCard(
+                    l10n.inventoryPurchaseStoreScope,
+                    l10n.inventoryPurchaseStoreCount(storeCount),
+                  ),
+                ),
                 const SizedBox(width: 8),
-                _purchaseMetricCard(
-                  'Low Stock Alerts',
-                  '$lowStockCount item(s)',
+                Expanded(
+                  child: _purchaseMetricCard(
+                    l10n.inventoryPurchaseLowStockAlerts,
+                    l10n.inventoryPurchaseCountItems(lowStockCount),
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
             Row(
               children: [
-                _purchaseMetricCard(
-                  'Inventory Value',
-                  _formatCurrencyCompact(totalInventoryAmount),
+                Expanded(
+                  child: _purchaseMetricCard(
+                    l10n.inventoryPurchaseAssetAmount,
+                    _formatCurrencyCompact(totalInventoryAmount),
+                  ),
                 ),
                 const SizedBox(width: 8),
-                _purchaseMetricCard(
-                  'Submitted Orders',
-                  _formatCurrencyCompact(submittedPurchaseAmount),
+                Expanded(
+                  child: _purchaseMetricCard(
+                    l10n.inventoryPurchaseSubmittedAmount,
+                    _formatCurrencyCompact(submittedPurchaseAmount),
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
             Row(
               children: [
-                _purchaseMetricCard(
-                  'Approved Orders',
-                  _formatCurrencyCompact(approvedPurchaseAmount),
+                Expanded(
+                  child: _purchaseMetricCard(
+                    l10n.inventoryPurchaseOfficeApprovedAmount,
+                    _formatCurrencyCompact(approvedPurchaseAmount),
+                  ),
                 ),
                 const SizedBox(width: 8),
-                _purchaseMetricCard('Slice Mode', 'Supporting context'),
+                Expanded(
+                  child: _purchaseMetricCard(
+                    l10n.inventoryPurchaseSliceMode,
+                    l10n.inventoryPurchaseSupportingContext,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
             _buildPurchaseOverviewDetail(
+              context: context,
               lowStockCount: lowStockCount,
               submittedPurchaseAmount: submittedPurchaseAmount,
               approvedPurchaseAmount: approvedPurchaseAmount,
@@ -1621,22 +1925,30 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   }
 
   Widget _buildPurchaseOverviewDetail({
+    required BuildContext context,
     required int lowStockCount,
     required double submittedPurchaseAmount,
     required double approvedPurchaseAmount,
     required InventoryPurchaseRecommendationRunState recommendationRun,
   }) {
+    final l10n = context.l10n;
     final approvalGap = submittedPurchaseAmount - approvedPurchaseAmount;
     final normalizedGap = approvalGap > 0 ? approvalGap : 0.0;
     final reviewFocus = lowStockCount > 0
-        ? 'Review low-stock items before creating any new purchase workflow.'
-        : 'No low-stock alerts in the current scoped dashboard snapshot.';
+        ? l10n.inventoryPurchaseReviewLowStockFocus
+        : l10n.inventoryPurchaseNoLowStockAlerts;
     final approvalStatus = normalizedGap > 0
-        ? 'Submitted orders exceed approved orders by ${_formatCurrencyCompact(normalizedGap)}.'
-        : 'Approved purchase volume is aligned with or ahead of submitted volume.';
+        ? l10n.inventoryPurchaseApprovalGapStatus(
+            _formatCurrencyCompact(normalizedGap),
+          )
+        : l10n.inventoryPurchaseApprovalAlignedStatus;
     final recommendationStatus = recommendationRun.lastRunId == null
-        ? 'No recommendation snapshot has been generated from the tracked POS workspace yet.'
-        : 'Last snapshot ${recommendationRun.lastRunId!.substring(0, 8)} ran for ${recommendationRun.lastTargetStockDays?.toStringAsFixed(0) ?? '-'} day coverage as of ${recommendationRun.lastAsOfDate ?? '-'}.';
+        ? l10n.inventoryPurchaseNoRecommendationSnapshot
+        : l10n.inventoryPurchaseLastSnapshotStatus(
+            recommendationRun.lastRunId!.substring(0, 8),
+            recommendationRun.lastTargetStockDays?.toStringAsFixed(0) ?? '-',
+            recommendationRun.lastAsOfDate ?? '-',
+          );
 
     return Container(
       width: double.infinity,
@@ -1650,23 +1962,26 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Purchase Review Detail',
-            style: GoogleFonts.notoSansKr(
+            l10n.inventoryPurchaseReviewDetailTitle,
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 14,
             ),
           ),
           const SizedBox(height: 8),
-          _purchaseDetailRow('Approval Gap', approvalStatus),
+          _purchaseDetailRow(l10n.inventoryPurchaseApprovalGap, approvalStatus),
           const SizedBox(height: 8),
-          _purchaseDetailRow('Review Focus', reviewFocus),
-          const SizedBox(height: 8),
-          _purchaseDetailRow('Recommendation Status', recommendationStatus),
+          _purchaseDetailRow(l10n.inventoryPurchaseReviewFocus, reviewFocus),
           const SizedBox(height: 8),
           _purchaseDetailRow(
-            'Boundary',
-            'This slice may create recommendation snapshots and supplier-grouped purchase orders, but approval stays Office-owned and receiving runs only through the tracked backend receipt contract.',
+            l10n.inventoryPurchaseRecommendationStatus,
+            recommendationStatus,
+          ),
+          const SizedBox(height: 8),
+          _purchaseDetailRow(
+            l10n.inventoryPurchaseBoundary,
+            l10n.inventoryPurchaseBoundaryDetail,
           ),
         ],
       ),
@@ -1674,8 +1989,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   }
 
   Widget _buildInventoryOperatingSummarySection(
+    BuildContext context,
     InventoryPurchaseOperatingSummary summary,
   ) {
+    final l10n = context.l10n;
     final reconciliation = summary.reconciliationSummary;
 
     return Container(
@@ -1690,8 +2007,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Inventory Operating Runtime Summary',
-            style: GoogleFonts.notoSansKr(
+            l10n.inventoryPurchaseRuntimeSummaryTitle,
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 14,
@@ -1699,22 +2016,22 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 4),
           Text(
-            'Read the full inventory operating flow from one POS surface: recommendation runtime, latest snapshot state, purchase-order creation readiness, approval handoff, receiving readiness, selected purchase-order closure, blocked reasons, and the next operator action.',
-            style: GoogleFonts.notoSansKr(
+            l10n.inventoryPurchaseRuntimeSummarySubtitle,
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            'Work the queue first, keep the selected purchase-order and handoff state visible, and use the supporting dashboard context only after the current action path is clear.',
-            style: GoogleFonts.notoSansKr(
+            l10n.inventoryPurchaseRuntimeSummaryHint,
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
           ),
           const SizedBox(height: 10),
-          _buildInventoryActionQueueSection(summary.actionQueue),
+          _buildInventoryActionQueueSection(context, summary.actionQueue),
           const SizedBox(height: 10),
           Container(
             width: double.infinity,
@@ -1728,8 +2045,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Next Operator Action',
-                  style: GoogleFonts.notoSansKr(
+                  l10n.inventoryPurchaseNextOperatorAction,
+                  style: AppFonts.system(
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
@@ -1738,7 +2055,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 const SizedBox(height: 4),
                 Text(
                   summary.nextOperatorAction,
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.textSecondary,
                     fontSize: 12,
                   ),
@@ -1748,8 +2065,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 10),
           Text(
-            'Selected Runtime And Handoff State',
-            style: GoogleFonts.notoSansKr(
+            l10n.inventoryPurchaseSelectedRuntimeState,
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 12,
@@ -1803,14 +2120,20 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     : AppColors.amber500,
               ),
               _buildIngredientMetaChip(
-                'Visible snapshot lines ${summary.visibleRecommendationLineCount}',
+                l10n.inventoryPurchaseVisibleSnapshotLines(
+                  summary.visibleRecommendationLineCount,
+                ),
                 color: AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                'Visible purchase orders ${summary.visiblePurchaseOrderCount}',
+                l10n.inventoryPurchaseVisiblePurchaseOrders(
+                  summary.visiblePurchaseOrderCount,
+                ),
               ),
               _buildIngredientMetaChip(
-                'Blocked reasons ${summary.visibleBlockedReasonCount}',
+                l10n.inventoryPurchaseBlockedReasonsCount(
+                  summary.visibleBlockedReasonCount,
+                ),
                 color: summary.visibleBlockedReasonCount > 0
                     ? AppColors.statusOccupied
                     : AppColors.statusAvailable,
@@ -1819,8 +2142,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 10),
           Text(
-            'Operating blocked reasons',
-            style: GoogleFonts.notoSansKr(
+            l10n.inventoryPurchaseOperatingBlockedReasons,
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 12,
@@ -1829,8 +2152,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 6),
           if (summary.blockedReasons.isEmpty)
             Text(
-              'No operating blocker is currently visible beyond the tracked runtime labels.',
-              style: GoogleFonts.notoSansKr(
+              l10n.inventoryPurchaseNoOperatingBlockers,
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -1844,13 +2167,16 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   .toList(),
             ),
           const SizedBox(height: 10),
-          _buildInventorySupplierBottleneckSection(summary.supplierBottlenecks),
+          _buildInventorySupplierBottleneckSection(
+            context,
+            summary.supplierBottlenecks,
+          ),
           const SizedBox(height: 10),
-          _buildInventoryReconciliationSummarySection(reconciliation),
+          _buildInventoryReconciliationSummarySection(context, reconciliation),
           const SizedBox(height: 10),
           Text(
             summary.operatingNarrative,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -1861,8 +2187,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   }
 
   Widget _buildInventoryReconciliationSummarySection(
+    BuildContext context,
     InventoryPurchaseReconciliationSummary summary,
   ) {
+    final l10n = context.l10n;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(10),
@@ -1877,8 +2205,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Open PO Reconciliation Summary',
-            style: GoogleFonts.notoSansKr(
+            l10n.inventoryPurchaseReconciliationSummaryTitle,
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 12,
@@ -1886,8 +2214,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 4),
           Text(
-            'Review the current store-scoped recommendation-to-receiving posture before drilling into one purchase order.',
-            style: GoogleFonts.notoSansKr(
+            l10n.inventoryPurchaseReconciliationSummarySubtitle,
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -1898,22 +2226,26 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             runSpacing: 8,
             children: [
               _buildIngredientMetaChip(
-                'Recommended ${summary.recommendedCount}',
-                color: AppColors.statusAvailable,
-              ),
-              _buildIngredientMetaChip('Ordered ${summary.orderedCount}'),
-              _buildIngredientMetaChip(
-                'Received ${summary.receivedCount}',
+                l10n.inventoryPurchaseRecommendedCount(
+                  summary.recommendedCount,
+                ),
                 color: AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                'Remaining ${summary.remainingCount}',
+                l10n.inventoryPurchaseOrderedCount(summary.orderedCount),
+              ),
+              _buildIngredientMetaChip(
+                l10n.inventoryPurchaseReceivedCount(summary.receivedCount),
+                color: AppColors.statusAvailable,
+              ),
+              _buildIngredientMetaChip(
+                l10n.inventoryPurchaseRemainingCount(summary.remainingCount),
                 color: summary.remainingCount > 0
                     ? AppColors.amber500
                     : AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                'Delayed ${summary.delayedCount}',
+                l10n.inventoryPurchaseDelayedCount(summary.delayedCount),
                 color: summary.delayedCount > 0
                     ? AppColors.statusOccupied
                     : AppColors.statusAvailable,
@@ -1929,7 +2261,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 8),
           Text(
             summary.narrative,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -1940,8 +2272,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   }
 
   Widget _buildInventoryActionQueueSection(
+    BuildContext context,
     List<InventoryPurchaseActionQueueEntry> actionQueue,
   ) {
+    final l10n = context.l10n;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(10),
@@ -1954,8 +2288,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Store-Level Inventory Action Queue',
-            style: GoogleFonts.notoSansKr(
+            l10n.inventoryPurchaseActionQueueTitle,
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 12,
@@ -1963,8 +2297,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 4),
           Text(
-            'Use the provider-owned queue to see which open purchase orders need Office handoff, receiving, follow-up, or escalation first.',
-            style: GoogleFonts.notoSansKr(
+            l10n.inventoryPurchaseActionQueueSubtitle,
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -1972,8 +2306,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 8),
           if (actionQueue.isEmpty)
             Text(
-              'No open purchase orders are currently visible in the tracked POS runtime queue.',
-              style: GoogleFonts.notoSansKr(
+              l10n.inventoryPurchaseActionQueueEmpty,
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -1981,7 +2315,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           else
             Column(
               children: actionQueue
-                  .map((queueItem) => _buildInventoryActionQueueRow(queueItem))
+                  .map(
+                    (queueItem) =>
+                        _buildInventoryActionQueueRow(context, queueItem),
+                  )
                   .toList(),
             ),
         ],
@@ -1990,8 +2327,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   }
 
   Widget _buildInventoryActionQueueRow(
+    BuildContext context,
     InventoryPurchaseActionQueueEntry queueItem,
   ) {
+    final l10n = context.l10n;
     final severityColor = _inventoryReceivingBlockerSeverityColor(
       queueItem.blockerSeverity,
     );
@@ -2018,7 +2357,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   children: [
                     Text(
                       '${queueItem.purchaseOrderNo} · ${queueItem.supplierLabel}',
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
                         fontSize: 12,
@@ -2027,7 +2366,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     const SizedBox(height: 4),
                     Text(
                       queueItem.operatorReason,
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
                       ),
@@ -2057,15 +2396,15 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               ),
               if (queueItem.isSelected)
                 _buildIngredientMetaChip(
-                  'Selected PO',
+                  l10n.inventoryPurchaseSelectedPo,
                   color: AppColors.amber500,
                 ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            'Next action: ${queueItem.nextAction}',
-            style: GoogleFonts.notoSansKr(
+            l10n.inventoryPurchaseNextAction(queueItem.nextAction),
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -2076,8 +2415,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   }
 
   Widget _buildInventorySupplierBottleneckSection(
+    BuildContext context,
     List<InventoryPurchaseSupplierBottleneckState> bottlenecks,
   ) {
+    final l10n = context.l10n;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(10),
@@ -2090,8 +2431,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Supplier Receiving Bottleneck View',
-            style: GoogleFonts.notoSansKr(
+            l10n.inventoryPurchaseSupplierBottleneckTitle,
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 12,
@@ -2099,8 +2440,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 4),
           Text(
-            'Review supplier-grouped queue pressure so follow-up happens at the supplier bottleneck level, not only one line at a time.',
-            style: GoogleFonts.notoSansKr(
+            l10n.inventoryPurchaseSupplierBottleneckSubtitle,
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -2110,7 +2451,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             children: bottlenecks
                 .map(
                   (bottleneck) =>
-                      _buildInventorySupplierBottleneckRow(bottleneck),
+                      _buildInventorySupplierBottleneckRow(context, bottleneck),
                 )
                 .toList(),
           ),
@@ -2120,8 +2461,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   }
 
   Widget _buildInventorySupplierBottleneckRow(
+    BuildContext context,
     InventoryPurchaseSupplierBottleneckState bottleneck,
   ) {
+    final l10n = context.l10n;
     final severityColor = _inventoryReceivingBlockerSeverityColor(
       bottleneck.severity,
     );
@@ -2146,7 +2489,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   children: [
                     Text(
                       bottleneck.supplierLabel,
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
                         fontSize: 12,
@@ -2155,7 +2498,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     const SizedBox(height: 4),
                     Text(
                       bottleneck.narrative,
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
                       ),
@@ -2175,12 +2518,14 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             runSpacing: 8,
             children: [
               _buildIngredientMetaChip(
-                'Affected PO ${bottleneck.affectedPoCount}',
+                l10n.inventoryPurchaseAffectedPoCount(
+                  bottleneck.affectedPoCount,
+                ),
                 color: AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(bottleneck.blockedReasonCluster),
               _buildIngredientMetaChip(
-                'Oldest wait ${bottleneck.oldestWaitingAge}',
+                l10n.inventoryPurchaseOldestWait(bottleneck.oldestWaitingAge),
                 color: AppColors.amber500,
               ),
               _buildIngredientMetaChip(
@@ -2237,7 +2582,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   children: [
                     Text(
                       'Latest Recommendation Snapshot',
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
                         fontSize: 14,
@@ -2246,7 +2591,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     const SizedBox(height: 4),
                     Text(
                       'Read the most recent recommendation run before deciding whether the next tracked slice should create purchase orders.',
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
                       ),
@@ -2285,7 +2630,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             const SizedBox(height: 12),
             Text(
               snapshot.error!,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.statusOccupied,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -2295,7 +2640,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             const SizedBox(height: 12),
             Text(
               'No recommendation snapshot detail has been generated for this store yet.',
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -2375,7 +2720,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             if (snapshot.lines.isEmpty)
               Text(
                 'This snapshot exists, but no recommendation lines are currently visible in the tracked POS scope.',
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textSecondary,
                   fontSize: 12,
                 ),
@@ -2406,7 +2751,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         children: [
           Text(
             'Latest Purchase Order Creation',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 13,
@@ -2417,7 +2762,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             orders.isEmpty
                 ? 'The latest snapshot did not produce any supplier-qualified purchase orders.'
                 : '${orders.length} submitted purchase order(s) were created from the latest recommendation snapshot.',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -2488,7 +2833,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   children: [
                     Text(
                       'Recent Purchase Orders',
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
                         fontSize: 13,
@@ -2497,7 +2842,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     const SizedBox(height: 4),
                     Text(
                       'Read the latest POS-created purchase orders, then use only the runtime actions that backend truth currently supports.',
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
                       ),
@@ -2525,7 +2870,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             const SizedBox(height: 12),
             Text(
               summary.error!,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.statusOccupied,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -2535,7 +2880,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             const SizedBox(height: 12),
             Text(
               'No recent purchase orders are visible for this store yet.',
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -2617,7 +2962,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     children: [
                       Text(
                         orderNo,
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: AppColors.textPrimary,
                           fontWeight: FontWeight.w700,
                         ),
@@ -2627,7 +2972,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                         supplierName == null || supplierName.isEmpty
                             ? 'Supplier unavailable'
                             : 'Supplier $supplierName',
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: AppColors.textSecondary,
                           fontSize: 12,
                         ),
@@ -2679,7 +3024,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               const SizedBox(height: 8),
               Text(
                 'Queue next action: ${queueEntry.nextAction}',
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textSecondary,
                   fontSize: 12,
                 ),
@@ -2738,7 +3083,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   children: [
                     Text(
                       'Purchase Order Detail',
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
                         fontSize: 13,
@@ -2747,7 +3092,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     const SizedBox(height: 4),
                     Text(
                       'Inspect the selected order line-by-line, keep approval inside the Office-owned boundary, and open receiving only when backend truth supports it.',
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
                       ),
@@ -2777,7 +3122,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             const SizedBox(height: 12),
             Text(
               detail.error!,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.statusOccupied,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -2787,7 +3132,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             const SizedBox(height: 12),
             Text(
               'Select a purchase order to inspect line-level detail once orders exist in the tracked POS scope.',
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -2796,7 +3141,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             const SizedBox(height: 12),
             Text(
               'Select a recent purchase order card above to inspect line-level detail.',
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -2841,7 +3186,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               const SizedBox(height: 8),
               Text(
                 'Order memo: $memo',
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textSecondary,
                   fontSize: 12,
                 ),
@@ -2896,7 +3241,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             if (sortedLines.isEmpty)
               Text(
                 'No line items are visible for the selected order.',
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textSecondary,
                   fontSize: 12,
                 ),
@@ -2946,7 +3291,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         children: [
           Text(
             'Receiving Readiness Summary',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 13,
@@ -2955,7 +3300,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 4),
           Text(
             'Review inbound receiving posture before opening receipt history or line provenance detail.',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -2994,7 +3339,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 8),
           Text(
             runtimeSurface.receivingReadinessNarrative,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -3020,7 +3365,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         children: [
           Text(
             'Receiving Blockers Detail',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 13,
@@ -3029,7 +3374,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 4),
           Text(
             'Read the current receiving blockers without opening receipt confirmation, supplier approval, or stock mutation workflows.',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -3076,7 +3421,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   children: [
                     Text(
                       title,
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
                         fontSize: 12,
@@ -3085,7 +3430,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     const SizedBox(height: 4),
                     Text(
                       narrative,
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
                       ),
@@ -3104,14 +3449,22 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             spacing: 8,
             runSpacing: 8,
             children: [
-              _buildIngredientMetaChip('Affected PO $affectedPurchaseOrders'),
               _buildIngredientMetaChip(
-                'Impacted suppliers $impactedSuppliers',
+                context.l10n.inventoryPurchaseAffectedPoCount(
+                  int.tryParse(affectedPurchaseOrders) ?? 0,
+                ),
+              ),
+              _buildIngredientMetaChip(
+                context.l10n.inventoryPurchaseImpactedSuppliers(
+                  int.tryParse(impactedSuppliers) ?? 0,
+                ),
                 color: AppColors.amber500,
               ),
-              _buildIngredientMetaChip('Oldest wait $oldestWaitingAge'),
               _buildIngredientMetaChip(
-                'Next hint $nextHint',
+                context.l10n.inventoryPurchaseOldestWait(oldestWaitingAge),
+              ),
+              _buildIngredientMetaChip(
+                context.l10n.inventoryPurchaseNextHint(nextHint),
                 color: AppColors.statusAvailable,
               ),
             ],
@@ -3150,7 +3503,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         children: [
           Text(
             'Inventory Mutation Readiness Phase',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 13,
@@ -3159,7 +3512,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 4),
           Text(
             'Use these guardrails to confirm POS remains responsible for visibility, readiness, and operator checklist coverage before any Office-owned approval, receipt confirmation, or stock mutation workflow is considered.',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -3286,7 +3639,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         children: [
           Text(
             title,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 12,
@@ -3297,7 +3650,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 8),
           Text(
             narrative,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -3348,16 +3701,17 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     final purchaseOrderNo = order['purchase_order_no']?.toString() ?? '-';
     final confirmed = await ToastConfirmDialog.withContent(
       context: context,
-      title: '$purchaseOrderNo — Confirm Remaining Receipt',
-      confirmLabel: 'Confirm Remaining Receipt',
+      title:
+          '$purchaseOrderNo — ${context.l10n.inventoryPurchaseConfirmRemainingReceipt}',
+      confirmLabel: context.l10n.inventoryPurchaseConfirmRemainingReceipt,
       confirmTone: PosActionTone.affirm,
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Confirm the currently remaining inbound quantity from backend truth. This will create confirmed receipt records and update stock only through the tracked inventory receipt contract.',
-            style: GoogleFonts.notoSansKr(
+            context.l10n.inventoryPurchaseConfirmRemainingReceiptHelp,
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -3366,13 +3720,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           TextField(
             controller: noteController,
             style: const TextStyle(color: AppColors.textPrimary),
-            decoration: const InputDecoration(
-              labelText: 'Memo (optional)',
-              labelStyle: TextStyle(color: AppColors.textSecondary),
-              enabledBorder: UnderlineInputBorder(
+            decoration: InputDecoration(
+              labelText: context.l10n.memoOptional,
+              labelStyle: const TextStyle(color: AppColors.textSecondary),
+              enabledBorder: const UnderlineInputBorder(
                 borderSide: BorderSide(color: AppColors.surface2),
               ),
-              focusedBorder: UnderlineInputBorder(
+              focusedBorder: const UnderlineInputBorder(
                 borderSide: BorderSide(color: AppColors.amber500),
               ),
             ),
@@ -3454,7 +3808,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         children: [
           Text(
             'Inventory Runtime Path',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 13,
@@ -3463,7 +3817,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 4),
           Text(
             'Open only the action states that the current POS runtime can support truthfully. Approval remains Office-owned, while receiving is enabled only when the backend receipt contract can safely update stock.',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -3551,8 +3905,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   : const Icon(Icons.inventory_2_outlined),
               label: Text(
                 receivingRuntime.isSubmitting
-                    ? 'Confirming Receipt...'
-                    : 'Confirm Remaining Receipt',
+                    ? context.l10n.inventoryPurchaseConfirmingReceipt
+                    : context.l10n.inventoryPurchaseConfirmRemainingReceipt,
               ),
             ),
             result: receivingRuntime.result,
@@ -3580,7 +3934,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         children: [
           Text(
             'Receiving Execution Safety Layer',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 13,
@@ -3589,7 +3943,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 4),
           Text(
             'Reduce duplicate receiving fear by showing the last runtime result, retry discipline, unknown outcome handling, and the next safe recovery step from provider truth.',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -3617,7 +3971,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 8),
           Text(
             receivingSafety.narrative,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -3644,7 +3998,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         children: [
           Text(
             'Inventory Runtime Closure',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 12,
@@ -3653,7 +4007,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 4),
           Text(
             'Keep the remaining purchase-order runtime understandable in one operational pass: approval handoff, receiving readiness, blockers, handoff target, and the last known runtime state all stay visible without leaving the POS inventory surface.',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -3704,7 +4058,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 8),
           Text(
             runtimeClosure.operatorSummary,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -3712,7 +4066,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 8),
           Text(
             'Next best operator action: ${runtimeSurface.nextBestOperatorAction}',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -3720,7 +4074,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 10),
           Text(
             'Blocked reasons',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 12,
@@ -3730,7 +4084,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           if (runtimeClosure.blockedReasons.isEmpty)
             Text(
               'No extra blocked reason is visible beyond the tracked runtime labels.',
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -3744,7 +4098,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 10),
           Text(
             'Runtime line context',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 12,
@@ -3754,7 +4108,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           if (runtimeSurface.lineContexts.isEmpty)
             Text(
               'No line-level runtime context is visible for the selected order.',
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -3782,7 +4136,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       ),
       child: Text(
         reason,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: AppColors.textSecondary,
           fontSize: 12,
         ),
@@ -3807,7 +4161,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         children: [
           Text(
             lineContext.productName,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 12,
@@ -3843,7 +4197,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 6),
           Text(
             'Line-level risk / quantity / expected / received context: ${lineContext.riskSummary}. ${lineContext.narrative}',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -3879,7 +4233,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               Expanded(
                 child: Text(
                   title,
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
@@ -3894,7 +4248,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 8),
           Text(
             narrative,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -3918,7 +4272,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 children: [
                   Text(
                     result.title,
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: AppColors.textPrimary,
                       fontWeight: FontWeight.w700,
                       fontSize: 12,
@@ -3927,7 +4281,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   const SizedBox(height: 4),
                   Text(
                     result.message,
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: AppColors.textSecondary,
                       fontSize: 12,
                     ),
@@ -3985,7 +4339,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         children: [
           Text(
             'Order Attention Banner',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 13,
@@ -3994,7 +4348,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 4),
           Text(
             'Review the current order-level risk posture before scanning individual line supplier signals.',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -4017,7 +4371,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             const SizedBox(height: 8),
             Text(
               'Top attention items',
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textPrimary,
                 fontWeight: FontWeight.w600,
                 fontSize: 12,
@@ -4083,7 +4437,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         children: [
           Text(
             'Supplier Attention Ordering',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 13,
@@ -4092,7 +4446,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 4),
           Text(
             'Higher-risk supplier lines are shown first so receipt pending, price-up, or overdue lead-time items surface before stable lines.',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -4145,7 +4499,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         children: [
           Text(
             'Supplier Context History',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 13,
@@ -4154,7 +4508,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 4),
           Text(
             'Review recent purchase and receipt history for the same supplier item without opening approval, receipt confirmation, or stock mutation workflows.',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -4163,7 +4517,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           if (linesWithHistory.isEmpty)
             Text(
               'No prior supplier history is visible for the current purchase-order lines.',
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -4216,7 +4570,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         children: [
           Text(
             productName,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
             ),
@@ -4226,7 +4580,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             supplierSku == null || supplierSku.isEmpty
                 ? 'Supplier SKU unavailable'
                 : 'Supplier SKU $supplierSku',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -4362,7 +4716,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         children: [
           Text(
             'Recent Receipts',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 13,
@@ -4371,7 +4725,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 4),
           Text(
             'Review receipt history in timeline form without opening receipt confirmation or stock mutation workflows.',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -4380,7 +4734,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           if (receipts.isEmpty)
             Text(
               'No receipt records are visible for this purchase order yet.',
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -4449,7 +4803,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     receivedAt == null
                         ? 'Receipt time unavailable'
                         : 'Receipt ${DateFormat('yyyy-MM-dd HH:mm').format(receivedAt)}',
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: AppColors.textPrimary,
                       fontWeight: FontWeight.w700,
                     ),
@@ -4489,7 +4843,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               const SizedBox(height: 8),
               Text(
                 'Receipt memo: $memo',
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: AppColors.textSecondary,
                   fontSize: 12,
                 ),
@@ -4517,7 +4871,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         children: [
           Text(
             'Receipt Visibility',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 13,
@@ -4526,7 +4880,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 4),
           Text(
             'Track receipt readiness and already recorded inbound quantities before deciding whether the backend receipt contract is ready to run.',
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -4594,7 +4948,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 8),
           Text(
             runtimeSurface.receiptVisibilityNarrative,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -4710,7 +5064,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   children: [
                     Text(
                       productName,
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
                       ),
@@ -4720,7 +5074,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                       supplierSku == null || supplierSku.isEmpty
                           ? 'Supplier SKU unavailable'
                           : 'Supplier SKU $supplierSku',
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
                       ),
@@ -4836,7 +5190,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             const SizedBox(height: 8),
             Text(
               'Line memo: $memo',
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -4886,7 +5240,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   children: [
                     Text(
                       productName,
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
                       ),
@@ -4896,7 +5250,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                       supplierName == null || supplierName.isEmpty
                           ? 'Supplier not assigned'
                           : 'Supplier $supplierName',
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
                       ),
@@ -5361,7 +5715,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               backgroundColor: AppColors.surface1,
               title: Text(
                 'Inventory Recommendation Trigger',
-                style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                style: AppFonts.system(color: AppColors.textPrimary),
               ),
               content: SizedBox(
                 width: 360,
@@ -5371,7 +5725,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   children: [
                     Text(
                       'Create a store-scoped recommendation snapshot only. This does not create purchase orders or update stock.',
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
                       ),
@@ -5414,8 +5768,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                 ),
                 FilledButton(
                   onPressed: () async {
-                    final targetStockDays = double.tryParse(
-                      targetDaysController.text.trim(),
+                    final targetStockDays = parseDecimalInput(
+                      targetDaysController.text,
                     );
                     if (targetStockDays == null || targetStockDays <= 0) {
                       showErrorToast(
@@ -5496,7 +5850,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               backgroundColor: AppColors.surface1,
               title: Text(
                 'Create Purchase Orders',
-                style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                style: AppFonts.system(color: AppColors.textPrimary),
               ),
               content: SizedBox(
                 width: 380,
@@ -5506,7 +5860,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   children: [
                     Text(
                       'Create submitted purchase orders grouped by supplier from the latest recommendation snapshot. This still does not confirm receipts or mutate stock.',
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textSecondary,
                         fontSize: 12,
                       ),
@@ -5514,7 +5868,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     const SizedBox(height: 12),
                     Text(
                       'Snapshot ${snapshotRun['id']?.toString().substring(0, 8) ?? '-'}',
-                      style: GoogleFonts.notoSansKr(
+                      style: AppFonts.system(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.w600,
                         fontSize: 12,
@@ -5618,33 +5972,31 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       '${NumberFormat('#,###', 'vi_VN').format(value.round())} VND';
 
   Widget _summaryCard(String label, double value) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: AppColors.surface1,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.surface2),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: GoogleFonts.notoSansKr(
-                color: AppColors.textSecondary,
-                fontSize: 11,
-              ),
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: AppFonts.system(
+              color: AppColors.textSecondary,
+              fontSize: 11,
             ),
-            Text(
-              value.toStringAsFixed(3),
-              style: GoogleFonts.bebasNeue(
-                color: AppColors.amber500,
-                fontSize: 26,
-              ),
+          ),
+          Text(
+            value.toStringAsFixed(3),
+            style: AppFonts.system(
+              color: AppColors.amber500,
+              fontSize: 26,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -5680,8 +6032,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Receipt Line Provenance',
-            style: GoogleFonts.notoSansKr(
+            context.l10n.inventoryReceiptLineProvenanceTitle,
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontWeight: FontWeight.w700,
               fontSize: 13,
@@ -5689,8 +6041,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           const SizedBox(height: 4),
           Text(
-            'Inspect the selected receipt line-by-line to understand ordered quantity, accepted quantity, rejected quantity, and recommendation provenance without opening any mutation workflow.',
-            style: GoogleFonts.notoSansKr(
+            context.l10n.inventoryReceiptLineProvenanceSubtitle,
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 12,
             ),
@@ -5698,8 +6050,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           const SizedBox(height: 8),
           if (selectedReceipt == null)
             Text(
-              'Select a receipt above to inspect receipt line provenance.',
-              style: GoogleFonts.notoSansKr(
+              context.l10n.inventorySelectReceiptForProvenance,
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -5710,13 +6062,16 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               runSpacing: 8,
               children: [
                 _buildIngredientMetaChip(
-                  'Selected receipt ${selectedReceipt['status']?.toString().toUpperCase() ?? 'DRAFT'}',
+                  context.l10n.inventorySelectedReceipt(
+                    selectedReceipt['status']?.toString().toUpperCase() ??
+                        'DRAFT',
+                  ),
                   color: _receiptVisibilityColor(
                     selectedReceipt['status']?.toString() ?? 'draft',
                   ),
                 ),
                 _buildIngredientMetaChip(
-                  'Receipt lines ${lineDetails.length}',
+                  context.l10n.inventoryReceiptLinesCount(lineDetails.length),
                   color: AppColors.statusAvailable,
                 ),
               ],
@@ -5724,8 +6079,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             const SizedBox(height: 8),
             if (lineDetails.isEmpty)
               Text(
-                'No receipt line detail is visible for the selected receipt.',
-                style: GoogleFonts.notoSansKr(
+                context.l10n.inventoryNoReceiptLineDetail,
+                style: AppFonts.system(
                   color: AppColors.textSecondary,
                   fontSize: 12,
                 ),
@@ -5782,7 +6137,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               Expanded(
                 child: Text(
                   productName,
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.w700,
                   ),
@@ -5800,57 +6155,73 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             runSpacing: 8,
             children: [
               _buildIngredientMetaChip(
-                'Ordered ${orderedBase.toStringAsFixed(3)} base',
+                context.l10n.inventoryOrderedBase(
+                  orderedBase.toStringAsFixed(3),
+                ),
               ),
               _buildIngredientMetaChip(
-                'Recommended ${recommendedBase.toStringAsFixed(3)} base',
+                context.l10n.inventoryRecommendedBase(
+                  recommendedBase.toStringAsFixed(3),
+                ),
                 color: AppColors.amber500,
               ),
               _buildIngredientMetaChip(
-                'Received ${receivedBase.toStringAsFixed(3)} base',
+                context.l10n.inventoryReceivedBase(
+                  receivedBase.toStringAsFixed(3),
+                ),
                 color: AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                'Accepted ${acceptedBase.toStringAsFixed(3)} base',
+                context.l10n.inventoryAcceptedBase(
+                  acceptedBase.toStringAsFixed(3),
+                ),
                 color: AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
-                'Rejected ${rejectedBase.toStringAsFixed(3)} base',
+                context.l10n.inventoryRejectedBase(
+                  rejectedBase.toStringAsFixed(3),
+                ),
                 color: rejectedBase > 0
                     ? AppColors.statusOccupied
                     : AppColors.surface2,
               ),
               _buildIngredientMetaChip(
                 recommendationRunId == null
-                    ? 'Recommendation provenance unavailable'
-                    : 'Recommendation ${recommendationRunId.substring(0, 8)}',
+                    ? context.l10n.inventoryRecommendationProvenanceUnavailable
+                    : context.l10n.inventoryRecommendationShort(
+                        recommendationRunId.substring(0, 8),
+                      ),
                 color: _recommendationRiskColor(riskStatus),
               ),
               _buildIngredientMetaChip(
                 supplierSku == null || supplierSku.isEmpty
-                    ? 'Supplier SKU unavailable'
-                    : 'Supplier SKU $supplierSku',
+                    ? context.l10n.inventorySupplierSkuUnavailable
+                    : context.l10n.inventorySupplierSku(supplierSku),
               ),
               _buildIngredientMetaChip(
                 supplierBaseFactor > 0
-                    ? 'Base factor ${supplierBaseFactor.toStringAsFixed(3)}'
-                    : 'Base factor unavailable',
+                    ? context.l10n.inventoryBaseFactor(
+                        supplierBaseFactor.toStringAsFixed(3),
+                      )
+                    : context.l10n.inventoryBaseFactorUnavailable,
               ),
               _buildIngredientMetaChip(
                 supplierMinOrder > 0
-                    ? 'Min order ${supplierMinOrder.toStringAsFixed(3)}'
-                    : 'Min order unavailable',
+                    ? context.l10n.inventoryMinOrder(
+                        supplierMinOrder.toStringAsFixed(3),
+                      )
+                    : context.l10n.inventoryMinOrderUnavailable,
               ),
               _buildIngredientMetaChip(
                 supplierLeadTimeDays > 0
-                    ? 'Lead time $supplierLeadTimeDays day(s)'
-                    : 'Lead time unavailable',
+                    ? context.l10n.inventoryLeadTimeDays(supplierLeadTimeDays)
+                    : context.l10n.inventoryLeadTimeUnavailable,
                 color: AppColors.statusAvailable,
               ),
               _buildIngredientMetaChip(
                 supplierPreferred
-                    ? 'Preferred supplier item'
-                    : 'Fallback supplier item',
+                    ? context.l10n.inventoryPreferredSupplierItem
+                    : context.l10n.inventoryFallbackSupplierItem,
                 color: supplierPreferred
                     ? AppColors.statusAvailable
                     : AppColors.surface2,
@@ -5860,8 +6231,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           if (lineMemo != null && lineMemo.trim().isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
-              'Receipt line memo: $lineMemo',
-              style: GoogleFonts.notoSansKr(
+              context.l10n.inventoryReceiptLineMemo(lineMemo),
+              style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
@@ -5873,35 +6244,33 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   }
 
   Widget _purchaseMetricCard(String label, String value) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: AppColors.surface0,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.surface2),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: GoogleFonts.notoSansKr(
-                color: AppColors.textSecondary,
-                fontSize: 11,
-              ),
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: AppFonts.system(
+              color: AppColors.textSecondary,
+              fontSize: 11,
             ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: GoogleFonts.notoSansKr(
-                color: AppColors.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: AppFonts.system(
+              color: AppColors.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -5914,7 +6283,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           width: 110,
           child: Text(
             label,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textSecondary,
               fontSize: 11,
               fontWeight: FontWeight.w700,
@@ -5924,7 +6293,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         Expanded(
           child: Text(
             value,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: AppColors.textPrimary,
               fontSize: 12,
             ),
@@ -5970,8 +6339,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             return AlertDialog(
               backgroundColor: AppColors.surface1,
               title: Text(
-                isEdit ? 'Edit Ingredient' : 'Add Ingredient',
-                style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                isEdit
+                    ? context.l10n.inventoryEditIngredient
+                    : context.l10n.inventoryAddIngredient,
+                style: AppFonts.system(color: AppColors.textPrimary),
               ),
               content: SizedBox(
                 width: 360,
@@ -5981,7 +6352,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     children: [
                       TextField(
                         controller: nameController,
-                        decoration: const InputDecoration(labelText: 'Name'),
+                        decoration: InputDecoration(
+                          labelText: context.l10n.name,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
@@ -5992,7 +6365,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                           DropdownMenuItem(value: 'ea', child: Text('ea')),
                         ],
                         onChanged: (v) => setModalState(() => unit = v ?? 'g'),
-                        decoration: const InputDecoration(labelText: 'Unit'),
+                        decoration: InputDecoration(
+                          labelText: context.l10n.inventoryUnit,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
@@ -6000,8 +6375,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
-                        decoration: const InputDecoration(
-                          labelText: 'Current Stock',
+                        decoration: InputDecoration(
+                          labelText: context.l10n.inventoryCurrentStock,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -6010,8 +6385,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
-                        decoration: const InputDecoration(
-                          labelText: 'Reorder Threshold',
+                        decoration: InputDecoration(
+                          labelText: context.l10n.inventoryReorderThreshold,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -6020,15 +6395,15 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
-                        decoration: const InputDecoration(
-                          labelText: 'Unit Price (VND)',
+                        decoration: InputDecoration(
+                          labelText: context.l10n.inventoryUnitPriceVnd,
                         ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
                         controller: supplierController,
-                        decoration: const InputDecoration(
-                          labelText: 'Supplier',
+                        decoration: InputDecoration(
+                          labelText: context.l10n.inventorySupplier,
                         ),
                       ),
                     ],
@@ -6038,7 +6413,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
+                  child: Text(context.l10n.cancel),
                 ),
                 FilledButton(
                   onPressed: () async {
@@ -6047,11 +6422,13 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
 
                     if (isEdit) {
                       final patch = <String, dynamic>{};
-                      final parsedStock = double.tryParse(stockController.text);
-                      final parsedReorder = double.tryParse(
+                      final parsedStock = parseDecimalInput(
+                        stockController.text,
+                      );
+                      final parsedReorder = parseDecimalInput(
                         reorderController.text,
                       );
-                      final parsedCost = double.tryParse(costController.text);
+                      final parsedCost = parseDecimalInput(costController.text);
                       final supplier = supplierController.text.trim();
 
                       if (name != (initial['name']?.toString() ?? '')) {
@@ -6085,7 +6462,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                       }
 
                       if (patch.isEmpty) {
-                        showErrorToast(context, 'No changes.');
+                        showErrorToast(context, context.l10n.noChanges);
                         return;
                       }
 
@@ -6099,21 +6476,24 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                           showErrorToast(
                             context,
                             ref.read(ingredientProvider).error ??
-                                'Failed to update ingredient',
+                                context.l10n.inventoryUpdateIngredientFailed,
                           );
                         }
                         return;
                       }
                       if (!context.mounted) return;
-                      showSuccessToast(context, 'Ingredient info saved.');
+                      showSuccessToast(
+                        context,
+                        context.l10n.inventoryIngredientSaved,
+                      );
                     } else {
                       final success = await notifier.add(
                         storeId: storeId,
                         name: name,
                         unit: unit,
-                        currentStock: double.tryParse(stockController.text),
-                        reorderPoint: double.tryParse(reorderController.text),
-                        costPerUnit: double.tryParse(costController.text),
+                        currentStock: parseDecimalInput(stockController.text),
+                        reorderPoint: parseDecimalInput(reorderController.text),
+                        costPerUnit: parseDecimalInput(costController.text),
                         supplierName: supplierController.text.trim().isEmpty
                             ? null
                             : supplierController.text.trim(),
@@ -6123,13 +6503,16 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                           showErrorToast(
                             context,
                             ref.read(ingredientProvider).error ??
-                                'Failed to add ingredient',
+                                context.l10n.inventoryAddIngredientFailed,
                           );
                         }
                         return;
                       }
                       if (!context.mounted) return;
-                      showSuccessToast(context, 'Ingredient added.');
+                      showSuccessToast(
+                        context,
+                        context.l10n.inventoryIngredientAdded,
+                      );
                     }
 
                     if (!context.mounted) return;
@@ -6139,7 +6522,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     backgroundColor: AppColors.amber500,
                     foregroundColor: AppColors.surface0,
                   ),
-                  child: const Text('Save'),
+                  child: Text(context.l10n.save),
                 ),
               ],
             );
@@ -6180,8 +6563,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             return AlertDialog(
               backgroundColor: AppColors.surface1,
               title: Text(
-                isEdit ? 'Edit Recipe Mapping' : 'Add Recipe Mapping',
-                style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
+                isEdit
+                    ? context.l10n.inventoryEditRecipe
+                    : context.l10n.inventoryAddRecipeMapping,
+                style: AppFonts.system(color: AppColors.textPrimary),
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -6199,7 +6584,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     onChanged: isEdit
                         ? null
                         : (v) => setModalState(() => menuItemId = v),
-                    decoration: const InputDecoration(labelText: 'Menu'),
+                    decoration: InputDecoration(labelText: context.l10n.menu),
                   ),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
@@ -6217,8 +6602,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     onChanged: isEdit
                         ? null
                         : (v) => setModalState(() => ingredientId = v),
-                    decoration: const InputDecoration(
-                      labelText: 'Ingredient (g)',
+                    decoration: InputDecoration(
+                      labelText: context.l10n.inventoryIngredientG,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -6227,25 +6612,27 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
-                    decoration: const InputDecoration(labelText: 'Usage (g)'),
+                    decoration: InputDecoration(
+                      labelText: context.l10n.inventoryUsageG,
+                    ),
                   ),
                 ],
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
+                  child: Text(context.l10n.cancel),
                 ),
                 FilledButton(
                   onPressed: () async {
-                    final qty = double.tryParse(qtyController.text.trim());
+                    final qty = parseDecimalInput(qtyController.text);
                     if (menuItemId == null ||
                         ingredientId == null ||
                         qty == null ||
                         qty <= 0) {
                       showErrorToast(
                         context,
-                        'Check the menu, ingredient, and usage (g).',
+                        context.l10n.inventoryCheckMenuIngredientUsage,
                       );
                       return;
                     }
@@ -6260,7 +6647,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                         showErrorToast(
                           context,
                           ref.read(recipeProvider).error ??
-                              'Failed to save recipe mapping',
+                              context.l10n.inventorySaveRecipeMappingFailed,
                         );
                       }
                       return;
@@ -6269,8 +6656,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     showSuccessToast(
                       context,
                       isEdit
-                          ? 'Recipe mapping updated.'
-                          : 'Recipe mapping added.',
+                          ? context.l10n.inventoryRecipeMappingUpdated
+                          : context.l10n.inventoryRecipeMappingAdded,
                     );
                     Navigator.of(context).pop();
                   },
@@ -6278,7 +6665,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                     backgroundColor: AppColors.amber500,
                     foregroundColor: AppColors.surface0,
                   ),
-                  child: const Text('Save'),
+                  child: Text(context.l10n.save),
                 ),
               ],
             );
@@ -6288,5 +6675,42 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     );
 
     qtyController.dispose();
+  }
+}
+
+class _InventorySurfaceTab extends StatelessWidget {
+  const _InventorySurfaceTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: AppRadius.lg,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? PosColors.accentMuted : PosColors.surface,
+          borderRadius: AppRadius.lg,
+          border: Border.all(
+            color: selected ? PosColors.accent : PosColors.border,
+          ),
+        ),
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: selected ? PosColors.accent : PosColors.textSecondary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -14,20 +14,24 @@ void main() {
     );
     final pinService = readRepoFile('lib/core/services/pin_service.dart');
 
-    expect(attendanceTab, contains('Preview Payroll'));
-    expect(attendanceTab, contains('Export Payroll'));
-    expect(attendanceTab, contains('Payroll Preview'));
     expect(
       attendanceTab,
-      contains('Read-only estimate for the selected attendance period.'),
+      contains('title: context.l10n.attendanceManagementTitle'),
     );
-    expect(attendanceTab, contains('Unlock Payroll'));
+    expect(attendanceTab, contains('label: context.l10n.payrollPreview'));
+    expect(attendanceTab, contains('label: context.l10n.download'));
     expect(
       attendanceTab,
-      contains('Payroll preview is locked by the current payroll PIN.'),
+      contains('title: context.l10n.attendancePayrollSummaryTitle'),
     );
+    expect(attendanceTab, contains('PosSplitContent('));
+    expect(attendanceTab, contains('PosTableShell('));
+    expect(attendanceTab, contains('compactAttendanceList'));
+    expect(attendanceTab, contains('ToastResponsiveScrollBody('));
+    expect(attendanceTab, contains('_attendanceDetailBody'));
+    expect(attendanceTab, contains('scrollable: false'));
     expect(attendanceTab, contains('pinService.verifyPin('));
-    expect(attendanceTab, contains('Unpaired shift'));
+    expect(attendanceTab, contains('record.isUnpaired'));
     expect(attendanceTab, contains('payrollService.calculatePayroll('));
     expect(attendanceTab, contains('payrollService.exportToExcel('));
 
@@ -46,4 +50,17 @@ void main() {
       isNot(contains('run_inventory_purchase_recommendation')),
     );
   });
+
+  test(
+    'attendance tab clears payroll preview when attendance scope changes',
+    () {
+      final attendanceTab = readRepoFile(
+        'lib/features/admin/tabs/attendance_tab.dart',
+      );
+
+      expect(attendanceTab, contains('void _clearPayrollPreview()'));
+      expect(attendanceTab, contains('_clearPayrollPreview();'));
+      expect(attendanceTab, contains('_payrolls = const [];'));
+    },
+  );
 }

@@ -20,6 +20,7 @@ void main() {
       'lib/core/services/offline_mutation_queue_service.dart',
     );
     final workspace = readRepoFile('lib/widgets/order_workspace.dart');
+    final englishArb = readRepoFile('lib/l10n/app_en.arb');
 
     expect(
       sql,
@@ -47,11 +48,42 @@ void main() {
       orderService,
       contains('add_items_to_order_with_client_mutation_id'),
     );
+    expect(orderService, contains('_isRpcSignatureMismatch'));
+    expect(orderService, contains("'create_order'"));
+    expect(orderService, contains("'add_items_to_order'"));
     expect(orderProvider, contains('offlineMutationQueueService.enqueue'));
     expect(orderProvider, contains('syncOfflineQueue'));
     expect(orderProvider, contains('clientMutationId: entry.id'));
+    expect(orderProvider, contains('_orderItemsRequiredMessage'));
     expect(queueService, contains('pos_offline_mutation_queue_v1'));
-    expect(workspace, contains('Offline orders are queued locally'));
+    expect(workspace, contains('orderWorkspaceOfflineQueueMessage'));
+    expect(englishArb, contains('Offline orders are queued locally'));
+  });
+
+  test('waiter kitchen send uses latest order state and visible errors', () {
+    final waiter = readRepoFile('lib/features/waiter/waiter_screen.dart');
+    final orderProvider = readRepoFile(
+      'lib/features/order/order_provider.dart',
+    );
+
+    expect(
+      waiter,
+      contains('final latestOrderState = ref.read(orderProvider)'),
+    );
+    expect(waiter, contains('latestOrderState.cart.isEmpty'));
+    expect(
+      waiter,
+      contains('showErrorToast(context, l10n.orderWorkspaceNoItemsAdded)'),
+    );
+    expect(waiter, contains('await orderNotifier.submitOrder'));
+    expect(
+      waiter,
+      contains('await orderNotifier.addMoreItems(activeOrder.id, storeId)'),
+    );
+    expect(
+      orderProvider,
+      contains('state = state.copyWith(error: _orderItemsRequiredMessage)'),
+    );
   });
 
   test('kitchen consumption and stock audit reconciliation stays read-only', () {

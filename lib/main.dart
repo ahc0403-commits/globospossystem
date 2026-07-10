@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -14,14 +15,24 @@ export 'core/ui/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Web에서는 .env 파일 로드 불필요.
-  // Native test/runtime may inject values via --dart-define only, so missing
-  // .env must not prevent boot.
-  if (!kIsWeb) {
+  // Prefer local env files when they are available, then fall back to
+  // dart-defines. Web deployments inject Supabase config via dart-define so
+  // local .env files are not bundled into the release asset set.
+  const hasWebDartDefinedSupabaseConfig =
+      kIsWeb &&
+      String.fromEnvironment('SUPABASE_URL') != '' &&
+      String.fromEnvironment('SUPABASE_ANON_KEY') != '';
+  final envCandidates = hasWebDartDefinedSupabaseConfig
+      ? const <String>[]
+      : kIsWeb
+      ? const ['.env']
+      : const ['.env.local', '.env'];
+  for (final fileName in envCandidates) {
     try {
-      await dotenv.load(fileName: '.env');
+      await dotenv.load(fileName: fileName);
+      break;
     } catch (_) {
-      // Fall back to dart-defines or defaults in AppConstants.
+      // Try the next local env source before falling back to dart-defines.
     }
   }
   await Supabase.initialize(
@@ -55,6 +66,7 @@ class GlobosPosApp extends ConsumerWidget {
       title: 'GLOBOS POS',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.build(),
+      scrollBehavior: const GlobosScrollBehavior(),
       locale: localeState.locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [
@@ -66,4 +78,17 @@ class GlobosPosApp extends ConsumerWidget {
       routerConfig: router,
     );
   }
+}
+
+class GlobosScrollBehavior extends MaterialScrollBehavior {
+  const GlobosScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => const {
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.trackpad,
+    PointerDeviceKind.stylus,
+    PointerDeviceKind.unknown,
+  };
 }

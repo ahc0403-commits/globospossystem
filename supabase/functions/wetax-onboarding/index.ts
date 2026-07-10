@@ -15,70 +15,68 @@
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getToken, WETAX_BASE_URL } from "../_shared/wetax.ts";
 
-// Supabase returns bytea as hex "\\x313233..." — decode correctly
-function decodeByteaToString(v) {
-  if (!v) return "";
-  if (v instanceof Uint8Array) return new TextDecoder().decode(v);
-  const s = String(v);
-  const hexMatch = s.match(/^[\\\\]?x([0-9a-fA-F]+)$/);
-  if (hexMatch) {
-    const bytes = new Uint8Array(hexMatch[1].length / 2);
-    for (let i = 0; i < hexMatch[1].length; i += 2)
-      bytes[i / 2] = parseInt(hexMatch[1].substring(i, i + 2), 16);
-    return new TextDecoder().decode(bytes);
-  }
-  try { return atob(s); } catch { return s; }
-}
+const TOKEN_OPTIONS = {
+  functionName: "wetax-onboarding",
+  accessReason: "onboarding_token_refresh",
+  formatLoginError: (status: number, body: unknown) =>
+    `WT00 failed: ${status} ${JSON.stringify(body)}`,
+};
 
+const USER_ALLOWED_OPERATIONS = new Set(["company_lookup"]);
+const ADMIN_ALLOWED_OPERATIONS = new Set([
+  "seller_register",
+  "shops_register",
+  "seller_info",
+]);
+const INTERNAL_ALLOWED_OPERATIONS = new Set([
+  "company_lookup",
+  "seller_register",
+  "shops_register",
+  "seller_info",
+  "commons_refresh",
+]);
 
-const WETAX_BASE_URL = Deno.env.get("WETAX_BASE_URL") ??
-  "https://apitest.wetax.com.vn";
-
-async function getToken(supabase: any): Promise<string> {
-  const { data: cred } = await supabase
-    .from("partner_credentials")
-    .select("id,user_id,password_value,current_token,token_expires_at")
-    .eq("data_source", "VNPT_EPAY")
-    .single();
-
-  if (!cred) throw new Error("partner_credentials not found");
-
-  const now = new Date();
-  const expiresAt = cred.token_expires_at ? new Date(cred.token_expires_at) : null;
-  const threshold = expiresAt ? new Date(expiresAt.getTime() - 15 * 60 * 1000) : now;
-
-  if (cred.current_token && expiresAt && now < threshold) return cred.current_token;
-
-  const password = decodeByteaToString(cred.password_value);
-
-  const loginRes = await fetch(`${WETAX_BASE_URL}/api/wtx/pa/v1/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id: cred.user_id, password }),
-  });
-  const loginBody = await loginRes.json();
-  if (!loginRes.ok || !loginBody?.data?.access_token) {
-    throw new Error(`WT00 failed: ${loginRes.status} ${JSON.stringify(loginBody)}`);
-  }
-
-  const token = loginBody.data.access_token;
-  const expiresIn = loginBody.data.expires_in ?? 86400;
-  await supabase.from("partner_credentials").update({
-    current_token: token,
-    token_expires_at: new Date(now.getTime() + expiresIn * 1000).toISOString(),
-    last_verified_at: now.toISOString(),
-    updated_at: now.toISOString(),
-  }).eq("id", cred.id);
-  await supabase.from("partner_credential_access_log").insert({
-    credential_id: cred.id, access_reason: "onboarding_token_refresh",
-    accessed_by_function: "wetax-onboarding", success: true,
-  });
-  return token;
-}
+type Actor = {
+  auth_id: string;
+  role: string;
+  is_active: boolean;
+};
 
 function authHeaders(token: string) {
-  return { "Content-Type": "application/json", "Authorization": `Bearer ${token}` };
+  return {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  };
+}
+
+function isUserAllowedOperation(operation: string, role: string) {
+  return USER_ALLOWED_OPERATIONS.has(operation) &&
+    ["cashier", "admin", "store_admin", "brand_admin", "super_admin"].includes(
+      role,
+    );
+}
+
+function isAdminAllowedOperation(operation: string, role: string) {
+  return ADMIN_ALLOWED_OPERATIONS.has(operation) &&
+    ["admin", "store_admin", "brand_admin", "super_admin"].includes(role);
+}
+
+async function actorCanAccessTaxEntity(
+  supabase: any,
+  actor: Actor,
+  taxEntityId: string | undefined,
+) {
+  if (!taxEntityId || actor.role === "super_admin") return true;
+
+  const { data, error } = await supabase.rpc("user_accessible_tax_entities", {
+    uid: actor.auth_id,
+  });
+  if (error) throw error;
+
+  return Array.isArray(data) &&
+    data.some((id) => String(id) === String(taxEntityId));
 }
 
 // WT09: company lookup by tax code
@@ -86,9 +84,11 @@ async function companyLookup(supabase: any, params: any) {
   const { tax_code } = params;
   if (!tax_code) throw new Error("tax_code required");
 
-  const token = await getToken(supabase);
+  const token = await getToken(supabase, TOKEN_OPTIONS);
   const res = await fetch(
-    `${WETAX_BASE_URL}/api/wtx/pa/v1/pos/company/${encodeURIComponent(tax_code)}`,
+    `${WETAX_BASE_URL}/api/wtx/pa/v1/pos/company/${
+      encodeURIComponent(tax_code)
+    }`,
     { method: "GET", headers: authHeaders(token) },
   );
   const body = await res.json().catch(() => null);
@@ -98,9 +98,11 @@ async function companyLookup(supabase: any, params: any) {
 // agency/sellers: register new seller
 async function sellerRegister(supabase: any, params: any) {
   const { tax_code, company_name, address, phone, email, owner_type } = params;
-  if (!tax_code || !company_name) throw new Error("tax_code and company_name required");
+  if (!tax_code || !company_name) {
+    throw new Error("tax_code and company_name required");
+  }
 
-  const token = await getToken(supabase);
+  const token = await getToken(supabase, TOKEN_OPTIONS);
   const res = await fetch(`${WETAX_BASE_URL}/api/wtx/pa/v1/agency/sellers`, {
     method: "POST",
     headers: authHeaders(token),
@@ -125,7 +127,9 @@ async function sellerRegister(supabase: any, params: any) {
 // agency/seller-shops: bulk register shops
 async function shopsRegister(supabase: any, params: any) {
   const { tax_entity_id, shops } = params;
-  if (!tax_entity_id || !shops?.length) throw new Error("tax_entity_id and shops[] required");
+  if (!tax_entity_id || !shops?.length) {
+    throw new Error("tax_entity_id and shops[] required");
+  }
 
   const { data: te } = await supabase
     .from("tax_entity")
@@ -134,12 +138,15 @@ async function shopsRegister(supabase: any, params: any) {
     .single();
   if (!te) throw new Error("tax_entity not found");
 
-  const token = await getToken(supabase);
-  const res = await fetch(`${WETAX_BASE_URL}/api/wtx/pa/v1/agency/seller-shops`, {
-    method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify({ res_key: te.res_key, shops }),
-  });
+  const token = await getToken(supabase, TOKEN_OPTIONS);
+  const res = await fetch(
+    `${WETAX_BASE_URL}/api/wtx/pa/v1/agency/seller-shops`,
+    {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ res_key: te.res_key, shops }),
+    },
+  );
   const body = await res.json().catch(() => null);
   return { http_status: res.status, body };
 }
@@ -148,7 +155,7 @@ async function shopsRegister(supabase: any, params: any) {
 async function sellerInfo(supabase: any, params: any) {
   const { tax_entity_id } = params;
 
-  const token = await getToken(supabase);
+  const token = await getToken(supabase, TOKEN_OPTIONS);
   const res = await fetch(`${WETAX_BASE_URL}/api/wtx/pa/v1/seller-info`, {
     method: "GET",
     headers: authHeaders(token),
@@ -185,7 +192,7 @@ async function sellerInfo(supabase: any, params: any) {
 
 // Refresh commons cache (payment-methods, tax-rates, currency)
 async function commonsRefresh(supabase: any) {
-  const token = await getToken(supabase);
+  const token = await getToken(supabase, TOKEN_OPTIONS);
   const categories = ["payment-methods", "tax-rates", "currency"];
   const results: any = {};
 
@@ -202,8 +209,10 @@ async function commonsRefresh(supabase: any) {
       for (const item of items) {
         await supabase.from("wetax_reference_values").upsert({
           category: cat,
-          code: item.code ?? item.method_code ?? item.currency_code ?? item.value,
-          label: item.label ?? item.name ?? item.method_name ?? item.description ?? "",
+          code: item.code ?? item.method_code ?? item.currency_code ??
+            item.value,
+          label: item.label ?? item.name ?? item.method_name ??
+            item.description ?? "",
           extra_data: item,
           fetched_at: new Date().toISOString(),
         }, { onConflict: "category,code" });
@@ -219,68 +228,105 @@ serve(async (req: Request) => {
     return new Response("Method not allowed", { status: 405 });
   }
 
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const { operation, ...params } = body;
   const authHeader = req.headers.get("Authorization");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   // Allow service_role key OR internal caller header
   const internalSecret = Deno.env.get("INTERNAL_SECRET");
+  const cronSecret = Deno.env.get("CRON_SECRET");
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  let authorized = authHeader === `Bearer ${serviceKey}` ||
-    (internalSecret && authHeader === `Bearer ${internalSecret}`);
+  const internalAuthorized = INTERNAL_ALLOWED_OPERATIONS.has(operation) &&
+    (authHeader === `Bearer ${serviceKey}` ||
+      (internalSecret && authHeader === `Bearer ${internalSecret}`) ||
+      (operation === "commons_refresh" && cronSecret &&
+        authHeader === `Bearer ${cronSecret}`));
 
-  if (!authorized && authHeader?.startsWith("Bearer ")) {
+  let actor: Actor | null = null;
+
+  if (!internalAuthorized && authHeader?.startsWith("Bearer ")) {
     const jwt = authHeader.replace("Bearer ", "").trim();
     const { data: authData } = await supabase.auth.getUser(jwt);
     const user = authData.user;
 
     if (user) {
-      const { data: actor } = await supabase
+      const { data: actorRow } = await supabase
         .from("users")
-        .select("role,is_active")
+        .select("auth_id,role,is_active")
         .eq("auth_id", user.id)
         .maybeSingle();
 
-      if (
-        actor?.is_active === true &&
-        ["cashier", "admin", "store_admin", "brand_admin", "super_admin"].includes(actor.role)
-      ) {
-        authorized = true;
+      if (actorRow?.is_active === true) {
+        actor = actorRow as Actor;
       }
     }
   }
 
-  if (!authorized) {
+  const userAuthorized = actor !== null &&
+    (isUserAllowedOperation(operation, actor.role) ||
+      isAdminAllowedOperation(operation, actor.role)) &&
+    await actorCanAccessTaxEntity(supabase, actor, params.tax_entity_id);
+
+  if (!internalAuthorized && !userAuthorized) {
     return new Response("Unauthorized", { status: 401 });
   }
 
   try {
-    const body = await req.json();
-    const { operation, ...params } = body;
-
     let result: any;
     switch (operation) {
-      case "company_lookup":   result = await companyLookup(supabase, params);   break;
-      case "seller_register":  result = await sellerRegister(supabase, params);  break;
-      case "shops_register":   result = await shopsRegister(supabase, params);   break;
-      case "seller_info":      result = await sellerInfo(supabase, params);      break;
-      case "commons_refresh":  result = await commonsRefresh(supabase);          break;
+      case "company_lookup":
+        result = await companyLookup(supabase, params);
+        break;
+      case "seller_register":
+        result = await sellerRegister(supabase, params);
+        break;
+      case "shops_register":
+        result = await shopsRegister(supabase, params);
+        break;
+      case "seller_info":
+        result = await sellerInfo(supabase, params);
+        break;
+      case "commons_refresh":
+        result = await commonsRefresh(supabase);
+        break;
       default:
-        return new Response(JSON.stringify({
-          error: "Unknown operation",
-          valid_operations: ["company_lookup","seller_register","shops_register","seller_info","commons_refresh"],
-        }), { status: 400, headers: { "Content-Type": "application/json" } });
+        return new Response(
+          JSON.stringify({
+            error: "Unknown operation",
+            valid_operations: [
+              "company_lookup",
+              "seller_register",
+              "shops_register",
+              "seller_info",
+              "commons_refresh",
+            ],
+          }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        );
     }
 
     return new Response(JSON.stringify({ ok: true, result }), {
-      status: 200, headers: { "Content-Type": "application/json" },
+      status: 200,
+      headers: { "Content-Type": "application/json" },
     });
   } catch (err) {
     console.error("Onboarding error:", err);
     return new Response(JSON.stringify({ error: (err as Error).message }), {
-      status: 500, headers: { "Content-Type": "application/json" },
+      status: 500,
+      headers: { "Content-Type": "application/json" },
     });
   }
 });

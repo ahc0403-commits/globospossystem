@@ -9,7 +9,7 @@ void main() {
     app.main();
     await tester.pumpAndSettle(const Duration(seconds: 5));
 
-    expect(find.text('GLOBOS POS'), findsNothing);
+    expect(find.text('GLOBOS POS'), findsWidgets);
     expect(find.byType(app.GlobosPosApp), findsOneWidget);
   });
 }

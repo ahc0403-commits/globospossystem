@@ -11379,7 +11379,7 @@ CREATE OR REPLACE VIEW "public"."v_daily_revenue_by_channel" AS
 ALTER VIEW "public"."v_daily_revenue_by_channel" OWNER TO "postgres";
 
 
-CREATE OR REPLACE VIEW "public"."v_external_store_overview" AS
+CREATE OR REPLACE VIEW "public"."v_external_store_overview" WITH ("security_invoker"='true') AS
  SELECT "r"."id" AS "store_id",
     "r"."name" AS "store_name",
     "b"."name" AS "brand_name",
@@ -11397,13 +11397,13 @@ CREATE OR REPLACE VIEW "public"."v_external_store_overview" AS
           WHERE (("o"."restaurant_id" = "r"."id") AND ("o"."created_at" >= "date_trunc"('month'::"text", "now"())))) AS "mtd_order_count"
    FROM ("public"."stores" "r"
      LEFT JOIN "public"."brands" "b" ON (("b"."id" = "r"."brand_id")))
-  WHERE ("r"."store_type" = 'external'::"text");
+  WHERE (("r"."store_type" = 'external'::"text") AND "public"."is_super_admin"());
 
 
 ALTER VIEW "public"."v_external_store_overview" OWNER TO "postgres";
 
 
-CREATE OR REPLACE VIEW "public"."v_external_store_sales" AS
+CREATE OR REPLACE VIEW "public"."v_external_store_sales" WITH ("security_invoker"='true') AS
  SELECT "r"."id" AS "store_id",
     "r"."brand_id",
     "b"."name" AS "brand_name",
@@ -11423,7 +11423,7 @@ CREATE OR REPLACE VIEW "public"."v_external_store_sales" AS
    FROM (("public"."payments" "p"
      JOIN "public"."stores" "r" ON (("r"."id" = "p"."restaurant_id")))
      LEFT JOIN "public"."brands" "b" ON (("b"."id" = "r"."brand_id")))
-  WHERE ("r"."store_type" = 'external'::"text")
+  WHERE (("r"."store_type" = 'external'::"text") AND "public"."is_super_admin"())
   GROUP BY "r"."id", "r"."brand_id", "b"."name", "r"."name", ("date"(("p"."created_at" AT TIME ZONE 'Asia/Ho_Chi_Minh'::"text")));
 
 
@@ -14720,15 +14720,13 @@ GRANT ALL ON TABLE "public"."v_daily_revenue_by_channel" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."v_external_store_overview" TO "anon";
-GRANT ALL ON TABLE "public"."v_external_store_overview" TO "authenticated";
-GRANT ALL ON TABLE "public"."v_external_store_overview" TO "service_role";
+GRANT SELECT ON TABLE "public"."v_external_store_overview" TO "authenticated";
+GRANT SELECT ON TABLE "public"."v_external_store_overview" TO "service_role";
 
 
 
-GRANT ALL ON TABLE "public"."v_external_store_sales" TO "anon";
-GRANT ALL ON TABLE "public"."v_external_store_sales" TO "authenticated";
-GRANT ALL ON TABLE "public"."v_external_store_sales" TO "service_role";
+GRANT SELECT ON TABLE "public"."v_external_store_sales" TO "authenticated";
+GRANT SELECT ON TABLE "public"."v_external_store_sales" TO "service_role";
 
 
 
@@ -14834,8 +14832,6 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "anon";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "authenticated";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "service_role";
-
-
 
 
 

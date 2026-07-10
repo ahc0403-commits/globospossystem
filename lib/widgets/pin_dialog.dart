@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
+import '../core/i18n/locale_extensions.dart';
 import '../main.dart';
 
-Future<String?> showPinDialog(
-  BuildContext context, {
-  String title = 'Enter PIN',
-}) async {
+Future<String?> showPinDialog(BuildContext context, {String? title}) async {
   return showDialog<String>(
     context: context,
     barrierDismissible: false,
-    builder: (ctx) => _PinDialog(title: title),
+    builder: (ctx) => _PinDialog(title: title ?? context.l10n.pinEnterTitle),
   );
 }
 
@@ -38,6 +36,7 @@ class _PinDialogState extends State<_PinDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Dialog(
       backgroundColor: AppColors.surface1,
       child: Padding(
@@ -47,7 +46,7 @@ class _PinDialogState extends State<_PinDialog> {
           children: [
             Text(
               widget.title,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: AppColors.textPrimary,
                 fontWeight: FontWeight.w700,
                 fontSize: 18,
@@ -103,7 +102,7 @@ class _PinDialogState extends State<_PinDialog> {
                                   ),
                                   child: Text(
                                     key == '<' ? '⌫' : key,
-                                    style: GoogleFonts.bebasNeue(
+                                    style: AppFonts.system(
                                       color: AppColors.textPrimary,
                                       fontSize: 24,
                                     ),
@@ -121,7 +120,7 @@ class _PinDialogState extends State<_PinDialog> {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
+                    child: Text(l10n.cancel),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -134,7 +133,7 @@ class _PinDialogState extends State<_PinDialog> {
                       backgroundColor: AppColors.amber500,
                       foregroundColor: AppColors.surface0,
                     ),
-                    child: const Text('Confirm'),
+                    child: Text(l10n.confirm),
                   ),
                 ),
               ],

@@ -54,8 +54,21 @@ supabase/.temp/
 # Claude Code prompt scratchpads
 CLAUDE_PROMPT_*.md
 
+# Generated design and manual-test artifacts
+design_artifacts/
+docs/manual_test/**/*.xlsx
+docs/manual_test/**/*.zip
+docs/manual_test/*.xlsx
+docs/training/**/*.xlsx
+docs/training/*.xlsx
+
+# Unused local font experiments. Track production fonts explicitly.
+assets/fonts/GlobosCharm-Regular.ttf
+assets/fonts/SourceHanSerif-VF.otf.ttc
+
 # Local tooling state (Claude Code session, Vercel CLI project link)
 .claude/
+.flare/
 .vercel/
 
 # Flutter gen-l10n output (generated from lib/l10n/*.arb at flutter pub get time

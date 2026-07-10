@@ -1,14 +1,27 @@
 import '../../main.dart';
 
 class MenuService {
-  Future<List<Map<String, dynamic>>> fetchCategories(
-    String storeId,
-  ) async {
+  bool _isRpcSignatureMismatch(Object error, String functionName) {
+    final message = error.toString().toLowerCase();
+    if (!message.contains(functionName.toLowerCase())) {
+      return false;
+    }
+
+    return message.contains('could not find the function') ||
+        message.contains('function public.') ||
+        message.contains('does not exist') ||
+        message.contains('no function matches');
+  }
+
+  Future<List<Map<String, dynamic>>> fetchCategories(String storeId) async {
+    // postgrest-dart's order() defaults to DESCENDING; sort_order must be
+    // ascending or the menu browser auto-selects the last (often empty test)
+    // category and renders a blank menu.
     final response = await supabase
         .from('menu_categories')
         .select()
         .eq('restaurant_id', storeId)
-        .order('sort_order');
+        .order('sort_order', ascending: true);
     return response
         .map<Map<String, dynamic>>((c) => Map<String, dynamic>.from(c))
         .toList();
@@ -19,7 +32,7 @@ class MenuService {
         .from('menu_items')
         .select()
         .eq('restaurant_id', storeId)
-        .order('sort_order');
+        .order('sort_order', ascending: true);
     return response
         .map<Map<String, dynamic>>((i) => Map<String, dynamic>.from(i))
         .toList();
@@ -30,14 +43,29 @@ class MenuService {
     required String name,
     required int sortOrder,
   }) async {
-    await supabase.rpc(
-      'admin_create_menu_category',
-      params: {
-        'p_store_id': storeId,
-        'p_name': name,
-        'p_sort_order': sortOrder,
-      },
-    );
+    try {
+      await supabase.rpc(
+        'admin_create_menu_category',
+        params: {
+          'p_store_id': storeId,
+          'p_name': name,
+          'p_sort_order': sortOrder,
+        },
+      );
+    } catch (error) {
+      if (!_isRpcSignatureMismatch(error, 'admin_create_menu_category')) {
+        rethrow;
+      }
+
+      await supabase.rpc(
+        'admin_create_menu_category',
+        params: {
+          'p_restaurant_id': storeId,
+          'p_name': name,
+          'p_sort_order': sortOrder,
+        },
+      );
+    }
   }
 
   Future<void> addMenuItem({
@@ -47,23 +75,45 @@ class MenuService {
     required double price,
     required int sortOrder,
   }) async {
-    await supabase.rpc(
-      'admin_create_menu_item',
-      params: {
-        'p_store_id': storeId,
-        'p_category_id': categoryId,
-        'p_name': name,
-        'p_price': price,
-        'p_sort_order': sortOrder,
-        'p_is_available': true,
-      },
-    );
+    final itemParams = {
+      'p_category_id': categoryId,
+      'p_name': name,
+      'p_price': price,
+      'p_sort_order': sortOrder,
+      'p_is_available': true,
+    };
+
+    try {
+      await supabase.rpc(
+        'admin_create_menu_item',
+        params: {'p_store_id': storeId, ...itemParams},
+      );
+    } catch (error) {
+      if (!_isRpcSignatureMismatch(error, 'admin_create_menu_item')) {
+        rethrow;
+      }
+
+      await supabase.rpc(
+        'admin_create_menu_item',
+        params: {'p_restaurant_id': storeId, ...itemParams},
+      );
+    }
   }
 
   Future<void> toggleAvailability(String itemId, bool isAvailable) async {
     await supabase.rpc(
       'admin_update_menu_item',
       params: {'p_item_id': itemId, 'p_is_available': isAvailable},
+    );
+  }
+
+  Future<void> togglePublicVisibility(
+    String itemId,
+    bool isVisiblePublic,
+  ) async {
+    await supabase.rpc(
+      'admin_update_menu_item',
+      params: {'p_item_id': itemId, 'p_is_visible_public': isVisiblePublic},
     );
   }
 

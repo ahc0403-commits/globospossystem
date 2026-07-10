@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AppConstants {
@@ -22,7 +21,6 @@ class AppConstants {
   );
 
   static String? _envValue(String key) {
-    if (kIsWeb) return null;
     try {
       return dotenv.env[key];
     } catch (_) {

@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/services/connectivity_service.dart';
+import '../../core/services/order_service.dart';
+import '../../core/ui/pos_design_tokens.dart';
+import '../../core/utils/number_input_utils.dart';
 import '../../main.dart';
+import '../../core/ui/toast/toast.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/offline_banner.dart';
@@ -11,6 +16,7 @@ import '../../widgets/order_workspace.dart';
 import '../admin/providers/menu_provider.dart';
 import '../auth/auth_provider.dart';
 import '../order/order_provider.dart';
+import '../table/floor_layout.dart';
 import '../table/table_model.dart';
 import '../table/table_provider.dart';
 
@@ -49,7 +55,7 @@ final restaurantSettingsProvider = FutureProvider.family<StoreSettings, String>(
     final rawCharge = response['per_person_charge'];
     final charge = switch (rawCharge) {
       num value => value.toDouble(),
-      String value => double.tryParse(value),
+      String value => parseDecimalInput(value),
       _ => null,
     };
 
@@ -103,12 +109,26 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     String storeId,
     bool requireGuestCount,
   ) async {
+    if (table.isReserved) {
+      showErrorToast(
+        context,
+        context.l10n.waiterTableReservedUnavailable(table.tableNumber),
+      );
+      return;
+    }
+
     int? guestCount;
-    if (requireGuestCount) {
-      guestCount = await _showGuestCountDialog();
+    final shouldRequestGuestCount = requireGuestCount || table.isAvailable;
+    if (shouldRequestGuestCount) {
+      guestCount = await _showGuestCountDialog(maxGuests: table.seatCount);
       if (guestCount == null) {
         return;
       }
+    }
+
+    final selectingDifferentTable = _selectedTable?.id != table.id;
+    if (selectingDifferentTable) {
+      ref.read(orderProvider.notifier).clearSession();
     }
 
     setState(() {
@@ -129,51 +149,113 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     });
   }
 
-  Future<int?> _showGuestCountDialog() async {
+  Future<int?> _showGuestCountDialog({int? maxGuests}) async {
     final l10n = context.l10n;
     final controller = TextEditingController(
       text: _selectedGuestCount?.toString() ?? '',
     );
+    String? guestCountError(String value) {
+      final guestCount = parseIntInput(value);
+      if (guestCount == null || guestCount < 1) {
+        return l10n.tablesInvalidTableAndSeat;
+      }
+      if (maxGuests != null && maxGuests > 0 && guestCount > maxGuests) {
+        return l10n.waiterGuestCountOverSeatLimit(maxGuests);
+      }
+      return null;
+    }
+
     final result = await showDialog<int>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppColors.surface1,
-          title: Text(
-            l10n.waiterGuestCountTitle,
-            style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-          ),
-          content: TextField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-            decoration: InputDecoration(labelText: l10n.waiterGuestCountField),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(l10n.cancel),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.amber500,
-                foregroundColor: AppColors.surface0,
+        var errorText = guestCountError(controller.text);
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface1,
+              title: Text(
+                l10n.waiterGuestCountTitle,
+                style: AppFonts.system(color: AppColors.textPrimary),
               ),
-              onPressed: () {
-                final guestCount = int.tryParse(controller.text.trim());
-                if (guestCount == null || guestCount < 1) {
-                  return;
-                }
-                Navigator.of(context).pop(guestCount);
-              },
-              child: Text(l10n.confirm),
-            ),
-          ],
+              content: TextField(
+                key: const Key('waiter_guest_count_input'),
+                controller: controller,
+                keyboardType: TextInputType.number,
+                style: AppFonts.system(color: AppColors.textPrimary),
+                onChanged: (value) {
+                  setDialogState(() {
+                    errorText = guestCountError(value);
+                  });
+                },
+                decoration: InputDecoration(
+                  labelText: l10n.waiterGuestCountField,
+                  helperText: maxGuests != null && maxGuests > 0
+                      ? l10n.waiterSeatCount(maxGuests)
+                      : null,
+                  errorText: errorText,
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(l10n.cancel),
+                ),
+                FilledButton(
+                  key: const Key('waiter_guest_count_confirm'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.amber500,
+                    foregroundColor: AppColors.surface0,
+                  ),
+                  onPressed: errorText != null
+                      ? null
+                      : () {
+                          final guestCount = parseIntInput(controller.text);
+                          if (guestCount == null) {
+                            return;
+                          }
+                          Navigator.of(context).pop(guestCount);
+                        },
+                  child: Text(l10n.confirm),
+                ),
+              ],
+            );
+          },
         );
       },
     );
-    controller.dispose();
+    // Dispose only after the dialog's exit transition finishes — the closing
+    // frame still rebuilds the TextField, and disposing immediately throws
+    // "TextEditingController was used after being disposed", which error-boxes
+    // the whole waiter surface.
+    Future.delayed(const Duration(milliseconds: 400), controller.dispose);
     return result;
+  }
+
+  Future<void> _onChangeGuestCount(
+    String storeId,
+    OrderState orderState,
+  ) async {
+    final activeOrder = orderState.activeOrder;
+    if (activeOrder == null) {
+      return;
+    }
+
+    setState(() {
+      _selectedGuestCount = activeOrder.guestCount ?? _selectedGuestCount;
+    });
+    final guestCount = await _showGuestCountDialog(
+      maxGuests: _selectedTable?.seatCount,
+    );
+    if (guestCount == null) {
+      return;
+    }
+
+    setState(() {
+      _selectedGuestCount = guestCount;
+    });
+    await ref
+        .read(orderProvider.notifier)
+        .updateGuestCount(activeOrder.id, storeId, guestCount);
   }
 
   Future<bool> _showCancelOrderDialog({required String tableNumber}) async {
@@ -184,14 +266,14 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
         backgroundColor: AppColors.surface1,
         title: Text(
           l10n.waiterCancelOrderTitle,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textPrimary,
             fontWeight: FontWeight.w700,
           ),
         ),
         content: Text(
           l10n.waiterCancelOrderMessage(tableNumber),
-          style: GoogleFonts.notoSansKr(color: AppColors.textSecondary),
+          style: AppFonts.system(color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
@@ -199,6 +281,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
             child: Text(l10n.waiterBack),
           ),
           FilledButton.icon(
+            key: const Key('waiter_cancel_order_confirm_button'),
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.statusCancelled,
@@ -218,7 +301,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     final tableState = ref.read(waiterTableProvider);
     final currentTableId = _selectedTable?.id;
     final availableTables = tableState.tables
-        .where((t) => t.id != currentTableId && !t.isOccupied)
+        .where((t) => t.id != currentTableId && t.isAvailable)
         .toList();
 
     if (availableTables.isEmpty) {
@@ -234,7 +317,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
         backgroundColor: AppColors.surface1,
         title: Text(
           l10n.waiterMoveTableTitle,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: AppColors.textPrimary,
             fontWeight: FontWeight.w700,
           ),
@@ -254,14 +337,14 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                 tileColor: AppColors.surface2,
                 title: Text(
                   l10n.waiterTableLabel(table.tableNumber),
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 subtitle: Text(
                   l10n.waiterSeatCount(table.seatCount ?? 0),
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.textSecondary,
                     fontSize: 12,
                   ),
@@ -287,7 +370,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
       SnackBar(
         content: Text(
           l10n.waiterOrderCancelled,
-          style: GoogleFonts.notoSansKr(color: Colors.white, fontSize: 14),
+          style: AppFonts.system(color: Colors.white, fontSize: 14),
         ),
         backgroundColor: AppColors.statusOccupied,
         behavior: SnackBarBehavior.floating,
@@ -317,10 +400,637 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     return selected;
   }
 
+  Widget _buildOrderWorkspace({
+    required String? storeId,
+    required PosTable selectedTable,
+    required MenuState menuState,
+    required MenuNotifier? menuNotifier,
+    required OrderState orderState,
+    required bool allowSubmitWithoutCart,
+    required bool isBuffetMode,
+  }) {
+    final orderNotifier = ref.read(orderProvider.notifier);
+    final l10n = context.l10n;
+    final guestCount =
+        orderState.activeOrder?.guestCount ?? _selectedGuestCount;
+
+    return OrderWorkspace(
+      key: ValueKey<String>('order-${selectedTable.id}-$_orderPanelNonce'),
+      table: selectedTable,
+      guestCount: guestCount,
+      menuState: menuState,
+      menuNotifier: menuNotifier,
+      orderState: orderState,
+      allowSubmitWithoutCart: allowSubmitWithoutCart,
+      onAddToCart: orderNotifier.addToCart,
+      onIncrementCartItem: (cartItem) {
+        orderNotifier.addToCart(cartItem.copyWith(quantity: 1));
+      },
+      onDecrementCartItem: orderNotifier.decrementCartItem,
+      onCancel: _onCancelOrderPanel,
+      onCancelOrderItem: storeId == null
+          ? null
+          : (itemId) async {
+              await orderNotifier.cancelOrderItem(itemId, storeId);
+              if (!mounted) {
+                return;
+              }
+              await ref.read(waiterTableProvider.notifier).loadTables(storeId);
+            },
+      onEditOrderItemQuantity: storeId == null
+          ? null
+          : (itemId, qty) async {
+              await orderNotifier.editOrderItemQuantity(itemId, storeId, qty);
+              if (!mounted) {
+                return;
+              }
+              await ref.read(waiterTableProvider.notifier).loadTables(storeId);
+            },
+      onTransferTable: storeId == null || orderState.activeOrder == null
+          ? null
+          : () async {
+              final newTable = await _showTransferTableDialog(storeId);
+              if (newTable == null) return;
+              await orderNotifier.transferOrderTable(
+                orderState.activeOrder!.id,
+                storeId,
+                newTable.id,
+              );
+              ref.read(waiterTableProvider.notifier).loadTables(storeId);
+              if (!mounted) return;
+              setState(() {
+                _selectedTable = newTable;
+              });
+            },
+      onChangeGuestCount: storeId == null || orderState.activeOrder == null
+          ? null
+          : () => _onChangeGuestCount(storeId, orderState),
+      onCancelOrder: () async {
+        final activeOrder = orderState.activeOrder;
+        if (storeId == null || activeOrder == null) {
+          return;
+        }
+        final confirmed = await _showCancelOrderDialog(
+          tableNumber: selectedTable.tableNumber,
+        );
+        if (!confirmed) {
+          return;
+        }
+
+        await orderNotifier.cancelOrder(activeOrder.id, storeId);
+        final nextState = ref.read(orderProvider);
+        if (!mounted) {
+          return;
+        }
+        if (nextState.error == null) {
+          final tableNotifier = ref.read(waiterTableProvider.notifier);
+          await tableNotifier.loadTables(storeId, showLoading: false);
+          await tableNotifier.refreshOrderPreviews(storeId);
+          if (!mounted) {
+            return;
+          }
+          ref.read(orderProvider.notifier).clearSession();
+          _onCancelOrderPanel();
+          _showOrderCancelledSnackBar();
+        }
+      },
+      onSendOrder: () async {
+        if (storeId == null) {
+          showErrorToast(context, l10n.orderWorkspaceMenuOfflineTitle);
+          return;
+        }
+        final latestOrderState = ref.read(orderProvider);
+        if (!allowSubmitWithoutCart && latestOrderState.cart.isEmpty) {
+          showErrorToast(context, l10n.orderWorkspaceNoItemsAdded);
+          return;
+        }
+
+        final activeOrder = latestOrderState.activeOrder;
+        if (activeOrder == null) {
+          if (isBuffetMode) {
+            await orderNotifier.submitBuffetOrder(
+              storeId,
+              selectedTable.id,
+              _selectedGuestCount ?? 1,
+            );
+          } else {
+            await orderNotifier.submitOrder(storeId, selectedTable.id);
+          }
+        } else {
+          await orderNotifier.addMoreItems(activeOrder.id, storeId);
+        }
+        if (!mounted) {
+          return;
+        }
+        if (ref.read(orderProvider).error == null) {
+          final tableNotifier = ref.read(waiterTableProvider.notifier);
+          await tableNotifier.loadTables(storeId);
+          await tableNotifier.refreshOrderPreviews(storeId);
+        }
+      },
+    );
+  }
+
+  Widget _buildWaiterCommandHeader({
+    required int tableCount,
+    required int occupiedCount,
+    required int emptyCount,
+    required PosTable? selectedTable,
+    required bool isBuffetMode,
+    required bool showOrderWorkspace,
+  }) {
+    final l10n = context.l10n;
+    final hasSelection = selectedTable != null;
+    final compactMetricsLabel =
+        '${l10n.waiterMetricTotal} $tableCount · '
+        '${l10n.waiterMetricOccupied} $occupiedCount · '
+        '${l10n.waiterMetricAvailable} $emptyCount';
+
+    if (showOrderWorkspace) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final useMobileHeader = constraints.maxWidth < 560;
+          if (useMobileHeader) {
+            return ToastWorkSurface(
+              key: const Key('waiter_mobile_order_header'),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              backgroundColor: AppColors.surface1,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        l10n.waiterScreenTitle,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(width: 8),
+                      ToastStatusBadge(
+                        label: hasSelection
+                            ? l10n.waiterSelectedTable(
+                                selectedTable.tableNumber,
+                              )
+                            : l10n.waiterDiningFloor,
+                        color: hasSelection ? PosColors.accent : PosColors.info,
+                        compact: true,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      ToastStatusBadge(
+                        label: isBuffetMode
+                            ? l10n.waiterBuffetStartPrompt
+                            : l10n.waiterWorkspaceReadyPrompt,
+                        color: isBuffetMode
+                            ? PosColors.warning
+                            : PosColors.success,
+                        compact: true,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          compactMetricsLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: PosColors.textSecondary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return ToastWorkSurface(
+            key: const Key('waiter_order_compact_header'),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            backgroundColor: AppColors.surface1,
+            child: Row(
+              children: [
+                Text(
+                  l10n.waiterScreenTitle,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(width: 10),
+                ToastStatusBadge(
+                  label: hasSelection
+                      ? l10n.waiterSelectedTable(selectedTable.tableNumber)
+                      : l10n.waiterDiningFloor,
+                  color: hasSelection ? PosColors.accent : PosColors.info,
+                  compact: true,
+                ),
+                const SizedBox(width: 8),
+                ToastStatusBadge(
+                  label: isBuffetMode
+                      ? l10n.waiterBuffetStartPrompt
+                      : l10n.waiterWorkspaceReadyPrompt,
+                  color: isBuffetMode ? PosColors.warning : PosColors.success,
+                  compact: true,
+                ),
+                const Spacer(),
+                Text(
+                  compactMetricsLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: PosColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useMobileHeader = constraints.maxWidth < 560;
+        if (useMobileHeader) {
+          return ToastWorkSurface(
+            key: const Key('waiter_mobile_command_header'),
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+            backgroundColor: AppColors.surface1,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            l10n.waiterScreenTitle,
+                            style: Theme.of(context).textTheme.headlineMedium,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            l10n.waiterTapTableToStart,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: PosColors.textSecondary,
+                                  fontSize: 12,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    ToastStatusBadge(
+                      label: hasSelection
+                          ? l10n.waiterSelectedTable(selectedTable.tableNumber)
+                          : l10n.waiterDiningFloor,
+                      color: hasSelection ? PosColors.accent : PosColors.info,
+                      compact: true,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    ToastStatusBadge(
+                      label: isBuffetMode
+                          ? l10n.waiterBuffetStartPrompt
+                          : l10n.waiterWorkspaceReadyPrompt,
+                      color: isBuffetMode
+                          ? PosColors.warning
+                          : PosColors.success,
+                      compact: true,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        compactMetricsLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: PosColors.textSecondary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ToastWorkSurface(
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+          backgroundColor: AppColors.surface1,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l10n.waiterScreenTitle,
+                          style: Theme.of(context).textTheme.headlineLarge,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          showOrderWorkspace
+                              ? l10n.waiterSelectedTableSubtitle
+                              : l10n.waiterTapTableToStart,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: PosColors.textSecondary,
+                                fontSize: 13,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  ToastStatusBadge(
+                    label: hasSelection
+                        ? l10n.waiterSelectedTable(selectedTable.tableNumber)
+                        : l10n.waiterDiningFloor,
+                    color: hasSelection ? PosColors.accent : PosColors.info,
+                    compact: true,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              ToastMetricStrip(
+                metrics: [
+                  ToastMetric(
+                    label: l10n.waiterMetricTotal,
+                    value: '$tableCount',
+                  ),
+                  ToastMetric(
+                    label: l10n.waiterMetricOccupied,
+                    value: '$occupiedCount',
+                    tone: occupiedCount > 0
+                        ? PosColors.accent
+                        : PosColors.textSecondary,
+                  ),
+                  ToastMetric(
+                    label: l10n.waiterMetricAvailable,
+                    value: '$emptyCount',
+                    tone: PosColors.success,
+                  ),
+                  ToastMetric(
+                    label: l10n.waiterSelectedTableLabel,
+                    value: selectedTable?.tableNumber ?? '-',
+                    tone: hasSelection
+                        ? PosColors.accent
+                        : PosColors.textSecondary,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  ToastStatusBadge(
+                    label: isBuffetMode
+                        ? l10n.waiterBuffetStartPrompt
+                        : l10n.waiterWorkspaceReadyPrompt,
+                    color: isBuffetMode ? PosColors.warning : PosColors.success,
+                    compact: true,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      l10n.waiterScreenSubtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showStaffMealDialog({
+    required String storeId,
+    required List<Map<String, dynamic>> menuItems,
+    required bool isOnline,
+  }) async {
+    final l10n = context.l10n;
+    if (!isOnline) {
+      showErrorToast(context, l10n.posDisabledOffline);
+      return;
+    }
+    if (menuItems.isEmpty) {
+      showErrorToast(context, l10n.orderWorkspaceNoItemsAdded);
+      return;
+    }
+
+    final quantities = <String, int>{};
+    final reasonController = TextEditingController();
+    final pinController = TextEditingController();
+    var isSaving = false;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final selectedCount = quantities.values.fold<int>(
+              0,
+              (sum, quantity) => sum + quantity,
+            );
+            return AlertDialog(
+              backgroundColor: AppColors.surface1,
+              title: Text(
+                l10n.waiterStaffMealTitle,
+                style: AppFonts.system(color: AppColors.textPrimary),
+              ),
+              content: SizedBox(
+                width: 520,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 320),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: menuItems.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final item = menuItems[index];
+                          final id = item['id']?.toString() ?? '';
+                          final name = item['name']?.toString() ?? 'Item';
+                          final quantity = quantities[id] ?? 0;
+                          return ListTile(
+                            title: Text(
+                              name,
+                              style: AppFonts.system(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  onPressed: quantity <= 0 || isSaving
+                                      ? null
+                                      : () => setModalState(() {
+                                          if (quantity <= 1) {
+                                            quantities.remove(id);
+                                          } else {
+                                            quantities[id] = quantity - 1;
+                                          }
+                                        }),
+                                  icon: const Icon(Icons.remove_circle_outline),
+                                ),
+                                SizedBox(
+                                  width: 28,
+                                  child: Text(
+                                    '$quantity',
+                                    textAlign: TextAlign.center,
+                                    style: AppFonts.system(
+                                      color: AppColors.textPrimary,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: isSaving
+                                      ? null
+                                      : () => setModalState(
+                                          () => quantities[id] = quantity + 1,
+                                        ),
+                                  icon: const Icon(Icons.add_circle_outline),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: reasonController,
+                      decoration: InputDecoration(
+                        labelText: l10n.waiterStaffMealReason,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: pinController,
+                      keyboardType: TextInputType.number,
+                      obscureText: true,
+                      decoration: InputDecoration(
+                        labelText: l10n.cashierDiscountManagerPin,
+                      ),
+                    ),
+                    if (!isOnline) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        l10n.posDisabledOffline,
+                        style: AppFonts.system(
+                          color: PosColors.warning,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSaving
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
+                  child: Text(l10n.cancel),
+                ),
+                FilledButton.icon(
+                  key: const Key('waiter_staff_meal_submit'),
+                  onPressed: isSaving || selectedCount == 0 || !isOnline
+                      ? null
+                      : () async {
+                          setModalState(() => isSaving = true);
+                          try {
+                            final payload = quantities.entries
+                                .where((entry) => entry.value > 0)
+                                .map(
+                                  (entry) => {
+                                    'menu_item_id': entry.key,
+                                    'quantity': entry.value,
+                                  },
+                                )
+                                .toList();
+                            await orderService.createStaffMealOrder(
+                              storeId: storeId,
+                              items: payload,
+                              reason: reasonController.text.trim(),
+                              managerPin: pinController.text.trim(),
+                            );
+                            if (!dialogContext.mounted || !context.mounted) {
+                              return;
+                            }
+                            Navigator.of(dialogContext).pop();
+                            showSuccessToast(
+                              context,
+                              l10n.waiterStaffMealCreated,
+                            );
+                          } catch (e) {
+                            if (!context.mounted) return;
+                            setModalState(() => isSaving = false);
+                            showErrorToast(
+                              context,
+                              l10n.waiterStaffMealFailed('$e'),
+                            );
+                          }
+                        },
+                  icon: isSaving
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 1.8),
+                        )
+                      : const Icon(Icons.restaurant_menu_outlined, size: 16),
+                  label: Text(l10n.waiterStaffMealAction),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    reasonController.dispose();
+    pinController.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final storeId = authState.storeId;
+    final isOnline = ref.watch(connectivityProvider).asData?.value ?? true;
 
     _ensureRestaurantLoaded(storeId);
 
@@ -337,7 +1047,6 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     final menuNotifier = storeId == null
         ? null
         : ref.read(menuProvider(storeId).notifier);
-    final orderNotifier = ref.read(orderProvider.notifier);
 
     final selectedTable = _resolveSelectedTable(tableState.tables);
     final operationMode =
@@ -346,6 +1055,14 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     final isBuffetMode = operationMode == 'buffet' || operationMode == 'hybrid';
     final allowSubmitWithoutCart =
         isBuffetMode && orderState.activeOrder == null;
+    final showOrderWorkspace = _showOrderPanel && selectedTable != null;
+    final occupiedCount = tableState.tables
+        .where((table) => table.isOccupied)
+        .length;
+    final reservedCount = tableState.tables
+        .where((table) => table.isReserved)
+        .length;
+    final emptyCount = tableState.tables.length - occupiedCount - reservedCount;
 
     return Scaffold(
       key: const Key('dashboard_root'),
@@ -356,144 +1073,114 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
           Expanded(
             child: Column(
               children: [
-                _WaiterTopBar(storeId: storeId),
+                _WaiterTopBar(
+                  storeId: storeId,
+                  showOrderWorkspace: showOrderWorkspace,
+                  onReturnToFloor: _onCancelOrderPanel,
+                  isOnline: isOnline,
+                  onCreateStaffMeal: storeId == null || !isOnline
+                      ? null
+                      : () => _showStaffMealDialog(
+                          storeId: storeId,
+                          menuItems: menuState.items.valueOrNull ?? const [],
+                          isOnline: isOnline,
+                        ),
+                ),
                 Expanded(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 260),
-                    transitionBuilder: (child, animation) {
-                      final curved = CurvedAnimation(
-                        parent: animation,
-                        curve: Curves.easeOutCubic,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final queuePane = _TableGridView(
+                        key: const Key('tables_root'),
+                        state: tableState,
+                        selectedTableId: selectedTable?.id,
+                        onRetry: () {
+                          if (storeId != null) {
+                            ref
+                                .read(waiterTableProvider.notifier)
+                                .loadTables(storeId);
+                          }
+                        },
+                        onTapTable: (table) {
+                          if (storeId != null) {
+                            _onSelectTable(table, storeId, isBuffetMode);
+                          }
+                        },
                       );
-                      return SlideTransition(
-                        position: Tween<Offset>(
-                          begin: const Offset(0.15, 0),
-                          end: Offset.zero,
-                        ).animate(curved),
-                        child: child,
+                      final detailPane = AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 220),
+                        child: showOrderWorkspace
+                            ? _buildOrderWorkspace(
+                                storeId: storeId,
+                                selectedTable: selectedTable,
+                                menuState: menuState,
+                                menuNotifier: menuNotifier,
+                                orderState: orderState,
+                                allowSubmitWithoutCart: allowSubmitWithoutCart,
+                                isBuffetMode: isBuffetMode,
+                              )
+                            : const _WaiterSelectionPlaceholder(
+                                key: ValueKey<String>('waiter-empty-detail'),
+                              ),
+                      );
+
+                      return ToastResponsiveBody(
+                        maxWidth: 1480,
+                        padding: EdgeInsets.all(showOrderWorkspace ? 10 : 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildWaiterCommandHeader(
+                              tableCount: tableState.tables.length,
+                              occupiedCount: occupiedCount,
+                              emptyCount: emptyCount,
+                              selectedTable: selectedTable,
+                              isBuffetMode: isBuffetMode,
+                              showOrderWorkspace: showOrderWorkspace,
+                            ),
+                            SizedBox(height: showOrderWorkspace ? 10 : 16),
+                            Expanded(
+                              child: constraints.maxWidth >= 1120
+                                  ? Row(
+                                      children: [
+                                        Expanded(
+                                          flex: showOrderWorkspace ? 3 : 4,
+                                          child: queuePane,
+                                        ),
+                                        SizedBox(
+                                          width: showOrderWorkspace ? 12 : 16,
+                                        ),
+                                        Expanded(
+                                          flex: showOrderWorkspace ? 9 : 7,
+                                          child: detailPane,
+                                        ),
+                                      ],
+                                    )
+                                  : AnimatedSwitcher(
+                                      duration: const Duration(
+                                        milliseconds: 260,
+                                      ),
+                                      transitionBuilder: (child, animation) {
+                                        final curved = CurvedAnimation(
+                                          parent: animation,
+                                          curve: Curves.easeOutCubic,
+                                        );
+                                        return SlideTransition(
+                                          position: Tween<Offset>(
+                                            begin: const Offset(0.15, 0),
+                                            end: Offset.zero,
+                                          ).animate(curved),
+                                          child: child,
+                                        );
+                                      },
+                                      child: showOrderWorkspace
+                                          ? detailPane
+                                          : queuePane,
+                                    ),
+                            ),
+                          ],
+                        ),
                       );
                     },
-                    child: _showOrderPanel && selectedTable != null
-                        ? OrderWorkspace(
-                            key: ValueKey<String>(
-                              'order-${selectedTable.id}-$_orderPanelNonce',
-                            ),
-                            table: selectedTable,
-                            guestCount: _selectedGuestCount,
-                            menuState: menuState,
-                            menuNotifier: menuNotifier,
-                            orderState: orderState,
-                            allowSubmitWithoutCart: allowSubmitWithoutCart,
-                            onAddToCart: orderNotifier.addToCart,
-                            onIncrementCartItem: (cartItem) {
-                              orderNotifier.addToCart(
-                                cartItem.copyWith(quantity: 1),
-                              );
-                            },
-                            onDecrementCartItem:
-                                orderNotifier.decrementCartItem,
-                            onCancel: _onCancelOrderPanel,
-                            onCancelOrderItem: storeId == null
-                                ? null
-                                : (itemId) => orderNotifier.cancelOrderItem(
-                                    itemId,
-                                    storeId,
-                                  ),
-                            onEditOrderItemQuantity: storeId == null
-                                ? null
-                                : (itemId, qty) =>
-                                      orderNotifier.editOrderItemQuantity(
-                                        itemId,
-                                        storeId,
-                                        qty,
-                                      ),
-                            onTransferTable:
-                                storeId == null ||
-                                    orderState.activeOrder == null
-                                ? null
-                                : () async {
-                                    final newTable =
-                                        await _showTransferTableDialog(storeId);
-                                    if (newTable == null) return;
-                                    await orderNotifier.transferOrderTable(
-                                      orderState.activeOrder!.id,
-                                      storeId,
-                                      newTable.id,
-                                    );
-                                    ref
-                                        .read(waiterTableProvider.notifier)
-                                        .loadTables(storeId);
-                                    if (!mounted) return;
-                                    setState(() {
-                                      _selectedTable = newTable;
-                                    });
-                                  },
-                            onCancelOrder: () async {
-                              final activeOrder = orderState.activeOrder;
-                              if (storeId == null || activeOrder == null) {
-                                return;
-                              }
-                              final confirmed = await _showCancelOrderDialog(
-                                tableNumber: selectedTable.tableNumber,
-                              );
-                              if (!confirmed) {
-                                return;
-                              }
-
-                              await orderNotifier.cancelOrder(
-                                activeOrder.id,
-                                storeId,
-                              );
-                              final nextState = ref.read(orderProvider);
-                              if (!mounted) {
-                                return;
-                              }
-                              if (nextState.error == null) {
-                                _onCancelOrderPanel();
-                                _showOrderCancelledSnackBar();
-                              }
-                            },
-                            onSendOrder: () async {
-                              if (storeId == null) {
-                                return;
-                              }
-                              if (orderState.activeOrder == null) {
-                                if (isBuffetMode) {
-                                  await orderNotifier.submitBuffetOrder(
-                                    storeId,
-                                    selectedTable.id,
-                                    _selectedGuestCount ?? 1,
-                                  );
-                                } else {
-                                  await orderNotifier.submitOrder(
-                                    storeId,
-                                    selectedTable.id,
-                                  );
-                                }
-                              } else {
-                                await orderNotifier.addMoreItems(
-                                  orderState.activeOrder!.id,
-                                  storeId,
-                                );
-                              }
-                            },
-                          )
-                        : _TableGridView(
-                            key: const Key('tables_root'),
-                            state: tableState,
-                            onRetry: () {
-                              if (storeId != null) {
-                                ref
-                                    .read(waiterTableProvider.notifier)
-                                    .loadTables(storeId);
-                              }
-                            },
-                            onTapTable: (table) {
-                              if (storeId != null) {
-                                _onSelectTable(table, storeId, isBuffetMode);
-                              }
-                            },
-                          ),
                   ),
                 ),
               ],
@@ -506,9 +1193,19 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
 }
 
 class _WaiterTopBar extends ConsumerWidget {
-  const _WaiterTopBar({required this.storeId});
+  const _WaiterTopBar({
+    required this.storeId,
+    required this.showOrderWorkspace,
+    required this.onReturnToFloor,
+    required this.isOnline,
+    required this.onCreateStaffMeal,
+  });
 
   final String? storeId;
+  final bool showOrderWorkspace;
+  final VoidCallback onReturnToFloor;
+  final bool isOnline;
+  final VoidCallback? onCreateStaffMeal;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -518,56 +1215,60 @@ class _WaiterTopBar extends ConsumerWidget {
         : ref.watch(restaurantNameProvider(storeId!));
 
     return Container(
-      height: 72,
+      height: 52,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: const BoxDecoration(
-        color: AppColors.surface0,
-        border: Border(bottom: BorderSide(color: AppColors.surface2)),
+        color: AppColors.surfaceTopbar,
+        border: Border(bottom: BorderSide(color: AppColors.surface3)),
       ),
       child: Row(
         children: [
-          const AppNavBar(),
-          const SizedBox(width: 12),
-          Text(
-            'GLOBOS POS',
-            style: AppTextStyles.operationalTitle(
-              size: 24,
-              color: AppColors.amber500,
-            ),
+          AppNavBar(
+            forceBackEnabled: showOrderWorkspace,
+            forceHomeEnabled: showOrderWorkspace,
+            onBackPressed: showOrderWorkspace ? onReturnToFloor : null,
+            onHomePressed: showOrderWorkspace ? onReturnToFloor : null,
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   l10n.waiterDiningFloor,
-                  style: GoogleFonts.notoSansKr(
+                  style: AppFonts.system(
                     color: AppColors.textSecondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.3,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.35,
                   ),
                 ),
                 restaurantName.when(
                   data: (name) => Text(
                     name.isEmpty ? l10n.store : name,
-                    style: GoogleFonts.notoSansKr(
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppFonts.system(
                       color: AppColors.textPrimary,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   loading: () => Text(
                     l10n.waiterLoading,
-                    style: GoogleFonts.notoSansKr(
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppFonts.system(
                       color: AppColors.textSecondary,
                       fontSize: 14,
                     ),
                   ),
                   error: (_, _) => Text(
                     l10n.store,
-                    style: GoogleFonts.notoSansKr(
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppFonts.system(
                       color: AppColors.textSecondary,
                       fontSize: 14,
                     ),
@@ -576,6 +1277,22 @@ class _WaiterTopBar extends ConsumerWidget {
               ],
             ),
           ),
+          Tooltip(
+            message: isOnline
+                ? l10n.waiterStaffMealAction
+                : l10n.posDisabledOffline,
+            child: TextButton.icon(
+              key: const Key('waiter_staff_meal_action'),
+              onPressed: onCreateStaffMeal,
+              icon: const Icon(Icons.restaurant_menu_outlined, size: 17),
+              label: Text(l10n.waiterStaffMealAction),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.amber500,
+                textStyle: AppFonts.system(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
           IconButton(
             key: const Key('logout_button'),
             onPressed: () => ref.read(authProvider.notifier).logout(),
@@ -592,11 +1309,13 @@ class _TableGridView extends StatelessWidget {
   const _TableGridView({
     super.key,
     required this.state,
+    required this.selectedTableId,
     required this.onRetry,
     required this.onTapTable,
   });
 
   final WaiterTableState state;
+  final String? selectedTableId;
   final VoidCallback onRetry;
   final ValueChanged<PosTable> onTapTable;
 
@@ -604,204 +1323,89 @@ class _TableGridView extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     if (state.isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColors.amber500),
-      );
-    }
-
-    if (state.error != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              state.error!,
-              style: GoogleFonts.notoSansKr(
-                color: AppColors.statusCancelled,
-                fontSize: 14,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton(
-              onPressed: onRetry,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.amber500,
-                foregroundColor: AppColors.surface0,
-              ),
-              child: Text(l10n.retry),
-            ),
-          ],
+      return const ToastWorkSurface(
+        child: Center(
+          child: CircularProgressIndicator(color: AppColors.amber500),
         ),
       );
     }
 
-    if (state.tables.isEmpty) {
-      return Center(
-        child: Text(
-          l10n.waiterNoTablesFound,
-          style: GoogleFonts.notoSansKr(
-            color: AppColors.textSecondary,
-            fontSize: 14,
+    if (state.error != null) {
+      return ToastWorkSurface(
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                state.error!,
+                style: AppFonts.system(
+                  color: AppColors.statusCancelled,
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: onRetry,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.amber500,
+                  foregroundColor: AppColors.surface0,
+                ),
+                child: Text(l10n.retry),
+              ),
+            ],
           ),
         ),
       );
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth < 1024 ? 3 : 4;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    l10n.waiterDiningFloor,
-                    style: AppTextStyles.operationalTitle(size: 24),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    l10n.waiterTapTableToStart,
-                    style: GoogleFonts.notoSansKr(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: GridView.builder(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-                itemCount: state.tables.length,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: crossAxisCount,
-                  mainAxisSpacing: 16,
-                  crossAxisSpacing: 16,
-                  childAspectRatio: 1,
-                ),
-                itemBuilder: (context, index) {
-                  final table = state.tables[index];
-                  final isOccupied = table.isOccupied;
+    if (state.tables.isEmpty) {
+      return ToastWorkSurface(
+        child: PosEmptyState(
+          title: l10n.waiterNoTablesTitle,
+          subtitle: l10n.waiterNoTablesSubtitle,
+          icon: Icons.table_restaurant_outlined,
+        ),
+      );
+    }
 
-                  return InkWell(
-                    key: index == 0 ? const Key('table_first_card') : null,
-                    borderRadius: BorderRadius.circular(16),
-                    onTap: () => onTapTable(table),
-                    child: Container(
-                      constraints: const BoxConstraints(
-                        minWidth: 120,
-                        minHeight: 120,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isOccupied
-                            ? AppColors.surface1.withValues(alpha: 0.95)
-                            : AppColors.surface1,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border(
-                          left: isOccupied
-                              ? const BorderSide(
-                                  color: AppColors.amber500,
-                                  width: 4,
-                                )
-                              : const BorderSide(
-                                  color: AppColors.surface2,
-                                  width: 1,
-                                ),
-                          top: isOccupied
-                              ? BorderSide(
-                                  color: AppColors.statusOccupied.withValues(
-                                    alpha: 0.4,
-                                  ),
-                                )
-                              : BorderSide.none,
-                          right: isOccupied
-                              ? BorderSide(
-                                  color: AppColors.statusOccupied.withValues(
-                                    alpha: 0.4,
-                                  ),
-                                )
-                              : BorderSide.none,
-                          bottom: isOccupied
-                              ? BorderSide(
-                                  color: AppColors.statusOccupied.withValues(
-                                    alpha: 0.4,
-                                  ),
-                                )
-                              : BorderSide.none,
-                        ),
-                        gradient: isOccupied
-                            ? LinearGradient(
-                                colors: [
-                                  AppColors.statusOccupied.withValues(
-                                    alpha: 0.22,
-                                  ),
-                                  AppColors.surface1,
-                                ],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              )
-                            : null,
-                      ),
-                      padding: const EdgeInsets.all(14),
-                      child: Column(
-                        children: [
-                          const Spacer(),
-                          Text(
-                            table.tableNumber,
-                            style: AppTextStyles.operationalTitle(
-                              size: 32,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            l10n.waiterSeatCount(table.seatCount ?? 0),
-                            style: GoogleFonts.notoSansKr(
-                              color: AppColors.textSecondary,
-                              fontSize: 12,
-                            ),
-                          ),
-                          const Spacer(),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: isOccupied
-                                      ? AppColors.statusOccupied
-                                      : AppColors.statusAvailable,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                isOccupied
-                                    ? l10n.waiterStatusOccupied
-                                    : l10n.waiterStatusAvailable,
-                                style: GoogleFonts.notoSansKr(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
+    return PosDataPanel(
+      title: l10n.waiterTableStatusTitle,
+      subtitle: selectedTableId == null
+          ? l10n.waiterTapTableToStart
+          : l10n.waiterSelectedTableSubtitle,
+      trailing: selectedTableId == null
+          ? null
+          : ToastStatusBadge(
+              label: l10n.waiterSelectedBadge,
+              color: PosColors.accent,
+              compact: true,
             ),
-          ],
-        );
-      },
+      child: FloorLayoutView(
+        tables: state.tables,
+        selectedTableId: selectedTableId,
+        orderPreviewByTableId: state.orderPreviewByTableId,
+        onTapTable: onTapTable,
+        editable: false,
+        padding: const EdgeInsets.fromLTRB(0, 4, 0, 0),
+      ),
+    );
+  }
+}
+
+class _WaiterSelectionPlaceholder extends StatelessWidget {
+  const _WaiterSelectionPlaceholder({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ToastWorkSurface(
+      child: Center(
+        child: PosEmptyState(
+          title: context.l10n.waiterSelectTableTitle,
+          subtitle: context.l10n.waiterTapTableToStart,
+          icon: Icons.table_restaurant_outlined,
+        ),
+      ),
     );
   }
 }

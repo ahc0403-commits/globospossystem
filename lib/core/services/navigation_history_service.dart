@@ -9,6 +9,9 @@ class NavigationHistoryService {
     if (location.isEmpty) {
       return;
     }
+    if (currentLocation == location) {
+      return;
+    }
     if (_currentIndex < _history.length - 1) {
       _history.removeRange(_currentIndex + 1, _history.length);
     }

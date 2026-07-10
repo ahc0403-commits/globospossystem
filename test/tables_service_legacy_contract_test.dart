@@ -20,4 +20,17 @@ void main() {
     expect(source, contains("row['is_occupied']"));
     expect(source, contains("row['layout_sort_order'] ??= 0"));
   });
+
+  test('tables service retries legacy admin table RPC signatures', () {
+    final source = readRepoFile('lib/core/services/tables_service.dart');
+
+    expect(source, contains('_isRpcSignatureMismatch'));
+    expect(source, contains("'admin_create_table'"));
+    expect(source, contains("'admin_delete_table'"));
+    expect(source, contains("'admin_update_table'"));
+    expect(source, contains("'p_restaurant_id': storeId"));
+    expect(source, contains("params: {'p_table_id': tableId}"));
+    expect(source, contains("'p_status': status"));
+    expect(source, contains('legacyLayoutParams'));
+  });
 }

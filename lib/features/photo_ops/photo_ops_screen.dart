@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/ui/app_primitives.dart';
 import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
-import '../../core/ui/toast/toast_primitives_extended.dart';
+import '../../core/ui/toast/toast.dart';
 import '../../features/auth/auth_provider.dart';
 import '../../features/auth/auth_state.dart';
 import '../../widgets/app_nav_bar.dart';
@@ -22,6 +22,7 @@ class PhotoOpsScreen extends ConsumerStatefulWidget {
 
 class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
   String? _lastLoadedStoreId;
+  int _selectedSurfaceIndex = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -44,14 +45,110 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
       Future.microtask(notifier.load);
     }
 
+    final surfaceMeta = _surfaceMeta(context);
+    final safeSurfaceIndex = _selectedSurfaceIndex.clamp(
+      0,
+      surfaceMeta.length - 1,
+    );
+    final selectedSurface = surfaceMeta[safeSurfaceIndex];
+    final contentChildren = <Widget>[
+      _HeroBanner(
+        role: auth.role,
+        activeStoreName: activeStoreName,
+        storeCount: auth.accessibleStores.length,
+      ),
+      const SizedBox(height: 18),
+      if (state.isLoading && state.data == null)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 80),
+          child: Center(
+            child: CircularProgressIndicator(color: PosColors.accent),
+          ),
+        )
+      else if (state.error != null && state.data == null)
+        _ErrorCard(message: state.error!, onRetry: notifier.load)
+      else if (state.data != null) ...[
+        if (state.data!.salesWarningCode != null) ...[
+          _WarningSurface(
+            message: _localizedSalesWarning(context, state.data!),
+          ),
+          const SizedBox(height: 18),
+        ],
+        _KpiGrid(data: state.data!.kpi),
+        const SizedBox(height: 18),
+        _WorkflowSurface(
+          title: l10n.photoOpsPriorityQueueTitle,
+          subtitle: l10n.photoOpsPriorityQueueSubtitle,
+          kind: PhotoOpsSurfaceKind.priority,
+          child: _PriorityList(
+            items: _buildPriorityItems(context, state.data!.kpi),
+          ),
+        ),
+        const SizedBox(height: 18),
+        _WorkflowSurface(
+          title: l10n.photoOpsSalesTitle,
+          subtitle: l10n.photoOpsSalesSubtitle,
+          kind: PhotoOpsSurfaceKind.backOffice,
+          child: _SalesList(rows: state.data!.salesSummary),
+        ),
+        const SizedBox(height: 18),
+        _WorkflowSurface(
+          title: l10n.photoOpsAttendanceTitle,
+          subtitle: l10n.photoOpsAttendanceSubtitle,
+          kind: PhotoOpsSurfaceKind.live,
+          child: _AttendanceList(rows: state.data!.recentAttendance),
+        ),
+        const SizedBox(height: 18),
+        _WorkflowSurface(
+          title: l10n.photoOpsInventoryTitle,
+          subtitle: l10n.photoOpsInventorySubtitle,
+          kind: PhotoOpsSurfaceKind.priority,
+          child: _InventoryList(rows: state.data!.inventoryAlerts),
+        ),
+        const SizedBox(height: 18),
+        _WorkflowSurface(
+          title: l10n.photoOpsSalaryTitle,
+          subtitle: l10n.photoOpsSalarySubtitle,
+          kind: PhotoOpsSurfaceKind.backOffice,
+          child: _PayrollList(rows: state.data!.payrollPreview),
+        ),
+        const SizedBox(height: 18),
+        _WorkflowSurface(
+          title: l10n.photoOpsStoreScopeTitle,
+          subtitle: l10n.photoOpsStoreScopeSubtitle,
+          kind: PhotoOpsSurfaceKind.backOffice,
+          child: _StoreScopeList(
+            stores: auth.accessibleStores,
+            activeStoreId: activeStoreId,
+          ),
+        ),
+      ],
+    ];
+
+    Widget surface({required Widget child}) {
+      return ToastOperationalQueuePane(
+        title: selectedSurface.title,
+        subtitle: selectedSurface.subtitle,
+        headerBottom: _PhotoOpsHeaderSummary(
+          selectedSurface: selectedSurface,
+          role: auth.role,
+          activeStoreName: activeStoreName,
+          storeCount: auth.accessibleStores.length,
+          data: state.data,
+        ),
+        child: child,
+      );
+    }
+
     return KeyedSubtree(
       key: const Key('photo_ops_root'),
       child: ToastShell(
         sidebar: ToastSidebarPanel(
           title: l10n.photoOpsBrandName,
           subtitle: activeStoreName,
-          selectedIndex: 0,
-          onItemSelected: (_) {},
+          selectedIndex: safeSurfaceIndex,
+          onItemSelected: (index) =>
+              setState(() => _selectedSurfaceIndex = index),
           items: [
             ToastSidebarPanelItem(
               icon: Icons.dashboard_outlined,
@@ -83,86 +180,190 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
         topbar: ToastTopbar(
           title: l10n.photoOpsBrandName,
           actions: const [AppNavBar()],
-          trailing: ToastStatusBadge.inventory(
+          trailing: ToastStatusBadge(
             label: activeStoreName,
-            status: 'normal',
+            color: _surfaceTone(selectedSurface.kind),
             key: const Key('photo_ops_active_store_badge'),
           ),
         ),
-        child: RefreshIndicator(
-          onRefresh: notifier.load,
-          color: PosColors.accent,
-          child: ListView(
-            children: [
-              _HeroBanner(
-                role: auth.role,
-                activeStoreName: activeStoreName,
-                storeCount: auth.accessibleStores.length,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 1120) {
+              return RefreshIndicator(
+                onRefresh: notifier.load,
+                color: PosColors.accent,
+                child: ToastResponsiveScrollBody(
+                  maxWidth: 1360,
+                  children: [
+                    surface(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: contentChildren,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return ToastResponsiveBody(
+              maxWidth: 1360,
+              child: surface(
+                child: RefreshIndicator(
+                  onRefresh: notifier.load,
+                  color: PosColors.accent,
+                  child: ListView(children: contentChildren),
+                ),
               ),
-              const SizedBox(height: 18),
-              if (state.isLoading && state.data == null)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 80),
-                  child: Center(
-                    child: CircularProgressIndicator(color: PosColors.accent),
-                  ),
-                )
-              else if (state.error != null && state.data == null)
-                _ErrorCard(message: state.error!, onRetry: notifier.load)
-              else if (state.data != null) ...[
-                if (state.data!.salesWarningCode != null) ...[
-                  _WarningSurface(
-                    message: _localizedSalesWarning(context, state.data!),
-                  ),
-                  const SizedBox(height: 18),
-                ],
-                _KpiGrid(data: state.data!.kpi),
-                const SizedBox(height: 18),
-                _WorkflowSurface(
-                  title: l10n.photoOpsPriorityQueueTitle,
-                  subtitle: l10n.photoOpsPriorityQueueSubtitle,
-                  child: _PriorityList(
-                    items: _buildPriorityItems(context, state.data!.kpi),
-                  ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  List<_PhotoOpsSurfaceMeta> _surfaceMeta(BuildContext context) {
+    final l10n = context.l10n;
+    return [
+      _PhotoOpsSurfaceMeta(
+        title: l10n.photoOpsPriorityQueueTitle,
+        subtitle:
+            'Review the next issue that needs intervention before moving into supporting detail.',
+        kind: PhotoOpsSurfaceKind.priority,
+      ),
+      _PhotoOpsSurfaceMeta(
+        title: l10n.photoOpsSalesTitle,
+        subtitle:
+            'Read current sales posture after priority exceptions are stable.',
+        kind: PhotoOpsSurfaceKind.backOffice,
+      ),
+      _PhotoOpsSurfaceMeta(
+        title: l10n.photoOpsAttendanceTitle,
+        subtitle:
+            'Track live workforce events and photo-backed attendance flow.',
+        kind: PhotoOpsSurfaceKind.live,
+      ),
+      _PhotoOpsSurfaceMeta(
+        title: l10n.photoOpsInventoryTitle,
+        subtitle:
+            'Use stock alerts as an action queue, not just a reporting surface.',
+        kind: PhotoOpsSurfaceKind.priority,
+      ),
+      _PhotoOpsSurfaceMeta(
+        title: l10n.photoOpsSalaryTitle,
+        subtitle:
+            'Review payroll preview only after live events and alert queues are understood.',
+        kind: PhotoOpsSurfaceKind.backOffice,
+      ),
+    ];
+  }
+}
+
+enum PhotoOpsSurfaceKind { priority, live, backOffice }
+
+class _PhotoOpsSurfaceMeta {
+  const _PhotoOpsSurfaceMeta({
+    required this.title,
+    required this.subtitle,
+    required this.kind,
+  });
+
+  final String title;
+  final String subtitle;
+  final PhotoOpsSurfaceKind kind;
+}
+
+class _PhotoOpsHeaderSummary extends StatelessWidget {
+  const _PhotoOpsHeaderSummary({
+    required this.selectedSurface,
+    required this.role,
+    required this.activeStoreName,
+    required this.storeCount,
+    required this.data,
+  });
+
+  final _PhotoOpsSurfaceMeta selectedSurface;
+  final String? role;
+  final String activeStoreName;
+  final int storeCount;
+  final PhotoOpsDashboardData? data;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        ToastWorkSurface(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              ToastSelectedContextHeader(
+                title: selectedSurface.title,
+                subtitle: context.l10n.photoOpsContextSubtitle,
+                urgentReason: _surfaceUrgencyCopy(
+                  context,
+                  selectedSurface.kind,
                 ),
-                const SizedBox(height: 18),
-                _WorkflowSurface(
-                  title: l10n.photoOpsSalesTitle,
-                  subtitle: l10n.photoOpsSalesSubtitle,
-                  child: _SalesList(rows: state.data!.salesSummary),
+                noteColor: _surfaceNoteColor(selectedSurface.kind),
+                noteBackgroundColor: _surfaceNoteBackground(
+                  selectedSurface.kind,
                 ),
-                const SizedBox(height: 18),
-                _WorkflowSurface(
-                  title: l10n.photoOpsAttendanceTitle,
-                  subtitle: l10n.photoOpsAttendanceSubtitle,
-                  child: _AttendanceList(rows: state.data!.recentAttendance),
+                noteIcon: _surfaceNoteIcon(selectedSurface.kind),
+                trailing: ToastStatusBadge(
+                  label: _surfaceLabel(context, selectedSurface.kind),
+                  color: _surfaceTone(selectedSurface.kind),
+                  compact: true,
                 ),
-                const SizedBox(height: 18),
-                _WorkflowSurface(
-                  title: l10n.photoOpsInventoryTitle,
-                  subtitle: l10n.photoOpsInventorySubtitle,
-                  child: _InventoryList(rows: state.data!.inventoryAlerts),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                child: ToastMetricStrip(
+                  metrics: [
+                    ToastMetric(label: context.l10n.role, value: role ?? '-'),
+                    ToastMetric(
+                      label: context.l10n.photoOpsMetaActiveStore,
+                      value: activeStoreName,
+                    ),
+                    ToastMetric(
+                      label: context.l10n.photoOpsMetaAccessibleStores,
+                      value: context.l10n.photoOpsStoreCount(storeCount),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 18),
-                _WorkflowSurface(
-                  title: l10n.photoOpsSalaryTitle,
-                  subtitle: l10n.photoOpsSalarySubtitle,
-                  child: _PayrollList(rows: state.data!.payrollPreview),
-                ),
-                const SizedBox(height: 18),
-                _WorkflowSurface(
-                  title: l10n.photoOpsStoreScopeTitle,
-                  subtitle: l10n.photoOpsStoreScopeSubtitle,
-                  child: _StoreScopeList(
-                    stores: auth.accessibleStores,
-                    activeStoreId: activeStoreId,
-                  ),
-                ),
-              ],
+              ),
             ],
           ),
         ),
-      ),
+        if (data != null) ...[
+          const SizedBox(height: 12),
+          ToastMetricStrip(
+            metrics: [
+              ToastMetric(
+                label: context.l10n.photoOpsKpiSales,
+                value: '${data!.kpi.activeStoreSales.toStringAsFixed(0)} VND',
+              ),
+              ToastMetric(
+                label: context.l10n.photoOpsKpiAttendance,
+                value: '${data!.kpi.activeAttendanceEvents}',
+                tone: data!.kpi.activeAttendanceEvents > 0
+                    ? PosColors.accent
+                    : PosColors.textSecondary,
+              ),
+              ToastMetric(
+                label: context.l10n.photoOpsKpiInventoryAlerts,
+                value: '${data!.kpi.activeInventoryAlerts}',
+                tone: data!.kpi.activeInventoryAlerts > 0
+                    ? PosColors.warning
+                    : PosColors.textSecondary,
+              ),
+              ToastMetric(
+                label: context.l10n.photoOpsKpiPayrollEstimate,
+                value:
+                    '${data!.kpi.activePayrollEstimate.toStringAsFixed(0)} VND',
+              ),
+            ],
+          ),
+        ],
+      ],
     );
   }
 }
@@ -207,7 +408,7 @@ class _HeroBanner extends StatelessWidget {
         children: [
           Text(
             context.l10n.photoOpsHeroEyebrow,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: PosColors.textMuted,
               fontSize: 13,
               fontWeight: FontWeight.w700,
@@ -216,7 +417,7 @@ class _HeroBanner extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             context.l10n.photoOpsHeroTitle,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: PosColors.textPrimary,
               fontSize: 20,
               fontWeight: FontWeight.w900,
@@ -315,7 +516,7 @@ class _MetaPill extends StatelessWidget {
       ),
       child: Text(
         '$label: $value',
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: PosColors.textSecondary,
           fontSize: 12,
           fontWeight: FontWeight.w700,
@@ -378,7 +579,7 @@ class _KpiGrid extends StatelessWidget {
     final metricItems = items
         .map(
           (item) => ToastMetricItem(
-            label: [item.$1, item.$3].join(' · '),
+            label: item.$1,
             value: item.$2,
             color: PosColors.accent,
           ),
@@ -406,6 +607,8 @@ class _WarningSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     return ToastWorkSurface(
       padding: const EdgeInsets.all(AppSpacing.md),
+      backgroundColor: PosColors.warningMuted,
+      borderColor: PosColors.warning.withValues(alpha: 0.18),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -414,7 +617,7 @@ class _WarningSurface extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: PosColors.textPrimary,
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
@@ -431,11 +634,13 @@ class _WorkflowSurface extends StatelessWidget {
   const _WorkflowSurface({
     required this.title,
     required this.subtitle,
+    required this.kind,
     required this.child,
   });
 
   final String title;
   final String subtitle;
+  final PhotoOpsSurfaceKind kind;
   final Widget child;
 
   @override
@@ -445,12 +650,81 @@ class _WorkflowSurface extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AppSectionHeader(title: title, subtitle: subtitle),
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: PosColors.border)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: AppSectionHeader(title: title, subtitle: subtitle),
+                ),
+                const SizedBox(width: 12),
+                ToastStatusBadge(
+                  label: _surfaceLabel(context, kind),
+                  color: _surfaceTone(kind),
+                  compact: true,
+                ),
+              ],
+            ),
+          ),
           Padding(padding: const EdgeInsets.all(AppSpacing.md), child: child),
         ],
       ),
     );
   }
+}
+
+String _surfaceLabel(BuildContext context, PhotoOpsSurfaceKind kind) {
+  final l10n = context.l10n;
+  return switch (kind) {
+    PhotoOpsSurfaceKind.priority => l10n.photoOpsPriorityQueueTitle,
+    PhotoOpsSurfaceKind.live => l10n.photoOpsLiveOps,
+    PhotoOpsSurfaceKind.backOffice => l10n.photoOpsBackOffice,
+  };
+}
+
+String _surfaceUrgencyCopy(BuildContext context, PhotoOpsSurfaceKind kind) {
+  final l10n = context.l10n;
+  return switch (kind) {
+    PhotoOpsSurfaceKind.priority => l10n.photoOpsPriorityUrgency,
+    PhotoOpsSurfaceKind.live => l10n.photoOpsLiveUrgency,
+    PhotoOpsSurfaceKind.backOffice => l10n.photoOpsBackOfficeUrgency,
+  };
+}
+
+Color _surfaceTone(PhotoOpsSurfaceKind kind) {
+  return switch (kind) {
+    PhotoOpsSurfaceKind.priority => PosColors.warning,
+    PhotoOpsSurfaceKind.live => PosColors.accent,
+    PhotoOpsSurfaceKind.backOffice => PosColors.textSecondary,
+  };
+}
+
+Color _surfaceNoteColor(PhotoOpsSurfaceKind kind) {
+  return switch (kind) {
+    PhotoOpsSurfaceKind.priority => PosColors.warning,
+    PhotoOpsSurfaceKind.live => PosColors.accent,
+    PhotoOpsSurfaceKind.backOffice => PosColors.textSecondary,
+  };
+}
+
+Color _surfaceNoteBackground(PhotoOpsSurfaceKind kind) {
+  return switch (kind) {
+    PhotoOpsSurfaceKind.priority => PosColors.warningMuted,
+    PhotoOpsSurfaceKind.live => PosColors.accentMuted,
+    PhotoOpsSurfaceKind.backOffice => PosColors.panelMuted,
+  };
+}
+
+IconData _surfaceNoteIcon(PhotoOpsSurfaceKind kind) {
+  return switch (kind) {
+    PhotoOpsSurfaceKind.priority => Icons.priority_high_rounded,
+    PhotoOpsSurfaceKind.live => Icons.bolt_rounded,
+    PhotoOpsSurfaceKind.backOffice => Icons.insights_rounded,
+  };
 }
 
 class _AttendanceList extends StatelessWidget {
@@ -639,7 +913,7 @@ class _SimpleRow extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: PosColors.textPrimary,
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
@@ -648,7 +922,7 @@ class _SimpleRow extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     subtitle,
-                    style: GoogleFonts.notoSansKr(
+                    style: AppFonts.system(
                       color: PosColors.textSecondary,
                       fontSize: 12,
                     ),
@@ -659,7 +933,7 @@ class _SimpleRow extends StatelessWidget {
             const SizedBox(width: 12),
             Text(
               trailing,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: PosColors.accent,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
@@ -683,7 +957,7 @@ class _EmptyLabel extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 14),
       child: Text(
         text,
-        style: GoogleFonts.notoSansKr(
+        style: AppFonts.system(
           color: PosColors.textSecondary,
           fontSize: 13,
         ),
@@ -705,7 +979,7 @@ class _ErrorCard extends StatelessWidget {
         children: [
           Text(
             message,
-            style: GoogleFonts.notoSansKr(
+            style: AppFonts.system(
               color: PosColors.textPrimary,
               fontSize: 14,
             ),

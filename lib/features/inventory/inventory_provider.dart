@@ -320,6 +320,121 @@ final recipeProvider = StateNotifierProvider<RecipeNotifier, RecipeState>(
   (ref) => RecipeNotifier(),
 );
 
+class InventoryPurchaseNewMenuState {
+  final List<Map<String, dynamic>> categories;
+  final bool isLoading;
+  final bool isSaving;
+  final String? error;
+  final Map<String, dynamic>? lastCreatedMenu;
+
+  const InventoryPurchaseNewMenuState({
+    this.categories = const [],
+    this.isLoading = false,
+    this.isSaving = false,
+    this.error,
+    this.lastCreatedMenu,
+  });
+
+  InventoryPurchaseNewMenuState copyWith({
+    List<Map<String, dynamic>>? categories,
+    bool? isLoading,
+    bool? isSaving,
+    String? error,
+    bool clearError = false,
+    Map<String, dynamic>? lastCreatedMenu,
+  }) => InventoryPurchaseNewMenuState(
+    categories: categories ?? this.categories,
+    isLoading: isLoading ?? this.isLoading,
+    isSaving: isSaving ?? this.isSaving,
+    error: clearError ? null : (error ?? this.error),
+    lastCreatedMenu: lastCreatedMenu ?? this.lastCreatedMenu,
+  );
+}
+
+class InventoryPurchaseNewMenuNotifier
+    extends StateNotifier<InventoryPurchaseNewMenuState> {
+  InventoryPurchaseNewMenuNotifier()
+    : super(const InventoryPurchaseNewMenuState());
+
+  Future<void> loadCategories(String storeId) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final categories = await inventoryService.fetchMenuCategories(storeId);
+      state = state.copyWith(categories: categories, isLoading: false);
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: _mapNewMenuError(e, 'Failed to load menu categories.'),
+      );
+    }
+  }
+
+  Future<bool> create({
+    required String storeId,
+    String? categoryId,
+    required String name,
+    required double price,
+    String? description,
+    required List<Map<String, dynamic>> recipeLines,
+  }) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      final menu = await inventoryService.createInventoryMenuWithRecipe(
+        storeId: storeId,
+        categoryId: categoryId,
+        name: name,
+        price: price,
+        description: description,
+        recipeLines: recipeLines,
+      );
+      state = state.copyWith(isSaving: false, lastCreatedMenu: menu);
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isSaving: false,
+        error: _mapNewMenuError(e, 'Failed to create menu with recipe.'),
+      );
+      return false;
+    }
+  }
+
+  String _mapNewMenuError(Object error, String fallback) {
+    final message = error is PostgrestException
+        ? error.message
+        : error.toString();
+
+    if (message.contains('INVENTORY_MENU_CREATE_FORBIDDEN')) {
+      return 'No permission to create menu recipes for this store.';
+    }
+    if (message.contains('MENU_ITEM_NAME_REQUIRED')) {
+      return 'Enter a menu name.';
+    }
+    if (message.contains('MENU_ITEM_PRICE_INVALID')) {
+      return 'Menu price must be zero or greater.';
+    }
+    if (message.contains('MENU_RECIPE_LINES_REQUIRED')) {
+      return 'Add at least one recipe ingredient.';
+    }
+    if (message.contains('MENU_CATEGORY_NOT_FOUND')) {
+      return 'Selected category is no longer available.';
+    }
+    if (message.contains('MENU_RECIPE_LINE_INVALID')) {
+      return 'Recipe ingredient and usage must be valid.';
+    }
+    if (message.contains('MENU_RECIPE_PRODUCT_NOT_FOUND')) {
+      return 'Recipe ingredients must be active gram-based inventory products.';
+    }
+
+    return fallback;
+  }
+}
+
+final inventoryPurchaseNewMenuProvider =
+    StateNotifierProvider<
+      InventoryPurchaseNewMenuNotifier,
+      InventoryPurchaseNewMenuState
+    >((ref) => InventoryPurchaseNewMenuNotifier());
+
 class PhysicalCountState {
   final List<Map<String, dynamic>> counts;
   final bool isLoading;
@@ -492,6 +607,404 @@ final inventoryReportProvider =
       (ref) => InventoryReportNotifier(),
     );
 
+class InventoryPurchaseSupplierCatalogState {
+  final List<Map<String, dynamic>> suppliers;
+  final List<Map<String, dynamic>> supplierItems;
+  final bool isLoading;
+  final bool isSaving;
+  final String? error;
+
+  const InventoryPurchaseSupplierCatalogState({
+    this.suppliers = const [],
+    this.supplierItems = const [],
+    this.isLoading = false,
+    this.isSaving = false,
+    this.error,
+  });
+
+  InventoryPurchaseSupplierCatalogState copyWith({
+    List<Map<String, dynamic>>? suppliers,
+    List<Map<String, dynamic>>? supplierItems,
+    bool? isLoading,
+    bool? isSaving,
+    String? error,
+    bool clearError = false,
+  }) => InventoryPurchaseSupplierCatalogState(
+    suppliers: suppliers ?? this.suppliers,
+    supplierItems: supplierItems ?? this.supplierItems,
+    isLoading: isLoading ?? this.isLoading,
+    isSaving: isSaving ?? this.isSaving,
+    error: clearError ? null : (error ?? this.error),
+  );
+}
+
+class InventoryPurchaseSupplierCatalogNotifier
+    extends StateNotifier<InventoryPurchaseSupplierCatalogState> {
+  InventoryPurchaseSupplierCatalogNotifier()
+    : super(const InventoryPurchaseSupplierCatalogState());
+
+  Future<void> load(String storeId) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final suppliers = await inventoryService.fetchInventorySuppliers(
+        storeId: storeId,
+      );
+      final supplierItems = await inventoryService.fetchInventorySupplierItems(
+        storeId: storeId,
+      );
+      state = state.copyWith(
+        suppliers: suppliers,
+        supplierItems: supplierItems,
+        isLoading: false,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: _mapSupplierCatalogError(e, 'Failed to load suppliers.'),
+      );
+    }
+  }
+
+  Future<bool> saveSupplier({
+    required String storeId,
+    String? supplierId,
+    required String supplierName,
+    String? supplierType,
+    String? contactName,
+    String? phone,
+    String? email,
+    String? address,
+    String? businessRegistrationNo,
+    String? paymentTerms,
+    DateTime? contractStartDate,
+    DateTime? contractEndDate,
+    String? memo,
+  }) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await inventoryService.upsertInventorySupplier(
+        storeId: storeId,
+        supplierId: supplierId,
+        supplierName: supplierName,
+        supplierType: supplierType,
+        contactName: contactName,
+        phone: phone,
+        email: email,
+        address: address,
+        businessRegistrationNo: businessRegistrationNo,
+        paymentTerms: paymentTerms,
+        contractStartDate: contractStartDate,
+        contractEndDate: contractEndDate,
+        memo: memo,
+      );
+      await load(storeId);
+      state = state.copyWith(isSaving: false);
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isSaving: false,
+        error: _mapSupplierCatalogError(e, 'Failed to save supplier.'),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> setSupplierStatus({
+    required String storeId,
+    required String supplierId,
+    required String status,
+  }) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await inventoryService.setInventorySupplierStatus(
+        storeId: storeId,
+        supplierId: supplierId,
+        status: status,
+      );
+      await load(storeId);
+      state = state.copyWith(isSaving: false);
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isSaving: false,
+        error: _mapSupplierCatalogError(e, 'Failed to update supplier status.'),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> saveSupplierItem({
+    required String storeId,
+    String? supplierItemId,
+    required String supplierId,
+    required String productId,
+    String? supplierSku,
+    required String orderUnit,
+    required double orderUnitQuantityBase,
+    required double minOrderQuantity,
+    required double unitPrice,
+    required double taxRate,
+    required int leadTimeDays,
+    required bool isPreferred,
+  }) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await inventoryService.upsertInventorySupplierItem(
+        storeId: storeId,
+        supplierItemId: supplierItemId,
+        supplierId: supplierId,
+        productId: productId,
+        supplierSku: supplierSku,
+        orderUnit: orderUnit,
+        orderUnitQuantityBase: orderUnitQuantityBase,
+        minOrderQuantity: minOrderQuantity,
+        unitPrice: unitPrice,
+        taxRate: taxRate,
+        leadTimeDays: leadTimeDays,
+        isPreferred: isPreferred,
+      );
+      await load(storeId);
+      state = state.copyWith(isSaving: false);
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isSaving: false,
+        error: _mapSupplierCatalogError(e, 'Failed to save supplier item.'),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> setSupplierItemActive({
+    required String storeId,
+    required String supplierItemId,
+    required bool isActive,
+  }) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await inventoryService.setInventorySupplierItemActive(
+        storeId: storeId,
+        supplierItemId: supplierItemId,
+        isActive: isActive,
+      );
+      await load(storeId);
+      state = state.copyWith(isSaving: false);
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isSaving: false,
+        error: _mapSupplierCatalogError(
+          e,
+          'Failed to update supplier item status.',
+        ),
+      );
+      return false;
+    }
+  }
+
+  String _mapSupplierCatalogError(Object error, String fallback) {
+    final message = error is PostgrestException
+        ? error.message
+        : error.toString();
+
+    if (message.contains('INVENTORY_SUPPLIER_FORBIDDEN') ||
+        message.contains('INVENTORY_SUPPLIER_ITEM_FORBIDDEN')) {
+      return 'No permission to manage suppliers for this store.';
+    }
+    if (message.contains('SUPPLIER_NAME_REQUIRED')) {
+      return 'Enter a supplier name.';
+    }
+    if (message.contains('SUPPLIER_STATUS_INVALID')) {
+      return 'Supplier status must be active, inactive, or suspended.';
+    }
+    if (message.contains('SUPPLIER_NOT_FOUND')) {
+      return 'Supplier is no longer available.';
+    }
+    if (message.contains('PRODUCT_NOT_FOUND')) {
+      return 'Select an active product for this supplier item.';
+    }
+    if (message.contains('ORDER_UNIT_REQUIRED')) {
+      return 'Enter an order unit.';
+    }
+    if (message.contains('ORDER_UNIT_QUANTITY_INVALID')) {
+      return 'Order unit quantity must be greater than zero.';
+    }
+    if (message.contains('MIN_ORDER_QUANTITY_INVALID')) {
+      return 'Minimum order quantity must be greater than zero.';
+    }
+    if (message.contains('UNIT_PRICE_INVALID')) {
+      return 'Unit price must be zero or greater.';
+    }
+    if (message.contains('TAX_RATE_INVALID')) {
+      return 'Tax rate must be zero or greater.';
+    }
+    if (message.contains('LEAD_TIME_INVALID')) {
+      return 'Lead time must be zero or greater.';
+    }
+    if (message.contains('SUPPLIER_ITEM_NOT_FOUND')) {
+      return 'Supplier item is no longer available.';
+    }
+
+    return fallback;
+  }
+}
+
+final inventoryPurchaseSupplierCatalogProvider =
+    StateNotifierProvider<
+      InventoryPurchaseSupplierCatalogNotifier,
+      InventoryPurchaseSupplierCatalogState
+    >((ref) => InventoryPurchaseSupplierCatalogNotifier());
+
+class InventoryPurchaseProductCatalogState {
+  final List<Map<String, dynamic>> products;
+  final bool isLoading;
+  final bool isSaving;
+  final String? error;
+
+  const InventoryPurchaseProductCatalogState({
+    this.products = const [],
+    this.isLoading = false,
+    this.isSaving = false,
+    this.error,
+  });
+
+  InventoryPurchaseProductCatalogState copyWith({
+    List<Map<String, dynamic>>? products,
+    bool? isLoading,
+    bool? isSaving,
+    String? error,
+    bool clearError = false,
+  }) => InventoryPurchaseProductCatalogState(
+    products: products ?? this.products,
+    isLoading: isLoading ?? this.isLoading,
+    isSaving: isSaving ?? this.isSaving,
+    error: clearError ? null : (error ?? this.error),
+  );
+}
+
+class InventoryPurchaseProductCatalogNotifier
+    extends StateNotifier<InventoryPurchaseProductCatalogState> {
+  InventoryPurchaseProductCatalogNotifier()
+    : super(const InventoryPurchaseProductCatalogState());
+
+  Future<void> load(String storeId) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final products = await inventoryService.fetchInventoryProducts(
+        storeId: storeId,
+      );
+      state = state.copyWith(products: products, isLoading: false);
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: _mapProductCatalogError(e, 'Failed to load products.'),
+      );
+    }
+  }
+
+  Future<bool> saveProduct({
+    required String storeId,
+    String? productId,
+    String? productCode,
+    required String name,
+    String? category,
+    required String stockUnit,
+    required String baseUnit,
+    required double baseUnitFactor,
+    String? imageUrl,
+    String? storageType,
+    int? shelfLifeDays,
+    bool isOrderable = true,
+  }) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await inventoryService.upsertInventoryProduct(
+        storeId: storeId,
+        productId: productId,
+        productCode: productCode,
+        name: name,
+        category: category,
+        stockUnit: stockUnit,
+        baseUnit: baseUnit,
+        baseUnitFactor: baseUnitFactor,
+        imageUrl: imageUrl,
+        storageType: storageType,
+        shelfLifeDays: shelfLifeDays,
+        isOrderable: isOrderable,
+      );
+      await load(storeId);
+      state = state.copyWith(isSaving: false);
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isSaving: false,
+        error: _mapProductCatalogError(e, 'Failed to save product.'),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> setProductActive({
+    required String storeId,
+    required String productId,
+    required bool isActive,
+  }) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await inventoryService.setInventoryProductActive(
+        storeId: storeId,
+        productId: productId,
+        isActive: isActive,
+      );
+      await load(storeId);
+      state = state.copyWith(isSaving: false);
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isSaving: false,
+        error: _mapProductCatalogError(e, 'Failed to update product status.'),
+      );
+      return false;
+    }
+  }
+
+  String _mapProductCatalogError(Object error, String fallback) {
+    final message = error is PostgrestException
+        ? error.message
+        : error.toString();
+
+    if (message.contains('INVENTORY_PRODUCT_FORBIDDEN')) {
+      return 'No permission to manage products for this store.';
+    }
+    if (message.contains('PRODUCT_NAME_REQUIRED')) {
+      return 'Enter a product name.';
+    }
+    if (message.contains('STOCK_UNIT_REQUIRED')) {
+      return 'Enter a stock unit.';
+    }
+    if (message.contains('BASE_UNIT_INVALID')) {
+      return 'Base unit must be g, ml, or ea.';
+    }
+    if (message.contains('BASE_UNIT_FACTOR_INVALID')) {
+      return 'Base unit factor must be greater than zero.';
+    }
+    if (message.contains('SHELF_LIFE_INVALID')) {
+      return 'Shelf life must be zero or greater.';
+    }
+    if (message.contains('PRODUCT_NOT_FOUND')) {
+      return 'Product is no longer available.';
+    }
+
+    return fallback;
+  }
+}
+
+final inventoryPurchaseProductCatalogProvider =
+    StateNotifierProvider<
+      InventoryPurchaseProductCatalogNotifier,
+      InventoryPurchaseProductCatalogState
+    >((ref) => InventoryPurchaseProductCatalogNotifier());
+
 class InventoryPurchaseOverviewState {
   final Map<String, dynamic>? dashboard;
   final bool isLoading;
@@ -552,6 +1065,175 @@ final inventoryPurchaseOverviewProvider =
       InventoryPurchaseOverviewNotifier,
       InventoryPurchaseOverviewState
     >((ref) => InventoryPurchaseOverviewNotifier());
+
+class InventoryPurchaseStockStatusState {
+  final List<Map<String, dynamic>> rows;
+  final bool isLoading;
+  final String? error;
+
+  const InventoryPurchaseStockStatusState({
+    this.rows = const [],
+    this.isLoading = false,
+    this.error,
+  });
+
+  InventoryPurchaseStockStatusState copyWith({
+    List<Map<String, dynamic>>? rows,
+    bool? isLoading,
+    String? error,
+    bool clearError = false,
+  }) => InventoryPurchaseStockStatusState(
+    rows: rows ?? this.rows,
+    isLoading: isLoading ?? this.isLoading,
+    error: clearError ? null : (error ?? this.error),
+  );
+}
+
+class InventoryPurchaseStockStatusNotifier
+    extends StateNotifier<InventoryPurchaseStockStatusState> {
+  InventoryPurchaseStockStatusNotifier()
+    : super(const InventoryPurchaseStockStatusState());
+
+  Future<void> load(String storeId, {DateTime? asOfDate}) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final rows = await inventoryService.fetchInventoryStockStatus(
+        storeId: storeId,
+        asOfDate: asOfDate,
+      );
+      state = state.copyWith(rows: rows, isLoading: false);
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: _mapInventoryPurchaseStockStatusError(e),
+      );
+    }
+  }
+
+  String _mapInventoryPurchaseStockStatusError(Object error) {
+    final fallback = 'Failed to load inventory stock status.';
+    final message = error.toString();
+
+    if (message.contains('INVENTORY_PURCHASE_FORBIDDEN')) {
+      return 'No permission to view inventory stock status for this store.';
+    }
+
+    return fallback;
+  }
+}
+
+final inventoryPurchaseStockStatusProvider =
+    StateNotifierProvider<
+      InventoryPurchaseStockStatusNotifier,
+      InventoryPurchaseStockStatusState
+    >((ref) => InventoryPurchaseStockStatusNotifier());
+
+class InventoryPurchaseCostAnalysisState {
+  final List<Map<String, dynamic>> rows;
+  final bool isLoading;
+  final bool isRefreshing;
+  final int? lastRefreshCount;
+  final String? error;
+
+  const InventoryPurchaseCostAnalysisState({
+    this.rows = const [],
+    this.isLoading = false,
+    this.isRefreshing = false,
+    this.lastRefreshCount,
+    this.error,
+  });
+
+  InventoryPurchaseCostAnalysisState copyWith({
+    List<Map<String, dynamic>>? rows,
+    bool? isLoading,
+    bool? isRefreshing,
+    int? lastRefreshCount,
+    String? error,
+    bool clearError = false,
+  }) => InventoryPurchaseCostAnalysisState(
+    rows: rows ?? this.rows,
+    isLoading: isLoading ?? this.isLoading,
+    isRefreshing: isRefreshing ?? this.isRefreshing,
+    lastRefreshCount: lastRefreshCount ?? this.lastRefreshCount,
+    error: clearError ? null : (error ?? this.error),
+  );
+}
+
+class InventoryPurchaseCostAnalysisNotifier
+    extends StateNotifier<InventoryPurchaseCostAnalysisState> {
+  InventoryPurchaseCostAnalysisNotifier()
+    : super(const InventoryPurchaseCostAnalysisState());
+
+  Future<void> load(String storeId, {DateTime? from, DateTime? to}) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final rows = await inventoryService.fetchInventoryCostAnalysis(
+        storeId: storeId,
+        from: from,
+        to: to,
+      );
+      state = state.copyWith(rows: rows, isLoading: false);
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: _mapCostAnalysisError(e, 'Failed to load cost analysis.'),
+      );
+    }
+  }
+
+  Future<bool> refreshConsumption(
+    String storeId, {
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    state = state.copyWith(isRefreshing: true, clearError: true);
+    try {
+      final count = await inventoryService.refreshInventoryDailyConsumption(
+        storeId: storeId,
+        from: from,
+        to: to,
+      );
+      final rows = await inventoryService.fetchInventoryCostAnalysis(
+        storeId: storeId,
+        from: from,
+        to: to,
+      );
+      state = state.copyWith(
+        rows: rows,
+        isRefreshing: false,
+        lastRefreshCount: count,
+      );
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isRefreshing: false,
+        error: _mapCostAnalysisError(e, 'Failed to refresh consumption.'),
+      );
+      return false;
+    }
+  }
+
+  String _mapCostAnalysisError(Object error, String fallback) {
+    final message = error.toString();
+
+    if (message.contains('INVENTORY_COST_ANALYSIS_FORBIDDEN') ||
+        message.contains('INVENTORY_CONSUMPTION_REFRESH_FORBIDDEN')) {
+      return 'No permission to analyze inventory cost for this store.';
+    }
+    if (message.contains('INVENTORY_COST_ANALYSIS_DATE_RANGE_INVALID') ||
+        message.contains('INVENTORY_CONSUMPTION_DATE_RANGE_INVALID')) {
+      return 'Check the analysis date range.';
+    }
+
+    return fallback;
+  }
+}
+
+final inventoryPurchaseCostAnalysisProvider =
+    StateNotifierProvider<
+      InventoryPurchaseCostAnalysisNotifier,
+      InventoryPurchaseCostAnalysisState
+    >((ref) => InventoryPurchaseCostAnalysisNotifier());
 
 class InventoryPurchaseRecommendationRunState {
   final bool isRunning;
@@ -711,6 +1393,90 @@ final inventoryPurchaseRecommendationSnapshotProvider =
       InventoryPurchaseRecommendationSnapshotState
     >((ref) => InventoryPurchaseRecommendationSnapshotNotifier());
 
+class InventoryPurchaseRecommendationAdjustmentState {
+  final String? updatingLineId;
+  final String? error;
+  final Map<String, dynamic>? lastUpdatedLine;
+
+  const InventoryPurchaseRecommendationAdjustmentState({
+    this.updatingLineId,
+    this.error,
+    this.lastUpdatedLine,
+  });
+
+  bool get isUpdating => updatingLineId != null;
+
+  InventoryPurchaseRecommendationAdjustmentState copyWith({
+    String? updatingLineId,
+    String? error,
+    bool clearUpdatingLine = false,
+    bool clearError = false,
+    Map<String, dynamic>? lastUpdatedLine,
+  }) => InventoryPurchaseRecommendationAdjustmentState(
+    updatingLineId: clearUpdatingLine
+        ? null
+        : (updatingLineId ?? this.updatingLineId),
+    error: clearError ? null : (error ?? this.error),
+    lastUpdatedLine: lastUpdatedLine ?? this.lastUpdatedLine,
+  );
+}
+
+class InventoryPurchaseRecommendationAdjustmentNotifier
+    extends StateNotifier<InventoryPurchaseRecommendationAdjustmentState> {
+  InventoryPurchaseRecommendationAdjustmentNotifier()
+    : super(const InventoryPurchaseRecommendationAdjustmentState());
+
+  Future<bool> update({
+    required String lineId,
+    double? adjustedOrderUnits,
+    String? memo,
+  }) async {
+    state = state.copyWith(updatingLineId: lineId, clearError: true);
+    try {
+      final line = await inventoryService
+          .updateInventoryRecommendationLineAdjustment(
+            lineId: lineId,
+            adjustedOrderUnits: adjustedOrderUnits,
+            memo: memo,
+          );
+      state = state.copyWith(clearUpdatingLine: true, lastUpdatedLine: line);
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        clearUpdatingLine: true,
+        error: _mapInventoryPurchaseRecommendationAdjustmentError(e),
+      );
+      return false;
+    }
+  }
+
+  String _mapInventoryPurchaseRecommendationAdjustmentError(Object error) {
+    final fallback = 'Failed to update recommendation adjustment.';
+    final message = error.toString();
+
+    if (message.contains('INVENTORY_PURCHASE_FORBIDDEN')) {
+      return 'No permission to adjust this recommendation line.';
+    }
+    if (message.contains('INVENTORY_RECOMMENDATION_LINE_NOT_FOUND')) {
+      return 'The selected recommendation line is no longer available.';
+    }
+    if (message.contains('INVENTORY_RECOMMENDATION_ADJUSTMENT_INVALID')) {
+      return 'Adjusted order units must be zero or greater.';
+    }
+    if (message.contains('INVENTORY_SUPPLIER_ITEM_NOT_FOUND')) {
+      return 'The selected recommendation line has no active supplier item.';
+    }
+
+    return fallback;
+  }
+}
+
+final inventoryPurchaseRecommendationAdjustmentProvider =
+    StateNotifierProvider<
+      InventoryPurchaseRecommendationAdjustmentNotifier,
+      InventoryPurchaseRecommendationAdjustmentState
+    >((ref) => InventoryPurchaseRecommendationAdjustmentNotifier());
+
 class InventoryPurchaseOrderCreationState {
   final bool isCreating;
   final String? error;
@@ -769,6 +1535,56 @@ class InventoryPurchaseOrderCreationNotifier
     }
   }
 
+  Future<bool> createManual({
+    required String storeId,
+    required String supplierId,
+    required List<Map<String, dynamic>> lines,
+    DateTime? requestedDeliveryDate,
+    String? memo,
+  }) async {
+    state = state.copyWith(isCreating: true, clearError: true);
+    try {
+      final order = await inventoryService.createManualInventoryPurchaseOrder(
+        storeId: storeId,
+        supplierId: supplierId,
+        lines: lines,
+        requestedDeliveryDate: requestedDeliveryDate,
+        memo: memo,
+      );
+      state = state.copyWith(isCreating: false, createdOrders: [order]);
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isCreating: false,
+        error: _mapInventoryPurchaseOrderCreationError(e),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> createRepeat({
+    required String sourcePurchaseOrderId,
+    DateTime? requestedDeliveryDate,
+    String? memo,
+  }) async {
+    state = state.copyWith(isCreating: true, clearError: true);
+    try {
+      final order = await inventoryService.createRepeatInventoryPurchaseOrder(
+        sourcePurchaseOrderId: sourcePurchaseOrderId,
+        requestedDeliveryDate: requestedDeliveryDate,
+        memo: memo,
+      );
+      state = state.copyWith(isCreating: false, createdOrders: [order]);
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isCreating: false,
+        error: _mapInventoryPurchaseOrderCreationError(e),
+      );
+      return false;
+    }
+  }
+
   String _mapInventoryPurchaseOrderCreationError(Object error) {
     final fallback = 'Failed to create supplier-grouped purchase orders.';
     final message = error.toString();
@@ -778,6 +1594,39 @@ class InventoryPurchaseOrderCreationNotifier
     }
     if (message.contains('INVENTORY_PURCHASE_FORBIDDEN')) {
       return 'No permission to create purchase orders for this store.';
+    }
+    if (message.contains('INVENTORY_MANUAL_PURCHASE_FORBIDDEN')) {
+      return 'No permission to create manual purchase orders for this store.';
+    }
+    if (message.contains('INVENTORY_MANUAL_PURCHASE_SUPPLIER_REQUIRED')) {
+      return 'Select a supplier for this manual purchase order.';
+    }
+    if (message.contains('INVENTORY_MANUAL_PURCHASE_LINES_REQUIRED')) {
+      return 'Add at least one supplier item to create a manual purchase order.';
+    }
+    if (message.contains('INVENTORY_MANUAL_PURCHASE_QUANTITY_INVALID')) {
+      return 'Manual purchase quantity must be greater than zero.';
+    }
+    if (message.contains('INVENTORY_MANUAL_PURCHASE_SUPPLIER_ITEM_NOT_FOUND')) {
+      return 'Manual purchase line must use an active item for the selected supplier.';
+    }
+    if (message.contains('INVENTORY_REPEAT_PURCHASE_SOURCE_NOT_FOUND')) {
+      return 'The source purchase order for repeat ordering was not found.';
+    }
+    if (message.contains('INVENTORY_REPEAT_PURCHASE_FORBIDDEN')) {
+      return 'No permission to create repeat purchase orders for this store.';
+    }
+    if (message.contains('INVENTORY_REPEAT_PURCHASE_SUPPLIER_REQUIRED')) {
+      return 'The source purchase order has no supplier.';
+    }
+    if (message.contains('INVENTORY_REPEAT_PURCHASE_LINES_REQUIRED')) {
+      return 'The source purchase order has no lines to repeat.';
+    }
+    if (message.contains('INVENTORY_REPEAT_PURCHASE_QUANTITY_INVALID')) {
+      return 'Repeat purchase quantity must be greater than zero.';
+    }
+    if (message.contains('INVENTORY_REPEAT_PURCHASE_SUPPLIER_ITEM_NOT_FOUND')) {
+      return 'Repeat purchase lines must use active supplier items.';
     }
 
     return fallback;
@@ -947,6 +1796,104 @@ final inventoryPurchaseOrderDetailProvider =
       InventoryPurchaseOrderDetailNotifier,
       InventoryPurchaseOrderDetailState
     >((ref) => InventoryPurchaseOrderDetailNotifier());
+
+class InventoryPurchaseStockAuditState {
+  final bool isSaving;
+  final String? error;
+  final String? lastSessionId;
+  final bool lastCompleted;
+
+  const InventoryPurchaseStockAuditState({
+    this.isSaving = false,
+    this.error,
+    this.lastSessionId,
+    this.lastCompleted = false,
+  });
+
+  InventoryPurchaseStockAuditState copyWith({
+    bool? isSaving,
+    String? error,
+    bool clearError = false,
+    String? lastSessionId,
+    bool? lastCompleted,
+  }) => InventoryPurchaseStockAuditState(
+    isSaving: isSaving ?? this.isSaving,
+    error: clearError ? null : (error ?? this.error),
+    lastSessionId: lastSessionId ?? this.lastSessionId,
+    lastCompleted: lastCompleted ?? this.lastCompleted,
+  );
+}
+
+class InventoryPurchaseStockAuditNotifier
+    extends StateNotifier<InventoryPurchaseStockAuditState> {
+  InventoryPurchaseStockAuditNotifier()
+    : super(const InventoryPurchaseStockAuditState());
+
+  Future<bool> save({
+    required String storeId,
+    required List<Map<String, dynamic>> lines,
+    String? memo,
+    required bool complete,
+    String? sessionId,
+  }) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      final savedSessionId = await inventoryService.saveInventoryStockAudit(
+        storeId: storeId,
+        lines: lines,
+        memo: memo,
+        complete: complete,
+        sessionId: sessionId ?? state.lastSessionId,
+      );
+      state = state.copyWith(
+        isSaving: false,
+        lastSessionId: savedSessionId,
+        lastCompleted: complete,
+      );
+      return true;
+    } catch (e) {
+      state = state.copyWith(isSaving: false, error: _mapStockAuditError(e));
+      return false;
+    }
+  }
+
+  String _mapStockAuditError(Object error) {
+    final fallback = 'Failed to save stock audit.';
+    final message = error.toString();
+
+    if (message.contains('INVENTORY_STOCK_AUDIT_FORBIDDEN')) {
+      return 'No permission to save stock audit for this store.';
+    }
+    if (message.contains('INVENTORY_STOCK_AUDIT_LINES_REQUIRED')) {
+      return 'Enter at least one counted product quantity.';
+    }
+    if (message.contains('INVENTORY_STOCK_AUDIT_SESSION_NOT_FOUND')) {
+      return 'The stock audit session no longer exists.';
+    }
+    if (message.contains('INVENTORY_STOCK_AUDIT_SESSION_NOT_EDITABLE')) {
+      return 'The selected stock audit session is already closed.';
+    }
+    if (message.contains('INVENTORY_STOCK_AUDIT_PRODUCT_REQUIRED')) {
+      return 'A counted product is missing.';
+    }
+    if (message.contains('INVENTORY_STOCK_AUDIT_ACTUAL_INVALID')) {
+      return 'Actual stock quantity must be zero or greater.';
+    }
+    if (message.contains('INVENTORY_STOCK_AUDIT_PRODUCT_NOT_FOUND') ||
+        message.contains('INVENTORY_STOCK_AUDIT_ITEM_NOT_LINKED') ||
+        message.contains('INVENTORY_STOCK_AUDIT_ITEM_NOT_FOUND')) {
+      return 'One or more counted products are no longer linked to inventory stock.';
+    }
+
+    return fallback;
+  }
+}
+
+final inventoryPurchaseStockAuditProvider =
+    StateNotifierProvider<
+      InventoryPurchaseStockAuditNotifier,
+      InventoryPurchaseStockAuditState
+    >((ref) => InventoryPurchaseStockAuditNotifier());
 
 enum InventoryPurchaseRuntimeResultKind {
   idle,

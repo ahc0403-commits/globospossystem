@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
 import '../../core/layout/platform_info.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/i18n/locale_extensions.dart';
 import '../../core/layout/adaptive_layout.dart';
+import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
-import '../../main.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/offline_banner.dart';
 import '../../core/utils/permission_utils.dart';
 import '../auth/auth_provider.dart';
+import '../auth/auth_state.dart';
 import 'tabs/attendance_tab.dart';
-import 'tabs/inventory_tab.dart';
 import 'tabs/menu_tab.dart';
+import 'tabs/owner_overview_tab.dart';
 import 'tabs/qc_tab.dart';
 import 'tabs/reports_tab.dart';
 import 'tabs/settings_tab.dart';
@@ -21,6 +22,7 @@ import 'tabs/staff_tab.dart';
 import 'tabs/tables_tab.dart';
 import '../delivery/screens/delivery_settlement_tab.dart';
 import 'tabs/einvoice_tab.dart';
+import '../inventory_purchase/inventory_purchase_screen.dart';
 
 class AdminScreen extends ConsumerStatefulWidget {
   const AdminScreen({
@@ -47,25 +49,70 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final isSuperAdminView = widget.overrideRestaurantId != null;
-    final role = ref.watch(authProvider).role;
-
-    if (PlatformInfo.isWebOrDesktop) {
-      return _buildWebDesktopLayout(context, isSuperAdminView, role);
+  void didUpdateWidget(covariant AdminScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialTabIndex != widget.initialTabIndex) {
+      _currentIndex = widget.initialTabIndex;
     }
-
-    return _buildMobileLayout(context, isSuperAdminView, role);
   }
 
-  List<Widget> _tabsForRole(String? role) {
+  @override
+  Widget build(BuildContext context) {
+    final isSuperAdminView = widget.overrideRestaurantId != null;
+    final authState = ref.watch(authProvider);
+    final role = authState.role;
+    final storeId = widget.overrideRestaurantId ?? authState.storeId;
+    final storeName = _storeNameFor(authState.accessibleStores, storeId);
+    final viewport = MediaQuery.sizeOf(context);
+    final useDesktopShell =
+        PlatformInfo.isWebOrDesktop &&
+        viewport.width >= 720 &&
+        viewport.shortestSide >= 600;
+
+    if (useDesktopShell) {
+      return _buildWebDesktopLayout(
+        context,
+        isSuperAdminView,
+        role,
+        storeId,
+        storeName,
+      );
+    }
+
+    return _buildMobileLayout(
+      context,
+      isSuperAdminView,
+      role,
+      storeId,
+      storeName,
+    );
+  }
+
+  String? _storeNameFor(List<AccessibleStore> stores, String? storeId) {
+    if (storeId == null) return null;
+    for (final store in stores) {
+      if (store.id == storeId) return store.name;
+    }
+    return null;
+  }
+
+  List<Widget> _tabsForRole(
+    String? role, {
+    required String? storeId,
+    required String? storeName,
+  }) {
     final tabs = <Widget>[
+      OwnerOverviewTab(
+        storeId: storeId,
+        storeName: storeName,
+        onSelectTab: (index) => setState(() => _currentIndex = index),
+      ),
       const TablesTab(),
       const MenuTab(),
       const StaffTab(),
       const ReportsTab(),
       const AttendanceTab(),
-      const InventoryTab(),
+      const InventoryPurchaseScreen(),
       const QcTab(),
       const SettingsTab(),
     ];
@@ -79,160 +126,137 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   }
 
   /// Operational sidebar groups. Order across groups MUST match the
-  /// existing flat tab order (Tables, Menu, Staff, Reports, Attendance,
+  /// existing flat tab order (Overview, Tables, Menu, Staff, Reports, Attendance,
   /// Inventory, QC, Settings, [Deliberry], E-Invoice) because the
   /// selected-index/tab mapping is positional. Grouping is expressive
   /// only — the `ToastSidebar` adapter flattens groups while preserving
   /// order, so shell behavior is unchanged.
   List<ToastSidebarGroup> _sidebarGroupsForRole(String? role) {
+    final l10n = context.l10n;
     final liveOps = <ToastSidebarItem>[
-      const ToastSidebarItem(
-        icon: Icons.table_restaurant,
-        label: 'Tables',
+      ToastSidebarItem(
+        icon: Icons.space_dashboard_outlined,
+        label: l10n.adminOverviewNavLabel,
         urgency: ToastSidebarUrgency.live,
-        itemKey: Key('nav_tables'),
+        helperLabel: l10n.adminOverviewNavHelper,
+        itemKey: const Key('nav_overview'),
       ),
-      const ToastSidebarItem(
-        icon: Icons.restaurant_menu,
-        label: 'Menu',
+      ToastSidebarItem(
+        icon: Icons.table_restaurant,
+        label: l10n.tables,
         urgency: ToastSidebarUrgency.live,
-        itemKey: Key('nav_menu'),
+        helperLabel: l10n.adminNavTablesHelper,
+        itemKey: const Key('nav_tables'),
+      ),
+      ToastSidebarItem(
+        icon: Icons.restaurant_menu,
+        label: l10n.menu,
+        urgency: ToastSidebarUrgency.live,
+        helperLabel: l10n.adminNavMenuHelper,
+        itemKey: const Key('nav_menu'),
       ),
     ];
 
     final backOffice = <ToastSidebarItem>[
-      const ToastSidebarItem(
+      ToastSidebarItem(
         icon: Icons.people,
-        label: 'Staff',
+        label: l10n.staff,
         urgency: ToastSidebarUrgency.backOffice,
-        itemKey: Key('nav_staff'),
+        helperLabel: l10n.adminNavStaffHelper,
+        itemKey: const Key('nav_staff'),
       ),
-      const ToastSidebarItem(
+      ToastSidebarItem(
         icon: Icons.bar_chart,
-        label: 'Reports',
+        label: l10n.reports,
         urgency: ToastSidebarUrgency.backOffice,
-        itemKey: Key('nav_reports'),
+        helperLabel: l10n.adminNavReportsHelper,
+        itemKey: const Key('nav_reports'),
       ),
-      const ToastSidebarItem(
+      ToastSidebarItem(
         icon: Icons.access_time,
-        label: 'Attendance',
+        label: l10n.attendance,
         urgency: ToastSidebarUrgency.backOffice,
-        itemKey: Key('nav_attendance'),
+        helperLabel: l10n.adminNavAttendanceHelper,
+        itemKey: const Key('nav_attendance'),
       ),
-      const ToastSidebarItem(
+      ToastSidebarItem(
         icon: Icons.inventory_2_outlined,
-        label: 'Inventory',
+        label: l10n.inventory,
         urgency: ToastSidebarUrgency.backOffice,
-        itemKey: Key('nav_inventory'),
+        helperLabel: l10n.adminNavInventoryHelper,
+        itemKey: const Key('nav_inventory'),
       ),
-      const ToastSidebarItem(
+      ToastSidebarItem(
         icon: Icons.fact_check,
-        label: 'QC',
+        label: l10n.navQuality,
         urgency: ToastSidebarUrgency.backOffice,
-        itemKey: Key('nav_qc'),
+        helperLabel: l10n.adminNavQcHelper,
+        itemKey: const Key('nav_qc'),
       ),
-      const ToastSidebarItem(
+      ToastSidebarItem(
         icon: Icons.settings,
-        label: 'Settings',
+        label: l10n.settings,
         urgency: ToastSidebarUrgency.backOffice,
-        itemKey: Key('nav_settings'),
+        helperLabel: l10n.adminNavSettingsHelper,
+        itemKey: const Key('nav_settings'),
       ),
     ];
 
     final exceptions = <ToastSidebarItem>[];
     if (PermissionUtils.canAccessDeliverySettlement(role)) {
       exceptions.add(
-        const ToastSidebarItem(
+        ToastSidebarItem(
           icon: Icons.delivery_dining,
-          label: 'Deliberry Settlement',
+          label: l10n.deliberrySettlement,
           urgency: ToastSidebarUrgency.exception,
-          itemKey: Key('nav_delivery_settlement'),
+          helperLabel: l10n.adminNavDeliverySettlementHelper,
+          itemKey: const Key('nav_delivery_settlement'),
         ),
       );
     }
     exceptions.add(
-      const ToastSidebarItem(
+      ToastSidebarItem(
         icon: Icons.receipt_long,
-        label: 'E-Invoice',
+        label: l10n.eInvoice,
         urgency: ToastSidebarUrgency.exception,
-        itemKey: Key('nav_einvoice'),
+        helperLabel: l10n.adminNavEinvoiceHelper,
+        itemKey: const Key('nav_einvoice'),
       ),
     );
 
     return [
-      ToastSidebarGroup(title: 'Live Operations', items: liveOps),
-      ToastSidebarGroup(title: 'Back Office', items: backOffice),
-      ToastSidebarGroup(title: 'Exceptions', items: exceptions),
+      ToastSidebarGroup(
+        title: l10n.adminWorkflowLiveOperations,
+        items: liveOps,
+      ),
+      ToastSidebarGroup(title: l10n.adminWorkflowBackOffice, items: backOffice),
+      ToastSidebarGroup(title: l10n.adminWorkflowExceptions, items: exceptions),
     ];
-  }
-
-  List<BottomNavigationBarItem> _mobileNavItemsForRole(String? role) {
-    final items = <BottomNavigationBarItem>[
-      const BottomNavigationBarItem(
-        icon: Icon(Icons.table_restaurant),
-        label: 'Tables',
-      ),
-      const BottomNavigationBarItem(
-        icon: Icon(Icons.restaurant_menu),
-        label: 'Menu',
-      ),
-      const BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Staff'),
-      const BottomNavigationBarItem(
-        icon: Icon(Icons.bar_chart),
-        label: 'Reports',
-      ),
-      const BottomNavigationBarItem(
-        icon: Icon(Icons.access_time),
-        label: 'Attendance',
-      ),
-      const BottomNavigationBarItem(
-        icon: Icon(Icons.inventory_2_outlined),
-        label: 'Inventory',
-      ),
-      const BottomNavigationBarItem(icon: Icon(Icons.fact_check), label: 'QC'),
-      const BottomNavigationBarItem(
-        icon: Icon(Icons.settings),
-        label: 'Settings',
-      ),
-    ];
-
-    if (PermissionUtils.canAccessDeliverySettlement(role)) {
-      items.add(
-        const BottomNavigationBarItem(
-          icon: Icon(Icons.delivery_dining),
-          label: 'Deliberry',
-        ),
-      );
-    }
-
-    items.add(
-      const BottomNavigationBarItem(
-        icon: Icon(Icons.receipt_long),
-        label: 'E-Invoice',
-      ),
-    );
-    return items;
   }
 
   Widget _buildWebDesktopLayout(
     BuildContext context,
     bool isSuperAdminView,
     String? role,
+    String? storeId,
+    String? storeName,
   ) {
-    final tabs = _tabsForRole(role);
+    final tabs = _tabsForRole(role, storeId: storeId, storeName: storeName);
     final groups = _sidebarGroupsForRole(role);
     final safeIndex = _currentIndex.clamp(0, tabs.length - 1);
 
     return ToastSidebar(
       key: const Key('admin_root'),
-      title: isSuperAdminView ? 'ADMIN VIEW' : 'GLOBOS POS',
+      title: isSuperAdminView
+          ? context.l10n.adminViewTitle
+          : context.l10n.appTitle,
       groups: groups,
       selectedIndex: safeIndex,
       onItemSelected: (index) => setState(() => _currentIndex = index),
       topBarLeading: isSuperAdminView
           ? IconButton(
-              icon: const Icon(Icons.arrow_back, color: AppColors.amber500),
-              tooltip: 'Back to System Admin',
+              icon: const Icon(Icons.arrow_back, color: PosColors.accent),
+              tooltip: context.l10n.backToSystemAdmin,
               onPressed: () => context.go('/super-admin'),
             )
           : null,
@@ -240,27 +264,12 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
           ? Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const AppNavBar(),
+                const Flexible(child: AppNavBar()),
                 const SizedBox(width: 10),
-                Container(
-                  margin: const EdgeInsets.symmetric(vertical: 12),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.statusOccupied.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.statusOccupied),
-                  ),
-                  child: Text(
-                    'SUPER ADMIN MODE',
-                    style: GoogleFonts.notoSansKr(
-                      color: AppColors.statusOccupied,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                ToastStatusBadge(
+                  label: context.l10n.superAdminMode,
+                  color: PosColors.warning,
+                  compact: true,
                 ),
               ],
             )
@@ -270,7 +279,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
           : [
               ToastSidebarItem(
                 icon: Icons.logout,
-                label: 'Logout',
+                label: context.l10n.logout,
                 urgency: ToastSidebarUrgency.backOffice,
                 itemKey: const Key('logout_button'),
                 onTap: () => ref.read(authProvider.notifier).logout(),
@@ -291,64 +300,53 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     BuildContext context,
     bool isSuperAdminView,
     String? role,
+    String? storeId,
+    String? storeName,
   ) {
-    final tabs = _tabsForRole(role);
-    final navItems = _mobileNavItemsForRole(role);
+    final tabs = _tabsForRole(role, storeId: storeId, storeName: storeName);
+    final groups = _sidebarGroupsForRole(role);
     final safeIndex = _currentIndex.clamp(0, tabs.length - 1);
 
-    return Scaffold(
+    return ToastSidebar(
       key: const Key('admin_root'),
-      backgroundColor: AppColors.surface0,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface0,
-        elevation: 0,
-        leading: isSuperAdminView
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back, color: AppColors.amber500),
-                tooltip: 'Back to System Admin',
-                onPressed: () => context.go('/super-admin'),
-              )
-            : null,
-        title: Text(
-          isSuperAdminView ? 'ADMIN VIEW' : 'GLOBOS POS',
-          style: AppTextStyles.operationalTitle(
-            size: 24,
-            color: AppColors.amber500,
-          ),
-        ),
-        actions: [
-          const Padding(
-            padding: EdgeInsets.only(right: 8),
-            child: Center(child: AppNavBar()),
-          ),
-          if (isSuperAdminView)
-            Container(
-              margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.statusOccupied.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.statusOccupied),
-              ),
-              child: Text(
-                'SUPER ADMIN MODE',
-                style: GoogleFonts.notoSansKr(
-                  color: AppColors.statusOccupied,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
+      title: isSuperAdminView
+          ? context.l10n.adminViewTitle
+          : context.l10n.appTitle,
+      groups: groups,
+      selectedIndex: safeIndex,
+      onItemSelected: (index) => setState(() => _currentIndex = index),
+      topBarLeading: isSuperAdminView
+          ? IconButton(
+              icon: const Icon(Icons.arrow_back, color: PosColors.accent),
+              tooltip: context.l10n.backToSystemAdmin,
+              onPressed: () => context.go('/super-admin'),
+            )
+          : null,
+      topBarTrailing: isSuperAdminView
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Flexible(child: AppNavBar()),
+                const SizedBox(width: 8),
+                ToastStatusBadge(
+                  label: context.l10n.superAdminMode,
+                  color: PosColors.warning,
+                  compact: true,
                 ),
+              ],
+            )
+          : const AppNavBar(),
+      bottomItems: isSuperAdminView
+          ? null
+          : [
+              ToastSidebarItem(
+                icon: Icons.logout,
+                label: context.l10n.logout,
+                urgency: ToastSidebarUrgency.backOffice,
+                itemKey: const Key('logout_button'),
+                onTap: () => ref.read(authProvider.notifier).logout(),
               ),
-            ),
-          if (!isSuperAdminView)
-            IconButton(
-              key: const Key('logout_button'),
-              onPressed: () => ref.read(authProvider.notifier).logout(),
-              icon: const Icon(Icons.logout),
-              color: AppColors.textPrimary,
-              tooltip: 'Logout',
-            ),
-        ],
-      ),
+            ],
       body: Column(
         children: [
           const OfflineBanner(),
@@ -356,20 +354,6 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
             child: IndexedStack(index: safeIndex, children: tabs),
           ),
         ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: safeIndex,
-        onTap: (index) {
-          if (index >= tabs.length) {
-            return;
-          }
-          setState(() => _currentIndex = index);
-        },
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: AppColors.surface1,
-        selectedItemColor: AppColors.amber500,
-        unselectedItemColor: AppColors.textSecondary,
-        items: navItems,
       ),
     );
   }
