@@ -27,6 +27,20 @@ BEGIN
   FROM auth.users au JOIN public.users u ON u.auth_id = au.id
   WHERE u.role = 'super_admin' AND u.is_active LIMIT 1;
 
+  IF v_super IS NULL THEN
+    v_super := 'c105e000-0000-4000-8000-0000000000a0';
+    INSERT INTO auth.users (id, email)
+    VALUES (v_super, 'closure.contract.super@globos.test');
+    INSERT INTO public.users (auth_id, restaurant_id, role, full_name, is_active)
+    VALUES (
+      v_super,
+      'aaaaaaaa-0000-0000-0000-000000000001',
+      'super_admin',
+      'Closure Contract Super',
+      true
+    );
+  END IF;
+
   INSERT INTO restaurants (id, name, address, is_active, brand_id, tax_entity_id)
   SELECT v_store, 'Closure Contract Store', 'x', true, r.brand_id, r.tax_entity_id
   FROM restaurants r WHERE r.id = 'aaaaaaaa-0000-0000-0000-000000000001';
