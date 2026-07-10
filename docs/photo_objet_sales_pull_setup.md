@@ -19,10 +19,11 @@ invoice jobs. The crawler does not call MISA directly.
 
 ## Current schedule
 
-The GitHub Actions workflow runs every 10 minutes:
+The GitHub Actions workflow runs once per hour from 09:00 through 22:00 in
+Asia/Ho_Chi_Minh. GitHub cron is UTC, so the configured range is 02:00-15:00:
 
 ```yaml
-cron: '*/10 * * * *'
+cron: '0 2-15 * * *'
 ```
 
 D7 is removed from the active pull list because the store is scheduled to close.
@@ -90,7 +91,7 @@ fragile name matching.
 ## Raw ledger behavior
 
 The collector builds `source_hash` from store, date, device, time, amount, type,
-row index, and raw row content. This makes the 10-minute pull idempotent:
+row index, and raw row content. This makes each hourly pull idempotent:
 
 - already-seen rows update `last_seen_at`
 - newly-seen rows insert into `photo_objet_sales_raw`
@@ -103,18 +104,22 @@ aggregate. It is not the tax-reporting source of truth.
 
 ## Current execution status
 
-As of 2026-04-17:
+As of 2026-07-11:
 
 - workflow file created
 - script created
 - linked DB `photo_objet_sales` / `v_photo_objet_daily_summary` created
-- linked DB `PHOTO OBJET` brand + 7 stores seeded
+- linked DB `PHOTO OBJET` brand and deterministic store anchors seeded
 - GitHub repository secrets registered:
   - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_KEY`
   - all `MOERS_*_PASS`
   - all `PHOTO_OBJET_*_STORE_ID`
+- D7 removed from active collection; six stores remain enabled
+- POS Photo Ops reads the current HCM day from
+  `v_photo_objet_daily_summary`
 
-Remaining manual blocker:
+Deployment note:
 
-- `SUPABASE_SERVICE_KEY` is still required before the workflow can be run
-  successfully in GitHub Actions.
+- GitHub scheduled workflows use the workflow definition on the default branch.
+  This revision must be merged there before the hourly schedule takes effect.

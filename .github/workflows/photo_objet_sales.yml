@@ -2,7 +2,8 @@ name: Photo Objet Sales Pull
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    # 09:00-22:00 Asia/Ho_Chi_Minh (UTC+7), once per hour.
+    - cron: '0 2-15 * * *'
   workflow_dispatch:
     inputs:
       target_date:

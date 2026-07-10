@@ -69,10 +69,12 @@ void main() {
     expect(source, isNot(contains('MISA_MEINVOICE_PASSWORD')));
   });
 
-  test('Photo Objet workflow runs every 10 minutes without D7', () {
+  test('Photo Objet workflow runs hourly from 09:00 through 22:00 HCM', () {
     final workflow = readRepoFile(workflowPath);
 
-    expect(workflow, contains("cron: '*/10 * * * *'"));
+    expect(workflow, contains("cron: '0 2-15 * * *'"));
+    expect(workflow, contains('09:00-22:00 Asia/Ho_Chi_Minh'));
+    expect(workflow, contains("node-version: '22'"));
     expect(workflow, contains('concurrency:'));
     expect(workflow, contains('cancel-in-progress: false'));
     expect(workflow, isNot(contains('MOERS_D7')));
@@ -88,7 +90,8 @@ void main() {
     expect(docs, contains('photo_objet_sales_pull_runs'));
     expect(docs, contains('meinvoice_jobs'));
     expect(docs, contains('The crawler does not call MISA directly.'));
-    expect(docs, contains("cron: '*/10 * * * *'"));
+    expect(docs, contains("cron: '0 2-15 * * *'"));
+    expect(docs, contains('09:00 through 22:00'));
     expect(docs, isNot(contains('MOERS_D7')));
     expect(docs, isNot(contains('PHOTO_OBJET_D7')));
     expect(docs, contains('payment_method = CASH'));
