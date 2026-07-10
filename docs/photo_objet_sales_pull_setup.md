@@ -19,12 +19,19 @@ invoice jobs. The crawler does not call MISA directly.
 
 ## Current schedule
 
-The GitHub Actions workflow runs once per hour from 09:00 through 22:00 in
-Asia/Ho_Chi_Minh. GitHub cron is UTC, so the configured range is 02:00-15:00:
+The GitHub Actions workflow runs from 09:00 through 22:30 in
+Asia/Ho_Chi_Minh: once per hour through 22:00, then once more at 22:30. GitHub
+cron is UTC, so the hourly range is 02:00-15:00 and the final run is 15:30:
 
 ```yaml
 cron: '0 2-15 * * *'
+cron: '30 15 * * *'
 ```
+
+The 22:30 run is the final sales collection and invoice queueing run for every
+enabled Photo Objet store. Newly collected rows enqueue their receipt issuance
+jobs during that run; no later sales collection or receipt queueing run is
+scheduled for the business day.
 
 D7 is removed from the active pull list because the store is scheduled to close.
 Historical POS rows and seeded anchors are retained for audit continuity.
