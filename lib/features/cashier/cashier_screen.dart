@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/payments/payment_method_contract.dart';
@@ -1395,7 +1396,7 @@ List<CashierOrder> _filterCashierOrders(
       _shortCashierOrderId(order.orderId),
       order.tableNumber,
       if (order.isQrOrder) 'qr',
-      if (order.isDeliveryOrder) 'delivery 배달',
+      if (order.isDeliveryOrder) 'delivery 배달 giao hàng giao hang',
     ].map(_normalizeCashierOrderSearch).join(' ');
     return haystack.contains(normalizedQuery);
   }).toList();
@@ -2797,6 +2798,7 @@ class _CashierDeliveryOrderDialog extends ConsumerStatefulWidget {
 class _CashierDeliveryOrderDialogState
     extends ConsumerState<_CashierDeliveryOrderDialog> {
   final Map<String, int> _quantities = <String, int>{};
+  final String _clientMutationId = const Uuid().v4();
   bool _isSubmitting = false;
   String? _error;
 
@@ -2837,6 +2839,7 @@ class _CashierDeliveryOrderDialogState
       await orderService.createDeliveryOrder(
         storeId: widget.storeId,
         items: payload,
+        clientMutationId: _clientMutationId,
       );
       if (mounted) {
         Navigator.of(context).pop(true);

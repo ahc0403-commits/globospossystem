@@ -23,7 +23,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap;
-SELECT plan(33);
+SELECT plan(48);
 
 SELECT set_config(
   'request.jwt.claim.sub',
@@ -879,6 +879,247 @@ SELECT ok(
       AND payload->>'printed_reason' = 'reprint'
   ),
   'TP12 receipt reprint creates a new batch on the receipt destination'
+);
+
+UPDATE public.users
+SET role = 'cashier',
+    restaurant_id = '00000000-0000-0000-0000-00000000b111'
+WHERE auth_id = '00000000-0000-0000-0000-00000000a111';
+
+SELECT throws_ok(
+  $$
+    SELECT public.create_delivery_order(
+      '00000000-0000-0000-0000-00000000b111',
+      NULL,
+      'delivery-null-items'
+    )
+  $$,
+  'P0001',
+  'ORDER_ITEMS_REQUIRED',
+  'TP13 delivery order rejects null items'
+);
+
+SELECT throws_ok(
+  $$
+    SELECT public.create_delivery_order(
+      '00000000-0000-0000-0000-00000000b111',
+      '[{"menu_item_id":"not-a-uuid","quantity":1}]'::jsonb,
+      'delivery-invalid-item'
+    )
+  $$,
+  'P0001',
+  'INVALID_ORDER_ITEM_INPUT',
+  'TP13 delivery order rejects malformed item input'
+);
+
+SELECT throws_ok(
+  $$
+    SELECT public.create_delivery_order(
+      '00000000-0000-0000-0000-00000000b222',
+      '[{"menu_item_id":"00000000-0000-0000-0000-00000000e111","quantity":1}]'::jsonb,
+      'delivery-cross-store'
+    )
+  $$,
+  'P0001',
+  'DELIVERY_ORDER_CREATE_FORBIDDEN',
+  'TP13 delivery order rejects cross-store creation'
+);
+
+UPDATE public.users
+SET role = 'waiter'
+WHERE auth_id = '00000000-0000-0000-0000-00000000a111';
+
+SELECT throws_ok(
+  $$
+    SELECT public.create_delivery_order(
+      '00000000-0000-0000-0000-00000000b111',
+      '[{"menu_item_id":"00000000-0000-0000-0000-00000000e111","quantity":1}]'::jsonb,
+      'delivery-wrong-role'
+    )
+  $$,
+  'P0001',
+  'DELIVERY_ORDER_CREATE_FORBIDDEN',
+  'TP13 delivery order is cashier-only'
+);
+
+UPDATE public.users
+SET role = 'cashier'
+WHERE auth_id = '00000000-0000-0000-0000-00000000a111';
+
+CREATE TEMP TABLE delivery_contract_order AS
+SELECT (
+  public.create_delivery_order(
+    '00000000-0000-0000-0000-00000000b111',
+    '[{"menu_item_id":"00000000-0000-0000-0000-00000000e111","quantity":1}]'::jsonb,
+    'delivery-contract-1'
+  )
+).id;
+
+SELECT is(
+  (
+    SELECT id
+    FROM delivery_contract_order
+  ),
+  (
+    SELECT (
+      public.create_delivery_order(
+        '00000000-0000-0000-0000-00000000b111',
+        '[{"menu_item_id":"00000000-0000-0000-0000-00000000e111","quantity":1}]'::jsonb,
+        'delivery-contract-1'
+      )
+    ).id
+  ),
+  'TP13 delivery retry returns the original order'
+);
+
+SELECT is(
+  (
+    SELECT count(*)
+    FROM public.pos_client_mutation_attempts
+    WHERE store_id = '00000000-0000-0000-0000-00000000b111'
+      AND actor_id = '00000000-0000-0000-0000-00000000a111'
+      AND client_mutation_id = 'delivery-contract-1'
+      AND mutation_type = 'create_delivery_order'
+  ),
+  1::bigint,
+  'TP13 delivery retry keeps one mutation attempt'
+);
+
+SELECT is(
+  (
+    SELECT count(*)
+    FROM public.orders o
+    JOIN delivery_contract_order d ON d.id = o.id
+    WHERE o.sales_channel = 'delivery'
+  ),
+  1::bigint,
+  'TP13 delivery retry keeps one order'
+);
+
+SELECT is(
+  (
+    SELECT count(*)
+    FROM public.print_jobs pj
+    JOIN delivery_contract_order d ON d.id = pj.order_id
+    WHERE pj.copy_type = 'kitchen'
+  ),
+  1::bigint,
+  'TP13 delivery retry keeps one kitchen ticket'
+);
+
+SELECT is(
+  (
+    SELECT concat_ws('/', payload->>'floor_label', payload->>'table_number')
+    FROM public.print_jobs pj
+    JOIN delivery_contract_order d ON d.id = pj.order_id
+    WHERE pj.copy_type = 'kitchen'
+    LIMIT 1
+  ),
+  'DELIVERY/DELIVERY',
+  'TP13 kitchen ticket preserves delivery identity'
+);
+
+UPDATE public.order_items oi
+SET status = 'ready'
+FROM delivery_contract_order d
+WHERE oi.order_id = d.id;
+
+SELECT public.recalc_order_status(id)
+FROM delivery_contract_order;
+
+SELECT is(
+  (
+    SELECT concat_ws('/', payload->>'floor_label', payload->>'table_number')
+    FROM public.print_jobs pj
+    JOIN delivery_contract_order d ON d.id = pj.order_id
+    WHERE pj.copy_type = 'tray'
+    LIMIT 1
+  ),
+  'DELIVERY/DELIVERY',
+  'TP13 tray ticket preserves delivery identity'
+);
+
+SELECT is(
+  (
+    SELECT (public.search_active_order_for_cashier(
+      '00000000-0000-0000-0000-00000000b111',
+      'giao hàng'
+    ))->>'id'
+  ),
+  (
+    SELECT id::text
+    FROM delivery_contract_order
+  ),
+  'TP13 Vietnamese delivery search finds the active order'
+);
+
+INSERT INTO public.payments (
+  id,
+  restaurant_id,
+  order_id,
+  amount,
+  amount_portion,
+  method,
+  is_revenue,
+  processed_by
+)
+SELECT
+  '00000000-0000-0000-0000-000000004222',
+  '00000000-0000-0000-0000-00000000b111',
+  d.id,
+  50000,
+  50000,
+  'CASH',
+  true,
+  '00000000-0000-0000-0000-00000000a111'
+FROM delivery_contract_order d;
+
+SELECT lives_ok(
+  $$
+    SELECT public.enqueue_receipt_print_job(
+      (SELECT id FROM delivery_contract_order),
+      false
+    )
+  $$,
+  'TP13 delivery receipt enqueue is callable'
+);
+
+SELECT is(
+  (
+    SELECT payload->>'table_number'
+    FROM public.print_jobs pj
+    JOIN delivery_contract_order d ON d.id = pj.order_id
+    WHERE pj.copy_type = 'receipt'
+    LIMIT 1
+  ),
+  'DELIVERY',
+  'TP13 receipt preserves delivery identity'
+);
+
+UPDATE public.orders o
+SET status = 'completed'
+FROM delivery_contract_order d
+WHERE o.id = d.id;
+
+SELECT is(
+  (
+    SELECT delivery_revenue
+    FROM public.v_daily_revenue_by_channel
+    WHERE restaurant_id = '00000000-0000-0000-0000-00000000b111'
+      AND sale_date = (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
+  ),
+  50000::numeric,
+  'TP13 POS delivery payment is included in delivery revenue'
+);
+
+SELECT is(
+  (
+    SELECT count(*)
+    FROM public.external_sales
+    WHERE restaurant_id = '00000000-0000-0000-0000-00000000b111'
+  ),
+  0::bigint,
+  'TP13 manual delivery does not create Deliberry external sales'
 );
 
 SELECT * FROM finish();

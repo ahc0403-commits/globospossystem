@@ -51,10 +51,15 @@ class OrderService {
   Future<Map<String, dynamic>> createDeliveryOrder({
     required String storeId,
     required List<Map<String, dynamic>> items,
+    required String clientMutationId,
   }) async {
     final result = await supabase.rpc(
       'create_delivery_order',
-      params: {'p_store_id': storeId, 'p_items': items},
+      params: {
+        'p_store_id': storeId,
+        'p_items': items,
+        'p_client_mutation_id': clientMutationId,
+      },
     );
     return Map<String, dynamic>.from(result as Map);
   }

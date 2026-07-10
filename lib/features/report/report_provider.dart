@@ -231,6 +231,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
           .order('created_at', ascending: false);
 
       double dineInRevenue = 0;
+      double deliveryRevenue = 0;
       double cashTotal = 0;
       double cardTotal = 0;
       double payTotal = 0;
@@ -309,13 +310,13 @@ class ReportNotifier extends StateNotifier<ReportState> {
         final normalized = channel.toLowerCase();
         if (normalized == 'delivery') {
           accumulator.delivery += amount;
+          deliveryRevenue += amount;
         } else {
           accumulator.dineIn += amount;
           dineInRevenue += amount;
         }
       }
 
-      double deliveryRevenue = 0;
       for (final row in externalSalesResponse) {
         final external = Map<String, dynamic>.from(row);
         final amount = _toDouble(external['net_amount']);
