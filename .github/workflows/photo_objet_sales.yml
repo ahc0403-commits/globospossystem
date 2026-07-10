@@ -1,13 +1,18 @@
-name: Photo Objet Daily Sales Pull
+name: Photo Objet Sales Pull
 
 on:
   schedule:
-    - cron: '0 0 * * *'
+    # 09:00-22:00 Asia/Ho_Chi_Minh (UTC+7), once per hour.
+    - cron: '0 2-15 * * *'
   workflow_dispatch:
     inputs:
       target_date:
-        description: 'Date to pull (YYYY-MM-DD), defaults to yesterday'
+        description: 'Date to pull (YYYY-MM-DD), defaults to today in Asia/Ho_Chi_Minh'
         required: false
+
+concurrency:
+  group: photo-objet-sales-pull
+  cancel-in-progress: false
 
 jobs:
   pull-sales:
@@ -18,14 +23,27 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install dependencies
         run: npm install --no-package-lock
         working-directory: scripts
 
       - name: Install Chromium
-        run: npx puppeteer browsers install chrome
+        run: |
+          rm -rf ~/.cache/puppeteer
+          CHROME_VERSION=$(node -p "require('puppeteer').PUPPETEER_REVISIONS.chrome")
+          echo "Puppeteer Chrome revision: ${CHROME_VERSION}"
+          ./node_modules/.bin/browsers install "chrome@${CHROME_VERSION}" --platform linux --path "$HOME/.cache/puppeteer"
+          CHROME_PATH="$HOME/.cache/puppeteer/chrome/linux-${CHROME_VERSION}/chrome-linux64/chrome"
+          if [ ! -x "${CHROME_PATH}" ]; then
+            find "$HOME/.cache/puppeteer" -maxdepth 5 -type f | sort | head -80
+          fi
+          test -x "${CHROME_PATH}"
+          echo "PUPPETEER_EXECUTABLE_PATH=${CHROME_PATH}" >> "$GITHUB_ENV"
+          export PUPPETEER_EXECUTABLE_PATH="${CHROME_PATH}"
+          "${CHROME_PATH}" --version
+          node -e "console.log(require('puppeteer').executablePath())"
         working-directory: scripts
 
       - name: Pull Photo Objet sales
@@ -35,9 +53,7 @@ jobs:
           TARGET_DATE: ${{ github.event.inputs.target_date }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          MOERS_D7_USER: tob003
-          MOERS_D7_PASS: ${{ secrets.MOERS_D7_PASS }}
-          PHOTO_OBJET_D7_STORE_ID: ${{ secrets.PHOTO_OBJET_D7_STORE_ID }}
+          PHOTO_OBJET_INCLUDE_YESTERDAY: 'false'
           MOERS_BIENHOA_USER: tob009
           MOERS_BIENHOA_PASS: ${{ secrets.MOERS_BIENHOA_PASS }}
           PHOTO_OBJET_BIENHOA_STORE_ID: ${{ secrets.PHOTO_OBJET_BIENHOA_STORE_ID }}
