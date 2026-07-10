@@ -22,18 +22,16 @@ class PhotoOpsKpi {
   final int activeInventoryAlerts;
   final double activePayrollEstimate;
 
-  /// Wave 1.6 sales-overlay: gross sales for the active store across the
-  /// dashboard window. Stored but not populated by the legacy loader;
-  /// defaults to 0 so existing constructor call sites stay compatible.
+  /// Gross sales for the active store on the current HCM calendar day.
   final double activeStoreSales;
 
-  /// Wave 1.6 sales-overlay: network-wide gross sales aggregate.
+  /// Current-day gross sales across every accessible store.
   final double networkSales;
 
-  /// Wave 1.6 sales-overlay: transaction count for the active store.
+  /// Current-day transaction count for the active store.
   final int activeStoreTransactions;
 
-  /// Wave 1.6 sales-overlay: timestamp of the most recent sales pull.
+  /// Timestamp of the most recent sales pull in the accessible scope.
   final DateTime? lastSalesPulledAt;
 }
 
@@ -121,9 +119,7 @@ class PhotoOpsDashboardData {
   final List<PhotoOpsInventoryRow> inventoryAlerts;
   final List<PhotoOpsPayrollRow> payrollPreview;
 
-  /// Wave 1.6 sales-overlay: per-store sales rows. Stored but not
-  /// populated by the legacy loader; defaults to empty so existing
-  /// constructor call sites stay compatible.
+  /// Current HCM calendar-day sales rows for accessible stores.
   final List<PhotoOpsSalesRow> salesSummary;
 
   /// Wave 1.6 sales-overlay: warning code emitted by the sales loader
@@ -135,6 +131,96 @@ class PhotoOpsDashboardData {
   final String? salesWarningDetail;
 }
 
+class PhotoOpsSalesSnapshot {
+  const PhotoOpsSalesSnapshot({
+    required this.rows,
+    required this.activeStoreSales,
+    required this.networkSales,
+    required this.activeStoreTransactions,
+    required this.lastSalesPulledAt,
+  });
+
+  final List<PhotoOpsSalesRow> rows;
+  final double activeStoreSales;
+  final double networkSales;
+  final int activeStoreTransactions;
+  final DateTime? lastSalesPulledAt;
+}
+
+String photoOpsHcmDate(DateTime value) {
+  final hcm = value.toUtc().add(const Duration(hours: 7));
+  return '${hcm.year.toString().padLeft(4, '0')}-'
+      '${hcm.month.toString().padLeft(2, '0')}-'
+      '${hcm.day.toString().padLeft(2, '0')}';
+}
+
+PhotoOpsSalesSnapshot summarizePhotoOpsSales({
+  required String activeStoreId,
+  required List<Map<String, dynamic>> rows,
+}) {
+  final salesRows = <PhotoOpsSalesRow>[];
+  var activeStoreSales = 0.0;
+  var networkSales = 0.0;
+  var activeStoreTransactions = 0;
+  DateTime? lastSalesPulledAt;
+
+  for (final row in rows) {
+    final storeId = row['store_id']?.toString().trim() ?? '';
+    final saleDate = DateTime.tryParse(row['sale_date']?.toString() ?? '');
+    if (storeId.isEmpty || saleDate == null) continue;
+
+    final grossSales = _photoOpsDouble(row['total_gross_sales']);
+    final totalTransactions = _photoOpsInt(row['total_transactions']);
+    final pulledAt = DateTime.tryParse(row['last_pulled_at']?.toString() ?? '');
+    final salesRow = PhotoOpsSalesRow(
+      storeId: storeId,
+      storeName: row['store_name']?.toString().trim().isNotEmpty == true
+          ? row['store_name'].toString().trim()
+          : storeId,
+      saleDate: saleDate,
+      grossSales: grossSales,
+      totalTransactions: totalTransactions,
+      serviceAmount: _photoOpsDouble(row['total_service_amount']),
+      activeMachines: _photoOpsInt(row['active_machines']),
+      lastPulledAt: pulledAt,
+    );
+    salesRows.add(salesRow);
+    networkSales += grossSales;
+
+    if (storeId == activeStoreId) {
+      activeStoreSales += grossSales;
+      activeStoreTransactions += totalTransactions;
+    }
+    if (pulledAt != null &&
+        (lastSalesPulledAt == null || pulledAt.isAfter(lastSalesPulledAt))) {
+      lastSalesPulledAt = pulledAt;
+    }
+  }
+
+  salesRows.sort((a, b) {
+    final dateOrder = b.saleDate.compareTo(a.saleDate);
+    return dateOrder != 0 ? dateOrder : a.storeName.compareTo(b.storeName);
+  });
+
+  return PhotoOpsSalesSnapshot(
+    rows: salesRows,
+    activeStoreSales: activeStoreSales,
+    networkSales: networkSales,
+    activeStoreTransactions: activeStoreTransactions,
+    lastSalesPulledAt: lastSalesPulledAt,
+  );
+}
+
+double _photoOpsDouble(dynamic value) {
+  if (value is num) return value.toDouble();
+  return double.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+int _photoOpsInt(dynamic value) {
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? 0;
+}
+
 class PhotoOpsService {
   Future<PhotoOpsDashboardData> loadDashboard({
     required String activeStoreId,
@@ -144,6 +230,31 @@ class PhotoOpsService {
     final today = DateTime(now.year, now.month, now.day);
     final monthStart = DateTime(now.year, now.month, 1);
     final attendanceWindowStart = today.subtract(const Duration(days: 6));
+    final salesDate = photoOpsHcmDate(now);
+
+    var salesRowsRaw = <Map<String, dynamic>>[];
+    String? salesWarningCode;
+    String? salesWarningDetail;
+    try {
+      final response = await supabase
+          .from('v_photo_objet_daily_summary')
+          .select(
+            'store_id, store_name, sale_date, total_gross_sales, '
+            'total_transactions, total_service_amount, active_machines, '
+            'last_pulled_at',
+          )
+          .inFilter('store_id', accessibleStoreIds)
+          .eq('sale_date', salesDate);
+      salesRowsRaw = List<Map<String, dynamic>>.from(response);
+    } catch (error) {
+      salesWarningCode = 'photo_ops_sales_load_failed';
+      salesWarningDetail = error.toString();
+    }
+
+    final sales = summarizePhotoOpsSales(
+      activeStoreId: activeStoreId,
+      rows: salesRowsRaw,
+    );
 
     final results = await Future.wait([
       supabase
@@ -243,10 +354,17 @@ class PhotoOpsService {
           0,
           (sum, row) => sum + row.totalAmount,
         ),
+        activeStoreSales: sales.activeStoreSales,
+        networkSales: sales.networkSales,
+        activeStoreTransactions: sales.activeStoreTransactions,
+        lastSalesPulledAt: sales.lastSalesPulledAt,
       ),
       recentAttendance: recentAttendance,
       inventoryAlerts: inventoryAlerts,
       payrollPreview: payrollPreview.take(10).toList(),
+      salesSummary: sales.rows,
+      salesWarningCode: salesWarningCode,
+      salesWarningDetail: salesWarningDetail,
     );
   }
 

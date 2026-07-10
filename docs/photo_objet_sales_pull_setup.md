@@ -6,10 +6,28 @@ This repository now includes the Photo Objet sales pull workflow and parser:
 - `scripts/package.json`
 - `scripts/pull_moers_sales.js`
 
-The pull job reads sales from `moersinc.com` and upserts into:
+The pull job reads sales from `moersinc.com`, stores raw rows first, and then
+updates the dashboard aggregate:
 
+- `public.photo_objet_sales_raw`
+- `public.photo_objet_sales_pull_runs`
 - `public.photo_objet_sales`
 - `public.v_photo_objet_daily_summary`
+
+New raw rows are queued into `public.meinvoice_jobs` as Photo Objet cash-register
+invoice jobs. The crawler does not call MISA directly.
+
+## Current schedule
+
+The GitHub Actions workflow runs once per hour from 09:00 through 22:00 in
+Asia/Ho_Chi_Minh. GitHub cron is UTC, so the configured range is 02:00-15:00:
+
+```yaml
+cron: '0 2-15 * * *'
+```
+
+D7 is removed from the active pull list because the store is scheduled to close.
+Historical POS rows and seeded anchors are retained for audit continuity.
 
 ## Required GitHub Actions secrets
 
@@ -17,7 +35,6 @@ Set these in GitHub repository settings:
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_KEY`
-- `MOERS_D7_PASS`
 - `MOERS_BIENHOA_PASS`
 - `MOERS_DIAN_PASS`
 - `MOERS_LONGTHANH_PASS`
@@ -28,9 +45,8 @@ Set these in GitHub repository settings:
 ## Required store id secrets
 
 Because the POS project does not currently expose a safe exact-name mapping
-for the 7 Photo Objet stores, the workflow uses explicit store id secrets:
+for the active Photo Objet stores, the workflow uses explicit store id secrets:
 
-- `PHOTO_OBJET_D7_STORE_ID`
 - `PHOTO_OBJET_BIENHOA_STORE_ID`
 - `PHOTO_OBJET_DIAN_STORE_ID`
 - `PHOTO_OBJET_LONGTHANH_STORE_ID`
@@ -43,7 +59,6 @@ upserted Photo Objet sales rows.
 
 Current linked-project mapping:
 
-- `PHOTO_OBJET_D7_STORE_ID` → `77000000-0000-0000-0000-000000000101`
 - `PHOTO_OBJET_BIENHOA_STORE_ID` → `77000000-0000-0000-0000-000000000102`
 - `PHOTO_OBJET_DIAN_STORE_ID` → `77000000-0000-0000-0000-000000000103`
 - `PHOTO_OBJET_LONGTHANH_STORE_ID` → `77000000-0000-0000-0000-000000000104`
@@ -68,25 +83,43 @@ The script supports both:
 
 ## Current linked-environment note
 
-As of 2026-04-17, the linked POS database does not yet contain the 7 Photo
-Objet restaurants as exact-name rows. This setup now seeds a dedicated
-`PHOTO OBJET` brand plus the 7 store anchors with deterministic ids, so the
-workflow can avoid fragile name matching.
+As of 2026-04-17, the linked POS database does not yet contain the active Photo
+Objet restaurants as exact-name rows. This setup seeds a dedicated
+`PHOTO OBJET` brand plus deterministic store anchors, so the workflow can avoid
+fragile name matching.
+
+## Raw ledger behavior
+
+The collector builds `source_hash` from store, date, device, time, amount, type,
+row index, and raw row content. This makes each hourly pull idempotent:
+
+- already-seen rows update `last_seen_at`
+- newly-seen rows insert into `photo_objet_sales_raw`
+- only newly inserted raw rows trigger meInvoice queue creation
+- all Photo Objet rows are treated as `payment_method = CASH`
+- VNPAY/QR wallet data must not be mixed into this ledger
+
+The existing `photo_objet_sales` table remains a dashboard/day-machine
+aggregate. It is not the tax-reporting source of truth.
 
 ## Current execution status
 
-As of 2026-04-17:
+As of 2026-07-11:
 
 - workflow file created
 - script created
 - linked DB `photo_objet_sales` / `v_photo_objet_daily_summary` created
-- linked DB `PHOTO OBJET` brand + 7 stores seeded
+- linked DB `PHOTO OBJET` brand and deterministic store anchors seeded
 - GitHub repository secrets registered:
   - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_KEY`
   - all `MOERS_*_PASS`
   - all `PHOTO_OBJET_*_STORE_ID`
+- D7 removed from active collection; six stores remain enabled
+- POS Photo Ops reads the current HCM day from
+  `v_photo_objet_daily_summary`
 
-Remaining manual blocker:
+Deployment note:
 
-- `SUPABASE_SERVICE_KEY` is still required before the workflow can be run
-  successfully in GitHub Actions.
+- GitHub scheduled workflows use the workflow definition on the default branch.
+  This revision must be merged there before the hourly schedule takes effect.
