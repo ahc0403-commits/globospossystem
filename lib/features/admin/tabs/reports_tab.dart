@@ -264,6 +264,10 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
             ],
             const SizedBox(height: 12),
             compactReportBody(),
+            if (storeId != null) ...[
+              const SizedBox(height: 12),
+              _DailyClosingSection(storeId: storeId),
+            ],
           ],
         ),
       );
@@ -289,6 +293,10 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
             const SizedBox(height: 12),
             if (summary != null) ...[
               _ReportsInsightRow(summary: summary),
+              const SizedBox(height: 12),
+            ],
+            if (storeId != null) ...[
+              _DailyClosingSection(storeId: storeId),
               const SizedBox(height: 12),
             ],
             Expanded(
@@ -517,7 +525,9 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                 ],
                               );
 
-                              if (reportConstraints.maxWidth < 1080) {
+                              if (reportConstraints.maxWidth < 1080 ||
+                                  reportConstraints.maxHeight <
+                                      compactReportHeight) {
                                 return ListView(
                                   key: const Key('reports_compact_scroll'),
                                   keyboardDismissBehavior:
@@ -2610,6 +2620,7 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
                   ),
                 )
               : Container(
+                  height: 220,
                   decoration: BoxDecoration(
                     color: AppColors.surface1,
                     borderRadius: BorderRadius.circular(12),
@@ -2617,17 +2628,27 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
                   child: Column(
                     children: [
                       _closingTableHeader(),
-                      ...records.take(10).toList().asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final record = entry.value;
-                        return _closingTableRow(
-                          record: record,
-                          currency: currency,
-                          bgColor: index.isEven
-                              ? AppColors.surface1
-                              : AppColors.surface0,
-                        );
-                      }),
+                      Expanded(
+                        child: ListView(
+                          children: records
+                              .take(10)
+                              .toList()
+                              .asMap()
+                              .entries
+                              .map((entry) {
+                                final index = entry.key;
+                                final record = entry.value;
+                                return _closingTableRow(
+                                  record: record,
+                                  currency: currency,
+                                  bgColor: index.isEven
+                                      ? AppColors.surface1
+                                      : AppColors.surface0,
+                                );
+                              })
+                              .toList(),
+                        ),
+                      ),
                     ],
                   ),
                 ),

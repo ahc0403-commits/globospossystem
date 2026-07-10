@@ -1774,6 +1774,19 @@ class _KitchenTopBar extends ConsumerWidget {
           ),
           const SizedBox(width: 8),
           if (storeId != null) ...[
+            if (PlatformInfo.isKioskSupported) ...[
+              IconButton.outlined(
+                key: const Key('kitchen_attendance_kiosk_entry'),
+                tooltip: l10n.attendance,
+                onPressed: () => context.go('/attendance-kiosk'),
+                icon: const Icon(
+                  Icons.fingerprint_outlined,
+                  color: AppColors.textSecondary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
             if (PlatformInfo.isPrinterSupported) ...[
               IconButton.outlined(
                 key: const Key('kitchen_print_station_entry'),

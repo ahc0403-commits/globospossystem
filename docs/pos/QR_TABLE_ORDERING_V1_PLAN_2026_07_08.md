@@ -213,7 +213,7 @@ Staff surfaces:
   key `cashier_order_search`) — 비-serving 주문은 큐에 없으므로 검색 미스
   시 "주방 진행 중일 수 있습니다" 힌트 (Q3);
 - admin tables tab: 테이블 편집에 "QR 관리" — 토큰 생성/회전 + QR 표시
-  다이얼로그(`qr_flutter` dep, URL = `https://globospossystem.vercel.app/qr/<token>`),
+  다이얼로그(`qr_flutter` dep, URL = `https://globospossystem.vercel.app/#/qr/<token>`),
   회전 경고("기존 부착 QR 즉시 무효"); 인쇄는 브라우저 인쇄/스크린샷 V1;
 - admin menu tab: `is_visible_public` 체크박스 노출(컬럼은 이미 존재).
 

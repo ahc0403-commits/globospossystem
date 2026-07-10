@@ -343,10 +343,27 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   Future<void> _printReceipt({
     required CashierOrder order,
     required String method,
+    bool reprint = false,
   }) async {
     final l10n = context.l10n;
     if (!PlatformInfo.isPrinterSupported) {
-      showErrorToast(context, l10n.cashierPrinterAppOnly);
+      try {
+        final job = await paymentService.enqueueReceiptPrintJob(
+          orderId: order.orderId,
+          reprint: reprint,
+        );
+        if (!mounted) return;
+        final status = job['status']?.toString();
+        if (status == 'pending' || status == 'printing' || status == 'done') {
+          showSuccessToast(context, l10n.cashierReceiptQueued);
+        } else {
+          showErrorToast(context, l10n.cashierReceiptPrintFailed);
+        }
+      } catch (_) {
+        if (mounted) {
+          showErrorToast(context, l10n.cashierReceiptPrintFailed);
+        }
+      }
       return;
     }
 
@@ -874,7 +891,11 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       return;
                     }
                     final method = _selectedMethod ?? paymentMethodCash;
-                    await _printReceipt(order: selectedOrder, method: method);
+                    await _printReceipt(
+                      order: selectedOrder,
+                      method: method,
+                      reprint: true,
+                    );
                   },
                 ),
         ),
@@ -2376,23 +2397,24 @@ class _CashierPaymentActions extends StatelessWidget {
         ],
         Row(
           children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: isProcessing ? null : onReprint,
-                icon: const Icon(Icons.print_outlined, size: 16),
-                label: Text(l10n.cashierReceipt),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: PosColors.textSecondary,
-                  side: const BorderSide(color: PosColors.border),
-                  padding: const EdgeInsets.symmetric(vertical: 11),
-                  textStyle: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+            if (PlatformInfo.isPrinterSupported)
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: isProcessing ? null : onReprint,
+                  icon: const Icon(Icons.print_outlined, size: 16),
+                  label: Text(l10n.cashierReceipt),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: PosColors.textSecondary,
+                    side: const BorderSide(color: PosColors.border),
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                    textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
               ),
-            ),
             if (canCancelOrder) ...[
-              const SizedBox(width: 8),
+              if (PlatformInfo.isPrinterSupported) const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: isProcessing ? null : onCancelOrder,

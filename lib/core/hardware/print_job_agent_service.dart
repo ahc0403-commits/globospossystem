@@ -95,7 +95,7 @@ class PrintJobAgentService {
       );
     }
 
-    final bytes = await _buildBytes(job.ticket);
+    final bytes = await _buildBytes(job);
     final result = await _printerService.printReceipt(
       destination.ip,
       bytes,
@@ -143,13 +143,27 @@ class PrintJobAgentService {
     );
   }
 
-  Future<List<int>> _buildBytes(PrintTicket ticket) {
-    return switch (ticket.ticket) {
-      'floor' => ReceiptBuilder.buildFloorTicket(ticket),
-      'tray' => ReceiptBuilder.buildTrayLabel(ticket),
-      'confirmation' => ReceiptBuilder.buildConfirmationSlip(ticket),
-      _ => ReceiptBuilder.buildKitchenTicket(ticket),
+  Future<List<int>> _buildBytes(PrintAgentJob job) {
+    return switch (job.ticket.ticket) {
+      'receipt' => _buildPaymentReceipt(job.payload),
+      'floor' => ReceiptBuilder.buildFloorTicket(job.ticket),
+      'tray' => ReceiptBuilder.buildTrayLabel(job.ticket),
+      'confirmation' => ReceiptBuilder.buildConfirmationSlip(job.ticket),
+      _ => ReceiptBuilder.buildKitchenTicket(job.ticket),
     };
+  }
+
+  Future<List<int>> _buildPaymentReceipt(Map<String, dynamic> payload) {
+    final receipt = QueuedPaymentReceipt.fromPayload(payload);
+    return ReceiptBuilder.buildPaymentReceipt(
+      restaurantName: receipt.restaurantName,
+      tableNumber: receipt.tableNumber,
+      items: receipt.items,
+      totalAmount: receipt.totalAmount,
+      paymentMethod: receipt.paymentMethod,
+      paidAt: receipt.paidAt,
+      isService: receipt.isService,
+    );
   }
 }
 
@@ -258,22 +272,24 @@ class PrintAgentJob {
     required this.id,
     required this.destinationId,
     required this.ticket,
+    this.payload = const <String, dynamic>{},
   });
 
   final String id;
   final String? destinationId;
   final PrintTicket ticket;
+  final Map<String, dynamic> payload;
 
   factory PrintAgentJob.fromJson(Map<String, dynamic> json) {
     final payload = json['payload'];
+    final payloadMap = payload is Map<String, dynamic>
+        ? payload
+        : Map<String, dynamic>.from(payload as Map);
     return PrintAgentJob(
       id: json['id'].toString(),
       destinationId: json['destination_id']?.toString(),
-      ticket: PrintTicket.fromPayload(
-        payload is Map<String, dynamic>
-            ? payload
-            : Map<String, dynamic>.from(payload as Map),
-      ),
+      ticket: PrintTicket.fromPayload(payloadMap),
+      payload: payloadMap,
     );
   }
 }

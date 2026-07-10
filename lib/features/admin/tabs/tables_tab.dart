@@ -1163,7 +1163,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     final origin = base.hasScheme && base.hasAuthority
         ? '${base.scheme}://${base.authority}'
         : '';
-    final qrUrl = origin.isEmpty ? '/qr/$token' : '$origin/qr/$token';
+    final qrUrl = origin.isEmpty ? '/#/qr/$token' : '$origin/#/qr/$token';
 
     await showDialog<void>(
       context: context,

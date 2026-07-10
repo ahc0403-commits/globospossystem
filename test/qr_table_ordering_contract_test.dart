@@ -154,7 +154,7 @@ void main() {
     expect(
       printAgent,
       contains(
-        "'confirmation' => ReceiptBuilder.buildConfirmationSlip(ticket)",
+        "'confirmation' => ReceiptBuilder.buildConfirmationSlip(job.ticket)",
       ),
     );
     expect(migration, contains("'print_enqueue_failed'"));
@@ -224,5 +224,7 @@ void main() {
     expect(tablesTab, contains("Key('admin_table_qr_rotate_warning')"));
     expect(tablesTab, contains("Key('admin_table_qr_preview')"));
     expect(tablesTab, contains("Key('admin_table_qr_url')"));
+    expect(tablesTab, contains(r"'$origin/#/qr/$token'"));
+    expect(tablesTab, isNot(contains(r"'$origin/qr/$token'")));
   });
 }

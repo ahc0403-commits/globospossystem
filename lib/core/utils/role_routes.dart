@@ -46,7 +46,18 @@ bool canAccessRouteForRole(
   if (path == '/login' || path == '/onboarding' || path == '/privacy-consent') {
     return true;
   }
-  if (path == '/attendance-kiosk') return false;
+  if (path == '/attendance-kiosk') {
+    return switch (role) {
+      'super_admin' ||
+      'brand_admin' ||
+      'store_admin' ||
+      'admin' ||
+      'waiter' ||
+      'kitchen' ||
+      'cashier' => true,
+      _ => false,
+    };
+  }
   if (path == '/print-station') {
     return switch (role) {
       'super_admin' || 'store_admin' || 'admin' || 'kitchen' => true,

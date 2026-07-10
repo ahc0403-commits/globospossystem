@@ -154,6 +154,54 @@ void main() {
       ]);
     });
 
+    test('processOnce renders receipt jobs as payment receipts', () async {
+      final backend = _FakePrintJobBackend(
+        jobs: [
+          PrintAgentJob.fromJson({
+            'id': 'job-receipt',
+            'destination_id': 'dest-receipt',
+            'payload': {
+              'ticket': 'receipt',
+              'restaurant_name': 'GLOBOS PILOT',
+              'table_number': 'T07',
+              'total_amount': 50000,
+              'payment_method': 'CASH',
+              'at': '2026-07-10T12:00:00+07:00',
+              'items': [
+                {
+                  'label': 'Pho Bo',
+                  'quantity': 1,
+                  'unit_price': 50000,
+                  'is_service_item': false,
+                },
+              ],
+            },
+          }),
+        ],
+        destinations: const {
+          'dest-receipt': PrintDestination(
+            id: 'dest-receipt',
+            name: 'Cashier',
+            ip: '192.168.1.52',
+            port: 9100,
+          ),
+        },
+      );
+      final printer = _FakePrinterService(PrintResult.success);
+      final agent = PrintJobAgentService(
+        backend: backend,
+        printerService: printer,
+      );
+
+      final results = await agent.processOnce('store-1');
+
+      expect(results.single.result, PrintResult.success);
+      final output = String.fromCharCodes(printer.prints.single.bytes);
+      expect(output, contains('GLOBOS PILOT'));
+      expect(output, contains('TONG CONG / Total'));
+      expect(output, isNot(contains('KITCHEN TICKET')));
+    });
+
     test(
       'processOnce is a no-op when printer backend is unsupported',
       () async {

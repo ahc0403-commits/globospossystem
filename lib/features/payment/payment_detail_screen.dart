@@ -748,8 +748,30 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
 
   Future<void> _printReceipt(Map<String, dynamic> detail) async {
     final l10n = context.l10n;
+    final order = _map(detail['order']);
+    final orderId = order['id']?.toString();
     if (!PlatformInfo.isPrinterSupported) {
-      showErrorToast(context, l10n.cashierPrinterAppOnly);
+      if (orderId == null || orderId.isEmpty) {
+        showErrorToast(context, l10n.cashierReceiptPrintFailed);
+        return;
+      }
+      try {
+        final job = await paymentService.enqueueReceiptPrintJob(
+          orderId: orderId,
+          reprint: true,
+        );
+        if (!mounted) return;
+        final status = job['status']?.toString();
+        if (status == 'pending' || status == 'printing' || status == 'done') {
+          showSuccessToast(context, l10n.cashierReceiptQueued);
+        } else {
+          showErrorToast(context, l10n.cashierReceiptPrintFailed);
+        }
+      } catch (_) {
+        if (mounted) {
+          showErrorToast(context, l10n.cashierReceiptPrintFailed);
+        }
+      }
       return;
     }
 
@@ -760,7 +782,6 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
     }
 
     final payment = _map(detail['payment']);
-    final order = _map(detail['order']);
     final bytes = await ReceiptBuilder.buildPaymentReceipt(
       restaurantName: _receiptRestaurantName(order),
       tableNumber: _extractTableNumber(order),

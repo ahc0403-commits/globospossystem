@@ -23,7 +23,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap;
-SELECT plan(26);
+SELECT plan(33);
 
 SELECT set_config(
   'request.jwt.claim.sub',
@@ -752,6 +752,133 @@ SELECT ok(
       AND status = 'pending'
   ),
   'TP10 queued test job is order-independent and agent-processable'
+);
+
+INSERT INTO public.printer_destinations (
+  id,
+  restaurant_id,
+  name,
+  ip,
+  port,
+  purpose,
+  floor_label,
+  is_active
+)
+VALUES (
+  '00000000-0000-0000-0000-00000000f555',
+  '00000000-0000-0000-0000-00000000b111',
+  'Cashier Receipt',
+  '192.168.1.40',
+  9100,
+  'receipt',
+  NULL,
+  true
+)
+ON CONFLICT (id) DO UPDATE
+SET is_active = true,
+    purpose = 'receipt';
+
+INSERT INTO public.payments (
+  id,
+  restaurant_id,
+  order_id,
+  amount,
+  amount_portion,
+  method,
+  is_revenue,
+  processed_by
+)
+VALUES (
+  '00000000-0000-0000-0000-000000004111',
+  '00000000-0000-0000-0000-00000000b111',
+  '00000000-0000-0000-0000-000000001111',
+  50000,
+  50000,
+  'CASH',
+  true,
+  '00000000-0000-0000-0000-00000000a111'
+)
+ON CONFLICT (id) DO NOTHING;
+
+SELECT lives_ok(
+  $$
+    SELECT public.enqueue_receipt_print_job(
+      '00000000-0000-0000-0000-000000001111',
+      false
+    )
+  $$,
+  'TP11 payment receipt enqueue is callable'
+);
+
+SELECT is(
+  (
+    SELECT count(*)
+    FROM public.print_jobs
+    WHERE order_id = '00000000-0000-0000-0000-000000001111'
+      AND copy_type = 'receipt'
+      AND batch_no = 1
+      AND destination_id = '00000000-0000-0000-0000-00000000f555'
+      AND status = 'pending'
+  ),
+  1::bigint,
+  'TP11 receipt batch 1 routes to the receipt destination'
+);
+
+SELECT is(
+  (
+    SELECT payload->>'payment_method'
+    FROM public.print_jobs
+    WHERE order_id = '00000000-0000-0000-0000-000000001111'
+      AND copy_type = 'receipt'
+      AND batch_no = 1
+  ),
+  'CASH',
+  'TP11 receipt payload snapshots the payment method'
+);
+
+SELECT lives_ok(
+  $$
+    SELECT public.enqueue_receipt_print_job(
+      '00000000-0000-0000-0000-000000001111',
+      false
+    )
+  $$,
+  'TP11 automatic receipt enqueue is idempotent'
+);
+
+SELECT is(
+  (
+    SELECT count(*)
+    FROM public.print_jobs
+    WHERE order_id = '00000000-0000-0000-0000-000000001111'
+      AND copy_type = 'receipt'
+      AND batch_no = 1
+  ),
+  1::bigint,
+  'TP11 duplicate automatic enqueue keeps one batch 1 receipt'
+);
+
+SELECT lives_ok(
+  $$
+    SELECT public.enqueue_receipt_print_job(
+      '00000000-0000-0000-0000-000000001111',
+      true
+    )
+  $$,
+  'TP12 manual receipt reprint is callable'
+);
+
+SELECT ok(
+  EXISTS (
+    SELECT 1
+    FROM public.print_jobs
+    WHERE order_id = '00000000-0000-0000-0000-000000001111'
+      AND copy_type = 'receipt'
+      AND batch_no = 2
+      AND destination_id = '00000000-0000-0000-0000-00000000f555'
+      AND payload->>'printed_reason' = 'reprint'
+  ),
+  'TP12 receipt reprint creates a new batch on the receipt destination'
 );
 
 SELECT * FROM finish();

@@ -1745,6 +1745,10 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                           value: 'tray',
                           child: Text(l10n.settingsPrintDestinationTray),
                         ),
+                        DropdownMenuItem(
+                          value: 'receipt',
+                          child: Text(l10n.settingsPrintDestinationReceipt),
+                        ),
                       ],
                       onChanged: (value) {
                         if (value == null) return;
@@ -1989,6 +1993,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     return switch (purpose) {
       'floor' => context.l10n.settingsPrintDestinationFloor,
       'tray' => context.l10n.settingsPrintDestinationTray,
+      'receipt' => context.l10n.settingsPrintDestinationReceipt,
       _ => context.l10n.settingsPrintDestinationKitchen,
     };
   }

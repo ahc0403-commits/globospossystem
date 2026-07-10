@@ -18,6 +18,8 @@ void main() {
       'supabase/migrations/20260706017000_print_routing_v1_payload_item_id_fix.sql';
   const testJobsMigrationPath =
       'supabase/migrations/20260706018000_print_routing_v1_test_jobs.sql';
+  const receiptQueueMigrationPath =
+      'supabase/migrations/20260710002000_receipt_print_queue.sql';
   const discountMigrationPath =
       'supabase/migrations/20260706010000_discount_staff_meal_v1_schema.sql';
   const destinationServicePath =
@@ -288,6 +290,32 @@ void main() {
     expect(sql, isNot(contains('pg_get_functiondef')));
   });
 
+  test('receipt printing extends the queue without coupling payment', () {
+    final migration = readRepoFile(receiptQueueMigrationPath);
+    final agent = readRepoFile(agentServicePath);
+    final service = readRepoFile('lib/core/services/payment_service.dart');
+
+    expect(
+      migration,
+      contains("purpose IN ('kitchen', 'floor', 'tray', 'receipt')"),
+    );
+    expect(
+      migration,
+      contains(
+        "copy_type IN ('kitchen', 'floor', 'tray', 'confirmation', 'receipt')",
+      ),
+    );
+    expect(
+      migration,
+      contains('CREATE OR REPLACE FUNCTION public.enqueue_receipt_print_job'),
+    );
+    expect(migration, contains("purpose = 'receipt'"));
+    expect(migration, contains("'printed_reason', CASE"));
+    expect(migration, contains("'NO_DESTINATION'"));
+    expect(agent, contains("'receipt' => _buildPaymentReceipt(job.payload)"));
+    expect(service, contains("'enqueue_receipt_print_job'"));
+  });
+
   test('print routing C1 Flutter layer keeps printing native-agent based', () {
     final receiptBuilder = readRepoFile(receiptBuilderPath);
     final agentService = readRepoFile(agentServicePath);
@@ -399,7 +427,9 @@ void main() {
     expect(roleRoutes, contains("'kitchen' => true"));
     expect(
       roleRoutes,
-      isNot(contains("'brand_admin' ||\n      'store_admin'")),
+      contains(
+        "'super_admin' || 'store_admin' || 'admin' || 'kitchen' => true",
+      ),
     );
     expect(printStation, contains('class PrintStationScreen'));
     expect(printStation, contains('PrintJobAgentService'));

@@ -120,16 +120,27 @@ void main() {
       }
     });
 
-    test('no role can access /attendance-kiosk', () {
+    test('store operating roles can access /attendance-kiosk', () {
       for (final role in [
         'super_admin',
+        'brand_admin',
+        'store_admin',
         'admin',
         'waiter',
         'kitchen',
         'cashier',
       ]) {
-        expect(canAccessRouteForRole(role, '/attendance-kiosk'), isFalse);
+        expect(canAccessRouteForRole(role, '/attendance-kiosk'), isTrue);
       }
+
+      expect(
+        canAccessRouteForRole('photo_objet_master', '/attendance-kiosk'),
+        isFalse,
+      );
+      expect(
+        canAccessRouteForRole('photo_objet_store_admin', '/attendance-kiosk'),
+        isFalse,
+      );
     });
 
     test('null role can only access /login', () {

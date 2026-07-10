@@ -67,6 +67,17 @@ class PaymentService {
     return Map<String, dynamic>.from(result as Map);
   }
 
+  Future<Map<String, dynamic>> enqueueReceiptPrintJob({
+    required String orderId,
+    bool reprint = false,
+  }) async {
+    final result = await supabase.rpc(
+      'enqueue_receipt_print_job',
+      params: {'p_order_id': orderId, 'p_reprint': reprint},
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
   Future<Map<String, dynamic>> markOrderItemService({
     required String itemId,
     required String storeId,

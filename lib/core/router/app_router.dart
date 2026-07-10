@@ -156,8 +156,8 @@ GoRouter buildAppRouter(ProviderContainer container) {
         return redirectTo;
       }
 
-      // 6-E. attendance kiosk / fingerprint flow is dormant and disabled
-      if (location == '/attendance-kiosk') {
+      // 6-E. Attendance capture requires the native Android camera flow.
+      if (location == '/attendance-kiosk' && !PlatformInfo.isKioskSupported) {
         redirectTo = homeRoute;
         NavigationHistoryService.instance.push(redirectTo);
         return redirectTo;

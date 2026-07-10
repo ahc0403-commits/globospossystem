@@ -25,11 +25,9 @@ void main() {
       expect(canAccessRouteForRole('waiter', '/payments/payment-1'), isFalse);
     });
 
-    test('blocks dormant attendance kiosk route for logged-in roles', () {
-      const roles = [
+    test('allows store operating roles into attendance kiosk', () {
+      const allowedRoles = [
         'super_admin',
-        'photo_objet_master',
-        'photo_objet_store_admin',
         'brand_admin',
         'store_admin',
         'admin',
@@ -38,13 +36,22 @@ void main() {
         'kitchen',
       ];
 
-      for (final role in roles) {
+      for (final role in allowedRoles) {
         expect(
           canAccessRouteForRole(role, '/attendance-kiosk'),
-          isFalse,
-          reason: 'attendance kiosk is dormant and disabled for role=$role',
+          isTrue,
+          reason: 'attendance kiosk should be available for role=$role',
         );
       }
+
+      expect(
+        canAccessRouteForRole('photo_objet_master', '/attendance-kiosk'),
+        isFalse,
+      );
+      expect(
+        canAccessRouteForRole('photo_objet_store_admin', '/attendance-kiosk'),
+        isFalse,
+      );
     });
 
     test('keeps photo objet roles out of general POS workspaces', () {

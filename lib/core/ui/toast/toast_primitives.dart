@@ -1069,10 +1069,15 @@ class ToastConfirmDialog {
               style: AppFonts.system(color: AppColors.textSecondary),
             ),
           ),
-          PosActionButton(
-            label: confirmLabel,
-            tone: tone,
-            onPressed: () => Navigator.pop(ctx, true),
+          SizedBox(
+            width: 140,
+            height: 48,
+            child: PosActionButton(
+              key: const Key('toast_confirm_dialog_confirm'),
+              label: confirmLabel,
+              tone: tone,
+              onPressed: () => Navigator.pop(ctx, true),
+            ),
           ),
         ],
       ),
@@ -1136,10 +1141,15 @@ class ToastConfirmDialog {
               style: AppFonts.system(color: AppColors.textSecondary),
             ),
           ),
-          PosActionButton(
-            label: confirmLabel,
-            tone: tone,
-            onPressed: () => Navigator.pop(ctx, true),
+          SizedBox(
+            width: 140,
+            height: 48,
+            child: PosActionButton(
+              key: const Key('toast_confirm_dialog_confirm'),
+              label: confirmLabel,
+              tone: tone,
+              onPressed: () => Navigator.pop(ctx, true),
+            ),
           ),
         ],
       ),

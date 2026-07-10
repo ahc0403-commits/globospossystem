@@ -610,6 +610,71 @@ class PrintTicketItem {
   }
 }
 
+class QueuedPaymentReceipt {
+  const QueuedPaymentReceipt({
+    required this.restaurantName,
+    required this.tableNumber,
+    required this.items,
+    required this.totalAmount,
+    required this.paymentMethod,
+    required this.paidAt,
+    required this.isService,
+  });
+
+  final String restaurantName;
+  final String tableNumber;
+  final List<ReceiptItem> items;
+  final double totalAmount;
+  final String paymentMethod;
+  final DateTime paidAt;
+  final bool isService;
+
+  factory QueuedPaymentReceipt.fromPayload(Map<String, dynamic> payload) {
+    final rawItems = payload['items'];
+    final itemRows = rawItems is List ? rawItems : const <Object?>[];
+    final method = payload['payment_method']?.toString() ?? 'OTHER';
+    return QueuedPaymentReceipt(
+      restaurantName: payload['restaurant_name']?.toString() ?? 'GLOBOS POS',
+      tableNumber: payload['table_number']?.toString() ?? '-',
+      items: itemRows.whereType<Map>().map((item) {
+        final row = Map<String, dynamic>.from(item);
+        return ReceiptItem(
+          name: row['label']?.toString() ?? 'Item',
+          quantity: switch (row['quantity'] ?? row['qty']) {
+            int value => value,
+            num value => value.toInt(),
+            String value => int.tryParse(value) ?? 1,
+            _ => 1,
+          },
+          unitPrice: switch (row['unit_price']) {
+            num value => value.toDouble(),
+            String value => double.tryParse(value) ?? 0,
+            _ => 0,
+          },
+          isServiceItem: switch (row['is_service_item']) {
+            bool value => value,
+            String value => value.toLowerCase() == 'true',
+            _ => false,
+          },
+        );
+      }).toList(),
+      totalAmount: switch (payload['total_amount']) {
+        num value => value.toDouble(),
+        String value => double.tryParse(value) ?? 0,
+        _ => 0,
+      },
+      paymentMethod: method,
+      paidAt:
+          DateTime.tryParse(payload['at']?.toString() ?? '') ?? DateTime.now(),
+      isService: switch (payload['is_service']) {
+        bool value => value,
+        String value => value.toLowerCase() == 'true',
+        _ => method.toUpperCase() == 'SERVICE',
+      },
+    );
+  }
+}
+
 class ReceiptItem {
   const ReceiptItem({
     required this.name,

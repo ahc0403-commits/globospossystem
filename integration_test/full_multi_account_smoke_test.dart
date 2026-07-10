@@ -16,6 +16,7 @@ import 'package:globos_pos_system/features/payment/payment_provider.dart'
 import 'package:globos_pos_system/core/ui/toast/toast_primitives.dart'
     show ToastFilterChip, ToastOperationalEmptyState;
 import 'package:globos_pos_system/main.dart' as app;
+import 'package:shared_preferences/shared_preferences.dart';
 
 const _sharedPassword = String.fromEnvironment(
   'SMOKE_SHARED_PASSWORD',
@@ -24,6 +25,34 @@ const _sharedPassword = String.fromEnvironment(
 const _noStoreScopeEmail = String.fromEnvironment(
   'SMOKE_NOSTORE_EMAIL',
   defaultValue: '',
+);
+const _waiterEmail = String.fromEnvironment(
+  'SMOKE_WAITER_EMAIL',
+  defaultValue: 'waiter@globos.test',
+);
+const _kitchenEmail = String.fromEnvironment(
+  'SMOKE_KITCHEN_EMAIL',
+  defaultValue: 'kitchen@globos.test',
+);
+const _cashierEmail = String.fromEnvironment(
+  'SMOKE_CASHIER_EMAIL',
+  defaultValue: 'cashier@globos.test',
+);
+const _adminEmail = String.fromEnvironment(
+  'SMOKE_ADMIN_EMAIL',
+  defaultValue: 'admin@globos.test',
+);
+const _superAdminEmail = String.fromEnvironment(
+  'SMOKE_SUPERADMIN_EMAIL',
+  defaultValue: 'superadmin@globos.test',
+);
+const _validationEmail = String.fromEnvironment(
+  'SMOKE_VALIDATION_EMAIL',
+  defaultValue: 'pos.validation.codex@globos.test',
+);
+const _includeOfficeAccounts = bool.fromEnvironment(
+  'SMOKE_INCLUDE_OFFICE_ACCOUNTS',
+  defaultValue: true,
 );
 const _maxTestDataInputsPerActivatableButton = 3;
 
@@ -49,6 +78,7 @@ void main() {
           '--dart-define=SMOKE_SHARED_PASSWORD=<pilot smoke password>.',
         );
       }
+      SharedPreferences.setMockInitialValues(const <String, Object>{});
       app.main();
       await _pumpFor(tester, const Duration(seconds: 8));
 
@@ -57,56 +87,58 @@ void main() {
       // navigate the rest. Validation runs last with a full feature set.
       final accounts = <AccountSpec>[
         AccountSpec(
-          email: 'waiter@globos.test',
+          email: _waiterEmail,
           expectedSurface: AccountSurface.waiterPos,
         ),
         AccountSpec(
-          email: 'kitchen@globos.test',
+          email: _kitchenEmail,
           expectedSurface: AccountSurface.kitchenPos,
         ),
         AccountSpec(
-          email: 'cashier@globos.test',
+          email: _cashierEmail,
           expectedSurface: AccountSurface.cashierPos,
         ),
         AccountSpec(
-          email: 'admin@globos.test',
+          email: _adminEmail,
           expectedSurface: AccountSurface.adminPos,
         ),
         AccountSpec(
-          email: 'superadmin@globos.test',
+          email: _superAdminEmail,
           expectedSurface: AccountSurface.superAdminPos,
         ),
         // Office accounts live in a separate office app/Supabase project.
         // They exist in auth.users but have no public.users POS profile,
         // so _fetchUserProfile throws. skipIfLoginFails records the outcome
         // as EXPECTED_OUT_OF_SCOPE without stopping the run.
+        if (_includeOfficeAccounts) ...[
+          AccountSpec(
+            email: 'office.store@globos.vn',
+            expectedSurface: AccountSurface.officeStore,
+            skipIfLoginFails: true,
+          ),
+          AccountSpec(
+            email: 'office.brand.kn@globos.vn',
+            expectedSurface: AccountSurface.officeBrand,
+            skipIfLoginFails: true,
+          ),
+          AccountSpec(
+            email: 'office.brand.mk@globos.vn',
+            expectedSurface: AccountSurface.officeBrand,
+            skipIfLoginFails: true,
+          ),
+          AccountSpec(
+            email: 'office.staff@globos.vn',
+            expectedSurface: AccountSurface.officeStaff,
+            skipIfLoginFails: true,
+          ),
+          AccountSpec(
+            email: 'office.super@globos.vn',
+            expectedSurface: AccountSurface.officeSuper,
+            skipIfLoginFails: true,
+          ),
+        ],
         AccountSpec(
-          email: 'office.store@globos.vn',
-          expectedSurface: AccountSurface.officeStore,
-          skipIfLoginFails: true,
-        ),
-        AccountSpec(
-          email: 'office.brand.kn@globos.vn',
-          expectedSurface: AccountSurface.officeBrand,
-          skipIfLoginFails: true,
-        ),
-        AccountSpec(
-          email: 'office.brand.mk@globos.vn',
-          expectedSurface: AccountSurface.officeBrand,
-          skipIfLoginFails: true,
-        ),
-        AccountSpec(
-          email: 'office.staff@globos.vn',
-          expectedSurface: AccountSurface.officeStaff,
-          skipIfLoginFails: true,
-        ),
-        AccountSpec(
-          email: 'office.super@globos.vn',
-          expectedSurface: AccountSurface.officeSuper,
-          skipIfLoginFails: true,
-        ),
-        AccountSpec(
-          email: 'pos.validation.codex@globos.test',
+          email: _validationEmail,
           expectedSurface: AccountSurface.validation,
         ),
         // Negative fixture (env-gated): an account provisioned WITHOUT any
@@ -234,7 +266,7 @@ Future<void> _runAccount(SmokeContext ctx, AccountSpec account) async {
   final visible = await _safeStepReturn<List<FeatureSpec>>(
     ctx,
     'surface_inventory',
-    () async => _discoverVisibleFeatures(tester, account.expectedSurface),
+    () => _discoverVisibleFeatures(tester, account.expectedSurface),
   );
 
   accountResult.visibleFeatures = visible.map((e) => e.name).toList();
@@ -413,8 +445,12 @@ Future<void> _forceSignOut(WidgetTester tester) async {
 Future<void> _logoutIfPossible(WidgetTester tester) async {
   final logoutButton = find.byKey(const Key(UiKeys.logoutButton));
   if (logoutButton.evaluate().isNotEmpty) {
-    await tester.tap(logoutButton.first);
+    await tester.ensureVisible(logoutButton.first);
+    await tester.tap(logoutButton.first, warnIfMissed: false);
     await _pumpFor(tester, const Duration(seconds: 3));
+  }
+  if (find.byKey(const Key(UiKeys.loginEmailField)).evaluate().isEmpty) {
+    await _forceSignOut(tester);
   }
 }
 
@@ -422,14 +458,27 @@ Future<void> _logoutIfPossible(WidgetTester tester) async {
 // Feature discovery
 // ---------------------------------------------------------------------------
 
-List<FeatureSpec> _discoverVisibleFeatures(
+Future<List<FeatureSpec>> _discoverVisibleFeatures(
   WidgetTester tester,
   AccountSurface surface,
-) {
+) async {
   final all = _featureMatrix(surface);
-  return all.where((feature) {
-    return find.byKey(Key(feature.entryKey)).evaluate().isNotEmpty;
-  }).toList();
+  final deadline = DateTime.now().add(const Duration(seconds: 15));
+  var missing = <FeatureSpec>[];
+  while (DateTime.now().isBefore(deadline)) {
+    missing = all.where((feature) {
+      return find.byKey(Key(feature.entryKey)).evaluate().isEmpty;
+    }).toList();
+    if (missing.isEmpty) {
+      return all;
+    }
+    await _pumpFor(tester, const Duration(milliseconds: 500));
+  }
+
+  throw TestFailure(
+    'Required surface features missing for $surface: '
+    '${missing.map((feature) => '${feature.name}[${feature.entryKey}]').join(', ')}',
+  );
 }
 
 List<FeatureSpec> _blockedFeatures(
@@ -503,7 +552,8 @@ List<FeatureSpec> _featureMatrix(AccountSurface surface) {
         _reportsFeature(),
       ];
     case AccountSurface.validation:
-      // All possible features; discovery filters to those visible.
+      // The validation account is an admin fixture. Dedicated waiter,
+      // kitchen, cashier, and super-admin accounts own their role workflows.
       return [
         _adminLandingFeature(),
         _adminTablesNavFeature(),
@@ -517,11 +567,6 @@ List<FeatureSpec> _featureMatrix(AccountSurface surface) {
         _adminDeliveryNavFeature(),
         _reportsFeature(),
         _dailyClosingFeature(),
-        _kitchenFeature(),
-        _cashierFeature(),
-        _waiterDashboardFeature(),
-        _waiterTablesFeature(),
-        _waiterOrderFeature(),
       ];
   }
 }
@@ -717,6 +762,11 @@ FeatureSpec _dailyClosingFeature() {
       await tester.tap(find.byKey(const Key(UiKeys.navReports)));
       await _pumpFor(tester, const Duration(seconds: 3));
       _expectVisible(tester, UiKeys.reportsRoot, 'reports_root not visible');
+      _expectVisible(
+        tester,
+        UiKeys.dailyClosingRoot,
+        'daily_closing_root not reachable in Reports',
+      );
 
       // Already-closed → record artifact and skip without failing the run.
       final alreadyClosed = find.byKey(
@@ -733,11 +783,9 @@ FeatureSpec _dailyClosingFeature() {
         const Key(UiKeys.dailyClosingSubmitButton),
       );
       if (closeButton.evaluate().isEmpty) {
-        // Role lacks button — record and skip.
-        ctx.report.linkArtifacts.add(
-          'daily_closing[${account.email}]: daily_closing_submit_button not present for this role',
+        throw TestFailure(
+          'daily_closing_submit_button is required for ${account.email}',
         );
-        return;
       }
 
       await tester.ensureVisible(closeButton);
@@ -746,7 +794,9 @@ FeatureSpec _dailyClosingFeature() {
       await tester.tap(closeButton);
       await _pumpFor(tester, const Duration(milliseconds: 500));
 
-      final dialogConfirm = find.widgetWithText(FilledButton, 'Close');
+      final dialogConfirm = find.byKey(
+        const Key(UiKeys.toastConfirmDialogConfirm),
+      );
       if (dialogConfirm.evaluate().isNotEmpty) {
         await tester.tap(dialogConfirm);
       }
@@ -847,10 +897,10 @@ FeatureSpec _kitchenFeature() {
             'order $capturedId',
           );
         }
-        ctx.report.linkArtifacts.add(
-          'kitchen[${account.email}]: no active orders (kitchen_first_order_card absent)',
+        throw TestFailure(
+          'kitchen_first_order_card absent for ${account.email}; '
+          'the required waiter handoff order was not available',
         );
-        return;
       }
 
       _expectVisible(
@@ -871,6 +921,11 @@ FeatureSpec _kitchenFeature() {
         await tester.tap(advanceButton.first, warnIfMissed: false);
         taps++;
         await _pumpFor(tester, const Duration(seconds: 2));
+      }
+      if (taps == 0) {
+        throw TestFailure(
+          'kitchen_item_status_button was not actionable for the required order',
+        );
       }
       ctx.report.linkArtifacts.add(
         'kitchen[${account.email}]: item status cycle taps=$taps',
@@ -908,10 +963,9 @@ FeatureSpec _cashierFeature() {
         await _waitForKey(tester, UiKeys.paymentFirstCandidate);
         targetCandidate = find.byKey(const Key(UiKeys.paymentFirstCandidate));
         if (targetCandidate.evaluate().isEmpty) {
-          ctx.report.linkArtifacts.add(
-            'cashier[${account.email}]: no payment_first_candidate present',
+          throw TestFailure(
+            'payment_first_candidate is required for ${account.email}',
           );
-          return;
         }
       }
 
@@ -922,10 +976,9 @@ FeatureSpec _cashierFeature() {
 
       final payButton = find.byKey(const Key(UiKeys.paymentSubmitButton));
       if (payButton.evaluate().isEmpty) {
-        ctx.report.linkArtifacts.add(
-          'cashier[${account.email}]: payment_submit_button not visible after candidate selection',
+        throw TestFailure(
+          'payment_submit_button not visible after candidate selection',
         );
-        return;
       }
 
       await tester.ensureVisible(payButton);
@@ -1028,10 +1081,9 @@ FeatureSpec _waiterTablesFeature() {
 
       final firstTable = find.byKey(const Key(UiKeys.tableFirstCard));
       if (firstTable.evaluate().isEmpty) {
-        ctx.report.linkArtifacts.add(
-          'waiter_tables[${account.email}]: no table_first_card visible',
+        throw TestFailure(
+          'table_first_card is required for waiter table selection',
         );
-        return;
       }
 
       await tester.tap(firstTable);
@@ -1054,10 +1106,17 @@ FeatureSpec _waiterTablesFeature() {
         final cancelButton = find.byKey(
           const Key(UiKeys.orderWorkspaceCancelButton),
         );
-        if (cancelButton.evaluate().isNotEmpty) {
-          await tester.tap(cancelButton.first);
-          await _pumpFor(tester, const Duration(seconds: 2));
+        if (cancelButton.evaluate().isEmpty) {
+          throw TestFailure(
+            'order_workspace_cancel_button is required in waiter workspace',
+          );
         }
+        await tester.tap(cancelButton.first);
+        await _pumpFor(tester, const Duration(seconds: 2));
+      } else {
+        throw TestFailure(
+          'orders_root not visible after selecting table_first_card',
+        );
       }
     },
   );
@@ -1076,11 +1135,9 @@ FeatureSpec _waiterCancelPathFeature() {
 
       final firstTable = find.byKey(const Key(UiKeys.tableFirstCard));
       if (firstTable.evaluate().isEmpty) {
-        ctx.report.linkArtifacts.add(
-          'waiter_cancel_path[${account.email}]: table_first_card absent — '
-          'grid not rendered (surface broken?)',
+        throw TestFailure(
+          'waiter_cancel_path requires table_first_card for ${account.email}',
         );
-        return;
       }
 
       await tester.tap(firstTable);
@@ -1142,14 +1199,9 @@ FeatureSpec _waiterCancelPathFeature() {
             'waiter_cancel_path[provider-dump]: failed — $e',
           );
         }
-        final cancelButton = find.byKey(
-          const Key(UiKeys.orderWorkspaceCancelButton),
+        throw TestFailure(
+          'waiter_cancel_path requires menu_first_item and cart_submit_order',
         );
-        if (cancelButton.evaluate().isNotEmpty) {
-          await tester.tap(cancelButton.first);
-          await _pumpFor(tester, const Duration(milliseconds: 300));
-        }
-        return;
       }
 
       await tester.tap(menuItem);
@@ -1223,11 +1275,9 @@ FeatureSpec _waiterOrderFeature() {
 
       final firstTable = find.byKey(const Key(UiKeys.tableFirstCard));
       if (firstTable.evaluate().isEmpty) {
-        ctx.report.linkArtifacts.add(
-          'waiter_order[${account.email}]: table_first_card absent — '
-          'grid not rendered (surface broken?)',
+        throw TestFailure(
+          'waiter_order requires table_first_card for ${account.email}',
         );
-        return;
       }
 
       await tester.tap(firstTable);
@@ -1245,17 +1295,9 @@ FeatureSpec _waiterOrderFeature() {
       final submitBtn = find.byKey(const Key(UiKeys.cartSubmitOrder));
 
       if (!menuReady || !submitReady) {
-        ctx.report.linkArtifacts.add(
-          'waiter_order[${account.email}]: workspace or menu not available — skipping order creation',
+        throw TestFailure(
+          'waiter_order requires menu_first_item and cart_submit_order',
         );
-        final cancelButton = find.byKey(
-          const Key(UiKeys.orderWorkspaceCancelButton),
-        );
-        if (cancelButton.evaluate().isNotEmpty) {
-          await tester.tap(cancelButton.first);
-          await _pumpFor(tester, const Duration(milliseconds: 300));
-        }
-        return;
       }
 
       await tester.tap(menuItem);
@@ -1285,6 +1327,11 @@ FeatureSpec _waiterOrderFeature() {
             'Order created by ${account.email}: id=$fullId (captured for kitchen/cashier flow)',
           );
         }
+      }
+      if (ctx.capturedOrderId == null) {
+        throw TestFailure(
+          'latest_order_id_full_text did not expose the created order id',
+        );
       }
     },
   );
@@ -1564,6 +1611,7 @@ class UiKeys {
   static const paymentSubmitButton = 'payment_submit_button';
   static const cashierMethodDialogCash = 'cashier_method_dialog_CASH';
   static const paymentSuccessBanner = 'payment_success_banner';
+  static const toastConfirmDialogConfirm = 'toast_confirm_dialog_confirm';
 
   // Kitchen
   static const kitchenFirstOrderCard = 'kitchen_first_order_card';
