@@ -334,6 +334,8 @@
   "deliveryConfirmDeposit": "Confirm Deposit",
   "deliveryConfirmDepositQuestion": "Confirmed the deposit on the actual bank account?",
   "reportsSaved": "Report saved.",
+  "reportsSaveFailed": "Could not save report: {error}",
+  "@reportsSaveFailed": {"placeholders": {"error": {"type": "String"}}},
   "reportsClosingComplete": "Closing complete.",
   "reportsCloseToday": "Close Today",
   "reportsDineInRevenue": "Dine-in Revenue",

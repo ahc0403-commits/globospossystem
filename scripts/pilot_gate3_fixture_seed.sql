@@ -68,14 +68,13 @@ BEGIN
   SELECT brand_id, tax_entity_id
   INTO v_brand, v_tax_entity
   FROM public.restaurants
-  WHERE is_active
-    AND brand_id IS NOT NULL
+  WHERE brand_id IS NOT NULL
     AND tax_entity_id IS NOT NULL
-  ORDER BY created_at
+  ORDER BY is_active DESC, created_at
   LIMIT 1;
 
   IF v_brand IS NULL OR v_tax_entity IS NULL THEN
-    RAISE EXCEPTION 'No active store with brand_id/tax_entity_id available';
+    RAISE EXCEPTION 'No store with brand_id/tax_entity_id available';
   END IF;
 
   INSERT INTO public.restaurants (
@@ -732,6 +731,10 @@ BEGIN
       AND copy_type = 'floor'
       AND payload->>'fixture' = 'pilot_gate3'
   );
+
+  DELETE FROM public.daily_closings
+  WHERE restaurant_id = v_store
+    AND closing_date = current_date;
 
   INSERT INTO public.daily_closings (
     restaurant_id, closing_date, closed_by, orders_total,

@@ -739,12 +739,20 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     final fileName =
         'report_${dateFormat.format(reportState.startDate)}_${dateFormat.format(reportState.endDate)}';
 
-    await FileSaver.instance.saveFile(
-      name: fileName,
-      bytes: Uint8List.fromList(bytes),
-      ext: 'xlsx',
-      mimeType: MimeType.microsoftExcel,
-    );
+    try {
+      await FileSaver.instance.saveFile(
+        name: fileName,
+        bytes: Uint8List.fromList(bytes),
+        ext: 'xlsx',
+        mimeType: MimeType.microsoftExcel,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.reportsSaveFailed('$error'))),
+      );
+      return;
+    }
 
     if (mounted) {
       ScaffoldMessenger.of(

@@ -1031,6 +1031,7 @@ class _RestaurantsTab extends StatelessWidget {
                           _modeBadge(context, restaurant.operationMode),
                           const SizedBox(width: 10),
                           OutlinedButton(
+                            key: Key('super_admin_manage_${restaurant.id}'),
                             onPressed: () => _showRestaurantSheet(
                               context,
                               notifier: notifier,
@@ -1040,6 +1041,9 @@ class _RestaurantsTab extends StatelessWidget {
                           ),
                           const SizedBox(width: 8),
                           FilledButton(
+                            key: Key(
+                              'super_admin_go_to_admin_${restaurant.id}',
+                            ),
                             onPressed: () {
                               notifier.selectRestaurant(restaurant);
                               onGoToAdmin(restaurant.id);

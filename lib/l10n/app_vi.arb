@@ -333,6 +333,8 @@
   "deliveryConfirmDeposit": "Xác nhận tiền vào",
   "deliveryConfirmDepositQuestion": "Bạn đã xác nhận tiền vào tài khoản ngân hàng thực tế chưa?",
   "reportsSaved": "Đã lưu báo cáo.",
+  "reportsSaveFailed": "Không thể lưu báo cáo: {error}",
+  "@reportsSaveFailed": {"placeholders": {"error": {"type": "String"}}},
   "reportsClosingComplete": "Đã hoàn tất chốt ngày.",
   "reportsCloseToday": "Chốt hôm nay",
   "reportsDineInRevenue": "Doanh thu tại bàn",

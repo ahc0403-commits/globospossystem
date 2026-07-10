@@ -201,45 +201,81 @@ GoRouter buildAppRouter(ProviderContainer container) {
     routes: [
       GoRoute(
         path: '/qr/:token',
-        builder: (_, state) =>
-            QrOrderScreen(token: state.pathParameters['token'] ?? ''),
+        builder: (_, state) => QrOrderScreen(
+          key: ValueKey(state.uri.toString()),
+          token: state.pathParameters['token'] ?? '',
+        ),
       ),
-      GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+      GoRoute(
+        path: '/login',
+        builder: (_, state) => LoginScreen(key: ValueKey(state.uri.toString())),
+      ),
       GoRoute(
         path: '/privacy-consent',
-        builder: (_, __) => const PrivacyConsentScreen(),
+        builder: (_, state) =>
+            PrivacyConsentScreen(key: ValueKey(state.uri.toString())),
       ),
       GoRoute(
         path: '/onboarding',
-        builder: (_, __) => const OnboardingScreen(),
+        builder: (_, state) =>
+            OnboardingScreen(key: ValueKey(state.uri.toString())),
       ),
-      GoRoute(path: '/waiter', builder: (_, __) => const WaiterScreen()),
-      GoRoute(path: '/kitchen', builder: (_, __) => const KitchenScreen()),
+      GoRoute(
+        path: '/waiter',
+        builder: (_, state) =>
+            WaiterScreen(key: ValueKey(state.uri.toString())),
+      ),
+      GoRoute(
+        path: '/kitchen',
+        builder: (_, state) =>
+            KitchenScreen(key: ValueKey(state.uri.toString())),
+      ),
       GoRoute(
         path: '/print-station',
-        builder: (_, __) => const PrintStationScreen(),
+        builder: (_, state) =>
+            PrintStationScreen(key: ValueKey(state.uri.toString())),
       ),
-      GoRoute(path: '/cashier', builder: (_, __) => const CashierScreen()),
+      GoRoute(
+        path: '/cashier',
+        builder: (_, state) =>
+            CashierScreen(key: ValueKey(state.uri.toString())),
+      ),
       GoRoute(
         path: '/attendance-kiosk',
-        builder: (_, __) => const AttendanceKioskScreen(),
+        builder: (_, state) =>
+            AttendanceKioskScreen(key: ValueKey(state.uri.toString())),
       ),
-      GoRoute(path: '/qc-check', builder: (_, __) => const QcCheckScreen()),
-      GoRoute(path: '/qc-review', builder: (_, __) => const QcReviewScreen()),
-      GoRoute(path: '/photo-ops', builder: (_, __) => const PhotoOpsScreen()),
+      GoRoute(
+        path: '/qc-check',
+        builder: (_, state) =>
+            QcCheckScreen(key: ValueKey(state.uri.toString())),
+      ),
+      GoRoute(
+        path: '/qc-review',
+        builder: (_, state) =>
+            QcReviewScreen(key: ValueKey(state.uri.toString())),
+      ),
+      GoRoute(
+        path: '/photo-ops',
+        builder: (_, state) =>
+            PhotoOpsScreen(key: ValueKey(state.uri.toString())),
+      ),
       GoRoute(
         path: '/payments/:paymentId',
         builder: (_, state) => PaymentDetailScreen(
+          key: ValueKey(state.uri.toString()),
           paymentId: state.pathParameters['paymentId'] ?? '',
         ),
       ),
       GoRoute(
         path: '/super-admin',
-        builder: (_, __) => const SuperAdminScreen(),
+        builder: (_, state) =>
+            SuperAdminScreen(key: ValueKey(state.uri.toString())),
       ),
       GoRoute(
         path: '/admin',
         builder: (_, state) => AdminScreen(
+          key: ValueKey(state.uri.toString()),
           initialTabIndex: _tabIndexFromQuery(state.uri.queryParameters['tab']),
         ),
       ),
@@ -247,6 +283,7 @@ GoRouter buildAppRouter(ProviderContainer container) {
       GoRoute(
         path: '/admin/:storeId',
         builder: (_, state) => AdminScreen(
+          key: ValueKey(state.uri.toString()),
           overrideRestaurantId: state.pathParameters['storeId'],
           initialTabIndex: _tabIndexFromQuery(state.uri.queryParameters['tab']),
         ),

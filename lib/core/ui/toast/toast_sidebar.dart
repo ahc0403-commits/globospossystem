@@ -548,6 +548,7 @@ class _ToastSidebarRail extends StatelessWidget {
                   vertical: 2,
                 ),
                 child: _ToastSidebarNavItem(
+                  key: item.itemKey,
                   item: item,
                   selected: false,
                   onTap: item.onTap ?? () {},

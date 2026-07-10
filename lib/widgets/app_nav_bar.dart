@@ -71,6 +71,7 @@ class AppNavBar extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             _NavButton(
+              buttonKey: const Key('app_nav_back'),
               icon: Icons.arrow_back_ios_new_rounded,
               tooltip: l10n.back,
               enabled: canGoBack,
@@ -87,6 +88,7 @@ class AppNavBar extends ConsumerWidget {
             ),
             const SizedBox(width: 6),
             _NavButton(
+              buttonKey: const Key('app_nav_home'),
               icon: Icons.home_rounded,
               tooltip: l10n.home,
               enabled: canGoHome,
@@ -102,6 +104,7 @@ class AppNavBar extends ConsumerWidget {
             if (showForward) ...[
               const SizedBox(width: 6),
               _NavButton(
+                buttonKey: const Key('app_nav_forward'),
                 icon: Icons.arrow_forward_ios_rounded,
                 tooltip: l10n.forward,
                 enabled: nav.canGoForward,
@@ -138,12 +141,14 @@ class AppNavBar extends ConsumerWidget {
 
 class _NavButton extends StatelessWidget {
   const _NavButton({
+    required this.buttonKey,
     required this.icon,
     required this.tooltip,
     required this.enabled,
     required this.onTap,
   });
 
+  final Key buttonKey;
   final IconData icon;
   final String tooltip;
   final bool enabled;
@@ -154,6 +159,7 @@ class _NavButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: InkWell(
+        key: buttonKey,
         onTap: enabled ? onTap : null,
         borderRadius: AppRadius.sm,
         child: Container(

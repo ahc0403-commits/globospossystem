@@ -492,6 +492,7 @@ class _QrCartBar extends StatelessWidget {
             ),
           ),
           FilledButton(
+            key: const Key('qr_cart_submit'),
             onPressed: isSubmitting ? null : onSubmit,
             child: isSubmitting
                 ? const SizedBox(

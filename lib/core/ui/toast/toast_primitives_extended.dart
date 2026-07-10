@@ -452,7 +452,7 @@ class ToastShell extends StatelessWidget {
       ],
     );
 
-    return ColoredBox(
+    return Material(
       color: ToastColorTokens.canvas,
       child: safeArea ? SafeArea(child: content) : content,
     );

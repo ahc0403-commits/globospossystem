@@ -47,6 +47,14 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   }
 
   @override
+  void didUpdateWidget(covariant AdminScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialTabIndex != widget.initialTabIndex) {
+      _currentIndex = widget.initialTabIndex;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isSuperAdminView = widget.overrideRestaurantId != null;
     final role = ref.watch(authProvider).role;
@@ -213,7 +221,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
           ? Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const AppNavBar(),
+                const Flexible(child: AppNavBar()),
                 const SizedBox(width: 10),
                 ToastStatusBadge(
                   label: context.l10n.superAdminMode,
@@ -273,7 +281,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
           ? Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const AppNavBar(),
+                const Flexible(child: AppNavBar()),
                 const SizedBox(width: 8),
                 ToastStatusBadge(
                   label: context.l10n.superAdminMode,

@@ -333,6 +333,8 @@
   "deliveryConfirmDeposit": "입금 확인",
   "deliveryConfirmDepositQuestion": "실제 은행 계좌 입금을 확인했습니까?",
   "reportsSaved": "리포트가 저장되었습니다.",
+  "reportsSaveFailed": "리포트를 저장하지 못했습니다: {error}",
+  "@reportsSaveFailed": {"placeholders": {"error": {"type": "String"}}},
   "reportsClosingComplete": "마감이 완료되었습니다.",
   "reportsCloseToday": "오늘 마감",
   "reportsDineInRevenue": "매장 매출",

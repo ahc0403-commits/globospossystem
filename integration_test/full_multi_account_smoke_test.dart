@@ -842,6 +842,13 @@ FeatureSpec _kitchenFeature() {
 
       final capturedId = ctx.capturedOrderId;
       if (capturedId != null) {
+        final searchField = find.byKey(
+          const Key('kitchen_ticket_search_field'),
+        );
+        if (searchField.evaluate().isNotEmpty) {
+          await tester.enterText(searchField, capturedId.substring(0, 8));
+          await _pumpFor(tester, const Duration(seconds: 1));
+        }
         await _waitForKey(tester, 'kitchen_order_$capturedId');
         final perOrderCard = find.byKey(Key('kitchen_order_$capturedId'));
         if (perOrderCard.evaluate().isEmpty) {

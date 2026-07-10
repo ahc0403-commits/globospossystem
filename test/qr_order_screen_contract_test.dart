@@ -11,7 +11,9 @@ void main() {
 
     expect(router, contains("path.startsWith('/qr/')"));
     expect(router, contains("path: '/qr/:token'"));
-    expect(router, contains('QrOrderScreen(token:'));
+    expect(router, contains('QrOrderScreen('));
+    expect(router, contains("token: state.pathParameters['token'] ?? ''"));
+    expect(router, contains('key: ValueKey(state.uri.toString())'));
     expect(service, contains("'qr_get_menu'"));
     expect(service, contains("'qr_place_order'"));
     expect(service, contains("'p_token': token"));

@@ -299,10 +299,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
             ),
             Text(
               DateFormat('yyyy-MM-dd').format(_todayVn),
-              style: AppFonts.system(
-                color: PosColors.textMuted,
-                fontSize: 12,
-              ),
+              style: AppFonts.system(color: PosColors.textMuted, fontSize: 12),
             ),
           ],
         ),
@@ -608,6 +605,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                                     ),
                                     const SizedBox(width: 8),
                                     OutlinedButton.icon(
+                                      key: Key('qc_complete_$templateId'),
                                       onPressed: () => setState(
                                         () =>
                                             draft.completed = !draft.completed,
@@ -777,6 +775,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                 SizedBox(
                   height: 52,
                   child: FilledButton(
+                    key: const Key('qc_save_all'),
                     onPressed: storeId == null
                         ? null
                         : () => _submitAll(
@@ -789,9 +788,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                     ),
                     child: Text(
                       context.l10n.qcSaveButton,
-                      style: AppFonts.system(
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: AppFonts.system(fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
@@ -1056,7 +1053,7 @@ class _QcDraftPreview extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           SizedBox(
-            height: 66,
+            height: 76,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: visibleTemplates.length,
