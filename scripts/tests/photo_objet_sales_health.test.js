@@ -17,6 +17,7 @@ const {
   parseSpreadsheetFile,
   runWithTransientRetry,
   runPreflight,
+  RUN_METADATA_AUDIT_START_AT,
   serializeRunMetadata,
   validateStaticPreflight,
   validateStoreMappings,
@@ -286,8 +287,43 @@ test('missing-run audit uses explicit slot metadata, not delayed started_at', ()
     started_at: '2026-07-11T03:55:00Z',
     error_message: serializeRunMetadata(identity),
   }];
-  const missing = findMissingRuns([store], ['2026-07-11'], runs, new Date('2026-07-11T04:20:00Z'));
+  const missing = findMissingRuns(
+    [store],
+    ['2026-07-11'],
+    runs,
+    new Date('2026-07-11T04:20:00Z'),
+    Date.parse('2026-07-11T00:00:00Z'),
+  );
   assert.deepEqual(missing, [{ storeName: 'BIEN HOA', date: '2026-07-11', slot: '2026-07-11 10:00' }]);
+});
+
+test('missing-run audit excludes historical metadata gaps but detects new gaps', () => {
+  const store = { storeName: 'BIEN HOA', storeId: ids[0], enabled: true };
+  const now = new Date('2026-07-11T13:20:00Z');
+
+  assert.equal(RUN_METADATA_AUDIT_START_AT, Date.parse('2026-07-11T12:00:00Z'));
+  assert.deepEqual(
+    findMissingRuns([store], ['2026-07-10'], [], now),
+    [],
+    'pre-cutover slots are the historical baseline',
+  );
+  assert.deepEqual(
+    findMissingRuns([store], ['2026-07-11'], [], now),
+    [{ storeName: 'BIEN HOA', date: '2026-07-11', slot: '2026-07-11 19:00' }],
+  );
+
+  const identity = {
+    source: 'scheduled',
+    slotId: 'scheduled:2026-07-11T19:00+07:00',
+    slotDateHcm: '2026-07-11',
+    slotTimeHcm: '19:00',
+  };
+  assert.deepEqual(findMissingRuns([store], ['2026-07-11'], [{
+    store_id: ids[0],
+    target_date: '2026-07-11',
+    status: 'success',
+    error_message: serializeRunMetadata(identity),
+  }], now), []);
 });
 
 test('partial aggregate snapshots never overwrite fuller totals', () => {
