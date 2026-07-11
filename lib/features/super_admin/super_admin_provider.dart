@@ -5,6 +5,45 @@ import '../../main.dart';
 
 const kUnclassifiedBrandFilter = '__unclassified__';
 
+class SuperTaxEntity {
+  const SuperTaxEntity({
+    required this.id,
+    required this.name,
+    required this.taxCode,
+    required this.ownerType,
+  });
+
+  final String id;
+  final String name;
+  final String taxCode;
+  final String ownerType;
+
+  bool get isInternal => ownerType == 'internal';
+
+  factory SuperTaxEntity.fromJson(Map<String, dynamic> json) {
+    return SuperTaxEntity(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      taxCode: json['tax_code']?.toString() ?? '',
+      ownerType: json['owner_type']?.toString() ?? 'external',
+    );
+  }
+}
+
+class SuperTaxEntityBrand {
+  const SuperTaxEntityBrand({required this.taxEntityId, required this.brandId});
+
+  final String taxEntityId;
+  final String brandId;
+
+  factory SuperTaxEntityBrand.fromJson(Map<String, dynamic> json) {
+    return SuperTaxEntityBrand(
+      taxEntityId: json['tax_entity_id']?.toString() ?? '',
+      brandId: json['brand_id']?.toString() ?? '',
+    );
+  }
+}
+
 class SuperRestaurant {
   const SuperRestaurant({
     required this.id,
@@ -19,6 +58,10 @@ class SuperRestaurant {
     this.brandId,
     this.brandName,
     this.brandCode,
+    this.taxEntityId,
+    this.taxEntityName,
+    this.taxCode,
+    this.ownerType = 'external',
   });
 
   final String id;
@@ -33,9 +76,14 @@ class SuperRestaurant {
   final String? brandId;
   final String? brandName;
   final String? brandCode;
+  final String? taxEntityId;
+  final String? taxEntityName;
+  final String? taxCode;
+  final String ownerType;
 
-  bool get isDirect => storeType == 'direct';
-  bool get isExternal => storeType == 'external';
+  bool get isDirect => ownerType == 'internal';
+  bool get isExternal => ownerType == 'external';
+  bool get isOfficeLinked => ownerType == 'internal';
 
   factory SuperRestaurant.fromJson(Map<String, dynamic> json) {
     final rawCharge = json['per_person_charge'];
@@ -61,6 +109,17 @@ class SuperRestaurant {
       brandId: json['brand_id']?.toString(),
       brandName: (json['brands'] as Map<String, dynamic>?)?['name']?.toString(),
       brandCode: (json['brands'] as Map<String, dynamic>?)?['code']?.toString(),
+      taxEntityId: json['tax_entity_id']?.toString(),
+      taxEntityName: (json['tax_entity'] as Map<String, dynamic>?)?['name']
+          ?.toString(),
+      taxCode: (json['tax_entity'] as Map<String, dynamic>?)?['tax_code']
+          ?.toString(),
+      ownerType:
+          (json['tax_entity'] as Map<String, dynamic>?)?['owner_type']
+              ?.toString() ??
+          (json['store_type']?.toString() == 'direct'
+              ? 'internal'
+              : 'external'),
     );
   }
 }
@@ -99,8 +158,11 @@ class SuperAdminState {
   const SuperAdminState({
     this.restaurants = const [],
     this.brands = const [],
+    this.taxEntities = const [],
+    this.taxEntityBrands = const [],
     this.selectedBrandId,
-    this.selectedStoreType,
+    this.selectedOwnerType,
+    this.selectedTaxEntityId,
     this.selectedRestaurant,
     this.reportSummary,
     required this.reportStart,
@@ -111,8 +173,11 @@ class SuperAdminState {
 
   final List<SuperRestaurant> restaurants;
   final List<Map<String, dynamic>> brands;
+  final List<SuperTaxEntity> taxEntities;
+  final List<SuperTaxEntityBrand> taxEntityBrands;
   final String? selectedBrandId;
-  final String? selectedStoreType; // null=All, 'direct', 'external'
+  final String? selectedOwnerType;
+  final String? selectedTaxEntityId;
   final SuperRestaurant? selectedRestaurant;
   final SuperAdminReportSummary? reportSummary;
   final DateTime reportStart;
@@ -120,13 +185,43 @@ class SuperAdminState {
   final bool isLoading;
   final String? error;
 
-  /// Returns restaurants filtered by selected brand and store type
+  List<Map<String, dynamic>> get filteredBrands {
+    if (selectedTaxEntityId == null) return brands;
+    final allowedIds = taxEntityBrands
+        .where((link) => link.taxEntityId == selectedTaxEntityId)
+        .map((link) => link.brandId)
+        .toSet();
+    return brands
+        .where((brand) => allowedIds.contains(brand['id']?.toString()))
+        .toList(growable: false);
+  }
+
+  List<SuperTaxEntity> get filteredTaxEntities {
+    if (selectedOwnerType == null) return taxEntities;
+    return taxEntities
+        .where((entity) => entity.ownerType == selectedOwnerType)
+        .toList(growable: false);
+  }
+
+  List<Map<String, dynamic>> brandsForTaxEntity(String taxEntityId) {
+    final allowedIds = taxEntityBrands
+        .where((link) => link.taxEntityId == taxEntityId)
+        .map((link) => link.brandId)
+        .toSet();
+    return brands
+        .where((brand) => allowedIds.contains(brand['id']?.toString()))
+        .toList(growable: false);
+  }
+
+  /// Returns restaurants filtered by owner type, legal entity, and brand.
   List<SuperRestaurant> get filteredRestaurants {
     var list = restaurants;
 
-    // Store type filter
-    if (selectedStoreType != null) {
-      list = list.where((r) => r.storeType == selectedStoreType).toList();
+    if (selectedOwnerType != null) {
+      list = list.where((r) => r.ownerType == selectedOwnerType).toList();
+    }
+    if (selectedTaxEntityId != null) {
+      list = list.where((r) => r.taxEntityId == selectedTaxEntityId).toList();
     }
 
     // Brand filter
@@ -142,8 +237,11 @@ class SuperAdminState {
   SuperAdminState copyWith({
     List<SuperRestaurant>? restaurants,
     List<Map<String, dynamic>>? brands,
+    List<SuperTaxEntity>? taxEntities,
+    List<SuperTaxEntityBrand>? taxEntityBrands,
     String? selectedBrandId,
-    String? selectedStoreType,
+    String? selectedOwnerType,
+    String? selectedTaxEntityId,
     SuperRestaurant? selectedRestaurant,
     SuperAdminReportSummary? reportSummary,
     DateTime? reportStart,
@@ -154,17 +252,23 @@ class SuperAdminState {
     bool clearReportSummary = false,
     bool clearError = false,
     bool clearBrandFilter = false,
-    bool clearStoreTypeFilter = false,
+    bool clearOwnerTypeFilter = false,
+    bool clearTaxEntityFilter = false,
   }) {
     return SuperAdminState(
       restaurants: restaurants ?? this.restaurants,
       brands: brands ?? this.brands,
+      taxEntities: taxEntities ?? this.taxEntities,
+      taxEntityBrands: taxEntityBrands ?? this.taxEntityBrands,
       selectedBrandId: clearBrandFilter
           ? null
           : (selectedBrandId ?? this.selectedBrandId),
-      selectedStoreType: clearStoreTypeFilter
+      selectedOwnerType: clearOwnerTypeFilter
           ? null
-          : (selectedStoreType ?? this.selectedStoreType),
+          : (selectedOwnerType ?? this.selectedOwnerType),
+      selectedTaxEntityId: clearTaxEntityFilter
+          ? null
+          : (selectedTaxEntityId ?? this.selectedTaxEntityId),
       selectedRestaurant: clearSelectedRestaurant
           ? null
           : (selectedRestaurant ?? this.selectedRestaurant),
@@ -193,7 +297,9 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     try {
       final response = await supabase
           .from('restaurants')
-          .select('*, brands(name, code)')
+          .select(
+            '*, brands(name, code), tax_entity(name, tax_code, owner_type)',
+          )
           .order('created_at', ascending: false);
       final restaurants = response
           .map<SuperRestaurant>(
@@ -225,6 +331,35 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     }
   }
 
+  Future<void> loadLegalEntityStructure() async {
+    try {
+      final responses = await Future.wait([
+        supabase
+            .from('tax_entity')
+            .select('id, name, tax_code, owner_type')
+            .order('name', ascending: true),
+        supabase.from('tax_entity_brands').select('tax_entity_id, brand_id'),
+      ]);
+      state = state.copyWith(
+        taxEntities: responses[0]
+            .map<SuperTaxEntity>(
+              (row) => SuperTaxEntity.fromJson(Map<String, dynamic>.from(row)),
+            )
+            .toList(growable: false),
+        taxEntityBrands: responses[1]
+            .map<SuperTaxEntityBrand>(
+              (row) =>
+                  SuperTaxEntityBrand.fromJson(Map<String, dynamic>.from(row)),
+            )
+            .toList(growable: false),
+      );
+    } catch (error) {
+      state = state.copyWith(
+        error: 'Failed to load legal entity structure: $error',
+      );
+    }
+  }
+
   void setBrandFilter(String? brandId) {
     state = state.copyWith(
       selectedBrandId: brandId,
@@ -232,10 +367,24 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     );
   }
 
-  void setStoreTypeFilter(String? storeType) {
+  void setOwnerTypeFilter(String? ownerType) {
     state = state.copyWith(
-      selectedStoreType: storeType,
-      clearStoreTypeFilter: storeType == null,
+      selectedOwnerType: ownerType,
+      clearOwnerTypeFilter: ownerType == null,
+      clearTaxEntityFilter: true,
+      clearBrandFilter: true,
+    );
+  }
+
+  void setStoreTypeFilter(String? storeType) {
+    setOwnerTypeFilter(storeType == 'direct' ? 'internal' : storeType);
+  }
+
+  void setTaxEntityFilter(String? taxEntityId) {
+    state = state.copyWith(
+      selectedTaxEntityId: taxEntityId,
+      clearTaxEntityFilter: taxEntityId == null,
+      clearBrandFilter: true,
     );
   }
 
@@ -245,9 +394,28 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     required String slug,
     required String operationMode,
     required double? perPersonCharge,
-    String? brandId,
-    String storeType = 'direct',
+    required String taxEntityId,
+    required String brandId,
   }) async {
+    if (taxEntityId.isEmpty || brandId.isEmpty) {
+      state = state.copyWith(
+        isLoading: false,
+        error:
+            'Failed to create restaurant: legal entity and brand are required.',
+      );
+      return false;
+    }
+    final isAllowed = state.taxEntityBrands.any(
+      (link) => link.taxEntityId == taxEntityId && link.brandId == brandId,
+    );
+    if (!isAllowed) {
+      state = state.copyWith(
+        isLoading: false,
+        error:
+            'Failed to create restaurant: brand is not allowed for this legal entity.',
+      );
+      return false;
+    }
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       await restaurantService.createRestaurant(
@@ -257,7 +425,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         address: address.isEmpty ? null : address,
         perPersonCharge: perPersonCharge,
         brandId: brandId,
-        storeType: storeType,
+        taxEntityId: taxEntityId,
       );
       await loadAllRestaurants();
       return true;
@@ -277,9 +445,28 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     required String slug,
     required String operationMode,
     required double? perPersonCharge,
-    String? brandId,
-    String storeType = 'direct',
+    required String taxEntityId,
+    required String brandId,
   }) async {
+    if (taxEntityId.isEmpty || brandId.isEmpty) {
+      state = state.copyWith(
+        isLoading: false,
+        error:
+            'Failed to update restaurant: legal entity and brand are required.',
+      );
+      return false;
+    }
+    final isAllowed = state.taxEntityBrands.any(
+      (link) => link.taxEntityId == taxEntityId && link.brandId == brandId,
+    );
+    if (!isAllowed) {
+      state = state.copyWith(
+        isLoading: false,
+        error:
+            'Failed to update restaurant: brand is not allowed for this legal entity.',
+      );
+      return false;
+    }
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       await restaurantService.updateRestaurant(
@@ -290,7 +477,7 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         address: address.isEmpty ? null : address,
         perPersonCharge: perPersonCharge,
         brandId: brandId,
-        storeType: storeType,
+        taxEntityId: taxEntityId,
       );
       await loadAllRestaurants();
       return true;

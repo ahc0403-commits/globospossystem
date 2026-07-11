@@ -1,0 +1,8 @@
+CREATE TABLE test_expected.object_backup AS
+TABLE public.hierarchy_20260711090000_object_backup;
+CREATE TABLE test_expected.photo_backup AS
+TABLE public.hierarchy_20260711090000_photo_backup;
+CREATE TABLE test_expected.history_backup AS
+TABLE public.hierarchy_20260711090000_history_backup;
+CREATE TABLE test_expected.backup_state AS
+TABLE public.hierarchy_20260711090000_backup_state;

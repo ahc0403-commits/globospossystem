@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../main.dart';
 
 class StoreService {
@@ -8,20 +10,41 @@ class StoreService {
     String? address,
     double? perPersonCharge,
     String? brandId,
+    String? taxEntityId,
     String storeType = 'direct',
   }) async {
-    final result = await supabase.rpc(
-      'admin_create_restaurant',
-      params: {
-        'p_name': name,
-        'p_slug': slug,
-        'p_operation_mode': operationMode.toLowerCase(),
-        'p_address': address,
-        'p_per_person_charge': perPersonCharge,
-        'p_brand_id': brandId,
-        'p_store_type': storeType,
-      },
-    );
+    final usesLegalEntity = taxEntityId != null && taxEntityId.isNotEmpty;
+    final result = await supabase
+        .rpc(
+          usesLegalEntity
+              ? 'admin_create_restaurant_v2'
+              : 'admin_create_restaurant',
+          params: usesLegalEntity
+              ? {
+                  'p_name': name,
+                  'p_slug': slug,
+                  'p_operation_mode': operationMode.toLowerCase(),
+                  'p_address': address,
+                  'p_per_person_charge': perPersonCharge,
+                  'p_tax_entity_id': taxEntityId,
+                  'p_brand_id': brandId,
+                }
+              : {
+                  'p_name': name,
+                  'p_slug': slug,
+                  'p_operation_mode': operationMode.toLowerCase(),
+                  'p_address': address,
+                  'p_per_person_charge': perPersonCharge,
+                  'p_brand_id': brandId,
+                  'p_store_type': storeType,
+                },
+        )
+        .timeout(
+          const Duration(seconds: 20),
+          onTimeout: () => throw TimeoutException(
+            'Store creation timed out before the server returned a result.',
+          ),
+        );
     return Map<String, dynamic>.from(result as Map);
   }
 
@@ -32,6 +55,7 @@ class StoreService {
     String? address,
     double? perPersonCharge,
     String? brandId,
+    String? taxEntityId,
     String storeType = 'direct',
   }) {
     return createStore(
@@ -41,6 +65,7 @@ class StoreService {
       address: address,
       perPersonCharge: perPersonCharge,
       brandId: brandId,
+      taxEntityId: taxEntityId,
       storeType: storeType,
     );
   }
@@ -53,21 +78,43 @@ class StoreService {
     String? address,
     double? perPersonCharge,
     String? brandId,
+    String? taxEntityId,
     String storeType = 'direct',
   }) async {
-    await supabase.rpc(
-      'admin_update_restaurant',
-      params: {
-        'p_store_id': id,
-        'p_name': name,
-        'p_slug': slug,
-        'p_operation_mode': operationMode.toLowerCase(),
-        'p_address': address,
-        'p_per_person_charge': perPersonCharge,
-        'p_brand_id': brandId,
-        'p_store_type': storeType,
-      },
-    );
+    final usesLegalEntity = taxEntityId != null && taxEntityId.isNotEmpty;
+    await supabase
+        .rpc(
+          usesLegalEntity
+              ? 'admin_update_restaurant_v2'
+              : 'admin_update_restaurant',
+          params: usesLegalEntity
+              ? {
+                  'p_store_id': id,
+                  'p_name': name,
+                  'p_slug': slug,
+                  'p_operation_mode': operationMode.toLowerCase(),
+                  'p_address': address,
+                  'p_per_person_charge': perPersonCharge,
+                  'p_tax_entity_id': taxEntityId,
+                  'p_brand_id': brandId,
+                }
+              : {
+                  'p_store_id': id,
+                  'p_name': name,
+                  'p_slug': slug,
+                  'p_operation_mode': operationMode.toLowerCase(),
+                  'p_address': address,
+                  'p_per_person_charge': perPersonCharge,
+                  'p_brand_id': brandId,
+                  'p_store_type': storeType,
+                },
+        )
+        .timeout(
+          const Duration(seconds: 20),
+          onTimeout: () => throw TimeoutException(
+            'Store update timed out before the server returned a result.',
+          ),
+        );
   }
 
   Future<void> updateRestaurant({
@@ -78,6 +125,7 @@ class StoreService {
     String? address,
     double? perPersonCharge,
     String? brandId,
+    String? taxEntityId,
     String storeType = 'direct',
   }) {
     return updateStore(
@@ -88,6 +136,7 @@ class StoreService {
       address: address,
       perPersonCharge: perPersonCharge,
       brandId: brandId,
+      taxEntityId: taxEntityId,
       storeType: storeType,
     );
   }
