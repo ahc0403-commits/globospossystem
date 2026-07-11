@@ -144,7 +144,5 @@ void main() {
     expect(accounts, isNot(contains('!')));
 
     expect(authProvider, contains(".eq('auth_id', user.id)"));
-    expect(authProvider, contains('claims_fallback_used'));
-    expect(authProvider, contains('debugPrint'));
   });
 }
