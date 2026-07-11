@@ -30,6 +30,12 @@ until "$REAL_PSQL" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres -d postgres -Atqc '
   >/dev/null 2>&1; do
   sleep 0.2
 done
+"$REAL_PSQL" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres -d postgres \
+  -v ON_ERROR_STOP=1 >/dev/null <<'SQL'
+CREATE ROLE cli_login_runner LOGIN;
+GRANT postgres TO cli_login_runner;
+CREATE ROLE cli_login_denied LOGIN;
+SQL
 
 cat >"$FAKE_BIN/supabase" <<'EOF'
 #!/usr/bin/env bash
@@ -69,7 +75,7 @@ chmod +x "$FAKE_BIN/psql"
 
 export PATH="$FAKE_BIN:$PATH"
 export ISSUER_LOG PSQL_LOG SECRET REAL_PSQL
-export LOCAL_PGHOST LOCAL_PGPORT="$PORT" LOCAL_PGUSER=postgres
+export LOCAL_PGHOST LOCAL_PGPORT="$PORT" LOCAL_PGUSER=cli_login_runner
 
 run_linked() {
   local sql_file="$1"
@@ -89,6 +95,13 @@ assert_not_contains() {
 
 SUCCESS_SQL="$TMP_DIR/success.sql"
 cat >"$SUCCESS_SQL" <<'SQL'
+DO $$
+BEGIN
+  IF current_user <> 'postgres' OR session_user <> 'cli_login_runner' THEN
+    RAISE EXCEPTION 'runner file did not inherit activated postgres role';
+  END IF;
+END;
+$$;
 CREATE TABLE runner_success (id integer PRIMARY KEY);
 INSERT INTO runner_success VALUES (1);
 SQL
@@ -98,9 +111,40 @@ success_output="$(run_linked "$SUCCESS_SQL" 'runner success' 2>&1)"
 "$REAL_PSQL" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres -d postgres -Atqc \
   "SELECT count(*) FROM runner_success" | grep -qx 1
 grep -qx 'db dump --linked --schema public --dry-run' "$ISSUER_LOG"
-grep -q 'args=-X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --file' "$PSQL_LOG"
+grep -q 'args=-X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --command SET ROLE postgres;' "$PSQL_LOG"
+grep -q -- '--command DO \$pos_role_check\$' "$PSQL_LOG"
+grep -q -- '--file .*success.sql' "$PSQL_LOG"
 grep -q 'ssl=require host=aws-0-ap-southeast-1.pooler.supabase.com user=cli_login_test.ynriuoomotxuwhuxxmhj database=postgres' "$PSQL_LOG"
 assert_not_contains "$success_output" "$SECRET"
+
+ROLE_REFUSAL_SQL="$TMP_DIR/role_refusal.sql"
+cat >"$ROLE_REFUSAL_SQL" <<'SQL'
+CREATE TABLE runner_role_refusal_must_not_run (id integer PRIMARY KEY);
+SQL
+
+set +e
+role_refusal_output="$(LOCAL_PGUSER=cli_login_denied \
+  run_linked "$ROLE_REFUSAL_SQL" 'role activation refusal' 2>&1)"
+role_refusal_status=$?
+set -e
+[[ "$role_refusal_status" -ne 0 ]]
+[[ "$role_refusal_output" == *'permission denied to set role "postgres"'* ]]
+assert_not_contains "$role_refusal_output" 'PASS: role activation refusal'
+assert_not_contains "$role_refusal_output" "$SECRET"
+"$REAL_PSQL" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres -d postgres -Atqc \
+  "SELECT to_regclass('public.runner_role_refusal_must_not_run') IS NULL" | grep -qx t
+
+set +e
+unbound_user_output="$(FAKE_PGUSER=postgres \
+  run_linked "$ROLE_REFUSAL_SQL" 'unbound credential refusal' 2>&1)"
+unbound_user_status=$?
+set -e
+[[ "$unbound_user_status" -ne 0 ]]
+[[ "$unbound_user_output" == *'not a ref-bound temporary cli_login role'* ]]
+assert_not_contains "$unbound_user_output" 'PASS: unbound credential refusal'
+assert_not_contains "$unbound_user_output" "$SECRET"
+"$REAL_PSQL" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres -d postgres -Atqc \
+  "SELECT to_regclass('public.runner_role_refusal_must_not_run') IS NULL" | grep -qx t
 
 FAIL_SQL="$TMP_DIR/fail.sql"
 cat >"$FAIL_SQL" <<'SQL'

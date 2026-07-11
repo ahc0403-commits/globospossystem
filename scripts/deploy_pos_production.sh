@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_REF_FILE="$ROOT_DIR/supabase/.temp/project-ref"
 
 readonly POS_PROJECT_REF="ynriuoomotxuwhuxxmhj"
+readonly POS_PSQL_ROLE="postgres"
 readonly POS_VERCEL_PROJECT="globospossystem"
 readonly POS_VERCEL_PROJECT_ID="prj_glOhZuHqHUHyAsGaSx5BVip3MIJJ"
 readonly POS_VERCEL_ORG_ID="team_4AfACJKDlP09zRqoJKce3Tib"
@@ -437,10 +438,21 @@ acquire_linked_pg_credentials() {
 run_linked_psql_file() {
   local file="$1"
   local pass_label="$2"
+  local role_check_sql
   [[ -f "$file" ]] || fail "Missing SQL file: $file"
 
+  role_check_sql="DO \$pos_role_check\$
+BEGIN
+  IF current_user <> '$POS_PSQL_ROLE'
+     OR session_user !~ '^cli_login_'
+     OR NOT pg_catalog.pg_has_role(session_user, '$POS_PSQL_ROLE', 'MEMBER') THEN
+    RAISE EXCEPTION 'POS_PSQL_ROLE_ACTIVATION_FAILED';
+  END IF;
+END;
+\$pos_role_check\$;"
+
   printf '+ supabase db dump --linked --schema public --dry-run <captured>\n'
-  printf '+ PGSSLMODE=require psql -X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --file %q\n' "$file"
+  printf '+ PGSSLMODE=require psql -X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --command SET_ROLE_POSTGRES --command VERIFY_ROLE --file %q\n' "$file"
   if [[ "$DRY_RUN" == "1" ]]; then
     return 0
   fi
@@ -453,7 +465,10 @@ run_linked_psql_file() {
     PGPASSWORD="$PGPASSWORD" \
     PGDATABASE="$PGDATABASE" \
     PGSSLMODE=require \
-    psql -X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --file "$file"; then
+    psql -X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction \
+      --command "SET ROLE $POS_PSQL_ROLE;" \
+      --command "$role_check_sql" \
+      --file "$file"; then
     unset PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE
     fail "$pass_label failed."
   fi

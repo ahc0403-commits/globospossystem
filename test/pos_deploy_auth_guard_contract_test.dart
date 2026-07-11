@@ -38,6 +38,7 @@ void main() {
     expect(deploy, contains('Do not report this deploy as login-ready'));
     expect(deploy, contains('SUPABASE_URL is not production'));
     expect(deploy, contains('POS_PROJECT_REF="ynriuoomotxuwhuxxmhj"'));
+    expect(deploy, contains('readonly POS_PSQL_ROLE="postgres"'));
     expect(deploy, contains('POS_VERCEL_PROJECT="globospossystem"'));
     expect(deploy, contains('POS_VERCEL_PROJECT_ID='));
     expect(deploy, contains('POS_VERCEL_ORG_ID='));
@@ -51,7 +52,11 @@ void main() {
       contains('supabase db dump --linked --schema public --dry-run'),
     );
     expect(deploy, contains('psql -X --no-psqlrc'));
-    expect(deploy, contains('-v ON_ERROR_STOP=1 --single-transaction --file'));
+    expect(deploy, contains('-v ON_ERROR_STOP=1 --single-transaction'));
+    expect(deploy, contains('--command "SET ROLE \$POS_PSQL_ROLE;"'));
+    expect(deploy, contains('POS_PSQL_ROLE_ACTIVATION_FAILED'));
+    expect(deploy, contains('pg_catalog.pg_has_role'));
+    expect(deploy, contains("session_user !~ '^cli_login_'"));
     expect(deploy, contains('PGSSLMODE=require'));
     expect(deploy, contains('cli_login_'));
     expect(deploy, contains('PASS: %s'));
@@ -64,6 +69,18 @@ void main() {
     expect(deploy, isNot(contains('supabase db query')));
     expect(deploy, isNot(contains('supabase db query --db-url')));
     expect(deploy, isNot(contains('ALLOW_PROJECT_REF_MISMATCH:-')));
+    final psqlRunner = deploy.substring(
+      deploy.indexOf('run_linked_psql_file() {'),
+      deploy.indexOf('migration_history_contains_remote_version() {'),
+    );
+    expect(
+      psqlRunner.indexOf(r'--command "SET ROLE $POS_PSQL_ROLE;"'),
+      lessThan(psqlRunner.indexOf(r'--command "$role_check_sql"')),
+    );
+    expect(
+      psqlRunner.indexOf(r'--command "$role_check_sql"'),
+      lessThan(psqlRunner.indexOf(r'--file "$file"')),
+    );
     expect(
       deploy,
       contains('preflight_legal_entity_brand_store_hierarchy.sql'),
