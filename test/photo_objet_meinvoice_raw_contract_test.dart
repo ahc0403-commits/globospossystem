@@ -89,10 +89,7 @@ void main() {
     final packageJson = File('scripts/package.json').readAsStringSync();
     final packageLock = File('scripts/package-lock.json').readAsStringSync();
 
-    expect(
-      packageJson,
-      contains('file:vendor/xlsx-0.20.3.tgz'),
-    );
+    expect(packageJson, contains('file:vendor/xlsx-0.20.3.tgz'));
     expect(packageLock, contains('xlsx-0.20.3.tgz'));
     expect(packageLock, isNot(contains('"version": "0.18.5"')));
   });
@@ -113,6 +110,17 @@ void main() {
       expect(workflow, contains("node-version: '22'"));
       expect(workflow, contains('npm ci'));
       expect(workflow, contains('scripts/package-lock.json'));
+      expect(workflow, isNot(contains(r'${{ runner.temp }}')));
+      expect(
+        workflow,
+        contains(
+          r'echo "PUPPETEER_CACHE_DIR=${RUNNER_TEMP}/puppeteer" >> "${GITHUB_ENV}"',
+        ),
+      );
+      expect(
+        workflow.indexOf(r'PUPPETEER_CACHE_DIR=${RUNNER_TEMP}/puppeteer'),
+        lessThan(workflow.indexOf('uses: actions/setup-node@v4')),
+      );
       expect(workflow, contains('concurrency:'));
       expect(workflow, contains('cancel-in-progress: false'));
       expect(workflow, contains('--preflight-only'));

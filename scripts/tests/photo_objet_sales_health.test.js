@@ -307,6 +307,16 @@ test('workflow uses locked Node 22 install, exact schedule, audit, and deduplica
   assert.match(workflow, /node-version: '22'/);
   assert.match(workflow, /npm ci/);
   assert.match(workflow, /PHOTO_OBJET_RUN_STARTED_AT=.*date -u/);
+  assert.doesNotMatch(workflow, /\$\{\{\s*runner\.temp\s*\}\}/);
+  assert.match(
+    workflow,
+    /echo "PUPPETEER_CACHE_DIR=\$\{RUNNER_TEMP\}\/puppeteer" >> "\$\{GITHUB_ENV\}"/,
+  );
+  assert.ok(
+    workflow.indexOf('PUPPETEER_CACHE_DIR=${RUNNER_TEMP}/puppeteer') <
+      workflow.indexOf('uses: actions/setup-node@v4'),
+    'runtime cache setup must run before Node and Chromium installation',
+  );
   assert.match(workflow, /--preflight-only/);
   assert.match(workflow, /--audit-missing-runs/);
   assert.match(workflow, /Collector failure/);
