@@ -86,15 +86,64 @@ function envSuffixForTaxCode(taxCode: string): string {
 // its own MISA credentials (MISA_MEINVOICE_*_<TAX_CODE>). The unsuffixed
 // shared fallback exists only for the single-entity transition window and
 // must be enabled explicitly via MISA_MEINVOICE_ALLOW_SHARED_SECRETS=true.
-function secretForTaxCode(baseName: string, taxCode: string): string | null {
+export interface MeInvoiceEntityAuth {
+  clientId: string;
+  invoiceSeries: string;
+  username: string;
+  password: string;
+  clientSecret: string;
+}
+
+export type MeInvoiceEnvReader = (name: string) => string | undefined;
+
+function secretForTaxCode(
+  baseName: string,
+  taxCode: string,
+  readEnv: MeInvoiceEnvReader,
+): string | null {
   const taxSpecific = asString(
-    Deno.env.get(`${baseName}_${envSuffixForTaxCode(taxCode)}`),
+    readEnv(`${baseName}_${envSuffixForTaxCode(taxCode)}`),
   );
   if (taxSpecific) return taxSpecific;
-  if (Deno.env.get("MISA_MEINVOICE_ALLOW_SHARED_SECRETS") === "true") {
-    return asString(Deno.env.get(baseName));
+  if (readEnv("MISA_MEINVOICE_ALLOW_SHARED_SECRETS") === "true") {
+    return asString(readEnv(baseName));
   }
   return null;
+}
+
+export function resolveMeInvoiceEntityAuth(
+  seller: SellerConfig,
+  readEnv: MeInvoiceEnvReader = (name) => Deno.env.get(name),
+): MeInvoiceEntityAuth {
+  assertDispatchReady(seller);
+  const username = secretForTaxCode(
+    "MISA_MEINVOICE_USERNAME",
+    seller.taxCode,
+    readEnv,
+  );
+  const password = secretForTaxCode(
+    "MISA_MEINVOICE_PASSWORD",
+    seller.taxCode,
+    readEnv,
+  );
+  if (!username || !password) {
+    throw new Error("MEINVOICE_CREDENTIAL_NOT_CONFIGURED");
+  }
+  const clientSecret = secretForTaxCode(
+    "MISA_MEINVOICE_CLIENT_SECRET",
+    seller.taxCode,
+    readEnv,
+  );
+  if (!clientSecret) {
+    throw new Error("MEINVOICE_CLIENT_SECRET_NOT_CONFIGURED");
+  }
+  return {
+    clientId: seller.clientId,
+    invoiceSeries: seller.invoiceSeries,
+    username,
+    password,
+    clientSecret,
+  };
 }
 
 function parseJwtExpiry(token: string): Date | null {
@@ -208,7 +257,7 @@ export async function getMeInvoiceToken(
   seller: SellerConfig,
   refreshSkewMinutes: number,
 ): Promise<string> {
-  assertDispatchReady(seller);
+  const auth = resolveMeInvoiceEntityAuth(seller);
 
   const now = new Date();
   const refreshAfter = new Date(now.getTime() + refreshSkewMinutes * 60_000);
@@ -226,30 +275,17 @@ export async function getMeInvoiceToken(
     return cached.current_token;
   }
 
-  const username = secretForTaxCode("MISA_MEINVOICE_USERNAME", seller.taxCode);
-  const password = secretForTaxCode("MISA_MEINVOICE_PASSWORD", seller.taxCode);
-  if (!username || !password) {
-    throw new Error("MEINVOICE_CREDENTIAL_NOT_CONFIGURED");
-  }
-  const clientSecret = secretForTaxCode(
-    "MISA_MEINVOICE_CLIENT_SECRET",
-    seller.taxCode,
-  );
-  if (!clientSecret) {
-    throw new Error("MEINVOICE_CLIENT_SECRET_NOT_CONFIGURED");
-  }
-
   const tokenResponse = await fetch(`${seller.authBaseUrl}/token`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      ClientID: seller.clientId,
-      ClientSecret: clientSecret,
+      ClientID: auth.clientId,
+      ClientSecret: auth.clientSecret,
     },
     body: JSON.stringify({
       taxcode: seller.taxCode,
-      username,
-      password,
+      username: auth.username,
+      password: auth.password,
     }),
   });
   const body = await tokenResponse.json().catch(() => null) as any;
@@ -632,7 +668,11 @@ export function validateCashRegisterInvoicePayload(
         "TaxRateInfo.AmountWithoutVATOC",
         taxRate.AmountWithoutVATOC,
       );
-      requireFiniteNumber(missing, "TaxRateInfo.VATAmountOC", taxRate.VATAmountOC);
+      requireFiniteNumber(
+        missing,
+        "TaxRateInfo.VATAmountOC",
+        taxRate.VATAmountOC,
+      );
     }
 
     const options = invoice.OptionUserDefined as JsonRecord | undefined;
@@ -648,7 +688,9 @@ export function validateCashRegisterInvoicePayload(
           "UnitPriceDecimalDigits",
         ]
       ) {
-        if (!asString(options[field])) missing.add(`OptionUserDefined.${field}`);
+        if (!asString(options[field])) {
+          missing.add(`OptionUserDefined.${field}`);
+        }
       }
     }
   }

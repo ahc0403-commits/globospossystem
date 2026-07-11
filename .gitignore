@@ -58,6 +58,9 @@ CLAUDE_PROMPT_*.md
 .claude/
 .vercel/
 
+# FLARE run logs are local validation artifacts; shared rules stay tracked.
+.flare/
+
 # Flutter gen-l10n output (generated from lib/l10n/*.arb at flutter pub get time
 # when pubspec `generate: true` is set; do not commit generated dart code)
 lib/l10n/app_localizations*.dart

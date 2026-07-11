@@ -88,8 +88,9 @@ void main() {
       expect(source, contains(r'${seller.authBaseUrl}/token'));
       expect(source, isNot(contains('/auth/token')));
       expect(source, isNot(contains('appid:')));
-      expect(source, contains('ClientID: seller.clientId'));
-      expect(source, contains('ClientSecret: clientSecret'));
+      expect(source, contains('resolveMeInvoiceEntityAuth(seller)'));
+      expect(source, contains('ClientID: auth.clientId'));
+      expect(source, contains('ClientSecret: auth.clientSecret'));
       expect(source, contains('MISA_MEINVOICE_CLIENT_SECRET'));
       expect(source, contains('MEINVOICE_CLIENT_ID_NOT_CONFIGURED'));
       expect(source, contains('MEINVOICE_CLIENT_SECRET_NOT_CONFIGURED'));
@@ -153,7 +154,11 @@ void main() {
       final tokenSection = source.substring(tokenStart);
       expect(payloadBuilder, contains('assertPayloadReady(seller);'));
       expect(payloadBuilder, isNot(contains('assertDispatchReady(seller);')));
-      expect(tokenSection, contains('assertDispatchReady(seller);'));
+      expect(
+        tokenSection,
+        contains('resolveMeInvoiceEntityAuth(seller)'),
+      );
+      expect(source, contains('assertDispatchReady(seller);'));
       expect(source, contains('summarizePublishResponse'));
       expect(source, contains('metadata: options.metadata'));
       expect(source, contains('publishInvoiceResult'));

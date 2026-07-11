@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEPLOY_SCRIPT="$ROOT_DIR/scripts/deploy_pos_production.sh"
+PORTAL_MIGRATION="$ROOT_DIR/supabase/migrations/20260711190000_meinvoice_portal_defaults.sql"
 REAL_PSQL="$(command -v psql)"
 REAL_CREATEDB="$(command -v createdb)"
 TMP_DIR="$(mktemp -d)"
@@ -76,6 +77,13 @@ chmod +x "$FAKE_BIN/psql"
 export PATH="$FAKE_BIN:$PATH"
 export ISSUER_LOG PSQL_LOG SECRET REAL_PSQL
 export LOCAL_PGHOST LOCAL_PGPORT="$PORT" LOCAL_PGUSER=cli_login_runner
+
+grep -q 'psql -X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --file' \
+  "$ROOT_DIR/docs/MEINVOICE_PORTAL_INTEGRATION_PLAN_2026_07_11.md"
+grep -q -- '--migration supabase/migrations/20260711190000_meinvoice_portal_defaults.sql' \
+  "$ROOT_DIR/docs/MEINVOICE_PORTAL_INTEGRATION_PLAN_2026_07_11.md"
+! grep -Eq 'supabase[[:space:]]+db[[:space:]]+query' "$DEPLOY_SCRIPT"
+[[ -f "$PORTAL_MIGRATION" ]]
 
 run_linked() {
   local sql_file="$1"

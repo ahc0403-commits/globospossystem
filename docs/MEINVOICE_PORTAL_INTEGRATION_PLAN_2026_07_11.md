@@ -59,8 +59,10 @@ OptionUserDefined. **No payload rewrite is needed** — only auth + URLs.
 
 ### Phase 0 — Portal registration (Hyochang, no code)
 
-1. Log in at developer.misa.vn with the company **MISA ID** (the account
-   that owns the meInvoice tenant for tax code `0319388179`).
+1. Verify the credential owner's legal name and tax code against the POS
+   `tax_entity` record, then log in at developer.misa.vn with that entity's
+   **MISA ID**. Never infer the entity from a brand or a previously used tax
+   code.
 2. Create an app (name: `GLOBOS POS`, contact info), send integration
    request selecting **meInvoice**.
 3. Capture **ClientID** (non-secret config) and **ClientSecret** (secret).
@@ -124,11 +126,17 @@ against the stricter portal validation):
 2. Migration: comment/relabel `meinvoice_tax_entity_config.app_id` as
    "MISA Developer Portal ClientID" (no physical rename needed), and update
    the admin e-invoice readiness UI label AppID → ClientID.
-3. Insert the config row for tax entity `0319388179` (currently **0 rows**):
-   ClientID, `invoice_series` (from templates call), portal base URLs,
-   `integration_status = 'configured'`.
-4. Set env secrets: `MISA_MEINVOICE_CLIENT_SECRET`,
-   existing `MISA_MEINVOICE_USERNAME` / `MISA_MEINVOICE_PASSWORD` confirmed.
+3. Resolve the verified tax code to exactly one `tax_entity.id`, confirm that
+   every target store's `tax_entity_id` points to it, and insert the config row
+   by that verified ID: ClientID, `invoice_series` (from templates call), portal
+   base URLs, `integration_status = 'configured'`. Do not hardcode or bind a
+   credential to an entity based on brand membership.
+4. Set all three entity-specific secrets using the normalized tax-code suffix:
+   `MISA_MEINVOICE_CLIENT_SECRET_<TAX_CODE>`,
+   `MISA_MEINVOICE_USERNAME_<TAX_CODE>`, and
+   `MISA_MEINVOICE_PASSWORD_<TAX_CODE>`. Unsuffixed secrets are forbidden for
+   normal operation; the explicit shared-secret flag is a temporary,
+   single-entity migration escape hatch only.
 5. **Fix deployment flag**: `meinvoice-dispatcher` is deployed with
    `verify_jwt: true` — the platform will 401 the CRON_SECRET bearer before
    our handler runs (wetax-dispatcher correctly uses `verify_jwt: false`).
@@ -160,7 +168,31 @@ against the stricter portal validation):
   (currently on `PLACEHOLDER_DEV_000`, skipped by trigger).
 - Viettel/AKJ plan is unaffected: provider-neutral queue work proceeds
   separately; this phase completes the **meinvoice provider adapter**,
-  which stays the provider for `0319388179`.
+  which stays the provider for the separately verified legal entity.
+
+## 6. Production SQL application contract
+
+Apply `20260711190000_meinvoice_portal_defaults.sql` only through the pinned
+POS production deploy script. The script obtains the linked project's
+temporary credentials, verifies the project-bound login and activated
+`postgres` role before mutation, and executes the file with fail-fast,
+single-transaction semantics:
+
+```bash
+scripts/deploy_pos_production.sh \
+  --migration supabase/migrations/20260711190000_meinvoice_portal_defaults.sql \
+  --skip-vercel --yes
+```
+
+The underlying invariant is:
+
+```bash
+psql -X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --file "$SQL_FILE"
+```
+
+Never use `supabase db query` to apply this or any other multi-statement
+production migration. Run read-only preflight before mutation and record the
+successful verify result only after `psql` exits with status 0.
 
 ## 4. Constraints re-affirmed
 
