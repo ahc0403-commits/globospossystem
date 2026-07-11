@@ -281,7 +281,23 @@ void main() {
 
       expect(smoke, contains('postgres:15'));
       expect(smoke, contains('db dump --linked --schema public --dry-run'));
-      expect(smoke, contains('ON_ERROR_STOP=1 --single-transaction --file'));
+      const failFastMarker =
+          'ON_ERROR_STOP=1 --single-transaction --command SET ROLE postgres;';
+      const roleCheckMarker = r'--command DO \$pos_role_check\$';
+      const fileMarker = r'--file .*success.sql';
+      expect(smoke, contains(failFastMarker));
+      expect(smoke, contains(roleCheckMarker));
+      expect(smoke, contains(fileMarker));
+      expect(
+        smoke.indexOf(failFastMarker),
+        lessThan(smoke.indexOf(roleCheckMarker)),
+      );
+      expect(
+        smoke.indexOf(roleCheckMarker),
+        lessThan(smoke.indexOf(fileMarker)),
+      );
+      expect(smoke, contains("current_user <> 'postgres'"));
+      expect(smoke, contains("session_user <> 'cli_login_runner'"));
       expect(smoke, contains('runner_mid_file_rollback'));
       expect(smoke, contains('FAKE_PGHOST='));
       expect(smoke, contains('temporary-secret-must-never-appear'));
