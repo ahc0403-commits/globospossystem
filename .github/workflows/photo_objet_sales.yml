@@ -3,13 +3,44 @@ name: Photo Objet Sales Pull
 on:
   schedule:
     # 09:00-22:30 Asia/Ho_Chi_Minh (UTC+7): hourly through 22:00, then 22:30.
-    - cron: '0 2-15 * * *'
+    - cron: '0 2 * * *'
+    - cron: '0 3 * * *'
+    - cron: '0 4 * * *'
+    - cron: '0 5 * * *'
+    - cron: '0 6 * * *'
+    - cron: '0 7 * * *'
+    - cron: '0 8 * * *'
+    - cron: '0 9 * * *'
+    - cron: '0 10 * * *'
+    - cron: '0 11 * * *'
+    - cron: '0 12 * * *'
+    - cron: '0 13 * * *'
+    - cron: '0 14 * * *'
+    - cron: '0 15 * * *'
     - cron: '30 15 * * *'
   workflow_dispatch:
     inputs:
       target_date:
         description: 'Date to pull (YYYY-MM-DD), defaults to today in Asia/Ho_Chi_Minh'
         required: false
+      audit_missing_runs:
+        description: 'Audit completed schedule slots without collecting sales'
+        type: boolean
+        default: false
+      backfill_from:
+        description: 'Backfill start (YYYY-MM-DD, maximum seven inclusive days)'
+        required: false
+      backfill_to:
+        description: 'Backfill end (YYYY-MM-DD)'
+        required: false
+      execute_backfill:
+        description: 'Write the backfill; false is a dry run'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
 
 concurrency:
   group: photo-objet-sales-pull
@@ -17,59 +48,205 @@ concurrency:
 
 jobs:
   pull-sales:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      PUPPETEER_CACHE_DIR: ${{ runner.temp }}/puppeteer
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      PHOTO_OBJET_INCLUDE_YESTERDAY: 'false'
+      PHOTO_OBJET_SCHEDULE_CRON: ${{ github.event.schedule }}
+      MOERS_BIENHOA_USER: tob009
+      MOERS_BIENHOA_PASS: ${{ secrets.MOERS_BIENHOA_PASS }}
+      PHOTO_OBJET_BIENHOA_STORE_ID: ${{ secrets.PHOTO_OBJET_BIENHOA_STORE_ID }}
+      PHOTO_OBJET_BIENHOA_ENABLED: ${{ vars.PHOTO_OBJET_BIENHOA_ENABLED }}
+      MOERS_DIAN_USER: tob024
+      MOERS_DIAN_PASS: ${{ secrets.MOERS_DIAN_PASS }}
+      PHOTO_OBJET_DIAN_STORE_ID: ${{ secrets.PHOTO_OBJET_DIAN_STORE_ID }}
+      PHOTO_OBJET_DIAN_ENABLED: ${{ vars.PHOTO_OBJET_DIAN_ENABLED }}
+      MOERS_LONGTHANH_USER: tob025
+      MOERS_LONGTHANH_PASS: ${{ secrets.MOERS_LONGTHANH_PASS }}
+      PHOTO_OBJET_LONGTHANH_STORE_ID: ${{ secrets.PHOTO_OBJET_LONGTHANH_STORE_ID }}
+      PHOTO_OBJET_LONGTHANH_ENABLED: ${{ vars.PHOTO_OBJET_LONGTHANH_ENABLED }}
+      MOERS_THAODIEN_USER: tob029
+      MOERS_THAODIEN_PASS: ${{ secrets.MOERS_THAODIEN_PASS }}
+      PHOTO_OBJET_THAODIEN_STORE_ID: ${{ secrets.PHOTO_OBJET_THAODIEN_STORE_ID }}
+      PHOTO_OBJET_THAODIEN_ENABLED: ${{ vars.PHOTO_OBJET_THAODIEN_ENABLED }}
+      MOERS_QUANGTRUNG_USER: tob030
+      MOERS_QUANGTRUNG_PASS: ${{ secrets.MOERS_QUANGTRUNG_PASS }}
+      PHOTO_OBJET_QUANGTRUNG_STORE_ID: ${{ secrets.PHOTO_OBJET_QUANGTRUNG_STORE_ID }}
+      PHOTO_OBJET_QUANGTRUNG_ENABLED: ${{ vars.PHOTO_OBJET_QUANGTRUNG_ENABLED }}
+      MOERS_NOWZONE_USER: tob049
+      MOERS_NOWZONE_PASS: ${{ secrets.MOERS_NOWZONE_PASS }}
+      PHOTO_OBJET_NOWZONE_STORE_ID: ${{ secrets.PHOTO_OBJET_NOWZONE_STORE_ID }}
+      PHOTO_OBJET_NOWZONE_ENABLED: ${{ vars.PHOTO_OBJET_NOWZONE_ENABLED }}
+
     steps:
       - uses: actions/checkout@v4
 
+      - name: Capture collector run timestamp
+        run: echo "PHOTO_OBJET_RUN_STARTED_AT=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "${GITHUB_ENV}"
+
       - uses: actions/setup-node@v4
+        id: node_setup
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
 
-      - name: Install dependencies
-        run: npm install --no-package-lock
-        working-directory: scripts
-
-      - name: Install Chromium
-        run: |
-          rm -rf ~/.cache/puppeteer
-          CHROME_VERSION=$(node -p "require('puppeteer').PUPPETEER_REVISIONS.chrome")
-          echo "Puppeteer Chrome revision: ${CHROME_VERSION}"
-          ./node_modules/.bin/browsers install "chrome@${CHROME_VERSION}" --platform linux --path "$HOME/.cache/puppeteer"
-          CHROME_PATH="$HOME/.cache/puppeteer/chrome/linux-${CHROME_VERSION}/chrome-linux64/chrome"
-          if [ ! -x "${CHROME_PATH}" ]; then
-            find "$HOME/.cache/puppeteer" -maxdepth 5 -type f | sort | head -80
-          fi
-          test -x "${CHROME_PATH}"
-          echo "PUPPETEER_EXECUTABLE_PATH=${CHROME_PATH}" >> "$GITHUB_ENV"
-          export PUPPETEER_EXECUTABLE_PATH="${CHROME_PATH}"
-          "${CHROME_PATH}" --version
-          node -e "console.log(require('puppeteer').executablePath())"
-        working-directory: scripts
-
-      - name: Pull Photo Objet sales
-        run: node pull_moers_sales.js
+      - name: Install locked dependencies
+        id: setup
+        if: steps.node_setup.outcome == 'success'
         working-directory: scripts
         env:
-          TARGET_DATE: ${{ github.event.inputs.target_date }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          PHOTO_OBJET_INCLUDE_YESTERDAY: 'false'
-          MOERS_BIENHOA_USER: tob009
-          MOERS_BIENHOA_PASS: ${{ secrets.MOERS_BIENHOA_PASS }}
-          PHOTO_OBJET_BIENHOA_STORE_ID: ${{ secrets.PHOTO_OBJET_BIENHOA_STORE_ID }}
-          MOERS_DIAN_USER: tob024
-          MOERS_DIAN_PASS: ${{ secrets.MOERS_DIAN_PASS }}
-          PHOTO_OBJET_DIAN_STORE_ID: ${{ secrets.PHOTO_OBJET_DIAN_STORE_ID }}
-          MOERS_LONGTHANH_USER: tob025
-          MOERS_LONGTHANH_PASS: ${{ secrets.MOERS_LONGTHANH_PASS }}
-          PHOTO_OBJET_LONGTHANH_STORE_ID: ${{ secrets.PHOTO_OBJET_LONGTHANH_STORE_ID }}
-          MOERS_THAODIEN_USER: tob029
-          MOERS_THAODIEN_PASS: ${{ secrets.MOERS_THAODIEN_PASS }}
-          PHOTO_OBJET_THAODIEN_STORE_ID: ${{ secrets.PHOTO_OBJET_THAODIEN_STORE_ID }}
-          MOERS_QUANGTRUNG_USER: tob030
-          MOERS_QUANGTRUNG_PASS: ${{ secrets.MOERS_QUANGTRUNG_PASS }}
-          PHOTO_OBJET_QUANGTRUNG_STORE_ID: ${{ secrets.PHOTO_OBJET_QUANGTRUNG_STORE_ID }}
-          MOERS_NOWZONE_USER: tob049
-          MOERS_NOWZONE_PASS: ${{ secrets.MOERS_NOWZONE_PASS }}
-          PHOTO_OBJET_NOWZONE_STORE_ID: ${{ secrets.PHOTO_OBJET_NOWZONE_STORE_ID }}
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+        run: npm ci
+
+      - name: Install pinned Chromium and system dependencies
+        id: chromium
+        if: steps.setup.outcome == 'success'
+        working-directory: scripts
+        run: |
+          CHROME_VERSION=$(node -p "require('puppeteer').PUPPETEER_REVISIONS.chrome")
+          npx puppeteer browsers install "chrome@${CHROME_VERSION}" --install-deps
+          CHROME_PATH=$(node -e "Promise.resolve(require('puppeteer').executablePath()).then(console.log)")
+          test -x "${CHROME_PATH}"
+          echo "PUPPETEER_EXECUTABLE_PATH=${CHROME_PATH}" >> "${GITHUB_ENV}"
+          "${CHROME_PATH}" --version
+
+      - name: Preflight collector and POS target
+        id: preflight
+        if: steps.chromium.outcome == 'success'
+        continue-on-error: true
+        working-directory: scripts
+        run: |
+          set +e
+          node pull_moers_sales.js --preflight-only 2>&1 | tee collector.log
+          status=${PIPESTATUS[0]}
+          echo "exit_code=${status}" >> "${GITHUB_OUTPUT}"
+          exit "${status}"
+
+      - name: Collect, audit, or backfill
+        id: collect
+        if: steps.preflight.outputs.exit_code == '0'
+        continue-on-error: true
+        working-directory: scripts
+        env:
+          TARGET_DATE: ${{ inputs.target_date }}
+          AUDIT_ONLY: ${{ inputs.audit_missing_runs }}
+          BACKFILL_FROM: ${{ inputs.backfill_from }}
+          BACKFILL_TO: ${{ inputs.backfill_to }}
+          EXECUTE_BACKFILL: ${{ inputs.execute_backfill }}
+        run: |
+          set +e
+          args=()
+          if [ "${AUDIT_ONLY}" = "true" ]; then
+            args+=(--audit-missing-runs)
+          elif [ -n "${BACKFILL_FROM}" ] || [ -n "${BACKFILL_TO}" ]; then
+            args+=(--backfill-from "${BACKFILL_FROM}" --backfill-to "${BACKFILL_TO}")
+            if [ "${EXECUTE_BACKFILL}" = "true" ]; then
+              args+=(--execute)
+            fi
+          fi
+          node pull_moers_sales.js "${args[@]}" 2>&1 | tee -a collector.log
+          status=${PIPESTATUS[0]}
+          if [ "${status}" -eq 0 ] && [ "${AUDIT_ONLY}" != "true" ] && [ -z "${BACKFILL_FROM}" ]; then
+            node pull_moers_sales.js --audit-missing-runs 2>&1 | tee -a collector.log
+            status=${PIPESTATUS[0]}
+          fi
+          echo "exit_code=${status}" >> "${GITHUB_OUTPUT}"
+          exit "${status}"
+
+      - name: Write failure summary
+        if: always()
+        working-directory: scripts
+        env:
+          NODE_SETUP_OUTCOME: ${{ steps.node_setup.outcome }}
+          SETUP_OUTCOME: ${{ steps.setup.outcome }}
+          CHROMIUM_OUTCOME: ${{ steps.chromium.outcome }}
+          PREFLIGHT_CODE: ${{ steps.preflight.outputs.exit_code }}
+          COLLECT_CODE: ${{ steps.collect.outputs.exit_code }}
+        run: |
+          {
+            echo "## Photo Objet sales collector"
+            echo ""
+            echo "- Node setup: ${NODE_SETUP_OUTCOME:-not-run}"
+            echo "- Dependency setup: ${SETUP_OUTCOME:-not-run}"
+            echo "- Chromium setup: ${CHROMIUM_OUTCOME:-not-run}"
+            echo "- Preflight exit: ${PREFLIGHT_CODE:-not-run}"
+            echo "- Collector/audit exit: ${COLLECT_CODE:-not-run}"
+            echo "- Failure class: $(grep -Eo 'FLARE_FAILURE_CLASS=(deterministic|transient)' collector.log 2>/dev/null | tail -1 | cut -d= -f2 || true)"
+            echo ""
+            echo '```text'
+            tail -80 collector.log 2>/dev/null || echo "collector.log unavailable"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Deduplicate failure escalation
+        if: >-
+          always() &&
+          (steps.node_setup.outcome != 'success' ||
+          steps.setup.outcome != 'success' ||
+          steps.chromium.outcome != 'success' ||
+          steps.preflight.outputs.exit_code != '0' ||
+          steps.collect.outputs.exit_code != '0')
+        uses: actions/github-script@v7
+        env:
+          NODE_SETUP_OUTCOME: ${{ steps.node_setup.outcome }}
+          SETUP_OUTCOME: ${{ steps.setup.outcome }}
+          CHROMIUM_OUTCOME: ${{ steps.chromium.outcome }}
+          PREFLIGHT_CODE: ${{ steps.preflight.outputs.exit_code }}
+          COLLECT_CODE: ${{ steps.collect.outputs.exit_code }}
+        with:
+          script: |
+            const fs = require('fs');
+            const title = '[Photo Objet sales] Collector failure';
+            let evidence = 'collector.log unavailable; use setup outcomes below';
+            try {
+              evidence = fs.readFileSync('scripts/collector.log', 'utf8').trim().split('\n').slice(-40).join('\n');
+            } catch {}
+            const body = [
+              `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              `Node setup: ${process.env.NODE_SETUP_OUTCOME || 'not-run'}`,
+              `Dependency setup: ${process.env.SETUP_OUTCOME || 'not-run'}`,
+              `Chromium setup: ${process.env.CHROMIUM_OUTCOME || 'not-run'}`,
+              `Preflight exit: ${process.env.PREFLIGHT_CODE || 'not-run'}`,
+              `Collector/audit exit: ${process.env.COLLECT_CODE || 'not-run'}`,
+              `Attempt: ${context.runAttempt}`,
+              '',
+              '```text',
+              evidence,
+              '```',
+            ].join('\n');
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const existing = issues.find(issue => !issue.pull_request && issue.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+              });
+            }
+
+      - name: Fail workflow after reporting
+        if: >-
+          always() &&
+          (steps.node_setup.outcome != 'success' ||
+          steps.setup.outcome != 'success' ||
+          steps.chromium.outcome != 'success' ||
+          steps.preflight.outputs.exit_code != '0' ||
+          steps.collect.outputs.exit_code != '0')
+        run: exit 1

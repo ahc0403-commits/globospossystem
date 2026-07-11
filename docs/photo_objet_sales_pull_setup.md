@@ -1,132 +1,154 @@
 # Photo Objet Sales Pull Setup
 
-This repository now includes the Photo Objet sales pull workflow and parser:
+POS is the sole Photo Objet Moers sales collector. The collector writes raw sales
+to `public.photo_objet_sales_raw`, records attempts in
+`public.photo_objet_sales_pull_runs`, and updates the dashboard aggregate in
+`public.photo_objet_sales`. `public.v_photo_objet_daily_summary` is the POS read
+surface.
 
-- `.github/workflows/photo_objet_sales.yml`
-- `scripts/package.json`
-- `scripts/pull_moers_sales.js`
+New raw rows are queued idempotently into `public.meinvoice_jobs` by the existing
+database trigger. The crawler does not call MISA directly. The raw ledger and
+`source_hash` are the invoice source of truth; the daily aggregate is not.
 
-The pull job reads sales from `moersinc.com`, stores raw rows first, and then
-updates the dashboard aggregate:
+## Runtime and schedule
 
-- `public.photo_objet_sales_raw`
-- `public.photo_objet_sales_pull_runs`
-- `public.photo_objet_sales`
-- `public.v_photo_objet_daily_summary`
+The workflow uses Node 22, `npm ci`, the committed `scripts/package-lock.json`,
+and the Chromium revision pinned by the exact Puppeteer package. Chromium system
+dependencies are installed before the collector preflight.
+The patched SheetJS `0.20.3` tarball is vendored at
+`scripts/vendor/xlsx-0.20.3.tgz`, so spreadsheet parsing does not depend on
+the npm registry or SheetJS CDN being available during a scheduled run.
 
-New raw rows are queued into `public.meinvoice_jobs` as Photo Objet cash-register
-invoice jobs. The crawler does not call MISA directly.
-
-## Current schedule
-
-The GitHub Actions workflow runs from 09:00 through 22:30 in
-Asia/Ho_Chi_Minh: once per hour through 22:00, then once more at 22:30. GitHub
-cron is UTC, so the hourly range is 02:00-15:00 and the final run is 15:30:
+The schedule is 09:00 through 22:30 Asia/Ho_Chi_Minh: hourly through 22:00,
+followed by the final sales collection and invoice queueing run at 22:30.
 
 ```yaml
-cron: '0 2-15 * * *'
+cron: '0 2 * * *'   # 09:00 HCM
+# One fixed cron entry per hourly slot through 0 15 (22:00 HCM).
 cron: '30 15 * * *'
 ```
 
-The 22:30 run is the final sales collection and invoice queueing run for every
-enabled Photo Objet store. Newly collected rows enqueue their receipt issuance
-jobs during that run; no later sales collection or receipt queueing run is
-scheduled for the business day.
+Fixed cron entries make `github.event.schedule` an explicit slot input. Each
+pull-run row stores a `FLARE_RUN_METADATA` JSON envelope in the existing nullable
+`error_message` compatibility field with `source`, `slot_id`, `slot_date_hcm`,
+`slot_time_hcm`, and any actual failure message nested as `error`.
+This is backward-compatible with the shipped schema and keeps a delayed run tied
+to its intended HCM slot instead of deriving identity from `started_at`. Manual,
+audit, and bounded-backfill invocations use distinct source and slot prefixes.
 
-D7 is removed from the active pull list because the store is scheduled to close.
-Historical POS rows and seeded anchors are retained for audit continuity.
+Workflow concurrency does not cancel an in-progress run. A failed run writes a
+GitHub step summary and creates or comments on the single open
+`[Photo Objet sales] Collector failure` issue, preventing duplicate escalation
+issues while keeping repeated failures visible.
 
-## Required GitHub Actions secrets
+## Required configuration
 
-Set these in GitHub repository settings:
+Repository secrets:
 
-- `SUPABASE_URL`
+- `SUPABASE_URL` for the pinned POS project `ynriuoomotxuwhuxxmhj`
 - `SUPABASE_SERVICE_KEY`
-- `MOERS_BIENHOA_PASS`
-- `MOERS_DIAN_PASS`
-- `MOERS_LONGTHANH_PASS`
-- `MOERS_THAODIEN_PASS`
-- `MOERS_QUANGTRUNG_PASS`
-- `MOERS_NOWZONE_PASS`
+- `MOERS_BIENHOA_PASS`, `MOERS_DIAN_PASS`, `MOERS_LONGTHANH_PASS`
+- `MOERS_THAODIEN_PASS`, `MOERS_QUANGTRUNG_PASS`, `MOERS_NOWZONE_PASS`
+- `PHOTO_OBJET_BIENHOA_STORE_ID`, `PHOTO_OBJET_DIAN_STORE_ID`
+- `PHOTO_OBJET_LONGTHANH_STORE_ID`, `PHOTO_OBJET_THAODIEN_STORE_ID`
+- `PHOTO_OBJET_QUANGTRUNG_STORE_ID`, `PHOTO_OBJET_NOWZONE_STORE_ID`
 
-## Required store id secrets
+The workflow contains the corresponding Moers usernames. Store IDs must resolve
+to unique, active POS `public.restaurants` rows with the exact expected store
+name and Photo Objet brand ID `77000000-0000-0000-0000-000000000001`.
+`store_type` may be `direct` or `external`; any other ownership value fails
+closed. This permits hierarchy-approved external operators without accepting a
+mapping outside the Photo Objet contract.
 
-Because the POS project does not currently expose a safe exact-name mapping
-for the active Photo Objet stores, the workflow uses explicit store id secrets:
-
-- `PHOTO_OBJET_BIENHOA_STORE_ID`
-- `PHOTO_OBJET_DIAN_STORE_ID`
-- `PHOTO_OBJET_LONGTHANH_STORE_ID`
-- `PHOTO_OBJET_THAODIEN_STORE_ID`
-- `PHOTO_OBJET_QUANGTRUNG_STORE_ID`
-- `PHOTO_OBJET_NOWZONE_STORE_ID`
-
-Each value must be the POS `public.restaurants.id` that should receive the
-upserted Photo Objet sales rows.
+Optional repository variables named `PHOTO_OBJET_<STORE>_ENABLED` can be set to
+`false` before a mapped store closes. Empty values default to enabled. D7 has no
+collector mapping and is not hardcoded; its historical rows remain untouched.
+Accepted boolean values are `true/false`, `1/0`, `yes/no`, `y/n`, and `on/off`
+(case-insensitive). Any other value fails preflight rather than disabling a store.
 
 Current linked-project mapping:
 
-- `PHOTO_OBJET_BIENHOA_STORE_ID` → `77000000-0000-0000-0000-000000000102`
-- `PHOTO_OBJET_DIAN_STORE_ID` → `77000000-0000-0000-0000-000000000103`
-- `PHOTO_OBJET_LONGTHANH_STORE_ID` → `77000000-0000-0000-0000-000000000104`
-- `PHOTO_OBJET_THAODIEN_STORE_ID` → `77000000-0000-0000-0000-000000000105`
-- `PHOTO_OBJET_QUANGTRUNG_STORE_ID` → `77000000-0000-0000-0000-000000000106`
-- `PHOTO_OBJET_NOWZONE_STORE_ID` → `77000000-0000-0000-0000-000000000107`
+- `PHOTO_OBJET_BIENHOA_STORE_ID` -> `77000000-0000-0000-0000-000000000102`
+- `PHOTO_OBJET_DIAN_STORE_ID` -> `77000000-0000-0000-0000-000000000103`
+- `PHOTO_OBJET_LONGTHANH_STORE_ID` -> `77000000-0000-0000-0000-000000000104`
+- `PHOTO_OBJET_THAODIEN_STORE_ID` -> `77000000-0000-0000-0000-000000000105`
+- `PHOTO_OBJET_QUANGTRUNG_STORE_ID` -> `77000000-0000-0000-0000-000000000106`
+- `PHOTO_OBJET_NOWZONE_STORE_ID` -> `77000000-0000-0000-0000-000000000107`
 
-## Verified selectors
+## Preflight and failures
 
-Based on the validated office-side implementation:
+`node pull_moers_sales.js --preflight-only` validates all of these before any
+browser launch:
 
-- Login URL: `http://moersinc.com/`
-- Username selector: `#id`
-- Password selector: `#pw`
-- Daily sales URL: `http://moersinc.com/day.php`
-- Date input selector: `#selDate`
+- Node major version 22 and the Node WebSocket global
+- required Supabase, Moers credential, and store mapping environment values
+- an executable absolute `PUPPETEER_EXECUTABLE_PATH`
+- the exact POS Supabase project URL
+- unique, active, exact-name Photo Objet store mappings and ownership type
+- availability of `photo_objet_sales_pull_runs`, `photo_objet_sales_raw`, and
+  `photo_objet_sales`, including service-role read and constraint-safe insert
+  permission probes used before launch
 
-The script supports both:
+Startup/configuration errors emit `FLARE_FAILURE_CLASS=deterministic` and are
+never retried. Network, timeout, and missing-run failures are transient. A store
+pull receives at most one retry, and deterministic failures receive none. The
+summary and deduplicated issue escalation run under `always()` and include npm
+setup and Chromium outcomes even when no collector log could be created.
 
-- Excel download path
-- HTML table scrape fallback when a store account does not show a download button
+## Health audit
 
-## Current linked-environment note
+Run the missing schedule-slot audit with:
 
-As of 2026-04-17, the linked POS database does not yet contain the active Photo
-Objet restaurants as exact-name rows. This setup seeds a dedicated
-`PHOTO OBJET` brand plus deterministic store anchors, so the workflow can avoid
-fragile name matching.
+```bash
+node pull_moers_sales.js --audit-missing-runs --audit-lookback-days 2
+```
 
-## Raw ledger behavior
+The lookback is bounded to 1-31 HCM calendar days. The audit checks every
+completed 09:00-22:00 hourly slot and the 22:30 slot for every enabled store
+using successful `photo_objet_sales_pull_runs` rows whose explicit metadata
+contains the expected scheduled `slot_id`. `started_at` is not used as slot
+identity. The scheduled workflow runs this audit after normal collection;
+missing runs use the same failure summary and deduplicated escalation path.
+
+## Bounded backfill
+
+Backfill accepts at most seven inclusive dates and is dry-run by default:
+
+```bash
+node pull_moers_sales.js --backfill-from 2026-07-01 --backfill-to 2026-07-03
+node pull_moers_sales.js --backfill-from 2026-07-01 --backfill-to 2026-07-03 --execute
+```
+
+The dry run performs preflight and prints the planned store-days without browser
+or database writes. `--execute` reuses the normal parser, `source_hash` upsert,
+raw insert trigger, and invoice idempotency semantics. Aggregate rows use
+`pull_source = manual`.
+
+## Data safety
 
 The collector builds `source_hash` from store, date, device, time, amount, type,
-row index, and raw row content. This makes each hourly pull idempotent:
+row index, and raw row content. Already-seen rows update `last_seen_at`; only new
+raw inserts trigger invoice queue creation. All rows use
+`payment_method = CASH`; VNPAY/QR wallet data must not be mixed into this ledger.
 
-- already-seen rows update `last_seen_at`
-- newly-seen rows insert into `photo_objet_sales_raw`
-- only newly inserted raw rows trigger meInvoice queue creation
-- all Photo Objet rows are treated as `payment_method = CASH`
-- VNPAY/QR wallet data must not be mixed into this ledger
+An empty recognized table records a successful zero-sales run only when no
+aggregate exists for that store-day, and it does not write aggregate rows.
+Existing device totals are compared with every new snapshot. An empty snapshot,
+missing device, or lower gross/transaction total is classified as a transient
+partial response, and existing aggregates are preserved. Other stores and dates
+continue independently.
 
-The existing `photo_objet_sales` table remains a dashboard/day-machine
-aggregate. It is not the tax-reporting source of truth.
+## Verification
 
-## Current execution status
+```bash
+cd scripts
+npm ci
+npm test
+cd ..
+flutter test test/photo_objet_meinvoice_raw_contract_test.dart test/photo_ops_sales_aggregation_test.dart
+dart analyze
+git diff --check -- .github/workflows/photo_objet_sales.yml scripts/package.json scripts/package-lock.json scripts/pull_moers_sales.js scripts/tests/photo_objet_sales_health.test.js docs/photo_objet_sales_pull_setup.md test/photo_objet_meinvoice_raw_contract_test.dart
+```
 
-As of 2026-07-11:
-
-- workflow file created
-- script created
-- linked DB `photo_objet_sales` / `v_photo_objet_daily_summary` created
-- linked DB `PHOTO OBJET` brand and deterministic store anchors seeded
-- GitHub repository secrets registered:
-  - `SUPABASE_URL`
-  - `SUPABASE_SERVICE_KEY`
-  - all `MOERS_*_PASS`
-  - all `PHOTO_OBJET_*_STORE_ID`
-- D7 removed from active collection; six stores remain enabled
-- POS Photo Ops reads the current HCM day from
-  `v_photo_objet_daily_summary`
-
-Deployment note:
-
-- GitHub scheduled workflows use the workflow definition on the default branch.
-  This revision must be merged there before the hourly schedule takes effect.
+Scheduled workflows use the workflow definition on the default branch. No
+schedule or escalation change takes effect until this revision is merged there.
