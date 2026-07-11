@@ -1,0 +1,10 @@
+# Required POS production pilot Auth accounts.
+# Email only. Do not store passwords or reset instructions in this file.
+# Deployment must stop if any listed POS pilot account is missing from production Auth.
+
+waiter@globos.test
+kitchen@globos.test
+cashier@globos.test
+admin@globos.test
+superadmin@globos.test
+pos.validation.codex@globos.test
