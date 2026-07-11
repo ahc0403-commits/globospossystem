@@ -1,7 +1,9 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/super_admin/super_admin_provider.dart';
+import 'package:globos_pos_system/l10n/app_localizations.dart';
 
 String readRepoFile(String path) => File(path).readAsStringSync();
 
@@ -108,12 +110,80 @@ void main() {
     );
   });
 
-  test('legal entity workflow is localized in all supported locales', () {
-    for (final locale in ['en', 'ko', 'vi']) {
-      final arb = readRepoFile('lib/l10n/app_$locale.arb');
-      expect(arb, contains('"superAdminLegalEntity"'));
-      expect(arb, contains('"superAdminOfficeLinkedDerived"'));
-      expect(arb, contains('"superAdminGroupByLegalEntityBrand"'));
-    }
-  });
+  test(
+    'Super Admin hierarchy UI consumes en, ko, and vi localizations',
+    () async {
+      final screen = readRepoFile(
+        'lib/features/super_admin/super_admin_screen.dart',
+      );
+      const consumedGetters = [
+        'superAdminFilterInternal',
+        'superAdminFilterExternal',
+        'superAdminLegalEntity',
+        'superAdminLegalEntityPrefix',
+        'superAdminBrand',
+        'superAdminBrandPrefix',
+        'superAdminBrandRequired',
+        'superAdminUncategorized',
+        'superAdminBadgeInternal',
+        'superAdminBadgeExternal',
+        'superAdminOfficeIntegration',
+        'superAdminOfficeLinkedDerived',
+        'superAdminOfficeNotLinkedDerived',
+        'superAdminGroupByLegalEntityBrand',
+        'superAdminLegalEntityBrandColumn',
+      ];
+      for (final getter in consumedGetters) {
+        expect(
+          screen,
+          contains('context.l10n.$getter'),
+          reason: 'Super Admin hierarchy UI must consume $getter',
+        );
+      }
+
+      final localizations = <String, AppLocalizations>{};
+      for (final locale in const ['en', 'ko', 'vi']) {
+        localizations[locale] = await AppLocalizations.delegate.load(
+          Locale(locale),
+        );
+      }
+
+      expect(localizations['en']!.superAdminLegalEntity, 'Legal entity');
+      expect(localizations['ko']!.superAdminLegalEntity, '법인');
+      expect(localizations['vi']!.superAdminLegalEntity, 'Pháp nhân');
+      expect(localizations['en']!.superAdminBrandRequired, 'Brand is required');
+      expect(localizations['ko']!.superAdminBrandRequired, '브랜드를 선택해야 합니다');
+      expect(
+        localizations['vi']!.superAdminBrandRequired,
+        'Cần chọn thương hiệu',
+      );
+      expect(
+        localizations['en']!.superAdminLegalEntityPrefix('AKJ'),
+        'Legal entity: AKJ',
+      );
+      expect(
+        localizations['ko']!.superAdminLegalEntityPrefix('AKJ'),
+        '법인: AKJ',
+      );
+      expect(
+        localizations['vi']!.superAdminLegalEntityPrefix('AKJ'),
+        'Pháp nhân: AKJ',
+      );
+
+      for (final literal in const [
+        "Text('Uncategorized'",
+        "labelText: 'Legal entity'",
+        "labelText: 'Brand'",
+        "'Linked automatically for internal legal entities'",
+        "'Not linked for external legal entities'",
+        "'Legal entity / Brand'",
+      ]) {
+        expect(
+          screen,
+          isNot(contains(literal)),
+          reason: 'Hierarchy UI must not render the English literal $literal',
+        );
+      }
+    },
+  );
 }

@@ -696,6 +696,7 @@
   "superAdminOfficeNotLinkedDerived": "외부 법인이므로 Office에 연동되지 않습니다",
   "superAdminSelectLegalEntityFirst": "Office 연동 여부를 확인하려면 법인을 선택하세요",
   "superAdminBrand": "브랜드",
+  "superAdminBrandRequired": "브랜드를 선택해야 합니다",
   "superAdminUncategorized": "미분류",
   "superAdminSharedQcTitle": "본사 공통 QC 템플릿 관리",
   "superAdminAddSharedCriterion": "공통 기준 추가",

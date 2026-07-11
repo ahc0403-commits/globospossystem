@@ -696,6 +696,7 @@
   "superAdminOfficeNotLinkedDerived": "Không liên kết Office cho pháp nhân bên ngoài",
   "superAdminSelectLegalEntityFirst": "Chọn pháp nhân để xác định liên kết Office",
   "superAdminBrand": "Thương hiệu",
+  "superAdminBrandRequired": "Cần chọn thương hiệu",
   "superAdminUncategorized": "Chưa phân loại",
   "superAdminSharedQcTitle": "Quản lý mẫu QC dùng chung tại HQ",
   "superAdminAddSharedCriterion": "Thêm tiêu chí dùng chung",

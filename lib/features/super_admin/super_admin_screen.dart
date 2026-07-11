@@ -81,14 +81,14 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
                 const SizedBox(height: 16),
                 _navItem(
                   Icons.store,
-                  'Stores',
+                  context.l10n.superAdminStores,
                   0,
                   itemKey: const Key('super_admin_nav_stores'),
                 ),
                 const SizedBox(height: 8),
                 _navItem(
                   Icons.bar_chart,
-                  'All Reports',
+                  context.l10n.superAdminAllReports,
                   1,
                   itemKey: const Key('super_admin_nav_reports'),
                 ),
@@ -707,7 +707,7 @@ class _RestaurantsTab extends StatelessWidget {
         Row(
           children: [
             Text(
-              'RESTAURANTS',
+              context.l10n.superAdminStores.toUpperCase(),
               style: GoogleFonts.bebasNeue(
                 color: AppColors.amber500,
                 fontSize: 28,
@@ -718,7 +718,7 @@ class _RestaurantsTab extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: _openOfficeSystem,
               icon: const Icon(Icons.business),
-              label: const Text('Go to Office System'),
+              label: Text(context.l10n.superAdminGoToOfficeSystem),
             ),
             const SizedBox(width: 8),
             FilledButton.icon(
@@ -729,7 +729,7 @@ class _RestaurantsTab extends StatelessWidget {
                 foregroundColor: AppColors.surface0,
               ),
               icon: const Icon(Icons.add_business),
-              label: const Text('Add Store'),
+              label: Text(context.l10n.superAdminAddStore),
             ),
           ],
         ),
@@ -738,14 +738,26 @@ class _RestaurantsTab extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              _ownerTypeChip(null, 'All', state.selectedOwnerType),
+              _ownerTypeChip(
+                null,
+                context.l10n.superAdminFilterAll,
+                state.selectedOwnerType,
+              ),
               const SizedBox(width: 6),
-              _ownerTypeChip('internal', 'Internal', state.selectedOwnerType),
+              _ownerTypeChip(
+                'internal',
+                context.l10n.superAdminFilterInternal,
+                state.selectedOwnerType,
+              ),
               const SizedBox(width: 6),
-              _ownerTypeChip('external', 'External', state.selectedOwnerType),
+              _ownerTypeChip(
+                'external',
+                context.l10n.superAdminFilterExternal,
+                state.selectedOwnerType,
+              ),
               const SizedBox(width: 16),
               Text(
-                'Legal entity',
+                context.l10n.superAdminLegalEntity,
                 style: GoogleFonts.notoSansKr(
                   color: AppColors.textSecondary,
                   fontSize: 12,
@@ -756,14 +768,14 @@ class _RestaurantsTab extends StatelessWidget {
                 value: state.selectedTaxEntityId,
                 dropdownColor: AppColors.surface1,
                 hint: Text(
-                  'All',
+                  context.l10n.superAdminFilterAll,
                   style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
                 ),
                 items: [
                   DropdownMenuItem<String?>(
                     value: null,
                     child: Text(
-                      'All',
+                      context.l10n.superAdminFilterAll,
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textPrimary,
                       ),
@@ -785,7 +797,7 @@ class _RestaurantsTab extends StatelessWidget {
               ),
               const SizedBox(width: 16),
               Text(
-                'Brand',
+                context.l10n.superAdminBrand,
                 style: GoogleFonts.notoSansKr(
                   color: AppColors.textSecondary,
                   fontSize: 12,
@@ -796,14 +808,14 @@ class _RestaurantsTab extends StatelessWidget {
                 value: state.selectedBrandId,
                 dropdownColor: AppColors.surface1,
                 hint: Text(
-                  'All',
+                  context.l10n.superAdminFilterAll,
                   style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
                 ),
                 items: [
                   DropdownMenuItem<String?>(
                     value: null,
                     child: Text(
-                      'All',
+                      context.l10n.superAdminFilterAll,
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textPrimary,
                       ),
@@ -812,7 +824,7 @@ class _RestaurantsTab extends StatelessWidget {
                   DropdownMenuItem<String?>(
                     value: kUnclassifiedBrandFilter,
                     child: Text(
-                      'Uncategorized',
+                      context.l10n.superAdminUncategorized,
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textPrimary,
                       ),
@@ -888,7 +900,10 @@ class _RestaurantsTab extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  'Legal entity: ${restaurant.taxEntityName ?? 'Uncategorized'}',
+                                  context.l10n.superAdminLegalEntityPrefix(
+                                    restaurant.taxEntityName ??
+                                        context.l10n.superAdminUncategorized,
+                                  ),
                                   style: GoogleFonts.notoSansKr(
                                     color: AppColors.textSecondary,
                                     fontSize: 11,
@@ -896,7 +911,10 @@ class _RestaurantsTab extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  "Brand: ${restaurant.brandName ?? 'Uncategorized'}",
+                                  context.l10n.superAdminBrandPrefix(
+                                    restaurant.brandName ??
+                                        context.l10n.superAdminUncategorized,
+                                  ),
                                   style: GoogleFonts.notoSansKr(
                                     color: AppColors.textSecondary,
                                     fontSize: 11,
@@ -905,11 +923,14 @@ class _RestaurantsTab extends StatelessWidget {
                               ],
                             ),
                           ),
-                          _ownerTypeBadge(restaurant.ownerType),
+                          _ownerTypeBadge(context, restaurant.ownerType),
                           const SizedBox(width: 6),
-                          _officeStatusBadge(restaurant.isOfficeLinked),
+                          _officeStatusBadge(
+                            context,
+                            restaurant.isOfficeLinked,
+                          ),
                           const SizedBox(width: 6),
-                          _modeBadge(restaurant.operationMode),
+                          _modeBadge(context, restaurant.operationMode),
                           const SizedBox(width: 10),
                           OutlinedButton(
                             onPressed: () => _showRestaurantSheet(
@@ -917,7 +938,7 @@ class _RestaurantsTab extends StatelessWidget {
                               notifier: notifier,
                               initial: restaurant,
                             ),
-                            child: const Text('Manage'),
+                            child: Text(context.l10n.superAdminManageStore),
                           ),
                           const SizedBox(width: 8),
                           FilledButton(
@@ -929,7 +950,7 @@ class _RestaurantsTab extends StatelessWidget {
                               backgroundColor: AppColors.amber500,
                               foregroundColor: AppColors.surface0,
                             ),
-                            child: const Text('Go to Admin'),
+                            child: Text(context.l10n.superAdminGoToAdmin),
                           ),
                         ],
                       ),
@@ -962,12 +983,14 @@ class _RestaurantsTab extends StatelessWidget {
     );
   }
 
-  Widget _ownerTypeBadge(String ownerType) {
+  Widget _ownerTypeBadge(BuildContext context, String ownerType) {
     final isExternal = ownerType == 'external';
     final color = isExternal
         ? const Color(0xFFE57373)
         : const Color(0xFF66BB6A);
-    final label = isExternal ? 'External' : 'Internal';
+    final label = isExternal
+        ? context.l10n.superAdminBadgeExternal
+        : context.l10n.superAdminBadgeInternal;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -986,7 +1009,7 @@ class _RestaurantsTab extends StatelessWidget {
     );
   }
 
-  Widget _officeStatusBadge(bool isLinked) {
+  Widget _officeStatusBadge(BuildContext context, bool isLinked) {
     final color = isLinked ? const Color(0xFF3A7BD5) : AppColors.textSecondary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -996,7 +1019,9 @@ class _RestaurantsTab extends StatelessWidget {
         border: Border.all(color: color),
       ),
       child: Text(
-        isLinked ? 'Office linked' : 'Office not linked',
+        isLinked
+            ? context.l10n.superAdminOfficeLinked
+            : context.l10n.superAdminOfficeNotLinked,
         style: GoogleFonts.notoSansKr(
           color: color,
           fontSize: 10,
@@ -1006,7 +1031,7 @@ class _RestaurantsTab extends StatelessWidget {
     );
   }
 
-  Widget _modeBadge(String mode) {
+  Widget _modeBadge(BuildContext context, String mode) {
     final normalized = mode.toLowerCase();
     final color = switch (normalized) {
       'buffet' => AppColors.amber500,
@@ -1021,7 +1046,11 @@ class _RestaurantsTab extends StatelessWidget {
         border: Border.all(color: color),
       ),
       child: Text(
-        normalized.toUpperCase(),
+        switch (normalized) {
+          'buffet' => context.l10n.superAdminOperationModeBuffet,
+          'hybrid' => context.l10n.superAdminOperationModeHybrid,
+          _ => context.l10n.superAdminOperationModeStandard,
+        },
         style: GoogleFonts.notoSansKr(
           color: AppColors.textPrimary,
           fontSize: 11,
@@ -1079,11 +1108,14 @@ class _RestaurantsTab extends StatelessWidget {
         return;
       }
       if (selectedTaxEntityId == null || selectedTaxEntityId!.isEmpty) {
-        showErrorToast(context, 'Legal entity is required');
+        showErrorToast(
+          context,
+          context.l10n.superAdminLegalEntityRequiredBeforeStore,
+        );
         return;
       }
       if (selectedBrandId == null || selectedBrandId!.isEmpty) {
-        showErrorToast(context, 'Brand is required');
+        showErrorToast(context, context.l10n.superAdminBrandRequired);
         return;
       }
       final taxEntityId = selectedTaxEntityId!;
@@ -1114,7 +1146,12 @@ class _RestaurantsTab extends StatelessWidget {
             );
 
       if (success && context.mounted) {
-        showSuccessToast(context, isEdit ? 'Store updated' : 'Store created');
+        showSuccessToast(
+          context,
+          isEdit
+              ? context.l10n.superAdminStoreUpdated
+              : context.l10n.superAdminStoreCreated,
+        );
         Navigator.of(context).pop();
       }
     }
@@ -1138,7 +1175,9 @@ class _RestaurantsTab extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isEdit ? 'Edit Store' : 'Add Store',
+                    isEdit
+                        ? context.l10n.superAdminEditStore
+                        : context.l10n.superAdminAddStore,
                     style: GoogleFonts.bebasNeue(
                       color: AppColors.amber500,
                       fontSize: 30,
@@ -1148,7 +1187,9 @@ class _RestaurantsTab extends StatelessWidget {
                   TextField(
                     controller: nameController,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(labelText: 'Name'),
+                    decoration: InputDecoration(
+                      labelText: context.l10n.superAdminStoreName,
+                    ),
                     onChanged: (value) {
                       if (!isEdit && slugController.text.trim().isEmpty) {
                         slugController.text = _slugify(value);
@@ -1159,29 +1200,41 @@ class _RestaurantsTab extends StatelessWidget {
                   TextField(
                     controller: addressController,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(labelText: 'Address'),
+                    decoration: InputDecoration(
+                      labelText: context.l10n.superAdminStoreAddress,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: slugController,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(labelText: 'Slug'),
+                    decoration: InputDecoration(
+                      labelText: context.l10n.superAdminStoreSlug,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     initialValue: operationMode,
                     dropdownColor: AppColors.surface1,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(
-                      labelText: 'Operation Mode',
+                    decoration: InputDecoration(
+                      labelText: context.l10n.superAdminOperationMode,
                     ),
-                    items: const [
+                    items: [
                       DropdownMenuItem(
                         value: 'standard',
-                        child: Text('Standard'),
+                        child: Text(
+                          context.l10n.superAdminOperationModeStandard,
+                        ),
                       ),
-                      DropdownMenuItem(value: 'buffet', child: Text('Buffet')),
-                      DropdownMenuItem(value: 'hybrid', child: Text('Hybrid')),
+                      DropdownMenuItem(
+                        value: 'buffet',
+                        child: Text(context.l10n.superAdminOperationModeBuffet),
+                      ),
+                      DropdownMenuItem(
+                        value: 'hybrid',
+                        child: Text(context.l10n.superAdminOperationModeHybrid),
+                      ),
                     ],
                     onChanged: (value) {
                       if (value != null) {
@@ -1195,8 +1248,8 @@ class _RestaurantsTab extends StatelessWidget {
                     initialValue: selectedTaxEntityId,
                     dropdownColor: AppColors.surface1,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(
-                      labelText: 'Legal entity',
+                    decoration: InputDecoration(
+                      labelText: context.l10n.superAdminLegalEntity,
                     ),
                     items: state.taxEntities
                         .map(
@@ -1226,7 +1279,9 @@ class _RestaurantsTab extends StatelessWidget {
                     initialValue: selectedBrandId,
                     dropdownColor: AppColors.surface1,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
-                    decoration: const InputDecoration(labelText: 'Brand'),
+                    decoration: InputDecoration(
+                      labelText: context.l10n.superAdminBrand,
+                    ),
                     items: [
                       ...availableBrands.map((brand) {
                         final id = brand['id']?.toString();
@@ -1244,19 +1299,19 @@ class _RestaurantsTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: 'Office integration',
+                    decoration: InputDecoration(
+                      labelText: context.l10n.superAdminOfficeIntegration,
                     ),
                     child: Text(
                       selectedTaxEntityId == null
-                          ? 'Select a legal entity first'
+                          ? context.l10n.superAdminSelectLegalEntityFirst
                           : state.taxEntities
                                 .firstWhere(
                                   (entity) => entity.id == selectedTaxEntityId,
                                 )
                                 .isInternal
-                          ? 'Linked automatically for internal legal entities'
-                          : 'Not linked for external legal entities',
+                          ? context.l10n.superAdminOfficeLinkedDerived
+                          : context.l10n.superAdminOfficeNotLinkedDerived,
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textPrimary,
                       ),
@@ -1273,8 +1328,8 @@ class _RestaurantsTab extends StatelessWidget {
                       style: GoogleFonts.notoSansKr(
                         color: AppColors.textPrimary,
                       ),
-                      decoration: const InputDecoration(
-                        labelText: 'Per Person Charge',
+                      decoration: InputDecoration(
+                        labelText: context.l10n.superAdminPerPersonCharge,
                       ),
                     ),
                   ],
@@ -1287,7 +1342,7 @@ class _RestaurantsTab extends StatelessWidget {
                         backgroundColor: AppColors.amber500,
                         foregroundColor: AppColors.surface0,
                       ),
-                      child: const Text('SAVE'),
+                      child: Text(context.l10n.superAdminSaveUpper),
                     ),
                   ),
                   if (isEdit) ...[
@@ -1300,7 +1355,10 @@ class _RestaurantsTab extends StatelessWidget {
                             initial.id,
                           );
                           if (success && context.mounted) {
-                            showSuccessToast(context, 'Store deactivated');
+                            showSuccessToast(
+                              context,
+                              context.l10n.superAdminStoreDeactivated,
+                            );
                             Navigator.of(context).pop();
                           }
                         },
@@ -1310,7 +1368,7 @@ class _RestaurantsTab extends StatelessWidget {
                           ),
                           foregroundColor: AppColors.statusCancelled,
                         ),
-                        child: const Text('DELETE (Deactivate)'),
+                        child: Text(context.l10n.superAdminDeleteDeactivate),
                       ),
                     ),
                   ],
@@ -1358,6 +1416,7 @@ class _AllReportsTabState extends State<_AllReportsTab> {
   List<_BrandRevenueRow> _brandRows(
     List<SuperAdminRestaurantReport> rows,
     List<SuperRestaurant> restaurants,
+    String uncategorized,
   ) {
     final map = <String, _BrandRevenueRow>{};
     for (final row in rows) {
@@ -1366,7 +1425,7 @@ class _AllReportsTabState extends State<_AllReportsTab> {
           .cast<SuperRestaurant?>()
           .firstWhere((r) => r != null, orElse: () => null);
       final key = restaurant?.brandId ?? kUnclassifiedBrandFilter;
-      final name = restaurant?.brandName ?? 'Uncategorized';
+      final name = restaurant?.brandName ?? uncategorized;
       final current = map[key];
       if (current == null) {
         map[key] = _BrandRevenueRow(name: name, total: row.total);
@@ -1385,6 +1444,7 @@ class _AllReportsTabState extends State<_AllReportsTab> {
   List<_RevenueGroupRow> _legalEntityBrandRows(
     List<SuperAdminRestaurantReport> rows,
     List<SuperRestaurant> restaurants,
+    String uncategorized,
   ) {
     final storesById = {for (final store in restaurants) store.id: store};
     final entities = <String, Map<String, _RevenueGroupAccumulator>>{};
@@ -1392,9 +1452,9 @@ class _AllReportsTabState extends State<_AllReportsTab> {
     for (final row in rows) {
       final store = storesById[row.storeId];
       final entityId = store?.taxEntityId ?? '__unclassified_entity__';
-      final entityName = store?.taxEntityName ?? 'Uncategorized';
+      final entityName = store?.taxEntityName ?? uncategorized;
       final brandId = store?.brandId ?? kUnclassifiedBrandFilter;
-      final brandName = store?.brandName ?? 'Uncategorized';
+      final brandName = store?.brandName ?? uncategorized;
       entityNames[entityId] = entityName;
       final brands = entities.putIfAbsent(entityId, () => {});
       final accumulator = brands.putIfAbsent(
@@ -1415,7 +1475,7 @@ class _AllReportsTabState extends State<_AllReportsTab> {
         ..sort((a, b) => b.total.compareTo(a.total));
       result.add(
         _RevenueGroupRow(
-          name: entityNames[entity.key] ?? 'Uncategorized',
+          name: entityNames[entity.key] ?? uncategorized,
           dineIn: brandRows.fold(0, (sum, row) => sum + row.dineIn),
           delivery: brandRows.fold(0, (sum, row) => sum + row.delivery),
           isBrand: false,
@@ -1443,16 +1503,24 @@ class _AllReportsTabState extends State<_AllReportsTab> {
     final currency = NumberFormat('#,###', 'vi_VN');
     final brandRows = summary == null
         ? const <_BrandRevenueRow>[]
-        : _brandRows(summary.rows, state.restaurants);
+        : _brandRows(
+            summary.rows,
+            state.restaurants,
+            context.l10n.superAdminUncategorized,
+          );
     final legalEntityBrandRows = summary == null
         ? const <_RevenueGroupRow>[]
-        : _legalEntityBrandRows(summary.rows, state.restaurants);
+        : _legalEntityBrandRows(
+            summary.rows,
+            state.restaurants,
+            context.l10n.superAdminUncategorized,
+          );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'ALL REPORTS',
+          context.l10n.superAdminAllReportsTitle,
           style: GoogleFonts.bebasNeue(color: AppColors.amber500, fontSize: 30),
         ),
         const SizedBox(height: 12),
@@ -1465,14 +1533,14 @@ class _AllReportsTabState extends State<_AllReportsTab> {
               value: state.selectedRestaurant,
               dropdownColor: AppColors.surface1,
               hint: Text(
-                'All Stores',
+                context.l10n.superAdminAllStores,
                 style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
               ),
               items: [
                 DropdownMenuItem<SuperRestaurant?>(
                   value: null,
                   child: Text(
-                    'All Stores',
+                    context.l10n.superAdminAllStores,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
                   ),
                 ),
@@ -1500,14 +1568,14 @@ class _AllReportsTabState extends State<_AllReportsTab> {
                 DropdownMenuItem<String>(
                   value: 'store',
                   child: Text(
-                    'By Store',
+                    context.l10n.superAdminGroupByStore,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
                   ),
                 ),
                 DropdownMenuItem<String>(
                   value: 'brand',
                   child: Text(
-                    'Brand Group',
+                    context.l10n.superAdminGroupByBrand,
                     style: GoogleFonts.notoSansKr(color: AppColors.textPrimary),
                   ),
                 ),
@@ -1547,7 +1615,7 @@ class _AllReportsTabState extends State<_AllReportsTab> {
             OutlinedButton.icon(
               onPressed: _openOfficeKpi,
               icon: const Icon(Icons.dashboard_customize),
-              label: const Text('View detailed reports in Office'),
+              label: Text(context.l10n.superAdminViewDetailedReports),
             ),
           ],
         ),
@@ -1558,15 +1626,15 @@ class _AllReportsTabState extends State<_AllReportsTab> {
             runSpacing: 10,
             children: [
               _summaryCard(
-                'Total Revenue',
+                context.l10n.superAdminTotalRevenue,
                 '₫${currency.format(summary.totalRevenue)}',
               ),
               _summaryCard(
-                'Dine-in',
+                context.l10n.superAdminDineIn,
                 '₫${currency.format(summary.dineInRevenue)}',
               ),
               _summaryCard(
-                'Delivery',
+                context.l10n.superAdminDelivery,
                 '₫${currency.format(summary.deliveryRevenue)}',
               ),
             ],
@@ -1580,7 +1648,7 @@ class _AllReportsTabState extends State<_AllReportsTab> {
           child: summary == null || summary.rows.isEmpty
               ? Center(
                   child: Text(
-                    'No report data',
+                    context.l10n.superAdminNoReportData,
                     style: GoogleFonts.notoSansKr(
                       color: AppColors.textSecondary,
                       fontSize: 14,
@@ -1596,10 +1664,14 @@ class _AllReportsTabState extends State<_AllReportsTab> {
                     children: [
                       _reportHeader(
                         label: switch (_reportGrouping) {
-                          'brand' => 'Brand',
-                          'legal_entity_brand' => 'Legal entity / Brand',
-                          _ => 'Store',
+                          'brand' => context.l10n.superAdminBrandColumn,
+                          'legal_entity_brand' =>
+                            context.l10n.superAdminLegalEntityBrandColumn,
+                          _ => context.l10n.superAdminStoreColumn,
                         },
+                        dineInLabel: context.l10n.superAdminDineIn,
+                        deliveryLabel: context.l10n.superAdminDelivery,
+                        totalLabel: context.l10n.superAdminTotal,
                       ),
                       Expanded(
                         child: _reportGrouping == 'brand'
@@ -1732,7 +1804,12 @@ class _AllReportsTabState extends State<_AllReportsTab> {
     );
   }
 
-  Widget _reportHeader({required String label}) {
+  Widget _reportHeader({
+    required String label,
+    required String dineInLabel,
+    required String deliveryLabel,
+    required String totalLabel,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: const BoxDecoration(
@@ -1741,9 +1818,9 @@ class _AllReportsTabState extends State<_AllReportsTab> {
       child: Row(
         children: [
           _cell(label, flex: 3, bold: true),
-          _cell('Dine-in', bold: true),
-          _cell('Delivery', bold: true),
-          _cell('Total', bold: true),
+          _cell(dineInLabel, bold: true),
+          _cell(deliveryLabel, bold: true),
+          _cell(totalLabel, bold: true),
         ],
       ),
     );

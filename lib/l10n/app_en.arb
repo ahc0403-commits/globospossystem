@@ -697,6 +697,7 @@
   "superAdminOfficeNotLinkedDerived": "Not linked for external legal entities",
   "superAdminSelectLegalEntityFirst": "Select a legal entity to determine Office integration",
   "superAdminBrand": "Brand",
+  "superAdminBrandRequired": "Brand is required",
   "superAdminUncategorized": "Uncategorized",
   "superAdminSharedQcTitle": "HQ Shared QC Template Management",
   "superAdminAddSharedCriterion": "Add Shared Criterion",
