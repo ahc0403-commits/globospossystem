@@ -1120,7 +1120,15 @@ function scheduledSlotsForDate(date) {
   return slots;
 }
 
-function findMissingRuns(stores, dates, runs, now = new Date()) {
+const RUN_METADATA_AUDIT_START_AT = Date.parse('2026-07-11T12:00:00Z');
+
+function findMissingRuns(
+  stores,
+  dates,
+  runs,
+  now = new Date(),
+  auditStartAt = RUN_METADATA_AUDIT_START_AT,
+) {
   const successful = runs.filter(run => run.status === 'success');
   const missing = [];
   for (const date of dates) {
@@ -1128,6 +1136,7 @@ function findMissingRuns(stores, dates, runs, now = new Date()) {
     for (let index = 0; index < slots.length; index += 1) {
       const slot = slots[index];
       const nextAt = slots[index + 1] ? slots[index + 1].at : slot.at + 90 * 60000;
+      if (slot.at < auditStartAt) continue;
       if (now.getTime() < nextAt + 15 * 60000) continue;
       for (const store of stores.filter(item => item.enabled)) {
         const covered = successful.some(run => {
@@ -1159,6 +1168,9 @@ async function auditMissingRuns(supabase, stores, lookbackDays) {
     .gte('target_date', dates[0])
     .lte('target_date', dates[dates.length - 1]);
   if (error) throw asCollectorError(error, 'Missing-run audit query failed');
+  console.log(
+    `AUDIT_HISTORICAL_BASELINE cutoff=${new Date(RUN_METADATA_AUDIT_START_AT).toISOString()} policy=excluded`,
+  );
   const missing = findMissingRuns(stores, dates, data || []);
   if (missing.length > 0) {
     const sample = missing.slice(0, 20).map(item => `${item.storeName} @ ${item.slot}`);
@@ -1270,6 +1282,7 @@ module.exports = {
   CollectorError,
   FAILURE,
   MAX_BACKFILL_DAYS,
+  RUN_METADATA_AUDIT_START_AT,
   RUN_METADATA_PREFIX,
   assertAggregateComplete,
   auditDates,

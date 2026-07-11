@@ -62,6 +62,10 @@ void main() {
     expect(source, contains('photo_objet_sales_pull_runs'));
     expect(source, contains('photo_objet_sales_raw'));
     expect(source, contains('RUN_METADATA_PREFIX'));
+    expect(source, contains('RUN_METADATA_AUDIT_START_AT'));
+    expect(source, contains("Date.parse('2026-07-11T12:00:00Z')"));
+    expect(source, contains('if (slot.at < auditStartAt) continue;'));
+    expect(source, contains('AUDIT_HISTORICAL_BASELINE'));
     expect(source, contains('metadata?.slot_id === slot.slotId'));
     expect(source, isNot(contains('startedAt >= slot.at')));
     expect(source, contains('runWithTransientRetry'));
@@ -165,5 +169,7 @@ void main() {
     expect(docs, contains('FLARE_FAILURE_CLASS=deterministic'));
     expect(docs, contains('FLARE_RUN_METADATA'));
     expect(docs, contains('`started_at` is not used as slot'));
+    expect(docs, contains('2026-07-11 19:00 HCM'));
+    expect(docs, contains('historical baseline'));
   });
 }

@@ -110,6 +110,12 @@ contains the expected scheduled `slot_id`. `started_at` is not used as slot
 identity. The scheduled workflow runs this audit after normal collection;
 missing runs use the same failure summary and deduplicated escalation path.
 
+Explicit slot metadata became authoritative at 2026-07-11 19:00 HCM. Missing
+metadata before that cutoff is a historical baseline and is excluded from the
+health result; it is not evidence that those collections failed. Every completed
+slot at or after the cutoff remains fail-closed, so a newly missing store-slot
+still fails the audit and triggers the normal escalation path.
+
 ## Bounded backfill
 
 Backfill accepts at most seven inclusive dates and is dry-run by default:
