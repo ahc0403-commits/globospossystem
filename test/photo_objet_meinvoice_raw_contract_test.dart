@@ -109,6 +109,11 @@ void main() {
       expect(workflow, contains('09:00-22:30 Asia/Ho_Chi_Minh'));
       expect(workflow, contains("node-version: '22'"));
       expect(workflow, contains('npm ci'));
+      expect(
+        workflow,
+        contains(r'npx puppeteer browsers install "chrome@${CHROME_VERSION}"'),
+      );
+      expect(workflow, isNot(contains('--install-deps')));
       expect(workflow, contains('scripts/package-lock.json'));
       expect(workflow, isNot(contains(r'${{ runner.temp }}')));
       expect(

@@ -306,6 +306,11 @@ test('workflow uses locked Node 22 install, exact schedule, audit, and deduplica
   ]);
   assert.match(workflow, /node-version: '22'/);
   assert.match(workflow, /npm ci/);
+  assert.match(
+    workflow,
+    /npx puppeteer browsers install "chrome@\$\{CHROME_VERSION\}"/,
+  );
+  assert.doesNotMatch(workflow, /--install-deps/);
   assert.match(workflow, /PHOTO_OBJET_RUN_STARTED_AT=.*date -u/);
   assert.doesNotMatch(workflow, /\$\{\{\s*runner\.temp\s*\}\}/);
   assert.match(

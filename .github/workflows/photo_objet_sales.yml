@@ -103,13 +103,13 @@ jobs:
           PUPPETEER_SKIP_DOWNLOAD: 'true'
         run: npm ci
 
-      - name: Install pinned Chromium and system dependencies
+      - name: Install pinned Chromium
         id: chromium
         if: steps.setup.outcome == 'success'
         working-directory: scripts
         run: |
           CHROME_VERSION=$(node -p "require('puppeteer').PUPPETEER_REVISIONS.chrome")
-          npx puppeteer browsers install "chrome@${CHROME_VERSION}" --install-deps
+          npx puppeteer browsers install "chrome@${CHROME_VERSION}"
           CHROME_PATH=$(node -e "Promise.resolve(require('puppeteer').executablePath()).then(console.log)")
           test -x "${CHROME_PATH}"
           echo "PUPPETEER_EXECUTABLE_PATH=${CHROME_PATH}" >> "${GITHUB_ENV}"
