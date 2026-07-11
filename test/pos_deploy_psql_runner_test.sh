@@ -210,11 +210,53 @@ PREFLIGHT_SQL="$ROOT_DIR/scripts/preflight_legal_entity_brand_store_hierarchy.sq
 MIGRATION_SQL="$ROOT_DIR/supabase/migrations/20260711090000_legal_entity_brand_store_hierarchy.sql"
 VERIFY_SQL="$ROOT_DIR/scripts/verify_legal_entity_brand_store_hierarchy.sql"
 ROLLBACK_SQL="$ROOT_DIR/scripts/rollback_legal_entity_brand_store_hierarchy.sql"
+LEGACY_CREATE_SQL="$TMP_DIR/legacy_create_compatibility.sql"
+cat >"$LEGACY_CREATE_SQL" <<'SQL'
+SET LOCAL request.jwt.claim.sub = '10000000-0000-0000-0000-000000000001';
+
+DO $legacy_create$
+DECLARE
+  v_created public.restaurants%ROWTYPE;
+BEGIN
+  IF to_regprocedure(
+    'public.admin_create_restaurant(text,text,text,text,numeric,uuid,text)'
+  ) IS NULL THEN
+    RAISE EXCEPTION 'LOCAL_SMOKE_LEGACY_CREATE_7_ARG_MISSING';
+  END IF;
+  IF to_regprocedure(
+    'public.admin_create_restaurant(text,text,text,text,numeric,uuid,text,uuid)'
+  ) IS NOT NULL THEN
+    RAISE EXCEPTION 'LOCAL_SMOKE_LEGACY_CREATE_8_ARG_PRESENT';
+  END IF;
+
+  v_created := public.admin_create_restaurant(
+    'Legacy compatibility store',
+    'legacy-compatibility-store',
+    'standard',
+    'Legacy address',
+    NULL,
+    '77000000-0000-0000-0000-000000000001'::uuid,
+    'direct'
+  );
+
+  IF v_created.name <> 'Legacy compatibility store'
+     OR v_created.tax_entity_id <>
+       'a6bda671-4179-5a29-a798-76357b42b497'::uuid THEN
+    RAISE EXCEPTION 'LOCAL_SMOKE_LEGACY_CREATE_7_ARG_RESULT_MISMATCH';
+  END IF;
+
+  DELETE FROM public.audit_logs WHERE entity_id = v_created.id;
+  DELETE FROM public.store_tax_entity_history WHERE store_id = v_created.id;
+  DELETE FROM public.restaurants WHERE id = v_created.id;
+END;
+$legacy_create$;
+SQL
 
 "$REAL_CREATEDB" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres legal_entity_smoke
 LOCAL_DB_NAME=legal_entity_smoke run_linked "$SETUP_SQL" 'local fixture setup' >/dev/null
 LOCAL_DB_NAME=legal_entity_smoke run_linked "$PREFLIGHT_SQL" 'hierarchy preflight smoke' >/dev/null
 LOCAL_DB_NAME=legal_entity_smoke run_linked "$MIGRATION_SQL" 'hierarchy migration smoke' >/dev/null
+LOCAL_DB_NAME=legal_entity_smoke run_linked "$LEGACY_CREATE_SQL" 'legacy create compatibility smoke' >/dev/null
 LOCAL_DB_NAME=legal_entity_smoke run_linked "$VERIFY_SQL" 'hierarchy verify smoke' >/dev/null
 LOCAL_DB_NAME=legal_entity_smoke run_linked "$CAPTURE_SQL" 'capture immutable backups' >/dev/null
 LOCAL_DB_NAME=legal_entity_smoke run_linked "$MIGRATION_SQL" 'hierarchy replay smoke' >/dev/null

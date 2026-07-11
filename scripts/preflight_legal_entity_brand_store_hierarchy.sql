@@ -28,11 +28,17 @@ BEGIN
   END IF;
 
   IF to_regprocedure(
-    'public.admin_create_restaurant(text,text,text,text,numeric,uuid,text,uuid)'
+    'public.admin_create_restaurant(text,text,text,text,numeric,uuid,text)'
   ) IS NULL OR to_regprocedure(
     'public.admin_update_restaurant(uuid,text,text,text,text,numeric,uuid,text)'
   ) IS NULL THEN
     RAISE EXCEPTION 'HIERARCHY_PREFLIGHT_LEGACY_RPC_MISSING';
+  END IF;
+
+  IF to_regprocedure(
+    'public.admin_create_restaurant(text,text,text,text,numeric,uuid,text,uuid)'
+  ) IS NOT NULL THEN
+    RAISE EXCEPTION 'HIERARCHY_PREFLIGHT_LEGACY_CREATE_OVERLOAD_AMBIGUOUS';
   END IF;
 
   IF EXISTS (

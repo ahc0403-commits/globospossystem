@@ -188,6 +188,7 @@ DROP FUNCTION IF EXISTS public.sync_restaurant_store_type_from_tax_entity();
 DROP FUNCTION IF EXISTS public.sync_stores_after_tax_entity_owner_change();
 DROP FUNCTION IF EXISTS public.guard_pending_tax_entity_meinvoice_activation();
 DROP FUNCTION IF EXISTS public.admin_create_restaurant(text, text, text, text, numeric, uuid, text, uuid);
+DROP FUNCTION IF EXISTS public.admin_create_restaurant(text, text, text, text, numeric, uuid, text);
 DROP FUNCTION IF EXISTS public.admin_update_restaurant(uuid, text, text, text, text, numeric, uuid, text);
 
 DO $restore_functions$

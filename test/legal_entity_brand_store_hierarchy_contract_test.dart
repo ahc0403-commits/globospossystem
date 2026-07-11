@@ -9,6 +9,9 @@ const preflightPath =
     'scripts/preflight_legal_entity_brand_store_hierarchy.sql';
 const verifyPath = 'scripts/verify_legal_entity_brand_store_hierarchy.sql';
 const rollbackPath = 'scripts/rollback_legal_entity_brand_store_hierarchy.sql';
+const localSetupPath = 'test/fixtures/legal_entity_deploy_local_setup.sql';
+const rollbackAssertPath =
+    'test/fixtures/legal_entity_deploy_assert_rollback.sql';
 const rpcSmokePath =
     'supabase/tests/legal_entity_brand_store_hierarchy_rpc_test.sql';
 const deploySmokePath = 'test/pos_deploy_psql_runner_test.sh';
@@ -177,9 +180,14 @@ void main() {
 
   test('legacy store RPCs remain as compatibility wrappers', () {
     final sql = readRepoFile(migrationPath);
+    final legacyCreateStart = sql.indexOf(
+      'CREATE OR REPLACE FUNCTION public.admin_create_restaurant(',
+    );
     final legacyUpdateStart = sql.indexOf(
       'CREATE OR REPLACE FUNCTION public.admin_update_restaurant(',
+      legacyCreateStart,
     );
+    final legacyCreate = sql.substring(legacyCreateStart, legacyUpdateStart);
     final legacyUpdateEnd = sql.indexOf(
       'REVOKE ALL ON FUNCTION public.link_office_pending_store_for_pos_store_v2',
       legacyUpdateStart,
@@ -191,6 +199,9 @@ void main() {
       contains('CREATE OR REPLACE FUNCTION public.admin_create_restaurant('),
     );
     expect(sql, contains('public.admin_create_restaurant_v2('));
+    expect(legacyCreate, contains('p_store_type text DEFAULT \'direct\''));
+    expect(legacyCreate, isNot(contains('p_office_store_id uuid')));
+    expect(legacyCreate, contains('p_office_store_id => NULL'));
     expect(
       sql,
       contains('CREATE OR REPLACE FUNCTION public.admin_update_restaurant('),
@@ -208,6 +219,53 @@ void main() {
     expect(sql, contains('p_store_type is retained for API compatibility'));
     expect(sql, isNot(contains('DROP TABLE public.restaurants')));
     expect(sql, isNot(contains('ALTER TABLE public.restaurants RENAME')));
+  });
+
+  test('legacy create preserves the production seven-argument signature', () {
+    final preflight = readRepoFile(preflightPath);
+    final migration = readRepoFile(migrationPath);
+    final rollback = readRepoFile(rollbackPath);
+    final compactRollback = rollback.replaceAll(' ', '');
+    final setup = readRepoFile(localSetupPath);
+    final rollbackAssert = readRepoFile(rollbackAssertPath);
+    final smoke = readRepoFile(deploySmokePath);
+    const sevenArg =
+        'admin_create_restaurant(text,text,text,text,numeric,uuid,text)';
+    const eightArg =
+        'admin_create_restaurant(text,text,text,text,numeric,uuid,text,uuid)';
+
+    expect(preflight, contains(sevenArg));
+    expect(preflight, contains(eightArg));
+    expect(
+      preflight,
+      contains('HIERARCHY_PREFLIGHT_LEGACY_CREATE_OVERLOAD_AMBIGUOUS'),
+    );
+    expect(migration, contains("to_regprocedure('public.$sevenArg')"));
+    expect(
+      migration,
+      contains(
+        'GRANT EXECUTE ON FUNCTION public.admin_create_restaurant'
+        '(text, text, text, text, numeric, uuid, text)',
+      ),
+    );
+    expect(
+      migration,
+      isNot(
+        contains(
+          'GRANT EXECUTE ON FUNCTION public.admin_create_restaurant'
+          '(text, text, text, text, numeric, uuid, text, uuid)',
+        ),
+      ),
+    );
+    expect(compactRollback, contains('DROPFUNCTIONIFEXISTSpublic.$sevenArg'));
+    expect(compactRollback, contains('DROPFUNCTIONIFEXISTSpublic.$eightArg'));
+    expect(setup, contains("to_regprocedure('public.$sevenArg')"));
+    expect(setup, isNot(contains("to_regprocedure('public.$eightArg')")));
+    expect(rollbackAssert, contains("to_regprocedure('public.$sevenArg')"));
+    expect(rollbackAssert, contains("to_regprocedure('public.$eightArg')"));
+    expect(smoke, contains('LOCAL_SMOKE_LEGACY_CREATE_7_ARG_MISSING'));
+    expect(smoke, contains('LOCAL_SMOKE_LEGACY_CREATE_8_ARG_PRESENT'));
+    expect(smoke, contains('legacy create compatibility smoke'));
   });
 
   test(

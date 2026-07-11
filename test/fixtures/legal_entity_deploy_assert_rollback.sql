@@ -16,7 +16,8 @@ BEGIN
     WHERE table_schema = 'public' AND table_name = 'tax_entity'
       AND column_name = 'onboarding_status'
   ) OR to_regprocedure('public.admin_create_restaurant_v2(text,text,text,uuid,uuid,text,numeric,uuid)') IS NOT NULL
-     OR to_regprocedure('public.admin_update_restaurant_v2(uuid,text,text,text,uuid,uuid,text,numeric,uuid)') IS NOT NULL THEN
+     OR to_regprocedure('public.admin_update_restaurant_v2(uuid,text,text,text,uuid,uuid,text,numeric,uuid)') IS NOT NULL
+     OR to_regprocedure('public.admin_create_restaurant(text,text,text,text,numeric,uuid,text,uuid)') IS NOT NULL THEN
     RAISE EXCEPTION 'LOCAL_SMOKE_ROLLBACK_NEW_OBJECT_REMAINS';
   END IF;
 
@@ -43,7 +44,7 @@ BEGIN
            pg_get_functiondef(p.oid) AS definition
     FROM pg_proc p
     WHERE p.oid IN (
-      to_regprocedure('public.admin_create_restaurant(text,text,text,text,numeric,uuid,text,uuid)'),
+      to_regprocedure('public.admin_create_restaurant(text,text,text,text,numeric,uuid,text)'),
       to_regprocedure('public.admin_update_restaurant(uuid,text,text,text,text,numeric,uuid,text)'),
       to_regprocedure('public.sync_restaurant_store_type_from_tax_entity()'),
       to_regprocedure('public.sync_stores_after_tax_entity_owner_change()'),

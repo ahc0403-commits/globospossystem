@@ -59,7 +59,7 @@ BEGIN
       pg_get_functiondef(p.oid)
     FROM pg_proc p
     WHERE p.oid IN (
-      to_regprocedure('public.admin_create_restaurant(text,text,text,text,numeric,uuid,text,uuid)'),
+      to_regprocedure('public.admin_create_restaurant(text,text,text,text,numeric,uuid,text)'),
       to_regprocedure('public.admin_update_restaurant(uuid,text,text,text,text,numeric,uuid,text)'),
       to_regprocedure('public.sync_restaurant_store_type_from_tax_entity()'),
       to_regprocedure('public.sync_stores_after_tax_entity_owner_change()'),
@@ -963,6 +963,9 @@ $$;
 
 -- Legacy create remains callable. p_store_type is retained for API compatibility
 -- but owner_type decides the stored value and Office behavior.
+DROP FUNCTION IF EXISTS public.admin_create_restaurant(
+  text, text, text, text, numeric, uuid, text, uuid
+);
 CREATE OR REPLACE FUNCTION public.admin_create_restaurant(
   p_name text,
   p_slug text,
@@ -970,8 +973,7 @@ CREATE OR REPLACE FUNCTION public.admin_create_restaurant(
   p_address text DEFAULT NULL,
   p_per_person_charge numeric DEFAULT NULL,
   p_brand_id uuid DEFAULT NULL,
-  p_store_type text DEFAULT 'direct',
-  p_office_store_id uuid DEFAULT NULL
+  p_store_type text DEFAULT 'direct'
 ) RETURNS public.restaurants
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -1011,8 +1013,14 @@ BEGIN
   END IF;
 
   RETURN public.admin_create_restaurant_v2(
-    p_name, p_slug, p_operation_mode, v_tax_entity_id, p_brand_id,
-    p_address, p_per_person_charge, p_office_store_id
+    p_name => p_name,
+    p_slug => p_slug,
+    p_operation_mode => p_operation_mode,
+    p_tax_entity_id => v_tax_entity_id,
+    p_brand_id => p_brand_id,
+    p_address => p_address,
+    p_per_person_charge => p_per_person_charge,
+    p_office_store_id => NULL
   );
 END;
 $$;
@@ -1165,9 +1173,9 @@ REVOKE ALL ON FUNCTION public.admin_update_restaurant_v2(uuid, text, text, text,
 GRANT EXECUTE ON FUNCTION public.admin_update_restaurant_v2(uuid, text, text, text, uuid, uuid, text, numeric, uuid)
   TO authenticated, service_role;
 
-REVOKE ALL ON FUNCTION public.admin_create_restaurant(text, text, text, text, numeric, uuid, text, uuid)
+REVOKE ALL ON FUNCTION public.admin_create_restaurant(text, text, text, text, numeric, uuid, text)
   FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.admin_create_restaurant(text, text, text, text, numeric, uuid, text, uuid)
+GRANT EXECUTE ON FUNCTION public.admin_create_restaurant(text, text, text, text, numeric, uuid, text)
   TO authenticated, service_role;
 
 REVOKE ALL ON FUNCTION public.admin_update_restaurant(uuid, text, text, text, text, numeric, uuid, text)

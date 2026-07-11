@@ -79,6 +79,16 @@ CREATE TABLE public.audit_logs (
   details jsonb
 );
 
+INSERT INTO auth.users (id) VALUES (
+  '10000000-0000-0000-0000-000000000001'
+);
+INSERT INTO public.users (id, auth_id, is_active, role) VALUES (
+  '20000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-000000000001',
+  true,
+  'super_admin'
+);
+
 CREATE OR REPLACE FUNCTION public.is_super_admin()
 RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT false $$;
 
@@ -90,7 +100,7 @@ RETURNS void LANGUAGE plpgsql AS $$ BEGIN RETURN; END $$;
 
 CREATE OR REPLACE FUNCTION public.admin_create_restaurant(
   text, text, text, text DEFAULT NULL, numeric DEFAULT NULL,
-  uuid DEFAULT NULL, text DEFAULT 'direct', uuid DEFAULT NULL
+  uuid DEFAULT NULL, text DEFAULT 'direct'
 ) RETURNS public.restaurants
 LANGUAGE plpgsql
 AS $$ BEGIN RAISE EXCEPTION 'old create fixture'; END $$;
@@ -189,7 +199,7 @@ SELECT p.oid::regprocedure::text AS object_identity,
        pg_get_functiondef(p.oid) AS definition
 FROM pg_proc p
 WHERE p.oid IN (
-  to_regprocedure('public.admin_create_restaurant(text,text,text,text,numeric,uuid,text,uuid)'),
+  to_regprocedure('public.admin_create_restaurant(text,text,text,text,numeric,uuid,text)'),
   to_regprocedure('public.admin_update_restaurant(uuid,text,text,text,text,numeric,uuid,text)'),
   to_regprocedure('public.sync_restaurant_store_type_from_tax_entity()'),
   to_regprocedure('public.sync_stores_after_tax_entity_owner_change()'),
