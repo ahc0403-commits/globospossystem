@@ -26,6 +26,11 @@ void main() {
     expect(deploy, contains('SKIP_LOGIN_SMOKE'));
     expect(deploy, contains('run_auth_check'));
     expect(deploy, contains('run_login_smoke'));
+    expect(deploy, contains('flutter pub get --enforce-lockfile'));
+    expect(
+      deploy,
+      contains('production checks require locked Flutter dependencies'),
+    );
     expect(deploy, contains('Pilot Auth account readiness'));
     expect(deploy, contains('Pilot login smoke'));
     expect(deploy, contains('PILOT_SMOKE_EMAIL'));
@@ -68,7 +73,23 @@ void main() {
       deploy.indexOf('run_auth_check'),
       lessThan(deploy.indexOf('run_checks')),
     );
+    final checks = deploy.substring(
+      deploy.indexOf('run_checks() {'),
+      deploy.indexOf('parse_linked_pg_exports() {'),
+    );
+    expect(
+      checks.indexOf('flutter pub get --enforce-lockfile'),
+      lessThan(checks.indexOf('dart analyze')),
+    );
+    expect(
+      checks.indexOf('dart analyze'),
+      lessThan(checks.indexOf('flutter test')),
+    );
     final mainBody = deploy.substring(deploy.indexOf('main() {'));
+    expect(
+      mainBody.indexOf('run_checks'),
+      lessThan(mainBody.indexOf('apply_migration')),
+    );
     expect(
       mainBody.indexOf('deploy_vercel'),
       lessThan(mainBody.indexOf('run_login_smoke')),

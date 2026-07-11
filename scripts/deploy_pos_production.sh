@@ -33,7 +33,8 @@ Usage:
   scripts/deploy_pos_production.sh [options]
 
 Default flow:
-  preflight -> pilot Auth readiness -> dart analyze -> focused tests ->
+  preflight -> pilot Auth readiness -> locked Flutter dependency bootstrap ->
+  dart analyze -> focused tests ->
   optional DB migration -> vercel build --prod ->
   vercel deploy --prebuilt --prod -> live HTTP check -> pilot login smoke
 
@@ -335,6 +336,12 @@ run_checks() {
     log "Checks skipped"
     return 0
   fi
+
+  [[ -f "$ROOT_DIR/pubspec.lock" ]] ||
+    fail "Missing pubspec.lock; production checks require locked Flutter dependencies."
+
+  log "Flutter dependency bootstrap"
+  run flutter pub get --enforce-lockfile
 
   log "Static analysis"
   run dart analyze
