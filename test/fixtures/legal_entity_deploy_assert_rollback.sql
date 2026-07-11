@@ -22,6 +22,22 @@ BEGIN
   END IF;
 
   IF EXISTS (
+    SELECT 1
+    FROM pg_proc p
+    WHERE p.oid IN (
+      to_regprocedure(
+        'public.admin_create_restaurant(text,text,text,text,numeric,uuid,text)'
+      ),
+      to_regprocedure(
+        'public.admin_update_restaurant(uuid,text,text,text,text,numeric,uuid,text)'
+      )
+    )
+      AND p.prorettype IS DISTINCT FROM to_regtype('public.stores')
+  ) THEN
+    RAISE EXCEPTION 'LOCAL_SMOKE_ROLLBACK_LEGACY_RETURN_TYPE_MISMATCH';
+  END IF;
+
+  IF EXISTS (
     (TABLE test_expected.tax_entity EXCEPT TABLE public.tax_entity)
     UNION ALL (TABLE public.tax_entity EXCEPT TABLE test_expected.tax_entity)
   ) OR EXISTS (

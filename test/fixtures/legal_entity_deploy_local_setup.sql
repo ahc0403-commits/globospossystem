@@ -47,6 +47,9 @@ CREATE TABLE public.restaurants (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE VIEW public.stores AS
+SELECT * FROM public.restaurants;
+
 CREATE TABLE public.store_tax_entity_history (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   store_id uuid NOT NULL REFERENCES public.restaurants(id),
@@ -101,14 +104,14 @@ RETURNS void LANGUAGE plpgsql AS $$ BEGIN RETURN; END $$;
 CREATE OR REPLACE FUNCTION public.admin_create_restaurant(
   text, text, text, text DEFAULT NULL, numeric DEFAULT NULL,
   uuid DEFAULT NULL, text DEFAULT 'direct'
-) RETURNS public.restaurants
+) RETURNS public.stores
 LANGUAGE plpgsql
 AS $$ BEGIN RAISE EXCEPTION 'old create fixture'; END $$;
 
 CREATE OR REPLACE FUNCTION public.admin_update_restaurant(
   uuid, text, text, text, text DEFAULT NULL, numeric DEFAULT NULL,
   uuid DEFAULT NULL, text DEFAULT 'direct'
-) RETURNS public.restaurants
+) RETURNS public.stores
 LANGUAGE plpgsql
 AS $$ BEGIN RAISE EXCEPTION 'old update fixture'; END $$;
 

@@ -974,7 +974,7 @@ CREATE OR REPLACE FUNCTION public.admin_create_restaurant(
   p_per_person_charge numeric DEFAULT NULL,
   p_brand_id uuid DEFAULT NULL,
   p_store_type text DEFAULT 'direct'
-) RETURNS public.restaurants
+) RETURNS public.stores
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path TO 'public', 'auth'
@@ -982,6 +982,8 @@ AS $$
 DECLARE
   v_tax_entity_id uuid;
   v_link_count integer;
+  v_created public.restaurants%ROWTYPE;
+  v_store public.stores%ROWTYPE;
 BEGIN
   IF p_brand_id IS NULL THEN RAISE EXCEPTION 'RESTAURANT_BRAND_REQUIRED'; END IF;
   PERFORM p_store_type;
@@ -1012,7 +1014,7 @@ BEGIN
     RAISE EXCEPTION 'RESTAURANT_TAX_ENTITY_REQUIRED_USE_V2';
   END IF;
 
-  RETURN public.admin_create_restaurant_v2(
+  v_created := public.admin_create_restaurant_v2(
     p_name => p_name,
     p_slug => p_slug,
     p_operation_mode => p_operation_mode,
@@ -1022,6 +1024,11 @@ BEGIN
     p_per_person_charge => p_per_person_charge,
     p_office_store_id => NULL
   );
+  SELECT * INTO v_store
+  FROM public.stores
+  WHERE id = v_created.id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'RESTAURANT_STORE_VIEW_MAPPING_MISSING'; END IF;
+  RETURN v_store;
 END;
 $$;
 
@@ -1036,7 +1043,7 @@ CREATE OR REPLACE FUNCTION public.admin_update_restaurant(
   p_per_person_charge numeric DEFAULT NULL,
   p_brand_id uuid DEFAULT NULL,
   p_store_type text DEFAULT 'direct'
-) RETURNS public.restaurants
+) RETURNS public.stores
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path TO 'public', 'auth'
@@ -1044,6 +1051,7 @@ AS $$
 DECLARE
   v_existing public.restaurants%ROWTYPE;
   v_updated public.restaurants%ROWTYPE;
+  v_store public.stores%ROWTYPE;
   v_owner_type text;
   v_name text := NULLIF(btrim(COALESCE(p_name, '')), '');
   v_slug text := NULLIF(btrim(COALESCE(p_slug, '')), '');
@@ -1126,7 +1134,11 @@ BEGIN
     )
   );
 
-  RETURN v_updated;
+  SELECT * INTO v_store
+  FROM public.stores
+  WHERE id = v_updated.id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'RESTAURANT_STORE_VIEW_MAPPING_MISSING'; END IF;
+  RETURN v_store;
 END;
 $$;
 

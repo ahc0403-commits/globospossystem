@@ -200,8 +200,12 @@ void main() {
     );
     expect(sql, contains('public.admin_create_restaurant_v2('));
     expect(legacyCreate, contains('p_store_type text DEFAULT \'direct\''));
+    expect(legacyCreate, contains(') RETURNS public.stores'));
     expect(legacyCreate, isNot(contains('p_office_store_id uuid')));
     expect(legacyCreate, contains('p_office_store_id => NULL'));
+    expect(legacyCreate, contains('v_created public.restaurants%ROWTYPE'));
+    expect(legacyCreate, contains('v_store public.stores%ROWTYPE'));
+    expect(legacyCreate, contains('WHERE id = v_created.id'));
     expect(
       sql,
       contains('CREATE OR REPLACE FUNCTION public.admin_update_restaurant('),
@@ -210,6 +214,10 @@ void main() {
       legacyUpdate,
       contains('public.require_admin_actor_for_restaurant(v_existing.id)'),
     );
+    expect(legacyUpdate, contains(') RETURNS public.stores'));
+    expect(legacyUpdate, contains('v_updated public.restaurants%ROWTYPE'));
+    expect(legacyUpdate, contains('v_store public.stores%ROWTYPE'));
+    expect(legacyUpdate, contains('WHERE id = v_updated.id'));
     expect(
       legacyUpdate,
       contains("RAISE EXCEPTION 'RESTAURANT_TAX_ENTITY_BRAND_INVALID'"),
@@ -240,6 +248,14 @@ void main() {
       preflight,
       contains('HIERARCHY_PREFLIGHT_LEGACY_CREATE_OVERLOAD_AMBIGUOUS'),
     );
+    expect(
+      preflight,
+      contains('HIERARCHY_PREFLIGHT_LEGACY_RPC_RETURN_TYPE_MISMATCH'),
+    );
+    expect(
+      preflight,
+      contains("p.prorettype IS DISTINCT FROM to_regtype('public.stores')"),
+    );
     expect(migration, contains("to_regprocedure('public.$sevenArg')"));
     expect(
       migration,
@@ -261,10 +277,21 @@ void main() {
     expect(compactRollback, contains('DROPFUNCTIONIFEXISTSpublic.$eightArg'));
     expect(setup, contains("to_regprocedure('public.$sevenArg')"));
     expect(setup, isNot(contains("to_regprocedure('public.$eightArg')")));
+    expect(setup, contains('CREATE VIEW public.stores AS'));
+    expect(
+      RegExp(r'\) RETURNS public\.stores').allMatches(setup).length,
+      greaterThanOrEqualTo(2),
+    );
     expect(rollbackAssert, contains("to_regprocedure('public.$sevenArg')"));
     expect(rollbackAssert, contains("to_regprocedure('public.$eightArg')"));
+    expect(
+      rollbackAssert,
+      contains('LOCAL_SMOKE_ROLLBACK_LEGACY_RETURN_TYPE_MISMATCH'),
+    );
     expect(smoke, contains('LOCAL_SMOKE_LEGACY_CREATE_7_ARG_MISSING'));
     expect(smoke, contains('LOCAL_SMOKE_LEGACY_CREATE_8_ARG_PRESENT'));
+    expect(smoke, contains('LOCAL_SMOKE_LEGACY_RPC_RETURN_TYPE_MISMATCH'));
+    expect(smoke, contains('LOCAL_SMOKE_LEGACY_UPDATE_8_ARG_RESULT_MISMATCH'));
     expect(smoke, contains('legacy create compatibility smoke'));
   });
 

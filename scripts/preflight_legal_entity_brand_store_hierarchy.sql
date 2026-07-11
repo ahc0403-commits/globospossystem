@@ -4,6 +4,7 @@ DECLARE
   v_photo_candidates integer;
 BEGIN
   IF to_regclass('public.restaurants') IS NULL
+     OR to_regclass('public.stores') IS NULL
      OR to_regclass('public.brands') IS NULL
      OR to_regclass('public.tax_entity') IS NULL
      OR to_regclass('public.store_tax_entity_history') IS NULL
@@ -33,6 +34,22 @@ BEGIN
     'public.admin_update_restaurant(uuid,text,text,text,text,numeric,uuid,text)'
   ) IS NULL THEN
     RAISE EXCEPTION 'HIERARCHY_PREFLIGHT_LEGACY_RPC_MISSING';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_proc p
+    WHERE p.oid IN (
+      to_regprocedure(
+        'public.admin_create_restaurant(text,text,text,text,numeric,uuid,text)'
+      ),
+      to_regprocedure(
+        'public.admin_update_restaurant(uuid,text,text,text,text,numeric,uuid,text)'
+      )
+    )
+      AND p.prorettype IS DISTINCT FROM to_regtype('public.stores')
+  ) THEN
+    RAISE EXCEPTION 'HIERARCHY_PREFLIGHT_LEGACY_RPC_RETURN_TYPE_MISMATCH';
   END IF;
 
   IF to_regprocedure(

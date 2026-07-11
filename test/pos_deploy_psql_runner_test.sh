@@ -216,7 +216,8 @@ SET LOCAL request.jwt.claim.sub = '10000000-0000-0000-0000-000000000001';
 
 DO $legacy_create$
 DECLARE
-  v_created public.restaurants%ROWTYPE;
+  v_created public.stores%ROWTYPE;
+  v_updated public.stores%ROWTYPE;
 BEGIN
   IF to_regprocedure(
     'public.admin_create_restaurant(text,text,text,text,numeric,uuid,text)'
@@ -227,6 +228,21 @@ BEGIN
     'public.admin_create_restaurant(text,text,text,text,numeric,uuid,text,uuid)'
   ) IS NOT NULL THEN
     RAISE EXCEPTION 'LOCAL_SMOKE_LEGACY_CREATE_8_ARG_PRESENT';
+  END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM pg_proc p
+    WHERE p.oid IN (
+      to_regprocedure(
+        'public.admin_create_restaurant(text,text,text,text,numeric,uuid,text)'
+      ),
+      to_regprocedure(
+        'public.admin_update_restaurant(uuid,text,text,text,text,numeric,uuid,text)'
+      )
+    )
+      AND p.prorettype IS DISTINCT FROM to_regtype('public.stores')
+  ) THEN
+    RAISE EXCEPTION 'LOCAL_SMOKE_LEGACY_RPC_RETURN_TYPE_MISMATCH';
   END IF;
 
   v_created := public.admin_create_restaurant(
@@ -245,9 +261,24 @@ BEGIN
     RAISE EXCEPTION 'LOCAL_SMOKE_LEGACY_CREATE_7_ARG_RESULT_MISMATCH';
   END IF;
 
-  DELETE FROM public.audit_logs WHERE entity_id = v_created.id;
-  DELETE FROM public.store_tax_entity_history WHERE store_id = v_created.id;
-  DELETE FROM public.restaurants WHERE id = v_created.id;
+  v_updated := public.admin_update_restaurant(
+    v_created.id,
+    'Legacy compatibility store updated',
+    'legacy-compatibility-store',
+    'standard',
+    'Updated legacy address',
+    NULL,
+    '77000000-0000-0000-0000-000000000001'::uuid,
+    'direct'
+  );
+  IF v_updated.id <> v_created.id
+     OR v_updated.name <> 'Legacy compatibility store updated' THEN
+    RAISE EXCEPTION 'LOCAL_SMOKE_LEGACY_UPDATE_8_ARG_RESULT_MISMATCH';
+  END IF;
+
+  DELETE FROM public.audit_logs WHERE entity_id = v_updated.id;
+  DELETE FROM public.store_tax_entity_history WHERE store_id = v_updated.id;
+  DELETE FROM public.restaurants WHERE id = v_updated.id;
 END;
 $legacy_create$;
 SQL
