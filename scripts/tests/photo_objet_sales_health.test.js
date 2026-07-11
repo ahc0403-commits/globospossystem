@@ -341,6 +341,7 @@ test('partial aggregate snapshots never overwrite fuller totals', () => {
 
 test('workflow uses locked Node 22 install, exact schedule, audit, and deduplicated escalation', () => {
   const workflow = fs.readFileSync(path.join(__dirname, '../../.github/workflows/photo_objet_sales.yml'), 'utf8');
+  assert.match(workflow, /on:\n  pull_request:\n  schedule:/);
   assert.deepEqual([...workflow.matchAll(/cron: '([^']+)'/g)].map(match => match[1]), [
     ...Array.from({ length: 14 }, (_, index) => `0 ${index + 2} * * *`),
     '30 15 * * *',
@@ -358,9 +359,11 @@ test('workflow uses locked Node 22 install, exact schedule, audit, and deduplica
     workflow,
     /echo "PUPPETEER_CACHE_DIR=\$\{RUNNER_TEMP\}\/puppeteer" >> "\$\{GITHUB_ENV\}"/,
   );
+  const productionStart = workflow.indexOf('  pull-sales:');
+  const productionJob = workflow.slice(productionStart);
   assert.ok(
-    workflow.indexOf('PUPPETEER_CACHE_DIR=${RUNNER_TEMP}/puppeteer') <
-      workflow.indexOf('uses: actions/setup-node@v4'),
+    productionJob.indexOf('PUPPETEER_CACHE_DIR=${RUNNER_TEMP}/puppeteer') <
+      productionJob.indexOf('uses: actions/setup-node@v4'),
     'runtime cache setup must run before Node and Chromium installation',
   );
   assert.match(workflow, /--preflight-only/);
@@ -372,6 +375,22 @@ test('workflow uses locked Node 22 install, exact schedule, audit, and deduplica
   assert.match(workflow, /steps\.setup\.outcome != 'success'/);
   assert.match(workflow, /steps\.chromium\.outcome != 'success'/);
   assert.match(workflow, /collector\.log unavailable; use setup outcomes below/);
+  const contractStart = workflow.indexOf('  photo-contract:');
+  assert.ok(contractStart > 0 && productionStart > contractStart);
+  const contractJob = workflow.slice(contractStart, productionStart);
+  assert.match(contractJob, /name: Photo Objet contract/);
+  assert.match(contractJob, /if: github\.event_name == 'pull_request'/);
+  assert.match(contractJob, /node-version: '22'/);
+  assert.match(contractJob, /run: npm ci/);
+  assert.match(contractJob, /run: npm test/);
+  assert.doesNotMatch(contractJob, /secrets\./);
+  assert.match(productionJob, /if: github\.event_name != 'pull_request'/);
+  assert.doesNotMatch(
+    workflow.slice(0, contractStart),
+    /issues: write/,
+    'write permission must not be global or available to the PR contract job',
+  );
+  assert.match(productionJob, /issues: write/);
   const collector = fs.readFileSync(path.join(__dirname, '../pull_moers_sales.js'), 'utf8');
   assert.match(collector, /runWithTransientRetry/);
   assert.match(collector, /attempt < 2/);

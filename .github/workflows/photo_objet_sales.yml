@@ -1,6 +1,7 @@
 name: Photo Objet Sales Pull
 
 on:
+  pull_request:
   schedule:
     # 09:00-22:30 Asia/Ho_Chi_Minh (UTC+7): hourly through 22:00, then 22:30.
     - cron: '0 2 * * *'
@@ -40,16 +41,43 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 concurrency:
   group: photo-objet-sales-pull
   cancel-in-progress: false
 
 jobs:
+  photo-contract:
+    name: Photo Objet contract
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+
+      - name: Install locked dependencies
+        working-directory: scripts
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+        run: npm ci
+
+      - name: Validate collector release contracts
+        working-directory: scripts
+        run: npm test
+
   pull-sales:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    permissions:
+      contents: read
+      issues: write
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}

@@ -113,6 +113,11 @@ void main() {
         '30 15 * * *',
       ]);
       expect(workflow, contains('09:00-22:30 Asia/Ho_Chi_Minh'));
+      expect(workflow, contains('pull_request:'));
+      expect(workflow, contains('name: Photo Objet contract'));
+      expect(workflow, contains("if: github.event_name == 'pull_request'"));
+      expect(workflow, contains("if: github.event_name != 'pull_request'"));
+      expect(workflow, contains('run: npm test'));
       expect(workflow, contains("node-version: '22'"));
       expect(workflow, contains('npm ci'));
       expect(
@@ -128,9 +133,14 @@ void main() {
           r'echo "PUPPETEER_CACHE_DIR=${RUNNER_TEMP}/puppeteer" >> "${GITHUB_ENV}"',
         ),
       );
+      final productionJob = workflow.substring(
+        workflow.indexOf('  pull-sales:'),
+      );
       expect(
-        workflow.indexOf(r'PUPPETEER_CACHE_DIR=${RUNNER_TEMP}/puppeteer'),
-        lessThan(workflow.indexOf('uses: actions/setup-node@v4')),
+        productionJob.indexOf(
+          r'PUPPETEER_CACHE_DIR=${RUNNER_TEMP}/puppeteer',
+        ),
+        lessThan(productionJob.indexOf('uses: actions/setup-node@v4')),
       );
       expect(workflow, contains('concurrency:'));
       expect(workflow, contains('cancel-in-progress: false'));
@@ -171,5 +181,7 @@ void main() {
     expect(docs, contains('`started_at` is not used as slot'));
     expect(docs, contains('2026-07-11 19:00 HCM'));
     expect(docs, contains('historical baseline'));
+    expect(docs, contains('Photo Objet contract'));
+    expect(docs, contains('Vercel preview'));
   });
 }

@@ -41,6 +41,12 @@ GitHub step summary and creates or comments on the single open
 `[Photo Objet sales] Collector failure` issue, preventing duplicate escalation
 issues while keeping repeated failures visible.
 
+Every pull request runs the secret-free `Photo Objet contract` job with Node 22,
+the committed lockfile, and the collector contract suite. The production job is
+disabled for pull requests and receives `issues: write` only during scheduled or
+manually dispatched operation. `main` branch protection requires the contract
+job, so the scheduler is not the first place a collector change is exercised.
+
 ## Required configuration
 
 Repository secrets:
@@ -155,6 +161,10 @@ flutter test test/photo_objet_meinvoice_raw_contract_test.dart test/photo_ops_sa
 dart analyze
 git diff --check -- .github/workflows/photo_objet_sales.yml scripts/package.json scripts/package-lock.json scripts/pull_moers_sales.js scripts/tests/photo_objet_sales_health.test.js docs/photo_objet_sales_pull_setup.md test/photo_objet_meinvoice_raw_contract_test.dart
 ```
+
+The `Photo Objet contract` GitHub check must pass before merge. Vercel preview
+success is not a substitute because it does not execute the collector or its
+schedule, runtime, audit-baseline, and backward-compatibility contracts.
 
 Scheduled workflows use the workflow definition on the default branch. No
 schedule or escalation change takes effect until this revision is merged there.
