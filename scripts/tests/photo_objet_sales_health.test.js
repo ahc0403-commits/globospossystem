@@ -91,11 +91,12 @@ test('store mappings fail closed unless active and in the Photo Objet brand', ()
   const stores = buildStores(validEnv());
   const rows = stores.map(store => ({
     id: store.storeId,
-    name: store.storeName,
+    name: `PHOTO OBJET ${store.storeName}`,
     is_active: true,
     brand_id: '77000000-0000-0000-0000-000000000001',
     store_type: 'direct',
   }));
+  rows[0].name = '  photo objet   bien hoa  ';
   rows[0].store_type = 'external';
   assert.doesNotThrow(() => validateStoreMappings(rows, stores));
   assert.throws(
@@ -107,8 +108,12 @@ test('store mappings fail closed unless active and in the Photo Objet brand', ()
     /outside the Photo Objet brand/,
   );
   assert.throws(
-    () => validateStoreMappings(rows.map(row => row.id === ids[3] ? { ...row, name: 'NOW ZONE' } : row), stores),
+    () => validateStoreMappings(rows.map(row => row.id === ids[3] ? { ...row, name: 'PHOTO OBJET NOW ZONE' } : row), stores),
     /resolves to unexpected store/,
+  );
+  assert.throws(
+    () => validateStoreMappings(rows.map(row => row.id === ids[0] ? { ...row, name: 'BIEN HOA' } : row), stores),
+    /BIEN HOA mapping resolves to unexpected store BIEN HOA/,
   );
 });
 
@@ -125,7 +130,7 @@ test('preflight probes pull runs, raw ledger, and aggregate before collection', 
   const stores = buildStores(validEnv());
   const rows = stores.map(store => ({
     id: store.storeId,
-    name: store.storeName,
+    name: `PHOTO OBJET ${store.storeName}`,
     is_active: true,
     brand_id: '77000000-0000-0000-0000-000000000001',
     store_type: 'direct',

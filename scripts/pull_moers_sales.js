@@ -1025,6 +1025,7 @@ function validateStaticPreflight(stores, env = process.env, runtime = {}) {
 function validateStoreMappings(rows, stores) {
   const enabled = stores.filter(store => store.enabled);
   const byId = new Map((rows || []).map(row => [row.id, row]));
+  const normalizeName = value => String(value || '').trim().replace(/\s+/g, ' ').toUpperCase();
   for (const store of enabled) {
     const row = byId.get(store.storeId);
     if (!row) {
@@ -1036,8 +1037,9 @@ function validateStoreMappings(rows, stores) {
     if (row.brand_id !== PHOTO_OBJET_BRAND_ID) {
       throw deterministic(`${store.storeName} mapping is outside the Photo Objet brand`);
     }
-    const mappedName = String(row.name || '').trim().replace(/\s+/g, ' ').toUpperCase();
-    if (mappedName !== store.storeName) {
+    const mappedName = normalizeName(row.name);
+    const expectedPosName = normalizeName(`PHOTO OBJET ${store.storeName}`);
+    if (mappedName !== expectedPosName) {
       throw deterministic(
         `${store.storeName} mapping resolves to unexpected store ${row.name || '(unnamed)'}`,
       );

@@ -57,6 +57,8 @@ void main() {
     expect(source, contains('Node WebSocket global is unavailable'));
     expect(source, contains('EXPECTED_POS_PROJECT_REF'));
     expect(source, contains('validateStoreMappings'));
+    expect(source, contains(r'`PHOTO OBJET ${store.storeName}`'));
+    expect(source, contains("replace(/\\s+/g, ' ')"));
     expect(source, contains('photo_objet_sales_pull_runs'));
     expect(source, contains('photo_objet_sales_raw'));
     expect(source, contains('RUN_METADATA_PREFIX'));
