@@ -341,6 +341,7 @@ serve(async (req) => {
         message.startsWith("MEINVOICE_INTEGRATION_NOT_ACTIVE") ||
         message.startsWith("MEINVOICE_CLIENT_ID_NOT_CONFIGURED") ||
         message.startsWith("MEINVOICE_CLIENT_SECRET_NOT_CONFIGURED") ||
+        message.startsWith("MEINVOICE_ENTITY_CREDENTIAL_INCOMPLETE") ||
         message.startsWith("MEINVOICE_INVOICE_SERIES_NOT_CONFIGURED") ||
         message.startsWith("MEINVOICE_CONFIG_NOT_FOUND") ||
         message.startsWith("MEINVOICE_CREDENTIAL_NOT_CONFIGURED")

@@ -103,7 +103,9 @@ OptionUserDefined. **No payload rewrite is needed** — only auth + URLs.
    `MISA_MEINVOICE_CLIENT_SECRET_<TAX_CODE>`. The unsuffixed shared fallback
    only works while `MISA_MEINVOICE_ALLOW_SHARED_SECRETS=true` is set
    explicitly (single-entity transition window; remove once a second
-   entity onboards).
+   entity onboards). Credential source selection is atomic: a complete
+   entity-specific set is used together, and partial entity values never mix
+   with the complete shared transition set.
 
 Payload hardening (two real risks found while re-reading our builder
 against the stricter portal validation):

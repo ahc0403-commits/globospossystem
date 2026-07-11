@@ -94,6 +94,7 @@ void main() {
       expect(source, contains('MISA_MEINVOICE_CLIENT_SECRET'));
       expect(source, contains('MEINVOICE_CLIENT_ID_NOT_CONFIGURED'));
       expect(source, contains('MEINVOICE_CLIENT_SECRET_NOT_CONFIGURED'));
+      expect(source, contains('MEINVOICE_ENTITY_CREDENTIAL_INCOMPLETE'));
       // Per-legal-entity secret isolation: the shared unsuffixed fallback is
       // gated behind an explicit transition switch.
       expect(source, contains('MISA_MEINVOICE_ALLOW_SHARED_SECRETS'));
@@ -220,6 +221,11 @@ void main() {
     expect(source, contains('reconcileDuplicated'));
     expect(source, contains('MEINVOICE_CLIENT_ID_NOT_CONFIGURED'));
     expect(source, contains('MEINVOICE_CLIENT_SECRET_NOT_CONFIGURED'));
+    expect(source, contains('MEINVOICE_ENTITY_CREDENTIAL_INCOMPLETE'));
+    expect(
+      source.indexOf('MEINVOICE_ENTITY_CREDENTIAL_INCOMPLETE'),
+      lessThan(source.indexOf('if (!dryRun) await markConfigBlocked')),
+    );
     expect(source, isNot(contains('MEINVOICE_APP_ID_NOT_CONFIGURED')));
     expect(shared, contains('meinvoice_job_events'));
     final validationCall = source.indexOf(

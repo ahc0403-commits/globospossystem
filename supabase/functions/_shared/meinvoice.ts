@@ -96,44 +96,52 @@ export interface MeInvoiceEntityAuth {
 
 export type MeInvoiceEnvReader = (name: string) => string | undefined;
 
-function secretForTaxCode(
-  baseName: string,
-  taxCode: string,
-  readEnv: MeInvoiceEnvReader,
-): string | null {
-  const taxSpecific = asString(
-    readEnv(`${baseName}_${envSuffixForTaxCode(taxCode)}`),
-  );
-  if (taxSpecific) return taxSpecific;
-  if (readEnv("MISA_MEINVOICE_ALLOW_SHARED_SECRETS") === "true") {
-    return asString(readEnv(baseName));
-  }
-  return null;
-}
-
 export function resolveMeInvoiceEntityAuth(
   seller: SellerConfig,
   readEnv: MeInvoiceEnvReader = (name) => Deno.env.get(name),
 ): MeInvoiceEntityAuth {
   assertDispatchReady(seller);
-  const username = secretForTaxCode(
-    "MISA_MEINVOICE_USERNAME",
-    seller.taxCode,
-    readEnv,
+  const suffix = envSuffixForTaxCode(seller.taxCode);
+  const entityUsername = asString(
+    readEnv(`MISA_MEINVOICE_USERNAME_${suffix}`),
   );
-  const password = secretForTaxCode(
-    "MISA_MEINVOICE_PASSWORD",
-    seller.taxCode,
-    readEnv,
+  const entityPassword = asString(
+    readEnv(`MISA_MEINVOICE_PASSWORD_${suffix}`),
   );
+  const entityClientSecret = asString(
+    readEnv(`MISA_MEINVOICE_CLIENT_SECRET_${suffix}`),
+  );
+  const entityCredentials = [
+    entityUsername,
+    entityPassword,
+    entityClientSecret,
+  ];
+  const entityCredentialCount = entityCredentials.filter(Boolean).length;
+
+  if (entityCredentialCount > 0 && entityCredentialCount < 3) {
+    throw new Error("MEINVOICE_ENTITY_CREDENTIAL_INCOMPLETE");
+  }
+
+  if (entityCredentialCount === 3) {
+    return {
+      clientId: seller.clientId,
+      invoiceSeries: seller.invoiceSeries,
+      username: entityUsername!,
+      password: entityPassword!,
+      clientSecret: entityClientSecret!,
+    };
+  }
+
+  if (readEnv("MISA_MEINVOICE_ALLOW_SHARED_SECRETS") !== "true") {
+    throw new Error("MEINVOICE_CREDENTIAL_NOT_CONFIGURED");
+  }
+
+  const username = asString(readEnv("MISA_MEINVOICE_USERNAME"));
+  const password = asString(readEnv("MISA_MEINVOICE_PASSWORD"));
   if (!username || !password) {
     throw new Error("MEINVOICE_CREDENTIAL_NOT_CONFIGURED");
   }
-  const clientSecret = secretForTaxCode(
-    "MISA_MEINVOICE_CLIENT_SECRET",
-    seller.taxCode,
-    readEnv,
-  );
+  const clientSecret = asString(readEnv("MISA_MEINVOICE_CLIENT_SECRET"));
   if (!clientSecret) {
     throw new Error("MEINVOICE_CLIENT_SECRET_NOT_CONFIGURED");
   }

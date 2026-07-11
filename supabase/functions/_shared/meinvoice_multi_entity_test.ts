@@ -10,13 +10,13 @@ function assertEquals(actual: unknown, expected: unknown, message: string) {
   }
 }
 
-function assertThrows(fn: () => unknown, expectedMessage: string) {
+function assertThrows(fn: () => unknown, expectedMessage: string): Error {
   try {
     fn();
   } catch (error) {
     assert(error instanceof Error, "resolver must throw Error");
     assertEquals(error.message, expectedMessage, "unexpected error code");
-    return;
+    return error;
   }
   throw new Error(`expected resolver failure: ${expectedMessage}`);
 }
@@ -113,18 +113,84 @@ Deno.test("shared secrets require explicit transition flag", () => {
   assertEquals(auth.clientSecret, "shared-secret", "shared secret mismatch");
 });
 
-Deno.test("partial entity credentials never mix with shared values", () => {
+Deno.test("partial entity credentials never mix with enabled shared values", () => {
+  const entity = seller("entity-a", "010001", "client-a", "1C26MAA");
+  const error = assertThrows(
+    () =>
+      resolveMeInvoiceEntityAuth(
+        entity,
+        reader({
+          MISA_MEINVOICE_ALLOW_SHARED_SECRETS: "true",
+          MISA_MEINVOICE_USERNAME_010001: "entity-user",
+          MISA_MEINVOICE_PASSWORD: "shared-password",
+          MISA_MEINVOICE_CLIENT_SECRET: "shared-secret",
+        }),
+      ),
+    "MEINVOICE_ENTITY_CREDENTIAL_INCOMPLETE",
+  );
+  assert(!error.message.includes("entity-user"), "error leaked entity value");
+  assert(!error.message.includes("shared"), "error leaked shared value");
+});
+
+Deno.test("complete entity credentials take precedence as one set", () => {
+  const entity = seller("entity-a", "010001", "client-a", "1C26MAA");
+  const auth = resolveMeInvoiceEntityAuth(
+    entity,
+    reader({
+      MISA_MEINVOICE_ALLOW_SHARED_SECRETS: "true",
+      MISA_MEINVOICE_USERNAME_010001: "entity-user",
+      MISA_MEINVOICE_PASSWORD_010001: "entity-password",
+      MISA_MEINVOICE_CLIENT_SECRET_010001: "entity-secret",
+      MISA_MEINVOICE_USERNAME: "shared-user",
+      MISA_MEINVOICE_PASSWORD: "shared-password",
+      MISA_MEINVOICE_CLIENT_SECRET: "shared-secret",
+    }),
+  );
+  assertEquals(auth.username, "entity-user", "entity username not selected");
+  assertEquals(
+    auth.password,
+    "entity-password",
+    "entity password not selected",
+  );
+  assertEquals(
+    auth.clientSecret,
+    "entity-secret",
+    "entity secret not selected",
+  );
+});
+
+Deno.test("partial shared credentials fail closed", () => {
   const entity = seller("entity-a", "010001", "client-a", "1C26MAA");
   assertThrows(
     () =>
       resolveMeInvoiceEntityAuth(
         entity,
         reader({
-          MISA_MEINVOICE_USERNAME_010001: "entity-user",
-          MISA_MEINVOICE_PASSWORD: "shared-password",
+          MISA_MEINVOICE_ALLOW_SHARED_SECRETS: "true",
+          MISA_MEINVOICE_USERNAME: "shared-user",
           MISA_MEINVOICE_CLIENT_SECRET: "shared-secret",
         }),
       ),
     "MEINVOICE_CREDENTIAL_NOT_CONFIGURED",
+  );
+});
+
+Deno.test("whitespace entity values count as an incomplete set", () => {
+  const entity = seller("entity-a", "010001", "client-a", "1C26MAA");
+  assertThrows(
+    () =>
+      resolveMeInvoiceEntityAuth(
+        entity,
+        reader({
+          MISA_MEINVOICE_ALLOW_SHARED_SECRETS: "true",
+          MISA_MEINVOICE_USERNAME_010001: "entity-user",
+          MISA_MEINVOICE_PASSWORD_010001: "   ",
+          MISA_MEINVOICE_CLIENT_SECRET_010001: "entity-secret",
+          MISA_MEINVOICE_USERNAME: "shared-user",
+          MISA_MEINVOICE_PASSWORD: "shared-password",
+          MISA_MEINVOICE_CLIENT_SECRET: "shared-secret",
+        }),
+      ),
+    "MEINVOICE_ENTITY_CREDENTIAL_INCOMPLETE",
   );
 });
