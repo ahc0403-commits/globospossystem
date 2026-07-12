@@ -45,7 +45,7 @@ set -euo pipefail
 cat <<EXPORTS
 export PGHOST="aws-0-ap-southeast-1.pooler.supabase.com"
 export PGPORT="5432"
-export PGUSER="cli_login_test.ynriuoomotxuwhuxxmhj"
+export PGUSER="postgres.ynriuoomotxuwhuxxmhj"
 export PGPASSWORD="$SECRET"
 export PGDATABASE="postgres"
 EXPORTS
