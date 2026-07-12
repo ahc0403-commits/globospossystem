@@ -126,6 +126,11 @@ legacy_cli_output="$(FAKE_PGUSER=cli_login_test.ynriuoomotxuwhuxxmhj \
 [[ "$legacy_cli_output" == *'PASS: legacy cli credential success'* ]]
 assert_not_contains "$legacy_cli_output" "$SECRET"
 
+pooler_normalized_output="$(LOCAL_PGUSER=postgres \
+  run_linked "$LEGACY_CLI_SQL" 'pooler normalized session success' 2>&1)"
+[[ "$pooler_normalized_output" == *'PASS: pooler normalized session success'* ]]
+assert_not_contains "$pooler_normalized_output" "$SECRET"
+
 ROLE_REFUSAL_SQL="$TMP_DIR/role_refusal.sql"
 cat >"$ROLE_REFUSAL_SQL" <<'SQL'
 CREATE TABLE runner_role_refusal_must_not_run (id integer PRIMARY KEY);
