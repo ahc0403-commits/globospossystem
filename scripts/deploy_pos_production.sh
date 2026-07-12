@@ -451,7 +451,7 @@ BEGIN
   IF current_user <> '$POS_PSQL_ROLE'
      OR (
        session_user !~ '^cli_login_'
-       AND session_user <> 'postgres.$POS_PROJECT_REF'
+       AND session_user <> '$POS_PSQL_ROLE'
      )
      OR NOT pg_catalog.pg_has_role(session_user, '$POS_PSQL_ROLE', 'MEMBER') THEN
     RAISE EXCEPTION 'POS_PSQL_ROLE_ACTIVATION_FAILED';
