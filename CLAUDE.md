@@ -18,14 +18,16 @@ Stack: Flutter + Supabase (Postgres + RLS + Edge Functions + Storage + pg_cron).
 
 - **Codebase**: `~/globos_pos_system`
 - **Obsidian vault**: `~/Documents/restaurant-ops-vault/GLOBOSVN POS/`
-- **Authoritative scope**: `Stage 1/stage1_scope_v1.3.md` (in vault)
-- **Vendor docs**: `docs/vendor/` (WeTax API)
+- **Authoritative scope**: Scope v1.4 (MISA meInvoice active path)
+- **Vendor docs**: MISA meInvoice Developer Portal references in `docs/`
 - **Sample API responses**: `docs/vendor/samples/`
 
 ## 3. Authority and scope rules
 
-- **Scope v1.3 is authoritative.** v1.0/v1.1/v1.2 are superseded but
-  preserved for history. Do not re-litigate decisions already in v1.3.
+- **Scope v1.4 is authoritative.** Earlier scope versions are superseded but
+  preserved for history. Do not re-litigate decisions already in v1.4.
+- **WeTax is permanently historical.** Do not reactivate its dispatch path.
+  MISA meInvoice is the active electronic-invoice provider integration.
 - **Do not re-run Phase -1, Phase 0, or Phase 1.** They are complete and
   documented in the vault. Same for Phase 2 Step 1.
 - **Phase 2 Steps 2–10 are complete** as of 2026-04-13.
@@ -47,11 +49,12 @@ Stack: Flutter + Supabase (Postgres + RLS + Edge Functions + Storage + pg_cron).
   Load Design Documents → Load Code Structure → Run Checks by Category
   → Generate Harness Report with severity classification (CRITICAL /
   HIGH / MEDIUM / LOW / CONFIRMED) and Priority Fix List.
-- **Do not rebuild what the vendor already provides.** WeTax portal
+- **Do not rebuild what the vendor already provides.** The MISA portal
   handles red invoice history, corrections, cancellations, PDF
   downloads. POS opens `lookup_url` — does not duplicate.
-- **Payment completion must never depend on WeTax availability.**
-  WeTax dispatch is always async. Principle P6 in scope v1.3.
+- **Payment completion must never depend on MISA availability.**
+  meInvoice dispatch is always asynchronous: payment commits first and the
+  durable invoice job is processed independently. This invariant is binding.
 - **Both existing settlement edge functions are preserved.**
   `generate-settlement` (dine-in) and `generate_delivery_settlement`
   (Deliberry) serve distinct business domains. Do not flag as duplicates.
@@ -93,7 +96,7 @@ This means:
   `supabase/migrations/20260409000000_dine_in_sales_contract_closure.sql`
   is the atomic anchor. Einvoice job creation attaches here.
 - Daily close is fixed 00:00 Asia/Ho_Chi_Minh, not per-store
-- WeTax portal handles red invoice lifecycle. POS does not duplicate.
+- MISA meInvoice handles red invoice lifecycle. POS does not duplicate.
 
 ## 8. Workflow
 
