@@ -116,6 +116,12 @@ contains the expected scheduled `slot_id`. `started_at` is not used as slot
 identity. The scheduled workflow runs this audit after normal collection;
 missing runs use the same failure summary and deduplicated escalation path.
 
+Moers daily reports are cumulative snapshots. A successful later scheduled
+snapshot for the same store and HCM date therefore recovers earlier missing
+slots for health-audit purposes. The latest completed slot still fails closed
+until an equal-or-newer scheduled snapshot succeeds, and recovery never crosses
+the HCM date boundary.
+
 Explicit slot metadata became authoritative at 2026-07-11 19:00 HCM. Missing
 metadata before that cutoff is a historical baseline and is excluded from the
 health result; it is not evidence that those collections failed. Every completed
@@ -143,8 +149,11 @@ row index, and raw row content. Already-seen rows update `last_seen_at`; only ne
 raw inserts trigger invoice queue creation. All rows use
 `payment_method = CASH`; VNPAY/QR wallet data must not be mixed into this ledger.
 
-An empty recognized table records a successful zero-sales run only when no
-aggregate exists for that store-day, and it does not write aggregate rows.
+An empty table with a recognized sales header records a successful zero-sales
+run only when no aggregate exists for that store-day, and it does not write
+aggregate rows. A workbook without a recognized sales header remains a transient
+vendor-response failure and receives the normal single retry; arbitrary empty or
+error files are never accepted as zero sales.
 Existing device totals are compared with every new snapshot. An empty snapshot,
 missing device, or lower gross/transaction total is classified as a transient
 partial response, and existing aggregates are preserved. Other stores and dates

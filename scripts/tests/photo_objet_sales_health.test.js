@@ -44,6 +44,42 @@ test('SheetJS uses the patched official release and parses a real workbook', () 
   }
 });
 
+test('a recognized header-only spreadsheet is a successful zero-sales report', () => {
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.aoa_to_sheet([
+    ['Device Name', 'Device ID', 'Time', 'Amount', 'Type'],
+  ]);
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Sales');
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'photo-empty-xlsx-'));
+  const filePath = path.join(tempDir, 'empty-sales.xlsx');
+  try {
+    fs.writeFileSync(filePath, XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }));
+    assert.deepEqual(parseSpreadsheetFile(filePath), []);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('an unrecognized spreadsheet is transient and eligible for one retry', () => {
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.aoa_to_sheet([['Report unavailable']]);
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Error');
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'photo-invalid-xlsx-'));
+  const filePath = path.join(tempDir, 'invalid-report.xlsx');
+  try {
+    fs.writeFileSync(filePath, XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }));
+    assert.throws(
+      () => parseSpreadsheetFile(filePath),
+      error => error.failureClass === FAILURE.TRANSIENT &&
+        /no recognizable sales table/.test(error.message),
+    );
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 const ids = [
   '77000000-0000-4000-8000-000000000102',
   '77000000-0000-4000-8000-000000000103',
@@ -324,6 +360,43 @@ test('missing-run audit excludes historical metadata gaps but detects new gaps',
     status: 'success',
     error_message: serializeRunMetadata(identity),
   }], now), []);
+});
+
+test('a later cumulative scheduled snapshot recovers earlier missing slots', () => {
+  const store = { storeName: 'BIEN HOA', storeId: ids[0], enabled: true };
+  const laterIdentity = {
+    source: 'scheduled',
+    slotId: 'scheduled:2026-07-12T11:00+07:00',
+    slotDateHcm: '2026-07-12',
+    slotTimeHcm: '11:00',
+  };
+  const laterSuccess = [{
+    store_id: ids[0],
+    target_date: '2026-07-12',
+    status: 'success',
+    error_message: serializeRunMetadata(laterIdentity),
+  }];
+
+  assert.deepEqual(
+    findMissingRuns(
+      [store],
+      ['2026-07-12'],
+      laterSuccess,
+      new Date('2026-07-12T04:20:00Z'),
+    ),
+    [],
+    'the 11:00 cumulative snapshot covers completed 09:00 and 10:00 slots',
+  );
+  assert.deepEqual(
+    findMissingRuns(
+      [store],
+      ['2026-07-12'],
+      laterSuccess,
+      new Date('2026-07-12T06:20:00Z'),
+    ),
+    [{ storeName: 'BIEN HOA', date: '2026-07-12', slot: '2026-07-12 12:00' }],
+    'a later slot still fails once it becomes due and has no equal-or-newer success',
+  );
 });
 
 test('partial aggregate snapshots never overwrite fuller totals', () => {
