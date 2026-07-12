@@ -7,6 +7,8 @@ const XLSX = require('xlsx');
 
 const {
   FAILURE,
+  SOURCE_IDENTITY_VERSION,
+  aggregateDailyRawRows,
   assertAggregateComplete,
   buildStores,
   classifyError,
@@ -14,11 +16,14 @@ const {
   findMissingRuns,
   inclusiveDateRange,
   parseArgs,
+  parseSoldAt,
   parseSpreadsheetFile,
+  normalizeRawSalesRows,
   runWithTransientRetry,
   runPreflight,
   RUN_METADATA_AUDIT_START_AT,
   serializeRunMetadata,
+  selectRowsForInterval,
   validateStaticPreflight,
   validateStoreMappings,
 } = require('../pull_moers_sales');
@@ -281,6 +286,8 @@ test('slot identities distinguish scheduled, manual, audit, and bounded backfill
     slotId: 'scheduled:2026-07-11T09:00+07:00',
     slotDateHcm: '2026-07-11',
     slotTimeHcm: '09:00',
+    intervalStartAt: '2026-07-11T01:00:00.000Z',
+    intervalEndAt: '2026-07-11T02:00:00.000Z',
   });
   assert.equal(new Set([scheduled.slotId, manual.slotId, audit.slotId, backfill.slotId]).size, 4);
   assert.deepEqual([manual.source, audit.source, backfill.source], ['manual', 'audit', 'backfill']);
@@ -299,10 +306,99 @@ test('delayed 22:30 schedule crossing HCM midnight retains the previous target d
   assert.equal(identity.slotDateHcm, options.targetDates[0]);
   assert.equal(identity.slotTimeHcm, '22:30');
   assert.equal(identity.slotId, 'scheduled:2026-07-11T22:30+07:00');
+  assert.equal(identity.intervalStartAt, '2026-07-11T15:00:00.000Z');
+  assert.equal(identity.intervalEndAt, '2026-07-11T15:30:00.000Z');
   assert.throws(
     () => createRunIdentity(options, '2026-07-12', env),
     /does not match intended HCM slot date 2026-07-11/,
   );
+});
+
+test('12:00 scheduled collection accepts only 11:00:00 through 11:59:59', () => {
+  const identity = createRunIdentity(
+    { auditMissingRuns: false, backfill: false },
+    '2026-07-12',
+    {
+      GITHUB_EVENT_NAME: 'schedule',
+      PHOTO_OBJET_SCHEDULE_CRON: '0 5 * * *',
+      PHOTO_OBJET_RUN_STARTED_AT: '2026-07-12T05:17:00Z',
+    },
+  );
+  const rows = [
+    { 'Device Name': 'M1', Time: '2026-07-12 10:59:59', Amount: '100000' },
+    { 'Device Name': 'M1', Time: '2026-07-12 11:00:00', Amount: '110000' },
+    { 'Device Name': 'M1', Time: '2026-07-12 11:59:59', Amount: '120000' },
+    { 'Device Name': 'M1', Time: '2026-07-12 12:00:00', Amount: '130000' },
+  ];
+
+  assert.deepEqual(
+    selectRowsForInterval(rows, '2026-07-12', identity).map(item => item.row.Amount),
+    ['110000', '120000'],
+  );
+  assert.equal(identity.intervalStartAt, '2026-07-12T04:00:00.000Z');
+  assert.equal(identity.intervalEndAt, '2026-07-12T05:00:00.000Z');
+});
+
+test('time parsing accepts Moers full timestamps and rejects another date', () => {
+  assert.equal(
+    parseSoldAt('2026-07-12', '2026-07-12 11:23:45'),
+    '2026-07-12T11:23:45+07:00',
+  );
+  assert.equal(parseSoldAt('2026-07-12', '11:23'), '2026-07-12T11:23:00+07:00');
+  assert.equal(parseSoldAt('2026-07-12', '2026-07-11 11:23:45'), null);
+});
+
+test('stable source identity ignores workbook order and preserves identical multiplicity', () => {
+  const identity = {
+    intervalStartAt: '2026-07-12T04:00:00.000Z',
+    intervalEndAt: '2026-07-12T05:00:00.000Z',
+  };
+  const store = { storeId: ids[0], storeName: 'BIEN HOA' };
+  const duplicate = {
+    'Device Name': 'M1',
+    'Device ID': 'D1',
+    Time: '2026-07-12 11:15:00',
+    Amount: '100000',
+    Type: 'Sale',
+  };
+  const other = { ...duplicate, Time: '2026-07-12 11:20:00', Amount: '90000' };
+  const first = selectRowsForInterval([duplicate, other, duplicate], '2026-07-12', identity);
+  const reordered = selectRowsForInterval([other, duplicate, duplicate], '2026-07-12', identity);
+  const firstHashes = normalizeRawSalesRows(
+    first, store, '2026-07-12', 'excel', 'run-a', identity,
+  ).map(row => row.source_hash).sort();
+  const reorderedRows = normalizeRawSalesRows(
+    reordered, store, '2026-07-12', 'excel', 'run-b', identity,
+  );
+
+  assert.deepEqual(reorderedRows.map(row => row.source_hash).sort(), firstHashes);
+  assert.equal(new Set(firstHashes).size, 3);
+  assert.deepEqual(
+    reorderedRows.filter(row => row.amount === 100000).map(row => row.occurrence_no),
+    [1, 2],
+  );
+  assert.equal(reorderedRows[0].source_identity_version, SOURCE_IDENTITY_VERSION);
+  assert.equal('row_index' in reorderedRows[0].raw_payload, false);
+});
+
+test('daily aggregate is recomputed from the canonical raw ledger', () => {
+  const rows = [
+    { device_name: 'M1', device_id: 'D1', amount: 100000, raw_payload: { row: { id: 1 } } },
+    { device_name: 'M1', device_id: 'D1', amount: 120000, raw_payload: { row: { id: 2 } } },
+    { device_name: 'M2', device_id: 'D2', amount: 90000, raw_payload: { row: { id: 3 } } },
+  ];
+  assert.deepEqual(aggregateDailyRawRows(rows), [
+    {
+      device_name: 'M1', device_id: 'D1', gross_sales: 220000,
+      service_amount: 0, transaction_count: 2, service_count: 0,
+      raw_rows: [{ id: 1 }, { id: 2 }],
+    },
+    {
+      device_name: 'M2', device_id: 'D2', gross_sales: 90000,
+      service_amount: 0, transaction_count: 1, service_count: 0,
+      raw_rows: [{ id: 3 }],
+    },
+  ]);
 });
 
 test('missing-run audit uses explicit slot metadata, not delayed started_at', () => {
@@ -362,7 +458,7 @@ test('missing-run audit excludes historical metadata gaps but detects new gaps',
   }], now), []);
 });
 
-test('a later cumulative scheduled snapshot recovers earlier missing slots', () => {
+test('schedule health requires each exact slot even when a later snapshot succeeds', () => {
   const store = { storeName: 'BIEN HOA', storeId: ids[0], enabled: true };
   const laterIdentity = {
     source: 'scheduled',
@@ -384,8 +480,11 @@ test('a later cumulative scheduled snapshot recovers earlier missing slots', () 
       laterSuccess,
       new Date('2026-07-12T04:20:00Z'),
     ),
-    [],
-    'the 11:00 cumulative snapshot covers completed 09:00 and 10:00 slots',
+    [
+      { storeName: 'BIEN HOA', date: '2026-07-12', slot: '2026-07-12 09:00' },
+      { storeName: 'BIEN HOA', date: '2026-07-12', slot: '2026-07-12 10:00' },
+    ],
+    'data recovery must not hide missed scheduler slots',
   );
   assert.deepEqual(
     findMissingRuns(
@@ -394,8 +493,12 @@ test('a later cumulative scheduled snapshot recovers earlier missing slots', () 
       laterSuccess,
       new Date('2026-07-12T06:20:00Z'),
     ),
-    [{ storeName: 'BIEN HOA', date: '2026-07-12', slot: '2026-07-12 12:00' }],
-    'a later slot still fails once it becomes due and has no equal-or-newer success',
+    [
+      { storeName: 'BIEN HOA', date: '2026-07-12', slot: '2026-07-12 09:00' },
+      { storeName: 'BIEN HOA', date: '2026-07-12', slot: '2026-07-12 10:00' },
+      { storeName: 'BIEN HOA', date: '2026-07-12', slot: '2026-07-12 12:00' },
+    ],
+    'every completed slot needs its own successful run',
   );
 });
 

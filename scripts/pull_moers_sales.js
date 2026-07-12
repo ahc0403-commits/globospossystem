@@ -10,6 +10,7 @@ const HCM_OFFSET_MS = 7 * 60 * 60 * 1000;
 const EXPECTED_POS_PROJECT_REF = 'ynriuoomotxuwhuxxmhj';
 const PHOTO_OBJET_BRAND_ID = '77000000-0000-0000-0000-000000000001';
 const MAX_BACKFILL_DAYS = 7;
+const SOURCE_IDENTITY_VERSION = 2;
 const RUN_METADATA_PREFIX = 'FLARE_RUN_METADATA ';
 const COLLECTOR_STARTED_AT = new Date();
 const FAILURE = Object.freeze({
@@ -411,43 +412,85 @@ function aggregateByDevice(rows) {
 }
 
 function parseSoldAt(targetDate, rawTime) {
-  const time = String(rawTime || '').trim();
-  const match = time.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  const value = String(rawTime || '').trim();
+  const match = value.match(
+    /^(?:(\d{4}-\d{2}-\d{2})[ T])?(\d{1,2}):(\d{2})(?::(\d{2}))?$/,
+  );
   if (!match) return null;
-  const hh = match[1].padStart(2, '0');
-  const mm = match[2];
-  const ss = (match[3] || '00').padStart(2, '0');
+  const rowDate = match[1] || targetDate;
+  const hour = Number(match[2]);
+  const minute = Number(match[3]);
+  const second = Number(match[4] || '0');
+  if (rowDate !== targetDate || hour > 23 || minute > 59 || second > 59) return null;
+  const hh = String(hour).padStart(2, '0');
+  const mm = String(minute).padStart(2, '0');
+  const ss = String(second).padStart(2, '0');
   return `${targetDate}T${hh}:${mm}:${ss}+07:00`;
 }
 
-function normalizeRawSalesRows(rows, store, targetDate, method, pullRunId) {
+function selectRowsForInterval(rows, targetDate, identity) {
+  const intervalStart = identity.intervalStartAt
+    ? Date.parse(identity.intervalStartAt)
+    : null;
+  const intervalEnd = identity.intervalEndAt ? Date.parse(identity.intervalEndAt) : null;
+
   return rows
-    .map((row, index) => {
+    .map(row => {
+      const deviceName = String(row['Device Name'] || '').trim();
+      const saleTimeText = String(row['Time'] || '').trim();
+      const amount = parseAmount(row['Amount']);
+      if (!deviceName || amount <= 0) return null;
+
+      const soldAt = parseSoldAt(targetDate, saleTimeText);
+      if (!soldAt) {
+        throw deterministic(
+          `Moers row has invalid or out-of-date Time value: ${saleTimeText || '<empty>'}`,
+        );
+      }
+      const soldAtMs = Date.parse(soldAt);
+      if (intervalStart !== null && soldAtMs < intervalStart) return null;
+      if (intervalEnd !== null && soldAtMs >= intervalEnd) return null;
+      return { row, soldAt };
+    })
+    .filter(Boolean);
+}
+
+function normalizeRawSalesRows(selectedRows, store, targetDate, method, pullRunId, identity) {
+  const occurrences = new Map();
+  return selectedRows.map(({ row, soldAt }) => {
       const deviceName = String(row['Device Name'] || '').trim();
       const deviceId = String(row['Device ID'] || '').trim();
       const saleTimeText = String(row['Time'] || '').trim();
       const rawType = String(row['Type'] || '').trim();
       const amount = parseAmount(row['Amount']);
 
-      if (!deviceName || amount <= 0) return null;
+      const canonicalIdentity = {
+        source_identity_version: SOURCE_IDENTITY_VERSION,
+        store_id: store.storeId,
+        sale_date: targetDate,
+        device_id: deviceId,
+        device_name: deviceName,
+        sold_at: soldAt,
+        amount,
+        raw_type: rawType,
+      };
+      const canonicalKey = stableJson(canonicalIdentity);
+      const occurrenceNo = (occurrences.get(canonicalKey) || 0) + 1;
+      occurrences.set(canonicalKey, occurrenceNo);
 
       const rawPayload = {
         source: 'moers',
         collector_method: method,
         store_name: store.storeName,
-        row_index: index,
+        source_identity_version: SOURCE_IDENTITY_VERSION,
+        occurrence_no: occurrenceNo,
+        interval_start_at: identity.intervalStartAt,
+        interval_end_at: identity.intervalEndAt,
         row,
       };
       const hashBasis = stableJson({
-        store_id: store.storeId,
-        sale_date: targetDate,
-        device_id: deviceId,
-        device_name: deviceName,
-        sale_time_text: saleTimeText,
-        amount,
-        raw_type: rawType,
-        row_index: index,
-        row,
+        ...canonicalIdentity,
+        occurrence_no: occurrenceNo,
       });
 
       return {
@@ -456,18 +499,21 @@ function normalizeRawSalesRows(rows, store, targetDate, method, pullRunId) {
         device_name: deviceName,
         device_id: deviceId || null,
         sale_time_text: saleTimeText || null,
-        sold_at: parseSoldAt(targetDate, saleTimeText),
+        sold_at: soldAt,
         amount,
         raw_type: rawType || null,
         payment_method: 'CASH',
         buyer_kind: 'anonymous',
         raw_payload: rawPayload,
         source_hash: sha256(hashBasis),
+        source_identity_version: SOURCE_IDENTITY_VERSION,
+        occurrence_no: occurrenceNo,
+        interval_start_at: identity.intervalStartAt,
+        interval_end_at: identity.intervalEndAt,
         pull_run_id: pullRunId,
         last_seen_at: new Date().toISOString(),
       };
-    })
-    .filter(Boolean);
+    });
 }
 
 async function loginAndGetData(page, user, pass, targetDate, downloadDir) {
@@ -612,11 +658,13 @@ async function loginAndGetData(page, user, pass, targetDate, downloadDir) {
 
 function serializeRunMetadata(identity, errorMessage = null) {
   return `${RUN_METADATA_PREFIX}${JSON.stringify({
-    version: 1,
+    version: 2,
     slot_id: identity.slotId,
     source: identity.source,
     slot_date_hcm: identity.slotDateHcm,
     slot_time_hcm: identity.slotTimeHcm,
+    interval_start_at: identity.intervalStartAt || null,
+    interval_end_at: identity.intervalEndAt || null,
     error: errorMessage,
   })}`;
 }
@@ -656,6 +704,24 @@ function scheduledSlotFromCron(cron, runTimestamp) {
   };
 }
 
+function fullDayInterval(targetDate) {
+  const start = new Date(`${targetDate}T00:00:00+07:00`);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return {
+    intervalStartAt: start.toISOString(),
+    intervalEndAt: end.toISOString(),
+  };
+}
+
+function scheduledInterval(slot) {
+  const end = new Date(`${slot.slotDateHcm}T${slot.slotTimeHcm}:00+07:00`);
+  const durationMinutes = slot.slotTimeHcm === '22:30' ? 30 : 60;
+  return {
+    intervalStartAt: new Date(end.getTime() - durationMinutes * 60 * 1000).toISOString(),
+    intervalEndAt: end.toISOString(),
+  };
+}
+
 function resolveRunTimestamp(env = process.env, fallback = COLLECTOR_STARTED_AT) {
   const value = env.PHOTO_OBJET_EVENT_TIMESTAMP ||
     env.PHOTO_OBJET_RUN_STARTED_AT ||
@@ -682,6 +748,7 @@ function createRunIdentity(options, targetDate, env = process.env) {
       slotId: `backfill:${targetDate}`,
       slotDateHcm: targetDate,
       slotTimeHcm: null,
+      ...fullDayInterval(targetDate),
     };
   }
   if (env.GITHUB_EVENT_NAME === 'schedule') {
@@ -699,6 +766,7 @@ function createRunIdentity(options, targetDate, env = process.env) {
       slotId: `scheduled:${slot.slotDateHcm}T${slot.slotTimeHcm}+07:00`,
       slotDateHcm: slot.slotDateHcm,
       slotTimeHcm: slot.slotTimeHcm,
+      ...scheduledInterval(slot),
     };
   }
   const invocation = env.GITHUB_RUN_ID || env.PHOTO_OBJET_INVOCATION_ID || 'local';
@@ -707,6 +775,7 @@ function createRunIdentity(options, targetDate, env = process.env) {
     slotId: `manual:${targetDate}:${invocation}`,
     slotDateHcm: targetDate,
     slotTimeHcm: null,
+    ...fullDayInterval(targetDate),
   };
 }
 
@@ -716,6 +785,12 @@ async function startPullRun(supabase, store, targetDate, identity) {
     .insert({
       store_id: store.storeId,
       target_date: targetDate,
+      run_source: identity.source,
+      slot_id: identity.slotId,
+      slot_date_hcm: identity.slotDateHcm,
+      slot_time_hcm: identity.slotTimeHcm,
+      interval_start_at: identity.intervalStartAt,
+      interval_end_at: identity.intervalEndAt,
       status: 'started',
       error_message: serializeRunMetadata(identity),
     })
@@ -769,6 +844,42 @@ async function upsertRawSalesRows(supabase, rows) {
     inserted: rows.filter(row => !existingHashes.has(row.source_hash)).length,
     duplicate: rows.filter(row => existingHashes.has(row.source_hash)).length,
   };
+}
+
+async function loadDailyRawSalesRows(supabase, storeId, targetDate) {
+  const { data, error } = await supabase
+    .from('photo_objet_sales_raw')
+    .select('device_name,device_id,amount,raw_payload')
+    .eq('store_id', storeId)
+    .eq('sale_date', targetDate)
+    .eq('source_identity_version', SOURCE_IDENTITY_VERSION);
+  if (error) throw new Error(`Daily raw sales lookup failed: ${error.message}`);
+  return data || [];
+}
+
+function aggregateDailyRawRows(rows) {
+  const devices = new Map();
+  for (const row of rows) {
+    const deviceName = String(row.device_name || '').trim();
+    const amount = Number(row.amount || 0);
+    if (!deviceName || !Number.isSafeInteger(amount) || amount <= 0) continue;
+    if (!devices.has(deviceName)) {
+      devices.set(deviceName, {
+        device_name: deviceName,
+        device_id: row.device_id || '',
+        gross_sales: 0,
+        service_amount: 0,
+        transaction_count: 0,
+        service_count: 0,
+        raw_rows: [],
+      });
+    }
+    const device = devices.get(deviceName);
+    device.gross_sales += amount;
+    device.transaction_count += 1;
+    device.raw_rows.push(row.raw_payload?.row || {});
+  }
+  return [...devices.values()];
 }
 
 async function loadExistingAggregates(supabase, storeId, targetDate) {
@@ -871,19 +982,26 @@ async function processStore(supabase, store, targetDate, downloadDir, runIdentit
     );
     console.log(`  Method: ${method}, ${rows.length} rows`);
 
+    const selectedRows = selectRowsForInterval(rows, targetDate, runIdentity);
+    console.log(
+      `  ${storeName}: accepted ${selectedRows.length}/${rows.length} rows for ` +
+        `${runIdentity.intervalStartAt} <= sold_at < ${runIdentity.intervalEndAt}`,
+    );
     const rawRows = normalizeRawSalesRows(
-      rows,
+      selectedRows,
       store,
       targetDate,
       method,
       pullRunId,
+      runIdentity,
     );
     const rawResult = await upsertRawSalesRows(supabase, rawRows);
     console.log(
       `  ${storeName}: ${rawResult.inserted} new raw rows, ${rawResult.duplicate} duplicates`,
     );
 
-    const deviceRows = aggregateByDevice(rows);
+    const dailyRawRows = await loadDailyRawSalesRows(supabase, storeId, targetDate);
+    const deviceRows = aggregateDailyRawRows(dailyRawRows);
     console.log(`  ${storeName}: ${deviceRows.length} devices`);
     const existingRows = await loadExistingAggregates(supabase, storeId, targetDate);
     assertAggregateComplete(existingRows, deviceRows);
@@ -1149,9 +1267,7 @@ function findMissingRuns(
           return run.store_id === store.storeId &&
             run.target_date === date &&
             metadata?.source === 'scheduled' &&
-            metadata.slot_date_hcm === date &&
-            typeof metadata.slot_time_hcm === 'string' &&
-            metadata.slot_time_hcm >= slot.label.slice(-5);
+            metadata.slot_id === slot.slotId;
         });
         if (!covered) missing.push({ storeName: store.storeName, date, slot: slot.label });
       }
@@ -1292,6 +1408,8 @@ module.exports = {
   MAX_BACKFILL_DAYS,
   RUN_METADATA_AUDIT_START_AT,
   RUN_METADATA_PREFIX,
+  SOURCE_IDENTITY_VERSION,
+  aggregateDailyRawRows,
   assertAggregateComplete,
   auditDates,
   buildStores,
@@ -1300,13 +1418,16 @@ module.exports = {
   findMissingRuns,
   inclusiveDateRange,
   parseArgs,
+  parseSoldAt,
   parseSpreadsheetFile,
   parseRunMetadata,
   runPreflight,
   runWithTransientRetry,
   scheduledSlotFromCron,
+  selectRowsForInterval,
   scheduledSlotsForDate,
   serializeRunMetadata,
+  normalizeRawSalesRows,
   validateStaticPreflight,
   validateStoreMappings,
 };

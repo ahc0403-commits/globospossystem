@@ -7,6 +7,8 @@ String readRepoFile(String path) => File(path).readAsStringSync();
 void main() {
   const migrationPath =
       'supabase/migrations/20260630007000_photo_objet_raw_meinvoice_queue.sql';
+  const intervalMigrationPath =
+      'supabase/migrations/20260712190000_photo_objet_interval_ledger.sql';
   const scriptPath = 'scripts/pull_moers_sales.js';
   const workflowPath = '.github/workflows/photo_objet_sales.yml';
   const docsPath = 'docs/photo_objet_sales_pull_setup.md';
@@ -67,7 +69,8 @@ void main() {
     expect(source, contains('if (slot.at < auditStartAt) continue;'));
     expect(source, contains('AUDIT_HISTORICAL_BASELINE'));
     expect(source, contains("metadata?.source === 'scheduled'"));
-    expect(source, contains("metadata.slot_time_hcm >= slot.label.slice(-5)"));
+    expect(source, contains('metadata.slot_id === slot.slotId'));
+    expect(source, isNot(contains("metadata.slot_time_hcm >= slot.label.slice(-5)")));
     expect(source, isNot(contains('startedAt >= slot.at')));
     expect(source, contains('salesTableFromMatrix'));
     expect(source, contains('if (table.recognized) return table.rows;'));
@@ -84,6 +87,9 @@ void main() {
     expect(source, contains('BACKFILL_DRY_RUN'));
     expect(source, contains('assertAggregateComplete'));
     expect(source, contains('normalizeRawSalesRows'));
+    expect(source, contains('selectRowsForInterval'));
+    expect(source, contains('SOURCE_IDENTITY_VERSION = 2'));
+    expect(source, isNot(contains('row_index: index')));
     expect(source, contains('source_hash'));
     expect(source, contains("payment_method: 'CASH'"));
     expect(source, contains("buyer_kind: 'anonymous'"));
@@ -98,6 +104,21 @@ void main() {
     expect(source, contains('pulled_at: new Date().toISOString()'));
     expect(source, isNot(contains('publishCashRegisterInvoice')));
     expect(source, isNot(contains('MISA_MEINVOICE_PASSWORD')));
+  });
+
+  test('Photo Objet interval migration backs up, gates, and resets the ledger', () {
+    final sql = readRepoFile(intervalMigrationPath);
+
+    expect(sql, contains('photo_interval_20260712190000_jobs_backup'));
+    expect(sql, contains('photo_interval_20260712190000_raw_backup'));
+    expect(sql, contains("source_system = 'photo_objet_moers'"));
+    expect(sql, contains("sales.sale_date < DATE '2026-07-01'"));
+    expect(sql, contains('source_identity_version integer NOT NULL DEFAULT 2'));
+    expect(sql, contains('occurrence_no integer'));
+    expect(sql, contains('ALTER COLUMN sold_at SET NOT NULL'));
+    expect(sql, contains("'photo_objet_meinvoice_dispatch_enabled'"));
+    expect(sql, contains("'false'"));
+    expect(sql, contains('PHOTO_INTERVAL_PREFLIGHT_DISPATCHED_JOBS'));
   });
 
   test('Photo Objet spreadsheet parser uses patched SheetJS release', () {
