@@ -66,8 +66,17 @@ void main() {
     expect(source, contains("Date.parse('2026-07-11T12:00:00Z')"));
     expect(source, contains('if (slot.at < auditStartAt) continue;'));
     expect(source, contains('AUDIT_HISTORICAL_BASELINE'));
-    expect(source, contains('metadata?.slot_id === slot.slotId'));
+    expect(source, contains("metadata?.source === 'scheduled'"));
+    expect(source, contains("metadata.slot_time_hcm >= slot.label.slice(-5)"));
     expect(source, isNot(contains('startedAt >= slot.at')));
+    expect(source, contains('salesTableFromMatrix'));
+    expect(source, contains('if (table.recognized) return table.rows;'));
+    expect(
+      source,
+      contains(
+        "throw transient('Downloaded spreadsheet has no recognizable sales table')",
+      ),
+    );
     expect(source, contains('runWithTransientRetry'));
     expect(source, contains('attempt < 2'));
     expect(source, contains('--audit-missing-runs'));

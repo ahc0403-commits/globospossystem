@@ -107,12 +107,12 @@ function canonicalHeader(header) {
   return String(header).trim();
 }
 
-function rowsFromMatrix(matrix) {
+function salesTableFromMatrix(matrix) {
   const headerIndex = matrix.findIndex(hasDeviceHeader);
-  if (headerIndex < 0) return [];
+  if (headerIndex < 0) return { recognized: false, rows: [] };
 
   const headers = matrix[headerIndex].map(canonicalHeader);
-  return matrix
+  const rows = matrix
     .slice(headerIndex + 1)
     .map(cells => {
       const row = {};
@@ -122,6 +122,11 @@ function rowsFromMatrix(matrix) {
       return row;
     })
     .filter(row => String(row['Device Name'] || '').trim() !== '');
+  return { recognized: true, rows };
+}
+
+function rowsFromMatrix(matrix) {
+  return salesTableFromMatrix(matrix).rows;
 }
 
 function parseHtmlXlsTable(htmlContent) {
@@ -157,17 +162,17 @@ function parseHtmlXlsTable(htmlContent) {
       if (cells.length === 0 || cells.every(c => c === '')) continue;
       matrix.push(cells);
     }
-    return rowsFromMatrix(matrix);
+    return salesTableFromMatrix(matrix);
   }
 
   const tablePattern = /<table[\s\S]*?<\/table>/gi;
   let tMatch;
   while ((tMatch = tablePattern.exec(body)) !== null) {
-    const rows = parseOneTable(tMatch[0]);
-    if (rows.length > 0) return rows;
+    const table = parseOneTable(tMatch[0]);
+    if (table.recognized) return table;
   }
 
-  return [];
+  return { recognized: false, rows: [] };
 }
 
 function parseSpreadsheetFile(filePath) {
@@ -175,9 +180,9 @@ function parseSpreadsheetFile(filePath) {
   const sample = buffer.toString('utf8', 0, Math.min(buffer.length, 2048));
 
   if (/<html|<table/i.test(sample)) {
-    const rows = parseHtmlXlsTable(buffer.toString('utf8'));
-    if (rows.length > 0) return rows;
-    throw deterministic('Downloaded spreadsheet has no recognizable sales table');
+    const table = parseHtmlXlsTable(buffer.toString('utf8'));
+    if (table.recognized) return table.rows;
+    throw transient('Downloaded spreadsheet has no recognizable sales table');
   }
 
   const workbook = XLSX.read(buffer, { type: 'buffer' });
@@ -187,10 +192,10 @@ function parseSpreadsheetFile(filePath) {
       raw: false,
       blankrows: false,
     });
-    const rows = rowsFromMatrix(matrix);
-    if (rows.length > 0) return rows;
+    const table = salesTableFromMatrix(matrix);
+    if (table.recognized) return table.rows;
   }
-  throw deterministic('Downloaded spreadsheet has no recognizable sales table');
+  throw transient('Downloaded spreadsheet has no recognizable sales table');
 }
 
 function parseVisibleDeviceTable() {
@@ -1143,7 +1148,10 @@ function findMissingRuns(
           const metadata = parseRunMetadata(run.error_message);
           return run.store_id === store.storeId &&
             run.target_date === date &&
-            metadata?.slot_id === slot.slotId;
+            metadata?.source === 'scheduled' &&
+            metadata.slot_date_hcm === date &&
+            typeof metadata.slot_time_hcm === 'string' &&
+            metadata.slot_time_hcm >= slot.label.slice(-5);
         });
         if (!covered) missing.push({ storeName: store.storeName, date, slot: slot.label });
       }
