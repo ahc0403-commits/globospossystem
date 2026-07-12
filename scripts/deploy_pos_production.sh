@@ -418,8 +418,13 @@ validate_linked_pg_credentials() {
     fail "Supabase credential host is not an allowed POS direct or pooler host."
   fi
 
-  [[ "$PGUSER" == cli_login_* && "$PGUSER" == *"$POS_PROJECT_REF"* ]] ||
-    fail "Supabase credential user is not a ref-bound temporary cli_login role."
+  if [[ "$PGUSER" == "postgres.$POS_PROJECT_REF" ]]; then
+    :
+  elif [[ "$PGUSER" == cli_login_* && "$PGUSER" == *"$POS_PROJECT_REF"* ]]; then
+    :
+  else
+    fail "Supabase credential user is not bound to the POS project ref."
+  fi
   [[ -n "$PGPASSWORD" ]] || fail "Supabase credential password is empty."
   [[ "$PGDATABASE" == "postgres" ]] || fail "Supabase credential database is not postgres."
 }
@@ -444,7 +449,10 @@ run_linked_psql_file() {
   role_check_sql="DO \$pos_role_check\$
 BEGIN
   IF current_user <> '$POS_PSQL_ROLE'
-     OR session_user !~ '^cli_login_'
+     OR (
+       session_user !~ '^cli_login_'
+       AND session_user <> 'postgres.$POS_PROJECT_REF'
+     )
      OR NOT pg_catalog.pg_has_role(session_user, '$POS_PSQL_ROLE', 'MEMBER') THEN
     RAISE EXCEPTION 'POS_PSQL_ROLE_ACTIVATION_FAILED';
   END IF;

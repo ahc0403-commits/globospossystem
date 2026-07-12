@@ -45,7 +45,7 @@ printf '%s\n' "$*" >>"$ISSUER_LOG"
 cat <<EXPORTS
 export PGHOST="${FAKE_PGHOST:-aws-0-ap-southeast-1.pooler.supabase.com}"
 export PGPORT="${FAKE_PGPORT:-5432}"
-export PGUSER="${FAKE_PGUSER:-cli_login_test.ynriuoomotxuwhuxxmhj}"
+export PGUSER="${FAKE_PGUSER:-postgres.ynriuoomotxuwhuxxmhj}"
 export PGPASSWORD="$SECRET"
 export PGDATABASE="postgres"
 
@@ -114,8 +114,17 @@ grep -qx 'db dump --linked --schema public --dry-run' "$ISSUER_LOG"
 grep -q 'args=-X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --command SET ROLE postgres;' "$PSQL_LOG"
 grep -q -- '--command DO \$pos_role_check\$' "$PSQL_LOG"
 grep -q -- '--file .*success.sql' "$PSQL_LOG"
-grep -q 'ssl=require host=aws-0-ap-southeast-1.pooler.supabase.com user=cli_login_test.ynriuoomotxuwhuxxmhj database=postgres' "$PSQL_LOG"
+grep -q 'ssl=require host=aws-0-ap-southeast-1.pooler.supabase.com user=postgres.ynriuoomotxuwhuxxmhj database=postgres' "$PSQL_LOG"
 assert_not_contains "$success_output" "$SECRET"
+
+LEGACY_CLI_SQL="$TMP_DIR/legacy_cli.sql"
+cat >"$LEGACY_CLI_SQL" <<'SQL'
+SELECT 1;
+SQL
+legacy_cli_output="$(FAKE_PGUSER=cli_login_test.ynriuoomotxuwhuxxmhj \
+  run_linked "$LEGACY_CLI_SQL" 'legacy cli credential success' 2>&1)"
+[[ "$legacy_cli_output" == *'PASS: legacy cli credential success'* ]]
+assert_not_contains "$legacy_cli_output" "$SECRET"
 
 ROLE_REFUSAL_SQL="$TMP_DIR/role_refusal.sql"
 cat >"$ROLE_REFUSAL_SQL" <<'SQL'
@@ -140,7 +149,7 @@ unbound_user_output="$(FAKE_PGUSER=postgres \
 unbound_user_status=$?
 set -e
 [[ "$unbound_user_status" -ne 0 ]]
-[[ "$unbound_user_output" == *'not a ref-bound temporary cli_login role'* ]]
+[[ "$unbound_user_output" == *'not bound to the POS project ref'* ]]
 assert_not_contains "$unbound_user_output" 'PASS: unbound credential refusal'
 assert_not_contains "$unbound_user_output" "$SECRET"
 "$REAL_PSQL" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres -d postgres -Atqc \
