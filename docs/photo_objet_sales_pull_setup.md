@@ -116,11 +116,12 @@ contains the expected scheduled `slot_id`. `started_at` is not used as slot
 identity. The scheduled workflow runs this audit after normal collection;
 missing runs use the same failure summary and deduplicated escalation path.
 
-Moers daily reports are cumulative snapshots. A successful later scheduled
-snapshot for the same store and HCM date therefore recovers earlier missing
-slots for health-audit purposes. The latest completed slot still fails closed
-until an equal-or-newer scheduled snapshot succeeds, and recovery never crosses
-the HCM date boundary.
+Moers daily reports are cumulative snapshots, but scheduled collection is
+interval-scoped. A 12:00 run accepts only `11:00:00 <= sold_at < 12:00:00`;
+older rows in the downloaded workbook are discarded before raw-ledger writes.
+The 22:30 close accepts `22:00:00 <= sold_at < 22:30:00`. A later snapshot does
+not satisfy an earlier scheduler slot. Missing data is recovered only through a
+bounded full-day backfill, which downloads each requested store-day once.
 
 Explicit slot metadata became authoritative at 2026-07-11 19:00 HCM. Missing
 metadata before that cutoff is a historical baseline and is excluded from the
@@ -142,12 +143,33 @@ or database writes. `--execute` reuses the normal parser, `source_hash` upsert,
 raw insert trigger, and invoice idempotency semantics. Aggregate rows use
 `pull_source = manual`.
 
+The 2026-07 interval-ledger rebuild uses `2026-07-01` as the retention boundary.
+The migration creates immutable backups, removes pre-July Photo data, resets the
+six configured collector stores, and forces the dedicated Photo MISA dispatch
+gate to `false`. Rebuild July in two bounded invocations so every store-day is
+downloaded exactly once:
+
+```bash
+node pull_moers_sales.js --backfill-from 2026-07-01 --backfill-to 2026-07-07 --execute
+node pull_moers_sales.js --backfill-from 2026-07-08 --backfill-to 2026-07-12 --execute
+```
+
+Run `scripts/verify_photo_objet_interval_rebuild.sql` after both batches. Do not
+enable `photo_objet_meinvoice_dispatch_enabled` until the rebuilt counts and at
+least one scheduled interval have been independently verified.
+
 ## Data safety
 
-The collector builds `source_hash` from store, date, device, time, amount, type,
-row index, and raw row content. Already-seen rows update `last_seen_at`; only new
-raw inserts trigger invoice queue creation. All rows use
+The collector builds identity-version-2 `source_hash` from canonical store,
+date, device, normalized sale timestamp, amount, type, and a one-based
+`occurrence_no` for otherwise identical rows. Workbook row order and mutable raw
+row position are never part of identity. Already-seen rows update `last_seen_at`;
+only new raw inserts trigger invoice queue creation. All rows use
 `payment_method = CASH`; VNPAY/QR wallet data must not be mixed into this ledger.
+
+Daily dashboard totals are recomputed from the identity-version-2 raw ledger
+after each interval write. The current hourly slice is never written directly as
+the daily total.
 
 An empty table with a recognized sales header records a successful zero-sales
 run only when no aggregate exists for that store-day, and it does not write
