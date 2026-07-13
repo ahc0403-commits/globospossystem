@@ -1300,7 +1300,7 @@ function findMissingRuns(
     const slots = scheduledSlotsForDate(date);
     for (let index = 0; index < slots.length; index += 1) {
       const slot = slots[index];
-      const nextAt = slots[index + 1] ? slots[index + 1].at : slot.at + 90 * 60000;
+      const nextAt = slots[index + 1] ? slots[index + 1].at : slot.at;
       if (slot.at < auditStartAt) continue;
       if (now.getTime() < nextAt + 15 * 60000) continue;
       for (const store of stores.filter(item => item.enabled)) {

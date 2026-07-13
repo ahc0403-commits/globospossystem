@@ -167,7 +167,7 @@ void main() {
       expect(workflow, contains('name: Photo Objet contract'));
       expect(workflow, contains("if: github.event_name == 'pull_request'"));
       expect(workflow, contains("if: github.event_name != 'pull_request'"));
-      expect(workflow, contains('run: npm test'));
+      expect(workflow, contains('npm run security-scan\n          npm test'));
       expect(workflow, contains("node-version: '22'"));
       expect(workflow, contains('npm ci'));
       expect(

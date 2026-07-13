@@ -6,6 +6,7 @@
     "node": ">=22 <23"
   },
   "scripts": {
+    "security-scan": "node scan_repository_secrets.js",
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {

@@ -124,6 +124,27 @@ BEGIN
   END IF;
 END $$;
 
+DO $$
+DECLARE before_deadline record;
+DECLARE at_deadline record;
+BEGIN
+  SELECT * INTO before_deadline
+  FROM public.photo_objet_collection_health_at('2026-07-14 22:44:59+07')
+  WHERE store_id = '77000000-0000-4000-8000-000000000102'
+    AND target_date = '2026-07-14';
+  SELECT * INTO at_deadline
+  FROM public.photo_objet_collection_health_at('2026-07-14 22:45:00+07')
+  WHERE store_id = '77000000-0000-4000-8000-000000000102'
+    AND target_date = '2026-07-14';
+
+  IF '22:30' = ANY(before_deadline.missing_slot_times)
+     OR NOT ('22:30' = ANY(at_deadline.missing_slot_times))
+     OR at_deadline.due_slots <> 15 THEN
+    RAISE EXCEPTION 'PHOTO_FINAL_SLOT_DEADLINE_FAILED: before=%, at=%',
+      row_to_json(before_deadline), row_to_json(at_deadline);
+  END IF;
+END $$;
+
 INSERT INTO public.photo_objet_sales_raw (
   store_id, sale_date, device_name, sold_at, amount, payment_method, buyer_kind,
   raw_payload, source_hash, source_identity_version, occurrence_no,

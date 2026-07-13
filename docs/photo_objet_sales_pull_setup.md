@@ -133,7 +133,8 @@ still fails the audit and triggers the normal escalation path.
 
 The health View applies the same cutoff and waits until 15 minutes after the next
 scheduled collection time, matching the collector audit and tolerating delayed
-GitHub schedule starts. It reports
+GitHub schedule starts. The final 22:30 slot has no successor and becomes due at
+22:45 HCM. It reports
 all expected, due, successful, failed, and missing slots plus the exact missing
 and failed HCM times. `not_due` is distinct from `healthy`, so yesterday's final
 success cannot make today's not-yet-run or missing collection appear current.

@@ -141,7 +141,7 @@ scheduled_slots AS (
         PARTITION BY target_date
         ORDER BY slot_time_hcm
       ),
-      scheduled_at + interval '90 minutes'
+      scheduled_at
     ) + interval '15 minutes' AS due_at
   FROM scheduled_slots_base
 ),
@@ -263,7 +263,7 @@ SELECT *
 FROM public.photo_objet_collection_health_at(now());
 
 COMMENT ON VIEW public.v_photo_objet_collection_health IS
-  'Exact-slot Photo Objet health due 15 minutes after the next schedule, tolerating delayed GitHub starts.';
+  'Exact-slot Photo Objet health due 15 minutes after the next schedule, or 15 minutes after the final 22:30 slot.';
 
 GRANT SELECT ON public.v_photo_objet_collection_health TO authenticated;
 GRANT SELECT ON public.v_photo_objet_collection_health TO service_role;

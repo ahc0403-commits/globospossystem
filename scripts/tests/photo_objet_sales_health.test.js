@@ -23,6 +23,7 @@ const {
   runWithTransientRetry,
   runPreflight,
   RUN_METADATA_AUDIT_START_AT,
+  scheduledSlotsForDate,
   serializeRunMetadata,
   selectRowsForInterval,
   validateStaticPreflight,
@@ -510,6 +511,32 @@ test('missing-run audit excludes historical metadata gaps but detects new gaps',
   );
 });
 
+test('missing-run audit reports the final 22:30 slot at 22:45 HCM', () => {
+  const store = { storeName: 'BIEN HOA', storeId: ids[0], enabled: true };
+  const successfulRuns = scheduledSlotsForDate('2026-07-13')
+    .slice(0, -1)
+    .map(slot => ({
+      store_id: ids[0],
+      target_date: '2026-07-13',
+      status: 'success',
+      error_message: serializeRunMetadata({
+        source: 'scheduled',
+        slotId: slot.slotId,
+        slotDateHcm: '2026-07-13',
+        slotTimeHcm: slot.label.slice(-5),
+      }),
+    }));
+
+  assert.deepEqual(
+    findMissingRuns([store], ['2026-07-13'], successfulRuns, new Date('2026-07-13T15:44:59Z')),
+    [],
+  );
+  assert.deepEqual(
+    findMissingRuns([store], ['2026-07-13'], successfulRuns, new Date('2026-07-13T15:45:00Z')),
+    [{ storeName: 'BIEN HOA', date: '2026-07-13', slot: '2026-07-13 22:30' }],
+  );
+});
+
 test('schedule health requires each exact slot even when a later snapshot succeeds', () => {
   const store = { storeName: 'BIEN HOA', storeId: ids[0], enabled: true };
   const laterIdentity = {
@@ -610,7 +637,7 @@ test('workflow uses locked Node 22 install, exact schedule, audit, and deduplica
   assert.match(contractJob, /if: github\.event_name == 'pull_request'/);
   assert.match(contractJob, /node-version: '22'/);
   assert.match(contractJob, /run: npm ci/);
-  assert.match(contractJob, /run: npm test/);
+  assert.match(contractJob, /run: \|\n\s+npm run security-scan\n\s+npm test/);
   assert.doesNotMatch(contractJob, /secrets\./);
   assert.match(productionJob, /if: github\.event_name != 'pull_request'/);
   assert.doesNotMatch(
