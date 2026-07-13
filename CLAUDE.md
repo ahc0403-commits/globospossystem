@@ -18,14 +18,14 @@ Stack: Flutter + Supabase (Postgres + RLS + Edge Functions + Storage + pg_cron).
 
 - **Codebase**: `~/globos_pos_system`
 - **Obsidian vault**: `~/Documents/restaurant-ops-vault/GLOBOSVN POS/`
-- **Authoritative scope**: `Stage 1/stage1_scope_v1.3.md` (in vault)
+- **Authoritative scope**: `Stage 1/stage1_scope_v1.4.md` (in vault)
 - **Vendor docs**: `docs/vendor/` (WeTax API)
 - **Sample API responses**: `docs/vendor/samples/`
 
 ## 3. Authority and scope rules
 
-- **Scope v1.3 is authoritative.** v1.0/v1.1/v1.2 are superseded but
-  preserved for history. Do not re-litigate decisions already in v1.3.
+- **Scope v1.4 is authoritative.** v1.0/v1.1/v1.2/v1.3 are superseded but
+  preserved for history. Do not re-litigate decisions already in v1.4.
 - **Do not re-run Phase -1, Phase 0, or Phase 1.** They are complete and
   documented in the vault. Same for Phase 2 Step 1.
 - **Phase 2 Steps 2–10 are complete** as of 2026-04-13.

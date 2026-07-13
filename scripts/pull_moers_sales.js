@@ -388,7 +388,12 @@ function aggregateByDevice(rows) {
     const deviceId = String(row['Device ID'] || '').trim();
     const amount = parseAmount(row['Amount']);
 
-    if (!deviceName || amount <= 0) continue;
+    if (!deviceName) continue;
+    if (amount <= 0) {
+      throw deterministic(
+        `Moers immutable sales row has a non-positive or invalid Amount: ${String(row['Amount'] ?? '<empty>')}`,
+      );
+    }
 
     if (!devices[deviceName]) {
       devices[deviceName] = {
@@ -439,7 +444,12 @@ function selectRowsForInterval(rows, targetDate, identity) {
       const deviceName = String(row['Device Name'] || '').trim();
       const saleTimeText = String(row['Time'] || '').trim();
       const amount = parseAmount(row['Amount']);
-      if (!deviceName || amount <= 0) return null;
+      if (!deviceName) return null;
+      if (amount <= 0) {
+        throw deterministic(
+          `Moers immutable sales row has a non-positive or invalid Amount: ${String(row['Amount'] ?? '<empty>')}`,
+        );
+      }
 
       const soldAt = parseSoldAt(targetDate, saleTimeText);
       if (!soldAt) {
@@ -453,6 +463,16 @@ function selectRowsForInterval(rows, targetDate, identity) {
       return { row, soldAt };
     })
     .filter(Boolean);
+}
+
+function assertImmutableSourceRows(existingHashes, incomingRows) {
+  const incomingHashes = new Set(incomingRows.map(row => row.source_hash));
+  const missingCount = existingHashes.filter(hash => !incomingHashes.has(hash)).length;
+  if (missingCount > 0) {
+    throw deterministic(
+      `Moers immutable source drift: ${missingCount} previously stored row(s) are missing or changed`,
+    );
+  }
 }
 
 function normalizeRawSalesRows(selectedRows, store, targetDate, method, pullRunId, identity) {
@@ -835,7 +855,7 @@ async function upsertRawSalesRows(supabase, rows) {
   const existingHashes = new Set((existing || []).map(row => row.source_hash));
   const { error } = await supabase
     .from('photo_objet_sales_raw')
-    .upsert(rows, { onConflict: 'source_hash' });
+    .upsert(rows, { onConflict: 'source_hash', ignoreDuplicates: true });
   if (error) {
     throw new Error(`Raw sales upsert failed: ${error.message}`);
   }
@@ -844,6 +864,18 @@ async function upsertRawSalesRows(supabase, rows) {
     inserted: rows.filter(row => !existingHashes.has(row.source_hash)).length,
     duplicate: rows.filter(row => existingHashes.has(row.source_hash)).length,
   };
+}
+
+async function loadExistingIntervalSourceHashes(supabase, storeId, identity) {
+  const { data, error } = await supabase
+    .from('photo_objet_sales_raw')
+    .select('source_hash')
+    .eq('store_id', storeId)
+    .eq('source_identity_version', SOURCE_IDENTITY_VERSION)
+    .gte('sold_at', identity.intervalStartAt)
+    .lt('sold_at', identity.intervalEndAt);
+  if (error) throw new Error(`Immutable source lookup failed: ${error.message}`);
+  return (data || []).map(row => row.source_hash);
 }
 
 async function loadDailyRawSalesRows(supabase, storeId, targetDate) {
@@ -862,7 +894,9 @@ function aggregateDailyRawRows(rows) {
   for (const row of rows) {
     const deviceName = String(row.device_name || '').trim();
     const amount = Number(row.amount || 0);
-    if (!deviceName || !Number.isSafeInteger(amount) || amount <= 0) continue;
+    if (!deviceName || !Number.isSafeInteger(amount) || amount <= 0) {
+      throw deterministic('Canonical Photo Objet raw ledger contains an invalid sales row');
+    }
     if (!devices.has(deviceName)) {
       devices.set(deviceName, {
         device_name: deviceName,
@@ -995,6 +1029,12 @@ async function processStore(supabase, store, targetDate, downloadDir, runIdentit
       pullRunId,
       runIdentity,
     );
+    const existingSourceHashes = await loadExistingIntervalSourceHashes(
+      supabase,
+      storeId,
+      runIdentity,
+    );
+    assertImmutableSourceRows(existingSourceHashes, rawRows);
     const rawResult = await upsertRawSalesRows(supabase, rawRows);
     console.log(
       `  ${storeName}: ${rawResult.inserted} new raw rows, ${rawResult.duplicate} duplicates`,
@@ -1411,6 +1451,7 @@ module.exports = {
   SOURCE_IDENTITY_VERSION,
   aggregateDailyRawRows,
   assertAggregateComplete,
+  assertImmutableSourceRows,
   auditDates,
   buildStores,
   classifyError,

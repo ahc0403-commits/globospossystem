@@ -9,6 +9,8 @@ void main() {
       'supabase/migrations/20260630007000_photo_objet_raw_meinvoice_queue.sql';
   const intervalMigrationPath =
       'supabase/migrations/20260712190000_photo_objet_interval_ledger.sql';
+  const immutableHealthMigrationPath =
+      'supabase/migrations/20260713090000_photo_objet_immutable_health.sql';
   const scriptPath = 'scripts/pull_moers_sales.js';
   const workflowPath = '.github/workflows/photo_objet_sales.yml';
   const docsPath = 'docs/photo_objet_sales_pull_setup.md';
@@ -96,6 +98,8 @@ void main() {
     expect(source, contains("from('photo_objet_sales_pull_runs')"));
     expect(source, contains("from('photo_objet_sales_raw')"));
     expect(source, contains("onConflict: 'source_hash'"));
+    expect(source, contains('ignoreDuplicates: true'));
+    expect(source, contains('assertImmutableSourceRows'));
     expect(source, contains('upsertRawSalesRows(supabase, rawRows)'));
     expect(
       source.indexOf('upsertRawSalesRows(supabase, rawRows)'),
@@ -104,6 +108,22 @@ void main() {
     expect(source, contains('pulled_at: new Date().toISOString()'));
     expect(source, isNot(contains('publishCashRegisterInvoice')));
     expect(source, isNot(contains('MISA_MEINVOICE_PASSWORD')));
+  });
+
+  test('Photo Objet immutable ledger exposes canonical slot health', () {
+    final sql = readRepoFile(immutableHealthMigrationPath);
+
+    expect(sql, contains('enforce_photo_objet_raw_immutability'));
+    expect(sql, contains('PHOTO_OBJET_RAW_IDENTITY_IMMUTABLE'));
+    expect(sql, contains('PHOTO_OBJET_RAW_DELETE_FORBIDDEN'));
+    expect(sql, contains('photo_objet_collection_health_at'));
+    expect(sql, contains('v_photo_objet_collection_health'));
+    expect(sql, contains("'09:00'::time"));
+    expect(sql, contains("'22:30'::time"));
+    expect(sql, contains("interval '15 minutes'"));
+    expect(sql, contains('missing_slot_times'));
+    expect(sql, contains('failed_slot_times'));
+    expect(sql, contains("'not_due'"));
   });
 
   test('Photo Objet interval migration backs up, gates, and resets the ledger', () {
@@ -211,6 +231,8 @@ void main() {
     expect(docs, contains('`started_at` is not used as slot'));
     expect(docs, contains('2026-07-11 19:00 HCM'));
     expect(docs, contains('historical baseline'));
+    expect(docs, contains('immutable append-only source'));
+    expect(docs, contains('v_photo_objet_collection_health'));
     expect(docs, contains('Photo Objet contract'));
     expect(docs, contains('Vercel preview'));
   });

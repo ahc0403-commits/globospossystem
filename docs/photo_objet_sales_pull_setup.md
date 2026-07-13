@@ -3,8 +3,9 @@
 POS is the sole Photo Objet Moers sales collector. The collector writes raw sales
 to `public.photo_objet_sales_raw`, records attempts in
 `public.photo_objet_sales_pull_runs`, and updates the dashboard aggregate in
-`public.photo_objet_sales`. `public.v_photo_objet_daily_summary` is the POS read
-surface.
+`public.photo_objet_sales`. `public.v_photo_objet_daily_summary` is the POS sales
+read surface, and `public.v_photo_objet_collection_health` is the canonical
+exact-slot health surface consumed by Office.
 
 New raw rows are queued idempotently into `public.meinvoice_jobs` by the existing
 database trigger. The crawler does not call MISA directly. The raw ledger and
@@ -129,6 +130,11 @@ health result; it is not evidence that those collections failed. Every completed
 slot at or after the cutoff remains fail-closed, so a newly missing store-slot
 still fails the audit and triggers the normal escalation path.
 
+The health View applies the same cutoff and a 15-minute grace period. It reports
+all expected, due, successful, failed, and missing slots plus the exact missing
+and failed HCM times. `not_due` is distinct from `healthy`, so yesterday's final
+success cannot make today's not-yet-run or missing collection appear current.
+
 ## Bounded backfill
 
 Backfill accepts at most seven inclusive dates and is dry-run by default:
@@ -160,11 +166,16 @@ least one scheduled interval have been independently verified.
 
 ## Data safety
 
-The collector builds identity-version-2 `source_hash` from canonical store,
+Moers Excel sales rows are an immutable append-only source. They are not
+cancelled, refunded, deleted, or corrected after export. The collector builds
+identity-version-2 `source_hash` from canonical store,
 date, device, normalized sale timestamp, amount, type, and a one-based
 `occurrence_no` for otherwise identical rows. Workbook row order and mutable raw
-row position are never part of identity. Already-seen rows update `last_seen_at`;
-only new raw inserts trigger invoice queue creation. All rows use
+row position are never part of identity. Already-seen rows remain unchanged;
+only new raw inserts trigger invoice queue creation. A rerun fails
+deterministically if a previously stored hash is absent or changed, and any
+device row with a zero, negative, or invalid amount is rejected rather than
+silently discarded. All rows use
 `payment_method = CASH`; VNPAY/QR wallet data must not be mixed into this ledger.
 
 Daily dashboard totals are recomputed from the identity-version-2 raw ledger
@@ -189,6 +200,7 @@ npm ci
 npm test
 cd ..
 flutter test test/photo_objet_meinvoice_raw_contract_test.dart test/photo_ops_sales_aggregation_test.dart
+bash test/photo_objet_immutable_health_sql_test.sh
 dart analyze
 git diff --check -- .github/workflows/photo_objet_sales.yml scripts/package.json scripts/package-lock.json scripts/pull_moers_sales.js scripts/tests/photo_objet_sales_health.test.js docs/photo_objet_sales_pull_setup.md test/photo_objet_meinvoice_raw_contract_test.dart
 ```

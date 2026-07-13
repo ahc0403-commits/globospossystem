@@ -10,6 +10,7 @@ const {
   SOURCE_IDENTITY_VERSION,
   aggregateDailyRawRows,
   assertAggregateComplete,
+  assertImmutableSourceRows,
   buildStores,
   classifyError,
   createRunIdentity,
@@ -337,6 +338,39 @@ test('12:00 scheduled collection accepts only 11:00:00 through 11:59:59', () => 
   );
   assert.equal(identity.intervalStartAt, '2026-07-12T04:00:00.000Z');
   assert.equal(identity.intervalEndAt, '2026-07-12T05:00:00.000Z');
+});
+
+test('immutable Moers rows reject zero, negative, and invalid amounts', () => {
+  const identity = {
+    intervalStartAt: '2026-07-11T04:00:00.000Z',
+    intervalEndAt: '2026-07-11T05:00:00.000Z',
+  };
+  for (const amount of ['0', '-10000', 'not-a-number']) {
+    assert.throws(
+      () => selectRowsForInterval([
+        { 'Device Name': 'M1', Time: '11:30:00', Amount: amount },
+      ], '2026-07-11', identity),
+      error => error.failureClass === FAILURE.DETERMINISTIC &&
+        /non-positive or invalid Amount/.test(error.message),
+    );
+  }
+});
+
+test('immutable source drift rejects removed or corrected rows', () => {
+  const existing = ['hash-a', 'hash-b'];
+  assert.doesNotThrow(() => assertImmutableSourceRows(existing, [
+    { source_hash: 'hash-a' },
+    { source_hash: 'hash-b' },
+    { source_hash: 'hash-c' },
+  ]));
+  assert.throws(
+    () => assertImmutableSourceRows(existing, [
+      { source_hash: 'hash-a' },
+      { source_hash: 'hash-b-corrected' },
+    ]),
+    error => error.failureClass === FAILURE.DETERMINISTIC &&
+      /previously stored row\(s\) are missing or changed/.test(error.message),
+  );
 });
 
 test('time parsing accepts Moers full timestamps and rejects another date', () => {
