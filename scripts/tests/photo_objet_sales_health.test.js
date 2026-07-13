@@ -490,6 +490,16 @@ test('missing-run audit excludes historical metadata gaps but detects new gaps',
     status: 'success',
     error_message: serializeRunMetadata(firstSlotIdentity),
   }));
+  assert.deepEqual(
+    findMissingRuns(
+      stores,
+      ['2026-07-11', '2026-07-12', '2026-07-13'],
+      runs,
+      new Date('2026-07-13T03:20:00Z'),
+    ),
+    [],
+    'the first post-cutover success must not inherit historical audit failures',
+  );
   assert.deepEqual(findMissingRuns(stores, ['2026-07-13'], runs, now),
     stores.map(store => ({
       storeName: store.storeName,
