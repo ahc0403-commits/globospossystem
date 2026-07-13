@@ -10,6 +10,7 @@ const {
   SOURCE_IDENTITY_VERSION,
   aggregateDailyRawRows,
   assertAggregateComplete,
+  assertImmutableSourceRows,
   buildStores,
   classifyError,
   createRunIdentity,
@@ -22,6 +23,7 @@ const {
   runWithTransientRetry,
   runPreflight,
   RUN_METADATA_AUDIT_START_AT,
+  scheduledSlotsForDate,
   serializeRunMetadata,
   selectRowsForInterval,
   validateStaticPreflight,
@@ -339,6 +341,39 @@ test('12:00 scheduled collection accepts only 11:00:00 through 11:59:59', () => 
   assert.equal(identity.intervalEndAt, '2026-07-12T05:00:00.000Z');
 });
 
+test('immutable Moers rows reject zero, negative, and invalid amounts', () => {
+  const identity = {
+    intervalStartAt: '2026-07-11T04:00:00.000Z',
+    intervalEndAt: '2026-07-11T05:00:00.000Z',
+  };
+  for (const amount of ['0', '-10000', 'not-a-number']) {
+    assert.throws(
+      () => selectRowsForInterval([
+        { 'Device Name': 'M1', Time: '11:30:00', Amount: amount },
+      ], '2026-07-11', identity),
+      error => error.failureClass === FAILURE.DETERMINISTIC &&
+        /non-positive or invalid Amount/.test(error.message),
+    );
+  }
+});
+
+test('immutable source drift rejects removed or corrected rows', () => {
+  const existing = ['hash-a', 'hash-b'];
+  assert.doesNotThrow(() => assertImmutableSourceRows(existing, [
+    { source_hash: 'hash-a' },
+    { source_hash: 'hash-b' },
+    { source_hash: 'hash-c' },
+  ]));
+  assert.throws(
+    () => assertImmutableSourceRows(existing, [
+      { source_hash: 'hash-a' },
+      { source_hash: 'hash-b-corrected' },
+    ]),
+    error => error.failureClass === FAILURE.DETERMINISTIC &&
+      /previously stored row\(s\) are missing or changed/.test(error.message),
+  );
+});
+
 test('time parsing accepts Moers full timestamps and rejects another date', () => {
   assert.equal(
     parseSoldAt('2026-07-12', '2026-07-12 11:23:45'),
@@ -430,45 +465,89 @@ test('missing-run audit uses explicit slot metadata, not delayed started_at', ()
 });
 
 test('missing-run audit excludes historical metadata gaps but detects new gaps', () => {
-  const store = { storeName: 'BIEN HOA', storeId: ids[0], enabled: true };
-  const now = new Date('2026-07-11T13:20:00Z');
+  const stores = ids.slice(0, 6).map((storeId, index) => ({
+    storeName: `STORE ${index + 1}`,
+    storeId,
+    enabled: true,
+  }));
+  const now = new Date('2026-07-13T04:20:00Z');
 
-  assert.equal(RUN_METADATA_AUDIT_START_AT, Date.parse('2026-07-11T12:00:00Z'));
+  assert.equal(RUN_METADATA_AUDIT_START_AT, Date.parse('2026-07-13T02:00:00Z'));
   assert.deepEqual(
-    findMissingRuns([store], ['2026-07-10'], [], now),
+    findMissingRuns(stores, ['2026-07-11', '2026-07-12'], [], now),
     [],
-    'pre-cutover slots are the historical baseline',
-  );
-  assert.deepEqual(
-    findMissingRuns([store], ['2026-07-11'], [], now),
-    [{ storeName: 'BIEN HOA', date: '2026-07-11', slot: '2026-07-11 19:00' }],
+    'the 126 pre-cutover store-slot gaps are a historical metadata baseline',
   );
 
-  const identity = {
+  const firstSlotIdentity = {
     source: 'scheduled',
-    slotId: 'scheduled:2026-07-11T19:00+07:00',
-    slotDateHcm: '2026-07-11',
-    slotTimeHcm: '19:00',
+    slotId: 'scheduled:2026-07-13T09:00+07:00',
+    slotDateHcm: '2026-07-13',
+    slotTimeHcm: '09:00',
   };
-  assert.deepEqual(findMissingRuns([store], ['2026-07-11'], [{
-    store_id: ids[0],
-    target_date: '2026-07-11',
+  const runs = stores.map(store => ({
+    store_id: store.storeId,
+    target_date: '2026-07-13',
     status: 'success',
-    error_message: serializeRunMetadata(identity),
-  }], now), []);
+    error_message: serializeRunMetadata(firstSlotIdentity),
+  }));
+  assert.deepEqual(
+    findMissingRuns(
+      stores,
+      ['2026-07-11', '2026-07-12', '2026-07-13'],
+      runs,
+      new Date('2026-07-13T03:20:00Z'),
+    ),
+    [],
+    'the first post-cutover success must not inherit historical audit failures',
+  );
+  assert.deepEqual(findMissingRuns(stores, ['2026-07-13'], runs, now),
+    stores.map(store => ({
+      storeName: store.storeName,
+      date: '2026-07-13',
+      slot: '2026-07-13 10:00',
+    })),
+    'a newly due slot after cutover must still fail health',
+  );
+});
+
+test('missing-run audit reports the final 22:30 slot at 22:45 HCM', () => {
+  const store = { storeName: 'BIEN HOA', storeId: ids[0], enabled: true };
+  const successfulRuns = scheduledSlotsForDate('2026-07-13')
+    .slice(0, -1)
+    .map(slot => ({
+      store_id: ids[0],
+      target_date: '2026-07-13',
+      status: 'success',
+      error_message: serializeRunMetadata({
+        source: 'scheduled',
+        slotId: slot.slotId,
+        slotDateHcm: '2026-07-13',
+        slotTimeHcm: slot.label.slice(-5),
+      }),
+    }));
+
+  assert.deepEqual(
+    findMissingRuns([store], ['2026-07-13'], successfulRuns, new Date('2026-07-13T15:44:59Z')),
+    [],
+  );
+  assert.deepEqual(
+    findMissingRuns([store], ['2026-07-13'], successfulRuns, new Date('2026-07-13T15:45:00Z')),
+    [{ storeName: 'BIEN HOA', date: '2026-07-13', slot: '2026-07-13 22:30' }],
+  );
 });
 
 test('schedule health requires each exact slot even when a later snapshot succeeds', () => {
   const store = { storeName: 'BIEN HOA', storeId: ids[0], enabled: true };
   const laterIdentity = {
     source: 'scheduled',
-    slotId: 'scheduled:2026-07-12T11:00+07:00',
-    slotDateHcm: '2026-07-12',
+    slotId: 'scheduled:2026-07-13T11:00+07:00',
+    slotDateHcm: '2026-07-13',
     slotTimeHcm: '11:00',
   };
   const laterSuccess = [{
     store_id: ids[0],
-    target_date: '2026-07-12',
+    target_date: '2026-07-13',
     status: 'success',
     error_message: serializeRunMetadata(laterIdentity),
   }];
@@ -476,27 +555,27 @@ test('schedule health requires each exact slot even when a later snapshot succee
   assert.deepEqual(
     findMissingRuns(
       [store],
-      ['2026-07-12'],
+      ['2026-07-13'],
       laterSuccess,
-      new Date('2026-07-12T04:20:00Z'),
+      new Date('2026-07-13T04:20:00Z'),
     ),
     [
-      { storeName: 'BIEN HOA', date: '2026-07-12', slot: '2026-07-12 09:00' },
-      { storeName: 'BIEN HOA', date: '2026-07-12', slot: '2026-07-12 10:00' },
+      { storeName: 'BIEN HOA', date: '2026-07-13', slot: '2026-07-13 09:00' },
+      { storeName: 'BIEN HOA', date: '2026-07-13', slot: '2026-07-13 10:00' },
     ],
     'data recovery must not hide missed scheduler slots',
   );
   assert.deepEqual(
     findMissingRuns(
       [store],
-      ['2026-07-12'],
+      ['2026-07-13'],
       laterSuccess,
-      new Date('2026-07-12T06:20:00Z'),
+      new Date('2026-07-13T06:20:00Z'),
     ),
     [
-      { storeName: 'BIEN HOA', date: '2026-07-12', slot: '2026-07-12 09:00' },
-      { storeName: 'BIEN HOA', date: '2026-07-12', slot: '2026-07-12 10:00' },
-      { storeName: 'BIEN HOA', date: '2026-07-12', slot: '2026-07-12 12:00' },
+      { storeName: 'BIEN HOA', date: '2026-07-13', slot: '2026-07-13 09:00' },
+      { storeName: 'BIEN HOA', date: '2026-07-13', slot: '2026-07-13 10:00' },
+      { storeName: 'BIEN HOA', date: '2026-07-13', slot: '2026-07-13 12:00' },
     ],
     'every completed slot needs its own successful run',
   );
@@ -558,7 +637,7 @@ test('workflow uses locked Node 22 install, exact schedule, audit, and deduplica
   assert.match(contractJob, /if: github\.event_name == 'pull_request'/);
   assert.match(contractJob, /node-version: '22'/);
   assert.match(contractJob, /run: npm ci/);
-  assert.match(contractJob, /run: npm test/);
+  assert.match(contractJob, /run: \|\n\s+npm run security-scan\n\s+npm test/);
   assert.doesNotMatch(contractJob, /secrets\./);
   assert.match(productionJob, /if: github\.event_name != 'pull_request'/);
   assert.doesNotMatch(
