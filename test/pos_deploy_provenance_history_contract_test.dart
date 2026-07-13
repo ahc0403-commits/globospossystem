@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('production mutations require clean descended Git state', () {
+  test('production mutations require clean exact-main Git state', () {
     final deploy = File(
       'scripts/deploy_pos_production.sh',
     ).readAsStringSync();
@@ -19,14 +19,36 @@ void main() {
     );
     expect(
       deploy,
-      contains('merge-base --is-ancestor origin/main HEAD'),
+      contains(r'$(git -C "$ROOT_DIR" rev-parse HEAD)'),
     );
+    expect(deploy, isNot(contains('merge-base --is-ancestor origin/main HEAD')));
     expect(
       deploy,
-      contains('HEAD is not descended from freshly fetched origin/main'),
+      contains('Production deployment requires exact HEAD == freshly fetched origin/main'),
     );
     expect(deploy, isNot(contains('ALLOW_GIT_ANCESTRY')));
     expect(deploy, isNot(contains('SKIP_GIT')));
+    expect(
+      deploy,
+      contains('20260713120000_photo_objet_expected_slot_ledger.sql'),
+    );
+    expect(
+      deploy,
+      contains('preflight_photo_objet_expected_slot_ledger.sql'),
+    );
+    expect(
+      deploy,
+      contains('verify_photo_objet_expected_slot_ledger.sql'),
+    );
+    expect(
+      deploy,
+      contains('apply_photo_objet_expected_slot_ledger.sql'),
+    );
+    expect(
+      deploy,
+      contains('PHOTO_OBJET_MONITORING_EFFECTIVE_FROM'),
+    );
+    expect(deploy, contains('PHOTO_POLICY_VALUES=<validated>'));
 
     final preflight = deploy.substring(
       deploy.indexOf('preflight() {'),

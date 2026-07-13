@@ -141,9 +141,10 @@ enforce_origin_main_ancestry() {
   fi
   git -C "$ROOT_DIR" show-ref --verify --quiet refs/remotes/origin/main ||
     fail "Fresh fetch did not produce origin/main."
-  git -C "$ROOT_DIR" merge-base --is-ancestor origin/main HEAD ||
-    fail "HEAD is not descended from freshly fetched origin/main."
-  printf 'Git ancestry verified: origin/main is an ancestor of HEAD.\n'
+  [[ "$(git -C "$ROOT_DIR" rev-parse HEAD)" == \
+     "$(git -C "$ROOT_DIR" rev-parse origin/main)" ]] ||
+    fail "Production deployment requires exact HEAD == freshly fetched origin/main."
+  printf 'Git release verified: HEAD exactly matches origin/main.\n'
 }
 
 run() {
@@ -444,7 +445,31 @@ run_linked_psql_file() {
   local file="$1"
   local pass_label="$2"
   local role_check_sql
+  local -a policy_psql_args=()
   [[ -f "$file" ]] || fail "Missing SQL file: $file"
+
+  if [[ "$(basename "$file")" == "apply_photo_objet_expected_slot_ledger.sql" ]]; then
+    local variable
+    for variable in \
+      PHOTO_OBJET_MONITORING_EFFECTIVE_FROM \
+      PHOTO_OBJET_BIENHOA_STORE_ID \
+      PHOTO_OBJET_DIAN_STORE_ID \
+      PHOTO_OBJET_LONGTHANH_STORE_ID \
+      PHOTO_OBJET_THAODIEN_STORE_ID \
+      PHOTO_OBJET_QUANGTRUNG_STORE_ID \
+      PHOTO_OBJET_NOWZONE_STORE_ID; do
+      [[ -n "${!variable:-}" ]] || fail "$variable is required for Photo Objet policy rollout."
+    done
+    policy_psql_args=(
+      -v "photo_policy_effective_from=$PHOTO_OBJET_MONITORING_EFFECTIVE_FROM"
+      -v "photo_store_bienhoa=$PHOTO_OBJET_BIENHOA_STORE_ID"
+      -v "photo_store_dian=$PHOTO_OBJET_DIAN_STORE_ID"
+      -v "photo_store_longthanh=$PHOTO_OBJET_LONGTHANH_STORE_ID"
+      -v "photo_store_thaodien=$PHOTO_OBJET_THAODIEN_STORE_ID"
+      -v "photo_store_quangtrung=$PHOTO_OBJET_QUANGTRUNG_STORE_ID"
+      -v "photo_store_nowzone=$PHOTO_OBJET_NOWZONE_STORE_ID"
+    )
+  fi
 
   role_check_sql="DO \$pos_role_check\$
 BEGIN
@@ -460,23 +485,42 @@ END;
 \$pos_role_check\$;"
 
   printf '+ supabase db dump --linked --schema public --dry-run <captured>\n'
-  printf '+ PGSSLMODE=require psql -X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --command SET_ROLE_POSTGRES --command VERIFY_ROLE --file %q\n' "$file"
+  printf '+ PGSSLMODE=require psql -X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --command SET_ROLE_POSTGRES --command VERIFY_ROLE'
+  if [[ "${#policy_psql_args[@]}" -gt 0 ]]; then
+    printf ' --set PHOTO_POLICY_VALUES=<validated>'
+  fi
+  printf ' --file %q\n' "$file"
   if [[ "$DRY_RUN" == "1" ]]; then
     return 0
   fi
 
   acquire_linked_pg_credentials
-  if ! \
+  local psql_status=0
+  if [[ "${#policy_psql_args[@]}" -gt 0 ]]; then
     PGHOST="$PGHOST" \
-    PGPORT="$PGPORT" \
-    PGUSER="$PGUSER" \
-    PGPASSWORD="$PGPASSWORD" \
-    PGDATABASE="$PGDATABASE" \
-    PGSSLMODE=require \
-    psql -X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction \
-      --command "SET ROLE $POS_PSQL_ROLE;" \
-      --command "$role_check_sql" \
-      --file "$file"; then
+      PGPORT="$PGPORT" \
+      PGUSER="$PGUSER" \
+      PGPASSWORD="$PGPASSWORD" \
+      PGDATABASE="$PGDATABASE" \
+      PGSSLMODE=require \
+      psql -X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction \
+        "${policy_psql_args[@]}" \
+        --command "SET ROLE $POS_PSQL_ROLE;" \
+        --command "$role_check_sql" \
+        --file "$file" || psql_status=$?
+  else
+    PGHOST="$PGHOST" \
+      PGPORT="$PGPORT" \
+      PGUSER="$PGUSER" \
+      PGPASSWORD="$PGPASSWORD" \
+      PGDATABASE="$PGDATABASE" \
+      PGSSLMODE=require \
+      psql -X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction \
+        --command "SET ROLE $POS_PSQL_ROLE;" \
+        --command "$role_check_sql" \
+        --file "$file" || psql_status=$?
+  fi
+  if [[ "$psql_status" -ne 0 ]]; then
     unset PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE
     fail "$pass_label failed."
   fi
@@ -548,9 +592,12 @@ apply_migration() {
   [[ "$migration_version" =~ ^[0-9]+$ ]] ||
     fail "Migration file must start with a numeric version: $migration_name"
 
-  if [[ "$migration_name" == "20260711090000_legal_entity_brand_store_hierarchy.sql" ]]; then
-    verification_complete=1
-  fi
+  case "$migration_name" in
+    20260711090000_legal_entity_brand_store_hierarchy.sql|\
+    20260713120000_photo_objet_expected_slot_ledger.sql)
+      verification_complete=1
+      ;;
+  esac
   [[ "$verification_complete" == "1" ]] ||
     fail "Migration $migration_name has no explicit verification phase."
 
@@ -562,14 +609,31 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_legal_entity_brand_store_hierarchy.sql" \
       "hierarchy migration preflight"
+  elif [[ "$migration_name" == "20260713120000_photo_objet_expected_slot_ledger.sql" ]]; then
+    log "Photo Objet expected-slot migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_photo_objet_expected_slot_ledger.sql" \
+      "Photo Objet expected-slot migration preflight"
   fi
-  run_linked_psql_file "$migration_path" "migration $migration_version"
+  if [[ "$migration_name" == "20260713120000_photo_objet_expected_slot_ledger.sql" ]]; then
+    log "Apply Photo Objet ledger, approved policies, and first slots atomically"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/apply_photo_objet_expected_slot_ledger.sql" \
+      "migration $migration_version with approved Photo Objet policies"
+  else
+    run_linked_psql_file "$migration_path" "migration $migration_version"
+  fi
 
   if [[ "$migration_name" == "20260711090000_legal_entity_brand_store_hierarchy.sql" ]]; then
     log "Hierarchy migration verification"
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_legal_entity_brand_store_hierarchy.sql" \
       "hierarchy migration verification"
+  elif [[ "$migration_name" == "20260713120000_photo_objet_expected_slot_ledger.sql" ]]; then
+    log "Photo Objet expected-slot migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_photo_objet_expected_slot_ledger.sql" \
+      "Photo Objet expected-slot migration verification"
   fi
 
   log "Repair Supabase migration history"
