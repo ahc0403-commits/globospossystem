@@ -156,11 +156,13 @@ LEGACY_CLI_SQL="$TMP_DIR/legacy_cli.sql"
 cat >"$LEGACY_CLI_SQL" <<'SQL'
 SELECT 1;
 SQL
+phase legacy_cli_credential
 legacy_cli_output="$(FAKE_PGUSER=cli_login_test.ynriuoomotxuwhuxxmhj \
   run_linked "$LEGACY_CLI_SQL" 'legacy cli credential success' 2>&1)"
 [[ "$legacy_cli_output" == *'PASS: legacy cli credential success'* ]]
 assert_not_contains "$legacy_cli_output" "$SECRET"
 
+phase pooler_normalized_session
 pooler_normalized_output="$(LOCAL_PGUSER=postgres \
   run_linked "$LEGACY_CLI_SQL" 'pooler normalized session success' 2>&1)"
 [[ "$pooler_normalized_output" == *'PASS: pooler normalized session success'* ]]
@@ -171,6 +173,7 @@ cat >"$ROLE_REFUSAL_SQL" <<'SQL'
 CREATE TABLE runner_role_refusal_must_not_run (id integer PRIMARY KEY);
 SQL
 
+phase role_activation_refusal
 set +e
 role_refusal_output="$(LOCAL_PGUSER=cli_login_denied \
   run_linked "$ROLE_REFUSAL_SQL" 'role activation refusal' 2>&1)"
@@ -183,6 +186,7 @@ assert_not_contains "$role_refusal_output" "$SECRET"
 "$REAL_PSQL" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres -d postgres -Atqc \
   "SELECT to_regclass('public.runner_role_refusal_must_not_run') IS NULL" | grep -qx t
 
+phase unbound_credential_refusal
 set +e
 unbound_user_output="$(FAKE_PGUSER=postgres \
   run_linked "$ROLE_REFUSAL_SQL" 'unbound credential refusal' 2>&1)"
@@ -203,6 +207,7 @@ DO $$ BEGIN RAISE EXCEPTION 'intentional assertion failure'; END $$;
 INSERT INTO runner_mid_file_rollback VALUES (2);
 SQL
 
+phase mid_file_rollback
 set +e
 failure_output="$(run_linked "$FAIL_SQL" 'runner assertion' 2>&1)"
 failure_status=$?
@@ -213,6 +218,7 @@ assert_not_contains "$failure_output" "$SECRET"
 "$REAL_PSQL" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres -d postgres -Atqc \
   "SELECT to_regclass('public.runner_mid_file_rollback') IS NULL" | grep -qx t
 
+phase wrong_target_refusal
 set +e
 wrong_target_output="$(FAKE_PGHOST='db.wrongprojectref.supabase.co' \
   run_linked "$SUCCESS_SQL" 'wrong target' 2>&1)"
@@ -223,6 +229,7 @@ set -e
 assert_not_contains "$wrong_target_output" 'PASS: wrong target'
 assert_not_contains "$wrong_target_output" "$SECRET"
 
+phase wrong_linked_project_refusal
 WRONG_REPO="$TMP_DIR/wrong-repo"
 mkdir -p "$WRONG_REPO/scripts" "$WRONG_REPO/supabase/.temp"
 cp "$DEPLOY_SCRIPT" "$WRONG_REPO/scripts/deploy_pos_production.sh"
@@ -243,6 +250,7 @@ set -e
 [[ "$wrong_ref_status" -ne 0 ]]
 [[ "$wrong_ref_output" == *'Linked Supabase project is not POS production'* ]]
 
+phase forced_psql_failure
 set +e
 forced_failure_output="$(FAKE_PSQL_FORCE_FAIL=1 run_linked "$SUCCESS_SQL" 'forced psql failure' 2>&1)"
 forced_failure_status=$?
