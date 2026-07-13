@@ -234,6 +234,12 @@ WRONG_REPO="$TMP_DIR/wrong-repo"
 mkdir -p "$WRONG_REPO/scripts" "$WRONG_REPO/supabase/.temp"
 cp "$DEPLOY_SCRIPT" "$WRONG_REPO/scripts/deploy_pos_production.sh"
 printf '%s\n' wrongprojectref >"$WRONG_REPO/supabase/.temp/project-ref"
+git -C "$WRONG_REPO" init -q
+git -C "$WRONG_REPO" add -- scripts/deploy_pos_production.sh supabase/.temp/project-ref
+git -C "$WRONG_REPO" \
+  -c user.name='POS contract test' \
+  -c user.email='pos-contract@example.invalid' \
+  commit -qm 'fixture: isolate linked project validation'
 set +e
 wrong_ref_output="$(bash -c '
   source "$1"
@@ -247,8 +253,14 @@ wrong_ref_output="$(bash -c '
 ' wrong-ref "$WRONG_REPO/scripts/deploy_pos_production.sh" 2>&1)"
 wrong_ref_status=$?
 set -e
-[[ "$wrong_ref_status" -ne 0 ]]
-[[ "$wrong_ref_output" == *'Linked Supabase project is not POS production'* ]]
+[[ "$wrong_ref_status" -ne 0 ]] || {
+  printf 'POS_PSQL_RUNNER_ASSERTION_FAILED=wrong_ref_exit_status\n' >&2
+  exit 1
+}
+[[ "$wrong_ref_output" == *'Linked Supabase project is not POS production'* ]] || {
+  printf 'POS_PSQL_RUNNER_ASSERTION_FAILED=wrong_ref_message\n' >&2
+  exit 1
+}
 
 phase forced_psql_failure
 set +e
