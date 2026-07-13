@@ -42,6 +42,7 @@ function scanRepository() {
   const findings = [];
   for (const relativePath of trackedFiles()) {
     const absolutePath = path.join(ROOT, relativePath);
+    if (!fs.existsSync(absolutePath)) continue;
     const stat = fs.statSync(absolutePath);
     if (stat.size > MAX_FILE_BYTES || BINARY_EXTENSIONS.has(path.extname(relativePath).toLowerCase())) {
       continue;

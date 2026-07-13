@@ -6,16 +6,19 @@ const fs = require('fs');
 const path = require('path');
 
 const HCM_TIME_ZONE = 'Asia/Ho_Chi_Minh';
-const HCM_OFFSET_MS = 7 * 60 * 60 * 1000;
 const EXPECTED_POS_PROJECT_REF = 'ynriuoomotxuwhuxxmhj';
 const PHOTO_OBJET_BRAND_ID = '77000000-0000-0000-0000-000000000001';
 const MAX_BACKFILL_DAYS = 7;
 const SOURCE_IDENTITY_VERSION = 2;
-const RUN_METADATA_PREFIX = 'FLARE_RUN_METADATA ';
 const COLLECTOR_STARTED_AT = new Date();
 const FAILURE = Object.freeze({
   DETERMINISTIC: 'deterministic',
   TRANSIENT: 'transient',
+});
+const OPERATIONAL_FAILURE = Object.freeze({
+  COLLECTION_FAILED: 'COLLECTION_FAILED',
+  DATA_INCOMPLETE: 'DATA_INCOMPLETE',
+  AUDIT_INFRA_FAILED: 'AUDIT_INFRA_FAILED',
 });
 
 class CollectorError extends Error {
@@ -333,18 +336,16 @@ function parseArgs(argv, env = process.env) {
   };
   const known = new Set([
     '--preflight-only',
-    '--audit-missing-runs',
     '--execute',
     '--backfill-from',
     '--backfill-to',
-    '--audit-lookback-days',
   ]);
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (!arg.startsWith('--') || !known.has(arg)) {
       throw deterministic(`Unknown argument: ${arg}`);
     }
-    if (['--backfill-from', '--backfill-to', '--audit-lookback-days'].includes(arg)) {
+    if (['--backfill-from', '--backfill-to'].includes(arg)) {
       index += 1;
     }
   }
@@ -358,21 +359,13 @@ function parseArgs(argv, env = process.env) {
     throw deterministic('--execute is only valid with a bounded backfill');
   }
 
-  const auditRaw = valueAfter('--audit-lookback-days') || env.PHOTO_OBJET_AUDIT_LOOKBACK_DAYS || '2';
-  const auditLookbackDays = Number(auditRaw);
-  if (!Number.isInteger(auditLookbackDays) || auditLookbackDays < 1 || auditLookbackDays > 31) {
-    throw deterministic('--audit-lookback-days must be an integer from 1 to 31');
-  }
-
   return {
     preflightOnly: args.has('--preflight-only'),
-    auditMissingRuns: args.has('--audit-missing-runs'),
     backfill: Boolean(backfillFrom),
     execute: args.has('--execute'),
     targetDates: backfillFrom
       ? inclusiveDateRange(backfillFrom, backfillTo)
       : getTargetDates(env),
-    auditLookbackDays,
   };
 }
 
@@ -676,29 +669,6 @@ async function loginAndGetData(page, user, pass, targetDate, downloadDir) {
   return { method: 'html_scrape', rows };
 }
 
-function serializeRunMetadata(identity, errorMessage = null) {
-  return `${RUN_METADATA_PREFIX}${JSON.stringify({
-    version: 2,
-    slot_id: identity.slotId,
-    source: identity.source,
-    slot_date_hcm: identity.slotDateHcm,
-    slot_time_hcm: identity.slotTimeHcm,
-    interval_start_at: identity.intervalStartAt || null,
-    interval_end_at: identity.intervalEndAt || null,
-    error: errorMessage,
-  })}`;
-}
-
-function parseRunMetadata(value) {
-  if (typeof value !== 'string' || !value.startsWith(RUN_METADATA_PREFIX)) return null;
-  try {
-    const metadata = JSON.parse(value.slice(RUN_METADATA_PREFIX.length));
-    return metadata && typeof metadata.slot_id === 'string' ? metadata : null;
-  } catch {
-    return null;
-  }
-}
-
 function scheduledSlotFromCron(cron, runTimestamp) {
   const match = /^(\d{1,2}) (\d{1,2}) \* \* \*$/.exec(String(cron || '').trim());
   if (!match) throw deterministic('Scheduled runs require a single fixed UTC cron slot');
@@ -754,14 +724,6 @@ function resolveRunTimestamp(env = process.env, fallback = COLLECTOR_STARTED_AT)
 }
 
 function createRunIdentity(options, targetDate, env = process.env) {
-  if (options.auditMissingRuns) {
-    return {
-      source: 'audit',
-      slotId: `audit:${targetDate}`,
-      slotDateHcm: targetDate,
-      slotTimeHcm: null,
-    };
-  }
   if (options.backfill) {
     return {
       source: 'backfill',
@@ -799,6 +761,63 @@ function createRunIdentity(options, targetDate, env = process.env) {
   };
 }
 
+function expectedSlotRpcArgs(store, identity) {
+  return {
+    p_store_id: store.storeId,
+    p_slot_date_hcm: identity.slotDateHcm,
+    p_slot_time_hcm: identity.slotTimeHcm,
+  };
+}
+
+async function bestEffortSlotRpc(supabase, name, args) {
+  const { error } = await supabase.rpc(name, args);
+  if (error) {
+    console.error(
+      `PHOTO_FAILURE_CLASS=${OPERATIONAL_FAILURE.AUDIT_INFRA_FAILED} ` +
+      `slot_rpc=${name} message=${error.message}`,
+    );
+    return false;
+  }
+  return true;
+}
+
+async function claimScheduledExpectation(supabase, store, identity, runId) {
+  if (identity.source !== 'scheduled') return true;
+  return bestEffortSlotRpc(supabase, 'photo_objet_claim_expected_slot', {
+    ...expectedSlotRpcArgs(store, identity),
+    p_run_id: runId,
+  });
+}
+
+async function completeScheduledExpectation(
+  supabase,
+  store,
+  identity,
+  runId,
+  zeroSales,
+) {
+  if (identity.source !== 'scheduled') return true;
+  return bestEffortSlotRpc(supabase, 'photo_objet_complete_expected_slot', {
+    ...expectedSlotRpcArgs(store, identity),
+    p_run_id: runId,
+    p_zero_sales: zeroSales,
+  });
+}
+
+function operationalFailureClass(error) {
+  return /incomplete aggregate|immutable source drift/i.test(String(error?.message || error))
+    ? OPERATIONAL_FAILURE.DATA_INCOMPLETE
+    : OPERATIONAL_FAILURE.COLLECTION_FAILED;
+}
+
+async function failScheduledExpectation(supabase, store, identity, error) {
+  if (identity.source !== 'scheduled') return true;
+  return bestEffortSlotRpc(supabase, 'photo_objet_fail_expected_slot', {
+    ...expectedSlotRpcArgs(store, identity),
+    p_failure_class: operationalFailureClass(error),
+  });
+}
+
 async function startPullRun(supabase, store, targetDate, identity) {
   const { data, error } = await supabase
     .from('photo_objet_sales_pull_runs')
@@ -812,7 +831,7 @@ async function startPullRun(supabase, store, targetDate, identity) {
       interval_start_at: identity.intervalStartAt,
       interval_end_at: identity.intervalEndAt,
       status: 'started',
-      error_message: serializeRunMetadata(identity),
+      error_message: null,
     })
     .select('id')
     .single();
@@ -827,7 +846,7 @@ async function finishPullRun(supabase, runId, identity, patch, bestEffort = fals
     .from('photo_objet_sales_pull_runs')
     .update({
       ...patch,
-      error_message: serializeRunMetadata(identity, patch.error_message || null),
+      error_message: patch.error_message || null,
       finished_at: new Date().toISOString(),
     })
     .eq('id', runId);
@@ -1007,6 +1026,7 @@ async function processStore(supabase, store, targetDate, downloadDir, runIdentit
     page.setDefaultTimeout(15000);
     page.setDefaultNavigationTimeout(30000);
     pullRunId = await startPullRun(supabase, store, targetDate, runIdentity);
+    await claimScheduledExpectation(supabase, store, runIdentity, pullRunId);
     const { method, rows } = await loginAndGetData(
       page,
       user,
@@ -1017,6 +1037,7 @@ async function processStore(supabase, store, targetDate, downloadDir, runIdentit
     console.log(`  Method: ${method}, ${rows.length} rows`);
 
     const selectedRows = selectRowsForInterval(rows, targetDate, runIdentity);
+    const zeroSalesInterval = selectedRows.length === 0;
     console.log(
       `  ${storeName}: accepted ${selectedRows.length}/${rows.length} rows for ` +
         `${runIdentity.intervalStartAt} <= sold_at < ${runIdentity.intervalEndAt}`,
@@ -1055,7 +1076,11 @@ async function processStore(supabase, store, targetDate, downloadDir, runIdentit
         rows_inserted: rawResult.inserted,
         rows_duplicate: rawResult.duplicate,
         aggregate_rows: 0,
+        interval_rows: selectedRows.length,
       });
+      await completeScheduledExpectation(
+        supabase, store, runIdentity, pullRunId, zeroSalesInterval,
+      );
       return {
         storeName,
         success: true,
@@ -1095,7 +1120,11 @@ async function processStore(supabase, store, targetDate, downloadDir, runIdentit
       rows_inserted: rawResult.inserted,
       rows_duplicate: rawResult.duplicate,
       aggregate_rows: payload.length,
+      interval_rows: selectedRows.length,
     });
+    await completeScheduledExpectation(
+      supabase, store, runIdentity, pullRunId, zeroSalesInterval,
+    );
     return {
       storeName,
       success: true,
@@ -1110,6 +1139,7 @@ async function processStore(supabase, store, targetDate, downloadDir, runIdentit
       status: 'failed',
       error_message: collectorError.message,
     }, true);
+    await failScheduledExpectation(supabase, store, runIdentity, collectorError);
     return {
       storeName,
       success: false,
@@ -1247,6 +1277,18 @@ async function runPreflight(supabase, stores, env = process.env, runtime = {}) {
       throw asCollectorError(insertProbeError, `POS ${table} insert permission probe failed`);
     }
   }
+  for (const [table, columns] of [
+    ['photo_objet_monitoring_policies', 'id,store_id,effective_from,is_enabled'],
+    ['photo_objet_expected_slots', 'id,store_id,slot_date_hcm,slot_time_hcm,status'],
+  ]) {
+    const { error: ledgerError } = await supabase.from(table).select(columns).limit(1);
+    if (ledgerError) {
+      console.error(
+        `PHOTO_FAILURE_CLASS=${OPERATIONAL_FAILURE.AUDIT_INFRA_FAILED} `
+          + `ledger_probe=${table} message=${ledgerError.message}`,
+      );
+    }
+  }
   const nodeVersion = runtime.nodeVersion || process.versions.node;
   console.log(
     `PREFLIGHT_OK node=${nodeVersion} websocket=available project=${EXPECTED_POS_PROJECT_REF} stores=${ids.length}`,
@@ -1264,89 +1306,6 @@ async function runWithTransientRetry(task, onRetry = () => {}) {
   throw new Error('unreachable');
 }
 
-function scheduledSlotsForDate(date) {
-  validateDate(date, 'audit date');
-  const slots = [];
-  for (let hour = 9; hour <= 22; hour += 1) {
-    const time = `${String(hour).padStart(2, '0')}:00`;
-    slots.push({
-      label: `${date} ${time}`,
-      slotId: `scheduled:${date}T${time}+07:00`,
-      at: Date.parse(`${date}T${String(hour - 7).padStart(2, '0')}:00:00Z`),
-    });
-  }
-  slots.push({
-    label: `${date} 22:30`,
-    slotId: `scheduled:${date}T22:30+07:00`,
-    at: Date.parse(`${date}T15:30:00Z`),
-  });
-  return slots;
-}
-
-// The 126 missing slot records before this cutover are a known metadata-only
-// baseline. Sales rows remain authoritative and are not rewritten or deleted.
-const RUN_METADATA_AUDIT_START_AT = Date.parse('2026-07-13T02:00:00Z');
-
-function findMissingRuns(
-  stores,
-  dates,
-  runs,
-  now = new Date(),
-  auditStartAt = RUN_METADATA_AUDIT_START_AT,
-) {
-  const successful = runs.filter(run => run.status === 'success');
-  const missing = [];
-  for (const date of dates) {
-    const slots = scheduledSlotsForDate(date);
-    for (let index = 0; index < slots.length; index += 1) {
-      const slot = slots[index];
-      const nextAt = slots[index + 1] ? slots[index + 1].at : slot.at;
-      if (slot.at < auditStartAt) continue;
-      if (now.getTime() < nextAt + 15 * 60000) continue;
-      for (const store of stores.filter(item => item.enabled)) {
-        const covered = successful.some(run => {
-          const metadata = parseRunMetadata(run.error_message);
-          return run.store_id === store.storeId &&
-            run.target_date === date &&
-            metadata?.source === 'scheduled' &&
-            metadata.slot_id === slot.slotId;
-        });
-        if (!covered) missing.push({ storeName: store.storeName, date, slot: slot.label });
-      }
-    }
-  }
-  return missing;
-}
-
-function auditDates(lookbackDays, now = new Date()) {
-  return Array.from({ length: lookbackDays }, (_, index) => {
-    const hcmNow = new Date(now.getTime() + HCM_OFFSET_MS);
-    hcmNow.setUTCDate(hcmNow.getUTCDate() - (lookbackDays - index - 1));
-    return hcmNow.toISOString().slice(0, 10);
-  });
-}
-
-async function auditMissingRuns(supabase, stores, lookbackDays) {
-  const dates = auditDates(lookbackDays);
-  const { data, error } = await supabase
-    .from('photo_objet_sales_pull_runs')
-    .select('store_id,target_date,status,error_message')
-    .gte('target_date', dates[0])
-    .lte('target_date', dates[dates.length - 1]);
-  if (error) throw asCollectorError(error, 'Missing-run audit query failed');
-  console.log(
-    `AUDIT_HISTORICAL_BASELINE cutoff=${new Date(RUN_METADATA_AUDIT_START_AT).toISOString()} policy=excluded`,
-  );
-  const missing = findMissingRuns(stores, dates, data || []);
-  if (missing.length > 0) {
-    const sample = missing.slice(0, 20).map(item => `${item.storeName} @ ${item.slot}`);
-    throw transient(
-      `Missing ${missing.length} completed Photo sales run(s): ${sample.join('; ')}${missing.length > sample.length ? '; ...' : ''}`,
-    );
-  }
-  console.log(`AUDIT_OK dates=${dates.join(',')} stores=${stores.filter(store => store.enabled).length}`);
-}
-
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   options.targetDates.forEach(date => validateDate(date, 'target date'));
@@ -1355,13 +1314,6 @@ async function main() {
   const supabase = createSupabaseClient();
   await runPreflight(supabase, stores);
   if (options.preflightOnly) return;
-  if (options.auditMissingRuns) {
-    const auditIdentity = createRunIdentity(options, options.targetDates[0]);
-    console.log(`RUN_IDENTITY slot=${auditIdentity.slotId} source=${auditIdentity.source}`);
-    await auditMissingRuns(supabase, stores, options.auditLookbackDays);
-    return;
-  }
-
   const enabledStores = stores.filter(store => store.enabled);
   const skippedStores = stores.filter(store => !store.enabled);
   if (options.backfill && !options.execute) {
@@ -1447,30 +1399,28 @@ if (require.main === module) {
 module.exports = {
   CollectorError,
   FAILURE,
+  OPERATIONAL_FAILURE,
   MAX_BACKFILL_DAYS,
-  RUN_METADATA_AUDIT_START_AT,
-  RUN_METADATA_PREFIX,
   SOURCE_IDENTITY_VERSION,
   aggregateDailyRawRows,
   assertAggregateComplete,
   assertImmutableSourceRows,
-  auditDates,
   buildStores,
   classifyError,
+  claimScheduledExpectation,
   createRunIdentity,
-  findMissingRuns,
+  completeScheduledExpectation,
+  failScheduledExpectation,
   inclusiveDateRange,
   parseArgs,
   parseSoldAt,
   parseSpreadsheetFile,
-  parseRunMetadata,
   runPreflight,
   runWithTransientRetry,
   scheduledSlotFromCron,
   selectRowsForInterval,
-  scheduledSlotsForDate,
-  serializeRunMetadata,
   normalizeRawSalesRows,
+  operationalFailureClass,
   validateStaticPreflight,
   validateStoreMappings,
 };

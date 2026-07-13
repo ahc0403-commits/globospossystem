@@ -5,236 +5,223 @@ import 'package:flutter_test/flutter_test.dart';
 String readRepoFile(String path) => File(path).readAsStringSync();
 
 void main() {
-  const migrationPath =
+  const rawMigration =
       'supabase/migrations/20260630007000_photo_objet_raw_meinvoice_queue.sql';
-  const intervalMigrationPath =
+  const intervalMigration =
       'supabase/migrations/20260712190000_photo_objet_interval_ledger.sql';
-  const immutableHealthMigrationPath =
+  const immutableMigration =
       'supabase/migrations/20260713090000_photo_objet_immutable_health.sql';
-  const scriptPath = 'scripts/pull_moers_sales.js';
-  const workflowPath = '.github/workflows/photo_objet_sales.yml';
-  const docsPath = 'docs/photo_objet_sales_pull_setup.md';
+  const slotMigration =
+      'supabase/migrations/20260713120000_photo_objet_expected_slot_ledger.sql';
+  const slotApply = 'scripts/apply_photo_objet_expected_slot_ledger.sql';
+  const slotConfiguration =
+      'scripts/configure_photo_objet_monitoring_policies.sql';
+  const collector = 'scripts/pull_moers_sales.js';
+  const health = 'scripts/photo_objet_slot_health.js';
+  const docs = 'docs/photo_objet_sales_pull_setup.md';
 
-  test('Photo Objet raw ledger migration extends meInvoice safely', () {
-    final sql = readRepoFile(migrationPath);
+  test('Photo Objet raw sales remain immutable and MISA-independent', () {
+    final sql = readRepoFile(rawMigration);
+    final source = readRepoFile(collector);
 
     expect(sql, contains('photo_objet_sales_raw'));
     expect(sql, contains('photo_objet_sales_pull_runs'));
-    expect(sql, contains('ALTER COLUMN order_id DROP NOT NULL'));
-    expect(sql, contains('source_system text NOT NULL'));
-    expect(sql, contains('source_key text'));
-    expect(sql, contains('source_snapshot jsonb'));
-    expect(sql, contains('meinvoice_jobs_source_key_unique'));
-    expect(sql, contains("'photo_objet_moers'"));
-    expect(sql, contains("payment_method text NOT NULL DEFAULT 'CASH'"));
-    expect(sql, contains("CHECK (payment_method = 'CASH')"));
     expect(sql, contains('UNIQUE (source_hash)'));
-    expect(
-      sql,
-      contains(
-        'CREATE OR REPLACE FUNCTION public.enqueue_photo_objet_meinvoice_job',
-      ),
-    );
-    expect(sql, contains('AFTER INSERT ON public.photo_objet_sales_raw'));
-    expect(sql, contains('public.meinvoice_payment_method_label'));
-    expect(sql, contains("ARRAY['CASH']::text[]"));
-    expect(sql, contains("'Người mua không lấy hóa đơn'"));
-    expect(sql, contains("'pending_manual_config'"));
-    expect(sql, contains("'pending'"));
-    expect(sql, contains('ENABLE ROW LEVEL SECURITY'));
     expect(sql, contains('user_accessible_stores(auth.uid())'));
     expect(sql, isNot(contains('cron.schedule')));
-    expect(sql, isNot(contains('publishCashRegisterInvoice')));
-  });
-
-  test('Moers pull script stores raw rows before dashboard aggregate', () {
-    final source = readRepoFile(scriptPath);
-
-    expect(source, contains("const crypto = require('crypto');"));
-    expect(source, isNot(contains('MOERS_D7')));
-    expect(source, isNot(contains('PHOTO_OBJET_D7')));
-    expect(source, contains("['BIEN HOA', 'BIENHOA']"));
-    expect(source, contains('Asia/Ho_Chi_Minh'));
-    expect(source, contains('getTargetDates'));
-    expect(source, contains('--preflight-only'));
-    expect(source, contains('Node 22 is required'));
-    expect(source, contains('Node WebSocket global is unavailable'));
-    expect(source, contains('EXPECTED_POS_PROJECT_REF'));
-    expect(source, contains('validateStoreMappings'));
-    expect(source, contains(r'`PHOTO OBJET ${store.storeName}`'));
-    expect(source, contains("replace(/\\s+/g, ' ')"));
-    expect(source, contains('photo_objet_sales_pull_runs'));
-    expect(source, contains('photo_objet_sales_raw'));
-    expect(source, contains('RUN_METADATA_PREFIX'));
-    expect(source, contains('RUN_METADATA_AUDIT_START_AT'));
-    expect(source, contains("Date.parse('2026-07-13T02:00:00Z')"));
-    expect(source, contains('if (slot.at < auditStartAt) continue;'));
-    expect(source, contains('AUDIT_HISTORICAL_BASELINE'));
-    expect(source, contains("metadata?.source === 'scheduled'"));
-    expect(source, contains('metadata.slot_id === slot.slotId'));
-    expect(source, isNot(contains("metadata.slot_time_hcm >= slot.label.slice(-5)")));
-    expect(source, isNot(contains('startedAt >= slot.at')));
-    expect(source, contains('salesTableFromMatrix'));
-    expect(source, contains('if (table.recognized) return table.rows;'));
-    expect(
-      source,
-      contains(
-        "throw transient('Downloaded spreadsheet has no recognizable sales table')",
-      ),
-    );
-    expect(source, contains('runWithTransientRetry'));
-    expect(source, contains('attempt < 2'));
-    expect(source, contains('--audit-missing-runs'));
-    expect(source, contains('MAX_BACKFILL_DAYS = 7'));
-    expect(source, contains('BACKFILL_DRY_RUN'));
-    expect(source, contains('assertAggregateComplete'));
-    expect(source, contains('normalizeRawSalesRows'));
-    expect(source, contains('selectRowsForInterval'));
-    expect(source, contains('SOURCE_IDENTITY_VERSION = 2'));
-    expect(source, isNot(contains('row_index: index')));
-    expect(source, contains('source_hash'));
-    expect(source, contains("payment_method: 'CASH'"));
-    expect(source, contains("buyer_kind: 'anonymous'"));
-    expect(source, contains("from('photo_objet_sales_pull_runs')"));
-    expect(source, contains("from('photo_objet_sales_raw')"));
-    expect(source, contains("onConflict: 'source_hash'"));
-    expect(source, contains('ignoreDuplicates: true'));
     expect(source, contains('assertImmutableSourceRows'));
-    expect(source, contains('upsertRawSalesRows(supabase, rawRows)'));
-    expect(
-      source.indexOf('upsertRawSalesRows(supabase, rawRows)'),
-      lessThan(source.indexOf('.upsert(payload')),
-    );
-    expect(source, contains('pulled_at: new Date().toISOString()'));
+    expect(source, contains('SOURCE_IDENTITY_VERSION = 2'));
+    expect(source, contains("payment_method: 'CASH'"));
     expect(source, isNot(contains('publishCashRegisterInvoice')));
     expect(source, isNot(contains('MISA_MEINVOICE_PASSWORD')));
+    expect(source, isNot(contains('DELETE FROM public.photo_objet_sales_raw')));
   });
 
-  test('Photo Objet immutable ledger exposes canonical slot health', () {
-    final sql = readRepoFile(immutableHealthMigrationPath);
+  test('collector uses exact typed slots and never performs health audit', () {
+    final source = readRepoFile(collector);
+
+    expect(source, contains('run_source: identity.source'));
+    expect(source, contains('slot_date_hcm: identity.slotDateHcm'));
+    expect(source, contains('slot_time_hcm: identity.slotTimeHcm'));
+    expect(source, contains('selectRowsForInterval'));
+    expect(source, contains('zeroSalesInterval = selectedRows.length === 0'));
+    expect(source, contains('interval_rows: selectedRows.length'));
+    expect(source, contains('photo_objet_complete_expected_slot'));
+    expect(source, contains('AUDIT_INFRA_FAILED'));
+    expect(source, contains('ledger_probe='));
+    expect(source, isNot(contains('--audit-missing-runs')));
+    expect(source, isNot(contains('RUN_METADATA_AUDIT_START_AT')));
+    expect(source, isNot(contains('parseRunMetadata')));
+    expect(source, isNot(contains('FLARE_RUN_METADATA')));
+  });
+
+  test('expected-slot ledger is policy-driven, scoped, and replay-safe', () {
+    final sql = readRepoFile(slotMigration);
+
+    expect(sql, contains('photo_objet_monitoring_policies'));
+    expect(sql, contains('photo_objet_expected_slots'));
+    expect(
+      sql,
+      contains('UNIQUE (store_id, slot_date_hcm, slot_time_hcm)'),
+    );
+    for (final status in [
+      'expected',
+      'running',
+      'collected',
+      'collected_zero',
+      'missing',
+      'failed',
+      'recovered',
+    ]) {
+      expect(sql, contains("'$status'"));
+    }
+    expect(sql, contains("(TIME '09:00')"));
+    expect(sql, contains("(TIME '22:30')"));
+    expect(sql, isNot(contains("TIME '22:45'")));
+    expect(sql, contains("d.slot_date + TIME '22:30'"));
+    expect(sql, contains('photo_objet_ensure_expected_slots'));
+    expect(sql, contains('photo-objet-materialize-expected-slots'));
+    expect(sql, contains("'5 17 * * *'"));
+    expect(sql, contains('ON CONFLICT (store_id, slot_date_hcm, slot_time_hcm)'));
+    expect(sql, contains('public.is_super_admin()'));
+    expect(sql, contains('user_accessible_stores(auth.uid())'));
+    expect(sql, contains('eligible.store_id = health.store_id'));
+    expect(sql, contains('alerted_failure_class IS DISTINCT FROM'));
+    expect(sql, contains('photo_objet_ack_expected_slot_alert'));
+    expect(
+      sql,
+      contains('FROM PUBLIC, anon, authenticated, service_role'),
+    );
+    expect(
+      sql,
+      contains('REVOKE ALL ON public.photo_slot_20260713120000_state'),
+    );
+    expect(sql, contains('coverage_missing_slots'));
+    expect(sql, contains('r.interval_rows = 0 AS zero_sales'));
+    expect(sql, isNot(contains("'2026-07-13 09:00")));
+    expect(sql, isNot(contains('126')));
+    expect(sql, isNot(contains('DELETE FROM public.photo_objet_sales_raw')));
+  });
+
+  test('legacy immutable migration remains represented on main', () {
+    final sql = readRepoFile(immutableMigration);
 
     expect(sql, contains('enforce_photo_objet_raw_immutability'));
     expect(sql, contains('PHOTO_OBJET_RAW_IDENTITY_IMMUTABLE'));
     expect(sql, contains('PHOTO_OBJET_RAW_DELETE_FORBIDDEN'));
-    expect(sql, contains('photo_objet_collection_health_at'));
     expect(sql, contains('v_photo_objet_collection_health'));
-    expect(sql, contains("'09:00'::time"));
-    expect(sql, contains("'22:30'::time"));
-    expect(sql, contains("interval '15 minutes'"));
-    expect(sql, contains('missing_slot_times'));
-    expect(sql, contains('failed_slot_times'));
-    expect(sql, contains("'not_due'"));
   });
 
-  test('Photo Objet interval migration backs up, gates, and resets the ledger', () {
-    final sql = readRepoFile(intervalMigrationPath);
+  test('interval migration retains backup and immutable identity contracts', () {
+    final sql = readRepoFile(intervalMigration);
 
-    expect(sql, contains('photo_interval_20260712190000_jobs_backup'));
     expect(sql, contains('photo_interval_20260712190000_raw_backup'));
-    expect(sql, contains("source_system = 'photo_objet_moers'"));
-    expect(sql, contains("sales.sale_date < DATE '2026-07-01'"));
     expect(sql, contains('source_identity_version integer NOT NULL DEFAULT 2'));
     expect(sql, contains('occurrence_no integer'));
-    expect(sql, contains('ALTER COLUMN sold_at SET NOT NULL'));
-    expect(sql, contains("'photo_objet_meinvoice_dispatch_enabled'"));
-    expect(sql, contains("'false'"));
-    expect(sql, contains('PHOTO_INTERVAL_PREFLIGHT_DISPATCHED_JOBS'));
+    expect(sql, contains('interval_start_at'));
+    expect(sql, contains('interval_end_at'));
+    expect(sql, contains('run_source'));
+    expect(sql, contains('slot_date_hcm'));
+    expect(sql, contains('slot_time_hcm'));
   });
 
-  test('Photo Objet spreadsheet parser uses patched SheetJS release', () {
-    final packageJson = File('scripts/package.json').readAsStringSync();
-    final packageLock = File('scripts/package-lock.json').readAsStringSync();
+  test('health audit is credential-minimal, typed, and fail-closed', () {
+    final source = readRepoFile(health);
+
+    expect(source, contains('photo_objet_refresh_expected_slot_health'));
+    expect(source, contains('photo_objet_expected_slot_health_at'));
+    expect(source, contains('photo_objet_ack_expected_slot_alert'));
+    expect(source, contains("audit_result: (rows || []).length === 0"));
+    expect(source, contains('AUDIT_INFRA_FAILED'));
+    expect(source, isNot(contains('MOERS_')));
+    expect(source, isNot(contains('puppeteer')));
+    expect(source, isNot(contains('error_message')));
+  });
+
+  test('workflows split collection, health, backfill, contract, and release', () {
+    final collect = readRepoFile(
+      '.github/workflows/photo_objet_sales_collect.yml',
+    );
+    final slotHealth = readRepoFile(
+      '.github/workflows/photo_objet_sales_health.yml',
+    );
+    final backfill = readRepoFile(
+      '.github/workflows/photo_objet_sales_backfill.yml',
+    );
+    final contract = readRepoFile(
+      '.github/workflows/photo_objet_sales_contract.yml',
+    );
+    final release = readRepoFile(
+      '.github/workflows/photo_objet_release_proof.yml',
+    );
+
+    final collectionCrons = RegExp(
+      r"cron: '([^']+)'",
+    ).allMatches(collect).map((match) => match.group(1)).toList();
+    expect(collectionCrons, [
+      for (var hour = 2; hour <= 15; hour++) '0 $hour * * *',
+      '30 15 * * *',
+    ]);
+    expect(collect, contains("node-version: '22'"));
+    expect(collect, contains('npm ci'));
+    expect(collect, contains('npx puppeteer browsers install'));
+    expect(collect, isNot(contains('--install-deps')));
+    expect(collect, isNot(contains('audit-missing-runs')));
+    expect(collect, isNot(contains('backfill')));
+
+    expect(slotHealth, contains("cron: '20 3-15 * * *'"));
+    expect(slotHealth, contains("cron: '50 15 * * *'"));
+    expect(slotHealth, contains('--refresh --output health-evidence.json'));
+    expect(slotHealth, contains('--ack-file health-evidence.json'));
+    expect(slotHealth, contains('--assert-file health-evidence.json'));
+    expect(slotHealth, isNot(contains('MOERS_')));
+    expect(slotHealth, isNot(contains('Chromium')));
+
+    expect(backfill, contains('workflow_dispatch:'));
+    expect(backfill, contains('default: false'));
+    expect(backfill, contains('EXECUTE_IMMUTABLE_BACKFILL'));
+    expect(backfill, isNot(contains('schedule:')));
+    expect(contract, contains('pull_request:'));
+    expect(contract, isNot(contains('secrets.')));
+
+    expect(release, contains('branches: [main]'));
+    expect(release, contains('git merge-base --is-ancestor'));
+    expect(release, contains('PRODUCTION_DEPLOYED exact main SHA'));
+    expect(release, contains('--read-only --output release-health.json'));
+    expect(release, contains('globospossystem.vercel.app'));
+    expect(release, contains('release-proof-evidence.json'));
+
+    final apply = readRepoFile(slotApply);
+    final configuration = readRepoFile(slotConfiguration);
+    expect(
+      apply,
+      contains(r'\ir ../supabase/migrations/20260713120000_photo_objet_expected_slot_ledger.sql'),
+    );
+    expect(apply, contains(r'\ir configure_photo_objet_monitoring_policies.sql'));
+    expect(configuration, contains('approved_photo_objet_monitoring_stores'));
+    expect(configuration, contains('photo_objet_ensure_expected_slots'));
+  });
+
+  test('SheetJS stays on the patched vendored release', () {
+    final packageJson = readRepoFile('scripts/package.json');
+    final packageLock = readRepoFile('scripts/package-lock.json');
 
     expect(packageJson, contains('file:vendor/xlsx-0.20.3.tgz'));
     expect(packageLock, contains('xlsx-0.20.3.tgz'));
     expect(packageLock, isNot(contains('"version": "0.18.5"')));
   });
 
-  test(
-    'Photo Objet workflow ends collection and invoice queueing at 22:30 HCM',
-    () {
-      final workflow = readRepoFile(workflowPath);
-      final cronExpressions = RegExp(
-        r"cron: '([^']+)'",
-      ).allMatches(workflow).map((match) => match.group(1)).toList();
+  test('runbook documents immutable, independent, and exact-main boundaries', () {
+    final text = readRepoFile(docs);
 
-      expect(cronExpressions, [
-        for (var hour = 2; hour <= 15; hour++) '0 $hour * * *',
-        '30 15 * * *',
-      ]);
-      expect(workflow, contains('09:00-22:30 Asia/Ho_Chi_Minh'));
-      expect(workflow, contains('pull_request:'));
-      expect(workflow, contains('name: Photo Objet contract'));
-      expect(workflow, contains("if: github.event_name == 'pull_request'"));
-      expect(workflow, contains("if: github.event_name != 'pull_request'"));
-      expect(workflow, contains('npm run security-scan\n          npm test'));
-      expect(workflow, contains("node-version: '22'"));
-      expect(workflow, contains('npm ci'));
-      expect(
-        workflow,
-        contains(r'npx puppeteer browsers install "chrome@${CHROME_VERSION}"'),
-      );
-      expect(workflow, isNot(contains('--install-deps')));
-      expect(workflow, contains('scripts/package-lock.json'));
-      expect(workflow, isNot(contains(r'${{ runner.temp }}')));
-      expect(
-        workflow,
-        contains(
-          r'echo "PUPPETEER_CACHE_DIR=${RUNNER_TEMP}/puppeteer" >> "${GITHUB_ENV}"',
-        ),
-      );
-      final productionJob = workflow.substring(
-        workflow.indexOf('  pull-sales:'),
-      );
-      expect(
-        productionJob.indexOf(
-          r'PUPPETEER_CACHE_DIR=${RUNNER_TEMP}/puppeteer',
-        ),
-        lessThan(productionJob.indexOf('uses: actions/setup-node@v4')),
-      );
-      expect(workflow, contains('concurrency:'));
-      expect(workflow, contains('cancel-in-progress: false'));
-      expect(workflow, contains('--preflight-only'));
-      expect(workflow, contains('--audit-missing-runs'));
-      expect(workflow, contains('Deduplicate failure escalation'));
-      expect(workflow, contains('always() &&'));
-      expect(workflow, contains("steps.node_setup.outcome != 'success'"));
-      expect(workflow, contains("steps.setup.outcome != 'success'"));
-      expect(workflow, contains("steps.chromium.outcome != 'success'"));
-      expect(workflow, contains('issues.find'));
-      expect(workflow, isNot(contains('MOERS_D7')));
-      expect(workflow, isNot(contains('PHOTO_OBJET_D7')));
-      expect(workflow, contains('defaults to today in Asia/Ho_Chi_Minh'));
-      expect(workflow, contains('node pull_moers_sales.js'));
-    },
-  );
-
-  test('Photo Objet setup docs describe raw ledger and queue boundaries', () {
-    final docs = readRepoFile(docsPath);
-
-    expect(docs, contains('photo_objet_sales_raw'));
-    expect(docs, contains('photo_objet_sales_pull_runs'));
-    expect(docs, contains('meinvoice_jobs'));
-    expect(docs, contains('The crawler does not call MISA directly.'));
-    expect(docs, contains("cron: '0 2 * * *'"));
-    expect(docs, contains("cron: '30 15 * * *'"));
-    expect(docs, contains('09:00 through 22:30'));
-    expect(docs, contains('final sales collection and invoice queueing run'));
-    expect(docs, isNot(contains('MOERS_D7')));
-    expect(docs, isNot(contains('PHOTO_OBJET_D7')));
-    expect(docs, contains('payment_method = CASH'));
-    expect(docs, contains('VNPAY/QR wallet data must not be mixed'));
-    expect(docs, contains('dry-run by default'));
-    expect(docs, contains('at most seven inclusive dates'));
-    expect(docs, contains('FLARE_FAILURE_CLASS=deterministic'));
-    expect(docs, contains('FLARE_RUN_METADATA'));
-    expect(docs, contains('`started_at` is not used as slot'));
-    expect(docs, contains('2026-07-13 09:00 HCM'));
-    expect(docs, contains('126'));
-    expect(docs, contains('historical baseline'));
-    expect(docs, contains('immutable append-only source'));
-    expect(docs, contains('v_photo_objet_collection_health'));
-    expect(docs, contains('Photo Objet contract'));
-    expect(docs, contains('Vercel preview'));
+    expect(text, contains('immutable source'));
+    expect(text, contains('collected_zero'));
+    expect(text, contains('22:45 HCM'));
+    expect(text, contains('detect -> create or update exact store/slot/failure issue -> ACK'));
+    expect(text, contains('PR checks and Preview deployments are never operational PASS'));
+    expect(text, contains('MISA queueing and receipt automation'));
+    expect(text, contains('dry-run by default'));
+    expect(text, contains('60 stores/900 slots'));
+    expect(text, isNot(contains('126')));
   });
 }

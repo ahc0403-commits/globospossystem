@@ -1,0 +1,149 @@
+name: Photo Objet Main Release Proof
+
+on:
+  workflow_run:
+    workflows: ['Photo Objet Sales Contract']
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: photo-objet-main-release-proof
+  cancel-in-progress: false
+
+jobs:
+  prove-production:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+      PRODUCTION_URL: https://globospossystem.vercel.app
+    steps:
+      - name: Reject non-main or stale validation before checkout
+        env:
+          VALIDATION_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          VALIDATION_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          VALIDATION_EVENT: ${{ github.event.workflow_run.event }}
+          VALIDATION_STATUS: ${{ github.event.workflow_run.status }}
+          VALIDATION_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "${VALIDATION_EVENT}" = 'push'
+          test "${VALIDATION_HEAD_BRANCH}" = 'main'
+          test "${VALIDATION_STATUS}" = 'completed'
+          test "${VALIDATION_CONCLUSION}" = 'success'
+          [[ "${VALIDATION_HEAD_SHA}" =~ ^[0-9a-f]{40}$ ]]
+          current_main_sha="$(
+            curl --fail --silent --show-error \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/git/ref/heads/main" \
+              | jq -er '.object.sha'
+          )"
+          [[ "${current_main_sha}" =~ ^[0-9a-f]{40}$ ]]
+          test "${current_main_sha}" = "${VALIDATION_HEAD_SHA}"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+      - name: CODE_VALIDATED exact main SHA
+        id: validated
+        env:
+          VALIDATION_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          VALIDATION_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          VALIDATION_EVENT: ${{ github.event.workflow_run.event }}
+          VALIDATION_STATUS: ${{ github.event.workflow_run.status }}
+          VALIDATION_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          VALIDATION_RUN_ID: ${{ github.event.workflow_run.id }}
+          VALIDATION_RUN_URL: ${{ github.event.workflow_run.html_url }}
+          VALIDATION_WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+        run: |
+          git fetch origin main
+          approved="${VALIDATION_HEAD_SHA}"
+          test "$(git rev-parse HEAD)" = "${approved}"
+          test "$(git rev-parse origin/main)" = "${approved}"
+          git merge-base --is-ancestor "${approved}" origin/main
+          node - <<'NODE'
+          const fs = require('fs');
+          fs.writeFileSync('code-validation.json', JSON.stringify({
+            name: process.env.VALIDATION_WORKFLOW_NAME,
+            path: '.github/workflows/photo_objet_sales_contract.yml',
+            head_sha: process.env.VALIDATION_HEAD_SHA,
+            head_branch: process.env.VALIDATION_HEAD_BRANCH,
+            event: process.env.VALIDATION_EVENT,
+            status: process.env.VALIDATION_STATUS,
+            conclusion: process.env.VALIDATION_CONCLUSION,
+            id: Number(process.env.VALIDATION_RUN_ID),
+            html_url: process.env.VALIDATION_RUN_URL,
+          }, null, 2) + '\n');
+          NODE
+          node scripts/verify_photo_objet_release.js \
+            --validation code-validation.json \
+            --sha "${approved}" \
+            --check-validation-only
+          echo "main_sha=${approved}" >> "${GITHUB_OUTPUT}"
+          echo 'validation_state=SUCCESS' >> "${GITHUB_OUTPUT}"
+      - name: Install locked audit dependencies
+        working-directory: scripts
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+        run: npm ci
+      - name: PRODUCTION_DEPLOYED exact main SHA
+        id: deployment
+        env:
+          MAIN_SHA: ${{ steps.validated.outputs.main_sha }}
+        run: |
+          for attempt in $(seq 1 60); do
+            query=''
+            if [ -n "${VERCEL_TEAM_ID:-}" ]; then query="?teamId=${VERCEL_TEAM_ID}"; fi
+            curl --fail --silent --show-error \
+              -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+              "https://api.vercel.com/v13/deployments/globospossystem.vercel.app${query}" \
+              -o deployment.json
+            if node scripts/verify_photo_objet_release.js \
+              --deployment deployment.json --sha "${MAIN_SHA}" --check-only; then
+              echo 'deployment_state=READY' >> "${GITHUB_OUTPUT}"
+              break
+            fi
+            if [ "${attempt}" -eq 60 ]; then exit 1; fi
+            sleep 20
+          done
+      - name: MAIN_AUDIT_PASS read-only
+        working-directory: scripts
+        run: node photo_objet_slot_health.js --read-only --output release-health.json
+      - name: PRODUCTION_OBSERVED HTTP 200
+        run: |
+          code=$(curl --silent --show-error --location --output /dev/null \
+            --write-out '%{http_code}' "${PRODUCTION_URL}")
+          test "${code}" = '200'
+      - name: Emit machine-readable release evidence
+        env:
+          MAIN_SHA: ${{ steps.validated.outputs.main_sha }}
+          DEPLOYMENT_STATE: ${{ steps.deployment.outputs.deployment_state }}
+          VALIDATION_STATE: ${{ steps.validated.outputs.validation_state }}
+        run: |
+          node scripts/verify_photo_objet_release.js \
+            --validation code-validation.json \
+            --deployment deployment.json \
+            --health scripts/release-health.json \
+            --sha "${MAIN_SHA}" \
+            --validation-state "${VALIDATION_STATE}" \
+            --deployment-state "${DEPLOYMENT_STATE}" \
+            --output release-proof-evidence.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: photo-objet-release-proof-${{ github.event.workflow_run.head_sha }}
+          path: release-proof-evidence.json
+          retention-days: 30

@@ -13,18 +13,17 @@ const {
   assertImmutableSourceRows,
   buildStores,
   classifyError,
+  claimScheduledExpectation,
+  completeScheduledExpectation,
   createRunIdentity,
-  findMissingRuns,
   inclusiveDateRange,
   parseArgs,
   parseSoldAt,
   parseSpreadsheetFile,
   normalizeRawSalesRows,
+  operationalFailureClass,
   runWithTransientRetry,
   runPreflight,
-  RUN_METADATA_AUDIT_START_AT,
-  scheduledSlotsForDate,
-  serializeRunMetadata,
   selectRowsForInterval,
   validateStaticPreflight,
   validateStoreMappings,
@@ -212,8 +211,57 @@ test('preflight probes pull runs, raw ledger, and aggregate before collection', 
     'photo_objet_sales_pull_runs',
     'photo_objet_sales_raw',
     'photo_objet_sales',
+    'photo_objet_monitoring_policies',
+    'photo_objet_expected_slots',
   ]);
-  assert.deepEqual(writeProbed, probed);
+  assert.deepEqual(writeProbed, [
+    'photo_objet_sales_pull_runs',
+    'photo_objet_sales_raw',
+    'photo_objet_sales',
+  ]);
+});
+
+test('health ledger probe failure cannot block collection preflight', async () => {
+  const stores = buildStores(validEnv());
+  const rows = stores.map(store => ({
+    id: store.storeId,
+    name: `PHOTO OBJET ${store.storeName}`,
+    is_active: true,
+    brand_id: '77000000-0000-0000-0000-000000000001',
+    store_type: 'direct',
+  }));
+  const errors = [];
+  const originalError = console.error;
+  console.error = message => errors.push(String(message));
+  const supabase = {
+    from(table) {
+      return {
+        select() {
+          if (table === 'restaurants') {
+            return { in: async () => ({ data: rows, error: null }) };
+          }
+          return {
+            limit: async () => table === 'photo_objet_monitoring_policies'
+              || table === 'photo_objet_expected_slots'
+              ? { data: null, error: { message: 'ledger unavailable' } }
+              : { data: [], error: null },
+          };
+        },
+        async insert() {
+          return { data: null, error: { code: '23502', message: 'expected not-null violation' } };
+        },
+      };
+    },
+  };
+  try {
+    await assert.doesNotReject(runPreflight(supabase, stores, validEnv(), {
+      nodeVersion: '22.17.0', webSocket() {}, executablePath: '/bin/sh',
+    }));
+  } finally {
+    console.error = originalError;
+  }
+  assert.equal(errors.length, 2);
+  assert.ok(errors.every(message => message.includes('AUDIT_INFRA_FAILED')));
 });
 
 test('bounded backfill is dry-run by default and rejects more than seven days', () => {
@@ -248,9 +296,33 @@ test('only transient failures receive one retry', async () => {
   assert.equal(classifyError(new Error('navigation timeout')), FAILURE.TRANSIENT);
 });
 
-test('slot identities distinguish scheduled, manual, audit, and bounded backfill', () => {
+test('slot audit infrastructure cannot overwrite collection execution success', async () => {
+  const calls = [];
+  const supabase = {
+    async rpc(name, args) {
+      calls.push({ name, args });
+      return { data: null, error: { message: 'temporary ledger outage' } };
+    },
+  };
+  const store = { storeId: ids[0] };
+  const identity = {
+    source: 'scheduled', slotDateHcm: '2026-07-14', slotTimeHcm: '09:00',
+  };
+  assert.equal(await claimScheduledExpectation(supabase, store, identity, 'run-1'), false);
+  assert.equal(
+    await completeScheduledExpectation(supabase, store, identity, 'run-1', true),
+    false,
+  );
+  assert.deepEqual(calls.map(call => call.name), [
+    'photo_objet_claim_expected_slot', 'photo_objet_complete_expected_slot',
+  ]);
+  assert.equal(operationalFailureClass(new Error('Incomplete aggregate snapshot')), 'DATA_INCOMPLETE');
+  assert.equal(operationalFailureClass(new Error('login failed')), 'COLLECTION_FAILED');
+});
+
+test('slot identities distinguish scheduled, manual, and bounded backfill', () => {
   const scheduled = createRunIdentity(
-    { auditMissingRuns: false, backfill: false },
+    { backfill: false },
     '2026-07-11',
     {
       GITHUB_EVENT_NAME: 'schedule',
@@ -259,7 +331,7 @@ test('slot identities distinguish scheduled, manual, audit, and bounded backfill
     },
   );
   const manual = createRunIdentity(
-    { auditMissingRuns: false, backfill: false },
+    { backfill: false },
     '2026-07-11',
     {
       GITHUB_EVENT_NAME: 'workflow_dispatch',
@@ -268,13 +340,8 @@ test('slot identities distinguish scheduled, manual, audit, and bounded backfill
       PHOTO_OBJET_RUN_STARTED_AT: '2026-07-11T17:10:00Z',
     },
   );
-  const audit = createRunIdentity(
-    { auditMissingRuns: true, backfill: false },
-    '2026-07-11',
-    {},
-  );
   const backfill = createRunIdentity(
-    { auditMissingRuns: false, backfill: true },
+    { backfill: true },
     '2026-07-11',
     {
       GITHUB_EVENT_NAME: 'workflow_dispatch',
@@ -291,8 +358,8 @@ test('slot identities distinguish scheduled, manual, audit, and bounded backfill
     intervalStartAt: '2026-07-11T01:00:00.000Z',
     intervalEndAt: '2026-07-11T02:00:00.000Z',
   });
-  assert.equal(new Set([scheduled.slotId, manual.slotId, audit.slotId, backfill.slotId]).size, 4);
-  assert.deepEqual([manual.source, audit.source, backfill.source], ['manual', 'audit', 'backfill']);
+  assert.equal(new Set([scheduled.slotId, manual.slotId, backfill.slotId]).size, 3);
+  assert.deepEqual([manual.source, backfill.source], ['manual', 'backfill']);
 });
 
 test('delayed 22:30 schedule crossing HCM midnight retains the previous target date and slot', () => {
@@ -318,7 +385,7 @@ test('delayed 22:30 schedule crossing HCM midnight retains the previous target d
 
 test('12:00 scheduled collection accepts only 11:00:00 through 11:59:59', () => {
   const identity = createRunIdentity(
-    { auditMissingRuns: false, backfill: false },
+    { backfill: false },
     '2026-07-12',
     {
       GITHUB_EVENT_NAME: 'schedule',
@@ -436,151 +503,6 @@ test('daily aggregate is recomputed from the canonical raw ledger', () => {
   ]);
 });
 
-test('missing-run audit uses explicit slot metadata, not delayed started_at', () => {
-  const store = { storeName: 'BIEN HOA', storeId: ids[0], enabled: true };
-  const identity = createRunIdentity(
-    { auditMissingRuns: false, backfill: false },
-    '2026-07-11',
-    {
-      GITHUB_EVENT_NAME: 'schedule',
-      PHOTO_OBJET_SCHEDULE_CRON: '0 2 * * *',
-      PHOTO_OBJET_RUN_STARTED_AT: '2026-07-11T03:55:00Z',
-    },
-  );
-  const runs = [{
-    store_id: ids[0],
-    target_date: '2026-07-11',
-    status: 'success',
-    started_at: '2026-07-11T03:55:00Z',
-    error_message: serializeRunMetadata(identity),
-  }];
-  const missing = findMissingRuns(
-    [store],
-    ['2026-07-11'],
-    runs,
-    new Date('2026-07-11T04:20:00Z'),
-    Date.parse('2026-07-11T00:00:00Z'),
-  );
-  assert.deepEqual(missing, [{ storeName: 'BIEN HOA', date: '2026-07-11', slot: '2026-07-11 10:00' }]);
-});
-
-test('missing-run audit excludes historical metadata gaps but detects new gaps', () => {
-  const stores = ids.slice(0, 6).map((storeId, index) => ({
-    storeName: `STORE ${index + 1}`,
-    storeId,
-    enabled: true,
-  }));
-  const now = new Date('2026-07-13T04:20:00Z');
-
-  assert.equal(RUN_METADATA_AUDIT_START_AT, Date.parse('2026-07-13T02:00:00Z'));
-  assert.deepEqual(
-    findMissingRuns(stores, ['2026-07-11', '2026-07-12'], [], now),
-    [],
-    'the 126 pre-cutover store-slot gaps are a historical metadata baseline',
-  );
-
-  const firstSlotIdentity = {
-    source: 'scheduled',
-    slotId: 'scheduled:2026-07-13T09:00+07:00',
-    slotDateHcm: '2026-07-13',
-    slotTimeHcm: '09:00',
-  };
-  const runs = stores.map(store => ({
-    store_id: store.storeId,
-    target_date: '2026-07-13',
-    status: 'success',
-    error_message: serializeRunMetadata(firstSlotIdentity),
-  }));
-  assert.deepEqual(
-    findMissingRuns(
-      stores,
-      ['2026-07-11', '2026-07-12', '2026-07-13'],
-      runs,
-      new Date('2026-07-13T03:20:00Z'),
-    ),
-    [],
-    'the first post-cutover success must not inherit historical audit failures',
-  );
-  assert.deepEqual(findMissingRuns(stores, ['2026-07-13'], runs, now),
-    stores.map(store => ({
-      storeName: store.storeName,
-      date: '2026-07-13',
-      slot: '2026-07-13 10:00',
-    })),
-    'a newly due slot after cutover must still fail health',
-  );
-});
-
-test('missing-run audit reports the final 22:30 slot at 22:45 HCM', () => {
-  const store = { storeName: 'BIEN HOA', storeId: ids[0], enabled: true };
-  const successfulRuns = scheduledSlotsForDate('2026-07-13')
-    .slice(0, -1)
-    .map(slot => ({
-      store_id: ids[0],
-      target_date: '2026-07-13',
-      status: 'success',
-      error_message: serializeRunMetadata({
-        source: 'scheduled',
-        slotId: slot.slotId,
-        slotDateHcm: '2026-07-13',
-        slotTimeHcm: slot.label.slice(-5),
-      }),
-    }));
-
-  assert.deepEqual(
-    findMissingRuns([store], ['2026-07-13'], successfulRuns, new Date('2026-07-13T15:44:59Z')),
-    [],
-  );
-  assert.deepEqual(
-    findMissingRuns([store], ['2026-07-13'], successfulRuns, new Date('2026-07-13T15:45:00Z')),
-    [{ storeName: 'BIEN HOA', date: '2026-07-13', slot: '2026-07-13 22:30' }],
-  );
-});
-
-test('schedule health requires each exact slot even when a later snapshot succeeds', () => {
-  const store = { storeName: 'BIEN HOA', storeId: ids[0], enabled: true };
-  const laterIdentity = {
-    source: 'scheduled',
-    slotId: 'scheduled:2026-07-13T11:00+07:00',
-    slotDateHcm: '2026-07-13',
-    slotTimeHcm: '11:00',
-  };
-  const laterSuccess = [{
-    store_id: ids[0],
-    target_date: '2026-07-13',
-    status: 'success',
-    error_message: serializeRunMetadata(laterIdentity),
-  }];
-
-  assert.deepEqual(
-    findMissingRuns(
-      [store],
-      ['2026-07-13'],
-      laterSuccess,
-      new Date('2026-07-13T04:20:00Z'),
-    ),
-    [
-      { storeName: 'BIEN HOA', date: '2026-07-13', slot: '2026-07-13 09:00' },
-      { storeName: 'BIEN HOA', date: '2026-07-13', slot: '2026-07-13 10:00' },
-    ],
-    'data recovery must not hide missed scheduler slots',
-  );
-  assert.deepEqual(
-    findMissingRuns(
-      [store],
-      ['2026-07-13'],
-      laterSuccess,
-      new Date('2026-07-13T06:20:00Z'),
-    ),
-    [
-      { storeName: 'BIEN HOA', date: '2026-07-13', slot: '2026-07-13 09:00' },
-      { storeName: 'BIEN HOA', date: '2026-07-13', slot: '2026-07-13 10:00' },
-      { storeName: 'BIEN HOA', date: '2026-07-13', slot: '2026-07-13 12:00' },
-    ],
-    'every completed slot needs its own successful run',
-  );
-});
-
 test('partial aggregate snapshots never overwrite fuller totals', () => {
   const existing = [{ device_name: 'M1', gross_sales: 100000, transaction_count: 4 }];
   assert.throws(
@@ -594,9 +516,11 @@ test('partial aggregate snapshots never overwrite fuller totals', () => {
   assert.doesNotThrow(() => assertAggregateComplete([], []));
 });
 
-test('workflow uses locked Node 22 install, exact schedule, audit, and deduplicated escalation', () => {
-  const workflow = fs.readFileSync(path.join(__dirname, '../../.github/workflows/photo_objet_sales.yml'), 'utf8');
-  assert.match(workflow, /on:\n  pull_request:\n  schedule:/);
+test('collection workflow stays green independently from slot health', () => {
+  const workflow = fs.readFileSync(
+    path.join(__dirname, '../../.github/workflows/photo_objet_sales_collect.yml'), 'utf8',
+  );
+  assert.match(workflow, /on:\n  schedule:/);
   assert.deepEqual([...workflow.matchAll(/cron: '([^']+)'/g)].map(match => match[1]), [
     ...Array.from({ length: 14 }, (_, index) => `0 ${index + 2} * * *`),
     '30 15 * * *',
@@ -614,39 +538,88 @@ test('workflow uses locked Node 22 install, exact schedule, audit, and deduplica
     workflow,
     /echo "PUPPETEER_CACHE_DIR=\$\{RUNNER_TEMP\}\/puppeteer" >> "\$\{GITHUB_ENV\}"/,
   );
-  const productionStart = workflow.indexOf('  pull-sales:');
-  const productionJob = workflow.slice(productionStart);
   assert.ok(
-    productionJob.indexOf('PUPPETEER_CACHE_DIR=${RUNNER_TEMP}/puppeteer') <
-      productionJob.indexOf('uses: actions/setup-node@v4'),
+    workflow.indexOf('PUPPETEER_CACHE_DIR=${RUNNER_TEMP}/puppeteer') <
+      workflow.indexOf('uses: actions/setup-node@v4'),
     'runtime cache setup must run before Node and Chromium installation',
   );
   assert.match(workflow, /--preflight-only/);
-  assert.match(workflow, /--audit-missing-runs/);
-  assert.match(workflow, /Collector failure/);
-  assert.match(workflow, /issues\.find/);
-  assert.match(workflow, /if: >-\n\s+always\(\) &&/);
-  assert.match(workflow, /steps\.node_setup\.outcome != 'success'/);
-  assert.match(workflow, /steps\.setup\.outcome != 'success'/);
-  assert.match(workflow, /steps\.chromium\.outcome != 'success'/);
-  assert.match(workflow, /collector\.log unavailable; use setup outcomes below/);
-  const contractStart = workflow.indexOf('  photo-contract:');
-  assert.ok(contractStart > 0 && productionStart > contractStart);
-  const contractJob = workflow.slice(contractStart, productionStart);
-  assert.match(contractJob, /name: Photo Objet contract/);
-  assert.match(contractJob, /if: github\.event_name == 'pull_request'/);
-  assert.match(contractJob, /node-version: '22'/);
-  assert.match(contractJob, /run: npm ci/);
-  assert.match(contractJob, /run: \|\n\s+npm run security-scan\n\s+npm test/);
-  assert.doesNotMatch(contractJob, /secrets\./);
-  assert.match(productionJob, /if: github\.event_name != 'pull_request'/);
-  assert.doesNotMatch(
-    workflow.slice(0, contractStart),
-    /issues: write/,
-    'write permission must not be global or available to the PR contract job',
-  );
-  assert.match(productionJob, /issues: write/);
+  assert.doesNotMatch(workflow, /audit-missing-runs|slot_health|backfill/);
+  assert.match(workflow, /COLLECTION_FAILED/);
   const collector = fs.readFileSync(path.join(__dirname, '../pull_moers_sales.js'), 'utf8');
   assert.match(collector, /runWithTransientRetry/);
   assert.match(collector, /attempt < 2/);
+});
+
+test('health, backfill, contract, and release proof are independent workflows', () => {
+  const read = name => fs.readFileSync(
+    path.join(__dirname, `../../.github/workflows/${name}`), 'utf8',
+  );
+  const health = read('photo_objet_sales_health.yml');
+  const backfill = read('photo_objet_sales_backfill.yml');
+  const contract = read('photo_objet_sales_contract.yml');
+  const release = read('photo_objet_release_proof.yml');
+
+  assert.deepEqual([...health.matchAll(/cron: '([^']+)'/g)].map(match => match[1]), [
+    '20 3-15 * * *', '50 15 * * *',
+  ]);
+  assert.match(health, /photo_objet_slot_health\.js --refresh/);
+  assert.match(health, /--ack-file health-evidence\.json/);
+  assert.match(health, /--assert-file health-evidence\.json/);
+  assert.match(health, /Escalate detected audit infrastructure failure/);
+  assert.doesNotMatch(health, /echo 'PHOTO_FAILURE_CLASS=SLOT_MISSING'/);
+  assert.doesNotMatch(health, /MOERS_|Chromium|pull_moers_sales/);
+  assert.match(backfill, /workflow_dispatch:/);
+  assert.match(backfill, /execute_backfill:[\s\S]*default: false/);
+  assert.match(backfill, /EXECUTE_IMMUTABLE_BACKFILL/);
+  assert.doesNotMatch(backfill, /schedule:/);
+  assert.match(contract, /pull_request:/);
+  assert.match(contract, /push:[\s\S]*branches: \[main\]/);
+  assert.match(contract, /photo_objet_release_proof\.yml/);
+  assert.doesNotMatch(contract, /secrets\./);
+  for (const command of [
+    'dart analyze --fatal-infos',
+    'flutter test',
+    'flutter build web --release',
+    'npm test',
+    'npm audit',
+    'npm run security-scan',
+    'bash test/pos_deploy_psql_runner_test.sh',
+    'bash test/photo_objet_expected_slot_ledger_test.sh',
+    'git diff --check',
+  ]) {
+    assert.match(contract, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+  assert.match(release, /workflow_run:/);
+  assert.match(release, /workflows: \['Photo Objet Sales Contract'\]/);
+  assert.match(release, /branches: \[main\]/);
+  assert.doesNotMatch(release, /workflow_dispatch:/);
+  assert.match(release, /test "\$\{VALIDATION_EVENT\}" = 'push'/);
+  assert.match(release, /test "\$\{VALIDATION_HEAD_BRANCH\}" = 'main'/);
+  assert.match(release, /VALIDATION_HEAD_SHA.*\^\[0-9a-f\]\{40\}\$/s);
+  assert.match(release, /api\.github\.com\/repos\/\$\{GITHUB_REPOSITORY\}\/git\/ref\/heads\/main/);
+  assert.match(release, /test "\$\{current_main_sha\}" = "\$\{VALIDATION_HEAD_SHA\}"/);
+  assert.match(release, /ref: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/);
+  assert.ok(
+    release.indexOf('Reject non-main or stale validation before checkout')
+      < release.indexOf('uses: actions/checkout@v4'),
+    'event metadata and current main must fail closed before repository checkout',
+  );
+  assert.ok(
+    release.indexOf('test "${current_main_sha}" = "${VALIDATION_HEAD_SHA}"')
+      < release.indexOf('uses: actions/checkout@v4'),
+    'a stale successful main validation must be rejected before checkout',
+  );
+  assert.ok(
+    release.indexOf('uses: actions/checkout@v4')
+      < release.indexOf('node scripts/verify_photo_objet_release.js'),
+    'repository verification scripts must run only after exact-SHA checkout',
+  );
+  assert.match(release, /git merge-base --is-ancestor/);
+  assert.match(release, /--check-validation-only/);
+  assert.match(release, /code-validation\.json/);
+  assert.match(release, /steps\.validated\.outputs\.main_sha/);
+  assert.match(release, /photo_objet_slot_health\.js --read-only/);
+  assert.match(release, /globospossystem\.vercel\.app/);
+  assert.match(release, /release-proof-evidence\.json/);
 });

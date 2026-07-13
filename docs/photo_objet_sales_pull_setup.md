@@ -1,217 +1,212 @@
-# Photo Objet Sales Pull Setup
+# Photo Objet Moers sales collection
 
-POS is the sole Photo Objet Moers sales collector. The collector writes raw sales
-to `public.photo_objet_sales_raw`, records attempts in
-`public.photo_objet_sales_pull_runs`, and updates the dashboard aggregate in
-`public.photo_objet_sales`. `public.v_photo_objet_daily_summary` is the POS sales
-read surface, and `public.v_photo_objet_collection_health` is the canonical
-exact-slot health surface consumed by Office.
+## Authority and immutability
 
-New raw rows are queued idempotently into `public.meinvoice_jobs` by the existing
-database trigger. The crawler does not call MISA directly. The raw ledger and
-`source_hash` are the invoice source of truth; the daily aggregate is not.
+Moers Excel is the immutable source for Photo Objet sales. The collector writes
+canonical rows to `public.photo_objet_sales_raw`, records execution attempts in
+`public.photo_objet_sales_pull_runs`, and rebuilds the daily dashboard aggregate
+in `public.photo_objet_sales`. It never deletes or rewrites a raw source row.
 
-## Runtime and schedule
+The crawler does not call MISA directly. MISA queueing and receipt automation
+are separate dimensions: payment completion, collection success, invoice
+dispatch, and receipt automation must not overwrite one another's result.
+`payment_method = CASH`; VNPAY/QR wallet data must not be mixed into this source.
 
-The workflow uses Node 22, `npm ci`, the committed `scripts/package-lock.json`,
-and the Chromium revision pinned by the exact Puppeteer package. Chromium system
-dependencies are installed before the collector preflight.
-The patched SheetJS `0.20.3` tarball is vendored at
-`scripts/vendor/xlsx-0.20.3.tgz`, so spreadsheet parsing does not depend on
-the npm registry or SheetJS CDN being available during a scheduled run.
+## Exact collection interval
 
-The schedule is 09:00 through 22:30 Asia/Ho_Chi_Minh: hourly through 22:00,
-followed by the final sales collection and invoice queueing run at 22:30.
+The scheduled workflow runs for the semantic HCM slots 09:00 through 22:00
+hourly and once more at 22:30. Each run reads one half-open interval:
 
-```yaml
-cron: '0 2 * * *'   # 09:00 HCM
-# One fixed cron entry per hourly slot through 0 15 (22:00 HCM).
-cron: '30 15 * * *'
+- 12:00 collects only `11:00:00 <= sold_at < 12:00:00`.
+- 22:30 collects only `22:00:00 <= sold_at < 22:30:00`.
+- A delayed GitHub start retains the intended `slot_date_hcm` and
+  `slot_time_hcm`; wall-clock `started_at` is not slot identity.
+- Excel may contain the entire day, but only rows in the exact interval enter
+  the immutable ledger. Previously stored source rows must still be present.
+
+The collection workflow is
+`.github/workflows/photo_objet_sales_collect.yml`. It never calls the missing
+slot audit. Six successful configured stores therefore remain a successful
+collection even if health monitoring or alert delivery has a separate error.
+The collector probes the health tables only as best-effort observability. A
+missing or unavailable health ledger emits `AUDIT_INFRA_FAILED` for the health
+dimension but does not block the immutable sales pull.
+
+## Authoritative expected-slot ledger
+
+Migration `20260713120000_photo_objet_expected_slot_ledger.sql` adds:
+
+- `photo_objet_monitoring_policies`: effective-dated monitoring configuration.
+- `photo_objet_expected_slots`: one unique store/date/time scheduler identity.
+
+Policy rows are not inferred from brand membership. Operations must configure
+only the approved active collector mappings with an explicit `effective_from`.
+This prevents D7, inactive stores, deleted stores, and environment-disabled
+stores from silently entering monitoring. Historical time before
+`effective_from` is never audited; there is no hardcoded rollout date or gap
+count in JavaScript or SQL.
+
+The database job `photo-objet-materialize-expected-slots` runs at 00:05 HCM and
+calls `photo_objet_ensure_expected_slots` as the database owner. The service
+role cannot insert, update, or delete policies or expected slots directly,
+cannot read or mutate the rollback state table, and cannot execute the
+materializer. Thus a collector outage cannot erase the
+expected workload. Migration rollout must insert the approved policies and
+materialize the first date in the same fail-fast transaction.
+
+Every day has these 15 slots per enabled active policy:
+
+```text
+09:00, 10:00, 11:00, 12:00, 13:00, 14:00, 15:00, 16:00,
+17:00, 18:00, 19:00, 20:00, 21:00, 22:00, 22:30
 ```
 
-Fixed cron entries make `github.event.schedule` an explicit slot input. Each
-pull-run row stores a `FLARE_RUN_METADATA` JSON envelope in the existing nullable
-`error_message` compatibility field with `source`, `slot_id`, `slot_date_hcm`,
-`slot_time_hcm`, and any actual failure message nested as `error`.
-This is backward-compatible with the shipped schema and keeps a delayed run tied
-to its intended HCM slot instead of deriving identity from `started_at`. Manual,
-audit, and bounded-backfill invocations use distinct source and slot prefixes.
+Hourly slots through 21:00 become due after the next slot plus the configured
+grace. Both 22:00 and 22:30 become due at 22:45 HCM. Status is one of
+`expected`, `running`, `collected`, `collected_zero`, `missing`, `failed`, or
+`recovered`. A later exact slot cannot satisfy an earlier one. Manual and
+backfill runs cannot satisfy scheduled history.
 
-Workflow concurrency does not cancel an in-progress run. A failed run writes a
-GitHub step summary and creates or comments on the single open
-`[Photo Objet sales] Collector failure` issue, preventing duplicate escalation
-issues while keeping repeated failures visible.
+Zero rows in the current interval is `collected_zero`, even when prior daily
+intervals already have sales. The pull-run ledger stores `interval_rows`
+separately from the daily aggregate device count, so health reconciliation
+keeps this classification even if the completion RPC was temporarily
+unavailable. A success after `missing` or `failed` is
+`recovered`. Retries create separate pull-run attempts while the expected slot
+remains unique.
 
-Every pull request runs the secret-free `Photo Objet contract` job with Node 22,
-the committed lockfile, and the collector contract suite. The production job is
-disabled for pull requests and receives `issues: write` only during scheduled or
-manually dispatched operation. `main` branch protection requires the contract
-job, so the scheduler is not the first place a collector change is exercised.
+## RLS and Office scope
 
-## Required configuration
+Authenticated readers see only super-admin or
+`user_accessible_stores(auth.uid())` scope. Anonymous access and authenticated
+writes are denied. Service-role writes are allowed only through validating
+RPCs. The Office read view joins
+`v_office_eligible_stores.store_id`, so external legal entities are excluded
+even though external Photo operators may be valid POS collectors.
 
-Repository secrets:
+## Health monitoring and alert delivery
 
-- `SUPABASE_URL` for the pinned POS project `ynriuoomotxuwhuxxmhj`
-- `SUPABASE_SERVICE_KEY`
-- `MOERS_BIENHOA_PASS`, `MOERS_DIAN_PASS`, `MOERS_LONGTHANH_PASS`
-- `MOERS_THAODIEN_PASS`, `MOERS_QUANGTRUNG_PASS`, `MOERS_NOWZONE_PASS`
-- `PHOTO_OBJET_BIENHOA_STORE_ID`, `PHOTO_OBJET_DIAN_STORE_ID`
-- `PHOTO_OBJET_LONGTHANH_STORE_ID`, `PHOTO_OBJET_THAODIEN_STORE_ID`
-- `PHOTO_OBJET_QUANGTRUNG_STORE_ID`, `PHOTO_OBJET_NOWZONE_STORE_ID`
+`.github/workflows/photo_objet_sales_health.yml` runs at 10:20 through 22:20
+HCM and again at 22:50. It needs only the POS Supabase URL and service key; it
+does not install Chromium and receives no Moers credentials.
 
-The workflow contains the corresponding Moers usernames. Store IDs must resolve
-to unique, active POS `public.restaurants` rows with the exact expected store
-name and Photo Objet brand ID `77000000-0000-0000-0000-000000000001`.
-`store_type` may be `direct` or `external`; any other ownership value fails
-closed. This permits hierarchy-approved external operators without accepting a
-mapping outside the Photo Objet contract.
+The monitor uses typed `run_source`, `slot_date_hcm`, and `slot_time_hcm`
+columns. It never parses `error_message`. Health refresh reconciles exact
+scheduled successes, marks due gaps, and lists unacknowledged failures. Alert
+delivery follows this order:
 
-Optional repository variables named `PHOTO_OBJET_<STORE>_ENABLED` can be set to
-`false` before a mapped store closes. Empty values default to enabled. D7 has no
-collector mapping and is not hardcoded; its historical rows remain untouched.
-Accepted boolean values are `true/false`, `1/0`, `yes/no`, `y/n`, and `on/off`
-(case-insensitive). Any other value fails preflight rather than disabling a store.
+```text
+detect -> create or update exact store/slot/failure issue -> ACK in database
+```
 
-Current linked-project mapping:
+An API failure before issue delivery leaves the alert unacknowledged, so the
+next health run retries it. The unique alert marker is
+`store_id/slot_date_hcm/slot_time_hcm/failure_class`.
 
-- `PHOTO_OBJET_BIENHOA_STORE_ID` -> `77000000-0000-0000-0000-000000000102`
-- `PHOTO_OBJET_DIAN_STORE_ID` -> `77000000-0000-0000-0000-000000000103`
-- `PHOTO_OBJET_LONGTHANH_STORE_ID` -> `77000000-0000-0000-0000-000000000104`
-- `PHOTO_OBJET_THAODIEN_STORE_ID` -> `77000000-0000-0000-0000-000000000105`
-- `PHOTO_OBJET_QUANGTRUNG_STORE_ID` -> `77000000-0000-0000-0000-000000000106`
-- `PHOTO_OBJET_NOWZONE_STORE_ID` -> `77000000-0000-0000-0000-000000000107`
+Alert acknowledgement suppresses duplicate delivery only. It never changes
+the health result: an acknowledged missing or failed slot keeps every health
+run red until an exact scheduled success recovers it, even after the normal
+healthy-history lookback window. The monitor also compares
+every enabled policy with its complete materialized slot set. One missing
+policy-day or inactive enabled policy is `AUDIT_INFRA_FAILED`, even when all
+other stores are healthy.
 
-## Preflight and failures
+## Independent failure dimensions
 
-`node pull_moers_sales.js --preflight-only` validates all of these before any
-browser launch:
+Operational evidence preserves separate results for:
 
-- Node major version 22 and the Node WebSocket global
-- required Supabase, Moers credential, and store mapping environment values
-- an executable absolute `PUPPETEER_EXECUTABLE_PATH`
-- the exact POS Supabase project URL
-- unique, active, exact-name Photo Objet store mappings and ownership type
-- availability of `photo_objet_sales_pull_runs`, `photo_objet_sales_raw`, and
-  `photo_objet_sales`, including service-role read and constraint-safe insert
-  permission probes used before launch
+- collection execution: `COLLECTION_FAILED`
+- data completeness: `DATA_INCOMPLETE`
+- scheduler reliability: `SLOT_MISSING`
+- release SHA drift: `RELEASE_SHA_DRIFT`
+- audit infrastructure: `AUDIT_INFRA_FAILED`
+- receipt automation: `RECEIPT_AUTOMATION_FAILED`
 
-Startup/configuration errors emit `FLARE_FAILURE_CLASS=deterministic` and are
-never retried. Network, timeout, and missing-run failures are transient. A store
-pull receives at most one retry, and deterministic failures receive none. The
-summary and deduplicated issue escalation run under `always()` and include npm
-setup and Chromium outcomes even when no collector log could be created.
+A health or release failure cannot rewrite a successful collection result.
+Receipt automation cannot rewrite payment or collection success.
 
-## Health audit
+## Backfill boundary
 
-Run the missing schedule-slot audit with:
+`.github/workflows/photo_objet_sales_backfill.yml` is manual only. It is
+dry-run by default and accepts at most seven inclusive dates. Execution requires the
+protected `production-backfill` environment and the exact confirmation
+`EXECUTE_IMMUTABLE_BACKFILL`. Backfill may add missing immutable source rows and
+recompute daily completeness, but its `run_source = backfill` never rewrites
+scheduler history.
+
+## Main release proof
+
+`.github/workflows/photo_objet_sales_contract.yml` runs the complete frozen
+validation suite for every `main` SHA. Only after that exact main push run
+completes successfully does `.github/workflows/photo_objet_release_proof.yml`
+start. The release proof has no manual dispatch path. Operational retries use
+GitHub's **Re-run jobs** action on the original main validation run. It records
+this state chain:
+
+```text
+CODE_VALIDATED
+-> MERGED_TO_MAIN
+-> PRODUCTION_DEPLOYED
+-> MAIN_AUDIT_PASS
+-> PRODUCTION_OBSERVED
+```
+
+The gate rejects absent, failed, PR-only, or stale-SHA validation evidence. Before
+the first repository checkout, it reads the current `main` ref through the GitHub
+API and requires an exact match with the successful validation event SHA. It then
+requires the validated SHA, checked-out SHA, and fetched `origin/main` to remain
+exact, confirms the approved SHA is an ancestor of main, polls the Vercel
+production alias until its metadata reports that exact main SHA and `READY`, runs
+the read-only slot audit, and requires HTTP 200 from
+`https://globospossystem.vercel.app`.
+PR checks and Preview deployments are never operational PASS evidence.
+
+The artifact `release-proof-evidence.json` contains the main, validated, and
+Vercel-confirmed deployment SHA, validation run identity, deployment state,
+audit result, latest due slot, HTTP observation, and observation time. All
+three SHA fields must be identical.
+
+## Fail-fast migration rollout
+
+Do not run this migration through a multi-statement client that can continue
+after an error. The secure POS production environment must contain the six
+approved store IDs and one explicit effective timestamp:
 
 ```bash
-node pull_moers_sales.js --audit-missing-runs --audit-lookback-days 2
+PHOTO_OBJET_MONITORING_EFFECTIVE_FROM
+PHOTO_OBJET_BIENHOA_STORE_ID
+PHOTO_OBJET_DIAN_STORE_ID
+PHOTO_OBJET_LONGTHANH_STORE_ID
+PHOTO_OBJET_THAODIEN_STORE_ID
+PHOTO_OBJET_QUANGTRUNG_STORE_ID
+PHOTO_OBJET_NOWZONE_STORE_ID
 ```
 
-The lookback is bounded to 1-31 HCM calendar days. The audit checks every
-completed 09:00-22:00 hourly slot and the 22:30 slot for every enabled store
-using successful `photo_objet_sales_pull_runs` rows whose explicit metadata
-contains the expected scheduled `slot_id`. `started_at` is not used as slot
-identity. The scheduled workflow runs this audit after normal collection;
-missing runs use the same failure summary and deduplicated escalation path.
+Use the pinned deployment path with
+`--migration supabase/migrations/20260713120000_photo_objet_expected_slot_ledger.sql`.
+It runs preflight, then executes
+`scripts/apply_photo_objet_expected_slot_ledger.sql` with
+`ON_ERROR_STOP=1 --single-transaction`. That wrapper applies the schema,
+inserts only those six explicit policies, and materializes the first monitored
+date atomically. Store IDs and credentials are never printed. Verification
+then fails closed on a missing policy, inactive store, broad service-role
+write privilege, or incomplete first-day materialization. Rollback is provided by
+`scripts/rollback_photo_objet_expected_slot_ledger.sql`; it removes only the
+new monitoring objects and never changes `photo_objet_sales_raw`,
+`photo_objet_sales`, MISA jobs, payments, or receipts. If `interval_rows`
+existed before the migration, rollback restores its original type, nullability,
+default, comment, and named constraint definition exactly. If the migration
+created the column, rollback removes it completely.
 
-Moers daily reports are cumulative snapshots, but scheduled collection is
-interval-scoped. A 12:00 run accepts only `11:00:00 <= sold_at < 12:00:00`;
-older rows in the downloaded workbook are discarded before raw-ledger writes.
-The 22:30 close accepts `22:00:00 <= sold_at < 22:30:00`. A later snapshot does
-not satisfy an earlier scheduler slot. Missing data is recovered only through a
-bounded full-day backfill, which downloads each requested store-day once.
-
-Explicit slot metadata became authoritative at 2026-07-13 09:00 HCM. The 126
-known missing slot records before that cutoff are a historical baseline and are
-excluded from the health result; it is not evidence that those
-collections failed. Every completed
-slot at or after the cutoff remains fail-closed, so a newly missing store-slot
-still fails the audit and triggers the normal escalation path.
-
-The health View applies the same cutoff and waits until 15 minutes after the next
-scheduled collection time, matching the collector audit and tolerating delayed
-GitHub schedule starts. The final 22:30 slot has no successor and becomes due at
-22:45 HCM. It reports
-all expected, due, successful, failed, and missing slots plus the exact missing
-and failed HCM times. `not_due` is distinct from `healthy`, so yesterday's final
-success cannot make today's not-yet-run or missing collection appear current.
-
-## Bounded backfill
-
-Backfill accepts at most seven inclusive dates and is dry-run by default:
+Required replay evidence:
 
 ```bash
-node pull_moers_sales.js --backfill-from 2026-07-01 --backfill-to 2026-07-03
-node pull_moers_sales.js --backfill-from 2026-07-01 --backfill-to 2026-07-03 --execute
+bash test/photo_objet_expected_slot_ledger_test.sh
 ```
 
-The dry run performs preflight and prints the planned store-days without browser
-or database writes. `--execute` reuses the normal parser, `source_hash` upsert,
-raw insert trigger, and invoice idempotency semantics. Aggregate rows use
-`pull_source = manual`.
-
-The 2026-07 interval-ledger rebuild uses `2026-07-01` as the retention boundary.
-The migration creates immutable backups, removes pre-July Photo data, resets the
-six configured collector stores, and forces the dedicated Photo MISA dispatch
-gate to `false`. Rebuild July in two bounded invocations so every store-day is
-downloaded exactly once:
-
-```bash
-node pull_moers_sales.js --backfill-from 2026-07-01 --backfill-to 2026-07-07 --execute
-node pull_moers_sales.js --backfill-from 2026-07-08 --backfill-to 2026-07-12 --execute
-```
-
-Run `scripts/verify_photo_objet_interval_rebuild.sql` after both batches. Do not
-enable `photo_objet_meinvoice_dispatch_enabled` until the rebuilt counts and at
-least one scheduled interval have been independently verified.
-
-## Data safety
-
-Moers Excel sales rows are an immutable append-only source. They are not
-cancelled, refunded, deleted, or corrected after export. The collector builds
-identity-version-2 `source_hash` from canonical store,
-date, device, normalized sale timestamp, amount, type, and a one-based
-`occurrence_no` for otherwise identical rows. Workbook row order and mutable raw
-row position are never part of identity. Already-seen rows remain unchanged;
-only new raw inserts trigger invoice queue creation. A rerun fails
-deterministically if a previously stored hash is absent or changed, and any
-device row with a zero, negative, or invalid amount is rejected rather than
-silently discarded. All rows use
-`payment_method = CASH`; VNPAY/QR wallet data must not be mixed into this ledger.
-
-Daily dashboard totals are recomputed from the identity-version-2 raw ledger
-after each interval write. The current hourly slice is never written directly as
-the daily total.
-
-An empty table with a recognized sales header records a successful zero-sales
-run only when no aggregate exists for that store-day, and it does not write
-aggregate rows. A workbook without a recognized sales header remains a transient
-vendor-response failure and receives the normal single retry; arbitrary empty or
-error files are never accepted as zero sales.
-Existing device totals are compared with every new snapshot. An empty snapshot,
-missing device, or lower gross/transaction total is classified as a transient
-partial response, and existing aggregates are preserved. Other stores and dates
-continue independently.
-
-## Verification
-
-```bash
-cd scripts
-npm ci
-npm test
-cd ..
-flutter test test/photo_objet_meinvoice_raw_contract_test.dart test/photo_ops_sales_aggregation_test.dart
-bash test/photo_objet_immutable_health_sql_test.sh
-dart analyze
-git diff --check -- .github/workflows/photo_objet_sales.yml scripts/package.json scripts/package-lock.json scripts/pull_moers_sales.js scripts/tests/photo_objet_sales_health.test.js docs/photo_objet_sales_pull_setup.md test/photo_objet_meinvoice_raw_contract_test.dart
-```
-
-The `Photo Objet contract` GitHub check must pass before merge. Vercel preview
-success is not a substitute because it does not execute the collector or its
-schedule, runtime, audit-baseline, and backward-compatibility contracts.
-
-Scheduled workflows use the workflow definition on the default branch. No
-schedule or escalation change takes effect until this revision is merged there.
+This validates replay, rollback, policy effective time, inactive exclusion,
+09:00-22:30 slots, the 22:45 boundary, zero sales, retry/recovery, backfill
+isolation, alert delivery-before-ACK, RLS, 60 stores/900 slots, and preservation
+of the immutable raw ledger. Separate catalog fixtures cover an absent column,
+a pre-existing column, a compatible pre-existing constraint, and incompatible
+type or constraint fail-fast paths.
