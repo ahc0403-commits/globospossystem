@@ -13,6 +13,19 @@ SECRET='temporary-secret-must-never-appear'
 PG_CONTAINER="globos-pos-deploy-test-$$"
 LOCAL_PGHOST=127.0.0.1
 
+phase() {
+  printf 'POS_PSQL_RUNNER_PHASE=%s\n' "$1"
+}
+
+require() {
+  local label="$1"
+  shift
+  "$@" || {
+    printf 'POS_PSQL_RUNNER_ASSERTION_FAILED=%s\n' "$label" >&2
+    exit 1
+  }
+}
+
 cleanup() {
   docker rm -f "$PG_CONTAINER" >/dev/null 2>&1 || true
   rm -rf "$TMP_DIR"
@@ -20,16 +33,23 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$FAKE_BIN"
+phase docker_start
 docker run --detach --rm \
   --name "$PG_CONTAINER" \
   --env POSTGRES_HOST_AUTH_METHOD=trust \
   --publish 127.0.0.1::5432 \
   postgres:15 >/dev/null
 PORT="$(docker port "$PG_CONTAINER" 5432/tcp | sed 's/.*://')"
+[[ "$PORT" =~ ^[0-9]+$ ]] || {
+  printf 'POS_PSQL_RUNNER_ASSERTION_FAILED=docker_port\n' >&2
+  exit 1
+}
+phase postgres_wait
 until "$REAL_PSQL" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres -d postgres -Atqc 'SELECT 1' \
   >/dev/null 2>&1; do
   sleep 0.2
 done
+phase postgres_roles
 "$REAL_PSQL" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres -d postgres \
   -v ON_ERROR_STOP=1 >/dev/null <<'SQL'
 CREATE ROLE cli_login_runner LOGIN;
@@ -107,15 +127,30 @@ INSERT INTO runner_success VALUES (1);
 SQL
 
 success_output="$(run_linked "$SUCCESS_SQL" 'runner success' 2>&1)"
-[[ "$success_output" == *'PASS: runner success'* ]]
-"$REAL_PSQL" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres -d postgres -Atqc \
-  "SELECT count(*) FROM runner_success" | grep -qx 1
-grep -qx 'db dump --linked --schema public --dry-run' "$ISSUER_LOG"
-grep -q 'args=-X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --command SET ROLE postgres;' "$PSQL_LOG"
-grep -q -- '--command DO \$pos_role_check\$' "$PSQL_LOG"
-grep -q -- '--file .*success.sql' "$PSQL_LOG"
-grep -q 'ssl=require host=aws-0-ap-southeast-1.pooler.supabase.com user=postgres.ynriuoomotxuwhuxxmhj database=postgres' "$PSQL_LOG"
+phase runner_success_assertions
+[[ "$success_output" == *'PASS: runner success'* ]] || {
+  printf 'POS_PSQL_RUNNER_ASSERTION_FAILED=success_marker\n' >&2
+  exit 1
+}
+runner_success_count="$(
+  "$REAL_PSQL" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres -d postgres -Atqc \
+    "SELECT count(*) FROM runner_success"
+)"
+[[ "$runner_success_count" == 1 ]] || {
+  printf 'POS_PSQL_RUNNER_ASSERTION_FAILED=success_row_count\n' >&2
+  exit 1
+}
+require issuer_invocation grep -qx 'db dump --linked --schema public --dry-run' "$ISSUER_LOG"
+require psql_fail_fast_args grep -q \
+  'args=-X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --command SET ROLE postgres;' \
+  "$PSQL_LOG"
+require psql_role_check grep -q -- '--command DO \$pos_role_check\$' "$PSQL_LOG"
+require psql_file_arg grep -q -- '--file .*success.sql' "$PSQL_LOG"
+require psql_target_metadata grep -q \
+  'ssl=require host=aws-0-ap-southeast-1.pooler.supabase.com user=postgres.ynriuoomotxuwhuxxmhj database=postgres' \
+  "$PSQL_LOG"
 assert_not_contains "$success_output" "$SECRET"
+phase runner_negative_paths
 
 LEGACY_CLI_SQL="$TMP_DIR/legacy_cli.sql"
 cat >"$LEGACY_CLI_SQL" <<'SQL'
@@ -298,6 +333,7 @@ $legacy_create$;
 SQL
 
 "$REAL_CREATEDB" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres legal_entity_smoke
+phase hierarchy_smoke
 LOCAL_DB_NAME=legal_entity_smoke run_linked "$SETUP_SQL" 'local fixture setup' >/dev/null
 LOCAL_DB_NAME=legal_entity_smoke run_linked "$PREFLIGHT_SQL" 'hierarchy preflight smoke' >/dev/null
 LOCAL_DB_NAME=legal_entity_smoke run_linked "$MIGRATION_SQL" 'hierarchy migration smoke' >/dev/null

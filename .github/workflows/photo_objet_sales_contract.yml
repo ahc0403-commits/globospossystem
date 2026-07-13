@@ -54,10 +54,10 @@ jobs:
           npm test
           npm audit
           npm run security-scan
-      - name: Validate production SQL runner and expected-slot replay
-        run: |
-          bash test/pos_deploy_psql_runner_test.sh
-          bash test/photo_objet_expected_slot_ledger_test.sh
+      - name: Validate production SQL runner
+        run: bash test/pos_deploy_psql_runner_test.sh
+      - name: Validate expected-slot replay
+        run: bash test/photo_objet_expected_slot_ledger_test.sh
       - name: Validate changed shell entrypoints and whitespace
         run: |
           bash -n scripts/deploy_pos_production.sh
