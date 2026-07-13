@@ -117,7 +117,7 @@ BEGIN
   FROM public.photo_objet_collection_health_at('2026-07-14 10:20:00+07')
   WHERE store_id = '77000000-0000-4000-8000-000000000102'
     AND target_date = '2026-07-14';
-  IF health.due_slots <> 2 OR health.successful_slots <> 1
+  IF health.due_slots <> 1 OR health.successful_slots <> 0
      OR health.missing_slots <> 1 OR health.status <> 'missing'
      OR health.is_healthy THEN
     RAISE EXCEPTION 'PHOTO_HEALTH_LATER_SUCCESS_HID_GAP: %', row_to_json(health);

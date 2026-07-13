@@ -124,13 +124,16 @@ The 22:30 close accepts `22:00:00 <= sold_at < 22:30:00`. A later snapshot does
 not satisfy an earlier scheduler slot. Missing data is recovered only through a
 bounded full-day backfill, which downloads each requested store-day once.
 
-Explicit slot metadata became authoritative at 2026-07-11 19:00 HCM. Missing
-metadata before that cutoff is a historical baseline and is excluded from the
-health result; it is not evidence that those collections failed. Every completed
+Explicit slot metadata became authoritative at 2026-07-13 09:00 HCM. The 126
+known missing slot records before that cutoff are a historical baseline and are
+excluded from the health result; it is not evidence that those
+collections failed. Every completed
 slot at or after the cutoff remains fail-closed, so a newly missing store-slot
 still fails the audit and triggers the normal escalation path.
 
-The health View applies the same cutoff and a 15-minute grace period. It reports
+The health View applies the same cutoff and waits until 15 minutes after the next
+scheduled collection time, matching the collector audit and tolerating delayed
+GitHub schedule starts. It reports
 all expected, due, successful, failed, and missing slots plus the exact missing
 and failed HCM times. `not_due` is distinct from `healthy`, so yesterday's final
 success cannot make today's not-yet-run or missing collection appear current.

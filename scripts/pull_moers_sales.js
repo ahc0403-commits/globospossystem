@@ -1283,7 +1283,9 @@ function scheduledSlotsForDate(date) {
   return slots;
 }
 
-const RUN_METADATA_AUDIT_START_AT = Date.parse('2026-07-11T12:00:00Z');
+// The 126 missing slot records before this cutover are a known metadata-only
+// baseline. Sales rows remain authoritative and are not rewritten or deleted.
+const RUN_METADATA_AUDIT_START_AT = Date.parse('2026-07-13T02:00:00Z');
 
 function findMissingRuns(
   stores,

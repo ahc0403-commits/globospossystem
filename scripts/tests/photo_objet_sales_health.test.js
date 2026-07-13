@@ -464,45 +464,53 @@ test('missing-run audit uses explicit slot metadata, not delayed started_at', ()
 });
 
 test('missing-run audit excludes historical metadata gaps but detects new gaps', () => {
-  const store = { storeName: 'BIEN HOA', storeId: ids[0], enabled: true };
-  const now = new Date('2026-07-11T13:20:00Z');
+  const stores = ids.slice(0, 6).map((storeId, index) => ({
+    storeName: `STORE ${index + 1}`,
+    storeId,
+    enabled: true,
+  }));
+  const now = new Date('2026-07-13T04:20:00Z');
 
-  assert.equal(RUN_METADATA_AUDIT_START_AT, Date.parse('2026-07-11T12:00:00Z'));
+  assert.equal(RUN_METADATA_AUDIT_START_AT, Date.parse('2026-07-13T02:00:00Z'));
   assert.deepEqual(
-    findMissingRuns([store], ['2026-07-10'], [], now),
+    findMissingRuns(stores, ['2026-07-11', '2026-07-12'], [], now),
     [],
-    'pre-cutover slots are the historical baseline',
-  );
-  assert.deepEqual(
-    findMissingRuns([store], ['2026-07-11'], [], now),
-    [{ storeName: 'BIEN HOA', date: '2026-07-11', slot: '2026-07-11 19:00' }],
+    'the 126 pre-cutover store-slot gaps are a historical metadata baseline',
   );
 
-  const identity = {
+  const firstSlotIdentity = {
     source: 'scheduled',
-    slotId: 'scheduled:2026-07-11T19:00+07:00',
-    slotDateHcm: '2026-07-11',
-    slotTimeHcm: '19:00',
+    slotId: 'scheduled:2026-07-13T09:00+07:00',
+    slotDateHcm: '2026-07-13',
+    slotTimeHcm: '09:00',
   };
-  assert.deepEqual(findMissingRuns([store], ['2026-07-11'], [{
-    store_id: ids[0],
-    target_date: '2026-07-11',
+  const runs = stores.map(store => ({
+    store_id: store.storeId,
+    target_date: '2026-07-13',
     status: 'success',
-    error_message: serializeRunMetadata(identity),
-  }], now), []);
+    error_message: serializeRunMetadata(firstSlotIdentity),
+  }));
+  assert.deepEqual(findMissingRuns(stores, ['2026-07-13'], runs, now),
+    stores.map(store => ({
+      storeName: store.storeName,
+      date: '2026-07-13',
+      slot: '2026-07-13 10:00',
+    })),
+    'a newly due slot after cutover must still fail health',
+  );
 });
 
 test('schedule health requires each exact slot even when a later snapshot succeeds', () => {
   const store = { storeName: 'BIEN HOA', storeId: ids[0], enabled: true };
   const laterIdentity = {
     source: 'scheduled',
-    slotId: 'scheduled:2026-07-12T11:00+07:00',
-    slotDateHcm: '2026-07-12',
+    slotId: 'scheduled:2026-07-13T11:00+07:00',
+    slotDateHcm: '2026-07-13',
     slotTimeHcm: '11:00',
   };
   const laterSuccess = [{
     store_id: ids[0],
-    target_date: '2026-07-12',
+    target_date: '2026-07-13',
     status: 'success',
     error_message: serializeRunMetadata(laterIdentity),
   }];
@@ -510,27 +518,27 @@ test('schedule health requires each exact slot even when a later snapshot succee
   assert.deepEqual(
     findMissingRuns(
       [store],
-      ['2026-07-12'],
+      ['2026-07-13'],
       laterSuccess,
-      new Date('2026-07-12T04:20:00Z'),
+      new Date('2026-07-13T04:20:00Z'),
     ),
     [
-      { storeName: 'BIEN HOA', date: '2026-07-12', slot: '2026-07-12 09:00' },
-      { storeName: 'BIEN HOA', date: '2026-07-12', slot: '2026-07-12 10:00' },
+      { storeName: 'BIEN HOA', date: '2026-07-13', slot: '2026-07-13 09:00' },
+      { storeName: 'BIEN HOA', date: '2026-07-13', slot: '2026-07-13 10:00' },
     ],
     'data recovery must not hide missed scheduler slots',
   );
   assert.deepEqual(
     findMissingRuns(
       [store],
-      ['2026-07-12'],
+      ['2026-07-13'],
       laterSuccess,
-      new Date('2026-07-12T06:20:00Z'),
+      new Date('2026-07-13T06:20:00Z'),
     ),
     [
-      { storeName: 'BIEN HOA', date: '2026-07-12', slot: '2026-07-12 09:00' },
-      { storeName: 'BIEN HOA', date: '2026-07-12', slot: '2026-07-12 10:00' },
-      { storeName: 'BIEN HOA', date: '2026-07-12', slot: '2026-07-12 12:00' },
+      { storeName: 'BIEN HOA', date: '2026-07-13', slot: '2026-07-13 09:00' },
+      { storeName: 'BIEN HOA', date: '2026-07-13', slot: '2026-07-13 10:00' },
+      { storeName: 'BIEN HOA', date: '2026-07-13', slot: '2026-07-13 12:00' },
     ],
     'every completed slot needs its own successful run',
   );

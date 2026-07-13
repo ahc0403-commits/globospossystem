@@ -67,7 +67,7 @@ void main() {
     expect(source, contains('photo_objet_sales_raw'));
     expect(source, contains('RUN_METADATA_PREFIX'));
     expect(source, contains('RUN_METADATA_AUDIT_START_AT'));
-    expect(source, contains("Date.parse('2026-07-11T12:00:00Z')"));
+    expect(source, contains("Date.parse('2026-07-13T02:00:00Z')"));
     expect(source, contains('if (slot.at < auditStartAt) continue;'));
     expect(source, contains('AUDIT_HISTORICAL_BASELINE'));
     expect(source, contains("metadata?.source === 'scheduled'"));
@@ -229,7 +229,8 @@ void main() {
     expect(docs, contains('FLARE_FAILURE_CLASS=deterministic'));
     expect(docs, contains('FLARE_RUN_METADATA'));
     expect(docs, contains('`started_at` is not used as slot'));
-    expect(docs, contains('2026-07-11 19:00 HCM'));
+    expect(docs, contains('2026-07-13 09:00 HCM'));
+    expect(docs, contains('126'));
     expect(docs, contains('historical baseline'));
     expect(docs, contains('immutable append-only source'));
     expect(docs, contains('v_photo_objet_collection_health'));

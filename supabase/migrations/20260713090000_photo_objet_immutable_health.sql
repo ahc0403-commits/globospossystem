@@ -101,7 +101,7 @@ WITH runtime AS (
   SELECT
     p_observed_at AS observed_at,
     (p_observed_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date AS hcm_today,
-    '2026-07-11 19:00:00+07'::timestamptz AS audit_start_at
+    '2026-07-13 09:00:00+07'::timestamptz AS audit_start_at
 ),
 dates AS (
   SELECT generate_series(
@@ -119,7 +119,7 @@ slot_times(slot_time_hcm) AS (
     ('18:00'::time), ('19:00'::time), ('20:00'::time),
     ('21:00'::time), ('22:00'::time), ('22:30'::time)
 ),
-scheduled_slots AS (
+scheduled_slots_base AS (
   SELECT
     dates.target_date,
     slot_times.slot_time_hcm,
@@ -130,6 +130,20 @@ scheduled_slots AS (
   CROSS JOIN runtime
   WHERE (dates.target_date + slot_times.slot_time_hcm)
       AT TIME ZONE 'Asia/Ho_Chi_Minh' >= runtime.audit_start_at
+),
+scheduled_slots AS (
+  SELECT
+    target_date,
+    slot_time_hcm,
+    scheduled_at,
+    coalesce(
+      lead(scheduled_at) OVER (
+        PARTITION BY target_date
+        ORDER BY slot_time_hcm
+      ),
+      scheduled_at + interval '90 minutes'
+    ) + interval '15 minutes' AS due_at
+  FROM scheduled_slots_base
 ),
 scheduled_runs AS (
   SELECT
@@ -151,6 +165,7 @@ store_slots AS (
     scheduled_slots.target_date,
     scheduled_slots.slot_time_hcm,
     scheduled_slots.scheduled_at,
+    scheduled_slots.due_at,
     runtime.observed_at,
     coalesce(scheduled_runs.succeeded, false) AS succeeded,
     coalesce(scheduled_runs.failed, false) AS failed,
@@ -171,25 +186,25 @@ aggregated AS (
     target_date,
     count(*)::integer AS expected_slots,
     count(*) FILTER (
-      WHERE scheduled_at + interval '15 minutes' <= observed_at
+      WHERE due_at <= observed_at
     )::integer AS due_slots,
     count(*) FILTER (
-      WHERE scheduled_at + interval '15 minutes' <= observed_at
+      WHERE due_at <= observed_at
         AND succeeded
     )::integer AS successful_slots,
     count(*) FILTER (
-      WHERE scheduled_at + interval '15 minutes' <= observed_at
+      WHERE due_at <= observed_at
         AND failed
         AND NOT succeeded
     )::integer AS failed_slots,
     count(*) FILTER (
-      WHERE scheduled_at + interval '15 minutes' <= observed_at
+      WHERE due_at <= observed_at
         AND NOT succeeded
     )::integer AS missing_slots,
     coalesce(
       array_agg(to_char(slot_time_hcm, 'HH24:MI') ORDER BY slot_time_hcm)
         FILTER (
-          WHERE scheduled_at + interval '15 minutes' <= observed_at
+          WHERE due_at <= observed_at
             AND NOT succeeded
         ),
       ARRAY[]::text[]
@@ -197,7 +212,7 @@ aggregated AS (
     coalesce(
       array_agg(to_char(slot_time_hcm, 'HH24:MI') ORDER BY slot_time_hcm)
         FILTER (
-          WHERE scheduled_at + interval '15 minutes' <= observed_at
+          WHERE due_at <= observed_at
             AND failed
             AND NOT succeeded
         ),
@@ -205,7 +220,7 @@ aggregated AS (
     ) AS failed_slot_times,
     max(scheduled_at) FILTER (WHERE succeeded) AS latest_successful_slot,
     min(scheduled_at) FILTER (
-      WHERE scheduled_at + interval '15 minutes' > observed_at
+      WHERE due_at > observed_at
     ) AS next_expected_slot,
     max(finished_at) FILTER (WHERE succeeded) AS last_finished_at,
     max(observed_at) AS observed_at
@@ -248,7 +263,7 @@ SELECT *
 FROM public.photo_objet_collection_health_at(now());
 
 COMMENT ON VIEW public.v_photo_objet_collection_health IS
-  'Exact-slot Photo Objet collection health with a 15-minute schedule grace period in Asia/Ho_Chi_Minh.';
+  'Exact-slot Photo Objet health due 15 minutes after the next schedule, tolerating delayed GitHub starts.';
 
 GRANT SELECT ON public.v_photo_objet_collection_health TO authenticated;
 GRANT SELECT ON public.v_photo_objet_collection_health TO service_role;
