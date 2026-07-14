@@ -2,14 +2,14 @@ name: Photo Objet Sales Collect
 
 on:
   schedule:
-    # HCM completion slots: 10:00-20:00 every two hours, then the final 23:00.
+    # HCM completion slots: 10:00-20:00 every two hours, then the final 22:30.
     - cron: '0 3 * * *'
     - cron: '0 5 * * *'
     - cron: '0 7 * * *'
     - cron: '0 9 * * *'
     - cron: '0 11 * * *'
     - cron: '0 13 * * *'
-    - cron: '0 16 * * *'
+    - cron: '30 15 * * *'
 
 permissions:
   contents: read

@@ -594,7 +594,8 @@ apply_migration() {
 
   case "$migration_name" in
     20260711090000_legal_entity_brand_store_hierarchy.sql|\
-    20260713120000_photo_objet_expected_slot_ledger.sql)
+    20260713120000_photo_objet_expected_slot_ledger.sql|\
+    20260714113000_photo_objet_final_slot_2230.sql)
       verification_complete=1
       ;;
   esac
@@ -614,6 +615,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_photo_objet_expected_slot_ledger.sql" \
       "Photo Objet expected-slot migration preflight"
+  elif [[ "$migration_name" == "20260714113000_photo_objet_final_slot_2230.sql" ]]; then
+    log "Photo Objet 22:30 final-slot migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_photo_objet_final_slot_2230.sql" \
+      "Photo Objet 22:30 final-slot migration preflight"
   fi
   if [[ "$migration_name" == "20260713120000_photo_objet_expected_slot_ledger.sql" ]]; then
     log "Apply Photo Objet ledger, approved policies, and first slots atomically"
@@ -634,6 +640,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_photo_objet_expected_slot_ledger.sql" \
       "Photo Objet expected-slot migration verification"
+  elif [[ "$migration_name" == "20260714113000_photo_objet_final_slot_2230.sql" ]]; then
+    log "Photo Objet 22:30 final-slot migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_photo_objet_final_slot_2230.sql" \
+      "Photo Objet 22:30 final-slot migration verification"
   fi
 
   log "Repair Supabase migration history"

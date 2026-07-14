@@ -685,4 +685,217 @@ psql_db photo_slot_bad_constraint -Atqc \
   "SELECT count(*) FROM public.photo_objet_sales_raw WHERE source_hash='fixture-d-constraint-raw-immutable'" \
   | grep -qx 1
 
+# Fixture F: switch the final slot from 23:00 to 22:30 without changing raw
+# Moers rows or historical v1 policy semantics.
+raw_before_2230="$(psql_test -Atqc "
+  SELECT count(*) || '|' || md5(coalesce(string_agg(
+    id::text || ':' || store_id::text || ':' || source_hash,
+    '|' ORDER BY id
+  ), ''))
+  FROM public.photo_objet_sales_raw
+")"
+psql_test \
+  -c "SET app.photo_objet_final_slot_cutover_date = '2026-07-14'" \
+  --file "$ROOT_DIR/scripts/preflight_photo_objet_final_slot_2230.sql" \
+  | grep -q 'PHOTO_OBJET_FINAL_SLOT_2230_PREFLIGHT_PASS'
+
+for _ in 1 2; do
+  psql_test --single-transaction \
+    -c "SET app.photo_objet_final_slot_cutover_date = '2026-07-14'" \
+    --file "$ROOT_DIR/supabase/migrations/20260714113000_photo_objet_final_slot_2230.sql" \
+    >/dev/null
+done
+psql_test --file "$ROOT_DIR/scripts/verify_photo_objet_final_slot_2230.sql" \
+  | grep -q 'PHOTO_OBJET_FINAL_SLOT_2230_VERIFY_PASS'
+
+# Verification and rollback authenticate every owner-only evidence table before
+# trusting it. Each tamper runs inside a failed transaction and is rolled back.
+set +e
+missing_evidence_output="$(psql_test --single-transaction \
+  -c "DROP TABLE public.photo_slot_20260714113000_raw_identity_backup" \
+  --file "$ROOT_DIR/scripts/verify_photo_objet_final_slot_2230.sql" 2>&1)"
+missing_evidence_status=$?
+set -e
+[[ "$missing_evidence_status" -ne 0 ]]
+[[ "$missing_evidence_output" == *'PHOTO_2230_VERIFY_BACKUP_MISSING'* ]]
+[[ "$missing_evidence_output" != *'PHOTO_OBJET_FINAL_SLOT_2230_VERIFY_PASS'* ]]
+
+set +e
+deleted_expected_output="$(psql_test --single-transaction \
+  -c "DELETE FROM public.photo_slot_20260714113000_expected_backup
+      WHERE id = (SELECT id FROM public.photo_slot_20260714113000_expected_backup LIMIT 1)" \
+  --file "$ROOT_DIR/scripts/verify_photo_objet_final_slot_2230.sql" 2>&1)"
+deleted_expected_status=$?
+set -e
+[[ "$deleted_expected_status" -ne 0 ]]
+[[ "$deleted_expected_output" == *'PHOTO_2230_VERIFY_EXPECTED_BACKUP_TAMPERED'* ]]
+[[ "$deleted_expected_output" != *'PHOTO_OBJET_FINAL_SLOT_2230_VERIFY_PASS'* ]]
+
+set +e
+modified_map_output="$(psql_test --single-transaction \
+  -c "UPDATE public.photo_slot_20260714113000_policy_map
+      SET grace_minutes = grace_minutes + 1
+      WHERE old_policy_id = (
+        SELECT old_policy_id FROM public.photo_slot_20260714113000_policy_map LIMIT 1
+      )" \
+  --file "$ROOT_DIR/scripts/verify_photo_objet_final_slot_2230.sql" 2>&1)"
+modified_map_status=$?
+set -e
+[[ "$modified_map_status" -ne 0 ]]
+[[ "$modified_map_output" == *'PHOTO_2230_VERIFY_POLICY_MAP_TAMPERED'* ]]
+
+set +e
+rollback_map_output="$(psql_test --single-transaction \
+  -c "UPDATE public.photo_slot_20260714113000_policy_map
+      SET final_slot_grace_minutes = final_slot_grace_minutes + 1
+      WHERE old_policy_id = (
+        SELECT old_policy_id FROM public.photo_slot_20260714113000_policy_map LIMIT 1
+      )" \
+  --file "$ROOT_DIR/scripts/rollback_photo_objet_final_slot_2230.sql" 2>&1)"
+rollback_map_status=$?
+set -e
+[[ "$rollback_map_status" -ne 0 ]]
+[[ "$rollback_map_output" == *'PHOTO_2230_ROLLBACK_POLICY_MAP_TAMPERED'* ]]
+[[ "$rollback_map_output" != *'PHOTO_OBJET_FINAL_SLOT_2230_ROLLBACK_PASS'* ]]
+
+set +e
+rollback_expected_output="$(psql_test --single-transaction \
+  -c "UPDATE public.photo_slot_20260714113000_expected_backup
+      SET status = 'tampered'
+      WHERE id = (SELECT id FROM public.photo_slot_20260714113000_expected_backup LIMIT 1)" \
+  --file "$ROOT_DIR/scripts/rollback_photo_objet_final_slot_2230.sql" 2>&1)"
+rollback_expected_status=$?
+set -e
+[[ "$rollback_expected_status" -ne 0 ]]
+[[ "$rollback_expected_output" == *'PHOTO_2230_ROLLBACK_EXPECTED_BACKUP_TAMPERED'* ]]
+[[ "$rollback_expected_output" != *'PHOTO_OBJET_FINAL_SLOT_2230_ROLLBACK_PASS'* ]]
+
+psql_test -Atqc "
+  SELECT count(*)
+  FROM public.photo_objet_monitoring_policies
+  WHERE effective_to IS NULL
+    AND schedule_version = 'hcm-two-hour-2230-v2'
+" | grep -qx 6
+psql_test -Atqc "
+  SELECT count(*)
+  FROM public.photo_objet_expected_slots
+  WHERE slot_date_hcm = '2026-07-14'
+    AND slot_time_hcm = TIME '22:30'
+    AND scheduled_at = '2026-07-14 22:30:00+07'
+    AND due_at = '2026-07-15 00:00:00+07'
+" | grep -qx 6
+psql_test -Atqc "
+  SELECT count(*)
+  FROM public.photo_objet_expected_slots
+  WHERE slot_date_hcm = '2026-07-14'
+    AND slot_time_hcm = TIME '23:00'
+" | grep -qx 0
+psql_test -Atqc "
+  SELECT count(*)
+  FROM public.photo_objet_expected_slots
+  WHERE slot_date_hcm = '2026-07-14'
+" | grep -qx 42
+psql_test -Atqc "
+  SELECT count(*)
+  FROM pg_class
+  WHERE oid IN (
+    'public.photo_slot_20260714113000_state'::regclass,
+    'public.photo_slot_20260714113000_policy_map'::regclass,
+    'public.photo_slot_20260714113000_expected_backup'::regclass,
+    'public.photo_slot_20260714113000_raw_identity_backup'::regclass
+  )
+    AND relrowsecurity = true
+" | grep -qx 4
+[[ "$(psql_test -Atqc "
+  SELECT count(*) || '|' || md5(coalesce(string_agg(
+    id::text || ':' || store_id::text || ':' || source_hash,
+    '|' ORDER BY id
+  ), ''))
+  FROM public.photo_objet_sales_raw
+")" = "$raw_before_2230" ]]
+
+# A normal pre-final collection and a new immutable raw row must survive a
+# schedule rollback. Only an attempted 22:30 final slot makes rollback unsafe.
+psql_test -c "
+  UPDATE public.photo_objet_expected_slots
+  SET status = 'running', attempt_count = 1, updated_at = now()
+  WHERE store_id = '$PHOTO_OBJET_BIENHOA_STORE_ID'
+    AND slot_date_hcm = '2026-07-14'
+    AND slot_time_hcm = TIME '20:00';
+  INSERT INTO public.photo_objet_sales_raw (store_id, source_hash)
+  VALUES ('$PHOTO_OBJET_BIENHOA_STORE_ID', 'raw-appended-after-2230-cutover');
+" >/dev/null
+raw_after_safe_append="$(psql_test -Atqc "
+  SELECT count(*) || '|' || md5(coalesce(string_agg(
+    id::text || ':' || store_id::text || ':' || source_hash,
+    '|' ORDER BY id
+  ), ''))
+  FROM public.photo_objet_sales_raw
+")"
+
+psql_test --single-transaction \
+  --file "$ROOT_DIR/scripts/rollback_photo_objet_final_slot_2230.sql" \
+  | grep -q 'PHOTO_OBJET_FINAL_SLOT_2230_ROLLBACK_PASS'
+psql_test -Atqc "
+  SELECT count(*)
+  FROM public.photo_objet_monitoring_policies
+  WHERE effective_to IS NULL
+    AND schedule_version = 'hcm-two-hour-v1'
+" | grep -qx 6
+psql_test -Atqc "
+  SELECT count(*)
+  FROM public.photo_objet_expected_slots
+  WHERE slot_date_hcm = '2026-07-14'
+    AND slot_time_hcm = TIME '23:00'
+" | grep -qx 6
+psql_test -Atqc "
+  SELECT count(*)
+  FROM public.photo_objet_expected_slots
+  WHERE slot_date_hcm = '2026-07-14'
+    AND slot_time_hcm = TIME '22:30'
+" | grep -qx 0
+[[ "$(psql_test -Atqc "
+  SELECT count(*) || '|' || md5(coalesce(string_agg(
+    id::text || ':' || store_id::text || ':' || source_hash,
+    '|' ORDER BY id
+  ), ''))
+  FROM public.photo_objet_sales_raw
+")" = "$raw_after_safe_append" ]]
+psql_test -Atqc "
+  SELECT status || '|' || attempt_count
+  FROM public.photo_objet_expected_slots
+  WHERE store_id = '$PHOTO_OBJET_BIENHOA_STORE_ID'
+    AND slot_date_hcm = '2026-07-14'
+    AND slot_time_hcm = TIME '20:00'
+" | grep -qx 'running|1'
+
+# Once the new final slot has started, rollback must fail closed instead of
+# discarding live scheduler state.
+psql_test --single-transaction \
+  -c "SET app.photo_objet_final_slot_cutover_date = '2026-07-14'" \
+  --file "$ROOT_DIR/supabase/migrations/20260714113000_photo_objet_final_slot_2230.sql" \
+  >/dev/null
+psql_test -c "
+  UPDATE public.photo_objet_expected_slots
+  SET status = 'running', attempt_count = 1, updated_at = now() + interval '1 second'
+  WHERE store_id = '$PHOTO_OBJET_BIENHOA_STORE_ID'
+    AND slot_date_hcm = '2026-07-14'
+    AND slot_time_hcm = TIME '22:30'
+" >/dev/null
+set +e
+rollback_live_output="$(psql_test --single-transaction \
+  --file "$ROOT_DIR/scripts/rollback_photo_objet_final_slot_2230.sql" 2>&1)"
+rollback_live_status=$?
+set -e
+[[ "$rollback_live_status" -ne 0 ]]
+[[ "$rollback_live_output" == *'PHOTO_2230_ROLLBACK_LIVE_STATE_CHANGED'* ]]
+[[ "$rollback_live_output" != *'PHOTO_OBJET_FINAL_SLOT_2230_ROLLBACK_PASS'* ]]
+[[ "$(psql_test -Atqc "
+  SELECT count(*) || '|' || md5(coalesce(string_agg(
+    id::text || ':' || store_id::text || ':' || source_hash,
+    '|' ORDER BY id
+  ), ''))
+  FROM public.photo_objet_sales_raw
+")" = "$raw_after_safe_append" ]]
+
 echo 'PHOTO_OBJET_EXPECTED_SLOT_LEDGER_TEST_PASS'
