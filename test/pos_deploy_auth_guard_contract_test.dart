@@ -104,6 +104,10 @@ void main() {
     );
     final mainBody = deploy.substring(deploy.indexOf('main() {'));
     expect(
+      mainBody.indexOf('load_env'),
+      lessThan(mainBody.indexOf('run_auth_check')),
+    );
+    expect(
       mainBody.indexOf('run_checks'),
       lessThan(mainBody.indexOf('apply_migration')),
     );

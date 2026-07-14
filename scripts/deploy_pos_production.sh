@@ -780,6 +780,7 @@ main() {
     log "Rollback flow completed"
     return 0
   fi
+  load_env
   run_auth_check
   run_checks
   apply_migration
