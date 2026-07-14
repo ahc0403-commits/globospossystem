@@ -17,6 +17,7 @@ permissions:
 
 jobs:
   contract:
+    name: Photo Objet contract
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
