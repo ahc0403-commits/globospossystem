@@ -1,0 +1,68 @@
+name: Photo Objet Sales Contract
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - '.github/workflows/photo_objet_sales_*.yml'
+      - '.github/workflows/photo_objet_release_proof.yml'
+      - 'scripts/**'
+      - 'supabase/migrations/*photo_objet*'
+      - 'test/*photo_objet*'
+      - 'docs/photo_objet_sales_pull_setup.md'
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Photo Objet contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.41.6'
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+      - name: Install locked dependencies
+        working-directory: scripts
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+        run: npm ci
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Validate Flutter source and release build
+        run: |
+          flutter pub get
+          dart analyze --fatal-infos
+          flutter test
+          flutter build web --release
+      - name: Validate Node contracts and repository safety
+        working-directory: scripts
+        run: |
+          npm test
+          npm audit
+          npm run security-scan
+      - name: Validate production SQL runner
+        run: bash test/pos_deploy_psql_runner_test.sh
+      - name: Validate expected-slot replay
+        run: bash test/photo_objet_expected_slot_ledger_test.sh
+      - name: Validate changed shell entrypoints and whitespace
+        run: |
+          bash -n scripts/deploy_pos_production.sh
+          bash -n test/photo_objet_expected_slot_ledger_test.sh
+          bash -n test/pos_deploy_git_history_guard_test.sh
+          git diff --check
+          git show --check --format= HEAD

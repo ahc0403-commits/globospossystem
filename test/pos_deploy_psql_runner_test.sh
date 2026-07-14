@@ -13,6 +13,19 @@ SECRET='temporary-secret-must-never-appear'
 PG_CONTAINER="globos-pos-deploy-test-$$"
 LOCAL_PGHOST=127.0.0.1
 
+phase() {
+  printf 'POS_PSQL_RUNNER_PHASE=%s\n' "$1"
+}
+
+require() {
+  local label="$1"
+  shift
+  "$@" || {
+    printf 'POS_PSQL_RUNNER_ASSERTION_FAILED=%s\n' "$label" >&2
+    exit 1
+  }
+}
+
 cleanup() {
   docker rm -f "$PG_CONTAINER" >/dev/null 2>&1 || true
   rm -rf "$TMP_DIR"
@@ -20,16 +33,23 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$FAKE_BIN"
+phase docker_start
 docker run --detach --rm \
   --name "$PG_CONTAINER" \
   --env POSTGRES_HOST_AUTH_METHOD=trust \
   --publish 127.0.0.1::5432 \
   postgres:15 >/dev/null
 PORT="$(docker port "$PG_CONTAINER" 5432/tcp | sed 's/.*://')"
+[[ "$PORT" =~ ^[0-9]+$ ]] || {
+  printf 'POS_PSQL_RUNNER_ASSERTION_FAILED=docker_port\n' >&2
+  exit 1
+}
+phase postgres_wait
 until "$REAL_PSQL" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres -d postgres -Atqc 'SELECT 1' \
   >/dev/null 2>&1; do
   sleep 0.2
 done
+phase postgres_roles
 "$REAL_PSQL" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres -d postgres \
   -v ON_ERROR_STOP=1 >/dev/null <<'SQL'
 CREATE ROLE cli_login_runner LOGIN;
@@ -107,25 +127,42 @@ INSERT INTO runner_success VALUES (1);
 SQL
 
 success_output="$(run_linked "$SUCCESS_SQL" 'runner success' 2>&1)"
-[[ "$success_output" == *'PASS: runner success'* ]]
-"$REAL_PSQL" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres -d postgres -Atqc \
-  "SELECT count(*) FROM runner_success" | grep -qx 1
-grep -qx 'db dump --linked --schema public --dry-run' "$ISSUER_LOG"
-grep -q 'args=-X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --command SET ROLE postgres;' "$PSQL_LOG"
-grep -q -- '--command DO \$pos_role_check\$' "$PSQL_LOG"
-grep -q -- '--file .*success.sql' "$PSQL_LOG"
-grep -q 'ssl=require host=aws-0-ap-southeast-1.pooler.supabase.com user=postgres.ynriuoomotxuwhuxxmhj database=postgres' "$PSQL_LOG"
+phase runner_success_assertions
+[[ "$success_output" == *'PASS: runner success'* ]] || {
+  printf 'POS_PSQL_RUNNER_ASSERTION_FAILED=success_marker\n' >&2
+  exit 1
+}
+runner_success_count="$(
+  "$REAL_PSQL" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres -d postgres -Atqc \
+    "SELECT count(*) FROM runner_success"
+)"
+[[ "$runner_success_count" == 1 ]] || {
+  printf 'POS_PSQL_RUNNER_ASSERTION_FAILED=success_row_count\n' >&2
+  exit 1
+}
+require issuer_invocation grep -qx 'db dump --linked --schema public --dry-run' "$ISSUER_LOG"
+require psql_fail_fast_args grep -q \
+  'args=-X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --command SET ROLE postgres;' \
+  "$PSQL_LOG"
+require psql_role_check grep -q -- '--command DO \$pos_role_check\$' "$PSQL_LOG"
+require psql_file_arg grep -q -- '--file .*success.sql' "$PSQL_LOG"
+require psql_target_metadata grep -q \
+  'ssl=require host=aws-0-ap-southeast-1.pooler.supabase.com user=postgres.ynriuoomotxuwhuxxmhj database=postgres' \
+  "$PSQL_LOG"
 assert_not_contains "$success_output" "$SECRET"
+phase runner_negative_paths
 
 LEGACY_CLI_SQL="$TMP_DIR/legacy_cli.sql"
 cat >"$LEGACY_CLI_SQL" <<'SQL'
 SELECT 1;
 SQL
+phase legacy_cli_credential
 legacy_cli_output="$(FAKE_PGUSER=cli_login_test.ynriuoomotxuwhuxxmhj \
   run_linked "$LEGACY_CLI_SQL" 'legacy cli credential success' 2>&1)"
 [[ "$legacy_cli_output" == *'PASS: legacy cli credential success'* ]]
 assert_not_contains "$legacy_cli_output" "$SECRET"
 
+phase pooler_normalized_session
 pooler_normalized_output="$(LOCAL_PGUSER=postgres \
   run_linked "$LEGACY_CLI_SQL" 'pooler normalized session success' 2>&1)"
 [[ "$pooler_normalized_output" == *'PASS: pooler normalized session success'* ]]
@@ -136,6 +173,7 @@ cat >"$ROLE_REFUSAL_SQL" <<'SQL'
 CREATE TABLE runner_role_refusal_must_not_run (id integer PRIMARY KEY);
 SQL
 
+phase role_activation_refusal
 set +e
 role_refusal_output="$(LOCAL_PGUSER=cli_login_denied \
   run_linked "$ROLE_REFUSAL_SQL" 'role activation refusal' 2>&1)"
@@ -148,6 +186,7 @@ assert_not_contains "$role_refusal_output" "$SECRET"
 "$REAL_PSQL" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres -d postgres -Atqc \
   "SELECT to_regclass('public.runner_role_refusal_must_not_run') IS NULL" | grep -qx t
 
+phase unbound_credential_refusal
 set +e
 unbound_user_output="$(FAKE_PGUSER=postgres \
   run_linked "$ROLE_REFUSAL_SQL" 'unbound credential refusal' 2>&1)"
@@ -168,6 +207,7 @@ DO $$ BEGIN RAISE EXCEPTION 'intentional assertion failure'; END $$;
 INSERT INTO runner_mid_file_rollback VALUES (2);
 SQL
 
+phase mid_file_rollback
 set +e
 failure_output="$(run_linked "$FAIL_SQL" 'runner assertion' 2>&1)"
 failure_status=$?
@@ -178,6 +218,7 @@ assert_not_contains "$failure_output" "$SECRET"
 "$REAL_PSQL" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres -d postgres -Atqc \
   "SELECT to_regclass('public.runner_mid_file_rollback') IS NULL" | grep -qx t
 
+phase wrong_target_refusal
 set +e
 wrong_target_output="$(FAKE_PGHOST='db.wrongprojectref.supabase.co' \
   run_linked "$SUCCESS_SQL" 'wrong target' 2>&1)"
@@ -188,10 +229,17 @@ set -e
 assert_not_contains "$wrong_target_output" 'PASS: wrong target'
 assert_not_contains "$wrong_target_output" "$SECRET"
 
+phase wrong_linked_project_refusal
 WRONG_REPO="$TMP_DIR/wrong-repo"
 mkdir -p "$WRONG_REPO/scripts" "$WRONG_REPO/supabase/.temp"
 cp "$DEPLOY_SCRIPT" "$WRONG_REPO/scripts/deploy_pos_production.sh"
 printf '%s\n' wrongprojectref >"$WRONG_REPO/supabase/.temp/project-ref"
+git -C "$WRONG_REPO" init -q
+git -C "$WRONG_REPO" add -- scripts/deploy_pos_production.sh supabase/.temp/project-ref
+git -C "$WRONG_REPO" \
+  -c user.name='POS contract test' \
+  -c user.email='pos-contract@example.invalid' \
+  commit -qm 'fixture: isolate linked project validation'
 set +e
 wrong_ref_output="$(bash -c '
   source "$1"
@@ -205,9 +253,16 @@ wrong_ref_output="$(bash -c '
 ' wrong-ref "$WRONG_REPO/scripts/deploy_pos_production.sh" 2>&1)"
 wrong_ref_status=$?
 set -e
-[[ "$wrong_ref_status" -ne 0 ]]
-[[ "$wrong_ref_output" == *'Linked Supabase project is not POS production'* ]]
+[[ "$wrong_ref_status" -ne 0 ]] || {
+  printf 'POS_PSQL_RUNNER_ASSERTION_FAILED=wrong_ref_exit_status\n' >&2
+  exit 1
+}
+[[ "$wrong_ref_output" == *'Linked Supabase project is not POS production'* ]] || {
+  printf 'POS_PSQL_RUNNER_ASSERTION_FAILED=wrong_ref_message\n' >&2
+  exit 1
+}
 
+phase forced_psql_failure
 set +e
 forced_failure_output="$(FAKE_PSQL_FORCE_FAIL=1 run_linked "$SUCCESS_SQL" 'forced psql failure' 2>&1)"
 forced_failure_status=$?
@@ -298,6 +353,7 @@ $legacy_create$;
 SQL
 
 "$REAL_CREATEDB" -h "$LOCAL_PGHOST" -p "$PORT" -U postgres legal_entity_smoke
+phase hierarchy_smoke
 LOCAL_DB_NAME=legal_entity_smoke run_linked "$SETUP_SQL" 'local fixture setup' >/dev/null
 LOCAL_DB_NAME=legal_entity_smoke run_linked "$PREFLIGHT_SQL" 'hierarchy preflight smoke' >/dev/null
 LOCAL_DB_NAME=legal_entity_smoke run_linked "$MIGRATION_SQL" 'hierarchy migration smoke' >/dev/null

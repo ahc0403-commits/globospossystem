@@ -103,3 +103,9 @@ Hyochang runs Claude Code, Claude (the assistant) designs and reviews.
 The assistant writes English Claude Code commands in harness format,
 Hyochang executes them in his environment, shares results, the
 assistant reviews and responds.
+
+For release work, local validation and an independent Judge are preflight
+evidence only. Do not report the release gate as PASS until the required
+GitHub Actions checks succeed on the exact pushed head SHA. Cross-platform
+shell fixtures must explicitly create every required Git state and must not
+depend on Bash-version-specific `errexit` behavior.

@@ -1,0 +1,91 @@
+name: Photo Objet Sales Backfill
+
+on:
+  workflow_dispatch:
+    inputs:
+      backfill_from:
+        description: 'Start date (YYYY-MM-DD, maximum seven inclusive days)'
+        required: true
+      backfill_to:
+        description: 'End date (YYYY-MM-DD)'
+        required: true
+      execute_backfill:
+        description: 'Write immutable missing rows; false is dry-run'
+        type: boolean
+        default: false
+      confirmation:
+        description: 'For execution enter EXECUTE_IMMUTABLE_BACKFILL'
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: photo-objet-manual-backfill
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    environment: production-backfill
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      PHOTO_OBJET_INCLUDE_YESTERDAY: 'false'
+      MOERS_BIENHOA_USER: tob009
+      MOERS_BIENHOA_PASS: ${{ secrets.MOERS_BIENHOA_PASS }}
+      PHOTO_OBJET_BIENHOA_STORE_ID: ${{ secrets.PHOTO_OBJET_BIENHOA_STORE_ID }}
+      MOERS_DIAN_USER: tob024
+      MOERS_DIAN_PASS: ${{ secrets.MOERS_DIAN_PASS }}
+      PHOTO_OBJET_DIAN_STORE_ID: ${{ secrets.PHOTO_OBJET_DIAN_STORE_ID }}
+      MOERS_LONGTHANH_USER: tob025
+      MOERS_LONGTHANH_PASS: ${{ secrets.MOERS_LONGTHANH_PASS }}
+      PHOTO_OBJET_LONGTHANH_STORE_ID: ${{ secrets.PHOTO_OBJET_LONGTHANH_STORE_ID }}
+      MOERS_THAODIEN_USER: tob029
+      MOERS_THAODIEN_PASS: ${{ secrets.MOERS_THAODIEN_PASS }}
+      PHOTO_OBJET_THAODIEN_STORE_ID: ${{ secrets.PHOTO_OBJET_THAODIEN_STORE_ID }}
+      MOERS_QUANGTRUNG_USER: tob030
+      MOERS_QUANGTRUNG_PASS: ${{ secrets.MOERS_QUANGTRUNG_PASS }}
+      PHOTO_OBJET_QUANGTRUNG_STORE_ID: ${{ secrets.PHOTO_OBJET_QUANGTRUNG_STORE_ID }}
+      MOERS_NOWZONE_USER: tob049
+      MOERS_NOWZONE_PASS: ${{ secrets.MOERS_NOWZONE_PASS }}
+      PHOTO_OBJET_NOWZONE_STORE_ID: ${{ secrets.PHOTO_OBJET_NOWZONE_STORE_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate manual guard
+        env:
+          EXECUTE: ${{ inputs.execute_backfill }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          test "${GITHUB_REF}" = 'refs/heads/main'
+          if [ "${EXECUTE}" = 'true' ]; then
+            test "${CONFIRMATION}" = 'EXECUTE_IMMUTABLE_BACKFILL'
+          fi
+      - name: Initialize runtime
+        run: echo "PUPPETEER_CACHE_DIR=${RUNNER_TEMP}/puppeteer" >> "${GITHUB_ENV}"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+      - name: Install dependencies and Chromium without root
+        working-directory: scripts
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+        run: |
+          npm ci
+          CHROME_VERSION=$(node -p "require('puppeteer').PUPPETEER_REVISIONS.chrome")
+          npx puppeteer browsers install "chrome@${CHROME_VERSION}"
+          CHROME_PATH=$(node -e "Promise.resolve(require('puppeteer').executablePath()).then(console.log)")
+          echo "PUPPETEER_EXECUTABLE_PATH=${CHROME_PATH}" >> "${GITHUB_ENV}"
+      - name: Run bounded backfill
+        working-directory: scripts
+        env:
+          FROM_DATE: ${{ inputs.backfill_from }}
+          TO_DATE: ${{ inputs.backfill_to }}
+          EXECUTE: ${{ inputs.execute_backfill }}
+        run: |
+          args=(--backfill-from "${FROM_DATE}" --backfill-to "${TO_DATE}")
+          if [ "${EXECUTE}" = 'true' ]; then args+=(--execute); fi
+          node pull_moers_sales.js "${args[@]}"

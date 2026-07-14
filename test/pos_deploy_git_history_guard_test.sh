@@ -60,7 +60,7 @@ stale_output="$(ALLOW_GIT_ANCESTRY_MISMATCH=1 bash -c '
 stale_status=$?
 set -e
 [[ "$stale_status" -ne 0 ]]
-[[ "$stale_output" == *'HEAD is not descended from freshly fetched origin/main'* ]]
+[[ "$stale_output" == *'Production deployment requires exact HEAD == freshly fetched origin/main'* ]]
 git -C "$STALE_REPO" rev-parse origin/main | grep -qx \
   "$(git -C "$SEED_REPO" rev-parse HEAD)"
 
@@ -76,7 +76,7 @@ stale_dry_run_output="$(bash -c '
 stale_dry_run_status=$?
 set -e
 [[ "$stale_dry_run_status" -ne 0 ]]
-[[ "$stale_dry_run_output" == *'HEAD is not descended from freshly fetched origin/main'* ]]
+[[ "$stale_dry_run_output" == *'Production deployment requires exact HEAD == freshly fetched origin/main'* ]]
 
 bash -c '
   source "$1/scripts/deploy_pos_production.sh"
