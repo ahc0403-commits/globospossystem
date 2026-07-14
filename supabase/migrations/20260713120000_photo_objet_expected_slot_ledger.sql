@@ -4,6 +4,8 @@
 
 CREATE TABLE IF NOT EXISTS public.photo_slot_20260713120000_state (
   migration_id text PRIMARY KEY,
+  prior_health_function_existed boolean,
+  prior_health_view_existed boolean,
   prior_health_function_definition text,
   pull_run_interval_rows_existed boolean,
   pull_run_interval_rows_data_type text,
@@ -16,6 +18,8 @@ CREATE TABLE IF NOT EXISTS public.photo_slot_20260713120000_state (
 );
 
 ALTER TABLE public.photo_slot_20260713120000_state
+  ADD COLUMN IF NOT EXISTS prior_health_function_existed boolean,
+  ADD COLUMN IF NOT EXISTS prior_health_view_existed boolean,
   ADD COLUMN IF NOT EXISTS pull_run_interval_rows_existed boolean,
   ADD COLUMN IF NOT EXISTS pull_run_interval_rows_data_type text,
   ADD COLUMN IF NOT EXISTS pull_run_interval_rows_not_null boolean,
@@ -26,6 +30,8 @@ ALTER TABLE public.photo_slot_20260713120000_state
 
 INSERT INTO public.photo_slot_20260713120000_state (
   migration_id,
+  prior_health_function_existed,
+  prior_health_view_existed,
   prior_health_function_definition,
   pull_run_interval_rows_existed,
   pull_run_interval_rows_data_type,
@@ -37,8 +43,14 @@ INSERT INTO public.photo_slot_20260713120000_state (
 )
 SELECT
   '20260713120000',
+  to_regprocedure(
+    'public.photo_objet_collection_health_at(timestamp with time zone)'
+  ) IS NOT NULL,
+  to_regclass('public.v_photo_objet_collection_health') IS NOT NULL,
   pg_get_functiondef(
-    'public.photo_objet_collection_health_at(timestamp with time zone)'::regprocedure
+    to_regprocedure(
+      'public.photo_objet_collection_health_at(timestamp with time zone)'
+    )
   ),
   EXISTS (
     SELECT 1 FROM pg_attribute
@@ -766,6 +778,18 @@ AS $$
   LEFT JOIN public.photo_objet_sales_pull_runs r ON r.id = s.successful_run_id
   GROUP BY s.store_id, s.slot_date_hcm
 $$;
+
+DO $health_view$
+BEGIN
+  IF to_regclass('public.v_photo_objet_collection_health') IS NULL THEN
+    EXECUTE $view$
+      CREATE VIEW public.v_photo_objet_collection_health
+      WITH (security_invoker = true)
+      AS SELECT * FROM public.photo_objet_collection_health_at(now())
+    $view$;
+  END IF;
+END;
+$health_view$;
 
 COMMENT ON VIEW public.v_photo_objet_collection_health IS
   'Compatibility health surface backed by effective-dated expected slots and typed run identity.';

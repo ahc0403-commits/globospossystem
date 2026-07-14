@@ -12,15 +12,30 @@ END $$;
 DROP VIEW IF EXISTS public.v_office_photo_objet_expected_slot_health;
 DROP VIEW IF EXISTS public.v_photo_objet_expected_slot_health;
 DO $$
-DECLARE v_definition text;
+DECLARE
+  v_existed boolean;
+  v_view_existed boolean;
+  v_definition text;
 BEGIN
-  SELECT prior_health_function_definition INTO v_definition
+  SELECT prior_health_function_existed, prior_health_view_existed,
+    prior_health_function_definition
+  INTO v_existed, v_view_existed, v_definition
   FROM public.photo_slot_20260713120000_state
   WHERE migration_id = '20260713120000';
-  IF v_definition IS NULL THEN
+  IF NOT FOUND OR v_existed IS NULL OR v_view_existed IS NULL THEN
     RAISE EXCEPTION 'PHOTO_SLOT_ROLLBACK_HEALTH_BACKUP_MISSING';
   END IF;
-  EXECUTE v_definition;
+  IF NOT v_view_existed THEN
+    DROP VIEW IF EXISTS public.v_photo_objet_collection_health;
+  END IF;
+  IF v_existed THEN
+    IF v_definition IS NULL THEN
+      RAISE EXCEPTION 'PHOTO_SLOT_ROLLBACK_HEALTH_DEFINITION_MISSING';
+    END IF;
+    EXECUTE v_definition;
+  ELSE
+    DROP FUNCTION IF EXISTS public.photo_objet_collection_health_at(timestamptz);
+  END IF;
 END $$;
 DROP FUNCTION IF EXISTS public.photo_objet_expected_slot_health_at(timestamptz, integer);
 DROP FUNCTION IF EXISTS public.photo_objet_ack_expected_slot_alert(uuid, date, time, text, timestamptz);

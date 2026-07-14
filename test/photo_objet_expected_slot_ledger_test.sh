@@ -128,6 +128,7 @@ SQL
 
 create_fixture_db photo_slot_existing_column
 create_fixture_db photo_slot_existing_constraint
+create_fixture_db photo_slot_missing_health_function
 create_fixture_db photo_slot_bad_type
 create_fixture_db photo_slot_bad_constraint
 
@@ -544,7 +545,35 @@ psql_test --single-transaction \
 psql_test --file "$ROOT_DIR/scripts/verify_photo_objet_expected_slot_ledger.sql" \
   | grep -q 'PHOTO_OBJET_EXPECTED_SLOT_VERIFY_PASS'
 
-# Fixture B: an existing column keeps its complete catalog shape. The
+# Fixture B: production may not yet have the superseded immutable-health
+# function. Apply must record that absence, and rollback must remove the
+# compatibility function introduced by this migration.
+psql_db photo_slot_missing_health_function >/dev/null <<'SQL'
+DROP VIEW public.v_photo_objet_collection_health;
+DROP FUNCTION public.photo_objet_collection_health_at(timestamptz);
+INSERT INTO public.photo_objet_sales_raw (store_id, source_hash) VALUES (
+  '77000000-0000-4000-8000-000000000001', 'fixture-missing-health-raw-immutable'
+);
+SQL
+apply_fixture photo_slot_missing_health_function >/dev/null
+apply_fixture photo_slot_missing_health_function >/dev/null
+psql_db photo_slot_missing_health_function \
+  --file "$ROOT_DIR/scripts/verify_photo_objet_expected_slot_ledger.sql" \
+  | grep -q 'PHOTO_OBJET_EXPECTED_SLOT_VERIFY_PASS'
+psql_db photo_slot_missing_health_function --single-transaction \
+  --file "$ROOT_DIR/scripts/rollback_photo_objet_expected_slot_ledger.sql" \
+  | grep -q 'PHOTO_OBJET_EXPECTED_SLOT_ROLLBACK_PASS'
+psql_db photo_slot_missing_health_function -Atqc \
+  "SELECT to_regprocedure('public.photo_objet_collection_health_at(timestamp with time zone)') IS NULL" \
+  | grep -qx t
+psql_db photo_slot_missing_health_function -Atqc \
+  "SELECT to_regclass('public.v_photo_objet_collection_health') IS NULL" \
+  | grep -qx t
+psql_db photo_slot_missing_health_function -Atqc \
+  "SELECT count(*) FROM public.photo_objet_sales_raw WHERE source_hash='fixture-missing-health-raw-immutable'" \
+  | grep -qx 1
+
+# Fixture C: an existing column keeps its complete catalog shape. The
 # migration-created constraint is removed and the legacy comment is restored.
 psql_db photo_slot_existing_column >/dev/null <<'SQL'
 ALTER TABLE public.photo_objet_sales_pull_runs
@@ -570,7 +599,7 @@ psql_db photo_slot_existing_column -Atqc \
   "SELECT count(*) FROM public.photo_objet_sales_raw WHERE source_hash='fixture-b-raw-immutable'" \
   | grep -qx 1
 
-# Fixture C: a compatible pre-existing named constraint and legacy comment
+# Fixture D: a compatible pre-existing named constraint and legacy comment
 # survive apply, replay, and rollback byte-for-byte at the catalog boundary.
 psql_db photo_slot_existing_constraint >/dev/null <<'SQL'
 ALTER TABLE public.photo_objet_sales_pull_runs
@@ -599,7 +628,7 @@ psql_db photo_slot_existing_constraint -Atqc \
   "SELECT count(*) FROM public.photo_objet_sales_raw WHERE source_hash='fixture-c-raw-immutable'" \
   | grep -qx 1
 
-# Fixture D1: an incompatible column type fails both preflight and direct
+# Fixture E1: an incompatible column type fails both preflight and direct
 # migration execution without leaving schema mutations or changing raw rows.
 psql_db photo_slot_bad_type >/dev/null <<'SQL'
 ALTER TABLE public.photo_objet_sales_pull_runs ADD COLUMN interval_rows text;
@@ -626,7 +655,7 @@ psql_db photo_slot_bad_type -Atqc \
   "SELECT count(*) FROM public.photo_objet_sales_raw WHERE source_hash='fixture-d-type-raw-immutable'" \
   | grep -qx 1
 
-# Fixture D2: a same-named but incompatible constraint fails closed before any
+# Fixture E2: a same-named but incompatible constraint fails closed before any
 # migration object survives the transaction.
 psql_db photo_slot_bad_constraint >/dev/null <<'SQL'
 ALTER TABLE public.photo_objet_sales_pull_runs ADD COLUMN interval_rows integer;
