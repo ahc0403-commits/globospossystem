@@ -80,6 +80,12 @@ BEGIN
     SELECT 1
     FROM public.photo_slot_20260713120000_state
     WHERE migration_id = '20260713120000'
+      AND prior_health_function_existed IS NOT NULL
+      AND prior_health_view_existed IS NOT NULL
+      AND (
+        prior_health_function_existed = false
+        OR prior_health_function_definition IS NOT NULL
+      )
       AND pull_run_interval_rows_existed IS NOT NULL
       AND pull_run_interval_rows_constraint_existed IS NOT NULL
       AND (
