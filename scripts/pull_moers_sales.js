@@ -18,7 +18,7 @@ const SCHEDULED_INTERVAL_MINUTES = Object.freeze({
   '16:00': 120,
   '18:00': 120,
   '20:00': 120,
-  '23:00': 180,
+  '22:30': 150,
 });
 const FAILURE = Object.freeze({
   DETERMINISTIC: 'deterministic',

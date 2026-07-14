@@ -13,6 +13,8 @@ void main() {
       'supabase/migrations/20260713090000_photo_objet_immutable_health.sql';
   const slotMigration =
       'supabase/migrations/20260713120000_photo_objet_expected_slot_ledger.sql';
+  const finalSlotMigration =
+      'supabase/migrations/20260714113000_photo_objet_final_slot_2230.sql';
   const slotApply = 'scripts/apply_photo_objet_expected_slot_ledger.sql';
   const slotConfiguration =
       'scripts/configure_photo_objet_monitoring_policies.sql';
@@ -122,6 +124,22 @@ void main() {
     expect(sql, contains('v_photo_objet_collection_health'));
   });
 
+  test('final collection slot transitions to 22:30 without rewriting v1', () {
+    final sql = readRepoFile(finalSlotMigration);
+
+    expect(sql, contains("'hcm-two-hour-2230-v2'"));
+    expect(sql, contains("TIME '22:30'"));
+    expect(sql, contains("WHEN 'hcm-two-hour-v1' THEN TIME '23:00'"));
+    expect(sql, contains('photo_slot_20260714113000_expected_backup'));
+    expect(sql, contains('photo_slot_20260714113000_raw_identity_backup'));
+    expect(sql, contains('ENABLE ROW LEVEL SECURITY'));
+    expect(sql, contains('policy_map_fingerprint'));
+    expect(sql, contains('expected_backup_fingerprint'));
+    expect(sql, contains('PHOTO_2230_LEGACY_SLOT_ALREADY_USED'));
+    expect(sql, isNot(contains('DELETE FROM public.photo_objet_sales_raw')));
+    expect(sql, isNot(contains('UPDATE public.photo_objet_sales_raw')));
+  });
+
   test(
     'interval migration retains backup and immutable identity contracts',
     () {
@@ -181,7 +199,7 @@ void main() {
       '0 9 * * *',
       '0 11 * * *',
       '0 13 * * *',
-      '0 16 * * *',
+      '30 15 * * *',
     ]);
     expect(collect, contains("node-version: '22'"));
     expect(collect, contains('npm ci'));

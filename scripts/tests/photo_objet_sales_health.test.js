@@ -336,7 +336,7 @@ test('slot identities distinguish scheduled, manual, and bounded backfill', () =
     {
       GITHUB_EVENT_NAME: 'workflow_dispatch',
       GITHUB_RUN_ID: '123',
-      PHOTO_OBJET_SCHEDULE_CRON: '0 16 * * *',
+      PHOTO_OBJET_SCHEDULE_CRON: '30 15 * * *',
       PHOTO_OBJET_RUN_STARTED_AT: '2026-07-11T17:10:00Z',
     },
   );
@@ -345,7 +345,7 @@ test('slot identities distinguish scheduled, manual, and bounded backfill', () =
     '2026-07-11',
     {
       GITHUB_EVENT_NAME: 'workflow_dispatch',
-      PHOTO_OBJET_SCHEDULE_CRON: '0 16 * * *',
+      PHOTO_OBJET_SCHEDULE_CRON: '30 15 * * *',
       PHOTO_OBJET_RUN_STARTED_AT: '2026-07-11T17:10:00Z',
     },
   );
@@ -362,10 +362,10 @@ test('slot identities distinguish scheduled, manual, and bounded backfill', () =
   assert.deepEqual([manual.source, backfill.source], ['manual', 'backfill']);
 });
 
-test('delayed 23:00 schedule crossing HCM midnight retains the previous target date and slot', () => {
+test('delayed 22:30 schedule crossing HCM midnight retains the previous target date and slot', () => {
   const env = {
     GITHUB_EVENT_NAME: 'schedule',
-    PHOTO_OBJET_SCHEDULE_CRON: '0 16 * * *',
+    PHOTO_OBJET_SCHEDULE_CRON: '30 15 * * *',
     PHOTO_OBJET_RUN_STARTED_AT: '2026-07-11T17:10:00Z',
   };
   const options = parseArgs([], env);
@@ -373,10 +373,10 @@ test('delayed 23:00 schedule crossing HCM midnight retains the previous target d
 
   assert.deepEqual(options.targetDates, ['2026-07-11']);
   assert.equal(identity.slotDateHcm, options.targetDates[0]);
-  assert.equal(identity.slotTimeHcm, '23:00');
-  assert.equal(identity.slotId, 'scheduled:2026-07-11T23:00+07:00');
+  assert.equal(identity.slotTimeHcm, '22:30');
+  assert.equal(identity.slotId, 'scheduled:2026-07-11T22:30+07:00');
   assert.equal(identity.intervalStartAt, '2026-07-11T13:00:00.000Z');
-  assert.equal(identity.intervalEndAt, '2026-07-11T16:00:00.000Z');
+  assert.equal(identity.intervalEndAt, '2026-07-11T15:30:00.000Z');
   assert.throws(
     () => createRunIdentity(options, '2026-07-12', env),
     /does not match intended HCM slot date 2026-07-11/,
@@ -408,10 +408,10 @@ test('12:00 scheduled collection accepts only 10:00:00 through 11:59:59', () => 
   assert.equal(identity.intervalEndAt, '2026-07-12T05:00:00.000Z');
 });
 
-test('scheduled intervals cover 09:00 through 23:00 without gaps or overlap', () => {
+test('scheduled intervals cover 09:00 through 22:30 without gaps or overlap', () => {
   const crons = [
     '0 3 * * *', '0 5 * * *', '0 7 * * *', '0 9 * * *',
-    '0 11 * * *', '0 13 * * *', '0 16 * * *',
+    '0 11 * * *', '0 13 * * *', '30 15 * * *',
   ];
   const identities = crons.map(cron => createRunIdentity(
     { backfill: false },
@@ -419,19 +419,19 @@ test('scheduled intervals cover 09:00 through 23:00 without gaps or overlap', ()
     {
       GITHUB_EVENT_NAME: 'schedule',
       PHOTO_OBJET_SCHEDULE_CRON: cron,
-      PHOTO_OBJET_RUN_STARTED_AT: `2026-07-12T${cron.split(' ')[1].padStart(2, '0')}:05:00Z`,
+      PHOTO_OBJET_RUN_STARTED_AT: `2026-07-12T${cron.split(' ')[1].padStart(2, '0')}:${cron.startsWith('30 ') ? '35' : '05'}:00Z`,
     },
   ));
 
   assert.deepEqual(identities.map(identity => identity.slotTimeHcm), [
-    '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '23:00',
+    '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:30',
   ]);
   assert.equal(identities[0].intervalStartAt, '2026-07-12T02:00:00.000Z');
-  assert.equal(identities.at(-1).intervalEndAt, '2026-07-12T16:00:00.000Z');
+  assert.equal(identities.at(-1).intervalEndAt, '2026-07-12T15:30:00.000Z');
   for (let index = 1; index < identities.length; index += 1) {
     assert.equal(identities[index - 1].intervalEndAt, identities[index].intervalStartAt);
   }
-  for (const unsupported of ['0 2 * * *', '30 15 * * *']) {
+  for (const unsupported of ['0 2 * * *', '0 16 * * *']) {
     assert.throws(
       () => createRunIdentity(
         { backfill: false },
@@ -562,7 +562,7 @@ test('collection workflow stays green independently from slot health', () => {
   assert.match(workflow, /on:\n  schedule:/);
   assert.deepEqual([...workflow.matchAll(/cron: '([^']+)'/g)].map(match => match[1]), [
     '0 3 * * *', '0 5 * * *', '0 7 * * *', '0 9 * * *',
-    '0 11 * * *', '0 13 * * *', '0 16 * * *',
+    '0 11 * * *', '0 13 * * *', '30 15 * * *',
   ]);
   assert.match(workflow, /node-version: '22'/);
   assert.match(workflow, /npm ci/);
