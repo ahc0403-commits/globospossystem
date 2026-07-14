@@ -2,9 +2,14 @@ name: Photo Objet Sales Health
 
 on:
   schedule:
-    # 10:20-22:20 HCM checks hourly due slots; 22:50 checks 22:00 and 22:30.
-    - cron: '20 3-15 * * *'
-    - cron: '50 15 * * *'
+    # Check ten minutes after each 90-minute collection deadline in HCM.
+    - cron: '40 4 * * *'
+    - cron: '40 6 * * *'
+    - cron: '40 8 * * *'
+    - cron: '40 10 * * *'
+    - cron: '40 12 * * *'
+    - cron: '40 14 * * *'
+    - cron: '40 17 * * *'
   workflow_dispatch:
 
 permissions:

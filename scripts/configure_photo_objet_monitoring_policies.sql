@@ -49,9 +49,9 @@ SELECT
   approved.store_id,
   rollout.effective_from,
   'Asia/Ho_Chi_Minh',
-  'hcm-hourly-v1',
-  15,
-  15,
+  'hcm-two-hour-v1',
+  90,
+  90,
   true
 FROM approved_photo_objet_monitoring_stores approved
 CROSS JOIN photo_objet_monitoring_rollout rollout

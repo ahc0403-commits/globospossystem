@@ -127,9 +127,9 @@ CREATE TABLE IF NOT EXISTS public.photo_objet_monitoring_policies (
   effective_from timestamptz NOT NULL,
   effective_to timestamptz,
   timezone text NOT NULL DEFAULT 'Asia/Ho_Chi_Minh',
-  schedule_version text NOT NULL DEFAULT 'hcm-hourly-v1',
-  grace_minutes integer NOT NULL DEFAULT 15,
-  final_slot_grace_minutes integer NOT NULL DEFAULT 15,
+  schedule_version text NOT NULL DEFAULT 'hcm-two-hour-v1',
+  grace_minutes integer NOT NULL DEFAULT 90,
+  final_slot_grace_minutes integer NOT NULL DEFAULT 90,
   is_enabled boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT photo_objet_monitoring_policy_period_check
@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS public.photo_objet_monitoring_policies (
   CONSTRAINT photo_objet_monitoring_policy_timezone_check
     CHECK (timezone = 'Asia/Ho_Chi_Minh'),
   CONSTRAINT photo_objet_monitoring_policy_schedule_check
-    CHECK (schedule_version = 'hcm-hourly-v1'),
+    CHECK (schedule_version = 'hcm-two-hour-v1'),
   CONSTRAINT photo_objet_monitoring_policy_grace_check
     CHECK (grace_minutes BETWEEN 0 AND 180),
   CONSTRAINT photo_objet_monitoring_policy_final_grace_check
@@ -211,9 +211,10 @@ CREATE TABLE IF NOT EXISTS public.photo_objet_expected_slots (
     )
   ),
   CONSTRAINT photo_objet_expected_slot_time_check CHECK (
-    (slot_time_hcm >= TIME '09:00' AND slot_time_hcm <= TIME '22:00'
-      AND date_part('minute', slot_time_hcm) = 0)
-    OR slot_time_hcm = TIME '22:30'
+    slot_time_hcm IN (
+      TIME '10:00', TIME '12:00', TIME '14:00', TIME '16:00',
+      TIME '18:00', TIME '20:00', TIME '23:00'
+    )
   ),
   CONSTRAINT photo_objet_expected_slot_due_check CHECK (due_at >= scheduled_at),
   CONSTRAINT photo_objet_expected_slot_attempt_check CHECK (attempt_count >= 0),
@@ -291,10 +292,8 @@ BEGIN
   ),
   slot_times(slot_time) AS (
     VALUES
-      (TIME '09:00'), (TIME '10:00'), (TIME '11:00'), (TIME '12:00'),
-      (TIME '13:00'), (TIME '14:00'), (TIME '15:00'), (TIME '16:00'),
-      (TIME '17:00'), (TIME '18:00'), (TIME '19:00'), (TIME '20:00'),
-      (TIME '21:00'), (TIME '22:00'), (TIME '22:30')
+      (TIME '10:00'), (TIME '12:00'), (TIME '14:00'), (TIME '16:00'),
+      (TIME '18:00'), (TIME '20:00'), (TIME '23:00')
   ),
   candidates AS (
     SELECT
@@ -304,11 +303,11 @@ BEGIN
       st.slot_time,
       (d.slot_date + st.slot_time) AT TIME ZONE p.timezone AS scheduled_at,
       CASE
-        WHEN st.slot_time IN (TIME '22:00', TIME '22:30') THEN
-          (d.slot_date + TIME '22:30') AT TIME ZONE p.timezone
+        WHEN st.slot_time = TIME '23:00' THEN
+          (d.slot_date + st.slot_time) AT TIME ZONE p.timezone
             + make_interval(mins => p.final_slot_grace_minutes)
         ELSE
-          (d.slot_date + st.slot_time + interval '1 hour') AT TIME ZONE p.timezone
+          (d.slot_date + st.slot_time) AT TIME ZONE p.timezone
             + make_interval(mins => p.grace_minutes)
       END AS due_at
     FROM public.photo_objet_monitoring_policies p
@@ -589,10 +588,8 @@ AS $$
   ),
   slot_times(slot_time) AS (
     VALUES
-      (TIME '09:00'), (TIME '10:00'), (TIME '11:00'), (TIME '12:00'),
-      (TIME '13:00'), (TIME '14:00'), (TIME '15:00'), (TIME '16:00'),
-      (TIME '17:00'), (TIME '18:00'), (TIME '19:00'), (TIME '20:00'),
-      (TIME '21:00'), (TIME '22:00'), (TIME '22:30')
+      (TIME '10:00'), (TIME '12:00'), (TIME '14:00'), (TIME '16:00'),
+      (TIME '18:00'), (TIME '20:00'), (TIME '23:00')
   ),
   policy_candidates AS (
     SELECT

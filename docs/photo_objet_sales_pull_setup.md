@@ -14,11 +14,12 @@ dispatch, and receipt automation must not overwrite one another's result.
 
 ## Exact collection interval
 
-The scheduled workflow runs for the semantic HCM slots 09:00 through 22:00
-hourly and once more at 22:30. Each run reads one half-open interval:
+The scheduled workflow runs at 10:00, 12:00, 14:00, 16:00, 18:00, 20:00,
+and 23:00 HCM. Each run reads one half-open interval without overlap:
 
-- 12:00 collects only `11:00:00 <= sold_at < 12:00:00`.
-- 22:30 collects only `22:00:00 <= sold_at < 22:30:00`.
+- 10:00 collects `09:00:00 <= sold_at < 10:00:00`.
+- 12:00 through 20:00 collect the preceding two hours.
+- 23:00 is the final run and collects `20:00:00 <= sold_at < 23:00:00`.
 - A delayed GitHub start retains the intended `slot_date_hcm` and
   `slot_time_hcm`; wall-clock `started_at` is not slot identity.
 - Excel may contain the entire day, but only rows in the exact interval enter
@@ -54,15 +55,16 @@ materializer. Thus a collector outage cannot erase the
 expected workload. Migration rollout must insert the approved policies and
 materialize the first date in the same fail-fast transaction.
 
-Every day has these 15 slots per enabled active policy:
+Every day has these seven slots per enabled active policy:
 
 ```text
-09:00, 10:00, 11:00, 12:00, 13:00, 14:00, 15:00, 16:00,
-17:00, 18:00, 19:00, 20:00, 21:00, 22:00, 22:30
+10:00, 12:00, 14:00, 16:00, 18:00, 20:00, 23:00
 ```
 
-Hourly slots through 21:00 become due after the next slot plus the configured
-grace. Both 22:00 and 22:30 become due at 22:45 HCM. Status is one of
+Every slot becomes due 90 minutes after its semantic collection time. This
+90-minute grace is longer than the observed GitHub scheduler delay and keeps a
+late runner from being classified as missing while it is still within the
+operating SLA. The final 23:00 slot becomes due at 00:30 HCM. Status is one of
 `expected`, `running`, `collected`, `collected_zero`, `missing`, `failed`, or
 `recovered`. A later exact slot cannot satisfy an earlier one. Manual and
 backfill runs cannot satisfy scheduled history.
@@ -86,9 +88,10 @@ even though external Photo operators may be valid POS collectors.
 
 ## Health monitoring and alert delivery
 
-`.github/workflows/photo_objet_sales_health.yml` runs at 10:20 through 22:20
-HCM and again at 22:50. It needs only the POS Supabase URL and service key; it
-does not install Chromium and receives no Moers credentials.
+`.github/workflows/photo_objet_sales_health.yml` runs ten minutes after each
+90-minute deadline: 11:40, 13:40, 15:40, 17:40, 19:40, 21:40, and 00:40 HCM.
+It needs only the POS Supabase URL and service key; it does not install Chromium
+and receives no Moers credentials.
 
 The monitor uses typed `run_source`, `slot_date_hcm`, and `slot_time_hcm`
 columns. It never parses `error_message`. Health refresh reconciles exact
@@ -205,8 +208,8 @@ bash test/photo_objet_expected_slot_ledger_test.sh
 ```
 
 This validates replay, rollback, policy effective time, inactive exclusion,
-09:00-22:30 slots, the 22:45 boundary, zero sales, retry/recovery, backfill
-isolation, alert delivery-before-ACK, RLS, 60 stores/900 slots, and preservation
+10:00-23:00 slots, the 90-minute grace boundary, zero sales, retry/recovery,
+backfill isolation, alert delivery-before-ACK, RLS, 60 stores/420 slots, and preservation
 of the immutable raw ledger. Separate catalog fixtures cover an absent column,
 a pre-existing column, a compatible pre-existing constraint, and incompatible
 type or constraint fail-fast paths.

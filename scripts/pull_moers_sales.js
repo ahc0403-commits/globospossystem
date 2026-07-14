@@ -11,6 +11,15 @@ const PHOTO_OBJET_BRAND_ID = '77000000-0000-0000-0000-000000000001';
 const MAX_BACKFILL_DAYS = 7;
 const SOURCE_IDENTITY_VERSION = 2;
 const COLLECTOR_STARTED_AT = new Date();
+const SCHEDULED_INTERVAL_MINUTES = Object.freeze({
+  '10:00': 60,
+  '12:00': 120,
+  '14:00': 120,
+  '16:00': 120,
+  '18:00': 120,
+  '20:00': 120,
+  '23:00': 180,
+});
 const FAILURE = Object.freeze({
   DETERMINISTIC: 'deterministic',
   TRANSIENT: 'transient',
@@ -678,8 +687,11 @@ function scheduledSlotFromCron(cron, runTimestamp) {
     throw deterministic(`Invalid Photo Objet schedule slot: ${cron}`);
   }
   const hcmHour = (utcHour + 7) % 24;
-  const valid = (minute === 0 && hcmHour >= 9 && hcmHour <= 22) ||
-    (minute === 30 && hcmHour === 22);
+  const slotTimeHcm = `${String(hcmHour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  const valid = Object.prototype.hasOwnProperty.call(
+    SCHEDULED_INTERVAL_MINUTES,
+    slotTimeHcm,
+  );
   if (!valid) throw deterministic(`Unsupported Photo Objet schedule slot: ${cron}`);
   const anchor = new Date(runTimestamp);
   if (Number.isNaN(anchor.getTime())) {
@@ -690,7 +702,7 @@ function scheduledSlotFromCron(cron, runTimestamp) {
   if (occurrence > anchor) occurrence.setUTCDate(occurrence.getUTCDate() - 1);
   return {
     slotDateHcm: hcmDateString(0, occurrence),
-    slotTimeHcm: `${String(hcmHour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
+    slotTimeHcm,
   };
 }
 
@@ -705,7 +717,10 @@ function fullDayInterval(targetDate) {
 
 function scheduledInterval(slot) {
   const end = new Date(`${slot.slotDateHcm}T${slot.slotTimeHcm}:00+07:00`);
-  const durationMinutes = slot.slotTimeHcm === '22:30' ? 30 : 60;
+  const durationMinutes = SCHEDULED_INTERVAL_MINUTES[slot.slotTimeHcm];
+  if (!durationMinutes) {
+    throw deterministic(`Unsupported Photo Objet slot interval: ${slot.slotTimeHcm}`);
+  }
   return {
     intervalStartAt: new Date(end.getTime() - durationMinutes * 60 * 1000).toISOString(),
     intervalEndAt: end.toISOString(),

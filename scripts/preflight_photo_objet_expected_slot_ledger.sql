@@ -44,6 +44,33 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'PHOTO_SLOT_PREFLIGHT_TYPED_RUN_IDENTITY_MISSING';
   END IF;
+  IF to_regclass('public.photo_objet_monitoring_policies') IS NOT NULL THEN
+    IF EXISTS (
+      SELECT 1
+      FROM public.photo_objet_monitoring_policies p
+      WHERE p.is_enabled = true
+        AND (
+          p.timezone <> 'Asia/Ho_Chi_Minh'
+          OR p.schedule_version <> 'hcm-two-hour-v1'
+          OR p.grace_minutes <> 90
+          OR p.final_slot_grace_minutes <> 90
+        )
+    ) THEN
+      RAISE EXCEPTION 'PHOTO_SLOT_PREFLIGHT_SCHEDULE_POLICY_MISMATCH';
+    END IF;
+  END IF;
+  IF to_regclass('public.photo_objet_expected_slots') IS NOT NULL THEN
+    IF EXISTS (
+      SELECT 1
+      FROM public.photo_objet_expected_slots s
+      WHERE s.slot_time_hcm NOT IN (
+        TIME '10:00', TIME '12:00', TIME '14:00', TIME '16:00',
+        TIME '18:00', TIME '20:00', TIME '23:00'
+      )
+    ) THEN
+      RAISE EXCEPTION 'PHOTO_SLOT_PREFLIGHT_LEGACY_EXPECTATION_PRESENT';
+    END IF;
+  END IF;
 
   SELECT format_type(a.atttypid, a.atttypmod) INTO v_interval_rows_type
   FROM pg_attribute a

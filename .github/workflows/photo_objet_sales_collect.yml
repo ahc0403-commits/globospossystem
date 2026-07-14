@@ -2,22 +2,14 @@ name: Photo Objet Sales Collect
 
 on:
   schedule:
-    # Semantic HCM slots: 09:00-22:00 hourly and the final 22:30 slot.
-    - cron: '0 2 * * *'
+    # HCM completion slots: 10:00-20:00 every two hours, then the final 23:00.
     - cron: '0 3 * * *'
-    - cron: '0 4 * * *'
     - cron: '0 5 * * *'
-    - cron: '0 6 * * *'
     - cron: '0 7 * * *'
-    - cron: '0 8 * * *'
     - cron: '0 9 * * *'
-    - cron: '0 10 * * *'
     - cron: '0 11 * * *'
-    - cron: '0 12 * * *'
     - cron: '0 13 * * *'
-    - cron: '0 14 * * *'
-    - cron: '0 15 * * *'
-    - cron: '30 15 * * *'
+    - cron: '0 16 * * *'
 
 permissions:
   contents: read

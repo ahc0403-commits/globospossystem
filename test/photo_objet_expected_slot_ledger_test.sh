@@ -189,6 +189,24 @@ for _ in 1 2; do
     >/dev/null
 done
 
+# A stale hourly policy must stop before any migration replay can claim success.
+psql_test -c "
+  UPDATE public.photo_objet_monitoring_policies
+  SET grace_minutes = 15
+  WHERE store_id = '$PHOTO_OBJET_BIENHOA_STORE_ID'" >/dev/null
+set +e
+schedule_mismatch_output="$(psql_test \
+  --file "$ROOT_DIR/scripts/preflight_photo_objet_expected_slot_ledger.sql" 2>&1)"
+schedule_mismatch_status=$?
+set -e
+[[ "$schedule_mismatch_status" -ne 0 ]]
+[[ "$schedule_mismatch_output" == *'PHOTO_SLOT_PREFLIGHT_SCHEDULE_POLICY_MISMATCH'* ]]
+[[ "$schedule_mismatch_output" != *'PHOTO_OBJET_EXPECTED_SLOT_PREFLIGHT_PASS'* ]]
+psql_test -c "
+  UPDATE public.photo_objet_monitoring_policies
+  SET grace_minutes = 90
+  WHERE store_id = '$PHOTO_OBJET_BIENHOA_STORE_ID'" >/dev/null
+
 psql_test >/dev/null <<'SQL'
 DO $$
 BEGIN
@@ -222,7 +240,7 @@ INSERT INTO public.photo_objet_monitoring_policies (
   grace_minutes, final_slot_grace_minutes, is_enabled
 )
 SELECT id, '2026-07-14 00:00:00+07', 'Asia/Ho_Chi_Minh',
-  'hcm-hourly-v1', 15, 15, true
+  'hcm-two-hour-v1', 90, 90, true
 FROM public.restaurants
 ON CONFLICT (store_id, effective_from) DO NOTHING;
 
@@ -233,7 +251,7 @@ BEGIN
   SELECT count(*) INTO v_inserted
   FROM public.photo_objet_expected_slots
   WHERE slot_date_hcm = '2026-07-14';
-  IF v_inserted <> 900 THEN
+  IF v_inserted <> 420 THEN
     RAISE EXCEPTION 'PHOTO_SLOT_LOAD_COUNT_FAILED: %', v_inserted;
   END IF;
   IF public.photo_objet_ensure_expected_slots('2026-07-14', '2026-07-14') <> 0 THEN
@@ -246,7 +264,7 @@ END $$;
 DELETE FROM public.photo_objet_expected_slots
 WHERE store_id = '77000000-0000-4000-8000-000000000060'
   AND slot_date_hcm = '2026-07-14'
-  AND slot_time_hcm = TIME '22:30';
+  AND slot_time_hcm = TIME '23:00';
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -266,17 +284,17 @@ BEGIN
   END IF;
 END $$;
 
--- A policy effective at 10:00 must never create the historical 09:00 slot.
+-- A policy effective at 12:00 must never create the earlier 10:00 slot.
 INSERT INTO public.restaurants (id, name, brand_id, is_active) VALUES
   ('77000000-0000-4000-8000-000000000061', 'EFFECTIVE STORE', null, true),
   ('77000000-0000-4000-8000-000000000062', 'INACTIVE STORE', null, false);
 INSERT INTO public.photo_objet_monitoring_policies (
   store_id, effective_from, timezone, schedule_version, is_enabled
 ) VALUES
-  ('77000000-0000-4000-8000-000000000061', '2026-07-14 10:00:00+07',
-   'Asia/Ho_Chi_Minh', 'hcm-hourly-v1', true),
+  ('77000000-0000-4000-8000-000000000061', '2026-07-14 12:00:00+07',
+   'Asia/Ho_Chi_Minh', 'hcm-two-hour-v1', true),
   ('77000000-0000-4000-8000-000000000062', '2026-07-14 00:00:00+07',
-   'Asia/Ho_Chi_Minh', 'hcm-hourly-v1', true);
+   'Asia/Ho_Chi_Minh', 'hcm-two-hour-v1', true);
 SELECT public.photo_objet_ensure_expected_slots('2026-07-14', '2026-07-14');
 
 DO $$
@@ -284,7 +302,7 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM public.photo_objet_expected_slots
     WHERE store_id = '77000000-0000-4000-8000-000000000061'
-      AND slot_time_hcm = TIME '09:00'
+      AND slot_time_hcm = TIME '10:00'
   ) THEN RAISE EXCEPTION 'PHOTO_SLOT_POLICY_EFFECTIVE_DATE_FAILED'; END IF;
   IF EXISTS (
     SELECT 1 FROM public.photo_objet_expected_slots
@@ -292,28 +310,28 @@ BEGIN
   ) THEN RAISE EXCEPTION 'PHOTO_SLOT_INACTIVE_STORE_FAILED'; END IF;
 END $$;
 
--- A successful 10:00 run does not cover the missing 09:00 slot.
+-- A successful 12:00 run does not cover the missing 10:00 slot.
 INSERT INTO public.photo_objet_sales_pull_runs (
   store_id, target_date, run_source, slot_id, slot_date_hcm, slot_time_hcm,
   status, aggregate_rows, interval_rows, finished_at
 ) VALUES (
   '77000000-0000-4000-8000-000000000001', '2026-07-14', 'scheduled',
-  'scheduled:2026-07-14T10:00+07:00', '2026-07-14', TIME '10:00',
-  'success', 1, 1, '2026-07-14 10:05:00+07'
+  'scheduled:2026-07-14T12:00+07:00', '2026-07-14', TIME '12:00',
+  'success', 1, 1, '2026-07-14 12:05:00+07'
 );
 SELECT * FROM public.photo_objet_refresh_expected_slot_health(
-  '2026-07-14 10:20:00+07', 1
+  '2026-07-14 13:40:00+07', 1
 );
 DO $$
 BEGIN
   IF (SELECT status FROM public.photo_objet_expected_slots
       WHERE store_id = '77000000-0000-4000-8000-000000000001'
-        AND slot_time_hcm = TIME '09:00') <> 'missing' THEN
+        AND slot_time_hcm = TIME '10:00') <> 'missing' THEN
     RAISE EXCEPTION 'PHOTO_SLOT_LATER_RUN_COVERED_EARLIER_SLOT';
   END IF;
   IF (SELECT status FROM public.photo_objet_expected_slots
       WHERE store_id = '77000000-0000-4000-8000-000000000001'
-        AND slot_time_hcm = TIME '10:00') <> 'collected' THEN
+        AND slot_time_hcm = TIME '12:00') <> 'collected' THEN
     RAISE EXCEPTION 'PHOTO_SLOT_TYPED_RECONCILIATION_FAILED';
   END IF;
 END $$;
@@ -327,19 +345,19 @@ DECLARE
 BEGIN
   SELECT count(*) INTO v_count
   FROM public.photo_objet_refresh_expected_slot_health(
-    '2026-07-14 10:20:00+07', 1
+    '2026-07-14 13:40:00+07', 1
   );
-  IF v_count <> 60 THEN
+  IF v_count <> 120 THEN
     RAISE EXCEPTION 'PHOTO_SLOT_ALERT_LOST_BEFORE_ACK: %', v_count;
   END IF;
   FOR alert IN
     SELECT * FROM public.photo_objet_refresh_expected_slot_health(
-      '2026-07-14 10:20:00+07', 1
+      '2026-07-14 13:40:00+07', 1
     )
   LOOP
     PERFORM public.photo_objet_ack_expected_slot_alert(
       alert.store_id, alert.slot_date_hcm, alert.slot_time_hcm,
-      alert.failure_class, '2026-07-14 10:21:00+07'
+      alert.failure_class, '2026-07-14 13:41:00+07'
     );
   END LOOP;
 END $$;
@@ -370,31 +388,37 @@ INSERT INTO public.photo_objet_sales_pull_runs (
   'backfill:2026-07-14', '2026-07-14', null, 'success', 20, 20, now()
 );
 SELECT * FROM public.photo_objet_refresh_expected_slot_health(
-  '2026-07-14 10:20:00+07', 1
+  '2026-07-14 13:40:00+07', 1
 );
 DO $$
 BEGIN
   IF (SELECT status FROM public.photo_objet_expected_slots
       WHERE store_id = '77000000-0000-4000-8000-000000000002'
-        AND slot_time_hcm = TIME '09:00') <> 'missing' THEN
+        AND slot_time_hcm = TIME '10:00') <> 'missing' THEN
     RAISE EXCEPTION 'PHOTO_SLOT_BACKFILL_REWROTE_SCHEDULER_HISTORY';
   END IF;
 END $$;
 
--- The final 22:00 and 22:30 slots share the 22:45 HCM deadline.
+-- A 52-minute scheduler delay remains healthy; the final 23:00 slot becomes
+-- due only after its 90-minute grace at 00:30 HCM the next day.
 DO $$
 BEGIN
   IF EXISTS (
     SELECT 1 FROM public.photo_objet_expected_slots
     WHERE slot_date_hcm = '2026-07-14'
-      AND slot_time_hcm IN (TIME '22:00', TIME '22:30')
-      AND due_at <= '2026-07-14 22:44:59+07'
+      AND due_at <= scheduled_at + interval '52 minutes'
+  ) THEN RAISE EXCEPTION 'PHOTO_SLOT_SCHEDULER_DELAY_GRACE_TOO_SHORT'; END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.photo_objet_expected_slots
+    WHERE slot_date_hcm = '2026-07-14'
+      AND slot_time_hcm = TIME '23:00'
+      AND due_at <= '2026-07-15 00:29:59+07'
   ) THEN RAISE EXCEPTION 'PHOTO_SLOT_FINAL_EARLY_DEADLINE'; END IF;
   IF (SELECT count(*) FROM public.photo_objet_expected_slots
       WHERE store_id = '77000000-0000-4000-8000-000000000001'
         AND slot_date_hcm = '2026-07-14'
-        AND slot_time_hcm IN (TIME '22:00', TIME '22:30')
-        AND due_at = '2026-07-14 22:45:00+07') <> 2 THEN
+        AND slot_time_hcm = TIME '23:00'
+        AND due_at = '2026-07-15 00:30:00+07') <> 1 THEN
     RAISE EXCEPTION 'PHOTO_SLOT_FINAL_DEADLINE_FAILED';
   END IF;
 END $$;
@@ -407,22 +431,22 @@ INSERT INTO public.photo_objet_sales_pull_runs (
 ) VALUES (
   '99000000-0000-4000-8000-000000000001',
   '77000000-0000-4000-8000-000000000003', '2026-07-14', 'scheduled',
-  'scheduled:2026-07-14T09:00+07:00', '2026-07-14', TIME '09:00',
-  'success', 9, 0, '2026-07-14 10:30:00+07'
+  'scheduled:2026-07-14T10:00+07:00', '2026-07-14', TIME '10:00',
+  'success', 9, 0, '2026-07-14 12:30:00+07'
 );
 SELECT public.photo_objet_complete_expected_slot(
-  '77000000-0000-4000-8000-000000000003', '2026-07-14', TIME '09:00',
+  '77000000-0000-4000-8000-000000000003', '2026-07-14', TIME '10:00',
   '99000000-0000-4000-8000-000000000001', true
 );
 SELECT public.photo_objet_complete_expected_slot(
-  '77000000-0000-4000-8000-000000000003', '2026-07-14', TIME '09:00',
+  '77000000-0000-4000-8000-000000000003', '2026-07-14', TIME '10:00',
   '99000000-0000-4000-8000-000000000001', true
 );
 DO $$
 BEGIN
   IF (SELECT status FROM public.photo_objet_expected_slots
       WHERE store_id = '77000000-0000-4000-8000-000000000003'
-        AND slot_time_hcm = TIME '09:00') <> 'recovered' THEN
+        AND slot_time_hcm = TIME '10:00') <> 'recovered' THEN
     RAISE EXCEPTION 'PHOTO_SLOT_ZERO_SALES_RECOVERY_FAILED';
   END IF;
 END $$;
@@ -434,17 +458,17 @@ INSERT INTO public.photo_objet_sales_pull_runs (
   status, aggregate_rows, interval_rows, finished_at
 ) VALUES (
   '77000000-0000-4000-8000-000000000004', '2026-07-14', 'scheduled',
-  'scheduled:2026-07-14T10:00+07:00', '2026-07-14', TIME '10:00',
-  'success', 9, 0, '2026-07-14 10:25:00+07'
+  'scheduled:2026-07-14T14:00+07:00', '2026-07-14', TIME '14:00',
+  'success', 9, 0, '2026-07-14 14:25:00+07'
 );
 SELECT * FROM public.photo_objet_refresh_expected_slot_health(
-  '2026-07-14 10:30:00+07', 1
+  '2026-07-14 15:40:00+07', 1
 );
 DO $$
 BEGIN
   IF (SELECT status FROM public.photo_objet_expected_slots
       WHERE store_id = '77000000-0000-4000-8000-000000000004'
-        AND slot_time_hcm = TIME '10:00') <> 'collected_zero' THEN
+        AND slot_time_hcm = TIME '14:00') <> 'collected_zero' THEN
     RAISE EXCEPTION 'PHOTO_SLOT_INTERVAL_ZERO_RECONCILIATION_FAILED';
   END IF;
 END $$;
@@ -454,7 +478,7 @@ DO $$
 DECLARE v_count integer;
 BEGIN
   SELECT count(*) INTO v_count FROM public.photo_objet_refresh_expected_slot_health(
-    '2026-07-14 10:20:00+07', 1
+    '2026-07-14 13:40:00+07', 1
   );
   IF v_count <> 0 THEN
     RAISE EXCEPTION 'PHOTO_SLOT_ALERT_DEDUP_FAILED: %', v_count;
@@ -477,7 +501,7 @@ BEGIN
       store_id, slot_date_hcm, slot_time_hcm, scheduled_at, due_at,
       monitoring_policy_id
     ) VALUES (
-      '77000000-0000-4000-8000-000000000001', '2026-07-15', TIME '09:00',
+      '77000000-0000-4000-8000-000000000001', '2026-07-15', TIME '10:00',
       now(), now(), gen_random_uuid()
     );
     RAISE EXCEPTION 'PHOTO_SLOT_RLS_WRITE_ALLOWED';

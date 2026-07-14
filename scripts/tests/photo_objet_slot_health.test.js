@@ -74,7 +74,7 @@ test('refresh lists new typed alerts without acknowledging before delivery', asy
   const client = rpcClient({
     photo_objet_refresh_expected_slot_health: {
       data: [{
-        store_id: 'store-a', slot_date_hcm: '2026-07-14', slot_time_hcm: '09:00:00',
+        store_id: 'store-a', slot_date_hcm: '2026-07-14', slot_time_hcm: '10:00:00',
         status: 'missing', failure_class: FAILURE_CLASS.SLOT_MISSING,
       }],
       error: null,
@@ -92,7 +92,7 @@ test('refresh lists new typed alerts without acknowledging before delivery', asy
   );
   const evidence = JSON.parse(fs.readFileSync(output, 'utf8'));
   assert.equal(evidence.newly_alertable.length, 1);
-  assert.equal(evidence.newly_alertable[0].slot_time_hcm, '09:00:00');
+  assert.equal(evidence.newly_alertable[0].slot_time_hcm, '10:00:00');
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -205,7 +205,7 @@ test('alerts are acknowledged only in the post-delivery ack mode', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'photo-health-ack-'));
   const ackFile = path.join(dir, 'evidence.json');
   fs.writeFileSync(ackFile, JSON.stringify({ newly_alertable: [{
-    store_id: 'store-a', slot_date_hcm: '2026-07-14', slot_time_hcm: '09:00:00',
+    store_id: 'store-a', slot_date_hcm: '2026-07-14', slot_time_hcm: '10:00:00',
     failure_class: FAILURE_CLASS.SLOT_MISSING,
   }] }));
   const result = await run(

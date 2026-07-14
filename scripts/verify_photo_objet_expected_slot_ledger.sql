@@ -21,6 +21,19 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'PHOTO_SLOT_VERIFY_INACTIVE_POLICY_ENABLED';
   END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM public.photo_objet_monitoring_policies p
+    WHERE p.is_enabled = true
+      AND (
+        p.timezone <> 'Asia/Ho_Chi_Minh'
+        OR p.schedule_version <> 'hcm-two-hour-v1'
+        OR p.grace_minutes <> 90
+        OR p.final_slot_grace_minutes <> 90
+      )
+  ) THEN
+    RAISE EXCEPTION 'PHOTO_SLOT_VERIFY_SCHEDULE_POLICY_MISMATCH';
+  END IF;
   IF to_regprocedure('public.photo_objet_ensure_expected_slots(date,date)') IS NULL
      OR to_regprocedure('public.photo_objet_refresh_expected_slot_health(timestamp with time zone,integer)') IS NULL
      OR to_regprocedure('public.photo_objet_expected_slot_health_at(timestamp with time zone,integer)') IS NULL THEN
@@ -123,10 +136,8 @@ BEGIN
 
   WITH slot_times(slot_time) AS (
     VALUES
-      (TIME '09:00'), (TIME '10:00'), (TIME '11:00'), (TIME '12:00'),
-      (TIME '13:00'), (TIME '14:00'), (TIME '15:00'), (TIME '16:00'),
-      (TIME '17:00'), (TIME '18:00'), (TIME '19:00'), (TIME '20:00'),
-      (TIME '21:00'), (TIME '22:00'), (TIME '22:30')
+      (TIME '10:00'), (TIME '12:00'), (TIME '14:00'), (TIME '16:00'),
+      (TIME '18:00'), (TIME '20:00'), (TIME '23:00')
   ), candidates AS (
     SELECT p.id AS policy_id, p.store_id,
       (p.effective_from AT TIME ZONE p.timezone)::date AS target_date,

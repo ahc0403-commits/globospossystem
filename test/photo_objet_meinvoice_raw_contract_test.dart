@@ -60,10 +60,7 @@ void main() {
 
     expect(sql, contains('photo_objet_monitoring_policies'));
     expect(sql, contains('photo_objet_expected_slots'));
-    expect(
-      sql,
-      contains('UNIQUE (store_id, slot_date_hcm, slot_time_hcm)'),
-    );
+    expect(sql, contains('UNIQUE (store_id, slot_date_hcm, slot_time_hcm)'));
     for (final status in [
       'expected',
       'running',
@@ -75,23 +72,36 @@ void main() {
     ]) {
       expect(sql, contains("'$status'"));
     }
-    expect(sql, contains("(TIME '09:00')"));
-    expect(sql, contains("(TIME '22:30')"));
-    expect(sql, isNot(contains("TIME '22:45'")));
-    expect(sql, contains("d.slot_date + TIME '22:30'"));
+    for (final slot in [
+      '10:00',
+      '12:00',
+      '14:00',
+      '16:00',
+      '18:00',
+      '20:00',
+      '23:00',
+    ]) {
+      expect(sql, contains("TIME '$slot'"));
+    }
+    for (final removedSlot in ['09:00', '11:00', '22:00', '22:30']) {
+      expect(sql, isNot(contains("(TIME '$removedSlot')")));
+    }
+    expect(sql, contains("st.slot_time = TIME '23:00'"));
+    expect(sql, contains("DEFAULT 'hcm-two-hour-v1'"));
+    expect(sql, contains('DEFAULT 90'));
     expect(sql, contains('photo_objet_ensure_expected_slots'));
     expect(sql, contains('photo-objet-materialize-expected-slots'));
     expect(sql, contains("'5 17 * * *'"));
-    expect(sql, contains('ON CONFLICT (store_id, slot_date_hcm, slot_time_hcm)'));
+    expect(
+      sql,
+      contains('ON CONFLICT (store_id, slot_date_hcm, slot_time_hcm)'),
+    );
     expect(sql, contains('public.is_super_admin()'));
     expect(sql, contains('user_accessible_stores(auth.uid())'));
     expect(sql, contains('eligible.store_id = health.store_id'));
     expect(sql, contains('alerted_failure_class IS DISTINCT FROM'));
     expect(sql, contains('photo_objet_ack_expected_slot_alert'));
-    expect(
-      sql,
-      contains('FROM PUBLIC, anon, authenticated, service_role'),
-    );
+    expect(sql, contains('FROM PUBLIC, anon, authenticated, service_role'));
     expect(
       sql,
       contains('REVOKE ALL ON public.photo_slot_20260713120000_state'),
@@ -112,18 +122,24 @@ void main() {
     expect(sql, contains('v_photo_objet_collection_health'));
   });
 
-  test('interval migration retains backup and immutable identity contracts', () {
-    final sql = readRepoFile(intervalMigration);
+  test(
+    'interval migration retains backup and immutable identity contracts',
+    () {
+      final sql = readRepoFile(intervalMigration);
 
-    expect(sql, contains('photo_interval_20260712190000_raw_backup'));
-    expect(sql, contains('source_identity_version integer NOT NULL DEFAULT 2'));
-    expect(sql, contains('occurrence_no integer'));
-    expect(sql, contains('interval_start_at'));
-    expect(sql, contains('interval_end_at'));
-    expect(sql, contains('run_source'));
-    expect(sql, contains('slot_date_hcm'));
-    expect(sql, contains('slot_time_hcm'));
-  });
+      expect(sql, contains('photo_interval_20260712190000_raw_backup'));
+      expect(
+        sql,
+        contains('source_identity_version integer NOT NULL DEFAULT 2'),
+      );
+      expect(sql, contains('occurrence_no integer'));
+      expect(sql, contains('interval_start_at'));
+      expect(sql, contains('interval_end_at'));
+      expect(sql, contains('run_source'));
+      expect(sql, contains('slot_date_hcm'));
+      expect(sql, contains('slot_time_hcm'));
+    },
+  );
 
   test('health audit is credential-minimal, typed, and fail-closed', () {
     final source = readRepoFile(health);
@@ -159,8 +175,13 @@ void main() {
       r"cron: '([^']+)'",
     ).allMatches(collect).map((match) => match.group(1)).toList();
     expect(collectionCrons, [
-      for (var hour = 2; hour <= 15; hour++) '0 $hour * * *',
-      '30 15 * * *',
+      '0 3 * * *',
+      '0 5 * * *',
+      '0 7 * * *',
+      '0 9 * * *',
+      '0 11 * * *',
+      '0 13 * * *',
+      '0 16 * * *',
     ]);
     expect(collect, contains("node-version: '22'"));
     expect(collect, contains('npm ci'));
@@ -169,8 +190,9 @@ void main() {
     expect(collect, isNot(contains('audit-missing-runs')));
     expect(collect, isNot(contains('backfill')));
 
-    expect(slotHealth, contains("cron: '20 3-15 * * *'"));
-    expect(slotHealth, contains("cron: '50 15 * * *'"));
+    for (final hour in [4, 6, 8, 10, 12, 14, 17]) {
+      expect(slotHealth, contains("cron: '40 $hour * * *'"));
+    }
     expect(slotHealth, contains('--refresh --output health-evidence.json'));
     expect(slotHealth, contains('--ack-file health-evidence.json'));
     expect(slotHealth, contains('--assert-file health-evidence.json'));
@@ -195,9 +217,14 @@ void main() {
     final configuration = readRepoFile(slotConfiguration);
     expect(
       apply,
-      contains(r'\ir ../supabase/migrations/20260713120000_photo_objet_expected_slot_ledger.sql'),
+      contains(
+        r'\ir ../supabase/migrations/20260713120000_photo_objet_expected_slot_ledger.sql',
+      ),
     );
-    expect(apply, contains(r'\ir configure_photo_objet_monitoring_policies.sql'));
+    expect(
+      apply,
+      contains(r'\ir configure_photo_objet_monitoring_policies.sql'),
+    );
     expect(configuration, contains('approved_photo_objet_monitoring_stores'));
     expect(configuration, contains('photo_objet_ensure_expected_slots'));
   });
@@ -211,17 +238,30 @@ void main() {
     expect(packageLock, isNot(contains('"version": "0.18.5"')));
   });
 
-  test('runbook documents immutable, independent, and exact-main boundaries', () {
-    final text = readRepoFile(docs);
+  test(
+    'runbook documents immutable, independent, and exact-main boundaries',
+    () {
+      final text = readRepoFile(docs);
 
-    expect(text, contains('immutable source'));
-    expect(text, contains('collected_zero'));
-    expect(text, contains('22:45 HCM'));
-    expect(text, contains('detect -> create or update exact store/slot/failure issue -> ACK'));
-    expect(text, contains('PR checks and Preview deployments are never operational PASS'));
-    expect(text, contains('MISA queueing and receipt automation'));
-    expect(text, contains('dry-run by default'));
-    expect(text, contains('60 stores/900 slots'));
-    expect(text, isNot(contains('126')));
-  });
+      expect(text, contains('immutable source'));
+      expect(text, contains('collected_zero'));
+      expect(text, contains('90-minute grace'));
+      expect(
+        text,
+        contains(
+          'detect -> create or update exact store/slot/failure issue -> ACK',
+        ),
+      );
+      expect(
+        text,
+        contains(
+          'PR checks and Preview deployments are never operational PASS',
+        ),
+      );
+      expect(text, contains('MISA queueing and receipt automation'));
+      expect(text, contains('dry-run by default'));
+      expect(text, contains('60 stores/420 slots'));
+      expect(text, isNot(contains('126')));
+    },
+  );
 }
