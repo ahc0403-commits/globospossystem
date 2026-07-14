@@ -95,6 +95,11 @@ SELECT
   )
 ON CONFLICT (migration_id) DO NOTHING;
 
+ALTER TABLE public.photo_slot_20260713120000_state
+  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.photo_slot_20260713120000_state
+  FORCE ROW LEVEL SECURITY;
+
 REVOKE ALL ON public.photo_slot_20260713120000_state
   FROM PUBLIC, anon, authenticated, service_role;
 

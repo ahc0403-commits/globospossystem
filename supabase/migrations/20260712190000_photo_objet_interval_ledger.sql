@@ -24,6 +24,38 @@ CREATE TABLE IF NOT EXISTS public.photo_interval_20260712190000_runs_backup
 CREATE TABLE IF NOT EXISTS public.photo_interval_20260712190000_sales_backup
   AS TABLE public.photo_objet_sales WITH NO DATA;
 
+-- Backup snapshots and rollback definitions are owner-only control-plane data.
+-- Explicit revokes are required because Supabase default ACLs may grant broad
+-- access to newly created tables.
+ALTER TABLE public.photo_interval_20260712190000_jobs_backup
+  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.photo_interval_20260712190000_jobs_backup
+  FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.photo_interval_20260712190000_raw_backup
+  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.photo_interval_20260712190000_raw_backup
+  FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.photo_interval_20260712190000_runs_backup
+  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.photo_interval_20260712190000_runs_backup
+  FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.photo_interval_20260712190000_sales_backup
+  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.photo_interval_20260712190000_sales_backup
+  FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.photo_interval_20260712190000_state
+  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.photo_interval_20260712190000_state
+  FORCE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE
+  public.photo_interval_20260712190000_jobs_backup,
+  public.photo_interval_20260712190000_raw_backup,
+  public.photo_interval_20260712190000_runs_backup,
+  public.photo_interval_20260712190000_sales_backup,
+  public.photo_interval_20260712190000_state
+FROM PUBLIC, anon, authenticated, service_role;
+
 INSERT INTO public.photo_interval_20260712190000_state (migration_id)
 VALUES ('20260712190000')
 ON CONFLICT (migration_id) DO NOTHING;
