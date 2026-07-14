@@ -1,5 +1,11 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
+CREATE ROLE anon;
+CREATE ROLE authenticated;
+CREATE ROLE service_role BYPASSRLS;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT ALL ON TABLES TO PUBLIC, anon, authenticated, service_role;
+
 CREATE TABLE public.users (id uuid PRIMARY KEY);
 CREATE TABLE public.tax_entity (id uuid PRIMARY KEY, tax_code text NOT NULL);
 CREATE TABLE public.restaurants (

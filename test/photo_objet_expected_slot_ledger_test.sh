@@ -211,7 +211,12 @@ psql_test -c "
 psql_test >/dev/null <<'SQL'
 DO $$
 BEGIN
-  IF has_table_privilege('service_role', 'public.photo_slot_20260713120000_state', 'SELECT')
+  IF NOT (
+       SELECT relation.relrowsecurity AND relation.relforcerowsecurity
+       FROM pg_class relation
+       WHERE relation.oid = 'public.photo_slot_20260713120000_state'::regclass
+     )
+     OR has_table_privilege('service_role', 'public.photo_slot_20260713120000_state', 'SELECT')
      OR has_table_privilege('service_role', 'public.photo_slot_20260713120000_state', 'INSERT')
      OR has_table_privilege('service_role', 'public.photo_slot_20260713120000_state', 'UPDATE')
      OR has_table_privilege('service_role', 'public.photo_slot_20260713120000_state', 'DELETE')
@@ -221,7 +226,7 @@ BEGIN
      OR has_table_privilege('service_role', 'public.photo_objet_expected_slots', 'INSERT')
      OR has_table_privilege('service_role', 'public.photo_objet_expected_slots', 'UPDATE')
      OR has_table_privilege('service_role', 'public.photo_objet_expected_slots', 'DELETE') THEN
-    RAISE EXCEPTION 'PHOTO_SLOT_SERVICE_ROLE_DIRECT_WRITE_ALLOWED';
+    RAISE EXCEPTION 'PHOTO_SLOT_CONTROL_PLANE_SECURITY_FAILED';
   END IF;
 END $$;
 SQL
