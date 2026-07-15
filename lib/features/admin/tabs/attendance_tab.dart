@@ -51,6 +51,10 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     setState(() {
       _isLogsLoading = true;
       _logsError = null;
+      _hasPayrollPin = null;
+      _payrollUnlocked = false;
+      _payrolls = const [];
+      _hasLoadedPayroll = false;
     });
 
     try {
@@ -60,15 +64,15 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         from: _logFrom,
         to: _logTo,
       );
-      final pinHash = await pinService.fetchPinHash(storeId);
+      final hasPayrollPin = await pinService.hasPin(storeId);
 
       if (!mounted) return;
       setState(() {
         _staffList = staff;
         _logs = logs;
         _isLogsLoading = false;
-        _hasPayrollPin = pinHash != null && pinHash.isNotEmpty;
-        _payrollUnlocked = pinHash == null || pinHash.isEmpty;
+        _hasPayrollPin = hasPayrollPin;
+        _payrollUnlocked = !hasPayrollPin;
       });
     } catch (e) {
       if (!mounted) return;
@@ -110,6 +114,11 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
   }
 
   Future<void> _loadPayrollPreview(String storeId) async {
+    if (_hasPayrollPin != false && !_payrollUnlocked) {
+      await _unlockPayroll(storeId);
+      if (!mounted || !_payrollUnlocked) return;
+    }
+
     setState(() {
       _isPayrollLoading = true;
       _payrollError = null;
@@ -206,7 +215,16 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                       );
                       return;
                     }
-                    final verified = await pinService.verifyPin(storeId, pin);
+                    bool verified;
+                    try {
+                      verified = await pinService.verifyPin(storeId, pin);
+                    } catch (_) {
+                      setDialogState(
+                        () => validationError =
+                            'Unable to verify the payroll PIN. Try again.',
+                      );
+                      return;
+                    }
                     if (!verified) {
                       setDialogState(
                         () => validationError = 'Incorrect payroll PIN.',
@@ -291,7 +309,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
       if (_selectedStaffFilter == 'all') return true;
       return payroll.userId == _selectedStaffFilter;
     }).toList();
-    final payrollRequiresUnlock = _hasPayrollPin == true && !_payrollUnlocked;
+    final payrollRequiresUnlock = _hasPayrollPin != false && !_payrollUnlocked;
 
     return Scaffold(
       key: const Key('attendance_root'),
@@ -568,27 +586,28 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
             ],
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildPayrollMetric(
-                label: 'Staff',
-                value: '${payrolls.length}',
-                accent: AppColors.amber500,
-              ),
-              _buildPayrollMetric(
-                label: 'Hours',
-                value: totalHours.toStringAsFixed(2),
-                accent: AppColors.statusAvailable,
-              ),
-              _buildPayrollMetric(
-                label: 'Estimated Payroll',
-                value: '₫${currency.format(totalAmount)}',
-                accent: AppColors.statusOccupied,
-              ),
-            ],
-          ),
+          if (!payrollRequiresUnlock)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildPayrollMetric(
+                  label: 'Staff',
+                  value: '${payrolls.length}',
+                  accent: AppColors.amber500,
+                ),
+                _buildPayrollMetric(
+                  label: 'Hours',
+                  value: totalHours.toStringAsFixed(2),
+                  accent: AppColors.statusAvailable,
+                ),
+                _buildPayrollMetric(
+                  label: 'Estimated Payroll',
+                  value: '₫${currency.format(totalAmount)}',
+                  accent: AppColors.statusOccupied,
+                ),
+              ],
+            ),
           if (_payrollError != null) ...[
             const SizedBox(height: 10),
             Text(

@@ -46,12 +46,12 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
 
   Future<void> _loadPayrollPinStatus(String storeId) async {
     try {
-      final hash = await pinService.fetchPinHash(storeId);
+      final hasPin = await pinService.hasPin(storeId);
       if (!mounted) return;
-      setState(() => _hasPayrollPin = hash != null && hash.isNotEmpty);
+      setState(() => _hasPayrollPin = hasPin);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _hasPayrollPin = false);
+      setState(() => _hasPayrollPin = null);
     }
   }
 
@@ -122,7 +122,8 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                           }
                           if (pin != confirm) {
                             setModalState(
-                              () => validationMessage = 'PIN confirmation does not match.',
+                              () => validationMessage =
+                                  'PIN confirmation does not match.',
                             );
                             return;
                           }
@@ -137,7 +138,10 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                             showSuccessToast(pageContext, 'Payroll PIN saved.');
                           } catch (e) {
                             if (pageContext.mounted) {
-                              showErrorToast(pageContext, 'Failed to save PIN: $e');
+                              showErrorToast(
+                                pageContext,
+                                'Failed to save PIN: $e',
+                              );
                             }
                           } finally {
                             if (mounted) {
@@ -568,9 +572,15 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                                         return;
                                       }
                                       if (result == PrintResult.success) {
-                                        showSuccessToast(context, 'Test print complete');
+                                        showSuccessToast(
+                                          context,
+                                          'Test print complete',
+                                        );
                                       } else {
-                                        showErrorToast(context, 'Test print failed');
+                                        showErrorToast(
+                                          context,
+                                          'Test print failed',
+                                        );
                                       }
                                     },
                               style: FilledButton.styleFrom(
@@ -626,9 +636,8 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                                   child: FilledButton(
                                     onPressed: storeId == null
                                         ? null
-                                        : () => _showSetPayrollPinDialog(
-                                            storeId,
-                                          ),
+                                        : () =>
+                                              _showSetPayrollPinDialog(storeId),
                                     style: FilledButton.styleFrom(
                                       backgroundColor: AppColors.amber500,
                                       foregroundColor: AppColors.surface0,

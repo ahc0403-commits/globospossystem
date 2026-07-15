@@ -169,7 +169,12 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     );
 
     try {
-      final payment = await paymentService.processPayment(
+      final actorAuthId = supabase.auth.currentUser?.id;
+      if (actorAuthId == null) {
+        throw const AuthException('Authentication required');
+      }
+      final payment = await paymentService.processPaymentWithPersistentAttempt(
+        actorAuthId: actorAuthId,
         orderId: orderId,
         storeId: storeId,
         amount: amount,

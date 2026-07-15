@@ -13,7 +13,7 @@
  *   - If secret not set: falls back to plaintext (current apitest behavior)
  */
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.2";
 
 const WETAX_BASE_URL = Deno.env.get("WETAX_BASE_URL") ?? "https://apitest.wetax.com.vn";
 const WETAX_ENCRYPTION_KEY = Deno.env.get("WETAX_ENCRYPTION_KEY"); // undefined → plaintext fallback

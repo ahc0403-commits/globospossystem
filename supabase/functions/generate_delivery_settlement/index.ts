@@ -9,7 +9,7 @@
 // 4. delivery_settlement_items 차감 항목 생성
 // 5. external_sales.settlement_id 연결
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.110.2'
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 
 const PLATFORM_COMMISSION_RATE = 0.015  // 1.5%

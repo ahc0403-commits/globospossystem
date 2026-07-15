@@ -579,7 +579,7 @@ test('collection workflow stays green independently from slot health', () => {
   );
   assert.ok(
     workflow.indexOf('PUPPETEER_CACHE_DIR=${RUNNER_TEMP}/puppeteer') <
-      workflow.indexOf('uses: actions/setup-node@v4'),
+      workflow.indexOf('uses: actions/setup-node@'),
     'runtime cache setup must run before Node and Chromium installation',
   );
   assert.match(workflow, /--preflight-only/);
@@ -642,16 +642,16 @@ test('health, backfill, contract, and release proof are independent workflows', 
   assert.match(release, /ref: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/);
   assert.ok(
     release.indexOf('Reject non-main or stale validation before checkout')
-      < release.indexOf('uses: actions/checkout@v4'),
+      < release.indexOf('uses: actions/checkout@'),
     'event metadata and current main must fail closed before repository checkout',
   );
   assert.ok(
     release.indexOf('test "${current_main_sha}" = "${VALIDATION_HEAD_SHA}"')
-      < release.indexOf('uses: actions/checkout@v4'),
+      < release.indexOf('uses: actions/checkout@'),
     'a stale successful main validation must be rejected before checkout',
   );
   assert.ok(
-    release.indexOf('uses: actions/checkout@v4')
+    release.indexOf('uses: actions/checkout@')
       < release.indexOf('node scripts/verify_photo_objet_release.js'),
     'repository verification scripts must run only after exact-SHA checkout',
   );

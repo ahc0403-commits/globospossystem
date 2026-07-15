@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.110.2'
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').filter(Boolean)
 
@@ -23,6 +23,38 @@ function normalizeUuidSet(rows: unknown): Set<string> {
       })
       .filter((value): value is string => Boolean(value)),
   )
+}
+
+type AdminClient = ReturnType<typeof createClient<any>>
+
+async function rollbackProvisionedUser(
+  serviceClient: AdminClient,
+  profileId: string | null,
+  authUserId: string,
+): Promise<void> {
+  const failures: string[] = []
+  if (profileId) {
+    for (const [table, column] of [
+      ['user_brand_access', 'user_id'],
+      ['user_store_access', 'user_id'],
+      ['users', 'id'],
+    ] as const) {
+      const { error } = await serviceClient
+        .from(table)
+        .delete()
+        .eq(column, profileId)
+      if (error) failures.push(table)
+    }
+  }
+
+  const { error: authDeleteError } =
+    await serviceClient.auth.admin.deleteUser(authUserId)
+  if (authDeleteError) failures.push('auth.users')
+
+  if (failures.length > 0) {
+    console.error('staff provisioning rollback failed', { resources: failures })
+    throw new Error('STAFF_PROVISIONING_ROLLBACK_FAILED')
+  }
 }
 
 serve(async (req) => {
@@ -61,13 +93,20 @@ serve(async (req) => {
     // Check caller role from users table
     const { data: callerProfile, error: profileError } = await anonClient
       .from('users')
-      .select('id, role, restaurant_id, primary_store_id, brand_id')
+      .select('id, role, restaurant_id, primary_store_id, brand_id, is_active')
       .eq('auth_id', callerUser.id)
       .single()
 
     if (profileError || !callerProfile) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    if (callerProfile.is_active !== true) {
+      return new Response(JSON.stringify({ error: 'Forbidden: inactive user' }), {
+        status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
@@ -108,7 +147,6 @@ serve(async (req) => {
       'waiter',
       'kitchen',
       'cashier',
-      'admin',
       'store_admin',
       'brand_admin',
       'photo_objet_master',
@@ -284,8 +322,11 @@ serve(async (req) => {
       .single()
 
     if (insertError) {
-      // Rollback: delete the auth user we just created
-      await serviceClient.auth.admin.deleteUser(newAuthUser.user.id)
+      await rollbackProvisionedUser(
+        serviceClient,
+        null,
+        newAuthUser.user.id,
+      )
       return new Response(JSON.stringify({ error: insertError.message }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -307,8 +348,11 @@ serve(async (req) => {
       )
 
     if (storeAccessError) {
-      await serviceClient.from('users').delete().eq('id', newUser.id)
-      await serviceClient.auth.admin.deleteUser(newAuthUser.user.id)
+      await rollbackProvisionedUser(
+        serviceClient,
+        newUser.id,
+        newAuthUser.user.id,
+      )
       return new Response(JSON.stringify({ error: storeAccessError.message }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -329,9 +373,11 @@ serve(async (req) => {
         )
 
       if (brandAccessError) {
-        await serviceClient.from('user_store_access').delete().eq('user_id', newUser.id)
-        await serviceClient.from('users').delete().eq('id', newUser.id)
-        await serviceClient.auth.admin.deleteUser(newAuthUser.user.id)
+        await rollbackProvisionedUser(
+          serviceClient,
+          newUser.id,
+          newAuthUser.user.id,
+        )
         return new Response(JSON.stringify({ error: brandAccessError.message }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -346,14 +392,66 @@ serve(async (req) => {
       )
       if (syncError) {
         console.error('sync_user_store_access error:', syncError)
+        await rollbackProvisionedUser(
+          serviceClient,
+          newUser.id,
+          newAuthUser.user.id,
+        )
+        return new Response(
+          JSON.stringify({ error: 'Failed to synchronize staff access' }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          },
+        )
       }
     }
 
-    const { error: refreshClaimsError } = await serviceClient.rpc('refresh_user_claims', {
-      p_auth_user_id: newAuthUser.user.id,
-    })
+    const { data: refreshedClaims, error: refreshClaimsError } =
+      await serviceClient.rpc('refresh_user_claims', {
+        p_auth_user_id: newAuthUser.user.id,
+      })
     if (refreshClaimsError) {
       console.error('refresh_user_claims error:', refreshClaimsError)
+      await rollbackProvisionedUser(
+        serviceClient,
+        newUser.id,
+        newAuthUser.user.id,
+      )
+      return new Response(
+        JSON.stringify({ error: 'Failed to refresh staff claims' }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
+    }
+
+    const claims = refreshedClaims as Record<string, unknown> | null
+    const claimStoreIds = normalizeUuidSet(claims?.accessible_store_ids)
+    if (
+      !claims ||
+      claims.role !== role ||
+      claims.primary_store_id !== targetStoreId ||
+      !claimStoreIds.has(targetStoreId)
+    ) {
+      console.error('CLAIMS_POSTCONDITION_FAILED', {
+        roleMatches: claims?.role === role,
+        primaryStoreMatches: claims?.primary_store_id === targetStoreId,
+        requestedStorePresent: claimStoreIds.has(targetStoreId),
+      })
+      await rollbackProvisionedUser(
+        serviceClient,
+        newUser.id,
+        newAuthUser.user.id,
+      )
+      return new Response(
+        JSON.stringify({ error: 'Failed to verify staff authorization claims' }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
     }
 
     return new Response(JSON.stringify({ success: true, user: newUser }), {

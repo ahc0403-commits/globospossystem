@@ -171,7 +171,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
       final paymentsRevenueResponse = await supabase
           .from('payments')
           .select(
-            'amount, method, created_at, proof_required, proof_photo_url, orders(sales_channel)',
+            'amount, method, created_at, proof_required, proof_object_path, proof_photo_url, orders(sales_channel)',
           )
           .eq('restaurant_id', storeId)
           .eq('is_revenue', true)
@@ -257,8 +257,11 @@ class ReportNotifier extends StateNotifier<ReportState> {
 
         if (payment['proof_required'] == true) {
           proofRequiredCount += 1;
-          final proofUrl = payment['proof_photo_url']?.toString() ?? '';
-          if (proofUrl.trim().isEmpty) {
+          final proofReference =
+              payment['proof_object_path']?.toString() ??
+              payment['proof_photo_url']?.toString() ??
+              '';
+          if (proofReference.trim().isEmpty) {
             missingProofPhotosCount += 1;
           }
         }
@@ -272,8 +275,11 @@ class ReportNotifier extends StateNotifier<ReportState> {
         methodAccumulator.totalAmount += amount;
         if (payment['proof_required'] == true) {
           methodAccumulator.proofRequired += 1;
-          final proofUrl = payment['proof_photo_url']?.toString() ?? '';
-          if (proofUrl.trim().isNotEmpty) {
+          final proofReference =
+              payment['proof_object_path']?.toString() ??
+              payment['proof_photo_url']?.toString() ??
+              '';
+          if (proofReference.trim().isNotEmpty) {
             methodAccumulator.proofCompleted += 1;
           }
         }

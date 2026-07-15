@@ -27,6 +27,7 @@ SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_VERCEL="${SKIP_VERCEL:-0}"
 REQUIRE_CLEAN_GIT="${REQUIRE_CLEAN_GIT:-1}"
 ROLLBACK_HIERARCHY=0
+MIGRATION_ARGUMENT_COUNT=0
 
 usage() {
   cat <<'EOF'
@@ -209,6 +210,9 @@ parse_args() {
     case "$1" in
       --migration)
         shift
+        MIGRATION_ARGUMENT_COUNT=$((MIGRATION_ARGUMENT_COUNT + 1))
+        [[ "$MIGRATION_ARGUMENT_COUNT" == "1" ]] ||
+          fail "Only one explicitly approved migration may be supplied per invocation."
         MIGRATION_FILE="${1:-}"
         [[ -n "$MIGRATION_FILE" ]] || fail "--migration requires a file"
         ;;
@@ -588,6 +592,18 @@ apply_migration() {
   local migration_version
   local verification_complete=0
   migration_name="$(basename "$migration_path")"
+  case "$migration_name" in
+    *security_contract*|*contract_draft*)
+      fail "Contract draft is never deployable through this production harness."
+      ;;
+  esac
+  case "$migration_name" in
+    20260715000000_security_audit_hardening.sql|\
+    20260715020000_security_expand_compat.sql)
+      [[ "$SKIP_VERCEL" == "1" ]] ||
+        fail "Security migrations require --skip-vercel so old-client smoke can run before the Flutter release."
+      ;;
+  esac
   migration_version="${migration_name%%_*}"
   [[ "$migration_version" =~ ^[0-9]+$ ]] ||
     fail "Migration file must start with a numeric version: $migration_name"
@@ -596,7 +612,9 @@ apply_migration() {
     20260711090000_legal_entity_brand_store_hierarchy.sql|\
     20260713120000_photo_objet_expected_slot_ledger.sql|\
     20260714113000_photo_objet_final_slot_2230.sql|\
-    20260715010000_photo_objet_backup_control_plane_security.sql)
+    20260715010000_photo_objet_backup_control_plane_security.sql|\
+    20260715000000_security_audit_hardening.sql|\
+    20260715020000_security_expand_compat.sql)
       verification_complete=1
       ;;
   esac
@@ -626,6 +644,16 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_photo_objet_backup_control_plane_security.sql" \
       "Photo Objet backup control-plane security preflight"
+  elif [[ "$migration_name" == "20260715000000_security_audit_hardening.sql" ]]; then
+    log "Security audit hardening preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_security_audit_hardening.sql" \
+      "security audit hardening preflight"
+  elif [[ "$migration_name" == "20260715020000_security_expand_compat.sql" ]]; then
+    log "Security Expand compatibility preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_security_expand_compat.sql" \
+      "security Expand compatibility preflight"
   fi
   if [[ "$migration_name" == "20260713120000_photo_objet_expected_slot_ledger.sql" ]]; then
     log "Apply Photo Objet ledger, approved policies, and first slots atomically"
@@ -656,6 +684,16 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_photo_objet_backup_control_plane_security.sql" \
       "Photo Objet backup control-plane security verification"
+  elif [[ "$migration_name" == "20260715000000_security_audit_hardening.sql" ]]; then
+    log "Security audit hardening verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_security_audit_hardening.sql" \
+      "security audit hardening verification"
+  elif [[ "$migration_name" == "20260715020000_security_expand_compat.sql" ]]; then
+    log "Security Expand compatibility verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_security_expand_compat.sql" \
+      "security Expand compatibility verification"
   fi
 
   log "Repair Supabase migration history"
