@@ -3,11 +3,14 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/services/payment_proof_service.dart';
 import '../../core/services/payment_service.dart';
 import '../../core/ui/app_primitives.dart';
 import '../../core/ui/app_theme.dart';
 import '../../core/ui/toast/toast.dart';
+import '../../core/utils/vendor_portal_url.dart';
 import '../../widgets/app_nav_bar.dart';
+import '../../widgets/error_toast.dart';
 
 class PaymentDetailScreen extends StatefulWidget {
   const PaymentDetailScreen({super.key, required this.paymentId});
@@ -126,7 +129,9 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
                                 children: [
                                   Text(
                                     l10n.paymentDetailOperationalSnapshot,
-                                    style: Theme.of(context).textTheme.labelLarge
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelLarge
                                         ?.copyWith(
                                           color: AppColors.textSecondary,
                                           fontWeight: FontWeight.w700,
@@ -145,7 +150,9 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
                                     l10n.paymentDetailReadOnlySubtitle(
                                       widget.paymentId,
                                     ),
-                                    style: Theme.of(context).textTheme.bodySmall,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
                                   ),
                                 ],
                               ),
@@ -375,6 +382,13 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
                       ),
                       _InfoPanel(
                         title: l10n.paymentDetailProofSummary,
+                        action: _proofStatus(payment) == 'captured'
+                            ? OutlinedButton.icon(
+                                onPressed: () => _openPaymentProof(payment),
+                                icon: const Icon(Icons.receipt_long_outlined),
+                                label: Text(l10n.paymentDetailViewProof),
+                              )
+                            : null,
                         rows: [
                           _InfoRow(
                             l10n.paymentDetailProofRequired,
@@ -383,7 +397,9 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
                           _InfoRow(l10n.paymentDetailStatus, proofStatus),
                           _InfoRow(
                             l10n.paymentDetailProofPhotoUrl,
-                            _stringOrDash(payment['proof_photo_url']),
+                            _proofStatus(payment) == 'captured'
+                                ? l10n.paymentDetailProofAvailable
+                                : '-',
                           ),
                           _InfoRow(
                             l10n.paymentDetailProofCaptured,
@@ -403,9 +419,63 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
   }
 
   Future<void> _openLookupUrl(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
+    final uri = validatedVendorPortalUri(url);
+    if (uri == null) {
+      if (mounted) {
+        showErrorToast(context, 'Vendor portal URL is not trusted.');
+      }
+      return;
+    }
     await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _openPaymentProof(Map<String, dynamic> payment) async {
+    final l10n = context.l10n;
+    final storeId = payment['restaurant_id']?.toString();
+    if (storeId == null || storeId.isEmpty) {
+      showErrorToast(context, l10n.paymentDetailProofLoadFailed);
+      return;
+    }
+
+    try {
+      final result = await paymentProofViewerService.load(
+        storeId: storeId,
+        objectPath: payment['proof_object_path']?.toString(),
+        legacyUrl: payment['proof_photo_url']?.toString(),
+      );
+      if (!mounted) return;
+      if (result?.bytes != null) {
+        await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(l10n.paymentDetailProofDialogTitle),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720, maxHeight: 720),
+              child: InteractiveViewer(child: Image.memory(result!.bytes!)),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: Text(l10n.close),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+      if (result?.legacyUri != null) {
+        await launchUrl(
+          result!.legacyUri!,
+          mode: LaunchMode.externalApplication,
+        );
+        return;
+      }
+      showErrorToast(context, l10n.paymentDetailProofUnavailable);
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(context, l10n.paymentDetailProofLoadFailed);
+      }
+    }
   }
 
   Map<String, dynamic> _map(dynamic value) {
@@ -447,11 +517,13 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
 
   String _proofStatus(Map<String, dynamic> payment) {
     final proofRequired = payment['proof_required'];
-    final proofUrl = payment['proof_photo_url']?.toString();
+    final proofReference =
+        payment['proof_object_path']?.toString() ??
+        payment['proof_photo_url']?.toString();
     final proofTakenAt = payment['proof_photo_taken_at']?.toString();
 
     if (proofRequired != true) return 'not-required';
-    if ((proofUrl != null && proofUrl.isNotEmpty) ||
+    if ((proofReference != null && proofReference.isNotEmpty) ||
         (proofTakenAt != null && proofTakenAt.isNotEmpty)) {
       return 'captured';
     }
@@ -548,10 +620,11 @@ class _PaymentDetailScreenState extends State<PaymentDetailScreen> {
 }
 
 class _InfoPanel extends StatelessWidget {
-  const _InfoPanel({required this.title, required this.rows});
+  const _InfoPanel({required this.title, required this.rows, this.action});
 
   final String title;
   final List<_InfoRow> rows;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -559,7 +632,15 @@ class _InfoPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: Theme.of(context).textTheme.titleLarge),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(title, style: Theme.of(context).textTheme.titleLarge),
+              if (action != null) action!,
+            ],
+          ),
           const SizedBox(height: AppSpacing.md),
           for (var i = 0; i < rows.length; i++) ...[
             _InfoRowView(row: rows[i]),

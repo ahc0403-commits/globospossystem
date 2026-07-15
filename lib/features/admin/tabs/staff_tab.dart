@@ -510,7 +510,6 @@ List<DropdownMenuItem<String>> _availableRoleOptions(String? viewerRole) {
   if (viewerRole == 'super_admin') {
     return const [
       ...baseRoles,
-      DropdownMenuItem(value: 'admin', child: Text('Admin')),
       DropdownMenuItem(value: 'store_admin', child: Text('Store Admin')),
       DropdownMenuItem(value: 'brand_admin', child: Text('Brand Admin')),
       DropdownMenuItem(
@@ -527,7 +526,6 @@ List<DropdownMenuItem<String>> _availableRoleOptions(String? viewerRole) {
   if (viewerRole == 'brand_admin') {
     return const [
       ...baseRoles,
-      DropdownMenuItem(value: 'admin', child: Text('Admin')),
       DropdownMenuItem(value: 'store_admin', child: Text('Store Admin')),
       DropdownMenuItem(
         value: 'photo_objet_store_admin',
@@ -536,8 +534,5 @@ List<DropdownMenuItem<String>> _availableRoleOptions(String? viewerRole) {
     ];
   }
 
-  return const [
-    ...baseRoles,
-    DropdownMenuItem(value: 'admin', child: Text('Admin')),
-  ];
+  return const [...baseRoles];
 }

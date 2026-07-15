@@ -1,6 +1,16 @@
 import '../../main.dart';
 
 class StaffService {
+  static const _newStaffRoles = <String>{
+    'waiter',
+    'kitchen',
+    'cashier',
+    'store_admin',
+    'brand_admin',
+    'photo_objet_master',
+    'photo_objet_store_admin',
+  };
+
   Future<Map<String, dynamic>> createStaffUser({
     required String email,
     required String password,
@@ -8,6 +18,9 @@ class StaffService {
     required String role,
     required String storeId,
   }) async {
+    if (!_newStaffRoles.contains(role)) {
+      throw ArgumentError.value(role, 'role', 'Unsupported new staff role');
+    }
     final response = await supabase.functions.invoke(
       'create_staff_user',
       body: {

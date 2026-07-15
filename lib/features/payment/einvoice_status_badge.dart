@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/utils/vendor_portal_url.dart';
 import '../../main.dart';
 import 'einvoice_provider.dart';
 
@@ -25,7 +26,10 @@ class EinvoiceStatusBadge extends ConsumerWidget {
       loading: () => const SizedBox(
         width: 14,
         height: 14,
-        child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.amber500),
+        child: CircularProgressIndicator(
+          strokeWidth: 1.5,
+          color: AppColors.amber500,
+        ),
       ),
       error: (_, __) => const SizedBox.shrink(),
     );
@@ -37,42 +41,42 @@ class _BadgeRow extends StatelessWidget {
   final EinvoiceJobStatus job;
 
   Color get _color => switch (job.status) {
-    'pending'                    => AppColors.textSecondary,
-    'dispatched'                 => AppColors.amber500,
-    'dispatched_polling_disabled'=> AppColors.amber500,
-    'reported'                   => AppColors.statusAvailable,
-    'issued_by_portal'           => AppColors.statusAvailable,
-    'failed_terminal'            => AppColors.statusCancelled,
-    'stale'                      => AppColors.statusOccupied,
-    _                            => AppColors.textSecondary,
+    'pending' => AppColors.textSecondary,
+    'dispatched' => AppColors.amber500,
+    'dispatched_polling_disabled' => AppColors.amber500,
+    'reported' => AppColors.statusAvailable,
+    'issued_by_portal' => AppColors.statusAvailable,
+    'failed_terminal' => AppColors.statusCancelled,
+    'stale' => AppColors.statusOccupied,
+    _ => AppColors.textSecondary,
   };
 
   IconData get _icon => switch (job.status) {
-    'pending'                    => Icons.hourglass_empty,
-    'dispatched'                 => Icons.send,
-    'dispatched_polling_disabled'=> Icons.send,
-    'reported'                   => Icons.check_circle_outline,
-    'issued_by_portal'           => Icons.check_circle,
-    'failed_terminal'            => Icons.error_outline,
-    'stale'                      => Icons.warning_amber,
-    _                            => Icons.receipt_long,
+    'pending' => Icons.hourglass_empty,
+    'dispatched' => Icons.send,
+    'dispatched_polling_disabled' => Icons.send,
+    'reported' => Icons.check_circle_outline,
+    'issued_by_portal' => Icons.check_circle,
+    'failed_terminal' => Icons.error_outline,
+    'stale' => Icons.warning_amber,
+    _ => Icons.receipt_long,
   };
 
   String get _label => switch (job.status) {
-    'pending'                    => 'Invoice: Queued',
-    'dispatched'                 => 'Invoice: Sent',
-    'dispatched_polling_disabled'=> 'Invoice: Sent',
-    'reported'                   => 'Invoice: Reported',
-    'issued_by_portal'           => job.redinvoiceRequested
-                                      ? 'Red Invoice: Issued'
-                                      : 'Invoice: Issued',
-    'failed_terminal'            => 'Invoice: Failed',
-    'stale'                      => 'Invoice: Stale',
-    _                            => 'Invoice: Unknown',
+    'pending' => 'Invoice: Queued',
+    'dispatched' => 'Invoice: Sent',
+    'dispatched_polling_disabled' => 'Invoice: Sent',
+    'reported' => 'Invoice: Reported',
+    'issued_by_portal' =>
+      job.redinvoiceRequested ? 'Red Invoice: Issued' : 'Invoice: Issued',
+    'failed_terminal' => 'Invoice: Failed',
+    'stale' => 'Invoice: Stale',
+    _ => 'Invoice: Unknown',
   };
 
   @override
   Widget build(BuildContext context) {
+    final portalUri = validatedVendorPortalUri(job.lookupUrl);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -99,17 +103,22 @@ class _BadgeRow extends StatelessWidget {
             ],
           ),
         ),
-        if (job.lookupUrl != null && job.lookupUrl!.isNotEmpty) ...[
+        if (portalUri != null) ...[
           const SizedBox(width: 6),
           InkWell(
-            onTap: () => launchUrl(Uri.parse(job.lookupUrl!)),
+            onTap: () =>
+                launchUrl(portalUri, mode: LaunchMode.externalApplication),
             borderRadius: BorderRadius.circular(4),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.open_in_new, size: 11, color: AppColors.textSecondary),
+                  const Icon(
+                    Icons.open_in_new,
+                    size: 11,
+                    color: AppColors.textSecondary,
+                  ),
                   const SizedBox(width: 3),
                   Text(
                     'WeTax',

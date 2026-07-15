@@ -1,5 +1,6 @@
 import '../../main.dart';
 import '../payments/payment_method_contract.dart';
+import 'payment_attempt_store.dart';
 
 class PaymentSplitInput {
   const PaymentSplitInput({required this.method, required this.amount});
@@ -31,6 +32,11 @@ String? validatePaymentSplits(List<PaymentSplitInput> splits, double total) {
 }
 
 class PaymentService {
+  PaymentService({PaymentAttemptStore? attemptStore})
+    : attemptStore = attemptStore ?? PaymentAttemptStore();
+
+  final PaymentAttemptStore attemptStore;
+
   double _toDouble(dynamic value) {
     return switch (value) {
       num v => v.toDouble(),
@@ -44,6 +50,7 @@ class PaymentService {
     required String storeId,
     required double amount,
     required String method,
+    required String paymentAttemptId,
   }) async {
     final result = await supabase.rpc(
       'process_payment',
@@ -52,9 +59,37 @@ class PaymentService {
         'p_store_id': storeId,
         'p_amount': amount,
         'p_method': method,
+        'p_payment_attempt_id': paymentAttemptId,
       },
     );
     return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<Map<String, dynamic>> processPaymentWithPersistentAttempt({
+    required String actorAuthId,
+    required String orderId,
+    required String storeId,
+    required double amount,
+    required String method,
+  }) async {
+    final scope = PaymentAttemptScope(
+      actorAuthId: actorAuthId,
+      storeId: storeId,
+      orderId: orderId,
+      splitIndex: 0,
+      method: method,
+      amount: amount,
+    );
+    final attemptId = await attemptStore.getOrCreate(scope);
+    final payment = await processPayment(
+      orderId: orderId,
+      storeId: storeId,
+      amount: amount,
+      method: method,
+      paymentAttemptId: attemptId,
+    );
+    await attemptStore.clear(scope);
+    return payment;
   }
 
   Future<Map<String, dynamic>?> fetchPaymentDetail(String paymentId) async {
@@ -129,6 +164,7 @@ class PaymentService {
   }
 
   Future<List<Map<String, dynamic>>> processPaymentSplits({
+    required String actorAuthId,
     required String orderId,
     required String storeId,
     required double orderTotal,
@@ -139,17 +175,36 @@ class PaymentService {
       throw ArgumentError(validationError);
     }
 
+    final scopes = splits.indexed
+        .map(
+          (entry) => PaymentAttemptScope(
+            actorAuthId: actorAuthId,
+            storeId: storeId,
+            orderId: orderId,
+            splitIndex: entry.$1,
+            method: entry.$2.method,
+            amount: entry.$2.amount,
+          ),
+        )
+        .toList(growable: false);
+    final attemptIds = <String>[];
+    for (final scope in scopes) {
+      attemptIds.add(await attemptStore.getOrCreate(scope));
+    }
+
     final payments = <Map<String, dynamic>>[];
-    for (final split in splits) {
+    for (final entry in splits.indexed) {
+      final split = entry.$2;
       final payment = await processPayment(
         orderId: orderId,
         storeId: storeId,
         amount: split.amount,
         method: split.method,
+        paymentAttemptId: attemptIds[entry.$1],
       );
       payments.add(payment);
     }
-
+    await attemptStore.clearMany(scopes);
     return payments;
   }
 
