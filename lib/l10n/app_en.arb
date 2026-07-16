@@ -1109,5 +1109,7 @@
   "deliverySettlementAtRiskOpenRevenue": "The remaining at-risk exposure is concentrated in open Deliberry revenue: {amount}.",
   "@deliverySettlementAtRiskOpenRevenue": {"placeholders": {"amount": {"type": "String"}}},
   "deliverySettlementAtRiskNone": "No material at-risk settlement mix is visible beyond the already-settled periods.",
-  "dateInputHint": "YYYY-MM-DD"
+  "dateInputHint": "YYYY-MM-DD",
+  "restaurantKitchenClosed": "The kitchen closed at 21:30. New orders, items, and quantity increases are unavailable. Existing orders can still be paid before 21:45.",
+  "restaurantDailySalesClosed": "Restaurant sales closed at 21:45. New sales and payment completion are unavailable for today."
 }
