@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/i18n/restaurant_cutoff_localization.dart';
+import '../../core/services/restaurant_cutoff_service.dart';
 import '../../main.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
@@ -81,7 +83,10 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
       if (error != null && error.isNotEmpty && error != _lastOrderError) {
         _lastOrderError = error;
         if (mounted) {
-          showErrorToast(context, error);
+          showErrorToast(
+            context,
+            localizeRestaurantCutoffError(context.l10n, error),
+          );
         }
       }
     });
@@ -174,6 +179,27 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     );
     controller.dispose();
     return result;
+  }
+
+  Future<bool> _canCreateRestaurantSale(String storeId) async {
+    try {
+      final cutoff = await restaurantCutoffService.fetchState(storeId);
+      if (cutoff.canCreateOrder) {
+        return true;
+      }
+      if (mounted) {
+        showErrorToast(
+          context,
+          cutoff.phase == 'sales_closed'
+              ? context.l10n.restaurantDailySalesClosed
+              : context.l10n.restaurantKitchenClosed,
+        );
+      }
+      return false;
+    } catch (_) {
+      // The mutation RPC remains the authoritative fail-closed check.
+      return true;
+    }
   }
 
   Future<bool> _showCancelOrderDialog({required String tableNumber}) async {
@@ -319,6 +345,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final authState = ref.watch(authProvider);
     final storeId = authState.storeId;
 
@@ -338,6 +365,15 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
         ? null
         : ref.read(menuProvider(storeId).notifier);
     final orderNotifier = ref.read(orderProvider.notifier);
+    final cutoffState = storeId == null
+        ? const RestaurantCutoffState.unrestricted()
+        : ref.watch(restaurantCutoffStateProvider(storeId)).valueOrNull ??
+              const RestaurantCutoffState.unrestricted();
+    final cutoffMessage = cutoffState.canCreateOrder
+        ? null
+        : cutoffState.phase == 'sales_closed'
+        ? l10n.restaurantDailySalesClosed
+        : l10n.restaurantKitchenClosed;
 
     final selectedTable = _resolveSelectedTable(tableState.tables);
     final operationMode =
@@ -384,6 +420,9 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                             menuNotifier: menuNotifier,
                             orderState: orderState,
                             allowSubmitWithoutCart: allowSubmitWithoutCart,
+                            canCreateSales: cutoffState.canCreateOrder,
+                            canCompletePayment: cutoffState.canCompletePayment,
+                            cutoffMessage: cutoffMessage,
                             onAddToCart: orderNotifier.addToCart,
                             onIncrementCartItem: (cartItem) {
                               orderNotifier.addToCart(
@@ -455,6 +494,9 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                             },
                             onSendOrder: () async {
                               if (storeId == null) {
+                                return;
+                              }
+                              if (!await _canCreateRestaurantSale(storeId)) {
                                 return;
                               }
                               if (orderState.activeOrder == null) {

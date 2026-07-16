@@ -469,6 +469,14 @@ run_linked_psql_file() {
       -v "photo_store_quangtrung=$PHOTO_OBJET_QUANGTRUNG_STORE_ID"
       -v "photo_store_nowzone=$PHOTO_OBJET_NOWZONE_STORE_ID"
     )
+  elif [[ "$(basename "$file")" == "apply_restaurant_daily_cutoff.sql" ]]; then
+    [[ -n "${RESTAURANT_CUTOFF_STORE_IDS:-}" ]] ||
+      fail "RESTAURANT_CUTOFF_STORE_IDS is required for Restaurant cutoff rollout."
+    [[ "$RESTAURANT_CUTOFF_STORE_IDS" =~ ^[0-9a-fA-F-]{36}(,[0-9a-fA-F-]{36})*$ ]] ||
+      fail "RESTAURANT_CUTOFF_STORE_IDS must be a comma-separated UUID list."
+    policy_psql_args=(
+      -v "restaurant_cutoff_store_ids=$RESTAURANT_CUTOFF_STORE_IDS"
+    )
   fi
 
   role_check_sql="DO \$pos_role_check\$
@@ -487,7 +495,11 @@ END;
   printf '+ supabase db dump --linked --schema public --dry-run <captured>\n'
   printf '+ PGSSLMODE=require psql -X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --command SET_ROLE_POSTGRES --command VERIFY_ROLE'
   if [[ "${#policy_psql_args[@]}" -gt 0 ]]; then
-    printf ' --set PHOTO_POLICY_VALUES=<validated>'
+    if [[ "$(basename "$file")" == "apply_photo_objet_expected_slot_ledger.sql" ]]; then
+      printf ' --set PHOTO_POLICY_VALUES=<validated>'
+    else
+      printf ' --set RESTAURANT_CUTOFF_VALUES=<validated>'
+    fi
   fi
   printf ' --file %q\n' "$file"
   if [[ "$DRY_RUN" == "1" ]]; then
@@ -597,6 +609,7 @@ apply_migration() {
     20260713120000_photo_objet_expected_slot_ledger.sql|\
     20260714113000_photo_objet_final_slot_2230.sql|\
     20260716160000_photo_objet_single_slot_2220.sql|\
+    20260716190000_restaurant_daily_cutoff.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -627,6 +640,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_photo_objet_single_slot_2220.sql" \
       "Photo Objet single 22:20 slot migration preflight"
+  elif [[ "$migration_name" == "20260716190000_restaurant_daily_cutoff.sql" ]]; then
+    log "Restaurant daily cutoff migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_restaurant_daily_cutoff.sql" \
+      "Restaurant daily cutoff migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -638,6 +656,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/apply_photo_objet_expected_slot_ledger.sql" \
       "migration $migration_version with approved Photo Objet policies"
+  elif [[ "$migration_name" == "20260716190000_restaurant_daily_cutoff.sql" ]]; then
+    log "Apply Restaurant cutoff with explicit approved Restaurant stores"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/apply_restaurant_daily_cutoff.sql" \
+      "migration $migration_version with approved Restaurant cutoff stores"
   else
     run_linked_psql_file "$migration_path" "migration $migration_version"
   fi
@@ -662,6 +685,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_photo_objet_single_slot_2220.sql" \
       "Photo Objet single 22:20 slot migration verification"
+  elif [[ "$migration_name" == "20260716190000_restaurant_daily_cutoff.sql" ]]; then
+    log "Restaurant daily cutoff migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_restaurant_daily_cutoff.sql" \
+      "Restaurant daily cutoff migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \

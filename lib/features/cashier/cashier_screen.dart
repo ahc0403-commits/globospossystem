@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/i18n/restaurant_cutoff_localization.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/layout/platform_info.dart';
 import '../../core/hardware/printer_service.dart';
@@ -23,6 +24,7 @@ import '../payment/payment_provider.dart';
 import '../payment/einvoice_status_badge.dart';
 import '../settings/printer_provider.dart';
 import '../../core/services/payment_proof_service.dart';
+import '../../core/services/restaurant_cutoff_service.dart';
 import 'payment_proof_modal.dart';
 import 'red_invoice_modal.dart';
 
@@ -60,7 +62,10 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       if (error != null && error.isNotEmpty && error != _lastError) {
         _lastError = error;
         if (mounted) {
-          showErrorToast(context, error);
+          showErrorToast(
+            context,
+            localizeRestaurantCutoffError(context.l10n, error),
+          );
         }
       }
     });
@@ -207,6 +212,10 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     final role = authState.role ?? '';
     final isAdmin = PermissionUtils.isAdminLike(role);
     _ensureLoaded(storeId);
+    final cutoffState = storeId == null
+        ? const RestaurantCutoffState.unrestricted()
+        : ref.watch(restaurantCutoffStateProvider(storeId)).valueOrNull ??
+              const RestaurantCutoffState.unrestricted();
 
     final paymentState = ref.watch(paymentProvider);
     final notifier = ref.read(paymentProvider.notifier);
@@ -404,6 +413,8 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                 isAdmin: isAdmin,
                                 isProcessing: paymentState.isProcessing,
                                 isOnline: isOnline,
+                                canCompletePayment:
+                                    cutoffState.canCompletePayment,
                                 onSelectMethod: (method) {
                                   setState(() => _selectedMethod = method);
                                 },
@@ -415,6 +426,22 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                       method == null ||
                                       selectedOrder == null) {
                                     return;
+                                  }
+                                  try {
+                                    final authoritative =
+                                        await restaurantCutoffService
+                                            .fetchState(storeId);
+                                    if (!authoritative.canCompletePayment) {
+                                      if (context.mounted) {
+                                        showErrorToast(
+                                          context,
+                                          l10n.restaurantDailySalesClosed,
+                                        );
+                                      }
+                                      return;
+                                    }
+                                  } catch (_) {
+                                    // The payment RPC remains authoritative.
                                   }
                                   if (method == 'service') {
                                     final proceed =
@@ -617,6 +644,7 @@ class _SelectedOrderView extends StatelessWidget {
     required this.isAdmin,
     required this.isProcessing,
     required this.isOnline,
+    required this.canCompletePayment,
     required this.onSelectMethod,
     required this.onProcess,
     required this.onCancelOrder,
@@ -628,6 +656,7 @@ class _SelectedOrderView extends StatelessWidget {
   final bool isAdmin;
   final bool isProcessing;
   final bool isOnline;
+  final bool canCompletePayment;
   final ValueChanged<String> onSelectMethod;
   final Future<void> Function() onProcess;
   final Future<void> Function() onCancelOrder;
@@ -827,6 +856,17 @@ class _SelectedOrderView extends StatelessWidget {
                     ),
                   ),
                 ],
+                if (!canCompletePayment) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    l10n.restaurantDailySalesClosed,
+                    style: GoogleFonts.notoSansKr(
+                      color: AppColors.statusOccupied,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 14),
                 SizedBox(
                   width: double.infinity,
@@ -835,7 +875,10 @@ class _SelectedOrderView extends StatelessWidget {
                     key: const Key('payment_submit_button'),
                     // RULES.md: 결제는 온라인 필수 — 오프라인 시 버튼 비활성화
                     onPressed:
-                        selectedMethod == null || isProcessing || !isOnline
+                        selectedMethod == null ||
+                            isProcessing ||
+                            !isOnline ||
+                            !canCompletePayment
                         ? null
                         : onProcess,
                     child: isProcessing

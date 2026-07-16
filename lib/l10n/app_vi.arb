@@ -1108,5 +1108,7 @@
   "deliverySettlementAtRiskOpenRevenue": "Phần rủi ro còn lại tập trung ở doanh thu Deliberry còn mở: {amount}.",
   "@deliverySettlementAtRiskOpenRevenue": {"placeholders": {"amount": {"type": "String"}}},
   "deliverySettlementAtRiskNone": "Không thấy cấu phần đối soát rủi ro đáng kể nào ngoài các kỳ đã nhận tiền.",
-  "dateInputHint": "YYYY-MM-DD"
+  "dateInputHint": "YYYY-MM-DD",
+  "restaurantKitchenClosed": "Bếp đã đóng lúc 21:30. Không thể tạo đơn mới, thêm món hoặc tăng số lượng. Đơn hiện có vẫn có thể thanh toán trước 21:45.",
+  "restaurantDailySalesClosed": "Doanh thu Restaurant đã đóng lúc 21:45. Hôm nay không thể tạo doanh thu mới hoặc hoàn tất thanh toán."
 }
