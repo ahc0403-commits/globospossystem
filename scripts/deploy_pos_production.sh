@@ -610,6 +610,7 @@ apply_migration() {
     20260714113000_photo_objet_final_slot_2230.sql|\
     20260716160000_photo_objet_single_slot_2220.sql|\
     20260716190000_restaurant_daily_cutoff.sql|\
+    20260716210000_restaurant_sales_excel_export.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -645,6 +646,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_restaurant_daily_cutoff.sql" \
       "Restaurant daily cutoff migration preflight"
+  elif [[ "$migration_name" == "20260716210000_restaurant_sales_excel_export.sql" ]]; then
+    log "Restaurant sales Excel export migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_restaurant_sales_excel_export.sql" \
+      "Restaurant sales Excel export migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -690,6 +696,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_restaurant_daily_cutoff.sql" \
       "Restaurant daily cutoff migration verification"
+  elif [[ "$migration_name" == "20260716210000_restaurant_sales_excel_export.sql" ]]; then
+    log "Restaurant sales Excel export migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_restaurant_sales_excel_export.sql" \
+      "Restaurant sales Excel export migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \

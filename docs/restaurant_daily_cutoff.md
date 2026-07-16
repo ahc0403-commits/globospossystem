@@ -47,6 +47,23 @@ This workflow does not call MISA or any red-invoice API. It does not modify the
 Photo 22:20 collector, Photo legal-entity Excel export, or Photo MISA-trigger
 removal.
 
+## Legal-entity Excel download
+
+The Super Admin web page `/restaurant-sales-export` is the Windows automation
+download point. It calls the read-only
+`get_restaurant_daily_sales_export(date)` RPC and creates one legal-entity file:
+
+```text
+restaurant_sales_YYYYMMDD.xlsx
+```
+
+The workbook contains `Sales` receipt rows ordered by the original sale time,
+`Hourly Summary`, and `Summary`. It is not split into store files. The RPC and
+page expose no customer data and do not write or recalculate sales. A download
+is allowed only when the immutable 22:20 result is `finalized`; `pending` and
+`data_integrity_failed` results fail closed. Photo remains available separately
+at `/photo-ops` with `photo_sales_YYYYMMDD.xlsx`.
+
 ## Verification and rollback
 
 Production deployment must use the pinned runner with an explicit
