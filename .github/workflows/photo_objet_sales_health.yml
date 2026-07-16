@@ -2,13 +2,7 @@ name: Photo Objet Sales Health
 
 on:
   schedule:
-    # Check ten minutes after each 90-minute collection deadline in HCM.
-    - cron: '40 4 * * *'
-    - cron: '40 6 * * *'
-    - cron: '40 8 * * *'
-    - cron: '40 10 * * *'
-    - cron: '40 12 * * *'
-    - cron: '40 14 * * *'
+    # Check after the 22:20 HCM collection and its 90-minute grace period.
     - cron: '40 17 * * *'
   workflow_dispatch:
 

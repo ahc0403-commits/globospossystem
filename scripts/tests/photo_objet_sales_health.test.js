@@ -326,8 +326,8 @@ test('slot identities distinguish scheduled, manual, and bounded backfill', () =
     '2026-07-11',
     {
       GITHUB_EVENT_NAME: 'schedule',
-      PHOTO_OBJET_SCHEDULE_CRON: '0 3 * * *',
-      PHOTO_OBJET_RUN_STARTED_AT: '2026-07-11T03:05:00Z',
+      PHOTO_OBJET_SCHEDULE_CRON: '20 15 * * *',
+      PHOTO_OBJET_RUN_STARTED_AT: '2026-07-11T15:25:00Z',
     },
   );
   const manual = createRunIdentity(
@@ -336,7 +336,7 @@ test('slot identities distinguish scheduled, manual, and bounded backfill', () =
     {
       GITHUB_EVENT_NAME: 'workflow_dispatch',
       GITHUB_RUN_ID: '123',
-      PHOTO_OBJET_SCHEDULE_CRON: '30 15 * * *',
+      PHOTO_OBJET_SCHEDULE_CRON: '20 15 * * *',
       PHOTO_OBJET_RUN_STARTED_AT: '2026-07-11T17:10:00Z',
     },
   );
@@ -345,27 +345,27 @@ test('slot identities distinguish scheduled, manual, and bounded backfill', () =
     '2026-07-11',
     {
       GITHUB_EVENT_NAME: 'workflow_dispatch',
-      PHOTO_OBJET_SCHEDULE_CRON: '30 15 * * *',
+      PHOTO_OBJET_SCHEDULE_CRON: '20 15 * * *',
       PHOTO_OBJET_RUN_STARTED_AT: '2026-07-11T17:10:00Z',
     },
   );
 
   assert.deepEqual(scheduled, {
     source: 'scheduled',
-    slotId: 'scheduled:2026-07-11T10:00+07:00',
+    slotId: 'scheduled:2026-07-11T22:20+07:00',
     slotDateHcm: '2026-07-11',
-    slotTimeHcm: '10:00',
-    intervalStartAt: '2026-07-11T02:00:00.000Z',
-    intervalEndAt: '2026-07-11T03:00:00.000Z',
+    slotTimeHcm: '22:20',
+    intervalStartAt: '2026-07-10T17:00:00.000Z',
+    intervalEndAt: '2026-07-11T15:20:00.000Z',
   });
   assert.equal(new Set([scheduled.slotId, manual.slotId, backfill.slotId]).size, 3);
   assert.deepEqual([manual.source, backfill.source], ['manual', 'backfill']);
 });
 
-test('delayed 22:30 schedule crossing HCM midnight retains the previous target date and slot', () => {
+test('delayed 22:20 schedule crossing HCM midnight retains the previous target date and slot', () => {
   const env = {
     GITHUB_EVENT_NAME: 'schedule',
-    PHOTO_OBJET_SCHEDULE_CRON: '30 15 * * *',
+    PHOTO_OBJET_SCHEDULE_CRON: '20 15 * * *',
     PHOTO_OBJET_RUN_STARTED_AT: '2026-07-11T17:10:00Z',
   };
   const options = parseArgs([], env);
@@ -373,64 +373,56 @@ test('delayed 22:30 schedule crossing HCM midnight retains the previous target d
 
   assert.deepEqual(options.targetDates, ['2026-07-11']);
   assert.equal(identity.slotDateHcm, options.targetDates[0]);
-  assert.equal(identity.slotTimeHcm, '22:30');
-  assert.equal(identity.slotId, 'scheduled:2026-07-11T22:30+07:00');
-  assert.equal(identity.intervalStartAt, '2026-07-11T13:00:00.000Z');
-  assert.equal(identity.intervalEndAt, '2026-07-11T15:30:00.000Z');
+  assert.equal(identity.slotTimeHcm, '22:20');
+  assert.equal(identity.slotId, 'scheduled:2026-07-11T22:20+07:00');
+  assert.equal(identity.intervalStartAt, '2026-07-10T17:00:00.000Z');
+  assert.equal(identity.intervalEndAt, '2026-07-11T15:20:00.000Z');
   assert.throws(
     () => createRunIdentity(options, '2026-07-12', env),
     /does not match intended HCM slot date 2026-07-11/,
   );
 });
 
-test('12:00 scheduled collection accepts only 10:00:00 through 11:59:59', () => {
+test('22:20 scheduled collection accepts the full HCM day through 22:19:59', () => {
   const identity = createRunIdentity(
     { backfill: false },
     '2026-07-12',
     {
       GITHUB_EVENT_NAME: 'schedule',
-      PHOTO_OBJET_SCHEDULE_CRON: '0 5 * * *',
-      PHOTO_OBJET_RUN_STARTED_AT: '2026-07-12T05:17:00Z',
+      PHOTO_OBJET_SCHEDULE_CRON: '20 15 * * *',
+      PHOTO_OBJET_RUN_STARTED_AT: '2026-07-12T15:25:00Z',
     },
   );
   const rows = [
-    { 'Device Name': 'M1', Time: '2026-07-12 09:59:59', Amount: '100000' },
+    { 'Device Name': 'M1', Time: '2026-07-12 00:00:00', Amount: '100000' },
     { 'Device Name': 'M1', Time: '2026-07-12 10:00:00', Amount: '110000' },
-    { 'Device Name': 'M1', Time: '2026-07-12 11:59:59', Amount: '120000' },
-    { 'Device Name': 'M1', Time: '2026-07-12 12:00:00', Amount: '130000' },
+    { 'Device Name': 'M1', Time: '2026-07-12 22:19:59', Amount: '120000' },
+    { 'Device Name': 'M1', Time: '2026-07-12 22:20:00', Amount: '130000' },
   ];
 
   assert.deepEqual(
     selectRowsForInterval(rows, '2026-07-12', identity).map(item => item.row.Amount),
-    ['110000', '120000'],
+    ['100000', '110000', '120000'],
   );
-  assert.equal(identity.intervalStartAt, '2026-07-12T03:00:00.000Z');
-  assert.equal(identity.intervalEndAt, '2026-07-12T05:00:00.000Z');
+  assert.equal(identity.intervalStartAt, '2026-07-11T17:00:00.000Z');
+  assert.equal(identity.intervalEndAt, '2026-07-12T15:20:00.000Z');
 });
 
-test('scheduled intervals cover 09:00 through 22:30 without gaps or overlap', () => {
-  const crons = [
-    '0 3 * * *', '0 5 * * *', '0 7 * * *', '0 9 * * *',
-    '0 11 * * *', '0 13 * * *', '30 15 * * *',
-  ];
+test('scheduled collection has exactly one 22:20 HCM slot', () => {
+  const crons = ['20 15 * * *'];
   const identities = crons.map(cron => createRunIdentity(
     { backfill: false },
     '2026-07-12',
     {
       GITHUB_EVENT_NAME: 'schedule',
       PHOTO_OBJET_SCHEDULE_CRON: cron,
-      PHOTO_OBJET_RUN_STARTED_AT: `2026-07-12T${cron.split(' ')[1].padStart(2, '0')}:${cron.startsWith('30 ') ? '35' : '05'}:00Z`,
+      PHOTO_OBJET_RUN_STARTED_AT: '2026-07-12T15:25:00Z',
     },
   ));
 
-  assert.deepEqual(identities.map(identity => identity.slotTimeHcm), [
-    '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:30',
-  ]);
-  assert.equal(identities[0].intervalStartAt, '2026-07-12T02:00:00.000Z');
-  assert.equal(identities.at(-1).intervalEndAt, '2026-07-12T15:30:00.000Z');
-  for (let index = 1; index < identities.length; index += 1) {
-    assert.equal(identities[index - 1].intervalEndAt, identities[index].intervalStartAt);
-  }
+  assert.deepEqual(identities.map(identity => identity.slotTimeHcm), ['22:20']);
+  assert.equal(identities[0].intervalStartAt, '2026-07-11T17:00:00.000Z');
+  assert.equal(identities[0].intervalEndAt, '2026-07-12T15:20:00.000Z');
   for (const unsupported of ['0 2 * * *', '0 16 * * *']) {
     assert.throws(
       () => createRunIdentity(
@@ -561,8 +553,7 @@ test('collection workflow stays green independently from slot health', () => {
   );
   assert.match(workflow, /on:\n  schedule:/);
   assert.deepEqual([...workflow.matchAll(/cron: '([^']+)'/g)].map(match => match[1]), [
-    '0 3 * * *', '0 5 * * *', '0 7 * * *', '0 9 * * *',
-    '0 11 * * *', '0 13 * * *', '30 15 * * *',
+    '20 15 * * *',
   ]);
   assert.match(workflow, /node-version: '22'/);
   assert.match(workflow, /npm ci/);
@@ -600,8 +591,7 @@ test('health, backfill, contract, and release proof are independent workflows', 
   const release = read('photo_objet_release_proof.yml');
 
   assert.deepEqual([...health.matchAll(/cron: '([^']+)'/g)].map(match => match[1]), [
-    '40 4 * * *', '40 6 * * *', '40 8 * * *', '40 10 * * *',
-    '40 12 * * *', '40 14 * * *', '40 17 * * *',
+    '40 17 * * *',
   ]);
   assert.match(health, /photo_objet_slot_health\.js --refresh/);
   assert.match(health, /--ack-file health-evidence\.json/);

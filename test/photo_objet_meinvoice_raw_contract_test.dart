@@ -15,6 +15,8 @@ void main() {
       'supabase/migrations/20260713120000_photo_objet_expected_slot_ledger.sql';
   const finalSlotMigration =
       'supabase/migrations/20260714113000_photo_objet_final_slot_2230.sql';
+  const singleSlotMigration =
+      'supabase/migrations/20260716160000_photo_objet_single_slot_2220.sql';
   const slotApply = 'scripts/apply_photo_objet_expected_slot_ledger.sql';
   const slotConfiguration =
       'scripts/configure_photo_objet_monitoring_policies.sql';
@@ -141,6 +143,28 @@ void main() {
   });
 
   test(
+    'current Photo schedule collects once at 22:20 without rewriting history',
+    () {
+      final sql = readRepoFile(singleSlotMigration);
+
+      expect(sql, contains("'hcm-eod-2220-v3'"));
+      expect(sql, contains("WHEN 'hcm-two-hour-v1' THEN ARRAY["));
+      expect(sql, contains("WHEN 'hcm-two-hour-2230-v2' THEN ARRAY["));
+      expect(sql, contains("WHEN 'hcm-eod-2220-v3' THEN ARRAY[TIME '22:20']"));
+      expect(sql, contains('photo_slot_20260716160000_expected_backup'));
+      expect(sql, contains('PHOTO_2220_FUTURE_SLOT_ALREADY_USED'));
+      expect(
+        sql,
+        contains(
+          'DROP TRIGGER IF EXISTS trg_enqueue_photo_objet_meinvoice_job',
+        ),
+      );
+      expect(sql, isNot(contains('DELETE FROM public.photo_objet_sales_raw')));
+      expect(sql, isNot(contains('UPDATE public.photo_objet_sales_raw')));
+    },
+  );
+
+  test(
     'interval migration retains backup and immutable identity contracts',
     () {
       final sql = readRepoFile(intervalMigration);
@@ -192,15 +216,7 @@ void main() {
     final collectionCrons = RegExp(
       r"cron: '([^']+)'",
     ).allMatches(collect).map((match) => match.group(1)).toList();
-    expect(collectionCrons, [
-      '0 3 * * *',
-      '0 5 * * *',
-      '0 7 * * *',
-      '0 9 * * *',
-      '0 11 * * *',
-      '0 13 * * *',
-      '30 15 * * *',
-    ]);
+    expect(collectionCrons, ['20 15 * * *']);
     expect(collect, contains("node-version: '22'"));
     expect(collect, contains('npm ci'));
     expect(collect, contains('npx puppeteer browsers install'));
@@ -208,9 +224,8 @@ void main() {
     expect(collect, isNot(contains('audit-missing-runs')));
     expect(collect, isNot(contains('backfill')));
 
-    for (final hour in [4, 6, 8, 10, 12, 14, 17]) {
-      expect(slotHealth, contains("cron: '40 $hour * * *'"));
-    }
+    expect(slotHealth, contains("cron: '40 17 * * *'"));
+    expect(RegExp(r"cron: '[^']+'\n").allMatches(slotHealth), hasLength(1));
     expect(slotHealth, contains('--refresh --output health-evidence.json'));
     expect(slotHealth, contains('--ack-file health-evidence.json'));
     expect(slotHealth, contains('--assert-file health-evidence.json'));
@@ -276,9 +291,9 @@ void main() {
           'PR checks and Preview deployments are never operational PASS',
         ),
       );
-      expect(text, contains('MISA queueing and receipt automation'));
+      expect(text, contains('source rows also do not create MISA jobs'));
       expect(text, contains('dry-run by default'));
-      expect(text, contains('60 stores/420 slots'));
+      expect(text, contains('60 stores/60 current slots'));
       expect(text, isNot(contains('126')));
     },
   );

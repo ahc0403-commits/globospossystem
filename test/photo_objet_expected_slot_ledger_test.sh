@@ -819,6 +819,181 @@ psql_test -Atqc "
   FROM public.photo_objet_sales_raw
 ")" = "$raw_before_2230" ]]
 
+# Fixture G: replace the seven v2 slots with one 22:20 slot from an
+# effective-dated cutover while preserving v1/v2 history and immutable sales.
+psql_test -c "SELECT public.photo_objet_ensure_expected_slots(
+  DATE '2026-07-17', DATE '2026-07-17'
+)" >/dev/null
+psql_test >/dev/null <<'SQL'
+CREATE FUNCTION public.trg_enqueue_photo_objet_meinvoice_job()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER trg_enqueue_photo_objet_meinvoice_job
+AFTER INSERT ON public.photo_objet_sales_raw
+FOR EACH ROW EXECUTE FUNCTION public.trg_enqueue_photo_objet_meinvoice_job();
+SQL
+raw_before_2220="$(psql_test -Atqc "
+  SELECT count(*) || '|' || md5(coalesce(string_agg(
+    id::text || ':' || store_id::text || ':' || source_hash,
+    '|' ORDER BY id
+  ), ''))
+  FROM public.photo_objet_sales_raw
+")"
+psql_test \
+  -c "SET app.photo_objet_single_slot_cutover_at = '2026-07-17 15:30:00+07'" \
+  --file "$ROOT_DIR/scripts/preflight_photo_objet_single_slot_2220.sql" \
+  | grep -q 'PHOTO_2220_PREFLIGHT_OK'
+
+for _ in 1 2; do
+  psql_test --single-transaction \
+    -c "SET app.photo_objet_single_slot_cutover_at = '2026-07-17 15:30:00+07'" \
+    --file "$ROOT_DIR/supabase/migrations/20260716160000_photo_objet_single_slot_2220.sql" \
+    >/dev/null
+done
+psql_test --file "$ROOT_DIR/scripts/verify_photo_objet_single_slot_2220.sql" \
+  | grep -q 'PHOTO_2220_VERIFY_OK'
+
+psql_test -Atqc "
+  SELECT cutover_at
+  FROM public.photo_slot_20260716160000_state
+  WHERE migration_id = '20260716160000'
+" | grep -qx '2026-07-17 08:30:00+00'
+
+psql_test -Atqc "
+  SELECT count(*)
+  FROM public.photo_objet_monitoring_policies
+  WHERE effective_to IS NULL
+    AND schedule_version = 'hcm-eod-2220-v3'
+" | grep -qx 6
+psql_test -Atqc "
+  SELECT count(*)
+  FROM pg_trigger
+  WHERE tgrelid = 'public.photo_objet_sales_raw'::regclass
+    AND tgname = 'trg_enqueue_photo_objet_meinvoice_job'
+    AND NOT tgisinternal
+" | grep -qx 0
+psql_test -Atqc "
+  SELECT count(*)
+  FROM public.photo_objet_expected_slots
+  WHERE slot_date_hcm = '2026-07-17'
+    AND slot_time_hcm = TIME '22:20'
+    AND scheduled_at = '2026-07-17 22:20:00+07'
+    AND due_at = '2026-07-17 23:50:00+07'
+" | grep -qx 6
+psql_test -Atqc "
+  SELECT count(*)
+  FROM public.photo_objet_expected_slots slot
+  JOIN public.photo_objet_monitoring_policies policy
+    ON policy.id = slot.monitoring_policy_id
+  WHERE slot.slot_date_hcm = '2026-07-17'
+    AND policy.schedule_version = 'hcm-two-hour-2230-v2'
+    AND slot.slot_time_hcm IN (TIME '10:00', TIME '12:00', TIME '14:00')
+" | grep -qx 18
+psql_test -Atqc "
+  SELECT count(*)
+  FROM public.photo_objet_expected_slots slot
+  JOIN public.photo_objet_monitoring_policies policy
+    ON policy.id = slot.monitoring_policy_id
+  WHERE slot.slot_date_hcm = '2026-07-17'
+    AND policy.schedule_version = 'hcm-two-hour-2230-v2'
+    AND slot.slot_time_hcm IN (TIME '16:00', TIME '18:00', TIME '20:00', TIME '22:30')
+" | grep -qx 0
+psql_test -Atqc "
+  SELECT count(*)
+  FROM public.photo_objet_expected_slots slot
+  JOIN public.photo_objet_monitoring_policies policy
+    ON policy.id = slot.monitoring_policy_id
+  WHERE slot.slot_date_hcm >= '2026-07-17'
+    AND policy.schedule_version = 'hcm-eod-2220-v3'
+    AND slot.slot_time_hcm <> TIME '22:20'
+" | grep -qx 0
+psql_test -Atqc "
+  SELECT count(*)
+  FROM public.photo_objet_expected_slots
+  WHERE slot_date_hcm = '2026-07-14'
+" | grep -qx 42
+psql_test -Atqc "
+  SELECT count(*)
+  FROM pg_class
+  WHERE oid IN (
+    'public.photo_slot_20260716160000_state'::regclass,
+    'public.photo_slot_20260716160000_policy_map'::regclass,
+    'public.photo_slot_20260716160000_expected_backup'::regclass
+  )
+    AND relrowsecurity = true
+    AND relforcerowsecurity = true
+" | grep -qx 3
+[[ "$(psql_test -Atqc "
+  SELECT count(*) || '|' || md5(coalesce(string_agg(
+    id::text || ':' || store_id::text || ':' || source_hash,
+    '|' ORDER BY id
+  ), ''))
+  FROM public.photo_objet_sales_raw
+")" = "$raw_before_2220" ]]
+
+psql_test --file "$ROOT_DIR/scripts/rollback_photo_objet_single_slot_2220.sql" \
+  | grep -q 'PHOTO_2220_ROLLBACK_OK'
+psql_test -Atqc "
+  SELECT count(*)
+  FROM public.photo_objet_monitoring_policies
+  WHERE effective_to IS NULL
+    AND schedule_version = 'hcm-two-hour-2230-v2'
+" | grep -qx 6
+psql_test -Atqc "
+  SELECT count(*)
+  FROM public.photo_objet_expected_slots
+  WHERE slot_date_hcm = '2026-07-17'
+    AND slot_time_hcm = TIME '22:30'
+" | grep -qx 6
+psql_test -Atqc "
+  SELECT count(*)
+  FROM pg_trigger
+  WHERE tgrelid = 'public.photo_objet_sales_raw'::regclass
+    AND tgname = 'trg_enqueue_photo_objet_meinvoice_job'
+    AND NOT tgisinternal
+" | grep -qx 1
+
+# An attempted v3 slot blocks rollback. Restoring this synthetic fixture to
+# expected permits a clean rollback so the v2 rollback contract can continue.
+psql_test --single-transaction \
+  -c "SET app.photo_objet_single_slot_cutover_at = '2026-07-17 15:30:00+07'" \
+  --file "$ROOT_DIR/supabase/migrations/20260716160000_photo_objet_single_slot_2220.sql" \
+  >/dev/null
+psql_test -c "
+  UPDATE public.photo_objet_expected_slots
+  SET status = 'running', attempt_count = 1
+  WHERE store_id = '$PHOTO_OBJET_BIENHOA_STORE_ID'
+    AND slot_date_hcm = '2026-07-17'
+    AND slot_time_hcm = TIME '22:20'
+" >/dev/null
+set +e
+rollback_2220_live_output="$(psql_test \
+  --file "$ROOT_DIR/scripts/rollback_photo_objet_single_slot_2220.sql" 2>&1)"
+rollback_2220_live_status=$?
+set -e
+[[ "$rollback_2220_live_status" -ne 0 ]]
+[[ "$rollback_2220_live_output" == *'PHOTO_2220_ROLLBACK_ATTEMPTED_SLOTS'* ]]
+[[ "$rollback_2220_live_output" != *'PHOTO_2220_ROLLBACK_OK'* ]]
+psql_test -c "
+  UPDATE public.photo_objet_expected_slots
+  SET status = 'expected', attempt_count = 0
+  WHERE store_id = '$PHOTO_OBJET_BIENHOA_STORE_ID'
+    AND slot_date_hcm = '2026-07-17'
+    AND slot_time_hcm = TIME '22:20'
+" >/dev/null
+psql_test --file "$ROOT_DIR/scripts/rollback_photo_objet_single_slot_2220.sql" \
+  | grep -q 'PHOTO_2220_ROLLBACK_OK'
+[[ "$(psql_test -Atqc "
+  SELECT count(*) || '|' || md5(coalesce(string_agg(
+    id::text || ':' || store_id::text || ':' || source_hash,
+    '|' ORDER BY id
+  ), ''))
+  FROM public.photo_objet_sales_raw
+")" = "$raw_before_2220" ]]
+
 # A normal pre-final collection and a new immutable raw row must survive a
 # schedule rollback. Only an attempted 22:30 final slot makes rollback unsafe.
 psql_test -c "
