@@ -2,6 +2,10 @@ import '../../core/services/attendance_service.dart';
 import '../../core/services/inventory_service.dart';
 import '../../core/services/payroll_service.dart';
 import '../../main.dart';
+import 'photo_ops_sales_export.dart';
+
+const _photoObjetBrandId = '77000000-0000-0000-0000-000000000001';
+const _photoSalesExportPageSize = 1000;
 
 class PhotoOpsKpi {
   const PhotoOpsKpi({
@@ -222,6 +226,79 @@ int _photoOpsInt(dynamic value) {
 }
 
 class PhotoOpsService {
+  Future<PhotoOpsSalesExport> loadSalesExport({
+    required List<String> accessibleStoreIds,
+    required String saleDate,
+  }) async {
+    if (accessibleStoreIds.isEmpty) {
+      throw const FormatException('PHOTO_EXPORT_NO_ACCESSIBLE_STORES');
+    }
+
+    final policyResponse = await supabase
+        .from('photo_objet_monitoring_policies')
+        .select('store_id')
+        .inFilter('store_id', accessibleStoreIds)
+        .eq('schedule_version', 'hcm-eod-2220-v3')
+        .eq('is_enabled', true)
+        .isFilter('effective_to', null);
+    final configuredStoreIds = List<Map<String, dynamic>>.from(
+      policyResponse,
+    ).map((row) => row['store_id'].toString()).toList();
+    if (configuredStoreIds.isEmpty) {
+      throw const FormatException('PHOTO_EXPORT_NO_CONFIGURED_STORES');
+    }
+
+    final storeResponse = await supabase
+        .from('restaurants')
+        .select('id, name, tax_entity_id')
+        .inFilter('id', configuredStoreIds)
+        .eq('brand_id', _photoObjetBrandId);
+    final stores = List<Map<String, dynamic>>.from(storeResponse);
+    if (stores.isEmpty) {
+      throw const FormatException('PHOTO_EXPORT_NO_ACCESSIBLE_STORES');
+    }
+    final exportStoreIds = stores.map((row) => row['id'].toString()).toList();
+
+    final completedRunResponse = await supabase
+        .from('photo_objet_sales_pull_runs')
+        .select('store_id')
+        .inFilter('store_id', exportStoreIds)
+        .eq('slot_date_hcm', saleDate)
+        .eq('slot_time_hcm', '22:20:00')
+        .eq('run_source', 'scheduled')
+        .eq('status', 'success');
+    validatePhotoOpsSalesExportReady(
+      stores: stores,
+      completedRuns: List<Map<String, dynamic>>.from(completedRunResponse),
+    );
+
+    final rawSales = <Map<String, dynamic>>[];
+    for (var offset = 0; ; offset += _photoSalesExportPageSize) {
+      final response = await supabase
+          .from('photo_objet_sales_raw')
+          .select(
+            'id, store_id, sold_at, sale_time_text, device_name, device_id, '
+            'amount, raw_type, payment_method, source_hash',
+          )
+          .inFilter('store_id', exportStoreIds)
+          .eq('sale_date', saleDate)
+          .gte('sold_at', '${saleDate}T00:00:00+07:00')
+          .lt('sold_at', '${saleDate}T22:20:00+07:00')
+          .order('sold_at')
+          .order('id')
+          .range(offset, offset + _photoSalesExportPageSize - 1);
+      final page = List<Map<String, dynamic>>.from(response);
+      rawSales.addAll(page);
+      if (page.length < _photoSalesExportPageSize) break;
+    }
+
+    return createPhotoOpsSalesExport(
+      saleDate: saleDate,
+      stores: stores,
+      rawSales: rawSales,
+    );
+  }
+
   Future<PhotoOpsDashboardData> loadDashboard({
     required String activeStoreId,
     required List<String> accessibleStoreIds,

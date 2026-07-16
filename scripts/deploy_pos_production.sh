@@ -596,6 +596,7 @@ apply_migration() {
     20260711090000_legal_entity_brand_store_hierarchy.sql|\
     20260713120000_photo_objet_expected_slot_ledger.sql|\
     20260714113000_photo_objet_final_slot_2230.sql|\
+    20260716160000_photo_objet_single_slot_2220.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -621,6 +622,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_photo_objet_final_slot_2230.sql" \
       "Photo Objet 22:30 final-slot migration preflight"
+  elif [[ "$migration_name" == "20260716160000_photo_objet_single_slot_2220.sql" ]]; then
+    log "Photo Objet single 22:20 slot migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_photo_objet_single_slot_2220.sql" \
+      "Photo Objet single 22:20 slot migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -651,6 +657,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_photo_objet_final_slot_2230.sql" \
       "Photo Objet 22:30 final-slot migration verification"
+  elif [[ "$migration_name" == "20260716160000_photo_objet_single_slot_2220.sql" ]]; then
+    log "Photo Objet single 22:20 slot migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_photo_objet_single_slot_2220.sql" \
+      "Photo Objet single 22:20 slot migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \

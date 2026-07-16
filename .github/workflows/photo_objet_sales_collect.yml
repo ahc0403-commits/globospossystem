@@ -2,14 +2,8 @@ name: Photo Objet Sales Collect
 
 on:
   schedule:
-    # HCM completion slots: 10:00-20:00 every two hours, then the final 22:30.
-    - cron: '0 3 * * *'
-    - cron: '0 5 * * *'
-    - cron: '0 7 * * *'
-    - cron: '0 9 * * *'
-    - cron: '0 11 * * *'
-    - cron: '0 13 * * *'
-    - cron: '30 15 * * *'
+    # One daily Photo collection run at 22:20 HCM (15:20 UTC).
+    - cron: '20 15 * * *'
 
 permissions:
   contents: read
@@ -79,7 +73,7 @@ jobs:
       - name: Preflight collector and POS target
         working-directory: scripts
         run: node pull_moers_sales.js --preflight-only
-      - name: Collect exact scheduled interval
+      - name: Collect the complete sales day through 22:20 HCM
         working-directory: scripts
         run: node pull_moers_sales.js
       - name: Escalate collection execution failure

@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -11,6 +14,7 @@ import '../../features/auth/auth_provider.dart';
 import '../../features/auth/auth_state.dart';
 import '../../widgets/app_nav_bar.dart';
 import 'photo_ops_provider.dart';
+import 'photo_ops_sales_export.dart';
 import 'photo_ops_service.dart';
 
 class PhotoOpsScreen extends ConsumerStatefulWidget {
@@ -22,6 +26,7 @@ class PhotoOpsScreen extends ConsumerStatefulWidget {
 
 class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
   String? _lastLoadedStoreId;
+  bool _isExportingSales = false;
 
   @override
   Widget build(BuildContext context) {
@@ -129,7 +134,31 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
                 _WorkflowSurface(
                   title: l10n.photoOpsSalesTitle,
                   subtitle: l10n.photoOpsSalesSubtitle,
-                  child: _SalesList(rows: state.data!.salesSummary),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton.icon(
+                          key: const Key('photo_ops_sales_export_button'),
+                          onPressed: _isExportingSales
+                              ? null
+                              : _exportLegalEntitySales,
+                          icon: _isExportingSales
+                              ? const SizedBox.square(
+                                  dimension: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.download_outlined),
+                          label: Text(l10n.photoOpsSalesDownloadExcel),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      _SalesList(rows: state.data!.salesSummary),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 18),
                 _WorkflowSurface(
@@ -164,6 +193,50 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _exportLegalEntitySales() async {
+    final auth = ref.read(authProvider);
+    final storeIds = auth.accessibleStores.map((store) => store.id).toList();
+    final saleDate = photoOpsHcmDate(DateTime.now());
+    setState(() => _isExportingSales = true);
+
+    try {
+      final export = await photoOpsService.loadSalesExport(
+        accessibleStoreIds: storeIds,
+        saleDate: saleDate,
+      );
+      final bytes = buildPhotoOpsSalesWorkbook(export);
+      await FileSaver.instance.saveFile(
+        name: 'photo_sales_${saleDate.replaceAll('-', '')}',
+        bytes: Uint8List.fromList(bytes),
+        ext: 'xlsx',
+        mimeType: MimeType.microsoftExcel,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            context.l10n.photoOpsSalesExportSaved(
+              export.receiptCount,
+              export.totalAmount.toString(),
+            ),
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final message =
+          error is FormatException &&
+              error.message.toString().startsWith('PHOTO_EXPORT_NOT_READY:')
+          ? context.l10n.photoOpsSalesExportNotReady
+          : context.l10n.photoOpsSalesExportFailed('$error');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      if (mounted) setState(() => _isExportingSales = false);
+    }
   }
 }
 

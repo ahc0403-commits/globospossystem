@@ -12,13 +12,7 @@ const MAX_BACKFILL_DAYS = 7;
 const SOURCE_IDENTITY_VERSION = 2;
 const COLLECTOR_STARTED_AT = new Date();
 const SCHEDULED_INTERVAL_MINUTES = Object.freeze({
-  '10:00': 60,
-  '12:00': 120,
-  '14:00': 120,
-  '16:00': 120,
-  '18:00': 120,
-  '20:00': 120,
-  '22:30': 150,
+  '22:20': 22 * 60 + 20,
 });
 const FAILURE = Object.freeze({
   DETERMINISTIC: 'deterministic',

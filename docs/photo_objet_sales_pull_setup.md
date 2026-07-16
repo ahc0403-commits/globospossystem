@@ -7,19 +7,20 @@ canonical rows to `public.photo_objet_sales_raw`, records execution attempts in
 `public.photo_objet_sales_pull_runs`, and rebuilds the daily dashboard aggregate
 in `public.photo_objet_sales`. It never deletes or rewrites a raw source row.
 
-The crawler does not call MISA directly. MISA queueing and receipt automation
-are separate dimensions: payment completion, collection success, invoice
-dispatch, and receipt automation must not overwrite one another's result.
-`payment_method = CASH`; VNPAY/QR wallet data must not be mixed into this source.
+The crawler does not call MISA. From the 22:20 single-slot cutover, new Photo
+source rows also do not create MISA jobs; invoice issuance belongs to the
+separate Windows portal automation. `payment_method = CASH`; VNPAY/QR wallet
+data must not be mixed into this source.
 
 ## Exact collection interval
 
-The scheduled workflow runs at 10:00, 12:00, 14:00, 16:00, 18:00, 20:00,
-and 22:30 HCM. Each run reads one half-open interval without overlap:
+The scheduled workflow runs once at 22:20 HCM. It reads the complete half-open
+business-day interval `00:00:00 <= sold_at < 22:20:00` for every configured
+Photo store. Every source transaction remains a separate immutable row, so the
+result can be listed by receipt and HCM sale time rather than only as a daily
+total.
 
-- 10:00 collects `09:00:00 <= sold_at < 10:00:00`.
-- 12:00 through 20:00 collect the preceding two hours.
-- 22:30 is the final run and collects `20:00:00 <= sold_at < 22:30:00`.
+- A sale at 22:19:59 is included; a sale at exactly 22:20:00 is not.
 - A delayed GitHub start retains the intended `slot_date_hcm` and
   `slot_time_hcm`; wall-clock `started_at` is not slot identity.
 - Excel may contain the entire day, but only rows in the exact interval enter
@@ -55,16 +56,18 @@ materializer. Thus a collector outage cannot erase the
 expected workload. Migration rollout must insert the approved policies and
 materialize the first date in the same fail-fast transaction.
 
-Every day has these seven slots per enabled active policy:
+Migration `20260716160000_photo_objet_single_slot_2220.sql` effective-dates the
+new schedule without rewriting the historical v1/v2 policies or their slots.
+From its cutover date, every enabled active policy has one slot:
 
 ```text
-10:00, 12:00, 14:00, 16:00, 18:00, 20:00, 22:30
+22:20
 ```
 
-Every slot becomes due 90 minutes after its semantic collection time. This
-90-minute grace is longer than the observed GitHub scheduler delay and keeps a
+The slot becomes due 90 minutes after its semantic collection time, at 23:50
+HCM. This grace is longer than the observed GitHub scheduler delay and keeps a
 late runner from being classified as missing while it is still within the
-operating SLA. The final 22:30 slot becomes due at 00:00 HCM. Status is one of
+operating SLA. Status is one of
 `expected`, `running`, `collected`, `collected_zero`, `missing`, `failed`, or
 `recovered`. A later exact slot cannot satisfy an earlier one. Manual and
 backfill runs cannot satisfy scheduled history.
@@ -86,10 +89,29 @@ RPCs. The Office read view joins
 `v_office_eligible_stores.store_id`, so external legal entities are excluded
 even though external Photo operators may be valid POS collectors.
 
+## Legal-entity Excel download
+
+The administrator web page `/photo-ops` is the Windows automation download
+point. In the Sales section, **Download legal-entity Excel** creates one file
+for all accessible, enabled 22:20 Photo collectors that share the same
+`tax_entity_id`:
+
+```text
+photo_sales_YYYYMMDD.xlsx
+```
+
+The workbook contains `Sales` receipt-level rows ordered by HCM sale time,
+`Hourly Summary`, and `Summary`. It refuses to combine stores from different
+legal entities. No MISA job or red-invoice API call is created by collection or
+export. Excel remains unavailable until every included store has a successful
+scheduled 22:20 pull run, preventing Windows automation from downloading a
+partial legal-entity file. The Windows task should retry the same button until
+the file is available.
+
 ## Health monitoring and alert delivery
 
-`.github/workflows/photo_objet_sales_health.yml` runs ten minutes after each
-90-minute deadline: 11:40, 13:40, 15:40, 17:40, 19:40, 21:40, and 00:40 HCM.
+`.github/workflows/photo_objet_sales_health.yml` runs at 00:40 HCM, after the
+22:20 collection's 90-minute deadline.
 It needs only the POS Supabase URL and service key; it does not install Chromium
 and receives no Moers credentials.
 
@@ -201,15 +223,34 @@ existed before the migration, rollback restores its original type, nullability,
 default, comment, and named constraint definition exactly. If the migration
 created the column, rollback removes it completely.
 
-Required replay evidence:
+Apply the one-slot cutover with the pinned deployment path:
+
+```bash
+scripts/deploy_pos_production.sh \
+  --migration supabase/migrations/20260716160000_photo_objet_single_slot_2220.sql
+```
+
+The cutover defaults to the migration execution timestamp, so completed legacy
+slots remain historical while only unattempted future v2 slots are replaced.
+An operator may pin an exact instant with
+`app.photo_objet_single_slot_cutover_at` (or an HCM midnight with the legacy
+test setting `app.photo_objet_single_slot_cutover_date`). Its preflight refuses
+to replace future v2 slots that have already started, verification requires
+exactly one 22:20 slot per policy, and
+`scripts/rollback_photo_objet_single_slot_2220.sql` refuses to discard an
+attempted v3 slot.
+
+Required replay evidence for the foundational ledger and both effective-dated
+schedule transitions:
 
 ```bash
 bash test/photo_objet_expected_slot_ledger_test.sh
 ```
 
 This validates replay, rollback, policy effective time, inactive exclusion,
-10:00-22:30 slots, the 90-minute grace boundary, zero sales, retry/recovery,
-backfill isolation, alert delivery-before-ACK, RLS, 60 stores/420 slots, and preservation
+historical 10:00-22:30 slots, the current single 22:20 slot, the 90-minute grace
+boundary, zero sales, retry/recovery, backfill isolation,
+alert delivery-before-ACK, RLS, 60 stores/60 current slots, and preservation
 of the immutable raw ledger. Separate catalog fixtures cover an absent column,
 a pre-existing column, a compatible pre-existing constraint, and incompatible
 type or constraint fail-fast paths.
