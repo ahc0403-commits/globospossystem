@@ -39,6 +39,12 @@ run_sql "$ROOT_DIR/scripts/preflight_restaurant_daily_cutoff.sql" \
   | grep -q 'RESTAURANT_CUTOFF_PREFLIGHT_OK'
 run_sql "$ROOT_DIR/supabase/migrations/20260716190000_restaurant_daily_cutoff.sql" \
   >/dev/null
+run_sql "$ROOT_DIR/scripts/preflight_restaurant_sales_excel_export.sql" \
+  | grep -q 'RESTAURANT_SALES_EXPORT_PREFLIGHT_OK'
+run_sql "$ROOT_DIR/supabase/migrations/20260716210000_restaurant_sales_excel_export.sql" \
+  >/dev/null
+run_sql "$ROOT_DIR/scripts/verify_restaurant_sales_excel_export.sql" \
+  | grep -q 'RESTAURANT_SALES_EXPORT_VERIFY_OK'
 
 if "$PSQL" -h "$HOST" -p "$PORT" -U postgres -d postgres \
   -X --no-psqlrc -v ON_ERROR_STOP=1 \
@@ -172,6 +178,27 @@ query "SELECT count(*) FROM public.restaurant_finalize_daily_sales_at(
   )" | grep -qx 1
 query "SELECT count(*) FROM public.restaurant_daily_sales_finalizations
   WHERE business_date='2026-07-14'" | grep -qx 1
+query "SET ROLE authenticated;
+  SELECT (export->>'status') || '|' || (export->>'receipt_count') || '|' ||
+    (export->>'gross_sales') || '|' ||
+    jsonb_array_length(export->'receipts')
+  FROM (
+    SELECT public.get_restaurant_daily_sales_export('2026-07-14') AS export
+  ) result" \
+  | grep -qx 'finalized|2|150000.00|2'
+query "SET ROLE authenticated;
+  SELECT (export->>'status') || '|' || jsonb_array_length(export->'receipts')
+  FROM (
+    SELECT public.get_restaurant_daily_sales_export('2026-07-13') AS export
+  ) result" \
+  | grep -qx 'pending|0'
+query "SET ROLE authenticated;
+  SELECT count(*)
+  FROM jsonb_object_keys(
+    (public.get_restaurant_daily_sales_export('2026-07-14')->'receipts')->0
+  ) key
+  WHERE key IN ('customer_name', 'customer_email', 'tax_id', 'address')" \
+  | grep -qx 0
 if query "UPDATE public.restaurant_daily_sales_finalizations
   SET status='data_integrity_failed' WHERE business_date='2026-07-14'" \
   >"$TMP_DIR/immutable.log" 2>&1; then
@@ -203,6 +230,25 @@ query "SELECT offending_stores @> '[{\"store_id\":
   \"81000000-0000-4000-8000-000000000001\",\"receipt_count\":1}]'::jsonb
   FROM public.restaurant_daily_sales_finalizations
   WHERE business_date='2026-07-15'" | grep -qx t
+query "SET ROLE authenticated;
+  SELECT (export->>'status') || '|' || jsonb_array_length(export->'receipts')
+  FROM (
+    SELECT public.get_restaurant_daily_sales_export('2026-07-15') AS export
+  ) result" \
+  | grep -qx 'data_integrity_failed|0'
+
+query "CREATE OR REPLACE FUNCTION public.is_super_admin() RETURNS boolean
+  LANGUAGE sql STABLE AS 'SELECT false'" >/dev/null
+if query "SET ROLE authenticated;
+  SELECT public.get_restaurant_daily_sales_export('2026-07-14')" \
+  >"$TMP_DIR/export-forbidden.log" 2>&1; then
+  printf 'expected Restaurant sales export authorization failure\n' >&2
+  exit 1
+fi
+grep -q 'RESTAURANT_SALES_EXPORT_FORBIDDEN' \
+  "$TMP_DIR/export-forbidden.log"
+query "CREATE OR REPLACE FUNCTION public.is_super_admin() RETURNS boolean
+  LANGUAGE sql STABLE AS 'SELECT true'" >/dev/null
 
 if query "SELECT public.restaurant_finalize_daily_sales_at(
   '2026-07-16', '2026-07-16 22:19:59+07')" \
@@ -212,6 +258,10 @@ if query "SELECT public.restaurant_finalize_daily_sales_at(
 fi
 grep -q 'RESTAURANT_FINALIZATION_TOO_EARLY' "$TMP_DIR/early.log"
 
+run_sql "$ROOT_DIR/scripts/rollback_restaurant_sales_excel_export.sql" \
+  | grep -q 'RESTAURANT_SALES_EXPORT_ROLLBACK_OK'
+query "SELECT to_regprocedure(
+  'public.get_restaurant_daily_sales_export(date)') IS NULL" | grep -qx t
 run_sql "$ROOT_DIR/scripts/rollback_restaurant_daily_cutoff.sql" \
   | grep -q 'RESTAURANT_CUTOFF_ROLLBACK_OK'
 query "SELECT count(*) FROM public.restaurant_daily_sales_finalizations" \
@@ -225,5 +275,11 @@ query "SELECT count(*) FROM public.photo_objet_sales_raw" | grep -qx 1
   --file "$ROOT_DIR/scripts/apply_restaurant_daily_cutoff.sql" >/dev/null
 run_sql "$ROOT_DIR/scripts/verify_restaurant_daily_cutoff.sql" \
   | grep -q 'RESTAURANT_CUTOFF_VERIFY_OK'
+run_sql "$ROOT_DIR/scripts/preflight_restaurant_sales_excel_export.sql" \
+  | grep -q 'RESTAURANT_SALES_EXPORT_PREFLIGHT_OK'
+run_sql "$ROOT_DIR/supabase/migrations/20260716210000_restaurant_sales_excel_export.sql" \
+  >/dev/null
+run_sql "$ROOT_DIR/scripts/verify_restaurant_sales_excel_export.sql" \
+  | grep -q 'RESTAURANT_SALES_EXPORT_VERIFY_OK'
 
-printf 'PASS: Restaurant cutoff boundaries, Photo isolation, finalization, replay, and rollback\n'
+printf 'PASS: Restaurant cutoff, finalized Excel export, Photo isolation, replay, and rollback\n'

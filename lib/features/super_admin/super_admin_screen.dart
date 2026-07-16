@@ -1617,6 +1617,12 @@ class _AllReportsTabState extends State<_AllReportsTab> {
               icon: const Icon(Icons.dashboard_customize),
               label: Text(context.l10n.superAdminViewDetailedReports),
             ),
+            FilledButton.icon(
+              key: const Key('super_admin_restaurant_sales_export_link'),
+              onPressed: () => context.go('/restaurant-sales-export'),
+              icon: const Icon(Icons.download_outlined),
+              label: Text(context.l10n.restaurantSalesExportDownload),
+            ),
           ],
         ),
         const SizedBox(height: 14),
