@@ -10,35 +10,60 @@ It must not be marked complete from local tests or simulated printer data.
 2. Confirm the merge is on `origin/main` and the worktree is clean.
 3. Build and download the Windows artifact whose name contains the exact main
    SHA; record its SHA-256 below.
-4. Run the guarded SQL sequence against pinned POS project
-   `ynriuoomotxuwhuxxmhj`:
+4. Link this clean worktree to pinned POS project
+   `ynriuoomotxuwhuxxmhj` with the official Supabase CLI. Do not copy stale
+   `supabase/.temp` state and do not use `--skip-pooler`:
 
    ```bash
-   scripts/run_pos_production_sql.sh \
-     scripts/preflight_store_opening_setup_wizard.sql \
-     'Store opening setup preflight'
-
-   scripts/run_pos_production_sql.sh \
-     scripts/apply_store_opening_setup_wizard.sql \
-     'Store opening setup apply'
-
-   scripts/run_pos_production_sql.sh \
-     scripts/verify_store_opening_setup_wizard.sql \
-     'Store opening setup verification'
+   supabase link --project-ref ynriuoomotxuwhuxxmhj
+   supabase migration list
    ```
 
-5. Keep `scripts/rollback_store_opening_setup_wizard.sql` ready. Use it only
+   The read-only history command must connect through the Shared Session
+   Pooler. The official DB-only runner rejects direct database credentials and
+   transaction pooler port 6543; it requires a pooler host on port 5432.
+5. From that clean exact-main worktree, capture a dry-run of the one official
+   release command:
+
+   ```bash
+   ENV_FILE=/Users/andreahn/.config/globos/pos-production.env \
+   TEST_TARGETS=all \
+   scripts/deploy_pos_production.sh \
+     --migration supabase/migrations/20260717090000_store_opening_setup_wizard.sql \
+     --mode prebuilt \
+     --db-only \
+     --dry-run \
+     --yes
+   ```
+
+6. After reviewing the dry-run gates, remove only `--dry-run` and execute the
+   same official command. Do not invoke preflight/apply/verification SQL files
+   directly. The script requires migration-history absence, rollback readiness,
+   dedicated preflight, atomic apply, verification, history repair, and final
+   history presence; any failure stops the sequence.
+7. Keep `scripts/rollback_store_opening_setup_wizard.sql` ready. Use it only
    with explicit rollback authorization; it removes feature functions/index
    but never deletes store tables, destinations, orders, payments, or jobs.
+
+DB-only does not invoke or require the pilot account checker, pilot account
+files, pilot email/password credentials, login smoke, Vercel tools/project
+files, or frontend anon-key readiness. It never creates, recovers, modifies,
+deletes, resets, or validates accounts. Auth, Vercel, live HTTP, and login
+readiness are N/A, and this database release is not POS login-ready evidence.
 
 ## Exact-version evidence
 
 - Main SHA:
+- Operator:
+- Production timestamp (Asia/Ho_Chi_Minh):
+- Supabase project ref: `ynriuoomotxuwhuxxmhj`
+- Sanitized DB-only dry-run command/output reference:
+- Sanitized DB-only apply command/output reference:
+- Migration history before/after reference:
+- Preflight/apply/verification output reference:
 - GitHub exact-head checks URL:
 - Windows artifact name:
 - Windows ZIP SHA-256:
-- Production migration timestamp/operator:
-- Verification output reference:
 
 ## Four-printer rehearsal — actual store LAN only
 

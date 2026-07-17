@@ -122,3 +122,4 @@ store_setup_output="$(bash -c '
 [[ "$store_setup_output" == *'Confirm migration history presence'* ]]
 
 printf 'PASS: production checks bootstrap clean worktrees and dry-run guarded store setup phases\n'
+bash "$ROOT_DIR/test/pos_db_only_deploy_contract_test.sh"
