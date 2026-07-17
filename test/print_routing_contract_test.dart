@@ -2,7 +2,11 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-String readRepoFile(String path) => File(path).readAsStringSync();
+String normalizeLineEndings(String source) =>
+    source.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+
+String readRepoFile(String path) =>
+    normalizeLineEndings(File(path).readAsStringSync());
 
 void main() {
   const migrationPath =
@@ -33,6 +37,26 @@ void main() {
   const appEnPath = 'lib/l10n/app_en.arb';
   const appKoPath = 'lib/l10n/app_ko.arb';
   const appViPath = 'lib/l10n/app_vi.arb';
+
+  test('source contracts normalize Windows line endings', () {
+    const windowsSource =
+        "WHERE order_id = p_order_id\r\n"
+        "    AND status IN ('pending', 'failed')\r\n"
+        "rpc(\r\n"
+        "      'claim_print_jobs'\r\n";
+
+    expect(
+      normalizeLineEndings(windowsSource),
+      contains(
+        "WHERE order_id = p_order_id\n"
+        "    AND status IN ('pending', 'failed')",
+      ),
+    );
+    expect(
+      normalizeLineEndings(windowsSource),
+      contains("rpc(\n      'claim_print_jobs'"),
+    );
+  });
 
   test('print routing M1 migration is sequenced after discount M1-M3', () {
     final migration = File(migrationPath);

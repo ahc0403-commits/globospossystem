@@ -4,6 +4,20 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Invoke-NativeCommand {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$FilePath,
+    [string[]]$Arguments = @()
+  )
+
+  & $FilePath @Arguments
+  $exitCode = $LASTEXITCODE
+  if ($exitCode -ne 0) {
+    throw "$FilePath exited with code $exitCode."
+  }
+}
+
 if ([string]::IsNullOrWhiteSpace($env:SUPABASE_URL)) {
   throw "SUPABASE_URL is required."
 }
@@ -22,10 +36,25 @@ try {
     SUPABASE_ANON_KEY = $env:SUPABASE_ANON_KEY
   } | ConvertTo-Json | Set-Content -LiteralPath $defineFile -Encoding utf8
 
-  flutter pub get
-  dart analyze --fatal-infos
-  flutter test test/print_routing_contract_test.dart test/cashier_receipt_print_contract_test.dart test/receipt_builder_contract_test.dart test/wifi_printer_service_test.dart
-  flutter build windows --release --dart-define-from-file=$defineFile
+  Invoke-NativeCommand -FilePath "flutter" -Arguments @("pub", "get")
+  Invoke-NativeCommand -FilePath "dart" -Arguments @(
+    "analyze",
+    "--fatal-infos"
+  )
+  Invoke-NativeCommand -FilePath "flutter" -Arguments @(
+    "test",
+    "test/print_routing_contract_test.dart",
+    "test/windows_print_station_build_contract_test.dart",
+    "test/cashier_receipt_print_contract_test.dart",
+    "test/receipt_builder_contract_test.dart",
+    "test/wifi_printer_service_test.dart"
+  )
+  Invoke-NativeCommand -FilePath "flutter" -Arguments @(
+    "build",
+    "windows",
+    "--release",
+    "--dart-define-from-file=$defineFile"
+  )
 
   $executable = Join-Path $releaseDirectory "globos_print_station.exe"
   if (-not (Test-Path -LiteralPath $executable)) {
