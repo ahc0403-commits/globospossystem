@@ -956,8 +956,11 @@ verify_remote_allowed_origin() {
     fail "Could not verify the deployed POS Edge origin configuration."
   fi
   local allowed
-  allowed="$(awk -F ': *' 'tolower($1) == "access-control-allow-origin" {
-    value=$2; sub(/\r$/, "", value); print value
+  allowed="$(awk 'tolower($0) ~ /^access-control-allow-origin:[[:space:]]*/ {
+    value=$0
+    sub(/^[^:]*:[[:space:]]*/, "", value)
+    sub(/\r$/, "", value)
+    print value
   }' "$headers" | tail -1)"
   rm -f "$headers"
   [[ "$allowed" == "$LIVE_URL" ]] ||
