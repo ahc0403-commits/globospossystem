@@ -240,6 +240,46 @@ class TablesService {
     );
     return Map<String, dynamic>.from(response as Map);
   }
+
+  Future<List<Map<String, dynamic>>> getOrCreateTableQrs({
+    required String storeId,
+    List<String>? tableIds,
+  }) async {
+    final response = await supabase.rpc(
+      'admin_get_or_create_table_qrs',
+      params: {'p_store_id': storeId, 'p_table_ids': tableIds},
+    );
+    final rows = (response as List<dynamic>)
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
+    rows.sort((left, right) {
+      final leftOrder = _intValue(left['layout_sort_order']);
+      final rightOrder = _intValue(right['layout_sort_order']);
+      final orderCompare = leftOrder.compareTo(rightOrder);
+      if (orderCompare != 0) {
+        return orderCompare;
+      }
+      final tableCompare = (left['table_number']?.toString() ?? '').compareTo(
+        right['table_number']?.toString() ?? '',
+      );
+      if (tableCompare != 0) {
+        return tableCompare;
+      }
+      return (left['table_id']?.toString() ?? '').compareTo(
+        right['table_id']?.toString() ?? '',
+      );
+    });
+    return rows;
+  }
+
+  int _intValue(dynamic value) {
+    return switch (value) {
+      int raw => raw,
+      num raw => raw.toInt(),
+      String raw => int.tryParse(raw) ?? 0,
+      _ => 0,
+    };
+  }
 }
 
 final tablesService = TablesService();

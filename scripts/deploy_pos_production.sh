@@ -663,6 +663,7 @@ apply_migration() {
     20260716190000_restaurant_daily_cutoff.sql|\
     20260716210000_restaurant_sales_excel_export.sql|\
     20260717090000_store_opening_setup_wizard.sql|\
+    20260717130000_table_qr_batch_export.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -675,6 +676,12 @@ apply_migration() {
     [[ -f "$rollback_path" ]] ||
       fail "Missing store opening setup rollback file: $rollback_path"
     log "Store opening setup rollback readiness"
+    printf 'Rollback ready (not executed): %s\n' "$rollback_path"
+  elif [[ "$migration_name" == "20260717130000_table_qr_batch_export.sql" ]]; then
+    local rollback_path="$ROOT_DIR/scripts/rollback_table_qr_batch_export.sql"
+    [[ -f "$rollback_path" ]] ||
+      fail "Missing table QR batch export rollback file: $rollback_path"
+    log "Table QR batch export rollback readiness"
     printf 'Rollback ready (not executed): %s\n' "$rollback_path"
   fi
 
@@ -716,6 +723,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_store_opening_setup_wizard.sql" \
       "Store opening setup migration preflight"
+  elif [[ "$migration_name" == "20260717130000_table_qr_batch_export.sql" ]]; then
+    log "Table QR batch export migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_table_qr_batch_export.sql" \
+      "table QR batch export migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -776,6 +788,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_store_opening_setup_wizard.sql" \
       "Store opening setup migration verification"
+  elif [[ "$migration_name" == "20260717130000_table_qr_batch_export.sql" ]]; then
+    log "Table QR batch export migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_table_qr_batch_export.sql" \
+      "table QR batch export migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \

@@ -5,10 +5,13 @@ import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
+import '../../../core/services/table_qr_export_service.dart';
+import '../../../core/services/tables_service.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
 import '../../../core/utils/number_input_utils.dart';
 import '../../../main.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
 import '../../order/order_provider.dart';
@@ -728,6 +731,17 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                 icon: const Icon(Icons.add, size: 18),
                 label: Text(l10n.tablesAddTitle),
               ),
+              if (!_layoutEditMode)
+                FilledButton.icon(
+                  key: const Key('admin_tables_qr_batch_export_action'),
+                  onPressed: () => _exportAllTableQrs(
+                    context,
+                    tablesNotifier,
+                    tablesState.tables,
+                  ),
+                  icon: const Icon(Icons.qr_code_2_rounded, size: 18),
+                  label: Text(l10n.tablesQrBatchAction),
+                ),
               if (!_layoutEditMode && selectedTable != null)
                 OutlinedButton.icon(
                   key: const Key('admin_tables_edit_floor_label_action'),
@@ -748,7 +762,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                     selectedTable,
                   ),
                   icon: const Icon(Icons.qr_code_2_rounded, size: 18),
-                  label: const Text('QR'),
+                  label: Text(l10n.tablesQrCurrentAction),
                 ),
               if (!_layoutEditMode &&
                   selectedTable != null &&
@@ -1122,56 +1136,33 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     TablesNotifier tablesNotifier,
     PosTable table,
   ) async {
-    final shouldRotate = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        key: const Key('admin_table_qr_rotate_warning_dialog'),
-        backgroundColor: AppColors.surface1,
-        title: Text(
-          'Generate table QR',
-          style: AppFonts.system(color: AppColors.textPrimary),
-        ),
-        content: Text(
-          'Generating a new QR immediately invalidates any code already attached to this table.',
-          key: const Key('admin_table_qr_rotate_warning'),
-          style: AppFonts.system(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(context.l10n.cancel),
-          ),
-          FilledButton(
-            key: const Key('admin_table_qr_generate_confirm'),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Generate'),
-          ),
-        ],
-      ),
-    );
-    if (shouldRotate != true || !context.mounted) {
+    final l10n = context.l10n;
+    TableQrCardModel card;
+    try {
+      final rows = await tablesService.getOrCreateTableQrs(
+        storeId: tablesNotifier.storeId,
+        tableIds: [table.id],
+      );
+      if (rows.length != 1) {
+        throw const FormatException('TABLE_QR_FIELD_REQUIRED:table_id');
+      }
+      card = tableQrExportService.cardsFromRpcRows(rows).single;
+    } catch (error) {
+      if (context.mounted) {
+        showErrorToast(context, _tableQrErrorMessage(error, l10n));
+      }
       return;
     }
 
-    final tokenRow = await tablesNotifier.generateTableQr(table.id);
-    if (!context.mounted || tokenRow == null) {
-      return;
-    }
-
-    final token = tokenRow['token']?.toString() ?? '';
-    final base = Uri.base;
-    final origin = base.hasScheme && base.hasAuthority
-        ? '${base.scheme}://${base.authority}'
-        : '';
-    final qrUrl = origin.isEmpty ? '/#/qr/$token' : '$origin/#/qr/$token';
+    if (!context.mounted) return;
 
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         key: const Key('admin_table_qr_dialog'),
         backgroundColor: AppColors.surface1,
         title: Text(
-          'Table ${table.tableNumber} QR',
+          l10n.tablesQrDialogTitle(card.tableNumber),
           style: AppFonts.system(color: AppColors.textPrimary),
         ),
         content: Column(
@@ -1190,7 +1181,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: QrImageView(
-                  data: qrUrl,
+                  data: card.orderUrl,
                   version: QrVersions.auto,
                   backgroundColor: Colors.white,
                   eyeStyle: const QrEyeStyle(
@@ -1206,7 +1197,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Customer ordering URL',
+              l10n.tablesQrOrderUrlLabel,
               style: AppFonts.system(
                 color: AppColors.textSecondary,
                 fontSize: 12,
@@ -1215,7 +1206,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
             ),
             const SizedBox(height: 8),
             SelectableText(
-              qrUrl,
+              card.orderUrl,
               key: const Key('admin_table_qr_url'),
               style: AppFonts.system(
                 color: AppColors.textPrimary,
@@ -1226,25 +1217,270 @@ class _TablesTabState extends ConsumerState<TablesTab> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(context.l10n.close),
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(l10n.close),
+          ),
+          TextButton.icon(
+            key: const Key('admin_table_qr_replace_action'),
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              _replaceTableQr(context, tablesNotifier, table);
+            },
+            icon: const Icon(Icons.sync_lock_rounded, size: 18),
+            label: Text(l10n.tablesQrReplaceAction),
+          ),
+          TextButton.icon(
+            key: const Key('admin_table_qr_pdf_action'),
+            onPressed: () async {
+              try {
+                await tableQrExportService.savePdf([card]);
+                if (context.mounted) {
+                  showSuccessToast(context, l10n.tablesQrPdfSaved);
+                }
+              } catch (error) {
+                if (context.mounted) {
+                  showErrorToast(context, _tableQrErrorMessage(error, l10n));
+                }
+              }
+            },
+            icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+            label: Text(l10n.tablesQrPdfAction),
+          ),
+          TextButton.icon(
+            key: const Key('admin_table_qr_png_action'),
+            onPressed: () async {
+              try {
+                await tableQrExportService.savePng(card);
+                if (context.mounted) {
+                  showSuccessToast(context, l10n.tablesQrPngSaved);
+                }
+              } catch (error) {
+                if (context.mounted) {
+                  showErrorToast(context, _tableQrErrorMessage(error, l10n));
+                }
+              }
+            },
+            icon: const Icon(Icons.image_outlined, size: 18),
+            label: Text(l10n.tablesQrPngAction),
           ),
           FilledButton.icon(
             key: const Key('admin_table_qr_copy_action'),
             onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: qrUrl));
+              await Clipboard.setData(ClipboardData(text: card.orderUrl));
               if (!context.mounted) {
                 return;
               }
-              Navigator.of(context).pop();
-              showSuccessToast(context, 'QR URL copied');
+              showSuccessToast(context, l10n.tablesQrUrlCopied);
             },
             icon: const Icon(Icons.copy_rounded, size: 18),
-            label: const Text('Copy'),
+            label: Text(l10n.tablesQrCopyAction),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _replaceTableQr(
+    BuildContext context,
+    TablesNotifier tablesNotifier,
+    PosTable table,
+  ) async {
+    final l10n = context.l10n;
+    final shouldRotate = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        key: const Key('admin_table_qr_rotate_warning_dialog'),
+        backgroundColor: AppColors.surface1,
+        title: Text(
+          l10n.tablesQrReplaceTitle,
+          style: AppFonts.system(color: AppColors.textPrimary),
+        ),
+        content: Text(
+          l10n.tablesQrReplaceWarning,
+          key: const Key('admin_table_qr_rotate_warning'),
+          style: AppFonts.system(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            key: const Key('admin_table_qr_generate_confirm'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(l10n.tablesQrReplaceConfirm),
+          ),
+        ],
+      ),
+    );
+    if (shouldRotate != true || !context.mounted) return;
+
+    try {
+      await tablesService.generateTableQr(table.id);
+      if (!context.mounted) return;
+      showSuccessToast(context, l10n.tablesQrReplaced);
+      await _showTableQrDialog(context, tablesNotifier, table);
+    } catch (_) {
+      if (context.mounted) {
+        showErrorToast(context, l10n.tablesQrReplaceFailed);
+      }
+    }
+  }
+
+  Future<void> _exportAllTableQrs(
+    BuildContext context,
+    TablesNotifier tablesNotifier,
+    List<Map<String, dynamic>> tables,
+  ) async {
+    final l10n = context.l10n;
+    if (tables.isEmpty) {
+      showErrorToast(context, l10n.tablesQrNoTables);
+      return;
+    }
+
+    final kind = await showDialog<TableQrExportKind>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        key: const Key('admin_table_qr_batch_format_dialog'),
+        backgroundColor: AppColors.surface1,
+        title: Text(
+          l10n.tablesQrBatchFormatTitle,
+          style: AppFonts.system(color: AppColors.textPrimary),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              l10n.tablesQrBatchFormatMessage(tables.length),
+              style: AppFonts.system(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              key: const Key('admin_table_qr_batch_pdf_action'),
+              leading: const Icon(Icons.picture_as_pdf_outlined),
+              title: Text(l10n.tablesQrPdfAction),
+              subtitle: Text(l10n.tablesQrBatchPdfDescription),
+              onTap: () =>
+                  Navigator.of(dialogContext).pop(TableQrExportKind.pdf),
+            ),
+            ListTile(
+              key: const Key('admin_table_qr_batch_png_action'),
+              leading: const Icon(Icons.folder_zip_outlined),
+              title: Text(l10n.tablesQrPngAction),
+              subtitle: Text(l10n.tablesQrBatchPngDescription),
+              onTap: () =>
+                  Navigator.of(dialogContext).pop(TableQrExportKind.png),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(l10n.cancel),
+          ),
+        ],
+      ),
+    );
+    if (kind == null || !context.mounted) return;
+
+    final progress = ValueNotifier<TableQrExportProgress>(
+      TableQrExportProgress(kind: kind, completed: 0, total: tables.length),
+    );
+    try {
+      final cards = await tableQrProgressDialogRunner.run(
+        context: context,
+        notifier: progress,
+        dialogBuilder: (dialogContext) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            key: const Key('admin_table_qr_batch_progress_dialog'),
+            backgroundColor: AppColors.surface1,
+            content: ValueListenableBuilder<TableQrExportProgress>(
+              valueListenable: progress,
+              builder: (context, value, _) => Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    value.completed == 0
+                        ? l10n.tablesQrExportPreparing
+                        : l10n.tablesQrExportProgress(
+                            value.completed,
+                            value.total,
+                          ),
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                  ),
+                  const SizedBox(height: 16),
+                  LinearProgressIndicator(
+                    value: value.total == 0
+                        ? null
+                        : value.completed / value.total,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        operation: () async {
+          final rows = await tablesService.getOrCreateTableQrs(
+            storeId: tablesNotifier.storeId,
+          );
+          final cards = tableQrExportService.cardsFromRpcRows(rows);
+          if (cards.isEmpty) {
+            throw StateError('TABLE_QR_EXPORT_EMPTY');
+          }
+          progress.value = TableQrExportProgress(
+            kind: kind,
+            completed: 0,
+            total: cards.length,
+          );
+          void updateProgress(TableQrExportProgress value) {
+            progress.value = value;
+          }
+
+          if (kind == TableQrExportKind.pdf) {
+            await tableQrExportService.savePdf(
+              cards,
+              onProgress: updateProgress,
+            );
+          } else {
+            await tableQrExportService.savePngZip(
+              cards,
+              onProgress: updateProgress,
+            );
+          }
+          return cards;
+        },
+      );
+      if (context.mounted) {
+        showSuccessToast(context, l10n.tablesQrExportSaved(cards.length));
+      }
+    } catch (error) {
+      if (context.mounted) {
+        showErrorToast(context, _tableQrErrorMessage(error, l10n));
+      }
+    }
+  }
+
+  String _tableQrErrorMessage(Object error, AppLocalizations l10n) {
+    final raw = error.toString();
+    if (raw.contains('ADMIN_MUTATION_FORBIDDEN') ||
+        raw.contains('TABLE_SCOPE_INVALID')) {
+      return l10n.tablesQrPermissionDenied;
+    }
+    if (raw.contains('POS_PUBLIC_URL') ||
+        raw.contains('TABLE_QR_PUBLIC_URL_INVALID')) {
+      return l10n.tablesQrInvalidPublicUrl;
+    }
+    if (raw.contains('TABLE_QR_FIELD_REQUIRED') ||
+        raw.contains('TABLE_NOT_FOUND')) {
+      return l10n.tablesQrDataInvalid;
+    }
+    if (raw.contains('TABLE_QR_EXPORT_EMPTY')) {
+      return l10n.tablesQrNoTables;
+    }
+    return l10n.tablesQrExportFailed;
   }
 }
 
