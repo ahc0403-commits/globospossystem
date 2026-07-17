@@ -478,24 +478,23 @@ parse_linked_pg_exports() {
 validate_linked_pg_credentials() {
   local direct_host="db.$POS_PROJECT_REF.supabase.co"
 
-  if [[ "$DB_ONLY" == "1" ]]; then
-    [[ "$PGHOST" =~ ^[a-z0-9-]+\.pooler\.supabase\.com$ && "$PGPORT" == "5432" ]] ||
-      fail "DB-only requires the Supabase Shared Session Pooler on port 5432."
-  elif [[ "$PGHOST" == "$direct_host" ]]; then
+  if [[ "$PGHOST" == "$direct_host" ]]; then
     [[ "$PGPORT" == "5432" ]] || fail "Direct database credential used an unexpected port."
+    [[ "$PGUSER" == "postgres" || "$PGUSER" == cli_login_* ]] ||
+      fail "Direct POS PG user is not an approved temporary login."
   elif [[ "$PGHOST" =~ ^[a-z0-9-]+\.pooler\.supabase\.com$ ]]; then
-    [[ "$PGPORT" == "5432" || "$PGPORT" == "6543" ]] ||
-      fail "Pooler database credential used an unexpected port."
+    if [[ "$DB_ONLY" == "1" ]]; then
+      [[ "$PGPORT" == "5432" ]] ||
+        fail "DB-only requires the Supabase Shared Session Pooler on port 5432."
+    else
+      [[ "$PGPORT" == "5432" || "$PGPORT" == "6543" ]] ||
+        fail "Pooler database credential used an unexpected port."
+    fi
+    [[ "$PGUSER" == "postgres.$POS_PROJECT_REF" || \
+       ( "$PGUSER" == cli_login_* && "$PGUSER" == *"$POS_PROJECT_REF"* ) ]] ||
+      fail "Pooler database credential user is not bound to the POS project ref."
   else
     fail "Supabase credential host is not an allowed POS direct or pooler host."
-  fi
-
-  if [[ "$PGUSER" == "postgres.$POS_PROJECT_REF" ]]; then
-    :
-  elif [[ "$PGUSER" == cli_login_* && "$PGUSER" == *"$POS_PROJECT_REF"* ]]; then
-    :
-  else
-    fail "Supabase credential user is not bound to the POS project ref."
   fi
   [[ -n "$PGPASSWORD" ]] || fail "Supabase credential password is empty."
   [[ "$PGDATABASE" == "postgres" ]] || fail "Supabase credential database is not postgres."
