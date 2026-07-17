@@ -342,11 +342,11 @@ preflight() {
   if [[ "$DB_ONLY" != "1" ]]; then
     [[ -f "$ROOT_DIR/.vercel/project.json" ]] ||
       fail "Missing .vercel/project.json. Run vercel link before deploying."
-    grep -q "\"projectName\": \"$POS_VERCEL_PROJECT\"" "$ROOT_DIR/.vercel/project.json" ||
+    grep -Eq "\"projectName\"[[:space:]]*:[[:space:]]*\"$POS_VERCEL_PROJECT\"" "$ROOT_DIR/.vercel/project.json" ||
       fail "Vercel project name is not $POS_VERCEL_PROJECT."
-    grep -q "\"projectId\": \"$POS_VERCEL_PROJECT_ID\"" "$ROOT_DIR/.vercel/project.json" ||
+    grep -Eq "\"projectId\"[[:space:]]*:[[:space:]]*\"$POS_VERCEL_PROJECT_ID\"" "$ROOT_DIR/.vercel/project.json" ||
       fail "Vercel project id is not the pinned POS project."
-    grep -q "\"orgId\": \"$POS_VERCEL_ORG_ID\"" "$ROOT_DIR/.vercel/project.json" ||
+    grep -Eq "\"orgId\"[[:space:]]*:[[:space:]]*\"$POS_VERCEL_ORG_ID\"" "$ROOT_DIR/.vercel/project.json" ||
       fail "Vercel org id is not the pinned POS team."
     printf 'Vercel project: %s\n' "$POS_VERCEL_PROJECT"
   fi
