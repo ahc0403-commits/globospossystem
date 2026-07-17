@@ -231,6 +231,7 @@ assert_not_contains "$wrong_target_output" "$SECRET"
 
 phase wrong_linked_project_refusal
 WRONG_REPO="$TMP_DIR/wrong-repo"
+WRONG_REMOTE="$TMP_DIR/wrong-remote.git"
 mkdir -p "$WRONG_REPO/scripts" "$WRONG_REPO/supabase/.temp"
 cp "$DEPLOY_SCRIPT" "$WRONG_REPO/scripts/deploy_pos_production.sh"
 printf '%s\n' wrongprojectref >"$WRONG_REPO/supabase/.temp/project-ref"
@@ -240,6 +241,10 @@ git -C "$WRONG_REPO" \
   -c user.name='POS contract test' \
   -c user.email='pos-contract@example.invalid' \
   commit -qm 'fixture: isolate linked project validation'
+git -C "$WRONG_REPO" branch -M main
+git init --bare -q "$WRONG_REMOTE"
+git -C "$WRONG_REPO" remote add origin "$WRONG_REMOTE"
+git -C "$WRONG_REPO" push -q -u origin main
 set +e
 wrong_ref_output="$(bash -c '
   source "$1"
