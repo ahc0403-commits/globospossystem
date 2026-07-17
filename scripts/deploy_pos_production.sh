@@ -611,12 +611,21 @@ apply_migration() {
     20260716160000_photo_objet_single_slot_2220.sql|\
     20260716190000_restaurant_daily_cutoff.sql|\
     20260716210000_restaurant_sales_excel_export.sql|\
+    20260717090000_store_opening_setup_wizard.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
   esac
   [[ "$verification_complete" == "1" ]] ||
     fail "Migration $migration_name has no explicit verification phase."
+
+  if [[ "$migration_name" == "20260717090000_store_opening_setup_wizard.sql" ]]; then
+    local rollback_path="$ROOT_DIR/scripts/rollback_store_opening_setup_wizard.sql"
+    [[ -f "$rollback_path" ]] ||
+      fail "Missing store opening setup rollback file: $rollback_path"
+    log "Store opening setup rollback readiness"
+    printf 'Rollback ready (not executed): %s\n' "$rollback_path"
+  fi
 
   require_migration_history_absent "$migration_version"
 
@@ -651,6 +660,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_restaurant_sales_excel_export.sql" \
       "Restaurant sales Excel export migration preflight"
+  elif [[ "$migration_name" == "20260717090000_store_opening_setup_wizard.sql" ]]; then
+    log "Store opening setup migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_store_opening_setup_wizard.sql" \
+      "Store opening setup migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -667,6 +681,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/apply_restaurant_daily_cutoff.sql" \
       "migration $migration_version with approved Restaurant cutoff stores"
+  elif [[ "$migration_name" == "20260717090000_store_opening_setup_wizard.sql" ]]; then
+    log "Apply Store opening setup migration atomically"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/apply_store_opening_setup_wizard.sql" \
+      "migration $migration_version with guarded Store opening setup"
   else
     run_linked_psql_file "$migration_path" "migration $migration_version"
   fi
@@ -701,6 +720,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_restaurant_sales_excel_export.sql" \
       "Restaurant sales Excel export migration verification"
+  elif [[ "$migration_name" == "20260717090000_store_opening_setup_wizard.sql" ]]; then
+    log "Store opening setup migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_store_opening_setup_wizard.sql" \
+      "Store opening setup migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \
