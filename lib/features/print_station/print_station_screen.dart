@@ -469,11 +469,7 @@ class _DestinationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final purpose = switch (destination.purpose) {
-      'floor' => l10n.settingsPrintDestinationFloor,
-      'tray' => l10n.settingsPrintDestinationTray,
-      _ => l10n.settingsPrintDestinationKitchen,
-    };
+    final purpose = localizeStoreSetupRoutePurpose(l10n, destination.purpose);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -588,7 +584,8 @@ class _PrintJobTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${job.floorLabel} / ${job.tableNumber} / ${job.copyType}',
+                  '${job.floorLabel} / ${job.tableNumber} / '
+                  '${localizePrintCopyType(context.l10n, job.copyType)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppFonts.system(

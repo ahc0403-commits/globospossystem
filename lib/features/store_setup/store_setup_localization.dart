@@ -1,4 +1,5 @@
 import '../../l10n/app_localizations.dart';
+import 'store_setup_models.dart';
 
 /// Server and queue codes that can reach a store-opening user surface.
 ///
@@ -57,6 +58,24 @@ abstract final class StoreSetupCodeCatalog {
     'done',
     'failed',
     'cancelled',
+  };
+
+  static const routePurposes = <String>{'receipt', 'kitchen', 'floor', 'tray'};
+
+  static const printCopyTypes = <String>{
+    'receipt',
+    'kitchen',
+    'floor',
+    'tray',
+    'confirmation',
+  };
+
+  static const testLabels = <String>{
+    'TEST-RECEIPT',
+    'TEST-KITCHEN',
+    'TEST-1F',
+    'TEST-2F',
+    'TEST-3F',
   };
 
   static const printJobErrors = <String>{
@@ -161,6 +180,45 @@ String localizePrintJobStatus(AppLocalizations l10n, String status) =>
       'failed' => l10n.storeSetupPrintStatusFailed,
       'cancelled' => l10n.storeSetupPrintStatusCancelled,
       _ => l10n.storeSetupPrintStatusUnknown,
+    };
+
+String localizeStoreSetupRoutePurpose(AppLocalizations l10n, String purpose) =>
+    switch (purpose) {
+      'receipt' => l10n.storeSetupPurposeReceipt,
+      'kitchen' => l10n.storeSetupPurposeKitchen,
+      'floor' => l10n.storeSetupPurposeFloor,
+      'tray' => l10n.storeSetupPurposeTray,
+      _ => l10n.storeSetupPurposeUnknown,
+    };
+
+String localizePhysicalPrinterSlot(
+  AppLocalizations l10n,
+  PhysicalPrinterSlot slot,
+) => switch (slot) {
+  PhysicalPrinterSlot.cashier => l10n.storeSetupCashierPrinter,
+  PhysicalPrinterSlot.kitchen => l10n.storeSetupKitchenPrinter,
+  PhysicalPrinterSlot.floor2 => l10n.storeSetupFloor2Printer,
+  PhysicalPrinterSlot.floor3 => l10n.storeSetupFloor3Printer,
+};
+
+String localizeStoreSetupTestLabel(AppLocalizations l10n, String label) =>
+    switch (label) {
+      'TEST-RECEIPT' => l10n.storeSetupTestLabelReceipt,
+      'TEST-KITCHEN' => l10n.storeSetupTestLabelKitchen,
+      'TEST-1F' => l10n.storeSetupTestLabelFloor1,
+      'TEST-2F' => l10n.storeSetupTestLabelFloor2,
+      'TEST-3F' => l10n.storeSetupTestLabelFloor3,
+      _ => l10n.storeSetupTestLabelUnknown,
+    };
+
+String localizePrintCopyType(AppLocalizations l10n, String copyType) =>
+    switch (copyType) {
+      'receipt' ||
+      'kitchen' ||
+      'floor' ||
+      'tray' => localizeStoreSetupRoutePurpose(l10n, copyType),
+      'confirmation' => l10n.storeSetupPrintCopyConfirmation,
+      _ => l10n.storeSetupPrintCopyUnknown,
     };
 
 String localizePrintJobError(AppLocalizations l10n, String error) =>

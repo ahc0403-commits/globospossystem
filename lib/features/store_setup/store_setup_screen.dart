@@ -190,12 +190,12 @@ class _StoreTemplateStep extends StatelessWidget {
               '${context.l10n.storeSetupSelectedStore}: '
               '${store['name'] ?? storeId}',
             ),
-            Text('ID: $storeId'),
+            Text('${context.l10n.storeSetupStoreId}: $storeId'),
             Text('${context.l10n.superAdminBrand}: ${brand ?? '-'}'),
             Text('${context.l10n.superAdminLegalEntity}: ${entity ?? '-'}'),
             Text(
               '${context.l10n.settingsPrintDestinationActive}: '
-              '${store['is_active'] == true}',
+              '${store['is_active'] == true ? context.l10n.yes : context.l10n.no}',
             ),
             const Divider(height: 28),
             Text(
@@ -224,12 +224,8 @@ class _PrinterStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    String title(PhysicalPrinterSlot slot) => switch (slot) {
-      PhysicalPrinterSlot.cashier => context.l10n.storeSetupCashierPrinter,
-      PhysicalPrinterSlot.kitchen => context.l10n.storeSetupKitchenPrinter,
-      PhysicalPrinterSlot.floor2 => context.l10n.storeSetupFloor2Printer,
-      PhysicalPrinterSlot.floor3 => context.l10n.storeSetupFloor3Printer,
-    };
+    String title(PhysicalPrinterSlot slot) =>
+        localizePhysicalPrinterSlot(context.l10n, slot);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

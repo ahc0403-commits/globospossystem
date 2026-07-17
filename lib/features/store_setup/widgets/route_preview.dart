@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
+import '../store_setup_localization.dart';
 import '../store_setup_models.dart';
 
 class StoreSetupRoutePreview extends StatelessWidget {
@@ -23,16 +24,18 @@ class StoreSetupRoutePreview extends StatelessWidget {
             child: ListTile(
               key: Key('store_setup_route_${destination.label}'),
               leading: const Icon(Icons.route_outlined),
-              title: Text(destination.label),
+              title: Text(
+                localizeStoreSetupTestLabel(context.l10n, destination.label),
+              ),
               subtitle: Text(
                 '${context.l10n.storeSetupRoutePurpose}: '
-                '${destination.purpose}'
+                '${localizeStoreSetupRoutePurpose(context.l10n, destination.purpose)}'
                 '${destination.floorLabel == null ? '' : '/${destination.floorLabel}'}\n'
                 '${destination.ip}:${destination.port}',
               ),
               trailing: Text(
                 '${context.l10n.storeSetupRoutePhysical}\n'
-                '${destination.physicalSlot.code}',
+                '${localizePhysicalPrinterSlot(context.l10n, destination.physicalSlot)}',
                 textAlign: TextAlign.end,
               ),
             ),

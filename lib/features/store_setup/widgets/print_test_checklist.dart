@@ -28,7 +28,7 @@ class PrintTestChecklist extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    entry.key,
+                    localizeStoreSetupTestLabel(context.l10n, entry.key),
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   Text(
@@ -36,7 +36,7 @@ class PrintTestChecklist extends StatelessWidget {
                       localizePrintJobStatus(context.l10n, entry.value.status),
                     ),
                   ),
-                  Text('Job ID: ${entry.value.jobId}'),
+                  Text(context.l10n.storeSetupTestJobId(entry.value.jobId)),
                   if (entry.value.error != null)
                     Text(
                       localizePrintJobError(context.l10n, entry.value.error!),

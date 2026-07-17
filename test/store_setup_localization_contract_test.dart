@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/store_setup/store_setup_localization.dart';
+import 'package:globos_pos_system/features/store_setup/store_setup_models.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 
 void main() {
@@ -70,6 +71,27 @@ void main() {
           (code) => localizePrintJobStatus(l10n, code),
         );
         expectMapped(
+          StoreSetupCodeCatalog.routePurposes,
+          (code) => localizeStoreSetupRoutePurpose(l10n, code),
+        );
+        expectMapped(
+          StoreSetupCodeCatalog.printCopyTypes,
+          (code) => localizePrintCopyType(l10n, code),
+        );
+        expectMapped(
+          StoreSetupCodeCatalog.testLabels,
+          (code) => localizeStoreSetupTestLabel(l10n, code),
+        );
+        for (final slot in PhysicalPrinterSlot.values) {
+          final message = localizePhysicalPrinterSlot(l10n, slot);
+          expect(message.trim(), isNotEmpty, reason: '$locale / ${slot.code}');
+          expect(
+            message,
+            isNot(slot.code),
+            reason: '$locale echoed ${slot.code}',
+          );
+        }
+        expectMapped(
           StoreSetupCodeCatalog.printJobErrors,
           (code) => localizePrintJobError(l10n, code),
         );
@@ -92,6 +114,15 @@ void main() {
           isNot(contains(unknown)),
         );
         expect(localizePrintJobStatus(l10n, unknown), isNot(contains(unknown)));
+        expect(
+          localizeStoreSetupRoutePurpose(l10n, unknown),
+          isNot(contains(unknown)),
+        );
+        expect(localizePrintCopyType(l10n, unknown), isNot(contains(unknown)));
+        expect(
+          localizeStoreSetupTestLabel(l10n, unknown),
+          isNot(contains(unknown)),
+        );
         expect(localizePrintJobError(l10n, unknown), isNot(contains(unknown)));
         expect(localizeReadinessCheck(l10n, unknown), isNot(contains(unknown)));
         expect(
@@ -163,4 +194,38 @@ void main() {
       expect(surfaces, contains('localizeReadinessCheck('));
     },
   );
+
+  test('wizard and print station reject raw labels and enum rendering', () {
+    final setupScreen = File(
+      'lib/features/store_setup/store_setup_screen.dart',
+    ).readAsStringSync();
+    final routePreview = File(
+      'lib/features/store_setup/widgets/route_preview.dart',
+    ).readAsStringSync();
+    final checklist = File(
+      'lib/features/store_setup/widgets/print_test_checklist.dart',
+    ).readAsStringSync();
+    final printStation = File(
+      'lib/features/print_station/print_station_screen.dart',
+    ).readAsStringSync();
+
+    expect(
+      RegExp(
+        r'''Text\(\s*['"](?:Job )?ID:''',
+      ).hasMatch('$setupScreen\n$checklist'),
+      isFalse,
+    );
+    expect(routePreview, isNot(contains(r'${destination.purpose}')));
+    expect(routePreview, isNot(contains('destination.physicalSlot.code')));
+    expect(RegExp(r'Text\(\s*entry\.key\b').hasMatch(checklist), isFalse);
+    expect(printStation, isNot(contains(r'${job.copyType}')));
+
+    expect(setupScreen, contains('l10n.storeSetupStoreId'));
+    expect(checklist, contains('l10n.storeSetupTestJobId'));
+    expect(checklist, contains('localizeStoreSetupTestLabel('));
+    expect(routePreview, contains('localizeStoreSetupRoutePurpose('));
+    expect(routePreview, contains('localizePhysicalPrinterSlot('));
+    expect(printStation, contains('localizeStoreSetupRoutePurpose('));
+    expect(printStation, contains('localizePrintCopyType('));
+  });
 }
