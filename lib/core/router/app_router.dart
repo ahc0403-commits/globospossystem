@@ -147,6 +147,7 @@ GoRouter buildAppRouter(ProviderContainer container) {
           role != 'admin' &&
           role != 'brand_admin' &&
           role != 'store_admin' &&
+          role != 'photo_objet_master' &&
           role != 'super_admin') {
         redirectTo = homeRoute;
         NavigationHistoryService.instance.push(redirectTo);
@@ -173,13 +174,6 @@ GoRouter buildAppRouter(ProviderContainer container) {
 
       // 6-D. /admin/:storeId 는 super_admin 전용
       if (location.startsWith('/admin/') && role != 'super_admin') {
-        redirectTo = homeRoute;
-        NavigationHistoryService.instance.push(redirectTo);
-        return redirectTo;
-      }
-
-      // 6-E. Attendance capture requires the native Android camera flow.
-      if (location == '/attendance-kiosk' && !PlatformInfo.isKioskSupported) {
         redirectTo = homeRoute;
         NavigationHistoryService.instance.push(redirectTo);
         return redirectTo;

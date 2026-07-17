@@ -1,5 +1,119 @@
 import 'dart:collection';
 
+class WorkforceAccountTemplate {
+  const WorkforceAccountTemplate({
+    required this.accountCode,
+    required this.accountType,
+    required this.role,
+    required this.displayName,
+    required this.scope,
+  });
+
+  final String accountCode;
+  final String accountType;
+  final String role;
+  final String displayName;
+  final String scope;
+
+  Map<String, dynamic> toJson() => {
+    'account_code': accountCode.trim().toLowerCase(),
+    'account_type': accountType,
+    'role': role,
+    'display_name': displayName.trim(),
+    'scope': scope,
+  };
+
+  factory WorkforceAccountTemplate.fromJson(Map<String, dynamic> json) =>
+      WorkforceAccountTemplate(
+        accountCode: json['account_code']?.toString() ?? '',
+        accountType: json['account_type']?.toString() ?? 'store_operator',
+        role: json['role']?.toString() ?? 'photo_objet_store_operator',
+        displayName: json['display_name']?.toString() ?? '',
+        scope: json['scope']?.toString() ?? 'store',
+      );
+}
+
+abstract final class WorkforcePresetCatalog {
+  static const andreEmail = 'andre@globos.world';
+  static const andreRole = 'super_admin';
+
+  static List<WorkforceAccountTemplate> photo(String shortCode) {
+    final short = shortCode.trim().toLowerCase().replaceAll(
+      RegExp('[^a-z0-9_]'),
+      '',
+    );
+    return [
+      const WorkforceAccountTemplate(
+        accountCode: 'photo_bm1',
+        accountType: 'brand_manager',
+        role: 'photo_objet_master',
+        displayName: 'PHOTO OBJET Brand Manager 1',
+        scope: 'brand',
+      ),
+      const WorkforceAccountTemplate(
+        accountCode: 'photo_bm2',
+        accountType: 'brand_manager',
+        role: 'photo_objet_master',
+        displayName: 'PHOTO OBJET Brand Manager 2',
+        scope: 'brand',
+      ),
+      WorkforceAccountTemplate(
+        accountCode: '${short.isEmpty ? 'store' : short}_ops1',
+        accountType: 'store_operator',
+        role: 'photo_objet_store_operator',
+        displayName:
+            '${short.isEmpty ? 'Store' : short.toUpperCase()} Operator',
+        scope: 'store',
+      ),
+    ];
+  }
+
+  static List<WorkforceAccountTemplate> bunsik(String shortCode) {
+    final short = shortCode.trim().toLowerCase().replaceAll(
+      RegExp('[^a-z0-9_]'),
+      '',
+    );
+    final prefix = short.isEmpty ? 'store' : short;
+    return [
+      const WorkforceAccountTemplate(
+        accountCode: 'bunsik_bm1',
+        accountType: 'brand_manager',
+        role: 'brand_admin',
+        displayName: 'Bunsik Brand Manager',
+        scope: 'brand',
+      ),
+      const WorkforceAccountTemplate(
+        accountCode: 'bunsik_sm1',
+        accountType: 'store_manager',
+        role: 'store_admin',
+        displayName: 'Bunsik Store Manager',
+        scope: 'store',
+      ),
+      WorkforceAccountTemplate(
+        accountCode: '${prefix}_pos1',
+        accountType: 'device_pos',
+        role: 'cashier',
+        displayName: '${prefix.toUpperCase()} POS',
+        scope: 'store',
+      ),
+      WorkforceAccountTemplate(
+        accountCode: '${prefix}_tab1',
+        accountType: 'device_tablet',
+        role: 'cashier',
+        displayName: '${prefix.toUpperCase()} Tablet',
+        scope: 'store',
+      ),
+      WorkforceAccountTemplate(
+        accountCode: '${prefix}_kit1',
+        accountType: 'device_kitchen',
+        role: 'kitchen',
+        displayName: '${prefix.toUpperCase()} Kitchen',
+        scope: 'store',
+      ),
+    ];
+  }
+}
+
 enum PhysicalPrinterSlot { cashier, kitchen, floor2, floor3 }
 
 extension PhysicalPrinterSlotCode on PhysicalPrinterSlot {

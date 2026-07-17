@@ -1,42 +1,6 @@
-import 'dart:async';
-
 import '../../main.dart';
 
 class StaffService {
-  Future<Map<String, dynamic>> createStaffUser({
-    required String email,
-    required String password,
-    required String fullName,
-    required String role,
-    required String storeId,
-  }) async {
-    final response = await supabase.functions
-        .invoke(
-          'create_staff_user',
-          body: {
-            'email': email,
-            'password': password,
-            'full_name': fullName,
-            'role': role,
-            'store_id': storeId,
-          },
-        )
-        .timeout(
-          const Duration(seconds: 20),
-          onTimeout: () => throw TimeoutException(
-            'Staff account creation timed out before the server returned a result.',
-          ),
-        );
-    if (response.status != 200) {
-      final errorData = response.data;
-      final errorMsg = errorData is Map
-          ? errorData['error'] ?? 'Failed to create staff'
-          : 'Failed to create staff';
-      throw Exception(errorMsg.toString());
-    }
-    return Map<String, dynamic>.from(response.data as Map);
-  }
-
   Future<void> updateMyFullName(String fullName) async {
     await supabase.rpc(
       'update_my_profile_full_name',
@@ -44,23 +8,70 @@ class StaffService {
     );
   }
 
-  Future<void> adminUpdateStaffAccount({
-    required String userId,
+  Future<List<Map<String, dynamic>>> fetchStoreEmployees(String storeId) async {
+    final response = await supabase
+        .from('store_employees')
+        .select()
+        .eq('store_id', storeId)
+        .order('created_at');
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  Future<Map<String, dynamic>> createStoreEmployee({
+    required String fullName,
+    required String employmentRole,
     required String storeId,
-    String? fullName,
-    bool? isActive,
-    List<String>? extraPermissions,
+    String? phone,
+    String? bankAccountNumber,
+    String? bankAccountHolder,
   }) async {
-    await supabase.rpc(
-      'admin_update_staff_account',
+    final response = await supabase.rpc(
+      'create_store_employee',
       params: {
-        'p_user_id': userId,
         'p_store_id': storeId,
         'p_full_name': fullName,
-        'p_is_active': isActive,
-        'p_extra_permissions': extraPermissions,
+        'p_employment_role': employmentRole,
+        'p_phone': phone,
+        'p_bank_account_number': bankAccountNumber,
+        'p_bank_account_holder': bankAccountHolder,
       },
     );
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  Future<Map<String, dynamic>> updateStoreEmployee({
+    required String employeeId,
+    required String storeId,
+    required String fullName,
+    required String employmentRole,
+    String? phone,
+    String? bankAccountNumber,
+    String? bankAccountHolder,
+  }) async {
+    final response = await supabase.rpc(
+      'update_store_employee',
+      params: {
+        'p_store_id': storeId,
+        'p_employee_id': employeeId,
+        'p_full_name': fullName,
+        'p_employment_role': employmentRole,
+        'p_phone': phone,
+        'p_bank_account_number': bankAccountNumber,
+        'p_bank_account_holder': bankAccountHolder,
+      },
+    );
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  Future<Map<String, dynamic>> deactivateStoreEmployee({
+    required String employeeId,
+    required String storeId,
+  }) async {
+    final response = await supabase.rpc(
+      'deactivate_store_employee',
+      params: {'p_store_id': storeId, 'p_employee_id': employeeId},
+    );
+    return Map<String, dynamic>.from(response as Map);
   }
 }
 

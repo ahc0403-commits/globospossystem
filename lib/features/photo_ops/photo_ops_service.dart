@@ -44,17 +44,16 @@ class PhotoOpsAttendanceRow {
     required this.employeeName,
     required this.type,
     required this.loggedAt,
-    this.photoUrl,
   });
 
   final String employeeName;
   final String type;
   final DateTime loggedAt;
-  final String? photoUrl;
 }
 
 class PhotoOpsInventoryRow {
   const PhotoOpsInventoryRow({
+    required this.ingredientId,
     required this.itemName,
     required this.currentStock,
     required this.unit,
@@ -63,6 +62,7 @@ class PhotoOpsInventoryRow {
     this.supplierName,
   });
 
+  final String ingredientId;
   final String itemName;
   final double currentStock;
   final String unit;
@@ -226,6 +226,38 @@ int _photoOpsInt(dynamic value) {
 }
 
 class PhotoOpsService {
+  Future<PhotoOpsDashboardData> loadOperatorDashboard({
+    required String activeStoreId,
+  }) async {
+    final now = DateTime.now();
+    final results = await Future.wait([
+      attendanceService.fetchLogs(
+        storeId: activeStoreId,
+        from: now.subtract(const Duration(days: 6)),
+        to: now.add(const Duration(days: 1)),
+      ),
+      inventoryService.fetchIngredients(activeStoreId),
+    ]);
+    final attendance = _attendanceRows(
+      List<Map<String, dynamic>>.from(results[0] as List),
+    );
+    final inventory = _inventoryRows(
+      List<Map<String, dynamic>>.from(results[1] as List),
+    );
+    return PhotoOpsDashboardData(
+      kpi: PhotoOpsKpi(
+        allAttendanceEvents: attendance.length,
+        activeAttendanceEvents: attendance.length,
+        allInventoryAlerts: inventory.length,
+        activeInventoryAlerts: inventory.length,
+        activePayrollEstimate: 0,
+      ),
+      recentAttendance: attendance,
+      inventoryAlerts: inventory,
+      payrollPreview: const [],
+    );
+  }
+
   Future<PhotoOpsSalesExport> loadSalesExport({
     required List<String> accessibleStoreIds,
     required String saleDate,
@@ -371,38 +403,8 @@ class PhotoOpsService {
     );
     final payrollPreviewRaw = results[4] as List<StaffPayroll>;
 
-    final recentAttendance = recentAttendanceRaw.take(10).map((row) {
-      final userRaw = row['users'];
-      String employeeName = 'Unknown';
-      if (userRaw is Map<String, dynamic>) {
-        employeeName = userRaw['full_name']?.toString() ?? 'Unknown';
-      }
-      return PhotoOpsAttendanceRow(
-        employeeName: employeeName,
-        type: row['type']?.toString() ?? '',
-        loggedAt:
-            DateTime.tryParse(row['logged_at']?.toString() ?? '') ??
-            DateTime.now(),
-        photoUrl: row['photo_url']?.toString(),
-      );
-    }).toList();
-
-    final inventoryAlerts = inventoryCatalog
-        .where((row) => (row['needs_reorder'] as bool?) ?? false)
-        .take(10)
-        .map(
-          (row) => PhotoOpsInventoryRow(
-            itemName: row['name']?.toString() ?? 'Unknown Item',
-            currentStock: _toDouble(row['current_stock']),
-            unit: row['unit']?.toString() ?? '-',
-            reorderPoint: row['reorder_point'] == null
-                ? null
-                : _toDouble(row['reorder_point']),
-            needsReorder: (row['needs_reorder'] as bool?) ?? false,
-            supplierName: row['supplier_name']?.toString(),
-          ),
-        )
-        .toList();
+    final recentAttendance = _attendanceRows(recentAttendanceRaw);
+    final inventoryAlerts = _inventoryRows(inventoryCatalog);
 
     final payrollPreview =
         payrollPreviewRaw
@@ -450,6 +452,45 @@ class PhotoOpsService {
     if (value is num) return value.toDouble();
     return double.tryParse(value.toString()) ?? 0;
   }
+
+  List<PhotoOpsAttendanceRow> _attendanceRows(
+    List<Map<String, dynamic>> rows,
+  ) => rows.take(10).map((row) {
+    final employeeRaw = row['store_employees'];
+    var employeeName = 'Unknown';
+    if (employeeRaw is Map) {
+      employeeName = employeeRaw['full_name']?.toString() ?? 'Unknown';
+    }
+    return PhotoOpsAttendanceRow(
+      employeeName: employeeName,
+      type: row['type']?.toString() ?? '',
+      loggedAt:
+          DateTime.tryParse(row['logged_at']?.toString() ?? '') ??
+          DateTime.now(),
+    );
+  }).toList();
+
+  List<PhotoOpsInventoryRow> _inventoryRows(List<Map<String, dynamic>> rows) =>
+      rows
+          .where((row) => (row['needs_reorder'] as bool?) ?? false)
+          .take(10)
+          .map(
+            (row) => PhotoOpsInventoryRow(
+              ingredientId:
+                  row['ingredient_id']?.toString() ??
+                  row['id']?.toString() ??
+                  '',
+              itemName: row['name']?.toString() ?? 'Unknown Item',
+              currentStock: _toDouble(row['current_stock']),
+              unit: row['unit']?.toString() ?? '-',
+              reorderPoint: row['reorder_point'] == null
+                  ? null
+                  : _toDouble(row['reorder_point']),
+              needsReorder: (row['needs_reorder'] as bool?) ?? false,
+              supplierName: row['supplier_name']?.toString(),
+            ),
+          )
+          .toList();
 }
 
 final photoOpsService = PhotoOpsService();

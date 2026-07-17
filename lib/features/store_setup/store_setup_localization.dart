@@ -47,6 +47,9 @@ abstract final class StoreSetupCodeCatalog {
     'STORE_SETUP_TEST_TIMEOUT',
     'STORE_SETUP_TEST_POLL_FAILED',
     'STORE_SETUP_READINESS_FAILED',
+    'STORE_SETUP_WORKFORCE_READINESS_FAILED',
+    'STORE_SETUP_WORKFORCE_SAVE_FAILED',
+    'STORE_SETUP_FIXED_ACCOUNT_PROVISION_FAILED',
     'PRINT_AGENT_PREFERENCE_READ_FAILED',
     'PRINT_AGENT_START_FAILED',
     'PRINT_AGENT_PROCESS_FAILED',
@@ -165,6 +168,11 @@ String localizeStoreSetupFlowError(AppLocalizations l10n, String code) =>
       'STORE_SETUP_TEST_TIMEOUT' => l10n.storeSetupErrorTestTimeout,
       'STORE_SETUP_TEST_POLL_FAILED' => l10n.storeSetupErrorTestPoll,
       'STORE_SETUP_READINESS_FAILED' => l10n.storeSetupErrorReadiness,
+      'STORE_SETUP_WORKFORCE_READINESS_FAILED' =>
+        l10n.storeSetupErrorWorkforceReadiness,
+      'STORE_SETUP_WORKFORCE_SAVE_FAILED' => l10n.storeSetupErrorWorkforceSave,
+      'STORE_SETUP_FIXED_ACCOUNT_PROVISION_FAILED' =>
+        l10n.storeSetupErrorAccountProvision,
       'PRINT_AGENT_PREFERENCE_READ_FAILED' =>
         l10n.storeSetupErrorAgentPreferenceRead,
       'PRINT_AGENT_START_FAILED' => l10n.storeSetupErrorAgentStart,

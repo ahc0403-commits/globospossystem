@@ -8,6 +8,22 @@ import '../../main.dart';
 import 'rpc_compat.dart';
 
 class AttendanceService {
+  Future<Map<String, dynamic>> recordEmployeeAttendance({
+    required String storeId,
+    required String employeeNumber,
+    required String type,
+  }) async {
+    final response = await supabase.rpc(
+      'record_employee_attendance',
+      params: {
+        'p_store_id': storeId,
+        'p_employee_number': employeeNumber.trim().toUpperCase(),
+        'p_type': type,
+      },
+    );
+    return Map<String, dynamic>.from(response as Map);
+  }
+
   Future<String?> uploadAttendancePhoto({
     required String storeId,
     required String userId,
@@ -86,46 +102,57 @@ class AttendanceService {
     required DateTime from,
     required DateTime to,
   }) async {
-    final result = await runRpcWithStoreCompat<dynamic>(
-      fnName: 'get_attendance_log_view',
-      params: {
-        'p_store_id': storeId,
-        'p_from': from.toUtc().toIso8601String(),
-        'p_to': to.toUtc().toIso8601String(),
-        'p_user_id': null,
-      },
-      invoke: (params) =>
-          supabase.rpc('get_attendance_log_view', params: params),
-    );
+    final result = await supabase
+        .from('attendance_logs')
+        .select(
+          'id, restaurant_id, employee_id, type, logged_at, created_at, '
+          'store_employees(employee_number, full_name, employment_role)',
+        )
+        .eq('restaurant_id', storeId)
+        .gte('logged_at', from.toUtc().toIso8601String())
+        .lt('logged_at', to.toUtc().toIso8601String())
+        .order('logged_at', ascending: false)
+        .limit(500);
 
-    return List<Map<String, dynamic>>.from(result as List).map((row) {
+    return List<Map<String, dynamic>>.from(result).map((row) {
       final map = Map<String, dynamic>.from(row);
+      final employee = map['store_employees'] is Map
+          ? Map<String, dynamic>.from(map['store_employees'] as Map)
+          : const <String, dynamic>{};
       return {
-        'id': map['attendance_log_id'],
+        'id': map['id'],
         'restaurant_id': map['restaurant_id'],
-        'user_id': map['user_id'],
-        'type': map['attendance_type'],
-        'photo_url': map['photo_url'],
-        'photo_thumbnail_url': map['photo_thumbnail_url'],
+        'user_id': map['employee_id'],
+        'employee_number': employee['employee_number'],
+        'type': map['type'],
         'logged_at': map['logged_at'],
         'created_at': map['created_at'],
         'users': {
-          'id': map['user_id'],
-          'full_name': map['user_full_name'],
-          'role': map['user_role'],
+          'id': map['employee_id'],
+          'full_name': employee['full_name'],
+          'role': employee['employment_role'],
         },
       };
     }).toList();
   }
 
   Future<List<Map<String, dynamic>>> fetchStaffList(String storeId) async {
-    final result = await runRpcWithStoreCompat<dynamic>(
-      fnName: 'get_attendance_staff_directory',
-      params: {'p_store_id': storeId},
-      invoke: (params) =>
-          supabase.rpc('get_attendance_staff_directory', params: params),
-    );
-    return List<Map<String, dynamic>>.from(result as List);
+    final result = await supabase
+        .from('store_employees')
+        .select('id, employee_number, full_name, employment_role')
+        .eq('store_id', storeId)
+        .eq('is_active', true)
+        .order('employee_number');
+    return List<Map<String, dynamic>>.from(result)
+        .map(
+          (row) => {
+            'user_id': row['id'],
+            'employee_number': row['employee_number'],
+            'full_name': row['full_name'],
+            'role': row['employment_role'],
+          },
+        )
+        .toList(growable: false);
   }
 
   Future<Map<String, dynamic>?> fetchWageConfig({

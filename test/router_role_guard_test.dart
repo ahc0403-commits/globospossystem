@@ -73,17 +73,20 @@ void main() {
       'photo_objet_master': {
         '/photo-ops': true,
         '/print-station': false,
-        '/admin': false,
+        '/admin': true,
         '/super-admin': false,
         '/waiter': false,
         '/cashier': false,
       },
-      'photo_objet_store_admin': {
+      'photo_objet_store_operator': {
         '/photo-ops': true,
+        '/attendance-kiosk': true,
         '/print-station': false,
         '/admin': false,
         '/super-admin': false,
+        '/cashier': false,
       },
+      'photo_objet_store_admin': {'/photo-ops': false, '/admin': false},
     };
 
     for (final roleEntry in roleRouteExpectations.entries) {
@@ -109,6 +112,8 @@ void main() {
         'waiter',
         'kitchen',
         'cashier',
+        'photo_objet_master',
+        'photo_objet_store_operator',
       ]) {
         expect(canAccessRouteForRole(role, '/login'), isTrue);
       }
@@ -133,10 +138,6 @@ void main() {
         expect(canAccessRouteForRole(role, '/attendance-kiosk'), isTrue);
       }
 
-      expect(
-        canAccessRouteForRole('photo_objet_master', '/attendance-kiosk'),
-        isFalse,
-      );
       expect(
         canAccessRouteForRole('photo_objet_store_admin', '/attendance-kiosk'),
         isFalse,
@@ -209,7 +210,8 @@ void main() {
       expect(homeRouteForRole('kitchen'), '/kitchen');
       expect(homeRouteForRole('cashier'), '/cashier');
       expect(homeRouteForRole('photo_objet_master'), '/photo-ops');
-      expect(homeRouteForRole('photo_objet_store_admin'), '/photo-ops');
+      expect(homeRouteForRole('photo_objet_store_operator'), '/photo-ops');
+      expect(homeRouteForRole('photo_objet_store_admin'), '/login');
       expect(homeRouteForRole(null), '/login');
       expect(homeRouteForRole('unknown_role'), '/login');
     });

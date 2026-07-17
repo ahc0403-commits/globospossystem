@@ -24,6 +24,21 @@ abstract class StoreSetupBackend {
 
   Future<Map<String, dynamic>> readiness(String storeId);
 
+  Future<Map<String, dynamic>> workforceReadiness(String storeId);
+
+  Future<Map<String, dynamic>> configureWorkforce({
+    required String storeId,
+    required String shortCode,
+    required String managementModel,
+    required int brandManagerSlots,
+    required List<WorkforceAccountTemplate> accountTemplates,
+  });
+
+  Future<Map<String, dynamic>> provisionFixedAccount({
+    required String requirementId,
+    required String password,
+  });
+
   Future<StoreSetupTestJob> enqueueTest({
     required String storeId,
     required LogicalDestinationDraft destination,
@@ -49,7 +64,7 @@ class SupabaseStoreSetupBackend implements StoreSetupBackend {
           .from('restaurants')
           .select(
             'id, name, address, is_active, brand_id, tax_entity_id, '
-            'brands(name), tax_entity(name, tax_code)',
+            'short_code, brands(name), tax_entity(name, tax_code)',
           )
           .eq('id', storeId)
           .single(),
@@ -116,6 +131,59 @@ class SupabaseStoreSetupBackend implements StoreSetupBackend {
       params: {'p_store_id': storeId},
     );
     return Map<String, dynamic>.from(response as Map);
+  }
+
+  @override
+  Future<Map<String, dynamic>> workforceReadiness(String storeId) async {
+    final response = await _client.rpc(
+      'admin_get_store_workforce_readiness',
+      params: {'p_store_id': storeId},
+    );
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  @override
+  Future<Map<String, dynamic>> configureWorkforce({
+    required String storeId,
+    required String shortCode,
+    required String managementModel,
+    required int brandManagerSlots,
+    required List<WorkforceAccountTemplate> accountTemplates,
+  }) async {
+    final response = await _client.rpc(
+      'admin_configure_store_workforce',
+      params: {
+        'p_store_id': storeId,
+        'p_short_code': shortCode.trim().toUpperCase(),
+        'p_management_model': managementModel,
+        'p_brand_manager_slots': brandManagerSlots,
+        'p_account_templates': accountTemplates
+            .map((template) => template.toJson())
+            .toList(growable: false),
+      },
+    );
+    return Map<String, dynamic>.from(response as Map);
+  }
+
+  @override
+  Future<Map<String, dynamic>> provisionFixedAccount({
+    required String requirementId,
+    required String password,
+  }) async {
+    final response = await _client.functions.invoke(
+      'provision-fixed-pos-account',
+      body: {
+        'requirement_id': requirementId,
+        'password': password,
+        'rotate_password': false,
+      },
+    );
+    if (response.status < 200 || response.status >= 300) {
+      final data = response.data;
+      final message = data is Map ? data['error']?.toString() : null;
+      throw Exception(message ?? 'FIXED_ACCOUNT_PROVISION_FAILED');
+    }
+    return Map<String, dynamic>.from(response.data as Map);
   }
 
   @override

@@ -57,10 +57,14 @@ class PhotoOpsNotifier extends StateNotifier<PhotoOpsState> {
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
-      final data = await photoOpsService.loadDashboard(
-        activeStoreId: activeStoreId,
-        accessibleStoreIds: accessibleStoreIds,
-      );
+      final data = auth.role == 'photo_objet_store_operator'
+          ? await photoOpsService.loadOperatorDashboard(
+              activeStoreId: activeStoreId,
+            )
+          : await photoOpsService.loadDashboard(
+              activeStoreId: activeStoreId,
+              accessibleStoreIds: accessibleStoreIds,
+            );
       state = state.copyWith(
         isLoading: false,
         data: data,

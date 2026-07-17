@@ -85,6 +85,50 @@ void main() {
     expect(notifier.state.testJobs[label]!.jobId, 'retry-$label');
     notifier.dispose();
   });
+
+  test(
+    'fixed-account provisioning clears transient state after success',
+    () async {
+      final backend = _FakeStoreSetupBackend();
+      final notifier = StoreSetupNotifier(storeId: 'store-1', backend: backend);
+      await _flush();
+
+      final result = await notifier.provisionFixedAccount(
+        requirementId: 'requirement-1',
+        password: 'twelve-chars',
+      );
+
+      expect(result, isTrue);
+      expect(backend.provisionCalls, 1);
+      expect(backend.lastProvisionRequirementId, 'requirement-1');
+      expect(backend.lastProvisionPasswordLength, 12);
+      expect(notifier.state.provisioningAccountId, isNull);
+      expect(notifier.state.errorCode, isNull);
+      notifier.dispose();
+    },
+  );
+
+  test(
+    'fixed-account provisioning clears transient state after failure',
+    () async {
+      final backend = _FakeStoreSetupBackend()..provisionShouldFail = true;
+      final notifier = StoreSetupNotifier(storeId: 'store-1', backend: backend);
+      await _flush();
+
+      final result = await notifier.provisionFixedAccount(
+        requirementId: 'requirement-2',
+        password: 'twelve-chars',
+      );
+
+      expect(result, isFalse);
+      expect(notifier.state.provisioningAccountId, isNull);
+      expect(
+        notifier.state.errorCode,
+        'STORE_SETUP_FIXED_ACCOUNT_PROVISION_FAILED',
+      );
+      notifier.dispose();
+    },
+  );
 }
 
 Future<void> _flush() => Future<void>.delayed(Duration.zero);
@@ -92,6 +136,10 @@ Future<void> _flush() => Future<void>.delayed(Duration.zero);
 class _FakeStoreSetupBackend implements StoreSetupBackend {
   int validateCalls = 0;
   int enqueueCalls = 0;
+  int provisionCalls = 0;
+  bool provisionShouldFail = false;
+  String? lastProvisionRequirementId;
+  int? lastProvisionPasswordLength;
   Completer<StoreSetupValidationResult>? validationCompleter;
   Completer<StoreSetupTestJob>? enqueueCompleter;
 
@@ -161,6 +209,38 @@ class _FakeStoreSetupBackend implements StoreSetupBackend {
     'checks': [],
     'recovery': [],
   };
+
+  @override
+  Future<Map<String, dynamic>> workforceReadiness(String storeId) async => {
+    'short_code': 'TEST',
+    'management_model': 'store_managed',
+    'account_templates_configured': true,
+    'accounts_ready': true,
+    'employees_active': 1,
+    'required_accounts': [],
+    'missing_accounts': [],
+  };
+
+  @override
+  Future<Map<String, dynamic>> configureWorkforce({
+    required String storeId,
+    required String shortCode,
+    required String managementModel,
+    required int brandManagerSlots,
+    required List<WorkforceAccountTemplate> accountTemplates,
+  }) async => {'store_id': storeId};
+
+  @override
+  Future<Map<String, dynamic>> provisionFixedAccount({
+    required String requirementId,
+    required String password,
+  }) async {
+    provisionCalls++;
+    lastProvisionRequirementId = requirementId;
+    lastProvisionPasswordLength = password.length;
+    if (provisionShouldFail) throw Exception('provision failed');
+    return {'requirement_id': requirementId};
+  }
 
   @override
   Future<StoreSetupValidationResult> validate(StoreOpeningDraft draft) {
