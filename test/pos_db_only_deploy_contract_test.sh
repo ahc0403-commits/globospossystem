@@ -108,7 +108,7 @@ case "$*" in
     cat <<EXPORTS
 export PGHOST="${FAKE_PGHOST:-aws-0-ap-southeast-1.pooler.supabase.com}"
 export PGPORT="${FAKE_PGPORT:-5432}"
-export PGUSER="postgres.ynriuoomotxuwhuxxmhj"
+export PGUSER="${FAKE_PGUSER:-postgres.ynriuoomotxuwhuxxmhj}"
 export PGPASSWORD="x"
 export PGDATABASE="postgres"
 EXPORTS
@@ -194,22 +194,26 @@ export ENV_FILE="$TMP_DIR/missing-production-env"
 assert_failure 'Missing env file.' invoke_db_only "$REHEARSAL_REPO"
 export ENV_FILE="$TMP_DIR/production.env"
 
-for rejected_pooler in direct transaction; do
-  : >"$CALL_LOG"
-  rm -f "$HISTORY_STATE"
-  if [[ "$rejected_pooler" == direct ]]; then
-    export FAKE_PGHOST=db.ynriuoomotxuwhuxxmhj.supabase.co
-    export FAKE_PGPORT=5432
-  else
-    export FAKE_PGHOST=aws-0-ap-southeast-1.pooler.supabase.com
-    export FAKE_PGPORT=6543
-  fi
-  assert_failure 'DB-only requires the Supabase Shared Session Pooler on port 5432.' \
-    invoke_db_only "$REHEARSAL_REPO"
-  [[ "$(cat "$CALL_LOG")" != *'psql apply_store_opening_setup_wizard.sql'* ]]
-  [[ "$(cat "$CALL_LOG")" != *'migration repair'* ]]
-  unset FAKE_PGHOST FAKE_PGPORT
-done
+: >"$CALL_LOG"
+rm -f "$HISTORY_STATE"
+export FAKE_PGHOST=db.ynriuoomotxuwhuxxmhj.supabase.co
+export FAKE_PGPORT=5432
+export FAKE_PGUSER=postgres
+direct_success_output="$(invoke_db_only "$REHEARSAL_REPO" 2>&1)"
+[[ "$direct_success_output" == *'Database migration gates finished'* ]]
+grep -qx 'psql apply_store_opening_setup_wizard.sql' "$CALL_LOG"
+grep -qx 'supabase migration repair 20260717090000 --status applied --yes' "$CALL_LOG"
+unset FAKE_PGHOST FAKE_PGPORT FAKE_PGUSER
+
+: >"$CALL_LOG"
+rm -f "$HISTORY_STATE"
+export FAKE_PGHOST=aws-0-ap-southeast-1.pooler.supabase.com
+export FAKE_PGPORT=6543
+assert_failure 'DB-only requires the Supabase Shared Session Pooler on port 5432.' \
+  invoke_db_only "$REHEARSAL_REPO"
+[[ "$(cat "$CALL_LOG")" != *'psql apply_store_opening_setup_wizard.sql'* ]]
+[[ "$(cat "$CALL_LOG")" != *'migration repair'* ]]
+unset FAKE_PGHOST FAKE_PGPORT
 
 assert_failure '--db-only requires --migration FILE.' \
   bash "$DEPLOY_SCRIPT" --db-only --dry-run --yes

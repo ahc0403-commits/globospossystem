@@ -177,7 +177,7 @@ workforce_output="$(bash -c '
 [[ "$workforce_output" == *'supabase migration repair 20260717170000 --status applied --yes'* ]]
 [[ "$workforce_output" == *'Confirm migration history presence'* ]]
 
-printf 'PASS: production checks bootstrap clean worktrees and dry-run guarded store setup/table QR/workforce phases\n'
 bash "$ROOT_DIR/test/pos_db_only_deploy_contract_test.sh"
 deno test "$ROOT_DIR/scripts/bootstrap_pos_master_account_test.ts"
 deno check "$ROOT_DIR/scripts/bootstrap_pos_master_account.ts"
+printf 'PASS: production checks bootstrap clean worktrees and dry-run guarded store setup/table QR/workforce phases\n'
