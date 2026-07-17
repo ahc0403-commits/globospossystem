@@ -184,6 +184,10 @@ void main() {
       'lib/features/admin/providers/tables_provider.dart',
     );
     final tablesTab = readRepoFile('lib/features/admin/tabs/tables_tab.dart');
+    final qrExport = readRepoFile(
+      'lib/core/services/table_qr_export_service.dart',
+    );
+    final appConstants = readRepoFile('lib/core/constants/app_constants.dart');
     final pubspec = readRepoFile('pubspec.yaml');
 
     expect(kitchenProvider, contains('order_source'));
@@ -224,7 +228,12 @@ void main() {
     expect(tablesTab, contains("Key('admin_table_qr_rotate_warning')"));
     expect(tablesTab, contains("Key('admin_table_qr_preview')"));
     expect(tablesTab, contains("Key('admin_table_qr_url')"));
-    expect(tablesTab, contains(r"'$origin/#/qr/$token'"));
-    expect(tablesTab, isNot(contains(r"'$origin/qr/$token'")));
+    expect(tablesTab, isNot(contains('Uri.base')));
+    expect(
+      qrExport,
+      contains("fragment: '/qr/\${Uri.encodeComponent(token)}'"),
+    );
+    expect(appConstants, contains("'https://globospossystem.vercel.app'"));
+    expect(appConstants, contains("uri.scheme != 'https'"));
   });
 }
