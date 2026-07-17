@@ -138,8 +138,9 @@ void main() {
         officeBridge,
         contains('await fetchPosRows("v_office_pos_sales_bucket_summary"'),
       );
-      expect(officeBridge, contains('store_id: access.storeId'));
-      expect(officeBridge, contains('brand_id: access.brandId'));
+      expect(officeBridge, contains('pos_store_id: posStoreId'));
+      expect(officeBridge, contains('store_id: scope.officeStoreId'));
+      expect(officeBridge, contains('brand_id: scope.brandId'));
 
       expect(
         officePosService,

@@ -1,6 +1,6 @@
 # POS Production Deployment Runbook
 
-Last updated: 2026-06-25
+Last updated: 2026-07-11
 
 ## Why pilot login can fail after a good deploy
 
@@ -47,17 +47,33 @@ scripts/deploy_pos_production.sh
 
 This default path runs:
 
-1. Production target preflight.
-2. Required pilot Auth readiness check with
+1. Clean Git worktree and freshly fetched `origin/main` ancestry preflight.
+2. Production target preflight.
+3. Required pilot Auth readiness check with
    `scripts/check_pilot_auth_accounts.sh`.
-3. `dart analyze`.
-4. Focused Flutter test target, currently
+4. `dart analyze`.
+5. Focused Flutter test target, currently
    `test/pilot_feedback_closure_contract_test.dart`.
-5. Optional single Supabase migration apply.
-6. `vercel build --prod`.
-7. `vercel deploy --prebuilt --prod --yes`.
-8. Live HTTP check for `https://globospossystem.vercel.app`.
-9. Pilot login smoke with `scripts/smoke_pilot_login.sh`.
+6. Optional single Supabase migration apply with migration-history guards.
+7. `vercel build --prod`.
+8. `vercel deploy --prebuilt --prod --yes`.
+9. Live HTTP check for `https://globospossystem.vercel.app`.
+10. Pilot login smoke with `scripts/smoke_pilot_login.sh`.
+
+Before any production database or Vercel mutation, the script fetches
+`origin/main` into `refs/remotes/origin/main` and requires that freshly fetched
+commit to be an ancestor of `HEAD`. A feature branch based on an older main
+commit is rejected even when its local `origin/main` reference was stale.
+There is no ancestry bypass environment variable.
+
+The worktree must be clean by default (`REQUIRE_CLEAN_GIT=1`). The only
+exception is an explicitly non-mutating inspection run:
+
+```bash
+REQUIRE_CLEAN_GIT=0 scripts/deploy_pos_production.sh --dry-run
+```
+
+`REQUIRE_CLEAN_GIT=0` exits nonzero without `--dry-run`.
 
 The Auth readiness check verifies required pilot emails exist in production
 `auth.users`, are confirmed, have active POS profiles in `public.users`, use a
@@ -100,14 +116,28 @@ Use a single explicit migration file:
 ```bash
 CONFIRM_PRODUCTION_DEPLOY=DEPLOY_GLOBOS_PROD \
 scripts/deploy_pos_production.sh \
-  --migration supabase/migrations/20260616000000_pos_pilot_feedback_closure.sql
+  --migration supabase/migrations/20260711090000_legal_entity_brand_store_hierarchy.sql
 ```
 
-The script applies the file with `supabase db query --linked -f`, then runs:
+The script supports production apply only when that migration has an explicit
+verification phase. It confirms the version is absent from remote migration
+history before SQL, applies the file with the linked fail-fast `psql` runner,
+runs verification, repairs history, and then requires the version to be
+present:
 
 ```bash
+supabase migration list
+psql -X --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction --file <migration>
 supabase migration repair <version> --status applied --yes
+supabase migration list
 ```
+
+Failure to list history, a version unexpectedly present before apply, or a
+version absent after repair stops the deployment with a nonzero exit. Migration
+history confirmation never warns and continues, and there is no repair/history
+bypass flag or environment variable. The destructive hierarchy rollback uses
+the inverse contract: history must contain `20260711090000` before rollback and
+must not contain it after the reverted repair.
 
 Do not use `supabase db push` until the local and remote migration histories
 are reconciled.
@@ -138,6 +168,10 @@ Dry run:
 scripts/deploy_pos_production.sh --dry-run
 ```
 
+Dry-run prints production mutation commands without executing them. It still
+freshly fetches and validates `origin/main`, and it does not weaken the default
+clean-tree rule unless `REQUIRE_CLEAN_GIT=0` is supplied explicitly.
+
 Skip checks only when you have already run them in the same working tree:
 
 ```bash
@@ -153,12 +187,41 @@ manual live URL check to call pilot login PASS.
 
 - Confirm the linked Supabase project is `ynriuoomotxuwhuxxmhj`.
 - Confirm the linked Vercel project is `globospossystem`.
+- Start from a clean committed worktree.
+- Require `HEAD` to descend from freshly fetched `origin/main`; update the
+  branch before retrying when this guard fails.
 - Stop before deploying if required pilot emails are missing from production
   Auth or their POS profile rows are missing.
 - After deploy, prove at least one assigned pilot account can log in and read
   its POS profile.
 - Apply at most one production migration per run unless there is a written
   reason to do otherwise.
+- Treat migration-list failures and expected version mismatches as deployment
+  blockers before continuing to another mutation.
 - Run Supabase DB operations sequentially.
 - Do not print database URLs, service role keys, or anon keys in logs.
 - Keep `.vercelignore` focused on web build inputs so deploy uploads stay small.
+
+## Windows native print station
+
+The Windows print station is the same Flutter POS source compiled as a native
+desktop application. It is not a browser wrapper. The packaged executable is
+`globos_print_station.exe`; all DLLs and the `data` directory beside it are
+required and must be moved together.
+
+Build on a Windows machine with Flutter 3.41.6 and Visual Studio Desktop
+development with C++ installed:
+
+```powershell
+$env:SUPABASE_URL = '<production project URL>'
+$env:SUPABASE_ANON_KEY = '<production anon key>'
+.\scripts\build_windows_print_station.ps1
+```
+
+Never use `SUPABASE_SERVICE_KEY` or a database password in a client build. For
+the reproducible build, run the `Windows Print Station Build` GitHub Actions
+workflow and use only the artifact whose name contains the reviewed commit
+SHA. After login on the station, open **Print Station**, confirm all five
+destinations, print one test ticket per destination, then start polling. Do not
+call the station operational until the physical tickets and retry queue have
+been checked on the store network.

@@ -1,0 +1,52 @@
+name: Windows Print Station Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/windows_print_station_build.yml'
+      - 'windows/**'
+      - 'lib/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'scripts/build_windows_print_station.ps1'
+      - 'test/*print*'
+  pull_request:
+    paths:
+      - '.github/workflows/windows_print_station_build.yml'
+      - 'windows/**'
+      - 'lib/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'scripts/build_windows_print_station.ps1'
+      - 'test/*print*'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Windows x64 print station
+    runs-on: windows-2025
+    timeout-minutes: 35
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.41.6'
+          cache: true
+      - name: Build and package native print station
+        shell: pwsh
+        run: ./scripts/build_windows_print_station.ps1
+      - name: Upload exact-SHA Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: globos-print-station-windows-x64-${{ github.sha }}
+          path: artifacts/globos_print_station_windows_x64.zip
+          if-no-files-found: error
+          retention-days: 14

@@ -678,6 +678,8 @@ const _orderItemsRequiredMessage =
 String _mapOrderError(Object error, String fallbackPrefix) {
   if (error is PostgrestException) {
     return switch (error.message) {
+      'RESTAURANT_KITCHEN_CLOSED' => 'RESTAURANT_KITCHEN_CLOSED',
+      'RESTAURANT_DAILY_SALES_CLOSED' => 'RESTAURANT_DAILY_SALES_CLOSED',
       'TABLE_ALREADY_OCCUPIED' => 'The selected table is already occupied.',
       'TABLE_NOT_AVAILABLE' => 'The selected table is not available.',
       'TABLE_NOT_FOUND' => 'The selected table could not be found.',

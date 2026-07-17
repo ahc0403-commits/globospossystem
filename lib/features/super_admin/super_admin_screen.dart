@@ -27,6 +27,41 @@ const _superAdminScrollPhysics = AlwaysScrollableScrollPhysics(
   parent: ClampingScrollPhysics(),
 );
 
+class _SuperAdminHierarchyCopy {
+  _SuperAdminHierarchyCopy(BuildContext context)
+    : filterInternal = context.l10n.superAdminFilterInternal,
+      filterExternal = context.l10n.superAdminFilterExternal,
+      legalEntity = context.l10n.superAdminLegalEntity,
+      legalEntityPrefix = context.l10n.superAdminLegalEntityPrefix,
+      brand = context.l10n.superAdminBrand,
+      brandPrefix = context.l10n.superAdminBrandPrefix,
+      brandRequired = context.l10n.superAdminBrandRequired,
+      uncategorized = context.l10n.superAdminUncategorized,
+      badgeInternal = context.l10n.superAdminBadgeInternal,
+      badgeExternal = context.l10n.superAdminBadgeExternal,
+      officeIntegration = context.l10n.superAdminOfficeIntegration,
+      officeLinkedDerived = context.l10n.superAdminOfficeLinkedDerived,
+      officeNotLinkedDerived = context.l10n.superAdminOfficeNotLinkedDerived,
+      groupByLegalEntityBrand = context.l10n.superAdminGroupByLegalEntityBrand,
+      legalEntityBrandColumn = context.l10n.superAdminLegalEntityBrandColumn;
+
+  final String filterInternal;
+  final String filterExternal;
+  final String legalEntity;
+  final String Function(String) legalEntityPrefix;
+  final String brand;
+  final String Function(String) brandPrefix;
+  final String brandRequired;
+  final String uncategorized;
+  final String badgeInternal;
+  final String badgeExternal;
+  final String officeIntegration;
+  final String officeLinkedDerived;
+  final String officeNotLinkedDerived;
+  final String groupByLegalEntityBrand;
+  final String legalEntityBrandColumn;
+}
+
 class SuperAdminScreen extends ConsumerStatefulWidget {
   const SuperAdminScreen({super.key});
 
@@ -50,6 +85,7 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
       _initialized = true;
       Future.microtask(() async {
         await notifier.loadBrands();
+        await notifier.loadLegalEntityStructure();
         await notifier.loadAllRestaurants();
         await notifier.loadAllReports();
       });
@@ -828,6 +864,7 @@ class _RestaurantsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final hierarchyCopy = _SuperAdminHierarchyCopy(context);
     return Column(
       children: [
         LayoutBuilder(
@@ -895,22 +932,52 @@ class _RestaurantsTab extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              _storeTypeChip(
+              _ownerTypeChip(
                 null,
                 l10n.superAdminFilterAll,
-                state.selectedStoreType,
+                state.selectedOwnerType,
               ),
               const SizedBox(width: 6),
-              _storeTypeChip(
-                'direct',
-                l10n.superAdminFilterDirect,
-                state.selectedStoreType,
+              _ownerTypeChip(
+                'internal',
+                hierarchyCopy.filterInternal,
+                state.selectedOwnerType,
               ),
               const SizedBox(width: 6),
-              _storeTypeChip(
+              _ownerTypeChip(
                 'external',
-                l10n.superAdminFilterExternal,
-                state.selectedStoreType,
+                hierarchyCopy.filterExternal,
+                state.selectedOwnerType,
+              ),
+              const SizedBox(width: 16),
+              Text(
+                hierarchyCopy.legalEntity,
+                style: AppFonts.system(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(width: 8),
+              DropdownButton<String?>(
+                value: state.selectedTaxEntityId,
+                dropdownColor: AppColors.surface1,
+                hint: Text(
+                  l10n.superAdminSelectLegalEntity,
+                  style: AppFonts.system(color: AppColors.textPrimary),
+                ),
+                items: [
+                  DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text(l10n.superAdminFilterAll),
+                  ),
+                  ...state.filteredTaxEntities.map(
+                    (entity) => DropdownMenuItem<String?>(
+                      value: entity.id,
+                      child: Text(entity.name),
+                    ),
+                  ),
+                ],
+                onChanged: notifier.setTaxEntityFilter,
               ),
               const SizedBox(width: 16),
               Text(
@@ -943,7 +1010,7 @@ class _RestaurantsTab extends StatelessWidget {
                       style: AppFonts.system(color: AppColors.textPrimary),
                     ),
                   ),
-                  ...state.brands.map((brand) {
+                  ...state.filteredBrands.map((brand) {
                     final id = brand['id']?.toString();
                     final code = brand['code']?.toString() ?? '-';
                     final name = brand['name']?.toString() ?? '-';
@@ -1014,6 +1081,17 @@ class _RestaurantsTab extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
+                                  l10n.superAdminLegalEntityPrefix(
+                                    restaurant.taxEntityName ??
+                                        l10n.superAdminUncategorized,
+                                  ),
+                                  style: AppFonts.system(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
                                   l10n.superAdminBrandPrefix(
                                     restaurant.brandName ??
                                         l10n.superAdminUncategorized,
@@ -1026,7 +1104,12 @@ class _RestaurantsTab extends StatelessWidget {
                               ],
                             ),
                           ),
-                          _storeTypeBadge(context, restaurant.storeType),
+                          _ownerTypeBadge(context, restaurant.ownerType),
+                          const SizedBox(width: 6),
+                          _officeIntegrationBadge(
+                            context,
+                            restaurant.isOfficeLinked,
+                          ),
                           const SizedBox(width: 6),
                           _modeBadge(context, restaurant.operationMode),
                           const SizedBox(width: 10),
@@ -1060,7 +1143,7 @@ class _RestaurantsTab extends StatelessWidget {
     );
   }
 
-  Widget _storeTypeChip(String? type, String label, String? selected) {
+  Widget _ownerTypeChip(String? type, String label, String? selected) {
     final isSelected = type == selected;
     return ChoiceChip(
       label: Text(
@@ -1077,19 +1160,19 @@ class _RestaurantsTab extends StatelessWidget {
           : AppColors.amber500,
       backgroundColor: AppColors.surface1,
       side: BorderSide.none,
-      onSelected: (_) => notifier.setStoreTypeFilter(type),
+      onSelected: (_) => notifier.setOwnerTypeFilter(type),
     );
   }
 
-  Widget _storeTypeBadge(BuildContext context, String storeType) {
+  Widget _ownerTypeBadge(BuildContext context, String ownerType) {
     final l10n = context.l10n;
-    final isExternal = storeType == 'external';
+    final isExternal = ownerType == 'external';
     final color = isExternal
         ? const Color(0xFFE57373)
         : const Color(0xFF66BB6A);
     final label = isExternal
         ? l10n.superAdminBadgeExternal
-        : l10n.superAdminBadgeDirect;
+        : l10n.superAdminBadgeInternal;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -1103,6 +1186,36 @@ class _RestaurantsTab extends StatelessWidget {
           color: color,
           fontSize: 10,
           fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _officeIntegrationBadge(BuildContext context, bool isLinked) {
+    final l10n = context.l10n;
+    final color = isLinked
+        ? AppColors.statusAvailable
+        : AppColors.textSecondary;
+    return Tooltip(
+      message: isLinked
+          ? l10n.superAdminOfficeLinkedDerived
+          : l10n.superAdminOfficeNotLinkedDerived,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color),
+        ),
+        child: Text(
+          isLinked
+              ? l10n.superAdminOfficeLinked
+              : l10n.superAdminOfficeNotLinked,
+          style: AppFonts.system(
+            color: color,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );
@@ -1154,14 +1267,20 @@ class _RestaurantsTab extends StatelessWidget {
     final chargeController = TextEditingController(
       text: initial?.perPersonCharge?.toString() ?? '',
     );
-    final availableBrands = state.brands
-        .where((brand) {
-          final id = brand['id']?.toString();
-          return id != null && id.isNotEmpty;
-        })
-        .toList(growable: false);
     String operationMode = initial?.operationMode ?? 'standard';
-    String storeType = initial?.storeType ?? 'direct';
+    String? selectedTaxEntityId =
+        initial?.taxEntityId ??
+        state.selectedTaxEntityId ??
+        (state.filteredTaxEntities.length == 1
+            ? state.filteredTaxEntities.first.id
+            : null);
+    if (selectedTaxEntityId != null &&
+        !state.taxEntities.any((entity) => entity.id == selectedTaxEntityId)) {
+      selectedTaxEntityId = null;
+    }
+    var availableBrands = selectedTaxEntityId == null
+        ? const <Map<String, dynamic>>[]
+        : state.brandsForTaxEntity(selectedTaxEntityId);
     final filterBrandId = state.selectedBrandId == kUnclassifiedBrandFilter
         ? null
         : state.selectedBrandId;
@@ -1185,10 +1304,15 @@ class _RestaurantsTab extends StatelessWidget {
       if (name.isEmpty || slug.isEmpty) {
         return;
       }
-      if (selectedBrandId == null || selectedBrandId!.isEmpty) {
-        showErrorToast(context, l10n.superAdminBrandRequiredBeforeStore);
+      if (selectedTaxEntityId == null || selectedTaxEntityId!.isEmpty) {
+        showErrorToast(context, l10n.superAdminLegalEntityRequiredBeforeStore);
         return;
       }
+      if (selectedBrandId == null || selectedBrandId!.isEmpty) {
+        showErrorToast(context, l10n.superAdminBrandRequired);
+        return;
+      }
+      final taxEntityId = selectedTaxEntityId!;
       final brandId = selectedBrandId!;
       final charge = (operationMode == 'buffet' || operationMode == 'hybrid')
           ? parseDecimalInput(chargeController.text)
@@ -1202,8 +1326,8 @@ class _RestaurantsTab extends StatelessWidget {
               slug: slug,
               operationMode: operationMode,
               perPersonCharge: charge,
+              taxEntityId: taxEntityId,
               brandId: brandId,
-              storeType: storeType,
             )
           : await notifier.addRestaurant(
               name: name,
@@ -1211,8 +1335,8 @@ class _RestaurantsTab extends StatelessWidget {
               slug: slug,
               operationMode: operationMode,
               perPersonCharge: charge,
+              taxEntityId: taxEntityId,
               brandId: brandId,
-              storeType: storeType,
             );
 
       if (success && context.mounted) {
@@ -1308,12 +1432,46 @@ class _RestaurantsTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String?>(
+                    key: ValueKey(selectedTaxEntityId),
+                    initialValue: selectedTaxEntityId,
+                    dropdownColor: AppColors.surface1,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      labelText: l10n.superAdminLegalEntity,
+                      hintText: l10n.superAdminSelectLegalEntity,
+                    ),
+                    items: state.filteredTaxEntities
+                        .map(
+                          (entity) => DropdownMenuItem<String?>(
+                            value: entity.id,
+                            child: Text(entity.name),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      setModalState(() {
+                        selectedTaxEntityId = value;
+                        availableBrands = value == null
+                            ? const <Map<String, dynamic>>[]
+                            : state.brandsForTaxEntity(value);
+                        selectedBrandId = availableBrands.length == 1
+                            ? availableBrands.first['id']?.toString()
+                            : null;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String?>(
+                    key: ValueKey(
+                      '${selectedTaxEntityId ?? 'none'}-${selectedBrandId ?? 'none'}',
+                    ),
                     initialValue: selectedBrandId,
                     dropdownColor: AppColors.surface1,
                     style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(
                       labelText: l10n.superAdminBrand,
                       hintText: l10n.superAdminSelectBrand,
+                      helperText: l10n.superAdminBrandRequiredBeforeStore,
                     ),
                     items: [
                       ...availableBrands.map((brand) {
@@ -1331,28 +1489,25 @@ class _RestaurantsTab extends StatelessWidget {
                     },
                   ),
                   const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    initialValue: storeType,
-                    dropdownColor: AppColors.surface1,
-                    style: AppFonts.system(color: AppColors.textPrimary),
-                    decoration: InputDecoration(
-                      labelText: l10n.superAdminStoreType,
+                  Text(
+                    l10n.superAdminOfficeIntegration,
+                    style: AppFonts.system(
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w700,
                     ),
-                    items: [
-                      DropdownMenuItem(
-                        value: 'direct',
-                        child: Text(l10n.superAdminFilterDirect),
-                      ),
-                      DropdownMenuItem(
-                        value: 'external',
-                        child: Text(l10n.superAdminFilterExternal),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        setModalState(() => storeType = value);
-                      }
-                    },
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    selectedTaxEntityId == null
+                        ? l10n.superAdminSelectLegalEntityFirst
+                        : state.taxEntities
+                              .firstWhere(
+                                (entity) => entity.id == selectedTaxEntityId,
+                              )
+                              .isInternal
+                        ? l10n.superAdminOfficeLinkedDerived
+                        : l10n.superAdminOfficeNotLinkedDerived,
+                    style: AppFonts.system(color: AppColors.textPrimary),
                   ),
                   if (operationMode == 'buffet' ||
                       operationMode == 'hybrid') ...[
@@ -1552,7 +1707,7 @@ class _AllReportsTab extends StatefulWidget {
 }
 
 class _AllReportsTabState extends State<_AllReportsTab> {
-  bool _groupByBrand = false;
+  String _reportGrouping = 'store';
 
   Future<void> _openOfficeKpi() async {
     final uri = Uri.parse(AppConstants.officeKpiUrl);
@@ -1586,6 +1741,58 @@ class _AllReportsTabState extends State<_AllReportsTab> {
     return rowsSorted;
   }
 
+  List<_RevenueGroupRow> _legalEntityBrandRows(
+    List<SuperAdminRestaurantReport> rows,
+    List<SuperRestaurant> restaurants,
+    String uncategorized,
+  ) {
+    final storesById = {for (final store in restaurants) store.id: store};
+    final entities = <String, Map<String, _RevenueGroupAccumulator>>{};
+    final entityNames = <String, String>{};
+    for (final row in rows) {
+      final store = storesById[row.storeId];
+      final entityId = store?.taxEntityId ?? '__unclassified_entity__';
+      final entityName = store?.taxEntityName ?? uncategorized;
+      final brandId = store?.brandId ?? kUnclassifiedBrandFilter;
+      final brandName = store?.brandName ?? uncategorized;
+      entityNames[entityId] = entityName;
+      final brands = entities.putIfAbsent(entityId, () => {});
+      brands
+          .putIfAbsent(brandId, () => _RevenueGroupAccumulator(brandName))
+          .add(row);
+    }
+
+    final result = <_RevenueGroupRow>[];
+    final sortedEntities = entities.entries.toList()
+      ..sort(
+        (a, b) =>
+            (entityNames[a.key] ?? '').compareTo(entityNames[b.key] ?? ''),
+      );
+    for (final entity in sortedEntities) {
+      final brandRows = entity.value.values.toList()
+        ..sort((a, b) => b.total.compareTo(a.total));
+      result.add(
+        _RevenueGroupRow(
+          name: entityNames[entity.key] ?? uncategorized,
+          dineIn: brandRows.fold(0, (sum, row) => sum + row.dineIn),
+          delivery: brandRows.fold(0, (sum, row) => sum + row.delivery),
+          isBrand: false,
+        ),
+      );
+      result.addAll(
+        brandRows.map(
+          (row) => _RevenueGroupRow(
+            name: row.name,
+            dineIn: row.dineIn,
+            delivery: row.delivery,
+            isBrand: true,
+          ),
+        ),
+      );
+    }
+    return result;
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = widget.state;
@@ -1596,6 +1803,13 @@ class _AllReportsTabState extends State<_AllReportsTab> {
     final brandRows = summary == null
         ? const <_BrandRevenueRow>[]
         : _brandRows(summary.rows, state.restaurants);
+    final legalEntityBrandRows = summary == null
+        ? const <_RevenueGroupRow>[]
+        : _legalEntityBrandRows(
+            summary.rows,
+            state.restaurants,
+            l10n.superAdminUncategorized,
+          );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1651,28 +1865,35 @@ class _AllReportsTabState extends State<_AllReportsTab> {
                     );
                   },
                 ),
-                DropdownButton<bool>(
-                  value: _groupByBrand,
+                DropdownButton<String>(
+                  value: _reportGrouping,
                   dropdownColor: AppColors.surface1,
                   items: [
-                    DropdownMenuItem<bool>(
-                      value: false,
+                    DropdownMenuItem<String>(
+                      value: 'store',
                       child: Text(
                         l10n.superAdminGroupByStore,
                         style: AppFonts.system(color: AppColors.textPrimary),
                       ),
                     ),
-                    DropdownMenuItem<bool>(
-                      value: true,
+                    DropdownMenuItem<String>(
+                      value: 'brand',
                       child: Text(
                         l10n.superAdminGroupByBrand,
+                        style: AppFonts.system(color: AppColors.textPrimary),
+                      ),
+                    ),
+                    DropdownMenuItem<String>(
+                      value: 'legal_entity_brand',
+                      child: Text(
+                        l10n.superAdminGroupByLegalEntityBrand,
                         style: AppFonts.system(color: AppColors.textPrimary),
                       ),
                     ),
                   ],
                   onChanged: (value) {
                     if (value != null) {
-                      setState(() => _groupByBrand = value);
+                      setState(() => _reportGrouping = value);
                     }
                   },
                 ),
@@ -1699,6 +1920,12 @@ class _AllReportsTabState extends State<_AllReportsTab> {
                   onPressed: _openOfficeKpi,
                   icon: const Icon(Icons.dashboard_customize),
                   label: Text(l10n.superAdminViewDetailedReports),
+                ),
+                FilledButton.icon(
+                  key: const Key('super_admin_restaurant_sales_export_link'),
+                  onPressed: () => context.go('/restaurant-sales-export'),
+                  icon: const Icon(Icons.download_outlined),
+                  label: Text(l10n.restaurantSalesExportDownload),
                 ),
               ],
             ),
@@ -1748,15 +1975,18 @@ class _AllReportsTabState extends State<_AllReportsTab> {
                       child: Column(
                         children: [
                           _reportHeader(
-                            label: _groupByBrand
-                                ? l10n.superAdminBrandColumn
-                                : l10n.superAdminStoreColumn,
+                            label: switch (_reportGrouping) {
+                              'brand' => l10n.superAdminBrandColumn,
+                              'legal_entity_brand' =>
+                                l10n.superAdminLegalEntityBrandColumn,
+                              _ => l10n.superAdminStoreColumn,
+                            },
                             dineInLabel: l10n.superAdminDineIn,
                             deliveryLabel: l10n.superAdminDelivery,
                             totalLabel: l10n.superAdminTotal,
                           ),
                           Expanded(
-                            child: _groupByBrand
+                            child: _reportGrouping == 'brand'
                                 ? ListView.builder(
                                     primary: false,
                                     physics: _superAdminScrollPhysics,
@@ -1780,6 +2010,47 @@ class _AllReportsTabState extends State<_AllReportsTab> {
                                             _cell('-'),
                                             _cell(
                                               '₫${currency.format(row.total)}',
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  )
+                                : _reportGrouping == 'legal_entity_brand'
+                                ? ListView.builder(
+                                    primary: false,
+                                    physics: _superAdminScrollPhysics,
+                                    padding: _superAdminScrollPadding,
+                                    itemCount: legalEntityBrandRows.length,
+                                    itemBuilder: (context, index) {
+                                      final row = legalEntityBrandRows[index];
+                                      final bg = index.isEven
+                                          ? AppColors.surface1
+                                          : AppColors.surface0;
+                                      return Container(
+                                        color: bg,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 10,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            _cell(
+                                              row.isBrand
+                                                  ? '  ${row.name}'
+                                                  : row.name,
+                                              flex: 3,
+                                              bold: !row.isBrand,
+                                            ),
+                                            _cell(
+                                              '₫${currency.format(row.dineIn)}',
+                                            ),
+                                            _cell(
+                                              '₫${currency.format(row.delivery)}',
+                                            ),
+                                            _cell(
+                                              '₫${currency.format(row.total)}',
+                                              bold: !row.isBrand,
                                             ),
                                           ],
                                         ),
@@ -1899,6 +2170,35 @@ class _BrandRevenueRow {
 
   final String name;
   final double total;
+}
+
+class _RevenueGroupAccumulator {
+  _RevenueGroupAccumulator(this.name);
+
+  final String name;
+  double dineIn = 0;
+  double delivery = 0;
+  double get total => dineIn + delivery;
+
+  void add(SuperAdminRestaurantReport row) {
+    dineIn += row.dineIn;
+    delivery += row.delivery;
+  }
+}
+
+class _RevenueGroupRow {
+  const _RevenueGroupRow({
+    required this.name,
+    required this.dineIn,
+    required this.delivery,
+    required this.isBrand,
+  });
+
+  final String name;
+  final double dineIn;
+  final double delivery;
+  final bool isBrand;
+  double get total => dineIn + delivery;
 }
 
 class _BrandRevenueChart extends StatelessWidget {

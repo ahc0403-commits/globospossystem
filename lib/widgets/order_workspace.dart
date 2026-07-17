@@ -14,6 +14,7 @@ import '../features/admin/providers/menu_provider.dart';
 import '../features/order/order_model.dart';
 import '../features/order/order_provider.dart';
 import '../features/table/table_model.dart';
+import 'error_toast.dart';
 
 enum _OrderPanelOverflowAction { moveTable, cancelOrder }
 
@@ -37,6 +38,9 @@ class OrderWorkspace extends StatelessWidget {
     this.showPaymentActions = false,
     this.onProcessPayment,
     this.isProcessingPayment = false,
+    this.canCreateSales = true,
+    this.canCompletePayment = true,
+    this.cutoffMessage,
     this.onCancelOrderItem,
     this.onEditOrderItemQuantity,
     this.onTransferTable,
@@ -61,6 +65,9 @@ class OrderWorkspace extends StatelessWidget {
   final bool showPaymentActions;
   final Future<void> Function(String method)? onProcessPayment;
   final bool isProcessingPayment;
+  final bool canCreateSales;
+  final bool canCompletePayment;
+  final String? cutoffMessage;
   final Future<void> Function(String itemId)? onCancelOrderItem;
   final Future<void> Function(String itemId, int newQuantity)?
   onEditOrderItemQuantity;
@@ -109,6 +116,9 @@ class OrderWorkspace extends StatelessWidget {
           showPaymentActions: showPaymentActions,
           onProcessPayment: onProcessPayment,
           isProcessingPayment: isProcessingPayment,
+          canCreateSales: canCreateSales,
+          canCompletePayment: canCompletePayment,
+          cutoffMessage: cutoffMessage,
           onCancelOrderItem: onCancelOrderItem,
           onEditOrderItemQuantity: onEditOrderItemQuantity,
           onTransferTable: onTransferTable,
@@ -140,8 +150,10 @@ class OrderWorkspace extends StatelessWidget {
                         cart: orderState.cart,
                         onSelectCategory: (categoryId) =>
                             menuNotifier?.selectCategory(categoryId),
-                        onAddItem: onAddToCart,
-                        onIncrementCartItem: onIncrementCartItem,
+                        onAddItem: canCreateSales ? onAddToCart : (_) {},
+                        onIncrementCartItem: canCreateSales
+                            ? onIncrementCartItem
+                            : (_) {},
                         onDecrementCartItem: onDecrementCartItem,
                       ),
                     ),
@@ -174,8 +186,10 @@ class OrderWorkspace extends StatelessWidget {
                 cart: orderState.cart,
                 onSelectCategory: (categoryId) =>
                     menuNotifier?.selectCategory(categoryId),
-                onAddItem: onAddToCart,
-                onIncrementCartItem: onIncrementCartItem,
+                onAddItem: canCreateSales ? onAddToCart : (_) {},
+                onIncrementCartItem: canCreateSales
+                    ? onIncrementCartItem
+                    : (_) {},
                 onDecrementCartItem: onDecrementCartItem,
               ),
             ),
@@ -911,6 +925,9 @@ class _CurrentOrderPanel extends ConsumerStatefulWidget {
     required this.showPaymentActions,
     required this.onProcessPayment,
     required this.isProcessingPayment,
+    required this.canCreateSales,
+    required this.canCompletePayment,
+    required this.cutoffMessage,
     this.onCancelOrderItem,
     this.onEditOrderItemQuantity,
     this.onTransferTable,
@@ -932,6 +949,9 @@ class _CurrentOrderPanel extends ConsumerStatefulWidget {
   final bool showPaymentActions;
   final Future<void> Function(String method)? onProcessPayment;
   final bool isProcessingPayment;
+  final bool canCreateSales;
+  final bool canCompletePayment;
+  final String? cutoffMessage;
   final Future<void> Function(String itemId)? onCancelOrderItem;
   final Future<void> Function(String itemId, int newQuantity)?
   onEditOrderItemQuantity;
@@ -1015,7 +1035,17 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
     // immediately throws "TextEditingController was used after being
     // disposed" during the closing frame and error-boxes the surface.
     Future.delayed(const Duration(milliseconds: 400), controller.dispose);
+    if (!mounted) {
+      return;
+    }
     if (result != null && result != item.quantity) {
+      if (result > item.quantity && !widget.canCreateSales) {
+        showErrorToast(
+          context,
+          widget.cutoffMessage ?? context.l10n.restaurantKitchenClosed,
+        );
+        return;
+      }
       await widget.onEditOrderItemQuantity!(item.id, result);
     }
   }
@@ -1093,6 +1123,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
         : null;
     final canSendOrder =
         !widget.state.isSubmitting &&
+        widget.canCreateSales &&
         (widget.allowSubmitWithoutCart || widget.state.cart.isNotEmpty);
     final orderSubmissionActions = _OrderSendFooter(
       state: widget.state,
@@ -1505,6 +1536,16 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                 ),
               ),
               const SizedBox(height: 8),
+              if (!widget.canCreateSales && widget.cutoffMessage != null) ...[
+                Text(
+                  widget.cutoffMessage!,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: PosColors.danger,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
               orderSubmissionActions,
               if (widget.state.isSubmitting)
                 Padding(
@@ -1599,6 +1640,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                     icon: PosActionIcons.paymentComplete,
                     onPressed:
                         widget.isProcessingPayment ||
+                            !widget.canCompletePayment ||
                             _selectedPaymentMethod == null ||
                             widget.onProcessPayment == null
                         ? null

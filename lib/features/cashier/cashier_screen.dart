@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/i18n/restaurant_cutoff_localization.dart';
 import '../../core/payments/payment_method_contract.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/layout/platform_info.dart';
@@ -24,6 +25,7 @@ import '../payment/einvoice_status_badge.dart';
 import '../settings/printer_provider.dart';
 import '../../core/services/payment_service.dart';
 import '../../core/services/payment_proof_service.dart';
+import '../../core/services/restaurant_cutoff_service.dart';
 import 'discount_modal.dart';
 import 'payment_proof_modal.dart';
 import 'red_invoice_modal.dart';
@@ -76,7 +78,10 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       if (error != null && error.isNotEmpty && error != _lastError) {
         _lastError = error;
         if (mounted) {
-          showErrorToast(context, error);
+          showErrorToast(
+            context,
+            localizeRestaurantCutoffError(context.l10n, error),
+          );
         }
       }
     });
@@ -401,6 +406,22 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     }
   }
 
+  Future<bool> _canCompleteRestaurantPayment(String storeId) async {
+    try {
+      final cutoff = await restaurantCutoffService.fetchState(storeId);
+      if (cutoff.canCompletePayment) {
+        return true;
+      }
+      if (mounted) {
+        showErrorToast(context, context.l10n.restaurantDailySalesClosed);
+      }
+      return false;
+    } catch (_) {
+      // Advisory preflight only; the payment RPC remains authoritative.
+      return true;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -415,6 +436,10 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     );
     final canManageServiceItems = isAdmin || canApplyDiscount;
     _ensureLoaded(storeId);
+    final cutoffState = storeId == null
+        ? const RestaurantCutoffState.unrestricted()
+        : ref.watch(restaurantCutoffStateProvider(storeId)).valueOrNull ??
+              const RestaurantCutoffState.unrestricted();
 
     final paymentState = ref.watch(paymentProvider);
     final notifier = ref.read(paymentProvider.notifier);
@@ -615,6 +640,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                   canManageServiceItems: canManageServiceItems,
                   isProcessing: paymentState.isProcessing,
                   isOnline: isOnline,
+                  canCompletePayment: cutoffState.canCompletePayment,
                   onSelectMethod: (method) {
                     setState(() => _selectedMethod = method);
                   },
@@ -691,6 +717,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                   onProcess: (method) async {
                     final selectedOrder = paymentState.selectedOrder;
                     if (storeId == null || selectedOrder == null) {
+                      return;
+                    }
+                    if (!await _canCompleteRestaurantPayment(storeId)) {
                       return;
                     }
                     if (isServicePaymentMethod(method)) {
@@ -786,6 +815,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                   onProcessSplit: () async {
                     final selectedOrder = paymentState.selectedOrder;
                     if (storeId == null || selectedOrder == null) {
+                      return;
+                    }
+                    if (!await _canCompleteRestaurantPayment(storeId)) {
                       return;
                     }
                     if (selectedOrder.isStaffMeal) {
@@ -1519,6 +1551,7 @@ class _SelectedOrderView extends StatelessWidget {
     required this.canManageServiceItems,
     required this.isProcessing,
     required this.isOnline,
+    required this.canCompletePayment,
     required this.onSelectMethod,
     required this.onApplyDiscount,
     required this.onToggleServiceItem,
@@ -1535,6 +1568,7 @@ class _SelectedOrderView extends StatelessWidget {
   final bool canManageServiceItems;
   final bool isProcessing;
   final bool isOnline;
+  final bool canCompletePayment;
   final ValueChanged<String> onSelectMethod;
   final Future<void> Function() onApplyDiscount;
   final Future<void> Function(OrderItem item) onToggleServiceItem;
@@ -1591,6 +1625,7 @@ class _SelectedOrderView extends StatelessWidget {
           isServiceSelected: isServiceSelected,
           isProcessing: isProcessing,
           isOnline: isOnline,
+          canCompletePayment: canCompletePayment,
           canCancelOrder: canCancelOrder,
           onSelectMethod: onSelectMethod,
           onApplyDiscount: onApplyDiscount,
@@ -1628,6 +1663,7 @@ class _SelectedOrderView extends StatelessWidget {
                   isServiceSelected: isServiceSelected,
                   isProcessing: isProcessing,
                   isOnline: isOnline,
+                  canCompletePayment: canCompletePayment,
                   canCancelOrder: canCancelOrder,
                   expandMethodSection: false,
                   onSelectMethod: onSelectMethod,
@@ -2004,6 +2040,7 @@ class _CashierPaymentRail extends StatelessWidget {
     required this.isServiceSelected,
     required this.isProcessing,
     required this.isOnline,
+    required this.canCompletePayment,
     required this.canCancelOrder,
     this.expandMethodSection = true,
     required this.onSelectMethod,
@@ -2022,6 +2059,7 @@ class _CashierPaymentRail extends StatelessWidget {
   final bool isServiceSelected;
   final bool isProcessing;
   final bool isOnline;
+  final bool canCompletePayment;
   final bool canCancelOrder;
   final bool expandMethodSection;
   final ValueChanged<String> onSelectMethod;
@@ -2059,6 +2097,7 @@ class _CashierPaymentRail extends StatelessWidget {
       isServiceSelected: isServiceSelected,
       isProcessing: isProcessing,
       isOnline: isOnline,
+      canCompletePayment: canCompletePayment,
       canCancelOrder: canCancelOrder,
       canApplyDiscount: canApplyDiscount && !order.isStaffMeal,
       canProcessSplit: !order.isStaffMeal && order.remainingDue > 0,
@@ -2095,6 +2134,8 @@ class _CashierPaymentRail extends StatelessWidget {
 
     final submitState = isProcessing
         ? PosActionTileState.processing
+        : !canCompletePayment
+        ? PosActionTileState.disabled
         : !isOnline
         ? PosActionTileState.offlineBlocked
         : PosActionTileState.idle;
@@ -2103,7 +2144,9 @@ class _CashierPaymentRail extends StatelessWidget {
         : isServiceSelected
         ? l10n.cashierServiceNow
         : l10n.cashierCompletedStatus;
-    final submitHelper = !isOnline
+    final submitHelper = !canCompletePayment
+        ? l10n.restaurantDailySalesClosed
+        : !isOnline
         ? PosDisabledCopy.forReason(l10n, PosActionDisabledReason.offline)
         : selectedLabel;
 
@@ -2244,7 +2287,7 @@ class _CashierPaymentRail extends StatelessWidget {
               helper: submitHelper,
               icon: PosActionIcons.processPayment,
               state: submitState,
-              onTap: isProcessing || !isOnline
+              onTap: isProcessing || !isOnline || !canCompletePayment
                   ? null
                   : () => unawaited(handlePayPressed()),
             ),
@@ -2267,6 +2310,7 @@ class _CashierPaymentActions extends StatelessWidget {
     required this.isServiceSelected,
     required this.isProcessing,
     required this.isOnline,
+    required this.canCompletePayment,
     required this.canCancelOrder,
     required this.canApplyDiscount,
     required this.canProcessSplit,
@@ -2283,6 +2327,7 @@ class _CashierPaymentActions extends StatelessWidget {
   final bool isServiceSelected;
   final bool isProcessing;
   final bool isOnline;
+  final bool canCompletePayment;
   final bool canCancelOrder;
   final bool canApplyDiscount;
   final bool canProcessSplit;
@@ -2378,7 +2423,9 @@ class _CashierPaymentActions extends StatelessWidget {
             width: double.infinity,
             child: OutlinedButton.icon(
               key: const Key('cashier_split_payment_button'),
-              onPressed: isProcessing || !isOnline ? null : onProcessSplit,
+              onPressed: isProcessing || !isOnline || !canCompletePayment
+                  ? null
+                  : onProcessSplit,
               icon: const Icon(Icons.call_split_rounded, size: 16),
               label: Text(l10n.cashierSplitPaymentTitle),
               style: OutlinedButton.styleFrom(

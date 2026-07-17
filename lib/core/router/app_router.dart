@@ -17,6 +17,7 @@ import '../../features/photo_ops/photo_ops_screen.dart';
 import '../../features/payment/payment_detail_screen.dart';
 import '../../features/print_station/print_station_screen.dart';
 import '../../features/qr_order/qr_order_screen.dart';
+import '../../features/restaurant_sales_export/restaurant_sales_export_screen.dart';
 import '../../features/attendance/attendance_kiosk_screen.dart';
 import '../../features/qc/qc_check_screen.dart';
 import '../../features/qc/qc_review_screen.dart';
@@ -115,6 +116,12 @@ GoRouter buildAppRouter(ProviderContainer container) {
 
       // 6-B. /super-admin 은 super_admin 전용
       if (location == '/super-admin' && role != 'super_admin') {
+        redirectTo = homeRoute;
+        NavigationHistoryService.instance.push(redirectTo);
+        return redirectTo;
+      }
+
+      if (location == '/restaurant-sales-export' && role != 'super_admin') {
         redirectTo = homeRoute;
         NavigationHistoryService.instance.push(redirectTo);
         return redirectTo;
@@ -236,6 +243,10 @@ GoRouter buildAppRouter(ProviderContainer container) {
       GoRoute(
         path: '/super-admin',
         builder: (_, __) => const SuperAdminScreen(),
+      ),
+      GoRoute(
+        path: '/restaurant-sales-export',
+        builder: (_, __) => const RestaurantSalesExportScreen(),
       ),
       GoRoute(
         path: '/admin',

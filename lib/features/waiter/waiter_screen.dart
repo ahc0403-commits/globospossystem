@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/i18n/restaurant_cutoff_localization.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/services/order_service.dart';
+import '../../core/services/restaurant_cutoff_service.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/utils/number_input_utils.dart';
 import '../../main.dart';
@@ -87,7 +89,10 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
       if (error != null && error.isNotEmpty && error != _lastOrderError) {
         _lastOrderError = error;
         if (mounted) {
-          showErrorToast(context, error);
+          showErrorToast(
+            context,
+            localizeRestaurantCutoffError(context.l10n, error),
+          );
         }
       }
     });
@@ -147,6 +152,27 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
       _selectedTable = null;
       _selectedGuestCount = null;
     });
+  }
+
+  Future<bool> _canCreateRestaurantSale(String storeId) async {
+    try {
+      final cutoff = await restaurantCutoffService.fetchState(storeId);
+      if (cutoff.canCreateOrder) {
+        return true;
+      }
+      if (mounted) {
+        showErrorToast(
+          context,
+          cutoff.phase == 'sales_closed'
+              ? context.l10n.restaurantDailySalesClosed
+              : context.l10n.restaurantKitchenClosed,
+        );
+      }
+      return false;
+    } catch (_) {
+      // Advisory preflight only; mutation RPCs remain authoritative.
+      return true;
+    }
   }
 
   Future<int?> _showGuestCountDialog({int? maxGuests}) async {
@@ -408,6 +434,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     required OrderState orderState,
     required bool allowSubmitWithoutCart,
     required bool isBuffetMode,
+    required RestaurantCutoffState cutoffState,
   }) {
     final orderNotifier = ref.read(orderProvider.notifier);
     final l10n = context.l10n;
@@ -422,6 +449,13 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
       menuNotifier: menuNotifier,
       orderState: orderState,
       allowSubmitWithoutCart: allowSubmitWithoutCart,
+      canCreateSales: cutoffState.canCreateOrder,
+      canCompletePayment: cutoffState.canCompletePayment,
+      cutoffMessage: cutoffState.canCreateOrder
+          ? null
+          : cutoffState.phase == 'sales_closed'
+          ? l10n.restaurantDailySalesClosed
+          : l10n.restaurantKitchenClosed,
       onAddToCart: orderNotifier.addToCart,
       onIncrementCartItem: (cartItem) {
         orderNotifier.addToCart(cartItem.copyWith(quantity: 1));
@@ -497,6 +531,12 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
       onSendOrder: () async {
         if (storeId == null) {
           showErrorToast(context, l10n.orderWorkspaceMenuOfflineTitle);
+          return;
+        }
+        if (!await _canCreateRestaurantSale(storeId)) {
+          return;
+        }
+        if (!mounted) {
           return;
         }
         final latestOrderState = ref.read(orderProvider);
@@ -1047,6 +1087,10 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     final menuNotifier = storeId == null
         ? null
         : ref.read(menuProvider(storeId).notifier);
+    final cutoffState = storeId == null
+        ? const RestaurantCutoffState.unrestricted()
+        : ref.watch(restaurantCutoffStateProvider(storeId)).valueOrNull ??
+              const RestaurantCutoffState.unrestricted();
 
     final selectedTable = _resolveSelectedTable(tableState.tables);
     final operationMode =
@@ -1117,6 +1161,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                                 orderState: orderState,
                                 allowSubmitWithoutCart: allowSubmitWithoutCart,
                                 isBuffetMode: isBuffetMode,
+                                cutoffState: cutoffState,
                               )
                             : const _WaiterSelectionPlaceholder(
                                 key: ValueKey<String>('waiter-empty-detail'),

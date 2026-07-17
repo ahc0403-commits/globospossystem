@@ -852,6 +852,7 @@ final cashierTodaySummaryProvider = FutureProvider.autoDispose
 String _mapPaymentError(Object error, String fallbackPrefix) {
   if (error is PostgrestException) {
     return switch (error.message) {
+      'RESTAURANT_DAILY_SALES_CLOSED' => 'RESTAURANT_DAILY_SALES_CLOSED',
       'PAYMENT_FORBIDDEN' =>
         'You do not have permission to complete payment for this order.',
       'INVALID_PAYMENT_METHOD' =>
