@@ -162,6 +162,17 @@ legacy_cli_output="$(FAKE_PGUSER=cli_login_test.ynriuoomotxuwhuxxmhj \
 [[ "$legacy_cli_output" == *'PASS: legacy cli credential success'* ]]
 assert_not_contains "$legacy_cli_output" "$SECRET"
 
+phase direct_postgres_credential
+direct_postgres_output="$(
+  FAKE_PGHOST=db.ynriuoomotxuwhuxxmhj.supabase.co \
+  FAKE_PGPORT=5432 \
+  FAKE_PGUSER=postgres \
+  DB_ONLY=1 \
+  run_linked "$LEGACY_CLI_SQL" 'direct postgres credential success' 2>&1
+)"
+[[ "$direct_postgres_output" == *'PASS: direct postgres credential success'* ]]
+assert_not_contains "$direct_postgres_output" "$SECRET"
+
 phase pooler_normalized_session
 pooler_normalized_output="$(LOCAL_PGUSER=postgres \
   run_linked "$LEGACY_CLI_SQL" 'pooler normalized session success' 2>&1)"
