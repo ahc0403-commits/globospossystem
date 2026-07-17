@@ -16,6 +16,7 @@ import 'widgets/print_test_checklist.dart';
 import 'widgets/readiness_summary.dart';
 import 'widgets/route_preview.dart';
 import 'widgets/table_bulk_editor.dart';
+import 'widgets/workforce_setup_card.dart';
 
 class StoreSetupScreen extends ConsumerWidget {
   const StoreSetupScreen({super.key, required this.storeId});
@@ -102,6 +103,12 @@ class StoreSetupScreen extends ConsumerWidget {
                         content: _StoreTemplateStep(
                           store: state.store,
                           storeId: storeId,
+                          workforceReadiness: state.workforceReadiness,
+                          isSavingWorkforce: state.isSavingWorkforce,
+                          onSaveWorkforce: notifier.configureWorkforce,
+                          onRefreshWorkforce: () =>
+                              notifier.refreshWorkforceReadiness(silent: false),
+                          onProvisionAccount: notifier.provisionFixedAccount,
                         ),
                       ),
                       Step(
@@ -162,10 +169,33 @@ String _localizedError(BuildContext context, String code) {
 }
 
 class _StoreTemplateStep extends StatelessWidget {
-  const _StoreTemplateStep({required this.store, required this.storeId});
+  const _StoreTemplateStep({
+    required this.store,
+    required this.storeId,
+    required this.workforceReadiness,
+    required this.isSavingWorkforce,
+    required this.onSaveWorkforce,
+    required this.onRefreshWorkforce,
+    required this.onProvisionAccount,
+  });
 
   final Map<String, dynamic> store;
   final String storeId;
+  final Map<String, dynamic>? workforceReadiness;
+  final bool isSavingWorkforce;
+  final Future<bool> Function({
+    required String shortCode,
+    required String managementModel,
+    required int brandManagerSlots,
+    required List<WorkforceAccountTemplate> accountTemplates,
+  })
+  onSaveWorkforce;
+  final Future<void> Function() onRefreshWorkforce;
+  final Future<bool> Function({
+    required String requirementId,
+    required String password,
+  })
+  onProvisionAccount;
 
   @override
   Widget build(BuildContext context) {
@@ -175,38 +205,51 @@ class _StoreTemplateStep extends StatelessWidget {
     final entity = store['tax_entity'] is Map
         ? (store['tax_entity'] as Map)['name']?.toString()
         : null;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              context.l10n.storeSetupSubtitle,
-              style: Theme.of(context).textTheme.bodyLarge,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  context.l10n.storeSetupSubtitle,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  '${context.l10n.storeSetupSelectedStore}: '
+                  '${store['name'] ?? storeId}',
+                ),
+                Text('${context.l10n.storeSetupStoreId}: $storeId'),
+                Text('${context.l10n.superAdminBrand}: ${brand ?? '-'}'),
+                Text('${context.l10n.superAdminLegalEntity}: ${entity ?? '-'}'),
+                Text(
+                  '${context.l10n.settingsPrintDestinationActive}: '
+                  '${store['is_active'] == true ? context.l10n.yes : context.l10n.no}',
+                ),
+                const Divider(height: 28),
+                Text(
+                  context.l10n.storeSetupTemplateName,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                Text(context.l10n.storeSetupTemplateDescription),
+                Text(context.l10n.storeSetupFloors),
+              ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              '${context.l10n.storeSetupSelectedStore}: '
-              '${store['name'] ?? storeId}',
-            ),
-            Text('${context.l10n.storeSetupStoreId}: $storeId'),
-            Text('${context.l10n.superAdminBrand}: ${brand ?? '-'}'),
-            Text('${context.l10n.superAdminLegalEntity}: ${entity ?? '-'}'),
-            Text(
-              '${context.l10n.settingsPrintDestinationActive}: '
-              '${store['is_active'] == true ? context.l10n.yes : context.l10n.no}',
-            ),
-            const Divider(height: 28),
-            Text(
-              context.l10n.storeSetupTemplateName,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            Text(context.l10n.storeSetupTemplateDescription),
-            Text(context.l10n.storeSetupFloors),
-          ],
+          ),
         ),
-      ),
+        WorkforceSetupCard(
+          store: store,
+          readiness: workforceReadiness,
+          isSaving: isSavingWorkforce,
+          onSave: onSaveWorkforce,
+          onRefresh: onRefreshWorkforce,
+          onProvision: onProvisionAccount,
+        ),
+      ],
     );
   }
 }

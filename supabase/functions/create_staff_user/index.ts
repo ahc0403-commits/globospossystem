@@ -125,6 +125,24 @@ serve(async (req) => {
       )
     }
 
+    // Human part-timers are auth-less store_employees and every manager/device
+    // login is provisioned from an approved fixed-account requirement. Keep the
+    // legacy path available only as an explicit, temporary rollback switch.
+    if (Deno.env.get('ALLOW_LEGACY_STAFF_PROVISIONING') !== 'true') {
+      return new Response(
+        JSON.stringify({
+          error: 'LEGACY_STAFF_PROVISIONING_DISABLED',
+          next_action: role === 'waiter'
+            ? 'USE_STORE_EMPLOYEE_DIRECTORY'
+            : 'USE_FIXED_POS_ACCOUNT_PROVISIONING',
+        }),
+        {
+          status: 409,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      )
+    }
+
     const serviceClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',

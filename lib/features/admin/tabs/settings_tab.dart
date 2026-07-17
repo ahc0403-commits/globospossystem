@@ -2050,8 +2050,8 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
         return context.l10n.staffRoleBrandAdmin;
       case 'photo_objet_master':
         return context.l10n.staffRolePhotoMaster;
-      case 'photo_objet_store_admin':
-        return context.l10n.staffRolePhotoStoreAdmin;
+      case 'photo_objet_store_operator':
+        return context.l10n.staffRolePhotoStoreOperator;
       case 'super_admin':
         return context.l10n.staffRoleSuperAdmin;
       case null:

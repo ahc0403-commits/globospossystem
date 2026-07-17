@@ -13,7 +13,7 @@ const Set<String> kKnownPosRoles = {
   'kitchen',
   'cashier',
   'photo_objet_master',
-  'photo_objet_store_admin',
+  'photo_objet_store_operator',
 };
 
 /// Cross-store roles that may log in without an accessible-store scope
@@ -26,7 +26,7 @@ const Set<String> kStoreScopeExemptRoles = {
 String homeRouteForRole(String? role) {
   return switch (role) {
     'super_admin' => '/super-admin',
-    'photo_objet_master' || 'photo_objet_store_admin' => '/photo-ops',
+    'photo_objet_master' || 'photo_objet_store_operator' => '/photo-ops',
     'brand_admin' || 'store_admin' || 'admin' => '/admin',
     'waiter' => '/waiter',
     'kitchen' => '/kitchen',
@@ -55,6 +55,7 @@ bool canAccessRouteForRole(
       'waiter' ||
       'kitchen' ||
       'cashier' => true,
+      'photo_objet_master' || 'photo_objet_store_operator' => true,
       _ => false,
     };
   }
@@ -90,7 +91,11 @@ bool canAccessRouteForRole(
       path == '/admin' ||
           path.startsWith('/store-setup/') ||
           path.startsWith('/payments/'),
-    'photo_objet_master' || 'photo_objet_store_admin' => path == '/photo-ops',
+    'photo_objet_master' =>
+      path == '/photo-ops' ||
+          path == '/admin' ||
+          path.startsWith('/store-setup/'),
+    'photo_objet_store_operator' => path == '/photo-ops',
     'waiter' => path == '/waiter',
     'kitchen' => path == '/kitchen',
     'cashier' =>

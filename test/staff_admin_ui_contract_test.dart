@@ -38,8 +38,8 @@ void main() {
   test('staff compact detail surfaces quick actions before dense history', () {
     final source = readRepoFile('lib/features/admin/tabs/staff_tab.dart');
 
-    expect(source, contains('initiallyExpanded: true'));
-    expect(source, contains('showAttendancePreview: false'));
+    expect(source, contains('initiallyExpanded: compact'));
+    expect(source, contains('showAttendancePreview: !compact'));
     expect(source, contains('this.initiallyExpanded = false'));
     expect(source, contains('this.showAttendancePreview = true'));
 

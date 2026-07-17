@@ -27,6 +27,9 @@ class StoreSetupState {
     this.validation,
     this.applyResult,
     this.readiness,
+    this.workforceReadiness,
+    this.isSavingWorkforce = false,
+    this.provisioningAccountId,
     this.testJobs = const {},
     this.errorCode,
   });
@@ -39,6 +42,9 @@ class StoreSetupState {
   final StoreSetupValidationResult? validation;
   final Map<String, dynamic>? applyResult;
   final Map<String, dynamic>? readiness;
+  final Map<String, dynamic>? workforceReadiness;
+  final bool isSavingWorkforce;
+  final String? provisioningAccountId;
   final Map<String, StoreSetupTestJob> testJobs;
   final String? errorCode;
 
@@ -57,8 +63,13 @@ class StoreSetupState {
 
   bool get operationallyReady =>
       readiness?['ready'] == true &&
+      workforceOperationallyReady &&
       allTestJobsDone &&
       allPhysicalOutputsConfirmed;
+
+  bool get workforceOperationallyReady =>
+      workforceReadiness?['accounts_ready'] == true &&
+      ((workforceReadiness?['employees_active'] as num?)?.toInt() ?? 0) > 0;
 
   StoreSetupState copyWith({
     StoreOpeningDraft? draft,
@@ -69,11 +80,16 @@ class StoreSetupState {
     StoreSetupValidationResult? validation,
     Map<String, dynamic>? applyResult,
     Map<String, dynamic>? readiness,
+    Map<String, dynamic>? workforceReadiness,
+    bool? isSavingWorkforce,
+    String? provisioningAccountId,
     Map<String, StoreSetupTestJob>? testJobs,
     String? errorCode,
     bool clearValidation = false,
     bool clearApplyResult = false,
     bool clearReadiness = false,
+    bool clearWorkforceReadiness = false,
+    bool clearProvisioningAccountId = false,
     bool clearError = false,
   }) {
     return StoreSetupState(
@@ -85,6 +101,13 @@ class StoreSetupState {
       validation: clearValidation ? null : (validation ?? this.validation),
       applyResult: clearApplyResult ? null : (applyResult ?? this.applyResult),
       readiness: clearReadiness ? null : (readiness ?? this.readiness),
+      workforceReadiness: clearWorkforceReadiness
+          ? null
+          : (workforceReadiness ?? this.workforceReadiness),
+      isSavingWorkforce: isSavingWorkforce ?? this.isSavingWorkforce,
+      provisioningAccountId: clearProvisioningAccountId
+          ? null
+          : (provisioningAccountId ?? this.provisioningAccountId),
       testJobs: testJobs ?? this.testJobs,
       errorCode: clearError ? null : (errorCode ?? this.errorCode),
     );
@@ -139,6 +162,7 @@ class StoreSetupNotifier extends StateNotifier<StoreSetupState> {
         clearError: true,
       );
       await refreshReadiness(silent: true);
+      await refreshWorkforceReadiness(silent: true);
     } catch (_) {
       state = state.copyWith(
         phase: StoreSetupPhase.blocked,
@@ -467,6 +491,76 @@ class StoreSetupNotifier extends StateNotifier<StoreSetupState> {
       if (!silent) {
         state = state.copyWith(errorCode: 'STORE_SETUP_READINESS_FAILED');
       }
+    }
+  }
+
+  Future<void> refreshWorkforceReadiness({bool silent = false}) async {
+    try {
+      final readiness = await _backend.workforceReadiness(state.draft.storeId);
+      state = state.copyWith(workforceReadiness: readiness, clearError: silent);
+    } catch (_) {
+      if (!silent) {
+        state = state.copyWith(
+          errorCode: 'STORE_SETUP_WORKFORCE_READINESS_FAILED',
+        );
+      }
+    }
+  }
+
+  Future<bool> configureWorkforce({
+    required String shortCode,
+    required String managementModel,
+    required int brandManagerSlots,
+    required List<WorkforceAccountTemplate> accountTemplates,
+  }) async {
+    if (state.isSavingWorkforce) return false;
+    state = state.copyWith(isSavingWorkforce: true, clearError: true);
+    try {
+      await _backend.configureWorkforce(
+        storeId: state.draft.storeId,
+        shortCode: shortCode,
+        managementModel: managementModel,
+        brandManagerSlots: brandManagerSlots,
+        accountTemplates: accountTemplates,
+      );
+      await refreshWorkforceReadiness(silent: true);
+      state = state.copyWith(isSavingWorkforce: false, clearError: true);
+      return true;
+    } catch (_) {
+      state = state.copyWith(
+        isSavingWorkforce: false,
+        errorCode: 'STORE_SETUP_WORKFORCE_SAVE_FAILED',
+      );
+      return false;
+    }
+  }
+
+  Future<bool> provisionFixedAccount({
+    required String requirementId,
+    required String password,
+  }) async {
+    if (state.provisioningAccountId != null) return false;
+    state = state.copyWith(
+      provisioningAccountId: requirementId,
+      clearError: true,
+    );
+    try {
+      await _backend.provisionFixedAccount(
+        requirementId: requirementId,
+        password: password,
+      );
+      await refreshWorkforceReadiness(silent: true);
+      state = state.copyWith(
+        clearProvisioningAccountId: true,
+        clearError: true,
+      );
+      return true;
+    } catch (_) {
+      state = state.copyWith(
+        clearProvisioningAccountId: true,
+        errorCode: 'STORE_SETUP_FIXED_ACCOUNT_PROVISION_FAILED',
+      );
+      return false;
     }
   }
 

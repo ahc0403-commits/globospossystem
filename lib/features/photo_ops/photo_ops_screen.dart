@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/services/attendance_service.dart';
+import '../../core/services/inventory_service.dart';
 import '../../core/ui/app_primitives.dart';
 import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
@@ -35,6 +37,7 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
     final state = ref.watch(photoOpsProvider);
     final notifier = ref.read(photoOpsProvider.notifier);
     final activeStoreId = auth.storeId;
+    final surfaceAccess = PhotoOpsSurfaceAccess.forRole(auth.role);
     final l10n = context.l10n;
     String activeStoreName = l10n.photoOpsNoActiveStore;
 
@@ -50,19 +53,21 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
       Future.microtask(notifier.load);
     }
 
-    final surfaceMeta = _surfaceMeta(context);
+    final surfaceMeta = _surfaceMeta(context, surfaceAccess);
     final safeSurfaceIndex = _selectedSurfaceIndex.clamp(
       0,
       surfaceMeta.length - 1,
     );
     final selectedSurface = surfaceMeta[safeSurfaceIndex];
     final contentChildren = <Widget>[
-      _HeroBanner(
-        role: auth.role,
-        activeStoreName: activeStoreName,
-        storeCount: auth.accessibleStores.length,
-      ),
-      const SizedBox(height: 18),
+      if (surfaceAccess.showManagementSurfaces) ...[
+        _HeroBanner(
+          role: auth.role,
+          activeStoreName: activeStoreName,
+          storeCount: auth.accessibleStores.length,
+        ),
+        const SizedBox(height: 18),
+      ],
       if (state.isLoading && state.data == null)
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 80),
@@ -73,78 +78,116 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
       else if (state.error != null && state.data == null)
         _ErrorCard(message: state.error!, onRetry: notifier.load)
       else if (state.data != null) ...[
-        if (state.data!.salesWarningCode != null) ...[
+        if (surfaceAccess.showManagementSurfaces &&
+            state.data!.salesWarningCode != null) ...[
           _WarningSurface(
             message: _localizedSalesWarning(context, state.data!),
           ),
           const SizedBox(height: 18),
         ],
-        _KpiGrid(data: state.data!.kpi),
-        const SizedBox(height: 18),
-        _WorkflowSurface(
-          title: l10n.photoOpsPriorityQueueTitle,
-          subtitle: l10n.photoOpsPriorityQueueSubtitle,
-          kind: PhotoOpsSurfaceKind.priority,
-          child: _PriorityList(
-            items: _buildPriorityItems(context, state.data!.kpi),
-          ),
-        ),
-        const SizedBox(height: 18),
-        _WorkflowSurface(
-          title: l10n.photoOpsSalesTitle,
-          subtitle: l10n.photoOpsSalesSubtitle,
-          kind: PhotoOpsSurfaceKind.backOffice,
+        PhotoOpsManagementSurfaceGate(
+          role: auth.role,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton.icon(
-                  key: const Key('photo_ops_sales_export_button'),
-                  onPressed: _isExportingSales ? null : _exportLegalEntitySales,
-                  icon: _isExportingSales
-                      ? const SizedBox.square(
-                          dimension: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.download_outlined),
-                  label: Text(l10n.photoOpsSalesDownloadExcel),
+              _KpiGrid(data: state.data!.kpi),
+              const SizedBox(height: 18),
+              _WorkflowSurface(
+                title: l10n.photoOpsPriorityQueueTitle,
+                subtitle: l10n.photoOpsPriorityQueueSubtitle,
+                kind: PhotoOpsSurfaceKind.priority,
+                child: _PriorityList(
+                  items: _buildPriorityItems(context, state.data!.kpi),
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
-              _SalesList(rows: state.data!.salesSummary),
+              const SizedBox(height: 18),
+              _WorkflowSurface(
+                title: l10n.photoOpsSalesTitle,
+                subtitle: l10n.photoOpsSalesSubtitle,
+                kind: PhotoOpsSurfaceKind.backOffice,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton.icon(
+                        key: const Key('photo_ops_sales_export_button'),
+                        onPressed: _isExportingSales
+                            ? null
+                            : _exportLegalEntitySales,
+                        icon: _isExportingSales
+                            ? const SizedBox.square(
+                                dimension: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.download_outlined),
+                        label: Text(l10n.photoOpsSalesDownloadExcel),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    _SalesList(rows: state.data!.salesSummary),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
             ],
           ),
         ),
-        const SizedBox(height: 18),
         _WorkflowSurface(
           title: l10n.photoOpsAttendanceTitle,
           subtitle: l10n.photoOpsAttendanceSubtitle,
           kind: PhotoOpsSurfaceKind.live,
-          child: _AttendanceList(rows: state.data!.recentAttendance),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _EmployeeAttendanceActions(
+                storeId: activeStoreId!,
+                onRecorded: notifier.load,
+              ),
+              const SizedBox(height: 12),
+              _AttendanceList(rows: state.data!.recentAttendance),
+            ],
+          ),
         ),
         const SizedBox(height: 18),
         _WorkflowSurface(
           title: l10n.photoOpsInventoryTitle,
           subtitle: l10n.photoOpsInventorySubtitle,
           kind: PhotoOpsSurfaceKind.priority,
-          child: _InventoryList(rows: state.data!.inventoryAlerts),
+          child: _InventoryList(
+            rows: state.data!.inventoryAlerts,
+            onAdjust: (row) => _showInventoryAdjustment(
+              storeId: activeStoreId,
+              row: row,
+              onRecorded: notifier.load,
+            ),
+          ),
         ),
         const SizedBox(height: 18),
-        _WorkflowSurface(
-          title: l10n.photoOpsSalaryTitle,
-          subtitle: l10n.photoOpsSalarySubtitle,
-          kind: PhotoOpsSurfaceKind.backOffice,
-          child: _PayrollList(rows: state.data!.payrollPreview),
-        ),
-        const SizedBox(height: 18),
-        _WorkflowSurface(
-          title: l10n.photoOpsStoreScopeTitle,
-          subtitle: l10n.photoOpsStoreScopeSubtitle,
-          kind: PhotoOpsSurfaceKind.backOffice,
-          child: _StoreScopeList(
-            stores: auth.accessibleStores,
-            activeStoreId: activeStoreId,
+        PhotoOpsManagementSurfaceGate(
+          role: auth.role,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _WorkflowSurface(
+                title: l10n.photoOpsSalaryTitle,
+                subtitle: l10n.photoOpsSalarySubtitle,
+                kind: PhotoOpsSurfaceKind.backOffice,
+                child: _PayrollList(rows: state.data!.payrollPreview),
+              ),
+              const SizedBox(height: 18),
+              _WorkflowSurface(
+                title: l10n.photoOpsStoreScopeTitle,
+                subtitle: l10n.photoOpsStoreScopeSubtitle,
+                kind: PhotoOpsSurfaceKind.backOffice,
+                child: _StoreScopeList(
+                  stores: auth.accessibleStores,
+                  activeStoreId: activeStoreId,
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -160,6 +203,7 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
           activeStoreName: activeStoreName,
           storeCount: auth.accessibleStores.length,
           data: state.data,
+          surfaceAccess: surfaceAccess,
         ),
         child: child,
       );
@@ -174,33 +218,46 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
           selectedIndex: safeSurfaceIndex,
           onItemSelected: (index) =>
               setState(() => _selectedSurfaceIndex = index),
-          items: [
-            ToastSidebarPanelItem(
-              icon: Icons.dashboard_outlined,
-              label: l10n.photoOpsPriorityQueueTitle,
-              sectionLabel: l10n.photoOpsHeroEyebrow,
-            ),
-            ToastSidebarPanelItem(
-              icon: Icons.payments_outlined,
-              label: l10n.photoOpsSalesTitle,
-              sectionLabel: l10n.photoOpsSalesTitle,
-            ),
-            ToastSidebarPanelItem(
-              icon: Icons.schedule_outlined,
-              label: l10n.photoOpsAttendanceTitle,
-              sectionLabel: l10n.photoOpsAttendanceTitle,
-            ),
-            ToastSidebarPanelItem(
-              icon: Icons.inventory_2_outlined,
-              label: l10n.photoOpsInventoryTitle,
-              sectionLabel: l10n.photoOpsInventoryTitle,
-            ),
-            ToastSidebarPanelItem(
-              icon: Icons.group_outlined,
-              label: l10n.photoOpsSalaryTitle,
-              sectionLabel: l10n.photoOpsSalaryTitle,
-            ),
-          ],
+          items: surfaceAccess.showManagementSurfaces
+              ? [
+                  ToastSidebarPanelItem(
+                    icon: Icons.dashboard_outlined,
+                    label: l10n.photoOpsPriorityQueueTitle,
+                    sectionLabel: l10n.photoOpsHeroEyebrow,
+                  ),
+                  ToastSidebarPanelItem(
+                    icon: Icons.payments_outlined,
+                    label: l10n.photoOpsSalesTitle,
+                    sectionLabel: l10n.photoOpsSalesTitle,
+                  ),
+                  ToastSidebarPanelItem(
+                    icon: Icons.schedule_outlined,
+                    label: l10n.photoOpsAttendanceTitle,
+                    sectionLabel: l10n.photoOpsAttendanceTitle,
+                  ),
+                  ToastSidebarPanelItem(
+                    icon: Icons.inventory_2_outlined,
+                    label: l10n.photoOpsInventoryTitle,
+                    sectionLabel: l10n.photoOpsInventoryTitle,
+                  ),
+                  ToastSidebarPanelItem(
+                    icon: Icons.group_outlined,
+                    label: l10n.photoOpsSalaryTitle,
+                    sectionLabel: l10n.photoOpsSalaryTitle,
+                  ),
+                ]
+              : [
+                  ToastSidebarPanelItem(
+                    icon: Icons.schedule_outlined,
+                    label: l10n.photoOpsAttendanceTitle,
+                    sectionLabel: l10n.photoOpsAttendanceTitle,
+                  ),
+                  ToastSidebarPanelItem(
+                    icon: Icons.inventory_2_outlined,
+                    label: l10n.photoOpsInventoryTitle,
+                    sectionLabel: l10n.photoOpsInventoryTitle,
+                  ),
+                ],
         ),
         topbar: ToastTopbar(
           title: l10n.photoOpsBrandName,
@@ -291,44 +348,227 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
     }
   }
 
-  List<_PhotoOpsSurfaceMeta> _surfaceMeta(BuildContext context) {
+  List<_PhotoOpsSurfaceMeta> _surfaceMeta(
+    BuildContext context,
+    PhotoOpsSurfaceAccess access,
+  ) {
     final l10n = context.l10n;
+    if (!access.showManagementSurfaces) {
+      return [
+        _PhotoOpsSurfaceMeta(
+          title: l10n.photoOpsAttendanceTitle,
+          subtitle: l10n.photoOpsAttendanceNumberOnlySubtitle,
+          kind: PhotoOpsSurfaceKind.live,
+        ),
+        _PhotoOpsSurfaceMeta(
+          title: l10n.photoOpsInventoryTitle,
+          subtitle: l10n.photoOpsInventorySubtitle,
+          kind: PhotoOpsSurfaceKind.priority,
+        ),
+      ];
+    }
     return [
       _PhotoOpsSurfaceMeta(
         title: l10n.photoOpsPriorityQueueTitle,
-        subtitle:
-            'Review the next issue that needs intervention before moving into supporting detail.',
+        subtitle: l10n.photoOpsPriorityQueueSubtitle,
         kind: PhotoOpsSurfaceKind.priority,
       ),
       _PhotoOpsSurfaceMeta(
         title: l10n.photoOpsSalesTitle,
-        subtitle:
-            'Read current sales posture after priority exceptions are stable.',
+        subtitle: l10n.photoOpsSalesSubtitle,
         kind: PhotoOpsSurfaceKind.backOffice,
       ),
       _PhotoOpsSurfaceMeta(
         title: l10n.photoOpsAttendanceTitle,
-        subtitle:
-            'Track live workforce events and photo-backed attendance flow.',
+        subtitle: l10n.photoOpsAttendanceNumberOnlySubtitle,
         kind: PhotoOpsSurfaceKind.live,
       ),
       _PhotoOpsSurfaceMeta(
         title: l10n.photoOpsInventoryTitle,
-        subtitle:
-            'Use stock alerts as an action queue, not just a reporting surface.',
+        subtitle: l10n.photoOpsInventorySubtitle,
         kind: PhotoOpsSurfaceKind.priority,
       ),
       _PhotoOpsSurfaceMeta(
         title: l10n.photoOpsSalaryTitle,
-        subtitle:
-            'Review payroll preview only after live events and alert queues are understood.',
+        subtitle: l10n.photoOpsSalarySubtitle,
         kind: PhotoOpsSurfaceKind.backOffice,
       ),
     ];
   }
+
+  Future<void> _showInventoryAdjustment({
+    required String storeId,
+    required PhotoOpsInventoryRow row,
+    required Future<void> Function() onRecorded,
+  }) async {
+    final employeeNumber = TextEditingController();
+    final quantity = TextEditingController();
+    final note = TextEditingController();
+    var transactionType = 'restock';
+    String? validation;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          key: const Key('photo_ops_inventory_adjustment_dialog'),
+          title: Text(
+            context.l10n.photoOpsInventoryAdjustmentTitle(row.itemName),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                key: const Key('photo_ops_inventory_employee_number'),
+                controller: employeeNumber,
+                textCapitalization: TextCapitalization.characters,
+                decoration: InputDecoration(
+                  labelText: context.l10n.attendanceEmployeeNumber,
+                ),
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: transactionType,
+                decoration: InputDecoration(
+                  labelText: context.l10n.photoOpsInventoryAdjustmentType,
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: 'restock',
+                    child: Text(context.l10n.photoOpsInventoryRestock),
+                  ),
+                  DropdownMenuItem(
+                    value: 'adjust',
+                    child: Text(context.l10n.photoOpsInventoryAdjust),
+                  ),
+                  DropdownMenuItem(
+                    value: 'waste',
+                    child: Text(context.l10n.photoOpsInventoryWaste),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setDialogState(() => transactionType = value);
+                  }
+                },
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                key: const Key('photo_ops_inventory_quantity'),
+                controller: quantity,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: InputDecoration(
+                  labelText: context.l10n.photoOpsInventoryQuantity,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: note,
+                decoration: InputDecoration(
+                  labelText: context.l10n.photoOpsInventoryNote,
+                ),
+              ),
+              if (validation != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  validation!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(context.l10n.cancel),
+            ),
+            FilledButton(
+              key: const Key('photo_ops_inventory_adjustment_save'),
+              onPressed: () async {
+                final parsedQuantity = double.tryParse(quantity.text.trim());
+                if (employeeNumber.text.trim().isEmpty ||
+                    parsedQuantity == null ||
+                    parsedQuantity <= 0 ||
+                    row.ingredientId.isEmpty) {
+                  setDialogState(
+                    () => validation =
+                        context.l10n.photoOpsInventoryAdjustmentInvalid,
+                  );
+                  return;
+                }
+                try {
+                  await inventoryService.recordEmployeeInventoryAdjustment(
+                    storeId: storeId,
+                    employeeNumber: employeeNumber.text,
+                    ingredientId: row.ingredientId,
+                    transactionType: transactionType,
+                    quantityG: parsedQuantity,
+                    note: note.text.trim().isEmpty ? null : note.text.trim(),
+                  );
+                  await onRecorded();
+                  if (!dialogContext.mounted) return;
+                  Navigator.of(dialogContext).pop();
+                  if (mounted) {
+                    ScaffoldMessenger.of(this.context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          this.context.l10n.photoOpsInventoryAdjustmentSaved,
+                        ),
+                      ),
+                    );
+                  }
+                } catch (_) {
+                  setDialogState(
+                    () => validation =
+                        context.l10n.photoOpsInventoryAdjustmentFailed,
+                  );
+                }
+              },
+              child: Text(context.l10n.save),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    employeeNumber.dispose();
+    quantity.dispose();
+    note.dispose();
+  }
 }
 
 enum PhotoOpsSurfaceKind { priority, live, backOffice }
+
+class PhotoOpsSurfaceAccess {
+  const PhotoOpsSurfaceAccess._({required this.showManagementSurfaces});
+
+  factory PhotoOpsSurfaceAccess.forRole(String? role) =>
+      PhotoOpsSurfaceAccess._(
+        showManagementSurfaces:
+            role == 'photo_objet_master' || role == 'super_admin',
+      );
+
+  final bool showManagementSurfaces;
+}
+
+class PhotoOpsManagementSurfaceGate extends StatelessWidget {
+  const PhotoOpsManagementSurfaceGate({
+    super.key,
+    required this.role,
+    required this.child,
+  });
+
+  final String? role;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      PhotoOpsSurfaceAccess.forRole(role).showManagementSurfaces
+      ? child
+      : const SizedBox.shrink();
+}
 
 class _PhotoOpsSurfaceMeta {
   const _PhotoOpsSurfaceMeta({
@@ -349,6 +589,7 @@ class _PhotoOpsHeaderSummary extends StatelessWidget {
     required this.activeStoreName,
     required this.storeCount,
     required this.data,
+    required this.surfaceAccess,
   });
 
   final _PhotoOpsSurfaceMeta selectedSurface;
@@ -356,6 +597,7 @@ class _PhotoOpsHeaderSummary extends StatelessWidget {
   final String activeStoreName;
   final int storeCount;
   final PhotoOpsDashboardData? data;
+  final PhotoOpsSurfaceAccess surfaceAccess;
 
   @override
   Widget build(BuildContext context) {
@@ -392,17 +634,18 @@ class _PhotoOpsHeaderSummary extends StatelessWidget {
                       label: context.l10n.photoOpsMetaActiveStore,
                       value: activeStoreName,
                     ),
-                    ToastMetric(
-                      label: context.l10n.photoOpsMetaAccessibleStores,
-                      value: context.l10n.photoOpsStoreCount(storeCount),
-                    ),
+                    if (surfaceAccess.showManagementSurfaces)
+                      ToastMetric(
+                        label: context.l10n.photoOpsMetaAccessibleStores,
+                        value: context.l10n.photoOpsStoreCount(storeCount),
+                      ),
                   ],
                 ),
               ),
             ],
           ),
         ),
-        if (data != null) ...[
+        if (data != null && surfaceAccess.showManagementSurfaces) ...[
           const SizedBox(height: 12),
           ToastMetricStrip(
             metrics: [
@@ -812,10 +1055,8 @@ class _AttendanceList extends StatelessWidget {
             (row) => _SimpleRow(
               title: row.employeeName,
               subtitle:
-                  '${row.type.replaceAll('_', ' ')} · ${row.loggedAt.toLocal()}',
-              trailing: row.photoUrl == null
-                  ? context.l10n.photoOpsNoPhoto
-                  : context.l10n.photoOpsPhoto,
+                  '${_attendanceTypeLabel(context, row.type)} · ${row.loggedAt.toLocal()}',
+              trailing: context.l10n.photoOpsRecorded,
             ),
           )
           .toList(),
@@ -853,9 +1094,10 @@ class _SalesList extends StatelessWidget {
 }
 
 class _InventoryList extends StatelessWidget {
-  const _InventoryList({required this.rows});
+  const _InventoryList({required this.rows, required this.onAdjust});
 
   final List<PhotoOpsInventoryRow> rows;
+  final ValueChanged<PhotoOpsInventoryRow> onAdjust;
 
   @override
   Widget build(BuildContext context) {
@@ -865,19 +1107,167 @@ class _InventoryList extends StatelessWidget {
     return Column(
       children: rows
           .map(
-            (row) => _SimpleRow(
-              title: row.itemName,
-              subtitle: context.l10n.photoOpsInventoryRowSubtitle(
-                row.currentStock.toStringAsFixed(1),
-                row.unit,
-                row.reorderPoint?.toStringAsFixed(1) ?? '-',
+            (row) => Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: PosListRow(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            row.itemName,
+                            style: AppFonts.system(
+                              color: PosColors.textPrimary,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            context.l10n.photoOpsInventoryRowSubtitle(
+                              row.currentStock.toStringAsFixed(1),
+                              row.unit,
+                              row.reorderPoint?.toStringAsFixed(1) ?? '-',
+                            ),
+                            style: AppFonts.system(
+                              color: PosColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    OutlinedButton(
+                      key: ValueKey(
+                        'photo_ops_inventory_adjust_${row.ingredientId}',
+                      ),
+                      onPressed: row.ingredientId.isEmpty
+                          ? null
+                          : () => onAdjust(row),
+                      child: Text(context.l10n.photoOpsInventoryRecordAction),
+                    ),
+                  ],
+                ),
               ),
-              trailing: row.supplierName ?? context.l10n.photoOpsReview,
             ),
           )
           .toList(),
     );
   }
+}
+
+String _attendanceTypeLabel(BuildContext context, String type) =>
+    switch (type) {
+      'clock_in' => context.l10n.clockIn,
+      'clock_out' => context.l10n.clockOut,
+      _ => context.l10n.photoOpsAttendanceUnknown,
+    };
+
+class _EmployeeAttendanceActions extends StatefulWidget {
+  const _EmployeeAttendanceActions({
+    required this.storeId,
+    required this.onRecorded,
+  });
+
+  final String storeId;
+  final Future<void> Function() onRecorded;
+
+  @override
+  State<_EmployeeAttendanceActions> createState() =>
+      _EmployeeAttendanceActionsState();
+}
+
+class _EmployeeAttendanceActionsState
+    extends State<_EmployeeAttendanceActions> {
+  final _employeeNumber = TextEditingController();
+  bool _submitting = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _employeeNumber.dispose();
+    super.dispose();
+  }
+
+  Future<void> _record(String type) async {
+    if (_employeeNumber.text.trim().isEmpty) {
+      setState(() => _error = context.l10n.attendanceEmployeeNumberRequired);
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await attendanceService.recordEmployeeAttendance(
+        storeId: widget.storeId,
+        employeeNumber: _employeeNumber.text,
+        type: type,
+      );
+      await widget.onRecorded();
+      if (!mounted) return;
+      _employeeNumber.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.photoOpsAttendanceRecorded)),
+      );
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = context.l10n.attendanceRecordFailed);
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => ToastWorkSurface(
+    padding: const EdgeInsets.all(14),
+    backgroundColor: PosColors.panelMuted,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          context.l10n.photoOpsPartTimerAttendanceTitle,
+          style: AppFonts.system(
+            color: PosColors.textPrimary,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          key: const Key('photo_ops_employee_number_field'),
+          controller: _employeeNumber,
+          textCapitalization: TextCapitalization.characters,
+          decoration: InputDecoration(
+            labelText: context.l10n.attendanceEmployeeNumber,
+            errorText: _error,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton(
+                key: const Key('photo_ops_employee_clock_in'),
+                onPressed: _submitting ? null : () => _record('clock_in'),
+                child: Text(context.l10n.clockIn),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton(
+                key: const Key('photo_ops_employee_clock_out'),
+                onPressed: _submitting ? null : () => _record('clock_out'),
+                child: Text(context.l10n.clockOut),
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
 }
 
 class _PayrollList extends StatelessWidget {

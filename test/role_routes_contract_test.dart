@@ -34,6 +34,8 @@ void main() {
         'waiter',
         'cashier',
         'kitchen',
+        'photo_objet_master',
+        'photo_objet_store_operator',
       ];
 
       for (final role in allowedRoles) {
@@ -45,24 +47,29 @@ void main() {
       }
 
       expect(
-        canAccessRouteForRole('photo_objet_master', '/attendance-kiosk'),
-        isFalse,
-      );
-      expect(
         canAccessRouteForRole('photo_objet_store_admin', '/attendance-kiosk'),
         isFalse,
       );
     });
 
-    test('keeps photo objet roles out of general POS workspaces', () {
+    test('keeps Photo operator limited while master can manage workforce', () {
       expect(canAccessRouteForRole('photo_objet_master', '/photo-ops'), isTrue);
+      expect(canAccessRouteForRole('photo_objet_master', '/admin'), isTrue);
       expect(
-        canAccessRouteForRole('photo_objet_store_admin', '/photo-ops'),
+        canAccessRouteForRole('photo_objet_master', '/store-setup/store-1'),
+        isTrue,
+      );
+      expect(
+        canAccessRouteForRole('photo_objet_store_operator', '/photo-ops'),
         isTrue,
       );
       expect(canAccessRouteForRole('photo_objet_master', '/cashier'), isFalse);
       expect(
-        canAccessRouteForRole('photo_objet_store_admin', '/admin'),
+        canAccessRouteForRole('photo_objet_store_operator', '/admin'),
+        isFalse,
+      );
+      expect(
+        canAccessRouteForRole('photo_objet_store_admin', '/photo-ops'),
         isFalse,
       );
     });

@@ -3,6 +3,7 @@ class PermissionUtils {
       role == 'admin' ||
       role == 'store_admin' ||
       role == 'brand_admin' ||
+      role == 'photo_objet_master' ||
       role == 'super_admin';
 
   static bool isSuperAdmin(String? role) => role == 'super_admin';
@@ -13,7 +14,7 @@ class PermissionUtils {
       role == 'photo_objet_master';
 
   static bool isPhotoObjetRole(String? role) =>
-      role == 'photo_objet_master' || role == 'photo_objet_store_admin';
+      role == 'photo_objet_master' || role == 'photo_objet_store_operator';
 
   static bool canAccessPhotoOps(String? role) =>
       role == 'super_admin' || isPhotoObjetRole(role);

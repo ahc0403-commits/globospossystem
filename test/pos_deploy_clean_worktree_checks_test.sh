@@ -20,12 +20,20 @@ cp "$ROOT_DIR/supabase/migrations/20260717090000_store_opening_setup_wizard.sql"
   "$REHEARSAL_REPO/supabase/migrations/"
 cp "$ROOT_DIR/supabase/migrations/20260717130000_table_qr_batch_export.sql" \
   "$REHEARSAL_REPO/supabase/migrations/"
+cp "$ROOT_DIR/supabase/migrations/20260717170000_workforce_fixed_accounts.sql" \
+  "$REHEARSAL_REPO/supabase/migrations/"
 for store_setup_sql in \
   preflight_store_opening_setup_wizard.sql \
   apply_store_opening_setup_wizard.sql \
   verify_store_opening_setup_wizard.sql \
   rollback_store_opening_setup_wizard.sql; do
   cp "$ROOT_DIR/scripts/$store_setup_sql" "$REHEARSAL_REPO/scripts/"
+done
+for workforce_sql in \
+  preflight_workforce_fixed_accounts.sql \
+  verify_workforce_fixed_accounts.sql \
+  rollback_workforce_fixed_accounts.sql; do
+  cp "$ROOT_DIR/scripts/$workforce_sql" "$REHEARSAL_REPO/scripts/"
 done
 for table_qr_sql in \
   preflight_table_qr_batch_export.sql \
@@ -149,5 +157,27 @@ table_qr_output="$(bash -c '
 [[ "$table_qr_output" == *'supabase migration repair 20260717130000 --status applied --yes'* ]]
 [[ "$table_qr_output" == *'Confirm migration history presence'* ]]
 
-printf 'PASS: production checks bootstrap clean worktrees and dry-run guarded store setup/table QR phases\n'
+workforce_output="$(bash -c '
+  source "$1/scripts/deploy_pos_production.sh"
+  SKIP_DB=0
+  DRY_RUN=1
+  MIGRATION_FILE="$1/supabase/migrations/20260717170000_workforce_fixed_accounts.sql"
+  cd "$1"
+  apply_migration
+' rehearsal "$REHEARSAL_REPO")"
+
+[[ "$workforce_output" == *'Workforce fixed-accounts rollback readiness'* ]]
+[[ "$workforce_output" == *'Rollback ready (not executed):'*'rollback_workforce_fixed_accounts.sql'* ]]
+[[ "$workforce_output" == *'Confirm migration history absence'* ]]
+[[ "$workforce_output" == *'Workforce fixed-accounts migration preflight'* ]]
+[[ "$workforce_output" == *'preflight_workforce_fixed_accounts.sql'* ]]
+[[ "$workforce_output" == *'20260717170000_workforce_fixed_accounts.sql'* ]]
+[[ "$workforce_output" == *'Workforce fixed-accounts migration verification'* ]]
+[[ "$workforce_output" == *'verify_workforce_fixed_accounts.sql'* ]]
+[[ "$workforce_output" == *'supabase migration repair 20260717170000 --status applied --yes'* ]]
+[[ "$workforce_output" == *'Confirm migration history presence'* ]]
+
+printf 'PASS: production checks bootstrap clean worktrees and dry-run guarded store setup/table QR/workforce phases\n'
 bash "$ROOT_DIR/test/pos_db_only_deploy_contract_test.sh"
+deno test "$ROOT_DIR/scripts/bootstrap_pos_master_account_test.ts"
+deno check "$ROOT_DIR/scripts/bootstrap_pos_master_account.ts"

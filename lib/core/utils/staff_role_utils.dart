@@ -12,7 +12,7 @@ String roleMenuLabel(String role) {
     'store_admin' => 'Store Admin',
     'brand_admin' => 'Brand Admin',
     'photo_objet_master' => 'Photo Objet Master',
-    'photo_objet_store_admin' => 'Photo Objet Store Admin',
+    'photo_objet_store_operator' => 'Photo Objet Store Operator',
     'super_admin' => 'Super Admin',
     _ => roleDisplayName(role),
   };
@@ -27,7 +27,7 @@ String roleDisplayName(String role) {
     'store_admin' => 'Store Admin',
     'brand_admin' => 'Brand Admin',
     'photo_objet_master' => 'Photo Objet Master',
-    'photo_objet_store_admin' => 'Photo Objet Store Admin',
+    'photo_objet_store_operator' => 'Photo Objet Store Operator',
     'super_admin' => 'Super Admin',
     _ => role,
   };
@@ -42,7 +42,7 @@ Color roleAccentColor(String role) {
     'store_admin' => const Color(0xFF7C5CFA),
     'brand_admin' => const Color(0xFFFF8A3D),
     'photo_objet_master' => const Color(0xFF00BFA5),
-    'photo_objet_store_admin' => const Color(0xFF4DD0E1),
+    'photo_objet_store_operator' => const Color(0xFF4DD0E1),
     _ => PosColors.border,
   };
 }
@@ -56,7 +56,8 @@ String localizedRoleMenuLabel(BuildContext context, String role) {
     'store_admin' => context.l10n.roleStoreAdminMenu,
     'brand_admin' => context.l10n.roleBrandAdminMenu,
     'photo_objet_master' => context.l10n.rolePhotoObjetMasterMenu,
-    'photo_objet_store_admin' => context.l10n.rolePhotoObjetStoreAdminMenu,
+    'photo_objet_store_operator' =>
+      context.l10n.rolePhotoObjetStoreOperatorMenu,
     'super_admin' => context.l10n.roleSuperAdminMenu,
     _ => localizedRoleDisplayName(context, role),
   };
@@ -71,7 +72,8 @@ String localizedRoleDisplayName(BuildContext context, String role) {
     'store_admin' => context.l10n.roleStoreAdminDisplay,
     'brand_admin' => context.l10n.roleBrandAdminDisplay,
     'photo_objet_master' => context.l10n.rolePhotoObjetMasterDisplay,
-    'photo_objet_store_admin' => context.l10n.rolePhotoObjetStoreAdminDisplay,
+    'photo_objet_store_operator' =>
+      context.l10n.rolePhotoObjetStoreOperatorDisplay,
     'super_admin' => context.l10n.roleSuperAdminDisplay,
     _ => role,
   };
@@ -83,7 +85,7 @@ bool canManageExtraPermissions(String role) {
     case 'store_admin':
     case 'brand_admin':
     case 'photo_objet_master':
-    case 'photo_objet_store_admin':
+    case 'photo_objet_store_operator':
     case 'super_admin':
       return false;
     default:
@@ -95,17 +97,11 @@ List<String> assignableRolesForViewer(String? viewerRole) {
   const baseRoles = ['waiter', 'kitchen', 'cashier'];
 
   if (viewerRole == 'super_admin') {
-    return [
-      ...baseRoles,
-      'store_admin',
-      'brand_admin',
-      'photo_objet_master',
-      'photo_objet_store_admin',
-    ];
+    return [...baseRoles, 'store_admin', 'brand_admin', 'photo_objet_master'];
   }
 
   if (viewerRole == 'brand_admin') {
-    return [...baseRoles, 'store_admin', 'photo_objet_store_admin'];
+    return [...baseRoles, 'store_admin'];
   }
 
   if (viewerRole == 'admin' || viewerRole == 'store_admin') {
@@ -129,6 +125,7 @@ bool canMutateStaffAccount({
       'brand_admin',
       'super_admin',
       'photo_objet_master',
+      'photo_objet_store_operator',
     }.contains(target);
   }
 
@@ -139,7 +136,7 @@ bool canMutateStaffAccount({
       'brand_admin',
       'super_admin',
       'photo_objet_master',
-      'photo_objet_store_admin',
+      'photo_objet_store_operator',
     }.contains(target);
   }
 

@@ -6,40 +6,40 @@ import '../../../main.dart';
 class StaffMember {
   const StaffMember({
     required this.id,
-    required this.authId,
+    required this.employeeNumber,
     required this.fullName,
     required this.role,
     required this.isActive,
     required this.createdAt,
-    this.email,
-    this.extraPermissions = const [],
+    this.phone,
+    this.bankAccountNumber,
+    this.bankAccountHolder,
   });
 
   final String id;
-  final String authId;
+  final String employeeNumber;
   final String fullName;
   final String role;
   final bool isActive;
   final DateTime createdAt;
-  final String? email;
-  final List<String> extraPermissions;
+  final String? phone;
+  final String? bankAccountNumber;
+  final String? bankAccountHolder;
 
   factory StaffMember.fromJson(Map<String, dynamic> json) {
     final createdAtRaw = json['created_at']?.toString();
     return StaffMember(
       id: json['id'].toString(),
-      authId: json['auth_id']?.toString() ?? '',
+      employeeNumber: json['employee_number']?.toString() ?? '',
       fullName: json['full_name']?.toString() ?? 'Unknown',
-      role: json['role']?.toString() ?? 'waiter',
+      role: json['employment_role']?.toString() ?? 'part_timer',
       isActive: json['is_active'] == true,
       createdAt: createdAtRaw != null
           ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
           : DateTime.now(),
-      email: json['email']?.toString(),
-      extraPermissions:
-          (json['extra_permissions'] as List<dynamic>? ?? const [])
-              .map((e) => e.toString())
-              .toList(),
+      phone: json['phone']?.toString(),
+      bankAccountNumber: json['bank_account_number']?.toString(),
+      bankAccountHolder: json['bank_account_holder']?.toString(),
     );
   }
 }
@@ -49,25 +49,32 @@ class StaffState {
     this.staff = const [],
     this.isLoading = false,
     this.isCreating = false,
+    this.lastCreatedEmployee,
     this.error,
   });
 
   final List<StaffMember> staff;
   final bool isLoading;
   final bool isCreating;
+  final StaffMember? lastCreatedEmployee;
   final String? error;
 
   StaffState copyWith({
     List<StaffMember>? staff,
     bool? isLoading,
     bool? isCreating,
+    StaffMember? lastCreatedEmployee,
     String? error,
     bool clearError = false,
+    bool clearLastCreated = false,
   }) {
     return StaffState(
       staff: staff ?? this.staff,
       isLoading: isLoading ?? this.isLoading,
       isCreating: isCreating ?? this.isCreating,
+      lastCreatedEmployee: clearLastCreated
+          ? null
+          : (lastCreatedEmployee ?? this.lastCreatedEmployee),
       error: clearError ? null : (error ?? this.error),
     );
   }
@@ -126,11 +133,7 @@ class StaffNotifier extends StateNotifier<StaffState> {
   Future<void> loadStaff(String storeId) async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final response = await supabase
-          .from('users')
-          .select()
-          .eq('restaurant_id', storeId)
-          .order('created_at', ascending: true);
+      final response = await staffService.fetchStoreEmployees(storeId);
 
       final staff = response
           .map<StaffMember>(
@@ -149,62 +152,75 @@ class StaffNotifier extends StateNotifier<StaffState> {
 
   Future<void> createStaff({
     required String storeId,
-    required String email,
-    required String password,
     required String fullName,
     required String role,
+    String? phone,
+    String? bankAccountNumber,
+    String? bankAccountHolder,
   }) async {
-    state = state.copyWith(isCreating: true, clearError: true);
+    state = state.copyWith(
+      isCreating: true,
+      clearError: true,
+      clearLastCreated: true,
+    );
     try {
-      await staffService.createStaffUser(
-        email: email,
-        password: password,
+      final created = await staffService.createStoreEmployee(
         fullName: fullName,
-        role: role,
+        employmentRole: role,
         storeId: storeId,
+        phone: phone,
+        bankAccountNumber: bankAccountNumber,
+        bankAccountHolder: bankAccountHolder,
       );
 
-      state = state.copyWith(isCreating: false, clearError: true);
-      await loadStaff(storeId);
-    } catch (error) {
       state = state.copyWith(
         isCreating: false,
-        error: _cleanException(error),
-      );
-    }
-  }
-
-  Future<void> toggleActive(
-    String userId,
-    bool isActive,
-    String storeId,
-  ) async {
-    try {
-      await staffService.adminUpdateStaffAccount(
-        userId: userId,
-        storeId: storeId,
-        isActive: isActive,
+        lastCreatedEmployee: StaffMember.fromJson(created),
+        clearError: true,
       );
       await loadStaff(storeId);
     } catch (error) {
-      state = state.copyWith(error: 'Failed to update staff status: $error');
+      state = state.copyWith(isCreating: false, error: _cleanException(error));
     }
   }
 
-  Future<void> updateExtraPermissions({
-    required String userId,
+  Future<void> updateStaff({
+    required String employeeId,
     required String storeId,
-    required List<String> permissions,
+    required String fullName,
+    required String role,
+    String? phone,
+    String? bankAccountNumber,
+    String? bankAccountHolder,
   }) async {
     try {
-      await staffService.adminUpdateStaffAccount(
-        userId: userId,
+      await staffService.updateStoreEmployee(
+        employeeId: employeeId,
         storeId: storeId,
-        extraPermissions: permissions,
+        fullName: fullName,
+        employmentRole: role,
+        phone: phone,
+        bankAccountNumber: bankAccountNumber,
+        bankAccountHolder: bankAccountHolder,
       );
       await loadStaff(storeId);
     } catch (error) {
-      state = state.copyWith(error: 'Failed to update permissions: $error');
+      state = state.copyWith(error: _cleanException(error));
+    }
+  }
+
+  Future<void> deactivateStaff({
+    required String employeeId,
+    required String storeId,
+  }) async {
+    try {
+      await staffService.deactivateStoreEmployee(
+        employeeId: employeeId,
+        storeId: storeId,
+      );
+      await loadStaff(storeId);
+    } catch (error) {
+      state = state.copyWith(error: _cleanException(error));
     }
   }
 }
@@ -230,7 +246,10 @@ class AttendanceNotifier extends StateNotifier<AttendanceState> {
     try {
       final response = await supabase
           .from('attendance_logs')
-          .select('id, user_id, type, logged_at, users(full_name, role)')
+          .select(
+            'id, employee_id, type, logged_at, '
+            'store_employees(employee_number, full_name, employment_role)',
+          )
           .eq('restaurant_id', storeId)
           .gte('logged_at', dayStart.toIso8601String())
           .lt('logged_at', dayEnd.toIso8601String())
@@ -239,18 +258,18 @@ class AttendanceNotifier extends StateNotifier<AttendanceState> {
 
       final logs = response.map<AttendanceRecord>((row) {
         final data = Map<String, dynamic>.from(row);
-        final userRaw = data['users'];
+        final userRaw = data['store_employees'];
         String userName = 'Unknown';
         String? role;
         if (userRaw is Map<String, dynamic>) {
           userName = userRaw['full_name']?.toString() ?? 'Unknown';
-          role = userRaw['role']?.toString();
+          role = userRaw['employment_role']?.toString();
         }
 
         final loggedAtRaw = data['logged_at']?.toString();
         return AttendanceRecord(
           id: data['id'].toString(),
-          userId: data['user_id']?.toString() ?? '',
+          userId: data['employee_id']?.toString() ?? '',
           userName: userName,
           type: data['type']?.toString() ?? '',
           loggedAt: loggedAtRaw != null

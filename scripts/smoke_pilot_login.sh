@@ -183,7 +183,7 @@ PY
 }
 
 parse_profile_response() {
-  python3 - "$1" <<'PY'
+  python3 - "$1" "${EXPECTED_FIXED_ACCOUNT_CODE:-}" <<'PY'
 import json
 import sys
 
@@ -196,6 +196,13 @@ if not isinstance(data, list) or len(data) != 1:
 row = data[0]
 if row.get("is_active") is False:
     sys.exit("Authenticated POS profile is inactive.")
+
+expected_fixed_code = sys.argv[2]
+if expected_fixed_code:
+    if row.get("fixed_account_code") != expected_fixed_code:
+        sys.exit("Authenticated POS profile fixed account code does not match.")
+    if row.get("account_type") in (None, "", "legacy_user"):
+        sys.exit("Authenticated POS profile is not a fixed account.")
 
 print(str(row.get("role") or "unknown"))
 print(str(row.get("restaurant_id") or "unknown"))
@@ -241,7 +248,7 @@ smoke_login() {
   profile_status="$(curl -sS \
     -o "$profile_response_file" \
     -w '%{http_code}' \
-    "$SUPABASE_URL/rest/v1/users?select=role,restaurant_id,is_active&auth_id=eq.$auth_user_id&limit=1" \
+    "$SUPABASE_URL/rest/v1/users?select=role,restaurant_id,is_active,account_type,fixed_account_code&auth_id=eq.$auth_user_id&limit=1" \
     -H "apikey: $SUPABASE_ANON_KEY" \
     -H "Authorization: Bearer $access_token" \
     -H "Accept: application/json")"

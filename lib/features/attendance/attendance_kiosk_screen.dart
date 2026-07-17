@@ -1,15 +1,12 @@
 import 'dart:async';
-import 'dart:io';
 
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../../core/i18n/locale_extensions.dart';
-import '../../core/layout/platform_info.dart';
 import '../../core/services/connectivity_service.dart';
-import '../../core/ui/app_primitives.dart';
 import '../../core/ui/toast/toast_primitives_extended.dart';
 import '../../core/utils/time_utils.dart';
 import '../../main.dart';
@@ -17,9 +14,9 @@ import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
-import 'fingerprint_provider.dart';
+import 'attendance_kiosk_provider.dart';
 
-enum _KioskViewState { idle, typeSelect, camera, preview, uploading, done }
+enum _KioskViewState { idle, submitting, done }
 
 class AttendanceKioskScreen extends ConsumerStatefulWidget {
   const AttendanceKioskScreen({super.key});
@@ -30,212 +27,89 @@ class AttendanceKioskScreen extends ConsumerStatefulWidget {
 }
 
 class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
+  final _employeeNumberController = TextEditingController();
+  final _employeeNumberFocus = FocusNode();
   _KioskViewState _viewState = _KioskViewState.idle;
-  Map<String, dynamic>? _selectedStaff;
-  String? _selectedType;
-  CameraController? _cameraController;
-  XFile? _capturedFile;
   Timer? _clockTimer;
-  Timer? _countdownTimer;
   Timer? _doneTimer;
   DateTime _nowVn = TimeUtils.nowVietnam();
-  int _countdown = 3;
-  String? _initializedRestaurantId;
 
   @override
   void initState() {
     super.initState();
     _clockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      if (mounted) {
-        setState(() => _nowVn = TimeUtils.nowVietnam());
-      }
+      if (mounted) setState(() => _nowVn = TimeUtils.nowVietnam());
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _employeeNumberFocus.requestFocus();
     });
   }
 
   @override
   void dispose() {
     _clockTimer?.cancel();
-    _countdownTimer?.cancel();
     _doneTimer?.cancel();
-    _disposeCamera();
+    _employeeNumberController.dispose();
+    _employeeNumberFocus.dispose();
     super.dispose();
   }
 
-  Future<void> _disposeCamera() async {
-    final controller = _cameraController;
-    _cameraController = null;
-    if (controller != null) {
-      await controller.dispose();
-    }
-  }
-
-  Future<void> _loadStaffIfNeeded(String storeId) async {
-    if (_initializedRestaurantId == storeId) return;
-    _initializedRestaurantId = storeId;
-    await ref.read(attendanceKioskProvider.notifier).loadStaff(storeId);
-  }
-
-  void _backToIdle() {
-    _countdownTimer?.cancel();
+  void _reset() {
     _doneTimer?.cancel();
-    ref.read(attendanceKioskProvider.notifier).clearTransientState();
-    setState(() {
-      _viewState = _KioskViewState.idle;
-      _selectedStaff = null;
-      _selectedType = null;
-      _capturedFile = null;
-      _countdown = 3;
-    });
+    ref.read(attendanceKioskProvider.notifier).clearResult();
+    _employeeNumberController.clear();
+    setState(() => _viewState = _KioskViewState.idle);
+    _employeeNumberFocus.requestFocus();
   }
 
-  Future<void> _goToCamera() async {
-    setState(() {
-      _viewState = _KioskViewState.camera;
-      _countdown = 3;
-    });
-
-    try {
-      final cameras = await availableCameras();
-      final back = cameras.where(
-        (c) => c.lensDirection == CameraLensDirection.back,
-      );
-      final front = cameras.where(
-        (c) => c.lensDirection == CameraLensDirection.front,
-      );
-      final chosen = back.isNotEmpty
-          ? back.first
-          : (front.isNotEmpty
-                ? front.first
-                : (cameras.isNotEmpty ? cameras.first : null));
-
-      if (chosen == null) {
-        await _submitAttendance(photoFile: null);
-        return;
-      }
-
-      await _disposeCamera();
-      final controller = CameraController(
-        chosen,
-        ResolutionPreset.medium,
-        enableAudio: false,
-      );
-      await controller.initialize();
-      if (!mounted) return;
-      setState(() {
-        _cameraController = controller;
-      });
-      _startCountdown();
-    } catch (_) {
-      await _submitAttendance(photoFile: null);
-    }
-  }
-
-  void _startCountdown() {
-    _countdownTimer?.cancel();
-    setState(() => _countdown = 3);
-
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (_countdown <= 1) {
-        timer.cancel();
-        await _capturePhoto();
-        return;
-      }
-      setState(() => _countdown -= 1);
-    });
-  }
-
-  Future<void> _capturePhoto() async {
-    final controller = _cameraController;
-    if (controller == null || !controller.value.isInitialized) {
-      await _submitAttendance(photoFile: null);
-      return;
-    }
-
-    try {
-      final file = await controller.takePicture();
-      if (!mounted) return;
-      setState(() {
-        _capturedFile = file;
-        _viewState = _KioskViewState.preview;
-      });
-    } catch (_) {
-      await _submitAttendance(photoFile: null);
-    }
-  }
-
-  Future<void> _submitAttendance({File? photoFile}) async {
+  Future<void> _submit(String type) async {
     final storeId = ref.read(authProvider).storeId;
-    final selected = _selectedStaff;
-    final selectedType = _selectedType;
-    final selectedUserId =
-        selected?['user_id']?.toString() ?? selected?['id']?.toString();
-    if (storeId == null ||
-        selected == null ||
-        selectedType == null ||
-        selectedUserId == null ||
-        selectedUserId.isEmpty) {
-      _backToIdle();
+    final employeeNumber = _employeeNumberController.text.trim();
+    if (storeId == null) {
+      showErrorToast(context, context.l10n.attendanceRecordFailed);
+      return;
+    }
+    if (employeeNumber.isEmpty) {
+      showErrorToast(context, context.l10n.attendanceEmployeeNumberRequired);
+      _employeeNumberFocus.requestFocus();
       return;
     }
 
-    setState(() => _viewState = _KioskViewState.uploading);
-
-    final success = await ref
+    setState(() => _viewState = _KioskViewState.submitting);
+    final recorded = await ref
         .read(attendanceKioskProvider.notifier)
         .recordAttendance(
-          userId: selectedUserId,
+          employeeNumber: employeeNumber,
           storeId: storeId,
-          type: selectedType,
-          photoFile: photoFile,
+          type: type,
         );
-
     if (!mounted) return;
 
-    final state = ref.read(attendanceKioskProvider);
-    if (state.error == 'PHOTO_UPLOAD_FAILED') {
-      showErrorToast(context, context.l10n.attendancePhotoUploadFailedRecorded);
-    }
-
-    if (!success) {
-      showErrorToast(context, context.l10n.attendanceRecordFailed);
-      _backToIdle();
+    if (!recorded) {
+      final errorCode = ref.read(attendanceKioskProvider).errorCode;
+      showErrorToast(context, _localizedAttendanceError(errorCode));
+      setState(() => _viewState = _KioskViewState.idle);
+      _employeeNumberFocus.requestFocus();
       return;
     }
 
     setState(() => _viewState = _KioskViewState.done);
-    _doneTimer?.cancel();
     _doneTimer = Timer(const Duration(seconds: 2), () {
-      if (mounted) _backToIdle();
+      if (mounted) _reset();
     });
   }
 
+  String _localizedAttendanceError(String? code) => switch (code) {
+    'EMPLOYEE_NOT_FOUND' => context.l10n.attendanceEmployeeNotFound,
+    'EMPLOYEE_INACTIVE' => context.l10n.attendanceEmployeeInactive,
+    'ATTENDANCE_FORBIDDEN' => context.l10n.attendanceEmployeeForbidden,
+    _ => context.l10n.attendanceRecordFailed,
+  };
+
   @override
   Widget build(BuildContext context) {
-    final auth = ref.watch(authProvider);
-    final storeId = auth.storeId;
-    final kioskState = ref.watch(attendanceKioskProvider);
     final isOnline = ref.watch(connectivityProvider).asData?.value ?? true;
-    final l10n = context.l10n;
-
-    if (!PlatformInfo.isAndroid) {
-      return Scaffold(
-        key: const Key('attendance_kiosk_root'),
-        backgroundColor: AppColors.surface0,
-        body: AppEmptyState(
-          title: l10n.attendanceAndroidTabletRequired,
-          message: l10n.attendanceAndroidTabletOnlyMessage,
-          icon: Icons.tablet_android,
-        ),
-      );
-    }
-
-    if (storeId != null) {
-      Future.microtask(() => _loadStaffIfNeeded(storeId));
-    }
+    final kioskState = ref.watch(attendanceKioskProvider);
 
     return Scaffold(
       key: const Key('attendance_kiosk_root'),
@@ -244,160 +118,38 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
         child: Column(
           children: [
             const OfflineBanner(),
-            Expanded(
-              child: Stack(
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: Row(
                 children: [
-                  Positioned(
-                    top: 16,
-                    right: 20,
-                    child: Row(
-                      children: [
-                        if (_viewState == _KioskViewState.idle) ...[
-                          const AppNavBar(),
-                          const SizedBox(width: 10),
-                        ],
-                        AppStatusBadge(
-                          label: l10n.attendance,
-                          color: AppColors.statusInfo,
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          '${_nowVn.hour.toString().padLeft(2, '0')}:${_nowVn.minute.toString().padLeft(2, '0')}',
-                          style: AppFonts.system(
-                            color: AppColors.textPrimary,
-                            fontSize: 42,
-                          ),
-                        ),
-                      ],
+                  Text(
+                    context.l10n.attendanceEmployeeKioskTitle,
+                    style: AppFonts.system(
+                      color: AppColors.textPrimary,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                  Positioned(
-                    top: 16,
-                    left: 20,
-                    child: Text(
-                      'KIOSK',
-                      style: AppFonts.system(
-                        color: AppColors.textSecondary,
-                        fontSize: 26,
-                      ),
-                    ),
-                  ),
-                  Positioned.fill(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 84, 20, 20),
-                      child: _buildBody(kioskState, isOnline),
+                  const Spacer(),
+                  const AppNavBar(),
+                  const SizedBox(width: 12),
+                  Text(
+                    '${_nowVn.hour.toString().padLeft(2, '0')}:${_nowVn.minute.toString().padLeft(2, '0')}',
+                    style: AppFonts.system(
+                      color: AppColors.textPrimary,
+                      fontSize: 32,
                     ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBody(AttendanceKioskState state, bool isOnline) {
-    switch (_viewState) {
-      case _KioskViewState.idle:
-        return _buildIdle(state);
-      case _KioskViewState.typeSelect:
-        return _buildTypeSelect(isOnline);
-      case _KioskViewState.camera:
-        return _buildCamera();
-      case _KioskViewState.preview:
-        return _buildPreview();
-      case _KioskViewState.uploading:
-        return _buildUploading();
-      case _KioskViewState.done:
-        return _buildDone(state.lastAction);
-    }
-  }
-
-  Widget _buildIdle(AttendanceKioskState state) {
-    if (state.isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColors.amber500),
-      );
-    }
-
-    return ToastResponsiveBody(
-      maxWidth: 1180,
-      padding: EdgeInsets.zero,
-      child: ToastWorkSurface(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Select a name',
-              style: AppFonts.system(
-                color: AppColors.textPrimary,
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Choose a team member to start the attendance flow.',
-              style: AppFonts.system(
-                color: AppColors.textSecondary,
-                fontSize: 13,
-              ),
-            ),
-            const SizedBox(height: 16),
             Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final columns = _kioskGridColumns(constraints.maxWidth);
-                  final aspectRatio = switch (columns) {
-                    1 => 3.4,
-                    2 => 2.8,
-                    3 => 2.4,
-                    _ => 2.1,
-                  };
-
-                  return GridView.builder(
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: columns,
-                      crossAxisSpacing: 14,
-                      mainAxisSpacing: 14,
-                      childAspectRatio: aspectRatio,
-                    ),
-                    itemCount: state.staffList.length,
-                    itemBuilder: (context, index) {
-                      final staff = state.staffList[index];
-                      return Material(
-                        color: AppColors.surface1,
-                        borderRadius: BorderRadius.circular(18),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(18),
-                          onTap: () {
-                            setState(() {
-                              _selectedStaff = staff;
-                              _viewState = _KioskViewState.typeSelect;
-                            });
-                          },
-                          child: Center(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                              ),
-                              child: Text(
-                                staff['full_name']?.toString() ?? '-',
-                                textAlign: TextAlign.center,
-                                style: AppFonts.system(
-                                  color: AppColors.textPrimary,
-                                  fontSize: columns == 1 ? 20 : 24,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  );
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: switch (_viewState) {
+                  _KioskViewState.idle => _buildIdle(isOnline),
+                  _KioskViewState.submitting => _buildSubmitting(),
+                  _KioskViewState.done => _buildDone(kioskState),
                 },
               ),
             ),
@@ -407,188 +159,109 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
     );
   }
 
-  Widget _buildTypeSelect(bool isOnline) {
-    final selectedName = _selectedStaff?['full_name']?.toString() ?? '-';
-
+  Widget _buildIdle(bool isOnline) {
     return ToastResponsiveBody(
-      maxWidth: 920,
+      maxWidth: 720,
       padding: EdgeInsets.zero,
       child: Center(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final stacked = constraints.maxWidth < 720;
-            final actionButtons = [
-              SizedBox(
-                width: stacked ? double.infinity : 220,
-                height: 80,
-                child: FilledButton(
-                  onPressed: !isOnline
-                      ? null
-                      : () {
-                          _selectedType = 'clock_in';
-                          _goToCamera();
-                        },
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.amber500,
-                    foregroundColor: AppColors.surface0,
-                  ),
-                  child: Text(
-                    'Clock In',
-                    style: AppFonts.system(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+        child: ToastWorkSurface(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                context.l10n.attendanceEnterEmployeeNumber,
+                textAlign: TextAlign.center,
+                style: AppFonts.system(
+                  color: AppColors.textPrimary,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-              SizedBox(
-                width: stacked ? double.infinity : 220,
-                height: 80,
-                child: OutlinedButton(
-                  onPressed: !isOnline
-                      ? null
-                      : () {
-                          _selectedType = 'clock_out';
-                          _goToCamera();
-                        },
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: AppColors.surface2),
-                  ),
-                  child: Text(
-                    'Clock Out',
-                    style: AppFonts.system(
-                      color: AppColors.textPrimary,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+              const SizedBox(height: 8),
+              Text(
+                context.l10n.attendanceEmployeeNumberOnlyHint,
+                textAlign: TextAlign.center,
+                style: AppFonts.system(
+                  color: AppColors.textSecondary,
+                  fontSize: 14,
                 ),
               ),
-            ];
-
-            return ToastWorkSurface(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+              const SizedBox(height: 24),
+              TextField(
+                key: const Key('attendance_employee_number_field'),
+                controller: _employeeNumberController,
+                focusNode: _employeeNumberFocus,
+                textCapitalization: TextCapitalization.characters,
+                textAlign: TextAlign.center,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp('[A-Za-z0-9_-]')),
+                ],
+                onSubmitted: (_) => isOnline ? _submit('clock_in') : null,
+                decoration: InputDecoration(
+                  labelText: context.l10n.attendanceEmployeeNumber,
+                  hintText: context.l10n.attendanceEmployeeNumberHint,
+                ),
+                style: AppFonts.system(
+                  color: AppColors.textPrimary,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
                 children: [
-                  Text(
-                    selectedName,
-                    textAlign: TextAlign.center,
-                    style: AppFonts.system(
-                      color: AppColors.textPrimary,
-                      fontSize: 36,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Select the attendance action to continue.',
-                    textAlign: TextAlign.center,
-                    style: AppFonts.system(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  if (stacked)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        actionButtons[0],
-                        const SizedBox(height: 12),
-                        actionButtons[1],
-                      ],
-                    )
-                  else
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        actionButtons[0],
-                        const SizedBox(width: 16),
-                        actionButtons[1],
-                      ],
-                    ),
-                  if (!isOnline) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      'Available after internet connection',
-                      textAlign: TextAlign.center,
-                      style: AppFonts.system(
-                        color: AppColors.statusOccupied,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
+                  Expanded(
+                    child: FilledButton(
+                      key: const Key('attendance_employee_clock_in'),
+                      onPressed: isOnline ? () => _submit('clock_in') : null,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(72),
+                        backgroundColor: AppColors.amber500,
+                        foregroundColor: AppColors.surface0,
+                      ),
+                      child: Text(
+                        context.l10n.clockIn,
+                        style: AppFonts.system(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
-                  ],
-                  const SizedBox(height: 16),
-                  TextButton(
-                    onPressed: _backToIdle,
-                    child: Text(
-                      '← Back',
-                      style: AppFonts.system(
-                        color: AppColors.textSecondary,
-                        fontSize: 14,
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: OutlinedButton(
+                      key: const Key('attendance_employee_clock_out'),
+                      onPressed: isOnline ? () => _submit('clock_out') : null,
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(72),
+                      ),
+                      child: Text(
+                        context.l10n.clockOut,
+                        style: AppFonts.system(
+                          color: AppColors.textPrimary,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCamera() {
-    final controller = _cameraController;
-    return ToastResponsiveBody(
-      maxWidth: 1100,
-      padding: EdgeInsets.zero,
-      child: SizedBox.expand(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: controller != null && controller.value.isInitialized
-                    ? CameraPreview(controller)
-                    : Container(color: Colors.black),
-              ),
-              Positioned.fill(
-                child: ColoredBox(
-                  color: Colors.black.withValues(alpha: 0.30),
-                  child: Center(
-                    child: Container(
-                      width: 260,
-                      height: 260,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '$_countdown',
-                        style: AppFonts.system(
-                          color: Colors.white,
-                          fontSize: 100,
-                        ),
-                      ),
-                    ),
+              if (!isOnline) ...[
+                const SizedBox(height: 14),
+                Text(
+                  context.l10n.attendanceOnlineRequired,
+                  textAlign: TextAlign.center,
+                  style: AppFonts.system(
+                    color: AppColors.statusOccupied,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-              ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 22,
-                child: Text(
-                  'Align your face within the circle',
-                  textAlign: TextAlign.center,
-                  style: AppFonts.system(color: Colors.white, fontSize: 16),
-                ),
-              ),
+              ],
             ],
           ),
         ),
@@ -596,139 +269,56 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
     );
   }
 
-  Widget _buildPreview() {
-    final file = _capturedFile;
-    if (file == null) {
-      return _buildUploading();
-    }
+  Widget _buildSubmitting() => Center(
+    child: ToastWorkSurface(
+      padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 30),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircularProgressIndicator(color: AppColors.amber500),
+          const SizedBox(height: 14),
+          Text(context.l10n.attendanceRecording),
+        ],
+      ),
+    ),
+  );
 
-    return ToastResponsiveBody(
-      maxWidth: 1100,
-      padding: EdgeInsets.zero,
-      child: SizedBox.expand(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: Image.file(File(file.path), fit: BoxFit.cover),
+  Widget _buildDone(AttendanceKioskState state) {
+    final isClockIn = state.lastAction == 'clock_in';
+    return Center(
+      child: ToastWorkSurface(
+        padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 30),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.check_circle,
+              color: AppColors.statusAvailable,
+              size: 96,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              isClockIn
+                  ? context.l10n.attendanceClockInComplete
+                  : context.l10n.attendanceClockOutComplete,
+              style: AppFonts.system(
+                color: AppColors.textPrimary,
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
               ),
-              Positioned(
-                left: 16,
-                right: 16,
-                bottom: 20,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: _goToCamera,
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Colors.white),
-                          foregroundColor: Colors.white,
-                        ),
-                        child: Text(
-                          'Retake',
-                          style: AppFonts.system(fontSize: 16),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: () =>
-                            _submitAttendance(photoFile: File(file.path)),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.amber500,
-                          foregroundColor: AppColors.surface0,
-                        ),
-                        child: Text(
-                          'Confirm ✓',
-                          style: AppFonts.system(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              state.lastEmployeeNumber ?? '',
+              style: AppFonts.system(
+                color: AppColors.textSecondary,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
-  }
-
-  Widget _buildUploading() {
-    return ToastResponsiveBody(
-      maxWidth: 560,
-      padding: EdgeInsets.zero,
-      child: Center(
-        child: ToastWorkSurface(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(color: AppColors.amber500),
-              const SizedBox(height: 14),
-              Text(
-                'Recording...',
-                style: AppFonts.system(
-                  color: AppColors.textPrimary,
-                  fontSize: 18,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDone(String? lastAction) {
-    final isIn = lastAction == 'clock_in';
-    return ToastResponsiveBody(
-      maxWidth: 640,
-      padding: EdgeInsets.zero,
-      child: Center(
-        child: ToastWorkSurface(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.check_circle,
-                color: AppColors.statusAvailable,
-                size: 96,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                isIn ? 'Clock-in complete' : 'Clock-out complete',
-                textAlign: TextAlign.center,
-                style: AppFonts.system(
-                  color: AppColors.textPrimary,
-                  fontSize: 32,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  int _kioskGridColumns(double width) {
-    if (width >= 1080) {
-      return 4;
-    }
-    if (width >= 760) {
-      return 3;
-    }
-    if (width >= 460) {
-      return 2;
-    }
-    return 1;
   }
 }

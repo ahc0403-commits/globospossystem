@@ -74,16 +74,12 @@ void main() {
     expect(waiter, contains('refreshOrderPreviews(storeId)'));
 
     expect(staffTab, contains("Key('staff_create_validation_message')"));
-    expect(staffTab, contains("Key('staff_created_credentials_dialog')"));
-    expect(staffTab, contains('_CredentialValueRow'));
-    expect(staffTab, contains('staffCreateValidationRequired'));
-    expect(staffTab, contains('staffCreateValidationPasswordLength'));
-    expect(staffTab, contains('_localizedStaffCreationMessage'));
+    expect(staffTab, contains("Key('staff_created_employee_number_dialog')"));
+    expect(staffTab, contains('staffEmployeeNumberGeneratedHint'));
+    expect(staffTab, contains('staffEmployeeNumberReadOnly'));
+    expect(staffTab, contains('staffEmployeeNameRequired'));
     expect(staffProvider, contains('_cleanException'));
-    expect(
-      vi,
-      contains('không đổi mật khẩu'),
-    );
+    expect(staffProvider, contains('StaffMember.fromJson(created)'));
 
     expect(settings, contains('_payrollPinPilotSaveError'));
     expect(settings, contains('restaurant_settings restaurant_id uniqueness'));

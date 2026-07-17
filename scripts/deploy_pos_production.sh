@@ -16,6 +16,7 @@ TEST_TARGETS="${TEST_TARGETS:-test/pilot_feedback_closure_contract_test.dart}"
 DEPLOY_MODE="${DEPLOY_MODE:-prebuilt}"
 PILOT_AUTH_EMAILS_FILE="${PILOT_AUTH_EMAILS_FILE:-$ROOT_DIR/docs/manual_test/pos_required_pilot_auth_emails.txt}"
 PILOT_LOGIN_SMOKE_SCRIPT="${PILOT_LOGIN_SMOKE_SCRIPT:-$ROOT_DIR/scripts/smoke_pilot_login.sh}"
+FIXED_ACCOUNT_SMOKE_SCRIPT="${FIXED_ACCOUNT_SMOKE_SCRIPT:-$ROOT_DIR/scripts/smoke_fixed_pos_account_login.sh}"
 
 YES="${YES:-0}"
 DRY_RUN=0
@@ -78,8 +79,11 @@ Useful env:
   DEPLOY_MODE=remote
   TEST_TARGETS="test/a.dart test/b.dart"
   PILOT_AUTH_EMAILS_FILE=docs/manual_test/pos_required_pilot_auth_emails.txt
-  PILOT_SMOKE_EMAIL=dung.cashier01@globos.test
-  PILOT_SMOKE_PASSWORD=<set securely in environment; never print it>
+  FIXED_SMOKE_ACCOUNT_CODE=<existing fixed POS code>
+  FIXED_SMOKE_PASSWORD=<set securely in environment; never print it>
+  PILOT_SMOKE_EMAIL=<legacy generic helper only; not used by production release>
+  PILOT_SMOKE_PASSWORD=<legacy generic helper only; never print it>
+  ALLOWED_ORIGINS=https://globospossystem.vercel.app
   REQUIRE_CLEAN_GIT=0 (accepted only with --dry-run)
 EOF
 }
@@ -125,8 +129,9 @@ reject_target_overrides() {
 }
 
 production_deploy_path_requested() {
-  [[ "$SKIP_VERCEL" != "1" ]] && return 0
-  [[ "$SKIP_DB" != "1" && ( -n "$MIGRATION_FILE" || "$ROLLBACK_HIERARCHY" == "1" ) ]]
+  # Every non-help invocation can deploy POS Edge functions, DB, or web.
+  # Therefore no skip combination is allowed to bypass exact-main ancestry.
+  return 0
 }
 
 enforce_clean_git() {
@@ -200,6 +205,15 @@ load_env() {
   fi
 
   fail "Missing env file. Expected $ENV_FILE or $ROOT_DIR/.env"
+}
+
+verify_allowed_production_origins() {
+  local configured="${ALLOWED_ORIGINS:-}"
+  [[ "$configured" == "$LIVE_URL" ]] ||
+    fail "ALLOWED_ORIGINS must be exactly $LIVE_URL for the POS production release."
+  [[ "$configured" != *'*'* && "$configured" != *','* ]] ||
+    fail "Wildcard or multiple production origins are forbidden."
+  printf 'Allowed production origin verified: %s\n' "$configured"
 }
 
 confirm_production() {
@@ -341,8 +355,14 @@ preflight() {
     need_cmd dart
     need_cmd flutter
   fi
-  if [[ "$DB_ONLY" != "1" && "$SKIP_AUTH_CHECK" != "1" ]]; then
+  if [[ "$DB_ONLY" != "1" ]]; then
     need_cmd supabase
+    [[ -f "$ROOT_DIR/supabase/functions/create_staff_user/index.ts" ]] ||
+      fail "Missing create_staff_user Edge function."
+    [[ -f "$ROOT_DIR/supabase/functions/provision-fixed-pos-account/index.ts" ]] ||
+      fail "Missing provision-fixed-pos-account Edge function."
+  fi
+  if [[ "$DB_ONLY" != "1" && "$SKIP_AUTH_CHECK" != "1" ]]; then
     [[ -f "$ROOT_DIR/scripts/check_pilot_auth_accounts.sh" ]] ||
       fail "Missing pilot Auth checker: $ROOT_DIR/scripts/check_pilot_auth_accounts.sh"
     [[ -f "$PILOT_AUTH_EMAILS_FILE" ]] ||
@@ -351,8 +371,8 @@ preflight() {
   if [[ "$DB_ONLY" != "1" && "$SKIP_LOGIN_SMOKE" != "1" && "$SKIP_VERCEL" != "1" ]]; then
     need_cmd curl
     need_cmd python3
-    [[ -f "$PILOT_LOGIN_SMOKE_SCRIPT" ]] ||
-      fail "Missing pilot login smoke script: $PILOT_LOGIN_SMOKE_SCRIPT"
+    [[ -f "$FIXED_ACCOUNT_SMOKE_SCRIPT" ]] ||
+      fail "Missing fixed POS account smoke script: $FIXED_ACCOUNT_SMOKE_SCRIPT"
   fi
   if [[ "$SKIP_DB" != "1" && ( -n "$MIGRATION_FILE" || "$ROLLBACK_HIERARCHY" == "1" ) ]]; then
     need_cmd supabase
@@ -664,6 +684,7 @@ apply_migration() {
     20260716210000_restaurant_sales_excel_export.sql|\
     20260717090000_store_opening_setup_wizard.sql|\
     20260717130000_table_qr_batch_export.sql|\
+    20260717170000_workforce_fixed_accounts.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -682,6 +703,12 @@ apply_migration() {
     [[ -f "$rollback_path" ]] ||
       fail "Missing table QR batch export rollback file: $rollback_path"
     log "Table QR batch export rollback readiness"
+    printf 'Rollback ready (not executed): %s\n' "$rollback_path"
+  elif [[ "$migration_name" == "20260717170000_workforce_fixed_accounts.sql" ]]; then
+    local rollback_path="$ROOT_DIR/scripts/rollback_workforce_fixed_accounts.sql"
+    [[ -f "$rollback_path" ]] ||
+      fail "Missing workforce fixed-accounts rollback file: $rollback_path"
+    log "Workforce fixed-accounts rollback readiness"
     printf 'Rollback ready (not executed): %s\n' "$rollback_path"
   fi
 
@@ -728,6 +755,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_table_qr_batch_export.sql" \
       "table QR batch export migration preflight"
+  elif [[ "$migration_name" == "20260717170000_workforce_fixed_accounts.sql" ]]; then
+    log "Workforce fixed-accounts migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_workforce_fixed_accounts.sql" \
+      "workforce fixed-accounts migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -793,6 +825,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_table_qr_batch_export.sql" \
       "table QR batch export migration verification"
+  elif [[ "$migration_name" == "20260717170000_workforce_fixed_accounts.sql" ]]; then
+    log "Workforce fixed-accounts migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_workforce_fixed_accounts.sql" \
+      "workforce fixed-accounts migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \
@@ -895,32 +932,64 @@ deploy_vercel() {
   run curl -fsSI -L "$LIVE_URL"
 }
 
+deploy_pos_edge_functions() {
+  log "POS Edge functions deploy"
+  run supabase functions deploy create_staff_user --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy provision-fixed-pos-account \
+    --project-ref "$POS_PROJECT_REF"
+}
+
+verify_remote_allowed_origin() {
+  log "POS Edge production origin verification"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '+ OPTIONS provision-fixed-pos-account with Origin %q; require exact access-control-allow-origin\n' \
+      "$LIVE_URL"
+    return 0
+  fi
+
+  local headers
+  headers="$(mktemp)"
+  if ! curl -sS -o /dev/null -D "$headers" -X OPTIONS \
+    "$SUPABASE_URL/functions/v1/provision-fixed-pos-account" \
+    -H "Origin: $LIVE_URL" \
+    -H "apikey: $SUPABASE_ANON_KEY"; then
+    rm -f "$headers"
+    fail "Could not verify the deployed POS Edge origin configuration."
+  fi
+  local allowed
+  allowed="$(awk -F ': *' 'tolower($1) == "access-control-allow-origin" {
+    value=$2; sub(/\r$/, "", value); print value
+  }' "$headers" | tail -1)"
+  rm -f "$headers"
+  [[ "$allowed" == "$LIVE_URL" ]] ||
+    fail "Deployed POS Edge origin is not exactly $LIVE_URL."
+  printf 'Deployed POS Edge origin verified: %s\n' "$allowed"
+}
+
 run_login_smoke() {
   if [[ "$SKIP_VERCEL" == "1" ]]; then
-    log "Pilot login smoke skipped because Vercel deploy was skipped"
+    log "Fixed POS account login smoke skipped because Vercel deploy was skipped"
     return 0
   fi
   if [[ "$SKIP_LOGIN_SMOKE" == "1" ]]; then
-    log "Pilot login smoke skipped"
-    warn "Do not report this deploy as login-ready until a pilot login smoke passes."
+    log "Fixed POS account login smoke skipped"
+    warn "Do not report this deploy as login-ready until a fixed-account login smoke passes."
     return 0
   fi
 
-  log "Pilot login smoke"
+  log "Fixed POS account login smoke"
   if [[ "$DRY_RUN" == "1" ]]; then
-    printf '+ PILOT_SMOKE_EMAIL=<set> PILOT_SMOKE_PASSWORD=<set> bash %q --expected-project-ref %q\n' \
-      "$PILOT_LOGIN_SMOKE_SCRIPT" "$POS_PROJECT_REF"
+    printf '+ FIXED_SMOKE_ACCOUNT_CODE=<set> FIXED_SMOKE_PASSWORD=<set> bash %q\n' \
+      "$FIXED_ACCOUNT_SMOKE_SCRIPT"
     return 0
   fi
 
-  [[ -n "${PILOT_SMOKE_EMAIL:-}" ]] ||
-    fail "PILOT_SMOKE_EMAIL is required for post-deploy pilot login smoke."
-  [[ -n "${PILOT_SMOKE_PASSWORD:-}" ]] ||
-    fail "PILOT_SMOKE_PASSWORD is required for post-deploy pilot login smoke."
+  [[ -n "${FIXED_SMOKE_ACCOUNT_CODE:-}" ]] ||
+    fail "FIXED_SMOKE_ACCOUNT_CODE is required for post-deploy login smoke."
+  [[ -n "${FIXED_SMOKE_PASSWORD:-}" ]] ||
+    fail "FIXED_SMOKE_PASSWORD is required for post-deploy login smoke."
 
-  run bash "$PILOT_LOGIN_SMOKE_SCRIPT" \
-    --email "$PILOT_SMOKE_EMAIL" \
-    --expected-project-ref "$POS_PROJECT_REF"
+  run bash "$FIXED_ACCOUNT_SMOKE_SCRIPT"
 }
 
 run_db_only_flow() {
@@ -956,9 +1025,13 @@ main() {
     return 0
   fi
   load_env
+  ensure_flutter_env
+  verify_allowed_production_origins
   run_auth_check
   run_checks
   apply_migration
+  deploy_pos_edge_functions
+  verify_remote_allowed_origin
   local_flutter_build
   deploy_vercel
   run_login_smoke
