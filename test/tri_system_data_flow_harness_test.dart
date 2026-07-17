@@ -4,11 +4,23 @@ import 'package:flutter_test/flutter_test.dart';
 
 String readRepoFile(String path) => File(path).readAsStringSync();
 
+String get officeAppRoot =>
+    Platform.environment['OFFICE_APP_ROOT'] ??
+    '/Users/andreahn/Documents/restaurant_office_app';
+
+const officeContractPaths = <String>[
+  'supabase/functions/pos-bridge/index.ts',
+  'lib/app/api/pos_data_service.dart',
+  'supabase/migrations/472_pos_sales_event_import_and_bucket_posting.sql',
+  'lib/features/pos_sales/data/pos_sales_repository.dart',
+];
+
+bool get officeContractFilesAvailable => officeContractPaths.every(
+  (path) => File('$officeAppRoot/$path').existsSync(),
+);
+
 String readOfficeFile(String path) {
-  final root =
-      Platform.environment['OFFICE_APP_ROOT'] ??
-      '/Users/andreahn/Documents/restaurant_office_app';
-  final file = File('$root/$path');
+  final file = File('$officeAppRoot/$path');
   if (!file.existsSync()) {
     fail('Missing Office fixture file: ${file.path}');
   }
@@ -18,6 +30,14 @@ String readOfficeFile(String path) {
 void main() {
   group('tri-system Deliberry -> POS -> Office data flow harness', () {
     test('static contracts keep all three systems wired through read fences', () {
+      if (!officeContractFilesAvailable) {
+        markTestSkipped(
+          'Office app checkout is unavailable; set OFFICE_APP_ROOT to run '
+          'the cross-repository static contract assertions.',
+        );
+        return;
+      }
+
       final posSalesView =
           readRepoFile(
             'supabase/migrations/20260604000000_office_pos_sales_events.sql',
