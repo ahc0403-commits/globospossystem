@@ -424,19 +424,14 @@ void main() {
     expect(router, contains('PrintStationScreen'));
     expect(router, contains('PlatformInfo.isPrinterSupported'));
     expect(roleRoutes, contains("path == '/print-station'"));
-    expect(roleRoutes, contains("'kitchen' => true"));
-    expect(
-      roleRoutes,
-      contains(
-        "'super_admin' || 'store_admin' || 'admin' || 'kitchen' => true",
-      ),
-    );
+    expect(roleRoutes, contains("'kitchen' ||"));
+    expect(roleRoutes, contains("'cashier'"));
     expect(printStation, contains('class PrintStationScreen'));
-    expect(printStation, contains('PrintJobAgentService'));
-    expect(printStation, contains('startPolling(storeId)'));
-    expect(printStation, contains('processOnce(storeId)'));
+    expect(printStation, contains('printAgentCoordinatorProvider'));
+    expect(printStation, isNot(contains('PrintJobAgentService()')));
+    expect(printStation, contains('.processOnce()'));
     expect(printStation, contains('printStationJobsProvider(storeId)'));
-    expect(printStation, contains('testPrintDestination(destination.id)'));
+    expect(printStation, contains('.testDestination(destination.id)'));
     expect(printStation, contains('reprintPrintJob(job.id)'));
     expect(printStation, contains("Key('print_station_root')"));
     expect(printStation, contains("Key('print_station_job_feed')"));

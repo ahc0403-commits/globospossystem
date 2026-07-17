@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:globos_pos_system/core/utils/role_routes.dart';
 
 String readRepoFile(String path) => File(path).readAsStringSync();
 
@@ -18,16 +19,8 @@ void main() {
     expect(router, contains("state.pathParameters['paymentId']"));
 
     expect(roleRoutes, contains("path.startsWith('/payments/')"));
-    expect(
-      roleRoutes,
-      contains(
-        "'cashier' => path == '/cashier' || path.startsWith('/payments/')",
-      ),
-    );
-    expect(
-      roleRoutes,
-      contains("'admin' => path == '/admin' || path.startsWith('/payments/')"),
-    );
+    expect(canAccessRouteForRole('cashier', '/payments/payment-id'), isTrue);
+    expect(canAccessRouteForRole('admin', '/payments/payment-id'), isTrue);
   });
 
   test(

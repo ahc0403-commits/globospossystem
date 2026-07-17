@@ -60,9 +60,17 @@ bool canAccessRouteForRole(
   }
   if (path == '/print-station') {
     return switch (role) {
-      'super_admin' || 'store_admin' || 'admin' || 'kitchen' => true,
+      'super_admin' ||
+      'brand_admin' ||
+      'store_admin' ||
+      'admin' ||
+      'kitchen' ||
+      'cashier' => true,
       _ => false,
     };
+  }
+  if (path.startsWith('/store-setup/')) {
+    return PermissionUtils.isAdminLike(role);
   }
   if (path == '/qc-check') {
     return PermissionUtils.canDoQcCheck(role, extraPermissions);
@@ -75,15 +83,20 @@ bool canAccessRouteForRole(
     'super_admin' =>
       path == '/super-admin' ||
           path == '/photo-ops' ||
+          path.startsWith('/store-setup/') ||
           path.startsWith('/admin/') ||
           path.startsWith('/payments/'),
-    'brand_admin' ||
-    'store_admin' ||
-    'admin' => path == '/admin' || path.startsWith('/payments/'),
+    'brand_admin' || 'store_admin' || 'admin' =>
+      path == '/admin' ||
+          path.startsWith('/store-setup/') ||
+          path.startsWith('/payments/'),
     'photo_objet_master' || 'photo_objet_store_admin' => path == '/photo-ops',
     'waiter' => path == '/waiter',
     'kitchen' => path == '/kitchen',
-    'cashier' => path == '/cashier' || path.startsWith('/payments/'),
+    'cashier' =>
+      path == '/cashier' ||
+          path == '/print-station' ||
+          path.startsWith('/payments/'),
     _ => false,
   };
 }

@@ -796,6 +796,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
       default:
         return _buildStorePanel(
           context: context,
+          storeId: storeId,
           settingsState: settingsState,
           notifier: notifier,
           scrollable: scrollable,
@@ -812,6 +813,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
 
   Widget _buildStorePanel({
     required BuildContext context,
+    required String? storeId,
     required SettingsState settingsState,
     required SettingsNotifier notifier,
     required bool scrollable,
@@ -835,6 +837,15 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                 color: PosColors.accent,
                 compact: true,
               ),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              key: const Key('settings_store_opening_setup'),
+              onPressed: storeId == null
+                  ? null
+                  : () => context.go('/store-setup/$storeId'),
+              icon: const Icon(Icons.rocket_launch_outlined),
+              label: Text(context.l10n.storeSetupEntry),
             ),
             const SizedBox(height: 14),
             TextField(

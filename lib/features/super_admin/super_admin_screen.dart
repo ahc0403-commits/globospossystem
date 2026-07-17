@@ -1122,6 +1122,19 @@ class _RestaurantsTab extends StatelessWidget {
                             child: Text(l10n.superAdminManageStore),
                           ),
                           const SizedBox(width: 8),
+                          OutlinedButton.icon(
+                            key: Key(
+                              'super_admin_store_setup_${restaurant.id}',
+                            ),
+                            onPressed: restaurant.isActive
+                                ? () => context.go(
+                                    '/store-setup/${restaurant.id}',
+                                  )
+                                : null,
+                            icon: const Icon(Icons.rocket_launch_outlined),
+                            label: Text(l10n.storeSetupEntry),
+                          ),
+                          const SizedBox(width: 8),
                           FilledButton(
                             onPressed: () {
                               notifier.selectRestaurant(restaurant);
@@ -1340,11 +1353,39 @@ class _RestaurantsTab extends StatelessWidget {
             );
 
       if (success && context.mounted) {
+        final createdStoreId = isEdit
+            ? initial.id
+            : notifier.restaurantIdForSlug(slug);
         showSuccessToast(
           context,
           isEdit ? l10n.superAdminStoreUpdated : l10n.superAdminStoreCreated,
         );
         Navigator.of(context).pop();
+        if (!isEdit && createdStoreId != null) {
+          await Future<void>.delayed(Duration.zero);
+          if (!context.mounted) return;
+          final continueSetup = await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: Text(l10n.storeSetupTitle),
+              content: Text(l10n.storeSetupTemplateDescription),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: Text(l10n.close),
+                ),
+                FilledButton(
+                  key: const Key('super_admin_continue_store_setup'),
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: Text(l10n.storeSetupNext),
+                ),
+              ],
+            ),
+          );
+          if (continueSetup == true && context.mounted) {
+            context.go('/store-setup/$createdStoreId');
+          }
+        }
       }
     }
 

@@ -309,6 +309,25 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               ),
             ),
           const SizedBox(height: 18),
+          if (state.createdStoreId != null) ...[
+            SizedBox(
+              height: 56,
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                key: const Key('onboarding_continue_store_setup'),
+                onPressed: state.isLoading
+                    ? null
+                    : () async {
+                        await notifier.finish();
+                        if (!mounted) return;
+                        context.go('/store-setup/${state.createdStoreId}');
+                      },
+                icon: const Icon(Icons.rocket_launch_outlined),
+                label: Text(context.l10n.storeSetupEntry),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           SizedBox(
             height: 56,
             width: double.infinity,
