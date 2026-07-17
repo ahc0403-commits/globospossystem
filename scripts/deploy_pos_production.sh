@@ -27,6 +27,8 @@ SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_VERCEL="${SKIP_VERCEL:-0}"
 REQUIRE_CLEAN_GIT="${REQUIRE_CLEAN_GIT:-1}"
 ROLLBACK_HIERARCHY=0
+DB_ONLY=0
+MIGRATION_OPTION_SET=0
 
 usage() {
   cat <<'EOF'
@@ -39,8 +41,21 @@ Default flow:
   optional DB migration -> vercel build --prod ->
   vercel deploy --prebuilt --prod -> live HTTP check -> pilot login smoke
 
+DB-only flow:
+  clean exact-main/source and production Supabase preflight -> locked Flutter
+  dependency bootstrap -> dart analyze -> tests -> rollback readiness ->
+  migration-history absence -> SQL preflight -> atomic apply -> verification ->
+  migration-history confirmation
+
+  DB-only never invokes pilot Auth/account checks or pilot login smoke, never
+  requires pilot credentials, and never creates, resets, or mutates accounts.
+  Auth, Vercel, live HTTP, and login readiness are not applicable.
+
 Options:
   --migration FILE   Apply one Supabase migration before deploying.
+  --db-only          Run the required migration gates without Auth or Vercel work.
+                     Requires --migration and all checks; incompatible with
+                     remote mode, skip options, and rollback.
   --mode MODE        prebuilt (default) or remote.
   --test FILE        Add a flutter test target. Use "all" for flutter test.
   --no-tests         Skip flutter test targets while keeping dart analyze.
@@ -198,8 +213,12 @@ confirm_production() {
     return 0
   fi
 
-  printf 'Production target: Supabase %s, Vercel %s\n' \
-    "$POS_PROJECT_REF" "$POS_VERCEL_PROJECT"
+  if [[ "$DB_ONLY" == "1" ]]; then
+    printf 'Production DB-only target: Supabase %s\n' "$POS_PROJECT_REF"
+  else
+    printf 'Production target: Supabase %s, Vercel %s\n' \
+      "$POS_PROJECT_REF" "$POS_VERCEL_PROJECT"
+  fi
   read -r -p "Type DEPLOY_GLOBOS_PROD to continue: " confirm
   [[ "$confirm" == "DEPLOY_GLOBOS_PROD" ]] || fail "Aborted."
 }
@@ -211,6 +230,10 @@ parse_args() {
         shift
         MIGRATION_FILE="${1:-}"
         [[ -n "$MIGRATION_FILE" ]] || fail "--migration requires a file"
+        MIGRATION_OPTION_SET=1
+        ;;
+      --db-only)
+        DB_ONLY=1
         ;;
       --mode)
         shift
@@ -264,6 +287,27 @@ parse_args() {
   done
 }
 
+validate_db_only_options() {
+  [[ "$DB_ONLY" == "1" ]] || return 0
+
+  [[ "$MIGRATION_OPTION_SET" == "1" && -n "$MIGRATION_FILE" ]] ||
+    fail "--db-only requires --migration FILE."
+  [[ "$DEPLOY_MODE" == "prebuilt" ]] ||
+    fail "--db-only is incompatible with non-default deployment mode $DEPLOY_MODE."
+  [[ "$SKIP_CHECKS" == "0" ]] || fail "--db-only is incompatible with --skip-checks."
+  [[ -n "$TEST_TARGETS" ]] || fail "--db-only is incompatible with --no-tests."
+  [[ "$SKIP_AUTH_CHECK" == "0" ]] ||
+    fail "--db-only is incompatible with --skip-auth-check; Auth is not applicable in DB-only mode."
+  [[ "$SKIP_LOGIN_SMOKE" == "0" ]] ||
+    fail "--db-only is incompatible with --skip-login-smoke; login smoke is not applicable in DB-only mode."
+  [[ "$SKIP_DB" == "0" ]] || fail "--db-only is incompatible with --skip-db."
+  [[ "$SKIP_BUILD" == "0" ]] || fail "--db-only is incompatible with --skip-build."
+  [[ "$SKIP_VERCEL" == "0" ]] ||
+    fail "--db-only is incompatible with --skip-vercel; Vercel is already not applicable."
+  [[ "$ROLLBACK_HIERARCHY" == "0" ]] ||
+    fail "--db-only is incompatible with --rollback-hierarchy."
+}
+
 preflight() {
   log "Preflight"
   reject_target_overrides
@@ -281,28 +325,30 @@ preflight() {
   [[ "$project_ref" == "$POS_PROJECT_REF" ]] ||
     fail "Linked Supabase project is not POS production ($POS_PROJECT_REF)."
 
-  [[ -f "$ROOT_DIR/.vercel/project.json" ]] ||
-    fail "Missing .vercel/project.json. Run vercel link before deploying."
-  grep -q "\"projectName\": \"$POS_VERCEL_PROJECT\"" "$ROOT_DIR/.vercel/project.json" ||
-    fail "Vercel project name is not $POS_VERCEL_PROJECT."
-  grep -q "\"projectId\": \"$POS_VERCEL_PROJECT_ID\"" "$ROOT_DIR/.vercel/project.json" ||
-    fail "Vercel project id is not the pinned POS project."
-  grep -q "\"orgId\": \"$POS_VERCEL_ORG_ID\"" "$ROOT_DIR/.vercel/project.json" ||
-    fail "Vercel org id is not the pinned POS team."
-  printf 'Vercel project: %s\n' "$POS_VERCEL_PROJECT"
+  if [[ "$DB_ONLY" != "1" ]]; then
+    [[ -f "$ROOT_DIR/.vercel/project.json" ]] ||
+      fail "Missing .vercel/project.json. Run vercel link before deploying."
+    grep -q "\"projectName\": \"$POS_VERCEL_PROJECT\"" "$ROOT_DIR/.vercel/project.json" ||
+      fail "Vercel project name is not $POS_VERCEL_PROJECT."
+    grep -q "\"projectId\": \"$POS_VERCEL_PROJECT_ID\"" "$ROOT_DIR/.vercel/project.json" ||
+      fail "Vercel project id is not the pinned POS project."
+    grep -q "\"orgId\": \"$POS_VERCEL_ORG_ID\"" "$ROOT_DIR/.vercel/project.json" ||
+      fail "Vercel org id is not the pinned POS team."
+    printf 'Vercel project: %s\n' "$POS_VERCEL_PROJECT"
+  fi
 
   if [[ "$SKIP_CHECKS" != "1" ]]; then
     need_cmd dart
     need_cmd flutter
   fi
-  if [[ "$SKIP_AUTH_CHECK" != "1" ]]; then
+  if [[ "$DB_ONLY" != "1" && "$SKIP_AUTH_CHECK" != "1" ]]; then
     need_cmd supabase
     [[ -f "$ROOT_DIR/scripts/check_pilot_auth_accounts.sh" ]] ||
       fail "Missing pilot Auth checker: $ROOT_DIR/scripts/check_pilot_auth_accounts.sh"
     [[ -f "$PILOT_AUTH_EMAILS_FILE" ]] ||
       fail "Missing pilot Auth account file: $PILOT_AUTH_EMAILS_FILE"
   fi
-  if [[ "$SKIP_LOGIN_SMOKE" != "1" && "$SKIP_VERCEL" != "1" ]]; then
+  if [[ "$DB_ONLY" != "1" && "$SKIP_LOGIN_SMOKE" != "1" && "$SKIP_VERCEL" != "1" ]]; then
     need_cmd curl
     need_cmd python3
     [[ -f "$PILOT_LOGIN_SMOKE_SCRIPT" ]] ||
@@ -312,10 +358,10 @@ preflight() {
     need_cmd supabase
     need_cmd psql
   fi
-  if [[ "$DEPLOY_MODE" == "remote" && "$SKIP_BUILD" != "1" ]]; then
+  if [[ "$DB_ONLY" != "1" && "$DEPLOY_MODE" == "remote" && "$SKIP_BUILD" != "1" ]]; then
     need_cmd flutter
   fi
-  if [[ "$SKIP_VERCEL" != "1" ]]; then
+  if [[ "$DB_ONLY" != "1" && "$SKIP_VERCEL" != "1" ]]; then
     need_cmd vercel
     need_cmd curl
   fi
@@ -360,6 +406,8 @@ run_checks() {
       run flutter test
     elif [[ -f "$ROOT_DIR/$target" ]]; then
       run flutter test "$target"
+    elif [[ "$DB_ONLY" == "1" ]]; then
+      fail "DB-only test target not found: $target"
     else
       warn "Test target not found, skipping: $target"
     fi
@@ -410,7 +458,10 @@ parse_linked_pg_exports() {
 validate_linked_pg_credentials() {
   local direct_host="db.$POS_PROJECT_REF.supabase.co"
 
-  if [[ "$PGHOST" == "$direct_host" ]]; then
+  if [[ "$DB_ONLY" == "1" ]]; then
+    [[ "$PGHOST" =~ ^[a-z0-9-]+\.pooler\.supabase\.com$ && "$PGPORT" == "5432" ]] ||
+      fail "DB-only requires the Supabase Shared Session Pooler on port 5432."
+  elif [[ "$PGHOST" == "$direct_host" ]]; then
     [[ "$PGPORT" == "5432" ]] || fail "Direct database credential used an unexpected port."
   elif [[ "$PGHOST" =~ ^[a-z0-9-]+\.pooler\.supabase\.com$ ]]; then
     [[ "$PGPORT" == "5432" || "$PGPORT" == "6543" ]] ||
@@ -855,11 +906,33 @@ run_login_smoke() {
     --expected-project-ref "$POS_PROJECT_REF"
 }
 
+run_db_only_flow() {
+  log "DB-only release scope"
+  printf 'Pilot Auth/account readiness: N/A (not invoked; no pilot credentials required).\n'
+  printf 'Vercel deployment: N/A.\n'
+  printf 'Live HTTP check: N/A.\n'
+  printf 'Pilot login smoke: N/A (not invoked).\n'
+  warn "DB-only releases do not establish or claim POS login readiness."
+
+  load_env
+  reject_target_overrides
+  run_checks
+  apply_migration
+
+  log "DB-only release flow completed"
+  printf 'Database migration gates finished; Auth, Vercel, live HTTP, and login readiness remain N/A.\n'
+}
+
 main() {
   parse_args "$@"
+  validate_db_only_options
   cd "$ROOT_DIR"
   confirm_production
   preflight
+  if [[ "$DB_ONLY" == "1" ]]; then
+    run_db_only_flow
+    return 0
+  fi
   if [[ "$ROLLBACK_HIERARCHY" == "1" ]]; then
     rollback_hierarchy
     log "Rollback flow completed"

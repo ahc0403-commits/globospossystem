@@ -1,6 +1,6 @@
 # POS Production Deployment Runbook
 
-Last updated: 2026-07-11
+Last updated: 2026-07-17
 
 ## Why pilot login can fail after a good deploy
 
@@ -141,6 +141,57 @@ must not contain it after the reverted repair.
 
 Do not use `supabase db push` until the local and remote migration histories
 are reconciled.
+
+## Official DB-only production release
+
+Use `--db-only` when the reviewed release changes only the production
+database. This is a first-class release mode, not a combination of skip flags:
+
+```bash
+ENV_FILE=/Users/andreahn/.config/globos/pos-production.env \
+TEST_TARGETS=all \
+scripts/deploy_pos_production.sh \
+  --migration supabase/migrations/20260717090000_store_opening_setup_wizard.sql \
+  --mode prebuilt \
+  --db-only \
+  --dry-run \
+  --yes
+```
+
+After the dry-run evidence is reviewed, remove only `--dry-run` and run the
+same command from a clean worktree whose `HEAD` exactly equals the freshly
+fetched `origin/main` SHA. Record the operator, Asia/Ho_Chi_Minh timestamp,
+exact SHA, pinned project ref, sanitized command, preflight output, apply
+output, migration-history confirmation, and verification output.
+
+Before either command, link that clean exact-main worktree to production with
+the official Supabase CLI:
+
+```bash
+supabase link --project-ref ynriuoomotxuwhuxxmhj
+supabase migration list
+```
+
+Do not copy `supabase/.temp` from another worktree and do not use
+`--skip-pooler`. The DB-only SQL runner obtains temporary linked credentials
+through the official CLI and requires a Shared Session Pooler host on port
+5432. Direct database credentials and transaction pooler port 6543 fail before
+SQL. `supabase migration list` is the read-only connectivity and history check;
+do not query or modify any pilot or real account for connectivity evidence.
+
+DB-only requires `--migration`, locked dependency bootstrap, static analysis,
+and tests. It rejects `--skip-db`, `--skip-checks`, `--no-tests`,
+`--skip-auth-check`, `--skip-login-smoke`, `--skip-build`, `--skip-vercel`,
+`--rollback-hierarchy`, and non-default deployment modes. The production env
+file is loaded for Supabase CLI authentication and pinned-target validation;
+pilot email/password variables and frontend anon-key readiness are not
+required or inspected.
+
+The following stages are explicitly N/A in DB-only output: pilot Auth/account
+readiness, Vercel deployment, live HTTP check, and pilot login smoke. The mode
+never invokes the account checker or login-smoke script, never creates,
+recovers, resets, or mutates accounts, and must never be reported as evidence
+that the POS login flow is production-ready.
 
 ## Faster or safer modes
 
