@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../core/hardware/print_job_agent_service.dart';
+import '../../core/hardware/print_agent_coordinator.dart';
+import '../../core/hardware/print_agent_coordinator_provider.dart';
 import '../../core/hardware/printer_service.dart';
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/printer_destination_service.dart';
@@ -19,6 +20,7 @@ import '../../widgets/offline_banner.dart';
 import '../admin/providers/printer_destinations_provider.dart';
 import '../auth/auth_provider.dart';
 import '../kitchen/kitchen_provider.dart';
+import '../store_setup/store_setup_localization.dart';
 
 class PrintStationScreen extends ConsumerStatefulWidget {
   const PrintStationScreen({super.key});
@@ -28,27 +30,13 @@ class PrintStationScreen extends ConsumerStatefulWidget {
 }
 
 class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
-  final _agent = PrintJobAgentService();
   final Set<String> _testingDestinationIds = <String>{};
-  bool _isRunning = false;
   bool _isProcessingOnce = false;
-  String? _lastRunLabel;
 
-  @override
-  void dispose() {
-    _agent.stop();
-    super.dispose();
-  }
-
-  void _togglePolling(String storeId) {
-    if (_isRunning) {
-      _agent.stop();
-      setState(() => _isRunning = false);
-      return;
-    }
-
-    _agent.startPolling(storeId);
-    setState(() => _isRunning = true);
+  Future<void> _togglePolling() async {
+    final coordinator = ref.read(printAgentCoordinatorProvider.notifier);
+    final enabled = ref.read(printAgentCoordinatorProvider).enabled;
+    await coordinator.setEnabled(!enabled);
   }
 
   Future<void> _processOnce(String storeId) async {
@@ -57,19 +45,10 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
     }
     setState(() => _isProcessingOnce = true);
     try {
-      final results = await _agent.processOnce(storeId);
+      await ref.read(printAgentCoordinatorProvider.notifier).processOnce();
       if (!mounted) {
         return;
       }
-      final ok = results
-          .where((result) => result.result == PrintResult.success)
-          .length;
-      setState(() {
-        _lastRunLabel = context.l10n.printStationLastRunSummary(
-          results.length,
-          ok,
-        );
-      });
       ref.invalidate(printStationJobsProvider(storeId));
       ref.invalidate(failedPrintJobsProvider(storeId));
     } finally {
@@ -94,7 +73,9 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
     }
     setState(() => _testingDestinationIds.add(destination.id));
     try {
-      final result = await _agent.testPrintDestination(destination.id);
+      final result = await ref
+          .read(printAgentCoordinatorProvider.notifier)
+          .testDestination(destination.id);
       if (!mounted) {
         return;
       }
@@ -116,6 +97,8 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final storeId = ref.watch(authProvider).storeId;
+    final agentState = ref.watch(printAgentCoordinatorProvider);
+    final isRunning = agentState.status == PrintAgentStatus.running;
 
     return Scaffold(
       key: const Key('print_station_root'),
@@ -147,10 +130,10 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
                   ),
                 ),
                 ToastStatusBadge(
-                  label: _isRunning
+                  label: isRunning
                       ? l10n.printStationRunning
                       : l10n.printStationStopped,
-                  color: _isRunning ? PosColors.success : PosColors.warning,
+                  color: isRunning ? PosColors.success : PosColors.warning,
                   compact: true,
                 ),
               ],
@@ -170,7 +153,9 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
 
   Widget _buildBody(String? storeId) {
     final l10n = context.l10n;
-    if (!_agent.isSupported) {
+    final coordinator = ref.read(printAgentCoordinatorProvider.notifier);
+    final agentState = ref.watch(printAgentCoordinatorProvider);
+    if (!coordinator.isSupported) {
       return Center(
         child: PosExceptionAlert(
           label: l10n.printStationTitle,
@@ -220,15 +205,15 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
                   children: [
                     FilledButton.icon(
                       key: const Key('print_station_start'),
-                      onPressed: () => _togglePolling(storeId),
+                      onPressed: _togglePolling,
                       icon: Icon(
-                        _isRunning
+                        agentState.enabled
                             ? Icons.stop_circle_outlined
                             : Icons.play_circle_outline,
                         size: 18,
                       ),
                       label: Text(
-                        _isRunning
+                        agentState.enabled
                             ? l10n.printStationStop
                             : l10n.printStationStart,
                       ),
@@ -277,7 +262,12 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
                     ),
                     ToastMetric(
                       label: l10n.printStationLastRun,
-                      value: _lastRunLabel ?? l10n.printStationNoLastRun,
+                      value: agentState.lastProcessed == 0
+                          ? l10n.printStationNoLastRun
+                          : l10n.printStationLastRunSummary(
+                              agentState.lastProcessed,
+                              agentState.lastSuccessful,
+                            ),
                       tone: PosColors.textPrimary,
                     ),
                   ],
@@ -296,9 +286,9 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
                   child: CircularProgressIndicator(color: AppColors.amber500),
                 ),
               ),
-              error: (error, _) => PosExceptionAlert(
+              error: (_, __) => PosExceptionAlert(
                 label: l10n.kitchenPrintQueueUnavailable,
-                detail: '$error',
+                detail: l10n.storeSetupErrorTestPoll,
                 color: PosColors.warning,
                 icon: Icons.warning_amber_outlined,
               ),
@@ -333,9 +323,9 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
                   child: CircularProgressIndicator(color: AppColors.amber500),
                 ),
               ),
-              error: (error, _) => PosExceptionAlert(
+              error: (_, __) => PosExceptionAlert(
                 label: l10n.kitchenPrintQueueUnavailable,
-                detail: '$error',
+                detail: l10n.storeSetupErrorTestPoll,
                 color: PosColors.warning,
                 icon: Icons.warning_amber_outlined,
               ),
@@ -479,11 +469,7 @@ class _DestinationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final purpose = switch (destination.purpose) {
-      'floor' => l10n.settingsPrintDestinationFloor,
-      'tray' => l10n.settingsPrintDestinationTray,
-      _ => l10n.settingsPrintDestinationKitchen,
-    };
+    final purpose = localizeStoreSetupRoutePurpose(l10n, destination.purpose);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -598,7 +584,8 @@ class _PrintJobTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${job.floorLabel} / ${job.tableNumber} / ${job.copyType}',
+                  '${job.floorLabel} / ${job.tableNumber} / '
+                  '${localizePrintCopyType(context.l10n, job.copyType)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppFonts.system(
@@ -621,7 +608,7 @@ class _PrintJobTile extends StatelessWidget {
                 if (job.lastError != null && job.lastError!.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
-                    job.lastError!,
+                    localizePrintJobError(context.l10n, job.lastError!),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: AppFonts.system(
@@ -636,7 +623,7 @@ class _PrintJobTile extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           ToastStatusBadge(
-            label: job.status,
+            label: localizePrintJobStatus(context.l10n, job.status),
             color: switch (job.status) {
               'printing' => PosColors.info,
               'pending' => PosColors.warning,

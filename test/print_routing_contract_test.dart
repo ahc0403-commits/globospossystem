@@ -2,7 +2,11 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-String readRepoFile(String path) => File(path).readAsStringSync();
+String normalizeLineEndings(String source) =>
+    source.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+
+String readRepoFile(String path) =>
+    normalizeLineEndings(File(path).readAsStringSync());
 
 void main() {
   const migrationPath =
@@ -33,6 +37,26 @@ void main() {
   const appEnPath = 'lib/l10n/app_en.arb';
   const appKoPath = 'lib/l10n/app_ko.arb';
   const appViPath = 'lib/l10n/app_vi.arb';
+
+  test('source contracts normalize Windows line endings', () {
+    const windowsSource =
+        "WHERE order_id = p_order_id\r\n"
+        "    AND status IN ('pending', 'failed')\r\n"
+        "rpc(\r\n"
+        "      'claim_print_jobs'\r\n";
+
+    expect(
+      normalizeLineEndings(windowsSource),
+      contains(
+        "WHERE order_id = p_order_id\n"
+        "    AND status IN ('pending', 'failed')",
+      ),
+    );
+    expect(
+      normalizeLineEndings(windowsSource),
+      contains("rpc(\n      'claim_print_jobs'"),
+    );
+  });
 
   test('print routing M1 migration is sequenced after discount M1-M3', () {
     final migration = File(migrationPath);
@@ -424,19 +448,14 @@ void main() {
     expect(router, contains('PrintStationScreen'));
     expect(router, contains('PlatformInfo.isPrinterSupported'));
     expect(roleRoutes, contains("path == '/print-station'"));
-    expect(roleRoutes, contains("'kitchen' => true"));
-    expect(
-      roleRoutes,
-      contains(
-        "'super_admin' || 'store_admin' || 'admin' || 'kitchen' => true",
-      ),
-    );
+    expect(roleRoutes, contains("'kitchen' ||"));
+    expect(roleRoutes, contains("'cashier'"));
     expect(printStation, contains('class PrintStationScreen'));
-    expect(printStation, contains('PrintJobAgentService'));
-    expect(printStation, contains('startPolling(storeId)'));
-    expect(printStation, contains('processOnce(storeId)'));
+    expect(printStation, contains('printAgentCoordinatorProvider'));
+    expect(printStation, isNot(contains('PrintJobAgentService()')));
+    expect(printStation, contains('.processOnce()'));
     expect(printStation, contains('printStationJobsProvider(storeId)'));
-    expect(printStation, contains('testPrintDestination(destination.id)'));
+    expect(printStation, contains('.testDestination(destination.id)'));
     expect(printStation, contains('reprintPrintJob(job.id)'));
     expect(printStation, contains("Key('print_station_root')"));
     expect(printStation, contains("Key('print_station_job_feed')"));

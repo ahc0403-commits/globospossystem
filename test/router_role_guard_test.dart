@@ -29,7 +29,7 @@ void main() {
       'brand_admin': {
         '/admin': true,
         '/payments/some-id': true,
-        '/print-station': false,
+        '/print-station': true,
         '/super-admin': false,
         '/waiter': false,
         '/kitchen': false,
@@ -64,7 +64,7 @@ void main() {
       'cashier': {
         '/cashier': true,
         '/payments/some-id': true,
-        '/print-station': false,
+        '/print-station': true,
         '/waiter': false,
         '/kitchen': false,
         '/admin': false,

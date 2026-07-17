@@ -22,6 +22,7 @@ import '../../features/attendance/attendance_kiosk_screen.dart';
 import '../../features/qc/qc_check_screen.dart';
 import '../../features/qc/qc_review_screen.dart';
 import '../../features/super_admin/super_admin_screen.dart';
+import '../../features/store_setup/store_setup_screen.dart';
 import '../../features/waiter/waiter_screen.dart';
 
 class _AuthListenable extends ChangeNotifier {
@@ -125,6 +126,20 @@ GoRouter buildAppRouter(ProviderContainer container) {
         redirectTo = homeRoute;
         NavigationHistoryService.instance.push(redirectTo);
         return redirectTo;
+      }
+
+      if (path.startsWith('/store-setup/')) {
+        final targetStoreId = state.pathParameters['storeId'];
+        final isAccessible =
+            role == 'super_admin' ||
+            auth.accessibleStores.any((store) => store.id == targetStoreId);
+        if (!PermissionUtils.isAdminLike(role) || !isAccessible) {
+          redirectTo = homeRoute;
+          NavigationHistoryService.instance.push(redirectTo);
+          return redirectTo;
+        }
+        NavigationHistoryService.instance.push(fullLocation);
+        return null;
       }
 
       // 6-C. /admin 은 admin / super_admin 전용
@@ -247,6 +262,11 @@ GoRouter buildAppRouter(ProviderContainer container) {
       GoRoute(
         path: '/restaurant-sales-export',
         builder: (_, __) => const RestaurantSalesExportScreen(),
+      ),
+      GoRoute(
+        path: '/store-setup/:storeId',
+        builder: (_, state) =>
+            StoreSetupScreen(storeId: state.pathParameters['storeId'] ?? ''),
       ),
       GoRoute(
         path: '/admin',

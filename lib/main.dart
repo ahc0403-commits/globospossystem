@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/constants/app_constants.dart';
+import 'core/hardware/print_agent_coordinator_provider.dart';
 import 'core/i18n/locale_controller.dart';
 import 'core/router/app_router.dart';
 import 'core/ui/app_theme.dart';
@@ -60,6 +61,9 @@ class GlobosPosApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // App-root ownership keeps the designated device's print agent alive while
+    // operators navigate between cashier, admin, and monitoring screens.
+    ref.watch(printAgentCoordinatorProvider);
     final localeState = ref.watch(localeControllerProvider);
 
     return MaterialApp.router(

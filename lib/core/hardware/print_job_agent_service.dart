@@ -8,7 +8,15 @@ import 'printer_service.dart';
 import 'receipt_builder.dart';
 import 'wifi_printer_service.dart';
 
-class PrintJobAgentService {
+abstract class PrintAgentDriver {
+  bool get isSupported;
+  Future<void> startPollingSafely(String storeId);
+  Future<void> stopSafely();
+  Future<List<PrintJobAgentResult>> processOnce(String storeId, {int limit});
+  Future<PrintResult> testPrintDestination(String destinationId);
+}
+
+class PrintJobAgentService implements PrintAgentDriver {
   PrintJobAgentService({
     PrintJobBackend? backend,
     PrinterService? printerService,
@@ -19,7 +27,10 @@ class PrintJobAgentService {
   final PrinterService _printerService;
   Timer? _pollTimer;
   bool _isProcessing = false;
+  int _lifecycleGeneration = 0;
+  String? _activeStoreId;
 
+  @override
   bool get isSupported => !kIsWeb && _printerService.isSupported;
 
   void startPolling(
@@ -27,28 +38,53 @@ class PrintJobAgentService {
     Duration interval = const Duration(seconds: 15),
     int limit = 10,
   }) {
-    stop();
-    if (!isSupported) {
-      return;
-    }
-    unawaited(
-      _backend.subscribeToJobs(
-        storeId,
-        () => unawaited(processOnce(storeId, limit: limit)),
-      ),
-    );
-    unawaited(processOnce(storeId, limit: limit));
-    _pollTimer = Timer.periodic(interval, (_) {
-      unawaited(processOnce(storeId, limit: limit));
-    });
+    unawaited(startPollingSafely(storeId, interval: interval, limit: limit));
   }
 
   void stop() {
-    _pollTimer?.cancel();
-    _pollTimer = null;
-    unawaited(_backend.unsubscribeFromJobs());
+    unawaited(stopSafely());
   }
 
+  @override
+  Future<void> startPollingSafely(
+    String storeId, {
+    Duration interval = const Duration(seconds: 15),
+    int limit = 10,
+  }) async {
+    final generation = ++_lifecycleGeneration;
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    _activeStoreId = null;
+    await _backend.unsubscribeFromJobs();
+    if (generation != _lifecycleGeneration || !isSupported) return;
+
+    _activeStoreId = storeId;
+    await _backend.subscribeToJobs(storeId, () {
+      if (generation == _lifecycleGeneration && _activeStoreId == storeId) {
+        unawaited(processOnce(storeId, limit: limit));
+      }
+    });
+    if (generation != _lifecycleGeneration || _activeStoreId != storeId) {
+      return;
+    }
+    unawaited(processOnce(storeId, limit: limit));
+    _pollTimer = Timer.periodic(interval, (_) {
+      if (generation == _lifecycleGeneration && _activeStoreId == storeId) {
+        unawaited(processOnce(storeId, limit: limit));
+      }
+    });
+  }
+
+  @override
+  Future<void> stopSafely() async {
+    _lifecycleGeneration++;
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    _activeStoreId = null;
+    await _backend.unsubscribeFromJobs();
+  }
+
+  @override
   Future<List<PrintJobAgentResult>> processOnce(
     String storeId, {
     int limit = 10,
@@ -110,6 +146,7 @@ class PrintJobAgentService {
     );
   }
 
+  @override
   Future<PrintResult> testPrintDestination(String destinationId) async {
     if (!isSupported) {
       return PrintResult.notSupported;

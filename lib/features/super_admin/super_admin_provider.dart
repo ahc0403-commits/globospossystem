@@ -397,6 +397,13 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
     );
   }
 
+  String? restaurantIdForSlug(String slug) {
+    for (final restaurant in state.restaurants) {
+      if (restaurant.slug == slug) return restaurant.id;
+    }
+    return null;
+  }
+
   Future<bool> addRestaurant({
     required String name,
     required String address,
