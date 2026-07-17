@@ -70,7 +70,8 @@ from silently-empty fixtures. Therefore:
 ```bash
 supabase start
 supabase db reset   # applies all migrations + seed
-DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+export PGPASSWORD="postgres"  # Supabase CLI local-stack default only
+DB_URL="postgresql://postgres@127.0.0.1:54322/postgres"
 for f in order_lifecycle print_routing qr_table_ordering \
          discount_staff_meal service_item_exclusion store_closure; do
   psql "$DB_URL" -f "supabase/tests/${f}_contract_test.sql" || exit 1
