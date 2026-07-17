@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
@@ -99,12 +97,30 @@ class QcService {
         'evidence_photo_url': map['evidence_photo_url'],
         'note': map['note'],
         'created_at': map['created_at'],
+        'submitted_at': map['submitted_at'],
+        'submission_status': map['submission_status'],
+        'photo_required_count': map['photo_required_count'],
+        'photo_uploaded_count': map['photo_uploaded_count'],
+        'score': map['score'],
+        'grade': map['grade'],
+        'sv_review_status': map['sv_review_status'],
+        'sv_reviewed_by': map['sv_reviewed_by'],
+        'sv_reviewed_at': map['sv_reviewed_at'],
+        'sv_score': map['sv_score'],
+        'sv_note': map['sv_note'],
+        'visit_session_id': map['visit_session_id'],
         'qc_templates': {
           'id': map['template_id'],
           'category': map['template_category'],
           'criteria_text': map['template_criteria_text'],
           'criteria_photo_url': map['template_criteria_photo_url'],
           'is_global': map['template_is_global'],
+          'qsc_domain': map['template_qsc_domain'],
+          'requires_photo': map['template_requires_photo'],
+          'required_photo_count': map['template_required_photo_count'],
+          'weight': map['template_weight'],
+          'sort_group': map['template_sort_group'],
+          'is_sv_required': map['template_is_sv_required'],
         },
       };
     }).toList();
@@ -136,21 +152,12 @@ class QcService {
   Future<String?> uploadQcPhoto({
     required String storeId,
     required String templateId,
-    required File file,
+    required XFile file,
     required String type,
     String? checkDate,
   }) async {
-    final bytes = await file.readAsBytes();
-    final original = img.decodeImage(bytes);
-    if (original == null) return null;
-
-    final widthDominant = original.width >= original.height;
-    final resized = img.copyResize(
-      original,
-      width: widthDominant ? 1200 : null,
-      height: widthDominant ? null : 1200,
-    );
-    final compressed = Uint8List.fromList(img.encodeJpg(resized, quality: 75));
+    final upload = await _prepareQcPhotoUpload(file);
+    if (upload == null) return null;
 
     final path = type == 'template'
         ? '$storeId/templates/$templateId.jpg'
@@ -160,9 +167,9 @@ class QcService {
         .from('qc-photos')
         .uploadBinary(
           path,
-          compressed,
-          fileOptions: const FileOptions(
-            contentType: 'image/jpeg',
+          upload.bytes,
+          fileOptions: FileOptions(
+            contentType: upload.contentType,
             upsert: true,
           ),
         );
@@ -270,9 +277,9 @@ class QcService {
         .order('check_date', ascending: false)
         .order('created_at', ascending: false);
 
-    return List<Map<String, dynamic>>.from(result as List)
-        .map((row) => Map<String, dynamic>.from(row))
-        .toList();
+    return List<Map<String, dynamic>>.from(
+      result as List,
+    ).map((row) => Map<String, dynamic>.from(row)).toList();
   }
 
   Future<Map<String, dynamic>> upsertCheckV2({

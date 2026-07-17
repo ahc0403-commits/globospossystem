@@ -186,6 +186,15 @@ class StoreService {
   Future<void> deactivateRestaurant(String id) {
     return deactivateStore(id);
   }
+
+  /// Closes a store while preserving its point-in-time sales history.
+  Future<Map<String, dynamic>> closeStore(String id, String reason) async {
+    final result = await supabase.rpc(
+      'admin_close_store',
+      params: {'p_store_id': id, 'p_reason': reason},
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
 }
 
 final storeService = StoreService();

@@ -283,6 +283,15 @@ class SuperAdminState {
   }
 }
 
+class StoreCloseResult {
+  const StoreCloseResult({this.summary, this.error});
+
+  final Map<String, dynamic>? summary;
+  final String? error;
+
+  bool get isSuccess => summary != null;
+}
+
 class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
   SuperAdminNotifier()
     : super(
@@ -502,6 +511,18 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
         error: 'Failed to deactivate restaurant: $error',
       );
       return false;
+    }
+  }
+
+  Future<StoreCloseResult> closeStore(String id, String reason) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final summary = await restaurantService.closeStore(id, reason);
+      await loadAllRestaurants();
+      return StoreCloseResult(summary: summary);
+    } catch (error) {
+      state = state.copyWith(isLoading: false, clearError: true);
+      return StoreCloseResult(error: error.toString());
     }
   }
 

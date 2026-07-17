@@ -201,3 +201,27 @@ manual live URL check to call pilot login PASS.
 - Run Supabase DB operations sequentially.
 - Do not print database URLs, service role keys, or anon keys in logs.
 - Keep `.vercelignore` focused on web build inputs so deploy uploads stay small.
+
+## Windows native print station
+
+The Windows print station is the same Flutter POS source compiled as a native
+desktop application. It is not a browser wrapper. The packaged executable is
+`globos_print_station.exe`; all DLLs and the `data` directory beside it are
+required and must be moved together.
+
+Build on a Windows machine with Flutter 3.41.6 and Visual Studio Desktop
+development with C++ installed:
+
+```powershell
+$env:SUPABASE_URL = '<production project URL>'
+$env:SUPABASE_ANON_KEY = '<production anon key>'
+.\scripts\build_windows_print_station.ps1
+```
+
+Never use `SUPABASE_SERVICE_KEY` or a database password in a client build. For
+the reproducible build, run the `Windows Print Station Build` GitHub Actions
+workflow and use only the artifact whose name contains the reviewed commit
+SHA. After login on the station, open **Print Station**, confirm all five
+destinations, print one test ticket per destination, then start polling. Do not
+call the station operational until the physical tickets and retry queue have
+been checked on the store network.

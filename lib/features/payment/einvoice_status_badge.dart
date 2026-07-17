@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../main.dart';
 import 'einvoice_provider.dart';
 
-/// Small badge showing einvoice job status for a given order.
-/// Shows: pending / dispatched / issued / failed — with WeTax portal link if available.
+/// Small badge showing the meInvoice queue status for a given order.
 class EinvoiceStatusBadge extends ConsumerWidget {
   const EinvoiceStatusBadge({super.key, required this.orderId});
 
@@ -25,7 +24,10 @@ class EinvoiceStatusBadge extends ConsumerWidget {
       loading: () => const SizedBox(
         width: 14,
         height: 14,
-        child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.amber500),
+        child: CircularProgressIndicator(
+          strokeWidth: 1.5,
+          color: AppColors.amber500,
+        ),
       ),
       error: (_, __) => const SizedBox.shrink(),
     );
@@ -37,38 +39,40 @@ class _BadgeRow extends StatelessWidget {
   final EinvoiceJobStatus job;
 
   Color get _color => switch (job.status) {
-    'pending'                    => AppColors.textSecondary,
-    'dispatched'                 => AppColors.amber500,
-    'dispatched_polling_disabled'=> AppColors.amber500,
-    'reported'                   => AppColors.statusAvailable,
-    'issued_by_portal'           => AppColors.statusAvailable,
-    'failed_terminal'            => AppColors.statusCancelled,
-    'stale'                      => AppColors.statusOccupied,
-    _                            => AppColors.textSecondary,
+    'pending' => AppColors.textSecondary,
+    'pending_manual_config' => AppColors.amber500,
+    'dispatch_paused' => AppColors.amber500,
+    'sent_to_misa' => AppColors.amber500,
+    'sent_to_tax_authority' => AppColors.amber500,
+    'valid_invoice' => AppColors.statusAvailable,
+    'failed' => AppColors.statusCancelled,
+    'manual_action_required' => AppColors.statusOccupied,
+    _ => AppColors.textSecondary,
   };
 
   IconData get _icon => switch (job.status) {
-    'pending'                    => Icons.hourglass_empty,
-    'dispatched'                 => Icons.send,
-    'dispatched_polling_disabled'=> Icons.send,
-    'reported'                   => Icons.check_circle_outline,
-    'issued_by_portal'           => Icons.check_circle,
-    'failed_terminal'            => Icons.error_outline,
-    'stale'                      => Icons.warning_amber,
-    _                            => Icons.receipt_long,
+    'pending' => Icons.hourglass_empty,
+    'pending_manual_config' => Icons.settings_outlined,
+    'dispatch_paused' => Icons.pause_circle_outline,
+    'sent_to_misa' => Icons.send,
+    'sent_to_tax_authority' => Icons.verified_outlined,
+    'valid_invoice' => Icons.check_circle,
+    'failed' => Icons.error_outline,
+    'manual_action_required' => Icons.warning_amber,
+    _ => Icons.receipt_long,
   };
 
   String get _label => switch (job.status) {
-    'pending'                    => 'Invoice: Queued',
-    'dispatched'                 => 'Invoice: Sent',
-    'dispatched_polling_disabled'=> 'Invoice: Sent',
-    'reported'                   => 'Invoice: Reported',
-    'issued_by_portal'           => job.redinvoiceRequested
-                                      ? 'Red Invoice: Issued'
-                                      : 'Invoice: Issued',
-    'failed_terminal'            => 'Invoice: Failed',
-    'stale'                      => 'Invoice: Stale',
-    _                            => 'Invoice: Unknown',
+    'pending' => 'Invoice: Queued',
+    'pending_manual_config' => 'Invoice: Config',
+    'dispatch_paused' => 'Invoice: Paused',
+    'sent_to_misa' => 'Invoice: Sent',
+    'sent_to_tax_authority' => 'Invoice: Tax sent',
+    'valid_invoice' =>
+      job.redinvoiceRequested ? 'Red Invoice: Issued' : 'Invoice: Issued',
+    'failed' => 'Invoice: Failed',
+    'manual_action_required' => 'Invoice: Review',
+    _ => 'Invoice: Unknown',
   };
 
   @override
@@ -90,7 +94,7 @@ class _BadgeRow extends StatelessWidget {
               const SizedBox(width: 4),
               Text(
                 _label,
-                style: GoogleFonts.notoSansKr(
+                style: AppFonts.system(
                   color: _color,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -109,11 +113,15 @@ class _BadgeRow extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.open_in_new, size: 11, color: AppColors.textSecondary),
+                  const Icon(
+                    Icons.open_in_new,
+                    size: 11,
+                    color: AppColors.textSecondary,
+                  ),
                   const SizedBox(width: 3),
                   Text(
-                    'WeTax',
-                    style: GoogleFonts.notoSansKr(
+                    'MISA',
+                    style: AppFonts.system(
                       color: AppColors.textSecondary,
                       fontSize: 11,
                     ),

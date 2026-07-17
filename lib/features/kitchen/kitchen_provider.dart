@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/order_service.dart';
+import '../../core/utils/live_sync_scope.dart';
 import '../../main.dart';
 
 class KitchenItem {
@@ -12,29 +13,38 @@ class KitchenItem {
     required this.label,
     required this.quantity,
     required this.status,
+    required this.createdAt,
+    this.isSupplemental = false,
   });
 
   final String itemId;
   final String label;
   final int quantity;
   final String status;
+  final DateTime createdAt;
+  final bool isSupplemental;
 
   KitchenItem copyWith({
     String? itemId,
     String? label,
     int? quantity,
     String? status,
+    DateTime? createdAt,
+    bool? isSupplemental,
   }) {
     return KitchenItem(
       itemId: itemId ?? this.itemId,
       label: label ?? this.label,
       quantity: quantity ?? this.quantity,
       status: status ?? this.status,
+      createdAt: createdAt ?? this.createdAt,
+      isSupplemental: isSupplemental ?? this.isSupplemental,
     );
   }
 
   factory KitchenItem.fromJson(Map<String, dynamic> json) {
     final quantityRaw = json['quantity'];
+    final createdAtRaw = json['created_at']?.toString();
     final menuItemRaw = json['menu_items'];
     String? menuItemName;
     if (menuItemRaw is Map<String, dynamic>) {
@@ -54,6 +64,9 @@ class KitchenItem {
         _ => 0,
       },
       status: json['status']?.toString() ?? 'pending',
+      createdAt: createdAtRaw != null
+          ? DateTime.tryParse(createdAtRaw) ?? DateTime.now().toUtc()
+          : DateTime.now().toUtc(),
     );
   }
 }
@@ -62,24 +75,35 @@ class KitchenOrder {
   const KitchenOrder({
     required this.orderId,
     required this.tableNumber,
+    required this.orderPurpose,
+    required this.orderSource,
     required this.createdAt,
     required this.items,
   });
 
   final String orderId;
   final String tableNumber;
+  final String orderPurpose;
+  final String orderSource;
   final DateTime createdAt;
   final List<KitchenItem> items;
+
+  bool get isStaffMeal => orderPurpose == 'staff_meal';
+  bool get isQrOrder => orderSource == 'qr';
 
   KitchenOrder copyWith({
     String? orderId,
     String? tableNumber,
+    String? orderPurpose,
+    String? orderSource,
     DateTime? createdAt,
     List<KitchenItem>? items,
   }) {
     return KitchenOrder(
       orderId: orderId ?? this.orderId,
       tableNumber: tableNumber ?? this.tableNumber,
+      orderPurpose: orderPurpose ?? this.orderPurpose,
+      orderSource: orderSource ?? this.orderSource,
       createdAt: createdAt ?? this.createdAt,
       items: items ?? this.items,
     );
@@ -89,24 +113,77 @@ class KitchenOrder {
 class KitchenState {
   const KitchenState({
     this.orders = const [],
+    this.completedOrders = const [],
     this.isLoading = false,
     this.error,
   });
 
   final List<KitchenOrder> orders;
+  final List<KitchenOrder> completedOrders;
   final bool isLoading;
   final String? error;
 
   KitchenState copyWith({
     List<KitchenOrder>? orders,
+    List<KitchenOrder>? completedOrders,
     bool? isLoading,
     String? error,
     bool clearError = false,
   }) {
     return KitchenState(
       orders: orders ?? this.orders,
+      completedOrders: completedOrders ?? this.completedOrders,
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
+    );
+  }
+}
+
+class FailedPrintJob {
+  const FailedPrintJob({
+    required this.id,
+    required this.copyType,
+    required this.batchNo,
+    required this.tableNumber,
+    required this.floorLabel,
+    required this.status,
+    required this.updatedAt,
+    this.lastError,
+  });
+
+  final String id;
+  final String copyType;
+  final int batchNo;
+  final String tableNumber;
+  final String floorLabel;
+  final String status;
+  final DateTime updatedAt;
+  final String? lastError;
+
+  factory FailedPrintJob.fromJson(Map<String, dynamic> json) {
+    final payloadRaw = json['payload'];
+    final payload = payloadRaw is Map
+        ? Map<String, dynamic>.from(payloadRaw)
+        : <String, dynamic>{};
+    final batchRaw = json['batch_no'];
+    final updatedAtRaw = json['updated_at']?.toString();
+
+    return FailedPrintJob(
+      id: json['id']?.toString() ?? '',
+      copyType: json['copy_type']?.toString() ?? 'kitchen',
+      batchNo: switch (batchRaw) {
+        int value => value,
+        num value => value.toInt(),
+        String value => int.tryParse(value) ?? 1,
+        _ => 1,
+      },
+      tableNumber: payload['table_number']?.toString() ?? '-',
+      floorLabel: payload['floor_label']?.toString() ?? '-',
+      status: json['status']?.toString() ?? 'failed',
+      updatedAt: updatedAtRaw == null
+          ? DateTime.now().toUtc()
+          : DateTime.tryParse(updatedAtRaw) ?? DateTime.now().toUtc(),
+      lastError: json['last_error']?.toString(),
     );
   }
 }
@@ -114,67 +191,123 @@ class KitchenState {
 class KitchenNotifier extends StateNotifier<KitchenState> {
   KitchenNotifier() : super(const KitchenState());
 
+  static const _autoRefreshInterval = Duration(seconds: 2);
+  static const _fallbackPollInterval = Duration(seconds: 15);
+
   RealtimeChannel? _ordersChannel;
   String? _restaurantId;
-  // RULES.md: Realtime 끊김 → 30초 폴링 자동 전환
+  // Realtime can report subscribed while table events are still delayed or
+  // filtered. Keep a lightweight safety refresh so kitchen never depends on
+  // manual reload to see waiter submissions.
   Timer? _pollTimer;
+  String? _pollStoreId;
   bool _realtimeConnected = false;
 
-  Future<void> loadOrders(String storeId) async {
+  Future<void> loadOrders(String storeId, {bool showLoading = true}) async {
     _restaurantId = storeId;
-    state = state.copyWith(isLoading: true, clearError: true);
+    if (showLoading) {
+      state = state.copyWith(isLoading: true, clearError: true);
+    }
 
     try {
       final response = await supabase
           .from('orders')
           .select(
-            'id, created_at, status, tables(table_number), order_items(id, label, quantity, status, menu_items(name))',
+            'id, created_at, status, order_purpose, order_source, tables(table_number), order_items(id, created_at, label, quantity, status, menu_items(name))',
           )
           .eq('restaurant_id', storeId)
-          .inFilter('status', ['pending', 'confirmed', 'serving'])
-          .order('created_at', ascending: true);
+          .inFilter('status', ['pending', 'confirmed', 'serving', 'completed'])
+          .order('created_at', ascending: true)
+          .order('created_at', referencedTable: 'order_items', ascending: true)
+          .order('id', referencedTable: 'order_items', ascending: true);
 
-      final orders = response
-          .map<KitchenOrder>((row) {
-            final data = Map<String, dynamic>.from(row);
-            final orderItems = data['order_items'];
-            final items = (orderItems is List)
-                ? orderItems
-                      .map<KitchenItem>(
-                        (item) => KitchenItem.fromJson(
-                          Map<String, dynamic>.from(item),
-                        ),
-                      )
-                      .where(
-                        (item) =>
-                            item.status != 'served' &&
-                            item.status != 'cancelled',
-                      )
-                      .toList()
-                : <KitchenItem>[];
+      // Lane eligibility is an ORDER-status fact
+      // (ORDER_LIFECYCLE_STATE_CONTRACT: kitchen never shows completed).
+      // Item-status-only partitioning left paid orders with never-served
+      // items in the active lanes forever.
+      final statusByOrderId = <String, String>{
+        for (final row in response)
+          row['id'].toString(): row['status']?.toString() ?? 'pending',
+      };
 
-            final tableData = data['tables'];
-            String tableNumber = '-';
-            if (tableData is Map<String, dynamic>) {
-              tableNumber = tableData['table_number']?.toString() ?? '-';
-            }
+      final allOrders = response.map<KitchenOrder>((row) {
+        final data = Map<String, dynamic>.from(row);
+        final orderItems = data['order_items'];
+        final itemRows = orderItems is List
+            ? orderItems
+                  .map((item) => Map<String, dynamic>.from(item as Map))
+                  .toList()
+            : <Map<String, dynamic>>[];
+        itemRows.sort(_compareOrderItemRowsByCreatedAt);
+        final items = itemRows.map<KitchenItem>(KitchenItem.fromJson).toList();
 
-            final createdAtRaw = data['created_at']?.toString();
+        final tableData = data['tables'];
+        String tableNumber = '-';
+        if (tableData is Map<String, dynamic>) {
+          tableNumber = tableData['table_number']?.toString() ?? '-';
+        } else if (data['order_purpose']?.toString() == 'staff_meal') {
+          tableNumber = 'STAFF';
+        }
 
-            return KitchenOrder(
-              orderId: data['id'].toString(),
-              tableNumber: tableNumber,
-              createdAt: createdAtRaw != null
-                  ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
-                  : DateTime.now(),
-              items: items,
-            );
-          })
+        final createdAtRaw = data['created_at']?.toString();
+        final createdAt = createdAtRaw != null
+            ? DateTime.tryParse(createdAtRaw) ?? DateTime.now().toUtc()
+            : DateTime.now().toUtc();
+        final firstItemCreatedAt = items.isEmpty
+            ? createdAt
+            : items
+                  .map((item) => item.createdAt.toUtc())
+                  .reduce((a, b) => a.isBefore(b) ? a : b);
+        final itemsWithSupplementFlags = items
+            .map(
+              (item) => item.copyWith(
+                isSupplemental:
+                    item.createdAt.toUtc().difference(firstItemCreatedAt) >
+                    const Duration(seconds: 10),
+              ),
+            )
+            .toList();
+
+        return KitchenOrder(
+          orderId: data['id'].toString(),
+          tableNumber: tableNumber,
+          orderPurpose: data['order_purpose']?.toString() ?? 'customer',
+          orderSource: data['order_source']?.toString() ?? 'staff',
+          createdAt: createdAt,
+          items: itemsWithSupplementFlags,
+        );
+      }).toList();
+      final orders = allOrders
+          .where((order) => statusByOrderId[order.orderId] != 'completed')
+          .map(
+            (order) => order.copyWith(
+              items: order.items
+                  .where(
+                    (item) =>
+                        item.status != 'served' && item.status != 'cancelled',
+                  )
+                  .toList(),
+            ),
+          )
           .where((order) => order.items.isNotEmpty)
+          .toList();
+      final completedOrders = allOrders
+          .where((order) => statusByOrderId[order.orderId] == 'completed')
+          .map(
+            (order) => order.copyWith(
+              items: order.items
+                  .where((item) => item.status != 'cancelled')
+                  .toList(),
+            ),
+          )
+          .toList()
+          .reversed
+          .take(12)
           .toList();
 
       state = state.copyWith(
         orders: orders,
+        completedOrders: completedOrders,
         isLoading: false,
         clearError: true,
       );
@@ -189,27 +322,55 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
 
   Future<void> subscribeRealtime(String storeId) async {
     if (_ordersChannel != null && _restaurantId == storeId) {
+      _ensureAutoRefresh(storeId);
       return;
     }
 
     if (_ordersChannel != null) {
       await _ordersChannel!.unsubscribe();
     }
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    _pollStoreId = null;
+    _realtimeConnected = false;
 
     _restaurantId = storeId;
     _ordersChannel = supabase
-        .channel('public:kitchen_orders:$storeId')
+        .channel(LiveSyncScope.storeChannel('kitchen_orders', storeId))
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'orders',
-          callback: (_) => loadOrders(storeId),
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshKitchenOrdersFromRealtime(storeId),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
           table: 'orders',
-          callback: (_) => loadOrders(storeId),
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshKitchenOrdersFromRealtime(storeId),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'order_items',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshKitchenOrdersFromRealtime(storeId),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'order_items',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshKitchenOrdersFromRealtime(storeId),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'order_items',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshKitchenOrdersFromRealtime(storeId),
         )
         .subscribe((status, [error]) {
           // Realtime 연결 상태 추적
@@ -217,27 +378,44 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
           if (connected != _realtimeConnected) {
             _realtimeConnected = connected;
             if (connected) {
-              // Realtime 복구 → 폴링 중단
-              _pollTimer?.cancel();
-              _pollTimer = null;
+              _ensureAutoRefresh(storeId);
             } else {
-              // Realtime 끊김 → 30초 폴링 시작
-              _startPollingFallback(storeId);
+              _ensureAutoRefresh(storeId);
             }
           }
         });
-    // 구독 후 초기 연결 확인용 타이머 (5초 내 연결 안 되면 폴링 시작)
-    Future.delayed(const Duration(seconds: 5), () {
+    _ensureAutoRefresh(storeId);
+    Future.delayed(_autoRefreshInterval, () {
       if (mounted && !_realtimeConnected && _restaurantId == storeId) {
-        _startPollingFallback(storeId);
+        _ensureAutoRefresh(storeId);
       }
     });
   }
 
-  void _startPollingFallback(String storeId) {
-    if (_pollTimer != null) return; // already polling
-    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) loadOrders(storeId);
+  void _refreshKitchenOrdersFromRealtime(String storeId) {
+    if (!mounted) {
+      return;
+    }
+    unawaited(loadOrders(storeId, showLoading: false));
+  }
+
+  void _ensureAutoRefresh(String storeId) {
+    if (_realtimeConnected) {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+      return;
+    }
+
+    if (_pollTimer != null && _pollStoreId == storeId) {
+      return;
+    }
+
+    _pollTimer?.cancel();
+    _pollStoreId = storeId;
+    _pollTimer = Timer.periodic(_fallbackPollInterval, (_) {
+      if (mounted && _restaurantId == storeId) {
+        unawaited(loadOrders(storeId, showLoading: false));
+      }
     });
   }
 
@@ -286,9 +464,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
         storeId: storeId,
         status: newStatus,
       );
-      if (newStatus == 'served') {
-        await loadOrders(storeId);
-      }
+      await loadOrders(storeId, showLoading: false);
     } catch (error) {
       state = state.copyWith(
         orders: previous,
@@ -297,16 +473,84 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
     }
   }
 
+  Future<void> reprintPrintJob(String jobId) async {
+    await supabase.rpc('reprint_print_job', params: {'p_job_id': jobId});
+  }
+
   @override
   void dispose() {
     _pollTimer?.cancel();
     _pollTimer = null;
+    _pollStoreId = null;
     _ordersChannel?.unsubscribe();
     _ordersChannel = null;
     super.dispose();
   }
 }
 
+int _compareOrderItemRowsByCreatedAt(
+  Map<String, dynamic> left,
+  Map<String, dynamic> right,
+) {
+  final leftCreatedAt = DateTime.tryParse(left['created_at']?.toString() ?? '');
+  final rightCreatedAt = DateTime.tryParse(
+    right['created_at']?.toString() ?? '',
+  );
+
+  if (leftCreatedAt != null && rightCreatedAt != null) {
+    final createdAtComparison = leftCreatedAt.compareTo(rightCreatedAt);
+    if (createdAtComparison != 0) {
+      return createdAtComparison;
+    }
+  } else if (leftCreatedAt != null) {
+    return -1;
+  } else if (rightCreatedAt != null) {
+    return 1;
+  }
+
+  return (left['id']?.toString() ?? '').compareTo(
+    right['id']?.toString() ?? '',
+  );
+}
+
 final kitchenProvider = StateNotifierProvider<KitchenNotifier, KitchenState>(
   (ref) => KitchenNotifier(),
 );
+
+final failedPrintJobsProvider = FutureProvider.autoDispose
+    .family<List<FailedPrintJob>, String>((ref, storeId) async {
+      final rows = await supabase
+          .from('print_jobs')
+          .select(
+            'id, copy_type, batch_no, payload, status, last_error, updated_at',
+          )
+          .eq('restaurant_id', storeId)
+          .eq('status', 'failed')
+          .order('updated_at', ascending: false)
+          .limit(8);
+
+      return rows
+          .map<FailedPrintJob>(
+            (row) => FailedPrintJob.fromJson(Map<String, dynamic>.from(row)),
+          )
+          .toList();
+    });
+
+final printStationJobsProvider = FutureProvider.autoDispose
+    .family<List<FailedPrintJob>, String>((ref, storeId) async {
+      final rows = await supabase
+          .from('print_jobs')
+          .select(
+            'id, copy_type, batch_no, payload, status, last_error, updated_at',
+          )
+          .eq('restaurant_id', storeId)
+          .inFilter('status', ['pending', 'printing', 'failed'])
+          .order('updated_at', ascending: false)
+          .limit(12);
+
+      return rows
+          .map<FailedPrintJob>(
+            (row) => FailedPrintJob.fromJson(Map<String, dynamic>.from(row)),
+          )
+          .toList();
+    });

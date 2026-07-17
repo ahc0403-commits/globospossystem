@@ -1,31 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../core/i18n/locale_extensions.dart';
 import '../core/ui/app_theme.dart';
 import '../core/ui/pos_design_tokens.dart';
 import '../core/services/navigation_history_service.dart';
+import '../core/utils/role_routes.dart' as role_routes;
 import '../features/auth/auth_provider.dart';
 import '../features/auth/auth_state.dart';
 import 'language_switcher.dart';
 
 class AppNavBar extends ConsumerWidget {
-  const AppNavBar({super.key});
+  const AppNavBar({
+    super.key,
+    this.forceBackEnabled = false,
+    this.forceHomeEnabled = false,
+    this.onBackPressed,
+    this.onHomePressed,
+  });
 
-  static String homeRouteForRole(String? role) {
-    return switch (role) {
-      'super_admin' => '/super-admin',
-      'photo_objet_master' || 'photo_objet_store_admin' => '/photo-ops',
-      'brand_admin' || 'store_admin' => '/admin',
-      'admin' => '/admin',
-      'waiter' => '/waiter',
-      'kitchen' => '/kitchen',
-      'cashier' => '/cashier',
-      _ => '/login',
-    };
-  }
+  final bool forceBackEnabled;
+  final bool forceHomeEnabled;
+  final VoidCallback? onBackPressed;
+  final VoidCallback? onHomePressed;
+
+  static String homeRouteForRole(String? role) =>
+      role_routes.homeRouteForRole(role);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -38,6 +40,8 @@ class AppNavBar extends ConsumerWidget {
         currentLocation == homeRoute ||
         currentLocation.startsWith('$homeRoute?') ||
         currentLocation.startsWith('$homeRoute/');
+    final canGoBack = forceBackEnabled || nav.canGoBack;
+    final canGoHome = forceHomeEnabled || !isHome;
     AccessibleStore? activeStore;
     for (final store in authState.accessibleStores) {
       if (store.id == authState.storeId) {
@@ -46,59 +50,88 @@ class AppNavBar extends ConsumerWidget {
       }
     }
     final l10n = context.l10n;
-    final compactLanguageSwitcher = MediaQuery.sizeOf(context).width < 1100;
+    final viewportWidth = MediaQuery.sizeOf(context).width;
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _NavButton(
-          icon: Icons.arrow_back_ios_new_rounded,
-          tooltip: l10n.back,
-          enabled: nav.canGoBack,
-          onTap: () {
-            final prev = nav.goBack();
-            if (prev != null) {
-              context.go(prev);
-            }
-          },
-        ),
-        const SizedBox(width: 4),
-        _NavButton(
-          icon: Icons.arrow_forward_ios_rounded,
-          tooltip: l10n.forward,
-          enabled: nav.canGoForward,
-          onTap: () {
-            final next = nav.goForward();
-            if (next != null) {
-              context.go(next);
-            }
-          },
-        ),
-        const SizedBox(width: 4),
-        _NavButton(
-          icon: Icons.home_rounded,
-          tooltip: l10n.home,
-          enabled: !isHome,
-          onTap: () {
-            nav.push(homeRoute);
-            context.go(homeRoute);
-          },
-        ),
-        if (authState.accessibleStores.length > 1) ...[
-          const SizedBox(width: 8),
-          _StoreSwitcher(
-            value: authState.storeId,
-            stores: authState.accessibleStores,
-            onChanged: (storeId) =>
-                ref.read(authProvider.notifier).setActiveStore(storeId),
-          ),
-        ] else if (activeStore != null) ...[
-          const SizedBox(width: 8),
-          _StorePill(store: activeStore),
-        ],
-        const SizedBox(width: 8),
-        LanguageSwitcher(compact: compactLanguageSwitcher),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth =
+            constraints.hasBoundedWidth && constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : viewportWidth;
+        final phoneChrome = viewportWidth < 560;
+        final veryCompact = availableWidth < 132 || viewportWidth < 420;
+        final showForward = !veryCompact && availableWidth >= 132;
+        final showStore = !veryCompact && !phoneChrome && availableWidth >= 290;
+        final showLanguage =
+            !veryCompact && !phoneChrome && availableWidth >= 460;
+        final compactLanguageSwitcher =
+            availableWidth < 640 || viewportWidth < 1180;
+
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _NavButton(
+              icon: Icons.arrow_back_ios_new_rounded,
+              tooltip: l10n.back,
+              enabled: canGoBack,
+              onTap: () {
+                if (forceBackEnabled && onBackPressed != null) {
+                  onBackPressed!();
+                  return;
+                }
+                final prev = nav.goBack();
+                if (prev != null) {
+                  context.go(prev);
+                }
+              },
+            ),
+            const SizedBox(width: 6),
+            _NavButton(
+              icon: Icons.home_rounded,
+              tooltip: l10n.home,
+              enabled: canGoHome,
+              onTap: () {
+                if (forceHomeEnabled && onHomePressed != null) {
+                  onHomePressed!();
+                  return;
+                }
+                nav.push(homeRoute);
+                context.go(homeRoute);
+              },
+            ),
+            if (showForward) ...[
+              const SizedBox(width: 6),
+              _NavButton(
+                icon: Icons.arrow_forward_ios_rounded,
+                tooltip: l10n.forward,
+                enabled: nav.canGoForward,
+                onTap: () {
+                  final next = nav.goForward();
+                  if (next != null) {
+                    context.go(next);
+                  }
+                },
+              ),
+            ],
+            if (showStore && authState.accessibleStores.length > 1) ...[
+              const SizedBox(width: 10),
+              _StoreSwitcher(
+                value: authState.storeId,
+                stores: authState.accessibleStores,
+                onChanged: (storeId) =>
+                    ref.read(authProvider.notifier).setActiveStore(storeId),
+              ),
+            ] else if (showStore && activeStore != null) ...[
+              const SizedBox(width: 10),
+              _StorePill(store: activeStore),
+            ],
+            if (showLanguage) ...[
+              const SizedBox(width: 10),
+              LanguageSwitcher(compact: compactLanguageSwitcher),
+            ],
+          ],
+        );
+      },
     );
   }
 }
@@ -124,20 +157,20 @@ class _NavButton extends StatelessWidget {
         onTap: enabled ? onTap : null,
         borderRadius: AppRadius.sm,
         child: Container(
-          width: 36,
-          height: 36,
+          width: 34,
+          height: 34,
           decoration: BoxDecoration(
-            color: enabled ? PosColors.mutedSurface : PosColors.surface,
+            color: enabled ? PosColors.surface : PosColors.canvasAlt,
             borderRadius: AppRadius.sm,
             border: Border.all(
               color: enabled
-                  ? PosColors.borderStrong
+                  ? PosColors.border
                   : PosColors.border.withValues(alpha: 0.7),
             ),
           ),
           child: Icon(
             icon,
-            size: 18,
+            size: 16,
             color: enabled
                 ? PosColors.textPrimary
                 : PosColors.textMuted.withValues(alpha: 0.72),
@@ -162,22 +195,24 @@ class _StoreSwitcher extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: 170,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: PosColors.surface,
-        borderRadius: AppRadius.sm,
+        borderRadius: AppRadius.lg,
         border: Border.all(color: PosColors.border),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
+          isExpanded: true,
           value: value != null && stores.any((store) => store.id == value)
               ? value
               : stores.first.id,
           dropdownColor: PosColors.surface,
           iconEnabledColor: PosColors.accent,
-          style: GoogleFonts.notoSansKr(
+          style: AppFonts.system(
             color: PosColors.textPrimary,
-            fontSize: 12,
+            fontSize: 13,
             fontWeight: FontWeight.w700,
           ),
           items: stores
@@ -188,6 +223,8 @@ class _StoreSwitcher extends StatelessWidget {
                     store.brandName == null || store.brandName!.isEmpty
                         ? store.name
                         : '${store.brandName} / ${store.name}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               )
@@ -213,17 +250,20 @@ class _StorePill extends StatelessWidget {
         : '${store.brandName} / ${store.name}';
 
     return Container(
+      constraints: const BoxConstraints(maxWidth: 170),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
         color: PosColors.surface,
-        borderRadius: AppRadius.sm,
+        borderRadius: AppRadius.lg,
         border: Border.all(color: PosColors.border),
       ),
       child: Text(
         label,
-        style: GoogleFonts.notoSansKr(
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppFonts.system(
           color: PosColors.textPrimary,
-          fontSize: 12,
+          fontSize: 13,
           fontWeight: FontWeight.w700,
         ),
       ),

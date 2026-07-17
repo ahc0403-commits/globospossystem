@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../main.dart';
 
@@ -45,7 +45,7 @@ void _showToast(
           Expanded(
             child: Text(
               message,
-              style: GoogleFonts.notoSansKr(
+              style: AppFonts.system(
                 color: Colors.white,
                 fontSize: 14,
               ),

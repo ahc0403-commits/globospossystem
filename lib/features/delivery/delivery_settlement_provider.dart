@@ -54,7 +54,7 @@ class DeliverySettlementNotifier
       // 1) 미정산 매출
       final unsettledRes = await supabase
           .from('external_sales')
-          .select('gross_amount')
+          .select('gross_amount, payload')
           .eq('restaurant_id', storeId)
           .eq('is_revenue', true)
           .isFilter('settlement_id', null);
@@ -62,6 +62,9 @@ class DeliverySettlementNotifier
       double unsettledRevenue = 0;
       for (final row in unsettledRes) {
         final r = Map<String, dynamic>.from(row);
+        if (_isMerchantCollectedOffline(r['payload'])) {
+          continue;
+        }
         final raw = r['gross_amount'];
         unsettledRevenue += switch (raw) {
           num v => v.toDouble(),
@@ -150,3 +153,12 @@ final deliverySettlementProvider =
     StateNotifierProvider<DeliverySettlementNotifier, DeliverySettlementState>(
       (ref) => DeliverySettlementNotifier(),
     );
+
+bool _isMerchantCollectedOffline(Object? payload) {
+  if (payload is! Map) return false;
+
+  final mode = payload['settlement_collection_mode'];
+  if (mode == 'merchant_collected_offline') return true;
+
+  return payload['offline_collection_acknowledgment'] != null;
+}

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../../main.dart';
 
 class StaffService {
@@ -8,16 +10,23 @@ class StaffService {
     required String role,
     required String storeId,
   }) async {
-    final response = await supabase.functions.invoke(
-      'create_staff_user',
-      body: {
-        'email': email,
-        'password': password,
-        'full_name': fullName,
-        'role': role,
-        'store_id': storeId,
-      },
-    );
+    final response = await supabase.functions
+        .invoke(
+          'create_staff_user',
+          body: {
+            'email': email,
+            'password': password,
+            'full_name': fullName,
+            'role': role,
+            'store_id': storeId,
+          },
+        )
+        .timeout(
+          const Duration(seconds: 20),
+          onTimeout: () => throw TimeoutException(
+            'Staff account creation timed out before the server returned a result.',
+          ),
+        );
     if (response.status != 200) {
       final errorData = response.data;
       final errorMsg = errorData is Map

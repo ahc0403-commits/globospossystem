@@ -124,6 +124,14 @@ class InventoryService {
         orderBy: 'sort_order',
       );
 
+  Future<List<Map<String, dynamic>>> fetchMenuCategories(String storeId) =>
+      _selectStoreScoped(
+        table: 'menu_categories',
+        storeId: storeId,
+        columns: 'id, name, sort_order',
+        orderBy: 'sort_order',
+      );
+
   Future<List<Map<String, dynamic>>> fetchAllRecipes(String storeId) =>
       _rpcListWithStoreCompat(
         'get_inventory_recipe_catalog',
@@ -168,6 +176,28 @@ class InventoryService {
         'p_ingredient_id': ingredientId,
       },
     );
+  }
+
+  Future<Map<String, dynamic>> createInventoryMenuWithRecipe({
+    required String storeId,
+    String? categoryId,
+    required String name,
+    required double price,
+    String? description,
+    required List<Map<String, dynamic>> recipeLines,
+  }) async {
+    final result = await supabase.rpc(
+      'create_inventory_menu_with_recipe',
+      params: {
+        'p_store_id': storeId,
+        'p_category_id': categoryId,
+        'p_name': name,
+        'p_price': price,
+        'p_description': description,
+        'p_recipe_lines': recipeLines,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
   }
 
   Future<List<Map<String, dynamic>>> fetchPhysicalCounts(
@@ -220,6 +250,55 @@ class InventoryService {
     return Map<String, dynamic>.from(result as Map);
   }
 
+  Future<List<Map<String, dynamic>>> fetchInventoryStockStatus({
+    required String storeId,
+    DateTime? asOfDate,
+  }) => _rpcList(
+    'get_inventory_stock_status',
+    params: {
+      'p_store_id': storeId,
+      'p_as_of_date': (asOfDate ?? DateTime.now())
+          .toIso8601String()
+          .split('T')
+          .first,
+    },
+  );
+
+  Future<List<Map<String, dynamic>>> fetchInventoryCostAnalysis({
+    required String storeId,
+    DateTime? from,
+    DateTime? to,
+  }) => _rpcList(
+    'get_inventory_cost_analysis',
+    params: {
+      'p_store_id': storeId,
+      'p_from': (from ?? DateTime.now().subtract(const Duration(days: 6)))
+          .toIso8601String()
+          .split('T')
+          .first,
+      'p_to': (to ?? DateTime.now()).toIso8601String().split('T').first,
+    },
+  );
+
+  Future<int> refreshInventoryDailyConsumption({
+    required String storeId,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final result = await supabase.rpc(
+      'refresh_inventory_daily_consumption',
+      params: {
+        'p_store_id': storeId,
+        'p_from': (from ?? DateTime.now().subtract(const Duration(days: 6)))
+            .toIso8601String()
+            .split('T')
+            .first,
+        'p_to': (to ?? DateTime.now()).toIso8601String().split('T').first,
+      },
+    );
+    return (result as num?)?.toInt() ?? 0;
+  }
+
   Future<String> runInventoryPurchaseRecommendation({
     required String storeId,
     required double targetStockDays,
@@ -259,13 +338,310 @@ class InventoryService {
     final result = await supabase
         .from('inventory_recommendation_lines')
         .select(
-          'id, product_id, supplier_id, current_stock_base, avg_daily_consumption_base, target_stock_days, recommended_quantity_base, recommended_order_units, estimated_days_remaining, risk_status, created_at, product:inventory_products(name), supplier:inventory_suppliers(name)',
+          'id, product_id, supplier_id, current_stock_base, avg_daily_consumption_base, target_stock_days, recommended_quantity_base, recommended_order_units, adjusted_quantity_base, adjusted_order_units, adjustment_memo, adjusted_at, estimated_days_remaining, risk_status, created_at, product:inventory_products(id, name, stock_unit, base_unit, base_unit_factor), supplier:inventory_suppliers(id, supplier_name)',
         )
         .eq('run_id', runId)
         .order('recommended_order_units', ascending: false)
         .limit(8);
 
+    final lines = List<Map<String, dynamic>>.from(
+      result as List,
+    ).map(Map<String, dynamic>.from).toList();
+    if (lines.isEmpty) {
+      return lines;
+    }
+
+    final productIds = lines
+        .map((line) => line['product_id']?.toString())
+        .whereType<String>()
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList();
+    final supplierIds = lines
+        .map((line) => line['supplier_id']?.toString())
+        .whereType<String>()
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList();
+    if (productIds.isEmpty || supplierIds.isEmpty) {
+      return lines;
+    }
+
+    final supplierItemResult = await supabase
+        .from('inventory_supplier_items')
+        .select(
+          'id, supplier_id, product_id, supplier_sku, order_unit, order_unit_quantity_base, min_order_quantity, unit_price, tax_rate, lead_time_days, is_preferred, is_active, updated_at, product:inventory_products(id, name, stock_unit, base_unit, base_unit_factor), supplier:inventory_suppliers(id, supplier_name)',
+        )
+        .eq('is_active', true)
+        .inFilter('product_id', productIds)
+        .inFilter('supplier_id', supplierIds)
+        .order('is_preferred', ascending: false)
+        .order('updated_at', ascending: false);
+
+    final supplierItemByKey = <String, Map<String, dynamic>>{};
+    for (final item in List<Map<String, dynamic>>.from(
+      supplierItemResult as List,
+    )) {
+      final copy = Map<String, dynamic>.from(item);
+      final key = _supplierItemRecommendationKey(
+        copy['product_id'],
+        copy['supplier_id'],
+      );
+      if (key.isNotEmpty) {
+        supplierItemByKey.putIfAbsent(key, () => copy);
+      }
+    }
+
+    for (final line in lines) {
+      final supplierItem =
+          supplierItemByKey[_supplierItemRecommendationKey(
+            line['product_id'],
+            line['supplier_id'],
+          )];
+      if (supplierItem == null) {
+        continue;
+      }
+      line['supplier_item'] = supplierItem;
+      line['order_unit'] = supplierItem['order_unit'];
+      line['order_unit_quantity_base'] =
+          supplierItem['order_unit_quantity_base'];
+      line['min_order_quantity'] = supplierItem['min_order_quantity'];
+      line['unit_price'] = supplierItem['unit_price'];
+      line['tax_rate'] = supplierItem['tax_rate'];
+      line['estimated_amount'] =
+          _serviceNum(
+            line['adjusted_order_units'] ?? line['recommended_order_units'],
+          ) *
+          _serviceNum(supplierItem['unit_price']);
+    }
+
+    return lines;
+  }
+
+  Future<Map<String, dynamic>> updateInventoryRecommendationLineAdjustment({
+    required String lineId,
+    double? adjustedOrderUnits,
+    String? memo,
+  }) async {
+    final result = await supabase.rpc(
+      'update_inventory_recommendation_line_adjustment',
+      params: {
+        'p_line_id': lineId,
+        'p_adjusted_order_units': adjustedOrderUnits,
+        'p_adjustment_memo': memo,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchInventorySuppliers({
+    required String storeId,
+  }) async {
+    final brandId = await _fetchStoreBrandId(storeId);
+    dynamic query = supabase
+        .from('inventory_suppliers')
+        .select(
+          'id, brand_id, supplier_name, supplier_type, contact_name, phone, email, address, business_registration_no, payment_terms, contract_start_date, contract_end_date, status, memo, created_at, updated_at',
+        );
+
+    if (brandId != null && brandId.isNotEmpty) {
+      query = query.or('brand_id.is.null,brand_id.eq.$brandId');
+    } else {
+      query = query.isFilter('brand_id', null);
+    }
+
+    final result = await query.order('supplier_name');
     return List<Map<String, dynamic>>.from(result as List);
+  }
+
+  Future<Map<String, dynamic>> upsertInventorySupplier({
+    required String storeId,
+    String? supplierId,
+    required String supplierName,
+    String? supplierType,
+    String? contactName,
+    String? phone,
+    String? email,
+    String? address,
+    String? businessRegistrationNo,
+    String? paymentTerms,
+    DateTime? contractStartDate,
+    DateTime? contractEndDate,
+    String? memo,
+  }) async {
+    final result = await supabase.rpc(
+      'upsert_inventory_supplier',
+      params: {
+        'p_store_id': storeId,
+        'p_supplier_id': supplierId,
+        'p_supplier_name': supplierName,
+        'p_supplier_type': supplierType,
+        'p_contact_name': contactName,
+        'p_phone': phone,
+        'p_email': email,
+        'p_address': address,
+        'p_business_registration_no': businessRegistrationNo,
+        'p_payment_terms': paymentTerms,
+        'p_contract_start_date': contractStartDate
+            ?.toIso8601String()
+            .split('T')
+            .first,
+        'p_contract_end_date': contractEndDate
+            ?.toIso8601String()
+            .split('T')
+            .first,
+        'p_memo': memo,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<Map<String, dynamic>> setInventorySupplierStatus({
+    required String storeId,
+    required String supplierId,
+    required String status,
+  }) async {
+    final result = await supabase.rpc(
+      'set_inventory_supplier_status',
+      params: {
+        'p_store_id': storeId,
+        'p_supplier_id': supplierId,
+        'p_status': status,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchInventoryProducts({
+    required String storeId,
+  }) async {
+    final result = await supabase
+        .from('inventory_products')
+        .select(
+          'id, restaurant_id, brand_id, inventory_item_id, product_code, name, category, stock_unit, base_unit, base_unit_factor, image_url, storage_type, shelf_life_days, is_orderable, is_active, created_at, updated_at, inventory_item:inventory_items(current_stock, reorder_point, cost_per_unit, supplier_name)',
+        )
+        .eq('restaurant_id', storeId)
+        .order('name');
+    return List<Map<String, dynamic>>.from(result as List);
+  }
+
+  Future<Map<String, dynamic>> upsertInventoryProduct({
+    required String storeId,
+    String? productId,
+    String? productCode,
+    required String name,
+    String? category,
+    required String stockUnit,
+    required String baseUnit,
+    required double baseUnitFactor,
+    String? imageUrl,
+    String? storageType,
+    int? shelfLifeDays,
+    bool isOrderable = true,
+  }) async {
+    final result = await supabase.rpc(
+      'upsert_inventory_product',
+      params: {
+        'p_store_id': storeId,
+        'p_product_id': productId,
+        'p_product_code': productCode,
+        'p_name': name,
+        'p_category': category,
+        'p_stock_unit': stockUnit,
+        'p_base_unit': baseUnit,
+        'p_base_unit_factor': baseUnitFactor,
+        'p_image_url': imageUrl,
+        'p_storage_type': storageType,
+        'p_shelf_life_days': shelfLifeDays,
+        'p_is_orderable': isOrderable,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<Map<String, dynamic>> setInventoryProductActive({
+    required String storeId,
+    required String productId,
+    required bool isActive,
+  }) async {
+    final result = await supabase.rpc(
+      'set_inventory_product_active',
+      params: {
+        'p_store_id': storeId,
+        'p_product_id': productId,
+        'p_is_active': isActive,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchInventorySupplierItems({
+    required String storeId,
+  }) async {
+    final result = await supabase
+        .from('inventory_supplier_items')
+        .select(
+          'id, supplier_id, product_id, supplier_sku, order_unit, order_unit_quantity_base, min_order_quantity, unit_price, tax_rate, lead_time_days, is_preferred, is_active, created_at, updated_at, supplier:inventory_suppliers(id, supplier_name, status), product:inventory_products(id, restaurant_id, name, product_code, category, stock_unit, base_unit, base_unit_factor)',
+        )
+        .order('updated_at', ascending: false);
+    return List<Map<String, dynamic>>.from(result as List)
+        .where((row) {
+          final product = row['product'];
+          return product is Map &&
+              product['restaurant_id']?.toString() == storeId;
+        })
+        .map(Map<String, dynamic>.from)
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> upsertInventorySupplierItem({
+    required String storeId,
+    String? supplierItemId,
+    required String supplierId,
+    required String productId,
+    String? supplierSku,
+    required String orderUnit,
+    required double orderUnitQuantityBase,
+    required double minOrderQuantity,
+    required double unitPrice,
+    required double taxRate,
+    required int leadTimeDays,
+    required bool isPreferred,
+  }) async {
+    final result = await supabase.rpc(
+      'upsert_inventory_supplier_item',
+      params: {
+        'p_store_id': storeId,
+        'p_supplier_item_id': supplierItemId,
+        'p_supplier_id': supplierId,
+        'p_product_id': productId,
+        'p_supplier_sku': supplierSku,
+        'p_order_unit': orderUnit,
+        'p_order_unit_quantity_base': orderUnitQuantityBase,
+        'p_min_order_quantity': minOrderQuantity,
+        'p_unit_price': unitPrice,
+        'p_tax_rate': taxRate,
+        'p_lead_time_days': leadTimeDays,
+        'p_is_preferred': isPreferred,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<Map<String, dynamic>> setInventorySupplierItemActive({
+    required String storeId,
+    required String supplierItemId,
+    required bool isActive,
+  }) async {
+    final result = await supabase.rpc(
+      'set_inventory_supplier_item_active',
+      params: {
+        'p_store_id': storeId,
+        'p_supplier_item_id': supplierItemId,
+        'p_is_active': isActive,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
   }
 
   Future<List<Map<String, dynamic>>> createPurchaseOrdersFromRecommendation({
@@ -286,13 +662,75 @@ class InventoryService {
     return List<Map<String, dynamic>>.from(result as List);
   }
 
+  Future<Map<String, dynamic>> createManualInventoryPurchaseOrder({
+    required String storeId,
+    required String supplierId,
+    required List<Map<String, dynamic>> lines,
+    DateTime? requestedDeliveryDate,
+    String? memo,
+  }) async {
+    final result = await supabase.rpc(
+      'create_manual_inventory_purchase_order',
+      params: {
+        'p_store_id': storeId,
+        'p_supplier_id': supplierId,
+        'p_lines': lines,
+        'p_requested_delivery_date': requestedDeliveryDate
+            ?.toIso8601String()
+            .split('T')
+            .first,
+        'p_memo': memo,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<Map<String, dynamic>> createRepeatInventoryPurchaseOrder({
+    required String sourcePurchaseOrderId,
+    DateTime? requestedDeliveryDate,
+    String? memo,
+  }) async {
+    final result = await supabase.rpc(
+      'create_repeat_inventory_purchase_order',
+      params: {
+        'p_source_purchase_order_id': sourcePurchaseOrderId,
+        'p_requested_delivery_date': requestedDeliveryDate
+            ?.toIso8601String()
+            .split('T')
+            .first,
+        'p_memo': memo,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<String> saveInventoryStockAudit({
+    required String storeId,
+    required List<Map<String, dynamic>> lines,
+    String? memo,
+    required bool complete,
+    String? sessionId,
+  }) async {
+    final result = await supabase.rpc(
+      'save_inventory_stock_audit',
+      params: {
+        'p_store_id': storeId,
+        'p_lines': lines,
+        'p_memo': memo,
+        'p_complete': complete,
+        'p_session_id': sessionId,
+      },
+    );
+    return result.toString();
+  }
+
   Future<List<Map<String, dynamic>>> fetchRecentInventoryPurchaseOrders({
     required String storeId,
   }) async {
     final orders = await supabase
         .from('inventory_purchase_orders')
         .select(
-          'id, purchase_order_no, status, requested_delivery_date, total_amount, total_supply_amount, tax_amount, created_at, supplier:inventory_suppliers(name)',
+          'id, purchase_order_no, status, requested_delivery_date, total_amount, total_supply_amount, tax_amount, created_at, supplier:inventory_suppliers(supplier_name)',
         )
         .eq('restaurant_id', storeId)
         .order('created_at', ascending: false)
@@ -329,7 +767,7 @@ class InventoryService {
     final order = await supabase
         .from('inventory_purchase_orders')
         .select(
-          'id, purchase_order_no, status, requested_delivery_date, total_amount, total_supply_amount, tax_amount, memo, created_at, supplier:inventory_suppliers(name)',
+          'id, purchase_order_no, status, requested_delivery_date, total_amount, total_supply_amount, tax_amount, memo, created_at, supplier:inventory_suppliers(supplier_name)',
         )
         .eq('id', purchaseOrderId)
         .maybeSingle();
@@ -716,6 +1154,17 @@ class InventoryService {
     return List<Map<String, dynamic>>.from(result as List);
   }
 
+  String _supplierItemRecommendationKey(Object? productId, Object? supplierId) {
+    final product = productId?.toString() ?? '';
+    final supplier = supplierId?.toString() ?? '';
+    return product.isEmpty || supplier.isEmpty ? '' : '$product::$supplier';
+  }
+
+  num _serviceNum(Object? value) {
+    if (value is num) return value;
+    return num.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
   Future<List<Map<String, dynamic>>> _rpcListWithStoreCompat(
     String functionName, {
     required Map<String, dynamic> params,
@@ -726,6 +1175,15 @@ class InventoryService {
       invoke: (nextParams) => supabase.rpc(functionName, params: nextParams),
     );
     return List<Map<String, dynamic>>.from(result as List);
+  }
+
+  Future<String?> _fetchStoreBrandId(String storeId) async {
+    final result = await supabase
+        .from('restaurants')
+        .select('brand_id')
+        .eq('id', storeId)
+        .maybeSingle();
+    return result?['brand_id']?.toString();
   }
 
   Future<List<Map<String, dynamic>>> _selectStoreScoped({

@@ -53,6 +53,7 @@ class ReportSummary {
     required this.totalRevenue,
     required this.totalOrders,
     required this.completedOrders,
+    required this.openOrders,
     required this.dailyBreakdown,
     this.cashTotal = 0,
     this.cardTotal = 0,
@@ -74,6 +75,7 @@ class ReportSummary {
   final double totalRevenue;
   final int totalOrders;
   final int completedOrders;
+  final int openOrders;
   final List<DailyRevenue> dailyBreakdown;
   final double cashTotal;
   final double cardTotal;
@@ -351,6 +353,10 @@ class ReportNotifier extends StateNotifier<ReportState> {
             (order) => order['status']?.toString().toLowerCase() == 'cancelled',
           )
           .length;
+      final openOrders = ordersResponse.where((order) {
+        final status = order['status']?.toString().toLowerCase();
+        return status != 'completed' && status != 'cancelled';
+      }).length;
       final cancelledItems = cancelledItemsResponse.length;
       final failedEinvoiceJobsCount = einvoiceJobsResponse.where((row) {
         final job = Map<String, dynamic>.from(row);
@@ -440,6 +446,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
         totalRevenue: dineInRevenue + deliveryRevenue,
         totalOrders: totalOrders,
         completedOrders: completedOrders,
+        openOrders: openOrders,
         dailyBreakdown: breakdown,
         cashTotal: cashTotal,
         cardTotal: cardTotal,

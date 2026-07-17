@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/i18n/locale_extensions.dart';
 import '../core/services/connectivity_service.dart';
 import '../core/ui/app_primitives.dart';
 import '../main.dart';
@@ -10,6 +11,7 @@ class OfflineBanner extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final connectivity = ref.watch(connectivityProvider);
     final isOffline = connectivity.maybeWhen(
       data: (connected) => !connected,
@@ -33,18 +35,22 @@ class OfflineBanner extends ConsumerWidget {
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
+              children: [
                 AppStatusBadge(
-                  label: 'OFFLINE',
+                  label: l10n.offline.toUpperCase(),
                   color: AppColors.statusOccupied,
                   foregroundColor: AppColors.statusOccupied,
                 ),
-                SizedBox(width: AppSpacing.sm),
-                Icon(Icons.wifi_off, color: AppColors.statusOccupied, size: 16),
-                SizedBox(width: 6),
+                const SizedBox(width: AppSpacing.sm),
+                const Icon(
+                  Icons.wifi_off,
+                  color: AppColors.statusOccupied,
+                  size: 16,
+                ),
+                const SizedBox(width: 6),
                 Text(
-                  'Internet connection lost. Online-only actions may be unavailable.',
-                  style: TextStyle(
+                  l10n.offlineConnectionMessage,
+                  style: const TextStyle(
                     color: AppColors.textPrimary,
                     fontSize: 12,
                     fontWeight: FontWeight.w700,

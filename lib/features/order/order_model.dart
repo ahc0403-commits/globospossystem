@@ -35,6 +35,10 @@ class OrderItem {
     required this.quantity,
     required this.status,
     required this.itemType,
+    this.isServiceItem = false,
+    this.serviceReason,
+    this.vatCategory,
+    this.payingAmountIncTax,
   });
 
   final String id;
@@ -44,6 +48,10 @@ class OrderItem {
   final int quantity;
   final String status;
   final String itemType;
+  final bool isServiceItem;
+  final String? serviceReason;
+  final String? vatCategory;
+  final double? payingAmountIncTax;
 
   OrderItem copyWith({
     String? id,
@@ -53,6 +61,10 @@ class OrderItem {
     int? quantity,
     String? status,
     String? itemType,
+    bool? isServiceItem,
+    String? serviceReason,
+    String? vatCategory,
+    double? payingAmountIncTax,
   }) {
     return OrderItem(
       id: id ?? this.id,
@@ -62,16 +74,23 @@ class OrderItem {
       quantity: quantity ?? this.quantity,
       status: status ?? this.status,
       itemType: itemType ?? this.itemType,
+      isServiceItem: isServiceItem ?? this.isServiceItem,
+      serviceReason: serviceReason ?? this.serviceReason,
+      vatCategory: vatCategory ?? this.vatCategory,
+      payingAmountIncTax: payingAmountIncTax ?? this.payingAmountIncTax,
     );
   }
 
   factory OrderItem.fromJson(Map<String, dynamic> json) {
     final unitPriceRaw = json['unit_price'];
     final quantityRaw = json['quantity'];
+    final payingAmountRaw = json['paying_amount_inc_tax'];
     final menuItemRaw = json['menu_items'];
     String? menuItemName;
-    if (menuItemRaw is Map<String, dynamic>) {
+    String? vatCategory;
+    if (menuItemRaw is Map) {
       menuItemName = menuItemRaw['name']?.toString();
+      vatCategory = menuItemRaw['vat_category']?.toString();
     }
 
     return OrderItem(
@@ -91,7 +110,19 @@ class OrderItem {
         _ => 0,
       },
       status: json['status']?.toString() ?? 'pending',
-      itemType: json['item_type']?.toString() ?? 'menu',
+      itemType: json['item_type']?.toString() ?? 'menu_item',
+      isServiceItem: switch (json['is_service_item']) {
+        bool value => value,
+        String value => value.toLowerCase() == 'true',
+        _ => false,
+      },
+      serviceReason: json['service_reason']?.toString(),
+      vatCategory: json['vat_category']?.toString() ?? vatCategory,
+      payingAmountIncTax: switch (payingAmountRaw) {
+        num value => value.toDouble(),
+        String value => double.tryParse(value),
+        _ => null,
+      },
     );
   }
 }
@@ -103,6 +134,7 @@ class Order {
     required this.status,
     required this.createdAt,
     required this.items,
+    this.guestCount,
   });
 
   final String id;
@@ -110,6 +142,7 @@ class Order {
   final String status;
   final DateTime createdAt;
   final List<OrderItem> items;
+  final int? guestCount;
 
   Order copyWith({
     String? id,
@@ -117,6 +150,7 @@ class Order {
     String? status,
     DateTime? createdAt,
     List<OrderItem>? items,
+    int? guestCount,
   }) {
     return Order(
       id: id ?? this.id,
@@ -124,19 +158,20 @@ class Order {
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       items: items ?? this.items,
+      guestCount: guestCount ?? this.guestCount,
     );
   }
 
   factory Order.fromJson(Map<String, dynamic> json) {
     final createdAtRaw = json['created_at']?.toString();
     final rawItems = json['order_items'];
-    final items = (rawItems is List)
+    final itemRows = rawItems is List
         ? rawItems
-              .map<OrderItem>(
-                (item) => OrderItem.fromJson(Map<String, dynamic>.from(item)),
-              )
+              .map((item) => Map<String, dynamic>.from(item as Map))
               .toList()
-        : const <OrderItem>[];
+        : <Map<String, dynamic>>[];
+    itemRows.sort(_compareOrderItemRowsByCreatedAt);
+    final items = itemRows.map<OrderItem>(OrderItem.fromJson).toList();
 
     return Order(
       id: json['id'].toString(),
@@ -147,6 +182,37 @@ class Order {
                 DateTime.fromMillisecondsSinceEpoch(0)
           : DateTime.fromMillisecondsSinceEpoch(0),
       items: items,
+      guestCount: switch (json['guest_count']) {
+        int value => value,
+        num value => value.toInt(),
+        String value => int.tryParse(value),
+        _ => null,
+      },
     );
   }
+}
+
+int _compareOrderItemRowsByCreatedAt(
+  Map<String, dynamic> left,
+  Map<String, dynamic> right,
+) {
+  final leftCreatedAt = DateTime.tryParse(left['created_at']?.toString() ?? '');
+  final rightCreatedAt = DateTime.tryParse(
+    right['created_at']?.toString() ?? '',
+  );
+
+  if (leftCreatedAt != null && rightCreatedAt != null) {
+    final createdAtComparison = leftCreatedAt.compareTo(rightCreatedAt);
+    if (createdAtComparison != 0) {
+      return createdAtComparison;
+    }
+  } else if (leftCreatedAt != null) {
+    return -1;
+  } else if (rightCreatedAt != null) {
+    return 1;
+  }
+
+  return (left['id']?.toString() ?? '').compareTo(
+    right['id']?.toString() ?? '',
+  );
 }

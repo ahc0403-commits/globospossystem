@@ -123,7 +123,9 @@ class MenuNotifier extends StateNotifier<MenuState> {
       state = state.copyWith(clearError: true);
       return true;
     } catch (error, _) {
-      state = state.copyWith(error: _mapMenuError(error, 'Failed to add category.'));
+      state = state.copyWith(
+        error: _mapMenuError(error, 'Failed to add category.'),
+      );
       return false;
     }
   }
@@ -146,7 +148,9 @@ class MenuNotifier extends StateNotifier<MenuState> {
       state = state.copyWith(clearError: true);
       return true;
     } catch (error, _) {
-      state = state.copyWith(error: _mapMenuError(error, 'Failed to add menu.'));
+      state = state.copyWith(
+        error: _mapMenuError(error, 'Failed to add menu.'),
+      );
       return false;
     }
   }
@@ -158,7 +162,26 @@ class MenuNotifier extends StateNotifier<MenuState> {
       state = state.copyWith(clearError: true);
       return true;
     } catch (error, _) {
-      state = state.copyWith(error: _mapMenuError(error, 'Failed to change menu status.'));
+      state = state.copyWith(
+        error: _mapMenuError(error, 'Failed to change menu status.'),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> togglePublicVisibility(
+    String itemId,
+    bool isVisiblePublic,
+  ) async {
+    try {
+      await menuService.togglePublicVisibility(itemId, isVisiblePublic);
+      await fetchItems();
+      state = state.copyWith(clearError: true);
+      return true;
+    } catch (error, _) {
+      state = state.copyWith(
+        error: _mapMenuError(error, 'Failed to change QR menu visibility.'),
+      );
       return false;
     }
   }
@@ -178,7 +201,9 @@ class MenuNotifier extends StateNotifier<MenuState> {
       state = state.copyWith(clearError: true);
       return true;
     } catch (error, _) {
-      state = state.copyWith(error: _mapMenuError(error, 'Failed to update menu.'));
+      state = state.copyWith(
+        error: _mapMenuError(error, 'Failed to update menu.'),
+      );
       return false;
     }
   }

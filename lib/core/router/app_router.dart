@@ -1,20 +1,26 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/layout/platform_info.dart';
 import '../../core/services/navigation_history_service.dart';
 import '../../core/utils/permission_utils.dart';
+import '../../core/utils/role_routes.dart';
 import '../../features/admin/admin_screen.dart';
 import '../../features/auth/auth_provider.dart';
 import '../../features/auth/auth_state.dart';
 import '../../features/auth/login_screen.dart';
+import '../../features/auth/privacy_consent_screen.dart';
 import '../../features/cashier/cashier_screen.dart';
 import '../../features/kitchen/kitchen_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
 import '../../features/photo_ops/photo_ops_screen.dart';
 import '../../features/payment/payment_detail_screen.dart';
+import '../../features/print_station/print_station_screen.dart';
+import '../../features/qr_order/qr_order_screen.dart';
+import '../../features/restaurant_sales_export/restaurant_sales_export_screen.dart';
 import '../../features/attendance/attendance_kiosk_screen.dart';
 import '../../features/qc/qc_check_screen.dart';
-import '../../features/restaurant_sales_export/restaurant_sales_export_screen.dart';
+import '../../features/qc/qc_review_screen.dart';
 import '../../features/super_admin/super_admin_screen.dart';
 import '../../features/waiter/waiter_screen.dart';
 
@@ -42,11 +48,23 @@ GoRouter buildAppRouter(ProviderContainer container) {
       final isLoggedIn = auth.user != null && role != null;
       final location = state.matchedLocation;
       final fullLocation = state.uri.toString();
+      final path = state.uri.path;
       String? redirectTo;
+
+      if (path.startsWith('/qr/')) {
+        NavigationHistoryService.instance.push(fullLocation);
+        return null;
+      }
 
       // 1. 비로그인 → 로그인 화면
       if (!isLoggedIn) {
         redirectTo = location == '/login' ? null : '/login';
+        NavigationHistoryService.instance.push(redirectTo ?? fullLocation);
+        return redirectTo;
+      }
+
+      if (auth.privacyConsentRequired) {
+        redirectTo = location == '/privacy-consent' ? null : '/privacy-consent';
         NavigationHistoryService.instance.push(redirectTo ?? fullLocation);
         return redirectTo;
       }
@@ -59,20 +77,16 @@ GoRouter buildAppRouter(ProviderContainer container) {
       }
 
       // 3. 역할별 허용 경로 정의
-      final String homeRoute = switch (role) {
-        'waiter' => '/waiter',
-        'kitchen' => '/kitchen',
-        'cashier' => '/cashier',
-        'super_admin' => '/super-admin',
-        'photo_objet_master' || 'photo_objet_store_admin' => '/photo-ops',
-        'brand_admin' || 'store_admin' => '/admin',
-        _ => '/admin',
-      };
+      final homeRoute = homeRouteForRole(role);
 
-      const publicRoutes = ['/login', '/onboarding'];
+      const publicRoutes = ['/login', '/onboarding', '/privacy-consent'];
 
       // 4. 공개 경로에 있으면 → 홈으로
       if (publicRoutes.contains(location)) {
+        if (homeRoute == '/login') {
+          NavigationHistoryService.instance.push(fullLocation);
+          return null;
+        }
         redirectTo = homeRoute;
         NavigationHistoryService.instance.push(redirectTo);
         return redirectTo;
@@ -131,6 +145,17 @@ GoRouter buildAppRouter(ProviderContainer container) {
         return redirectTo;
       }
 
+      if (path.startsWith('/payments/') &&
+          !canAccessRouteForRole(
+            role,
+            fullLocation,
+            extraPermissions: auth.extraPermissions,
+          )) {
+        redirectTo = homeRoute;
+        NavigationHistoryService.instance.push(redirectTo);
+        return redirectTo;
+      }
+
       // 6-D. /admin/:storeId 는 super_admin 전용
       if (location.startsWith('/admin/') && role != 'super_admin') {
         redirectTo = homeRoute;
@@ -138,8 +163,14 @@ GoRouter buildAppRouter(ProviderContainer container) {
         return redirectTo;
       }
 
-      // 6-E. attendance kiosk / fingerprint flow is dormant and disabled
-      if (location == '/attendance-kiosk') {
+      // 6-E. Attendance capture requires the native Android camera flow.
+      if (location == '/attendance-kiosk' && !PlatformInfo.isKioskSupported) {
+        redirectTo = homeRoute;
+        NavigationHistoryService.instance.push(redirectTo);
+        return redirectTo;
+      }
+
+      if (location == '/print-station' && !PlatformInfo.isPrinterSupported) {
         redirectTo = homeRoute;
         NavigationHistoryService.instance.push(redirectTo);
         return redirectTo;
@@ -153,23 +184,55 @@ GoRouter buildAppRouter(ProviderContainer container) {
         return redirectTo;
       }
 
+      if (location == '/qc-review' &&
+          !PermissionUtils.canDoQcVisitReview(role, auth.extraPermissions)) {
+        redirectTo = homeRoute;
+        NavigationHistoryService.instance.push(redirectTo);
+        return redirectTo;
+      }
+
+      // Fall-through: enforce role matrix on any route not handled above
+      if (!canAccessRouteForRole(
+        role,
+        fullLocation,
+        extraPermissions: auth.extraPermissions,
+      )) {
+        redirectTo = homeRoute;
+        NavigationHistoryService.instance.push(redirectTo);
+        return redirectTo;
+      }
+
       NavigationHistoryService.instance.push(fullLocation);
       return null;
     },
     routes: [
+      GoRoute(
+        path: '/qr/:token',
+        builder: (_, state) =>
+            QrOrderScreen(token: state.pathParameters['token'] ?? ''),
+      ),
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+      GoRoute(
+        path: '/privacy-consent',
+        builder: (_, __) => const PrivacyConsentScreen(),
+      ),
       GoRoute(
         path: '/onboarding',
         builder: (_, __) => const OnboardingScreen(),
       ),
       GoRoute(path: '/waiter', builder: (_, __) => const WaiterScreen()),
       GoRoute(path: '/kitchen', builder: (_, __) => const KitchenScreen()),
+      GoRoute(
+        path: '/print-station',
+        builder: (_, __) => const PrintStationScreen(),
+      ),
       GoRoute(path: '/cashier', builder: (_, __) => const CashierScreen()),
       GoRoute(
         path: '/attendance-kiosk',
         builder: (_, __) => const AttendanceKioskScreen(),
       ),
       GoRoute(path: '/qc-check', builder: (_, __) => const QcCheckScreen()),
+      GoRoute(path: '/qc-review', builder: (_, __) => const QcReviewScreen()),
       GoRoute(path: '/photo-ops', builder: (_, __) => const PhotoOpsScreen()),
       GoRoute(
         path: '/payments/:paymentId',
@@ -215,6 +278,7 @@ int _tabIndexFromQuery(String? value) {
     'qc' => 6,
     'settings' => 7,
     'delivery' || 'settlement' => 8,
+    'einvoice' || 'e-invoice' || 'invoice' => 9,
     _ => 0,
   };
 }

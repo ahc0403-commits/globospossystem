@@ -2,10 +2,10 @@ import 'dart:typed_data';
 
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/ui/app_fonts.dart';
 import '../../core/ui/app_theme.dart';
 import '../../widgets/app_nav_bar.dart';
 import 'restaurant_sales_export.dart';
@@ -55,7 +55,7 @@ class _RestaurantSalesExportScreenState
                     children: [
                       Text(
                         context.l10n.restaurantSalesExportTitle,
-                        style: GoogleFonts.bebasNeue(
+                        style: AppFonts.system(
                           color: AppColors.amber500,
                           fontSize: 34,
                         ),
@@ -63,7 +63,7 @@ class _RestaurantSalesExportScreenState
                       const SizedBox(height: 8),
                       Text(
                         context.l10n.restaurantSalesExportSubtitle,
-                        style: GoogleFonts.notoSansKr(
+                        style: AppFonts.system(
                           color: AppColors.textSecondary,
                           fontSize: 14,
                         ),
@@ -79,7 +79,7 @@ class _RestaurantSalesExportScreenState
                               key: const Key(
                                 'restaurant_sales_export_business_date',
                               ),
-                              style: GoogleFonts.notoSansKr(
+                              style: AppFonts.system(
                                 color: AppColors.textPrimary,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,

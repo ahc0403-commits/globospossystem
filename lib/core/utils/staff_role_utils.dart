@@ -97,7 +97,6 @@ List<String> assignableRolesForViewer(String? viewerRole) {
   if (viewerRole == 'super_admin') {
     return [
       ...baseRoles,
-      'admin',
       'store_admin',
       'brand_admin',
       'photo_objet_master',
@@ -106,14 +105,14 @@ List<String> assignableRolesForViewer(String? viewerRole) {
   }
 
   if (viewerRole == 'brand_admin') {
-    return [...baseRoles, 'admin', 'store_admin', 'photo_objet_store_admin'];
+    return [...baseRoles, 'store_admin', 'photo_objet_store_admin'];
   }
 
   if (viewerRole == 'admin' || viewerRole == 'store_admin') {
     return [...baseRoles];
   }
 
-  return [...baseRoles, 'admin'];
+  return [...baseRoles];
 }
 
 bool canMutateStaffAccount({

@@ -72,6 +72,18 @@ Interpretation:
 - Treat component names as implementation details. Behavior and hierarchy are
   authoritative; a specific widget name is not.
 
+## Visual Design Rules
+
+- Use a high-contrast light palette with dark text as the default operating
+  baseline.
+- Keep canvas, work surface, and selected-state contrast visually distinct
+  through shared tokens rather than screen-local color invention.
+- Use the shared accent color consistently for primary interactive elements and
+  reserve success, warning, danger, and info colors for semantic state.
+- Meet WCAG AA contrast targets for text and key UI communication surfaces.
+- Do not rely on color alone to convey meaning; pair state color with labels,
+  badges, icons, or other explicit signals.
+
 ## Legacy Patterns That Are Forbidden As Standards
 
 Do not use any of the following as active design standards, source documents,

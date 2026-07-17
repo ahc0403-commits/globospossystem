@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -141,7 +139,7 @@ class QcTemplateNotifier extends StateNotifier<QcTemplateState> {
   Future<String?> uploadCriteriaPhoto(
     String storeId,
     String templateId,
-    File file,
+    XFile file,
   ) {
     return qcService.uploadQcPhoto(
       storeId: storeId,
@@ -261,7 +259,7 @@ class QcCheckNotifier extends StateNotifier<QcCheckState> {
     required String templateId,
     required String checkDate,
     required String result,
-    File? evidencePhoto,
+    XFile? evidencePhoto,
     String? note,
     String? checkedBy,
   }) async {
