@@ -685,6 +685,7 @@ apply_migration() {
     20260717130000_table_qr_batch_export.sql|\
     20260717170000_workforce_fixed_accounts.sql|\
     20260718170000_vnd_currency_enforcement.sql|\
+    20260719013000_production_test_entity_guard.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -709,6 +710,12 @@ apply_migration() {
     [[ -f "$rollback_path" ]] ||
       fail "Missing workforce fixed-accounts rollback file: $rollback_path"
     log "Workforce fixed-accounts rollback readiness"
+    printf 'Rollback ready (not executed): %s\n' "$rollback_path"
+  elif [[ "$migration_name" == "20260719013000_production_test_entity_guard.sql" ]]; then
+    local rollback_path="$ROOT_DIR/scripts/rollback_production_test_entity_guard.sql"
+    [[ -f "$rollback_path" ]] ||
+      fail "Missing production test-entity guard rollback file: $rollback_path"
+    log "Production test-entity guard rollback readiness"
     printf 'Rollback ready (not executed): %s\n' "$rollback_path"
   fi
 
@@ -765,6 +772,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_vnd_currency_enforcement.sql" \
       "VND currency enforcement migration preflight"
+  elif [[ "$migration_name" == "20260719013000_production_test_entity_guard.sql" ]]; then
+    log "Production test-entity guard migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_production_test_entity_guard.sql" \
+      "production test-entity guard migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -840,6 +852,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_vnd_currency_enforcement.sql" \
       "VND currency enforcement migration verification"
+  elif [[ "$migration_name" == "20260719013000_production_test_entity_guard.sql" ]]; then
+    log "Production test-entity guard migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_production_test_entity_guard.sql" \
+      "production test-entity guard migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \
