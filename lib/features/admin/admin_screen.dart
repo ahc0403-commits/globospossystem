@@ -210,18 +210,21 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
             )
           : null,
       topBarTrailing: isSuperAdminView
-          ? Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const AppNavBar(),
-                const SizedBox(width: 10),
-                ToastStatusBadge(
-                  label: context.l10n.superAdminMode,
-                  color: PosColors.warning,
-                  compact: true,
-                ),
-              ],
-            )
+          ? MediaQuery.sizeOf(context).width < 600 ||
+                    MediaQuery.textScalerOf(context).scale(1) > 1.5
+                ? const AppNavBar()
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const AppNavBar(),
+                      const SizedBox(width: 10),
+                      ToastStatusBadge(
+                        label: context.l10n.superAdminMode,
+                        color: PosColors.warning,
+                        compact: true,
+                      ),
+                    ],
+                  )
           : const AppNavBar(),
       bottomItems: isSuperAdminView
           ? null
@@ -270,18 +273,21 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
             )
           : null,
       topBarTrailing: isSuperAdminView
-          ? Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const AppNavBar(),
-                const SizedBox(width: 8),
-                ToastStatusBadge(
-                  label: context.l10n.superAdminMode,
-                  color: PosColors.warning,
-                  compact: true,
-                ),
-              ],
-            )
+          ? MediaQuery.sizeOf(context).width < 600 ||
+                    MediaQuery.textScalerOf(context).scale(1) > 1.5
+                ? const AppNavBar()
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const AppNavBar(),
+                      const SizedBox(width: 8),
+                      ToastStatusBadge(
+                        label: context.l10n.superAdminMode,
+                        color: PosColors.warning,
+                        compact: true,
+                      ),
+                    ],
+                  )
           : const AppNavBar(),
       bottomItems: isSuperAdminView
           ? null

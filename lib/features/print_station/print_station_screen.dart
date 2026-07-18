@@ -23,7 +23,11 @@ import '../kitchen/kitchen_provider.dart';
 import '../store_setup/store_setup_localization.dart';
 
 class PrintStationScreen extends ConsumerStatefulWidget {
-  const PrintStationScreen({super.key});
+  const PrintStationScreen({super.key, this.isSupportedOverride});
+
+  /// Allows widget tests to exercise supported queue states on non-printer
+  /// hosts. Production continues to use the coordinator capability probe.
+  final bool? isSupportedOverride;
 
   @override
   ConsumerState<PrintStationScreen> createState() => _PrintStationScreenState();
@@ -115,7 +119,10 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
             ),
             child: Row(
               children: [
-                const AppNavBar(),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: const AppNavBar(),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -155,7 +162,7 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
     final l10n = context.l10n;
     final coordinator = ref.read(printAgentCoordinatorProvider.notifier);
     final agentState = ref.watch(printAgentCoordinatorProvider);
-    if (!coordinator.isSupported) {
+    if (!(widget.isSupportedOverride ?? coordinator.isSupported)) {
       return Center(
         child: PosExceptionAlert(
           label: l10n.printStationTitle,

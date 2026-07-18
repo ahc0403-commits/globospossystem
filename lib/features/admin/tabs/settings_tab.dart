@@ -24,7 +24,9 @@ import '../providers/settings_provider.dart';
 import '../widgets/admin_audit_trace_panel.dart';
 
 class SettingsTab extends ConsumerStatefulWidget {
-  const SettingsTab({super.key});
+  const SettingsTab({super.key, this.pinServiceOverride});
+
+  final PinService? pinServiceOverride;
 
   @override
   ConsumerState<SettingsTab> createState() => _SettingsTabState();
@@ -47,6 +49,8 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
   bool _isSavingDiscountManagerPin = false;
   String _selectedCategory = 'store';
 
+  PinService get _pinService => widget.pinServiceOverride ?? pinService;
+
   @override
   void dispose() {
     _restaurantNameController.dispose();
@@ -59,7 +63,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
 
   Future<void> _loadPayrollPinStatus(String storeId) async {
     try {
-      final hash = await pinService.fetchPinHash(storeId);
+      final hash = await _pinService.fetchPinHash(storeId);
       if (!mounted) return;
       setState(() => _hasPayrollPin = hash != null && hash.isNotEmpty);
     } catch (_) {
@@ -70,7 +74,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
 
   Future<void> _loadDiscountManagerPinStatus(String storeId) async {
     try {
-      final hasPin = await pinService.hasDiscountManagerPin(storeId);
+      final hasPin = await _pinService.hasDiscountManagerPin(storeId);
       if (!mounted) return;
       setState(() => _hasDiscountManagerPin = hasPin);
     } catch (_) {
@@ -92,6 +96,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return AlertDialog(
+              key: const Key('settings_payroll_pin_dialog'),
               backgroundColor: AppColors.surface1,
               title: Text(
                 l10n.settingsPayrollPinTitle,
@@ -158,7 +163,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
 
                           setState(() => _isSavingPayrollPin = true);
                           try {
-                            await pinService.setPin(storeId, pin);
+                            await _pinService.setPin(storeId, pin);
                             if (!pageContext.mounted) return;
                             Navigator.of(pageContext).pop();
                             await _loadPayrollPinStatus(storeId);
@@ -201,6 +206,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
       },
     );
 
+    await Future<void>.delayed(kThemeAnimationDuration);
     pinController.dispose();
     confirmController.dispose();
   }
@@ -218,6 +224,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return AlertDialog(
+              key: const Key('settings_discount_manager_pin_dialog'),
               backgroundColor: AppColors.surface1,
               title: Text(
                 l10n.settingsDiscountManagerPinTitle,
@@ -284,7 +291,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
 
                           setState(() => _isSavingDiscountManagerPin = true);
                           try {
-                            await pinService.setDiscountManagerPin(
+                            await _pinService.setDiscountManagerPin(
                               storeId,
                               pin,
                             );
@@ -332,6 +339,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
       },
     );
 
+    await Future<void>.delayed(kThemeAnimationDuration);
     pinController.dispose();
     confirmController.dispose();
   }
@@ -344,14 +352,14 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     if (entered == null) return;
 
     try {
-      final ok = await pinService.verifyPin(storeId, entered);
+      final ok = await _pinService.verifyPin(storeId, entered);
       if (!ok) {
         if (mounted) {
           showErrorToast(context, context.l10n.settingsPayrollPinIncorrect);
         }
         return;
       }
-      await pinService.clearPin(storeId);
+      await _pinService.clearPin(storeId);
       await _loadPayrollPinStatus(storeId);
       if (mounted) {
         showSuccessToast(context, context.l10n.settingsPayrollPinDeleted);
@@ -368,7 +376,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
 
   Future<void> _clearDiscountManagerPin(String storeId) async {
     try {
-      await pinService.clearDiscountManagerPin(storeId);
+      await _pinService.clearDiscountManagerPin(storeId);
       await _loadDiscountManagerPinStatus(storeId);
       if (mounted) {
         showSuccessToast(
@@ -523,7 +531,8 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
         builder: (context, viewport) {
           final categoryPane = _buildCategoryPane(categories);
 
-          if (viewport.maxWidth < 1120) {
+          if (viewport.maxWidth < 1120 ||
+              MediaQuery.textScalerOf(context).scale(1) > 1.5) {
             return ToastResponsiveScrollBody(
               maxWidth: 1480,
               padding: const EdgeInsets.all(16),
@@ -698,57 +707,62 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
   Widget _buildCategoryPane(List<_SettingsCategory> categories) {
     return ToastWorkSurface(
       padding: const EdgeInsets.all(12),
-      child: Column(
+      child: SingleChildScrollView(
         key: const Key('settings_configuration_queue'),
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final category in categories) ...[
-            Builder(
-              builder: (context) {
-                final selected = _selectedCategory == category.id;
-                return InkWell(
-                  onTap: () => setState(() => _selectedCategory = category.id),
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? PosColors.accentMuted
-                          : PosColors.surface,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: selected ? PosColors.accent : PosColors.border,
-                        width: selected ? 1.5 : 1,
+        physics: const ClampingScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final category in categories) ...[
+              Builder(
+                builder: (context) {
+                  final selected = _selectedCategory == category.id;
+                  return InkWell(
+                    key: Key('settings_category_${category.id}'),
+                    onTap: () =>
+                        setState(() => _selectedCategory = category.id),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? PosColors.accentMuted
+                            : PosColors.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: selected ? PosColors.accent : PosColors.border,
+                          width: selected ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            category.label,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: selected
+                                      ? PosColors.accent
+                                      : PosColors.textPrimary,
+                                ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            category.summary,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: PosColors.textSecondary),
+                          ),
+                        ],
                       ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          category.label,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: selected
-                                    ? PosColors.accent
-                                    : PosColors.textPrimary,
-                              ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          category.summary,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: PosColors.textSecondary),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-            if (category != categories.last) const SizedBox(height: 8),
+                  );
+                },
+              ),
+              if (category != categories.last) const SizedBox(height: 8),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1131,6 +1145,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                   children: [
                     Expanded(
                       child: FilledButton(
+                        key: const Key('settings_payroll_pin_change_action'),
                         onPressed: storeId == null
                             ? null
                             : () => _showSetPayrollPinDialog(storeId),
@@ -1140,6 +1155,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: OutlinedButton(
+                        key: const Key('settings_payroll_pin_clear_action'),
                         onPressed: storeId == null || _hasPayrollPin != true
                             ? null
                             : () => _clearPayrollPin(storeId),
@@ -1193,6 +1209,9 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                   children: [
                     Expanded(
                       child: FilledButton(
+                        key: const Key(
+                          'settings_discount_manager_pin_change_action',
+                        ),
                         onPressed: storeId == null
                             ? null
                             : () => _showSetDiscountManagerPinDialog(storeId),
@@ -1696,6 +1715,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
             return AlertDialog(
+              key: const Key('settings_printer_destination_dialog'),
               backgroundColor: AppColors.surface1,
               title: Text(
                 destination == null
@@ -1855,6 +1875,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
       },
     );
 
+    await Future<void>.delayed(kThemeAnimationDuration);
     nameController.dispose();
     ipController.dispose();
     portController.dispose();

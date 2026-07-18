@@ -13,7 +13,14 @@ import '../inventory/inventory_provider.dart';
 import 'inventory_purchase_document_service.dart';
 
 class InventoryPurchaseScreen extends ConsumerStatefulWidget {
-  const InventoryPurchaseScreen({super.key});
+  const InventoryPurchaseScreen({
+    super.key,
+    this.initialSectionIndex = 0,
+    this.autoLoad = true,
+  });
+
+  final int initialSectionIndex;
+  final bool autoLoad;
 
   @override
   ConsumerState<InventoryPurchaseScreen> createState() =>
@@ -22,11 +29,17 @@ class InventoryPurchaseScreen extends ConsumerStatefulWidget {
 
 class _InventoryPurchaseScreenState
     extends ConsumerState<InventoryPurchaseScreen> {
-  int _selectedIndex = 0;
+  late int _selectedIndex;
   String? _loadedStoreId;
   String? _printingOrderId;
   String? _selectedSupplierId;
   String? _selectedProductId;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedIndex = widget.initialSectionIndex.clamp(0, 10);
+  }
 
   List<_InventoryPurchaseSection> _sections(BuildContext context) {
     final l10n = context.l10n;
@@ -93,7 +106,9 @@ class _InventoryPurchaseScreenState
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final storeId = auth.storeId;
-    _scheduleStoreLoad(storeId);
+    if (widget.autoLoad) {
+      _scheduleStoreLoad(storeId);
+    }
 
     final overview = ref.watch(inventoryPurchaseOverviewProvider);
     final stockStatus = ref.watch(inventoryPurchaseStockStatusProvider);
@@ -201,6 +216,7 @@ class _InventoryPurchaseScreenState
     final items = <Widget>[
       for (var index = 0; index < sections.length; index++)
         _SectionRailItem(
+          key: Key('inventory_section_$index'),
           section: sections[index],
           selected: index == _selectedIndex,
           onTap: () => setState(() => _selectedIndex = index),
@@ -209,8 +225,9 @@ class _InventoryPurchaseScreenState
 
     if (horizontal) {
       return SizedBox(
-        height: 76,
+        height: 88,
         child: ListView.separated(
+          key: const Key('inventory_section_rail'),
           scrollDirection: Axis.horizontal,
           itemCount: items.length,
           separatorBuilder: (_, __) =>
@@ -223,6 +240,7 @@ class _InventoryPurchaseScreenState
     return ToastWorkSurface(
       padding: const EdgeInsets.all(ToastSpacingTokens.sm),
       child: ListView.separated(
+        key: const Key('inventory_section_rail'),
         itemCount: items.length,
         separatorBuilder: (_, __) =>
             const SizedBox(height: ToastSpacingTokens.xs),
@@ -592,6 +610,7 @@ class _InventoryPurchaseScreenState
           creationState.error,
       actions: [
         PosActionButton(
+          key: const Key('inventory_recommendation_run_action'),
           label: l10n.inventoryPurchaseGenerateRecommendation,
           tone: PosActionTone.primary,
           icon: Icons.auto_graph_outlined,
@@ -619,6 +638,7 @@ class _InventoryPurchaseScreenState
           ),
         ),
         PosActionButton(
+          key: const Key('inventory_manual_purchase_order_action'),
           label: l10n.inventoryPurchaseManualOrder,
           tone: PosActionTone.secondary,
           icon: Icons.edit_note_outlined,
@@ -737,6 +757,7 @@ class _InventoryPurchaseScreenState
           }
 
           return AlertDialog(
+            key: const Key('inventory_recommendation_run_dialog'),
             title: Text(l10n.inventoryPurchaseRecommendationInputTitle),
             content: SizedBox(
               width: 420,
@@ -819,6 +840,7 @@ class _InventoryPurchaseScreenState
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
+          key: const Key('inventory_recommendation_adjustment_dialog'),
           title: Text(l10n.inventoryPurchaseRecommendationAdjustment),
           content: SizedBox(
             width: 420,
@@ -1046,6 +1068,7 @@ class _InventoryPurchaseScreenState
                   compact: true,
                 ),
                 PosActionButton(
+                  key: const Key('inventory_repeat_purchase_order_action'),
                   label: l10n.inventoryPurchaseRepeatOrder,
                   tone: PosActionTone.secondary,
                   icon: Icons.repeat_outlined,
@@ -1065,6 +1088,7 @@ class _InventoryPurchaseScreenState
                   compact: true,
                 ),
                 PosActionButton(
+                  key: const Key('inventory_receipt_confirmation_action'),
                   label: l10n.inventoryPurchaseReceiveTitle,
                   tone: PosActionTone.affirm,
                   icon: Icons.local_shipping_outlined,
@@ -1226,6 +1250,7 @@ class _InventoryPurchaseScreenState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        key: const Key('inventory_receipt_confirmation_dialog'),
         title: Text(l10n.inventoryPurchaseReceiveTitle),
         content: SizedBox(
           width: 520,
@@ -1336,6 +1361,7 @@ class _InventoryPurchaseScreenState
           );
 
           return AlertDialog(
+            key: const Key('inventory_stock_audit_dialog'),
             title: Text(l10n.inventoryPurchaseStockAuditInputTitle),
             content: SizedBox(
               width: 780,
@@ -1597,6 +1623,7 @@ class _InventoryPurchaseScreenState
       error: supplierCatalog.error,
       actions: [
         PosActionButton(
+          key: const Key('inventory_supplier_add_action'),
           label: l10n.inventoryPurchaseAddSupplier,
           tone: PosActionTone.primary,
           icon: Icons.add_business_outlined,
@@ -1607,6 +1634,7 @@ class _InventoryPurchaseScreenState
           compact: true,
         ),
         PosActionButton(
+          key: const Key('inventory_supplier_item_add_action'),
           label: l10n.inventoryPurchaseLinkItem,
           tone: PosActionTone.secondary,
           icon: Icons.link_outlined,
@@ -1748,6 +1776,7 @@ class _InventoryPurchaseScreenState
       error: productCatalog.error ?? supplierCatalog.error,
       actions: [
         PosActionButton(
+          key: const Key('inventory_product_add_action'),
           label: l10n.inventoryPurchaseAddProduct,
           tone: PosActionTone.primary,
           icon: Icons.add_box_outlined,
@@ -1900,6 +1929,7 @@ class _InventoryPurchaseScreenState
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        key: const Key('inventory_supplier_dialog'),
         title: Text(
           supplier == null
               ? l10n.inventoryPurchaseAddSupplier
@@ -2078,6 +2108,7 @@ class _InventoryPurchaseScreenState
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
           return AlertDialog(
+            key: const Key('inventory_product_dialog'),
             title: Text(
               product == null
                   ? l10n.inventoryPurchaseAddProduct
@@ -2372,6 +2403,7 @@ class _InventoryPurchaseScreenState
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
           return AlertDialog(
+            key: const Key('inventory_supplier_item_dialog'),
             title: Text(
               supplierItem == null
                   ? l10n.inventoryPurchaseLinkSupplierItem
@@ -2387,6 +2419,7 @@ class _InventoryPurchaseScreenState
                       children: [
                         DropdownButtonFormField<String>(
                           initialValue: supplierId,
+                          isExpanded: true,
                           decoration: InputDecoration(
                             labelText: l10n.inventoryPurchaseSupplierRequired,
                           ),
@@ -2399,6 +2432,8 @@ class _InventoryPurchaseScreenState
                                     supplier['supplier_name'],
                                     fallback: '-',
                                   ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                           ],
@@ -2602,6 +2637,7 @@ class _InventoryPurchaseScreenState
             (item) => item['id']?.toString() == supplierItemId,
           );
           return AlertDialog(
+            key: const Key('inventory_manual_purchase_order_dialog'),
             title: Text(l10n.inventoryPurchaseManualOrder),
             content: SizedBox(
               width: 760,
@@ -2665,6 +2701,7 @@ class _InventoryPurchaseScreenState
                             children: [
                               DropdownButtonFormField<String>(
                                 initialValue: supplierItemId,
+                                isExpanded: true,
                                 decoration: InputDecoration(
                                   labelText: l10n.inventoryPurchaseItemRequired,
                                 ),
@@ -2672,7 +2709,11 @@ class _InventoryPurchaseScreenState
                                   for (final item in selectedSupplierItems)
                                     DropdownMenuItem(
                                       value: item['id'].toString(),
-                                      child: Text(_supplierItemLabel(item)),
+                                      child: Text(
+                                        _supplierItemLabel(item),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
                                 ],
                                 onChanged: (value) {
@@ -2840,6 +2881,7 @@ class _InventoryPurchaseScreenState
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        key: const Key('inventory_repeat_purchase_order_dialog'),
         title: Text(l10n.inventoryPurchaseRepeatOrder),
         content: SizedBox(
           width: 720,
@@ -2974,6 +3016,7 @@ class _InventoryPurchaseScreenState
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
           return AlertDialog(
+            key: const Key('inventory_recipe_line_dialog'),
             title: Text(
               recipe == null
                   ? l10n.inventoryPurchaseAddRecipeLine
@@ -3118,6 +3161,7 @@ class _InventoryPurchaseScreenState
             (product) => product['id']?.toString() == productId,
           );
           return AlertDialog(
+            key: const Key('inventory_new_menu_dialog'),
             title: Text(l10n.inventoryPurchaseNewMenuTitle),
             content: SizedBox(
               width: 760,
@@ -3402,6 +3446,7 @@ class _InventoryPurchaseScreenState
       error: recipeState.error ?? productCatalog.error,
       actions: [
         PosActionButton(
+          key: const Key('inventory_recipe_line_add_action'),
           label: l10n.inventoryPurchaseAddRecipeLine,
           tone: PosActionTone.primary,
           icon: Icons.add_outlined,
@@ -3775,6 +3820,7 @@ class _InventoryPurchaseScreenState
       error: stockStatus.error ?? stockAuditState.error,
       actions: [
         PosActionButton(
+          key: const Key('inventory_stock_audit_action'),
           label: l10n.inventoryPurchaseStockAuditInput,
           tone: PosActionTone.primary,
           icon: Icons.fact_check_outlined,
@@ -3856,6 +3902,7 @@ class _InventoryPurchaseScreenState
       error: newMenuState.error ?? productCatalog.error,
       actions: [
         PosActionButton(
+          key: const Key('inventory_new_menu_action'),
           label: l10n.inventoryPurchaseNewMenuTitle,
           tone: PosActionTone.primary,
           icon: Icons.restaurant_menu_outlined,
@@ -3954,6 +4001,7 @@ class _InventoryPurchaseSection {
 
 class _SectionRailItem extends StatelessWidget {
   const _SectionRailItem({
+    super.key,
     required this.section,
     required this.selected,
     required this.onTap,
@@ -3968,62 +4016,68 @@ class _SectionRailItem extends StatelessWidget {
     final color = selected
         ? ToastColorTokens.accent
         : ToastColorTokens.textSecondary;
-    return Material(
-      color: selected ? ToastColorTokens.accentMuted : Colors.transparent,
-      borderRadius: ToastRadiusTokens.sm,
-      child: InkWell(
+    return Semantics(
+      button: true,
+      enabled: true,
+      selected: selected,
+      label: section.label,
+      child: Material(
+        color: selected ? ToastColorTokens.accentMuted : Colors.transparent,
         borderRadius: ToastRadiusTokens.sm,
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 54),
-          padding: const EdgeInsets.symmetric(
-            horizontal: ToastSpacingTokens.md,
-            vertical: ToastSpacingTokens.sm,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: ToastRadiusTokens.sm,
-            border: Border.all(
-              color: selected
-                  ? ToastColorTokens.accent.withValues(alpha: 0.2)
-                  : Colors.transparent,
+        child: InkWell(
+          borderRadius: ToastRadiusTokens.sm,
+          onTap: onTap,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 54),
+            padding: const EdgeInsets.symmetric(
+              horizontal: ToastSpacingTokens.md,
+              vertical: ToastSpacingTokens.sm,
             ),
-          ),
-          child: Row(
-            children: [
-              Icon(section.icon, color: color, size: 18),
-              const SizedBox(width: ToastSpacingTokens.sm),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      section.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: _textStyle(
-                        size: 13,
-                        weight: FontWeight.w800,
-                        color: selected
-                            ? ToastColorTokens.accentStrong
-                            : ToastColorTokens.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      section.subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: _textStyle(
-                        size: 10.5,
-                        weight: FontWeight.w600,
-                        color: ToastColorTokens.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
+            decoration: BoxDecoration(
+              borderRadius: ToastRadiusTokens.sm,
+              border: Border.all(
+                color: selected
+                    ? ToastColorTokens.accent.withValues(alpha: 0.2)
+                    : Colors.transparent,
               ),
-            ],
+            ),
+            child: Row(
+              children: [
+                Icon(section.icon, color: color, size: 18),
+                const SizedBox(width: ToastSpacingTokens.sm),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        section.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: _textStyle(
+                          size: 13,
+                          weight: FontWeight.w800,
+                          color: selected
+                              ? ToastColorTokens.accentStrong
+                              : ToastColorTokens.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        section.subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: _textStyle(
+                          size: 10.5,
+                          weight: FontWeight.w600,
+                          color: ToastColorTokens.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -4056,6 +4110,9 @@ class _PageShell extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compactPhone = constraints.maxWidth < 430;
+          final stackHeader =
+              constraints.maxWidth < 760 ||
+              MediaQuery.textScalerOf(context).scale(1) > 1.5;
           final body = Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: children,
@@ -4085,7 +4142,7 @@ class _PageShell extends StatelessWidget {
           final actionWrap = Wrap(
             spacing: ToastSpacingTokens.sm,
             runSpacing: ToastSpacingTokens.sm,
-            alignment: compactPhone ? WrapAlignment.start : WrapAlignment.end,
+            alignment: stackHeader ? WrapAlignment.start : WrapAlignment.end,
             children: actions,
           );
 
@@ -4099,7 +4156,7 @@ class _PageShell extends StatelessWidget {
                   compactPhone ? 16 : 20,
                   14,
                 ),
-                child: compactPhone
+                child: stackHeader
                     ? Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -4170,20 +4227,37 @@ class _DataCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: _textStyle(
-                    size: 15,
-                    weight: FontWeight.w900,
-                    color: ToastColorTokens.textPrimary,
-                  ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final titleText = Text(
+                title,
+                style: _textStyle(
+                  size: 15,
+                  weight: FontWeight.w900,
+                  color: ToastColorTokens.textPrimary,
                 ),
-              ),
-              if (trailing != null) trailing!,
-            ],
+              );
+              if (trailing == null) return titleText;
+
+              final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.5;
+              if (constraints.maxWidth < 520 || largeText) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    titleText,
+                    const SizedBox(height: ToastSpacingTokens.sm),
+                    trailing!,
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: titleText),
+                  const SizedBox(width: ToastSpacingTokens.sm),
+                  trailing!,
+                ],
+              );
+            },
           ),
           const SizedBox(height: ToastSpacingTokens.md),
           child,
@@ -4210,8 +4284,8 @@ class _SimpleDataTable extends StatelessWidget {
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 720),
+      child: SizedBox(
+        width: 720,
         child: Table(
           defaultVerticalAlignment: TableCellVerticalAlignment.middle,
           columnWidths: {
@@ -5700,8 +5774,8 @@ class _PurchaseRecommendationGrid extends StatelessWidget {
         const SizedBox(height: ToastSpacingTokens.md),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minWidth: 1240),
+          child: SizedBox(
+            width: 1240,
             child: Column(
               children: [
                 PosDataGridRow(
@@ -6249,6 +6323,7 @@ class _RecommendationAdjustmentRow extends StatelessWidget {
           ),
           const SizedBox(width: ToastSpacingTokens.sm),
           PosActionButton(
+            key: ValueKey('inventory_recommendation_adjust_${line['id']}'),
             label: l10n.inventoryPurchaseAdjustQuantity,
             tone: PosActionTone.secondary,
             icon: Icons.tune_outlined,

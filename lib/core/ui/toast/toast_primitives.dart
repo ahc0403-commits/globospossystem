@@ -210,6 +210,31 @@ class ToastMetricStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        if (!constraints.hasBoundedWidth || !constraints.maxWidth.isFinite) {
+          final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.5;
+          final tileWidth = largeText ? 220.0 : 160.0;
+          return Container(
+            decoration: BoxDecoration(
+              color: AppColors.surface0,
+              borderRadius: AppRadius.lg,
+              border: Border.all(color: AppColors.surface3),
+            ),
+            padding: const EdgeInsets.all(6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var index = 0; index < metrics.length; index++) ...[
+                  SizedBox(
+                    width: tileWidth,
+                    child: _tile(metrics[index], compactPhone: false),
+                  ),
+                  if (index != metrics.length - 1) const SizedBox(width: 8),
+                ],
+              ],
+            ),
+          );
+        }
+
         final compactPhone = constraints.maxWidth < 420;
         final columns = compactPhone
             ? 1
@@ -827,24 +852,33 @@ class ToastFilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final display = count != null ? '$label ($count)' : label;
-    return InkWell(
-      onTap: onSelected,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.amber500 : AppColors.surface1,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: selected ? AppColors.amber500 : AppColors.surface2,
+    return Semantics(
+      button: true,
+      enabled: true,
+      selected: selected,
+      label: display,
+      child: InkWell(
+        onTap: onSelected,
+        borderRadius: ToastRadiusTokens.pill,
+        child: Container(
+          constraints: const BoxConstraints(
+            minHeight: PosDensity.touchTargetMin,
           ),
-        ),
-        child: Text(
-          display,
-          style: AppFonts.system(
-            color: selected ? AppColors.surface0 : AppColors.textPrimary,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: selected ? PosColors.accent : PosColors.surface,
+            borderRadius: ToastRadiusTokens.pill,
+            border: Border.all(
+              color: selected ? PosColors.accent : PosColors.border,
+            ),
+          ),
+          child: Text(
+            display,
+            style: AppFonts.system(
+              color: selected ? Colors.white : PosColors.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ),
@@ -1036,19 +1070,19 @@ class ToastConfirmDialog {
     return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface1,
+        backgroundColor: PosColors.surface,
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(icon, color: AppColors.amber500, size: 20),
+              Icon(icon, color: PosColors.accent, size: 20),
               const SizedBox(width: 8),
             ],
             Flexible(
               child: Text(
                 title,
                 style: AppFonts.system(
-                  color: AppColors.textPrimary,
+                  color: PosColors.textPrimary,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -1059,14 +1093,14 @@ class ToastConfirmDialog {
             ? null
             : Text(
                 description,
-                style: AppFonts.system(color: AppColors.textSecondary),
+                style: AppFonts.system(color: PosColors.textSecondary),
               ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: Text(
               cancelLabel,
-              style: AppFonts.system(color: AppColors.textSecondary),
+              style: AppFonts.system(color: PosColors.textSecondary),
             ),
           ),
           SizedBox(

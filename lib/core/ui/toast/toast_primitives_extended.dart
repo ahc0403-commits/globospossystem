@@ -404,12 +404,14 @@ class ToastStatusBadge extends StatelessWidget {
             Icon(icon, size: compact ? 13 : 15, color: textColor),
             const SizedBox(width: AppSpacing.xs),
           ],
-          Text(
-            label,
-            style: AppFonts.system(
-              color: textColor,
-              fontSize: compact ? 11 : 11.5,
-              fontWeight: FontWeight.w800,
+          Flexible(
+            child: Text(
+              label,
+              style: AppFonts.system(
+                color: textColor,
+                fontSize: compact ? 11 : 11.5,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ],
@@ -452,9 +454,15 @@ class ToastShell extends StatelessWidget {
       ],
     );
 
-    return ColoredBox(
-      color: ToastColorTokens.canvas,
-      child: safeArea ? SafeArea(child: content) : content,
+    return Semantics(
+      container: true,
+      child: FocusTraversalGroup(
+        policy: ReadingOrderTraversalPolicy(),
+        child: Material(
+          color: ToastColorTokens.canvas,
+          child: safeArea ? SafeArea(child: content) : content,
+        ),
+      ),
     );
   }
 }
@@ -492,47 +500,54 @@ class ToastResponsiveBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final resolvedPadding =
-            padding ?? _toastResponsivePagePadding(constraints.maxWidth);
-        final insets = resolvedPadding.resolve(Directionality.of(context));
-        final availableWidth = math.max(
-          0.0,
-          constraints.maxWidth - insets.horizontal,
-        );
-        final availableHeight = math.max(
-          0.0,
-          constraints.maxHeight - insets.vertical,
-        );
-        final resolvedWidth = math.min(maxWidth, availableWidth);
-        final narrowLayout =
-            constraints.maxWidth < _toastSingleScrollOwnerBreakpoint;
-        final preferredHeight = narrowLayout && !fitToViewportWhenNarrow
-            ? math.max(
-                math.max(availableHeight, minHeight),
-                _toastCompactPageMinHeight,
-              )
-            : math.max(availableHeight, minHeight);
-        final useSingleScrollOwner = fitToViewportWhenNarrow && narrowLayout;
-        final effectiveHeight = useSingleScrollOwner
-            ? availableHeight
-            : preferredHeight;
-        final body = Align(
-          alignment: alignment,
-          child: SizedBox(
-            width: resolvedWidth,
-            height: effectiveHeight,
-            child: child,
-          ),
-        );
+    return Semantics(
+      container: true,
+      child: FocusTraversalGroup(
+        policy: ReadingOrderTraversalPolicy(),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final resolvedPadding =
+                padding ?? _toastResponsivePagePadding(constraints.maxWidth);
+            final insets = resolvedPadding.resolve(Directionality.of(context));
+            final availableWidth = math.max(
+              0.0,
+              constraints.maxWidth - insets.horizontal,
+            );
+            final availableHeight = math.max(
+              0.0,
+              constraints.maxHeight - insets.vertical,
+            );
+            final resolvedWidth = math.min(maxWidth, availableWidth);
+            final narrowLayout =
+                constraints.maxWidth < _toastSingleScrollOwnerBreakpoint;
+            final preferredHeight = narrowLayout && !fitToViewportWhenNarrow
+                ? math.max(
+                    math.max(availableHeight, minHeight),
+                    _toastCompactPageMinHeight,
+                  )
+                : math.max(availableHeight, minHeight);
+            final useSingleScrollOwner =
+                fitToViewportWhenNarrow && narrowLayout;
+            final effectiveHeight = useSingleScrollOwner
+                ? availableHeight
+                : preferredHeight;
+            final body = Align(
+              alignment: alignment,
+              child: SizedBox(
+                width: resolvedWidth,
+                height: effectiveHeight,
+                child: child,
+              ),
+            );
 
-        if (!narrowLayout && effectiveHeight <= availableHeight) {
-          return Padding(padding: resolvedPadding, child: body);
-        }
+            if (!narrowLayout && effectiveHeight <= availableHeight) {
+              return Padding(padding: resolvedPadding, child: body);
+            }
 
-        return ToastViewportScroll(padding: resolvedPadding, child: body);
-      },
+            return ToastViewportScroll(padding: resolvedPadding, child: body);
+          },
+        ),
+      ),
     );
   }
 }
@@ -555,40 +570,46 @@ class ToastResponsiveScrollBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final resolvedPadding =
-            padding ?? _toastResponsivePagePadding(constraints.maxWidth);
-        final insets = resolvedPadding.resolve(Directionality.of(context));
-        final availableWidth = math.max(
-          0.0,
-          constraints.maxWidth - insets.horizontal,
-        );
-        final resolvedWidth = math.min(maxWidth, availableWidth);
+    return Semantics(
+      container: true,
+      child: FocusTraversalGroup(
+        policy: ReadingOrderTraversalPolicy(),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final resolvedPadding =
+                padding ?? _toastResponsivePagePadding(constraints.maxWidth);
+            final insets = resolvedPadding.resolve(Directionality.of(context));
+            final availableWidth = math.max(
+              0.0,
+              constraints.maxWidth - insets.horizontal,
+            );
+            final resolvedWidth = math.min(maxWidth, availableWidth);
 
-        return ListView(
-          controller: controller,
-          physics:
-              physics ??
-              const AlwaysScrollableScrollPhysics(
-                parent: ClampingScrollPhysics(),
-              ),
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: resolvedPadding,
-          children: [
-            Align(
-              alignment: Alignment.topCenter,
-              child: SizedBox(
-                width: resolvedWidth,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: children,
+            return ListView(
+              controller: controller,
+              physics:
+                  physics ??
+                  const AlwaysScrollableScrollPhysics(
+                    parent: ClampingScrollPhysics(),
+                  ),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: resolvedPadding,
+              children: [
+                Align(
+                  alignment: Alignment.topCenter,
+                  child: SizedBox(
+                    width: resolvedWidth,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: children,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          ],
-        );
-      },
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 }
@@ -680,37 +701,46 @@ class _ToastDenseListRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = statusColor ?? ToastColorTokens.accent;
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 140),
-      curve: Curves.easeOutCubic,
-      decoration: BoxDecoration(
-        color: selected ? ToastColorTokens.selectedRow : Colors.transparent,
-        borderRadius: ToastRadiusTokens.md,
-        border: Border.all(
-          color: selected ? accent.withValues(alpha: 0.22) : Colors.transparent,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
+    return Semantics(
+      button: onTap != null,
+      enabled: onTap != null,
+      selected: selected,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          color: selected ? ToastColorTokens.selectedRow : Colors.transparent,
           borderRadius: ToastRadiusTokens.md,
-          hoverColor: ToastColorTokens.selectedRow.withValues(alpha: 0.62),
-          focusColor: accent.withValues(alpha: 0.08),
-          splashFactory: NoSplash.splashFactory,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: minHeight),
-            child: Row(
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 140),
-                  width: selected ? 4 : 0,
-                  color: selected ? accent : Colors.transparent,
-                ),
-                Expanded(
-                  child: Padding(padding: padding, child: child),
-                ),
-              ],
+          border: Border.all(
+            color: selected
+                ? accent.withValues(alpha: 0.22)
+                : Colors.transparent,
+          ),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: ToastRadiusTokens.md,
+            hoverColor: ToastColorTokens.selectedRow.withValues(alpha: 0.62),
+            focusColor: accent.withValues(alpha: 0.08),
+            splashFactory: NoSplash.splashFactory,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: math.max(minHeight, PosDensity.touchTargetMin),
+              ),
+              child: Row(
+                children: [
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 140),
+                    width: selected ? 4 : 0,
+                    color: selected ? accent : Colors.transparent,
+                  ),
+                  Expanded(
+                    child: Padding(padding: padding, child: child),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -2121,6 +2151,9 @@ class ToastActionButton extends StatelessWidget {
           onTap: isDisabled ? null : onPressed,
           borderRadius: ToastRadiusTokens.sm,
           child: Container(
+            constraints: const BoxConstraints(
+              minHeight: PosDensity.touchTargetMin,
+            ),
             padding: EdgeInsets.symmetric(
               horizontal: compact ? 10 : 14,
               vertical: compact ? 6 : 10,

@@ -95,152 +95,147 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         border: Border(right: BorderSide(color: PosColors.border)),
       ),
       padding: const EdgeInsets.fromLTRB(28, 28, 28, 20),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: PosColors.accent,
-                  borderRadius: AppRadius.sm,
-                ),
-                child: Text(
-                  'G',
-                  style: AppFonts.system(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'GLOBOS Operations',
-                      style: AppFonts.system(
-                        fontSize: 17,
-                        color: PosColors.text,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    Text(
-                      l10n.loginBrandBadge,
-                      style: AppTextStyles.operationalCaption(
-                        color: PosColors.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            decoration: BoxDecoration(
-              color: PosColors.panelMuted,
-              border: Border.all(color: PosColors.border),
-              borderRadius: ToastRadiusTokens.xs,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Text(
-                  l10n.loginBrandTitle,
-                  style: AppFonts.system(
-                    fontSize: 22,
-                    color: PosColors.text,
-                    fontWeight: FontWeight.w900,
+                Container(
+                  width: 36,
+                  height: 36,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: PosColors.accent,
+                    borderRadius: AppRadius.sm,
+                  ),
+                  child: Text(
+                    'G',
+                    style: AppFonts.system(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                 ),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  l10n.loginBrandDescription,
-                  style: AppFonts.system(
-                    fontSize: 13,
-                    color: PosColors.textSecondary,
-                    height: 1.45,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          Container(height: 1, color: PosColors.border),
-          const SizedBox(height: AppSpacing.md),
-          Text(
-            l10n.loginShiftFocus,
-            style: AppFonts.system(
-              fontSize: 12,
-              color: PosColors.textMuted,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          _buildBrandMetric(
-            l10n.loginMetricDiningRoomTitle,
-            l10n.loginMetricDiningRoomSubtitle,
-            Icons.table_bar_outlined,
-          ),
-          _buildBrandMetric(
-            l10n.loginMetricKitchenTitle,
-            l10n.loginMetricKitchenSubtitle,
-            Icons.soup_kitchen_outlined,
-          ),
-          _buildBrandMetric(
-            l10n.loginMetricCheckoutTitle,
-            l10n.loginMetricCheckoutSubtitle,
-            Icons.payments_outlined,
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.md,
-              vertical: AppSpacing.sm,
-            ),
-            decoration: const BoxDecoration(
-              color: PosColors.panelMuted,
-              border: Border(
-                top: BorderSide(color: PosColors.border),
-                bottom: BorderSide(color: PosColors.border),
-              ),
-            ),
-            child: Row(
-              children: [
+                const SizedBox(width: AppSpacing.md),
                 Expanded(
-                  child: Wrap(
-                    spacing: AppSpacing.sm,
-                    runSpacing: AppSpacing.sm,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      ToastStatusBadge(
-                        label: l10n.loginFastOrdering,
-                        color: PosColors.info,
+                      Text(
+                        'GLOBOS Operations',
+                        style: AppFonts.system(
+                          fontSize: 17,
+                          color: PosColors.text,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
-                      ToastStatusBadge(
-                        label: l10n.loginPaymentReady,
-                        color: PosColors.accent,
+                      Text(
+                        l10n.loginBrandBadge,
+                        style: AppTextStyles.operationalCaption(
+                          color: PosColors.textMuted,
+                        ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: AppSpacing.md),
-                ToastStatusBadge(
-                  label: l10n.loginTabletReady,
-                  color: PosColors.success,
-                ),
               ],
             ),
-          ),
-        ],
+            const SizedBox(height: AppSpacing.lg),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              decoration: BoxDecoration(
+                color: PosColors.panelMuted,
+                border: Border.all(color: PosColors.border),
+                borderRadius: ToastRadiusTokens.xs,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.loginBrandTitle,
+                    style: AppFonts.system(
+                      fontSize: 22,
+                      color: PosColors.text,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    l10n.loginBrandDescription,
+                    style: AppFonts.system(
+                      fontSize: 13,
+                      color: PosColors.textSecondary,
+                      height: 1.45,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Container(height: 1, color: PosColors.border),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              l10n.loginShiftFocus,
+              style: AppFonts.system(
+                fontSize: 12,
+                color: PosColors.textMuted,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            _buildBrandMetric(
+              l10n.loginMetricDiningRoomTitle,
+              l10n.loginMetricDiningRoomSubtitle,
+              Icons.table_bar_outlined,
+            ),
+            _buildBrandMetric(
+              l10n.loginMetricKitchenTitle,
+              l10n.loginMetricKitchenSubtitle,
+              Icons.soup_kitchen_outlined,
+            ),
+            _buildBrandMetric(
+              l10n.loginMetricCheckoutTitle,
+              l10n.loginMetricCheckoutSubtitle,
+              Icons.payments_outlined,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm,
+              ),
+              decoration: const BoxDecoration(
+                color: PosColors.panelMuted,
+                border: Border(
+                  top: BorderSide(color: PosColors.border),
+                  bottom: BorderSide(color: PosColors.border),
+                ),
+              ),
+              child: Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
+                children: [
+                  ToastStatusBadge(
+                    label: l10n.loginFastOrdering,
+                    color: PosColors.info,
+                  ),
+                  ToastStatusBadge(
+                    label: l10n.loginPaymentReady,
+                    color: PosColors.accent,
+                  ),
+                  ToastStatusBadge(
+                    label: l10n.loginTabletReady,
+                    color: PosColors.success,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -356,16 +351,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 Text(
                   _localizedAuthError(context, authState.errorMessage!),
                   key: const Key('auth_error_text'),
-                  style: AppFonts.system(
-                    fontSize: 13,
-                    color: PosColors.danger,
-                  ),
+                  style: AppFonts.system(fontSize: 13, color: PosColors.danger),
                 ),
               ],
               const SizedBox(height: AppSpacing.lg),
               SizedBox(
                 width: double.infinity,
-                height: 46,
+                height: PosDensity.touchTargetMin,
                 child: ElevatedButton(
                   key: const Key('login_submit_button'),
                   style: ElevatedButton.styleFrom(

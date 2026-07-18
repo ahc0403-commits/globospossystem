@@ -114,18 +114,20 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
       groups: groups,
       selectedIndex: safeIndex,
       onItemSelected: (index) => setState(() => _tabIndex = index),
-      topBarTrailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const AppNavBar(),
-          const SizedBox(width: 10),
-          ToastStatusBadge(
-            label: l10n.superAdminHq,
-            color: AppColors.statusOccupied,
-            compact: true,
-          ),
-        ],
-      ),
+      topBarTrailing: MediaQuery.sizeOf(context).width < 600
+          ? const AppNavBar()
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const AppNavBar(),
+                const SizedBox(width: 10),
+                ToastStatusBadge(
+                  label: l10n.superAdminHq,
+                  color: AppColors.statusOccupied,
+                  compact: true,
+                ),
+              ],
+            ),
       bottomItems: [
         ToastSidebarItem(
           icon: Icons.logout,
@@ -135,64 +137,115 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
           onTap: () => ref.read(authProvider.notifier).logout(),
         ),
       ],
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: ToastWorkSurface(
-              padding: EdgeInsets.zero,
-              child: Column(
-                children: [
-                  ToastSelectedContextHeader(
-                    title: selected.label,
-                    subtitle:
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final compactContext =
+              constraints.maxWidth < 600 ||
+              MediaQuery.textScalerOf(context).scale(1) > 1.5;
+          final contextHeader = compactContext
+              ? ToastWorkSurface(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        selected.label,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w800,
+                            ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
                         selected.helperLabel ?? l10n.superAdminDefaultSubtitle,
-                    urgentReason: _superAdminUrgencyCopy(
-                      context,
-                      selected.urgency,
-                    ),
-                    noteColor: _superAdminUrgencyNoteColor(selected.urgency),
-                    noteBackgroundColor: _superAdminUrgencyNoteBackground(
-                      selected.urgency,
-                    ),
-                    noteIcon: _superAdminUrgencyNoteIcon(selected.urgency),
-                    trailing: ToastStatusBadge(
-                      label: _superAdminUrgencyLabel(context, selected.urgency),
-                      color: _superAdminUrgencyColor(selected.urgency),
-                      compact: true,
-                    ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ToastStatusBadge(
+                        label: _superAdminUrgencyLabel(
+                          context,
+                          selected.urgency,
+                        ),
+                        color: _superAdminUrgencyColor(selected.urgency),
+                        compact: true,
+                      ),
+                    ],
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-                    child: ToastMetricStrip(
-                      metrics: [
-                        ToastMetric(
-                          label: l10n.superAdminStores,
-                          value: '${state.filteredRestaurants.length}',
+                )
+              : ToastWorkSurface(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: [
+                      ToastSelectedContextHeader(
+                        title: selected.label,
+                        subtitle:
+                            selected.helperLabel ??
+                            l10n.superAdminDefaultSubtitle,
+                        urgentReason: _superAdminUrgencyCopy(
+                          context,
+                          selected.urgency,
                         ),
-                        ToastMetric(
-                          label: l10n.superAdminBrands,
-                          value: '${state.brands.length}',
+                        noteColor: _superAdminUrgencyNoteColor(
+                          selected.urgency,
                         ),
-                        ToastMetric(
-                          label: l10n.superAdminSurface,
-                          value: '${safeIndex + 1}/${items.length}',
-                          tone: _superAdminUrgencyColor(selected.urgency),
+                        noteBackgroundColor: _superAdminUrgencyNoteBackground(
+                          selected.urgency,
                         ),
-                      ],
-                    ),
+                        noteIcon: _superAdminUrgencyNoteIcon(selected.urgency),
+                        trailing: ToastStatusBadge(
+                          label: _superAdminUrgencyLabel(
+                            context,
+                            selected.urgency,
+                          ),
+                          color: _superAdminUrgencyColor(selected.urgency),
+                          compact: true,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                        child: ToastMetricStrip(
+                          metrics: [
+                            ToastMetric(
+                              label: l10n.superAdminStores,
+                              value: '${state.filteredRestaurants.length}',
+                            ),
+                            ToastMetric(
+                              label: l10n.superAdminBrands,
+                              value: '${state.brands.length}',
+                            ),
+                            ToastMetric(
+                              label: l10n.superAdminSurface,
+                              value: '${safeIndex + 1}/${items.length}',
+                              tone: _superAdminUrgencyColor(selected.urgency),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                );
+
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: contextHeader,
               ),
-            ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: tabs[safeIndex],
-            ),
-          ),
-        ],
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: tabs[safeIndex],
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -354,6 +407,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
               ),
             );
             final action = FilledButton.icon(
+              key: const Key('super_admin_global_template_add_action'),
               onPressed: () =>
                   _showGlobalTemplateSheet(context, ref, picker, notifier),
               style: FilledButton.styleFrom(
@@ -572,6 +626,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return Padding(
+              key: const Key('super_admin_global_template_sheet'),
               padding: EdgeInsets.only(
                 left: 16,
                 right: 16,
@@ -708,6 +763,7 @@ class _QcGlobalTemplatesTab extends ConsumerWidget {
       },
     );
 
+    await Future<void>.delayed(kThemeAnimationDuration);
     categoryController.dispose();
     criteriaController.dispose();
   }
@@ -886,6 +942,7 @@ class _RestaurantsTab extends StatelessWidget {
                 label: Text(l10n.superAdminGoToOfficeSystem),
               ),
               FilledButton.icon(
+                key: const Key('super_admin_add_store_action'),
                 onPressed: () =>
                     _showRestaurantSheet(context, notifier: notifier),
                 style: FilledButton.styleFrom(
@@ -897,7 +954,8 @@ class _RestaurantsTab extends StatelessWidget {
               ),
             ];
 
-            if (constraints.maxWidth < 560) {
+            if (constraints.maxWidth < 560 ||
+                MediaQuery.textScalerOf(context).scale(1) > 1.5) {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -1114,6 +1172,9 @@ class _RestaurantsTab extends StatelessWidget {
                           _modeBadge(context, restaurant.operationMode),
                           const SizedBox(width: 10),
                           OutlinedButton(
+                            key: Key(
+                              'super_admin_manage_store_${restaurant.id}',
+                            ),
                             onPressed: () => _showRestaurantSheet(
                               context,
                               notifier: notifier,
@@ -1367,6 +1428,7 @@ class _RestaurantsTab extends StatelessWidget {
           final continueSetup = await showDialog<bool>(
             context: context,
             builder: (dialogContext) => AlertDialog(
+              key: const Key('super_admin_continue_store_setup_dialog'),
               title: Text(l10n.storeSetupTitle),
               content: Text(l10n.storeSetupTemplateDescription),
               actions: [
@@ -1397,6 +1459,7 @@ class _RestaurantsTab extends StatelessWidget {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return Padding(
+              key: const Key('super_admin_store_sheet'),
               padding: EdgeInsets.only(
                 left: 16,
                 right: 16,
@@ -1625,6 +1688,7 @@ class _RestaurantsTab extends StatelessWidget {
       },
     );
 
+    await Future<void>.delayed(kThemeAnimationDuration);
     nameController.dispose();
     addressController.dispose();
     slugController.dispose();
@@ -1645,6 +1709,7 @@ class _RestaurantsTab extends StatelessWidget {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
             return AlertDialog(
+              key: const Key('super_admin_close_store_dialog'),
               backgroundColor: AppColors.surface1,
               title: Text(
                 l10n.superAdminCloseStoreTitle,
@@ -1703,6 +1768,7 @@ class _RestaurantsTab extends StatelessWidget {
     );
 
     if (confirmed != true) {
+      await Future<void>.delayed(kThemeAnimationDuration);
       reasonController.dispose();
       return;
     }
@@ -1711,6 +1777,7 @@ class _RestaurantsTab extends StatelessWidget {
       store.id,
       reasonController.text.trim(),
     );
+    await Future<void>.delayed(kThemeAnimationDuration);
     reasonController.dispose();
     if (!context.mounted) return;
 

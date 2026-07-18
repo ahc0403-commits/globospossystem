@@ -14,7 +14,9 @@ import '../../auth/auth_provider.dart';
 import '../../inventory/inventory_provider.dart';
 
 class InventoryTab extends ConsumerStatefulWidget {
-  const InventoryTab({super.key});
+  const InventoryTab({super.key, this.autoLoad = true});
+
+  final bool autoLoad;
 
   @override
   ConsumerState<InventoryTab> createState() => _InventoryTabState();
@@ -193,7 +195,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     ];
     _ensureTabController(tabs.length);
 
-    if (storeId != null && _initializedRestaurantId != storeId) {
+    if (widget.autoLoad &&
+        storeId != null &&
+        _initializedRestaurantId != storeId) {
       _initializedRestaurantId = storeId;
       Future.microtask(() => _initialize(storeId));
     }
@@ -325,6 +329,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                   children: [
                     for (var index = 0; index < tabs.length; index++)
                       _InventorySurfaceTab(
+                        key: Key('admin_inventory_surface_${tabs[index]}'),
                         label: _inventorySurfaceDisplayLabel(tabs[index]),
                         selected: index == _selectedSurfaceIndex,
                         onTap: () => controller.animateTo(index),
@@ -420,6 +425,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               ),
               const Spacer(),
               FilledButton.icon(
+                key: const Key('admin_inventory_ingredient_add_action'),
                 onPressed: storeId == null
                     ? null
                     : () => _showIngredientDialog(context, storeId, notifier),
@@ -867,6 +873,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               ),
               const Spacer(),
               FilledButton.icon(
+                key: const Key('admin_inventory_recipe_add_action'),
                 onPressed: storeId == null || menuItems.isEmpty
                     ? null
                     : () => _showUpsertRecipeDialog(
@@ -1692,10 +1699,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           l10n.inventoryPurchaseOverviewSubtitle,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: AppFonts.system(
-            color: AppColors.textSecondary,
-            fontSize: 12,
-          ),
+          style: AppFonts.system(color: AppColors.textSecondary, fontSize: 12),
         ),
         children: [
           _buildInventoryOperatingSummarySection(context, operatingSummary),
@@ -1799,6 +1803,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             children: [
               Expanded(
                 child: FilledButton.icon(
+                  key: const Key('admin_inventory_recommendation_run_action'),
                   onPressed:
                       storeId == null ||
                           overview.isLoading ||
@@ -2651,6 +2656,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               children: [
                 Expanded(
                   child: FilledButton.icon(
+                    key: const Key(
+                      'admin_inventory_create_purchase_orders_action',
+                    ),
                     onPressed:
                         storeId == null ||
                             snapshot.isLoading ||
@@ -4136,10 +4144,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       ),
       child: Text(
         reason,
-        style: AppFonts.system(
-          color: AppColors.textSecondary,
-          fontSize: 12,
-        ),
+        style: AppFonts.system(color: AppColors.textSecondary, fontSize: 12),
       ),
     );
   }
@@ -5712,6 +5717,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         return StatefulBuilder(
           builder: (dialogContext, setModalState) {
             return AlertDialog(
+              key: const Key('admin_inventory_recommendation_run_dialog'),
               backgroundColor: AppColors.surface1,
               title: Text(
                 'Inventory Recommendation Trigger',
@@ -5831,6 +5837,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       },
     );
 
+    await Future<void>.delayed(kThemeAnimationDuration);
     targetDaysController.dispose();
   }
 
@@ -5847,6 +5854,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         return StatefulBuilder(
           builder: (dialogContext, setModalState) {
             return AlertDialog(
+              key: const Key('admin_inventory_create_purchase_orders_dialog'),
               backgroundColor: AppColors.surface1,
               title: Text(
                 'Create Purchase Orders',
@@ -5991,10 +5999,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
           ),
           Text(
             value.toStringAsFixed(3),
-            style: AppFonts.system(
-              color: AppColors.amber500,
-              fontSize: 26,
-            ),
+            style: AppFonts.system(color: AppColors.amber500, fontSize: 26),
           ),
         ],
       ),
@@ -6293,10 +6298,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         Expanded(
           child: Text(
             value,
-            style: AppFonts.system(
-              color: AppColors.textPrimary,
-              fontSize: 12,
-            ),
+            style: AppFonts.system(color: AppColors.textPrimary, fontSize: 12),
           ),
         ),
       ],
@@ -6337,6 +6339,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         return StatefulBuilder(
           builder: (context, setModalState) {
             return AlertDialog(
+              key: const Key('admin_inventory_ingredient_dialog'),
               backgroundColor: AppColors.surface1,
               title: Text(
                 isEdit
@@ -6531,6 +6534,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       },
     );
 
+    await Future<void>.delayed(kThemeAnimationDuration);
     nameController.dispose();
     stockController.dispose();
     reorderController.dispose();
@@ -6561,6 +6565,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
         return StatefulBuilder(
           builder: (context, setModalState) {
             return AlertDialog(
+              key: const Key('admin_inventory_recipe_dialog'),
               backgroundColor: AppColors.surface1,
               title: Text(
                 isEdit
@@ -6674,12 +6679,14 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       },
     );
 
+    await Future<void>.delayed(kThemeAnimationDuration);
     qtyController.dispose();
   }
 }
 
 class _InventorySurfaceTab extends StatelessWidget {
   const _InventorySurfaceTab({
+    super.key,
     required this.label,
     required this.selected,
     required this.onTap,

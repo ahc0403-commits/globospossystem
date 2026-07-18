@@ -31,7 +31,16 @@ import 'payment_proof_modal.dart';
 import 'red_invoice_modal.dart';
 
 class CashierScreen extends ConsumerStatefulWidget {
-  const CashierScreen({super.key});
+  const CashierScreen({
+    super.key,
+    this.paymentProofServiceOverride,
+    this.paymentServiceOverride,
+    this.restaurantCutoffServiceOverride,
+  });
+
+  final PaymentProofService? paymentProofServiceOverride;
+  final PaymentService? paymentServiceOverride;
+  final RestaurantCutoffService? restaurantCutoffServiceOverride;
 
   @override
   ConsumerState<CashierScreen> createState() => _CashierScreenState();
@@ -51,6 +60,13 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   CashierOrderSearchResult? _orderSearchResult;
   String? _orderSearchFeedback;
   late final ProviderSubscription<PaymentState> _paymentSub;
+
+  PaymentProofService get _paymentProofService =>
+      widget.paymentProofServiceOverride ?? paymentProofService;
+  PaymentService get _paymentService =>
+      widget.paymentServiceOverride ?? paymentService;
+  RestaurantCutoffService get _restaurantCutoffService =>
+      widget.restaurantCutoffServiceOverride ?? restaurantCutoffService;
 
   @override
   void initState() {
@@ -94,7 +110,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
 
     _isFlushingProofQueue = true;
     try {
-      final uploaded = await paymentProofService.flushPendingUploads();
+      final uploaded = await _paymentProofService.flushPendingUploads();
       if (mounted && uploaded > 0) {
         showSuccessToast(
           context,
@@ -129,6 +145,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        key: const Key('cashier_cancel_order_dialog'),
         backgroundColor: PosColors.surface,
         title: Text(
           l10n.cashierCancelOrderTitle,
@@ -180,11 +197,12 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     final reasonController = TextEditingController();
     final pinController = TextEditingController();
     try {
-      return showDialog<Map<String, String>?>(
+      return await showDialog<Map<String, String>?>(
         context: context,
         barrierDismissible: false,
         builder: (context) {
           return AlertDialog(
+            key: const Key('cashier_service_item_dialog'),
             title: Text(
               isMarked
                   ? l10n.cashierServiceItemUnmarkTitle
@@ -238,6 +256,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
         },
       );
     } finally {
+      await Future<void>.delayed(kThemeAnimationDuration);
       reasonController.dispose();
       pinController.dispose();
     }
@@ -249,7 +268,10 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     return showDialog<List<PaymentSplitInput>?>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _SplitPaymentDialog(totalAmount: totalAmount),
+      builder: (_) => _SplitPaymentDialog(
+        key: const Key('cashier_split_payment_dialog'),
+        totalAmount: totalAmount,
+      ),
     );
   }
 
@@ -353,7 +375,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     final l10n = context.l10n;
     if (!PlatformInfo.isPrinterSupported) {
       try {
-        final job = await paymentService.enqueueReceiptPrintJob(
+        final job = await _paymentService.enqueueReceiptPrintJob(
           orderId: order.orderId,
           reprint: reprint,
         );
@@ -408,7 +430,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
 
   Future<bool> _canCompleteRestaurantPayment(String storeId) async {
     try {
-      final cutoff = await restaurantCutoffService.fetchState(storeId);
+      final cutoff = await _restaurantCutoffService.fetchState(storeId);
       if (cutoff.canCompletePayment) {
         return true;
       }
@@ -494,15 +516,17 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
           const SizedBox(height: 12),
           Expanded(
             child: visiblePaymentOrders.isEmpty
-                ? _CashierNoPayableOrdersPanel(
-                    title: l10n.cashierNoPayableOrdersTitle,
-                    subtitle: orderSearchQuery.isEmpty
-                        ? l10n.cashierNoPayableOrdersMessage
-                        : 'No payable order in the cashier queue for "$orderSearchQuery".',
-                    isOnline: isOnline,
-                    onRefresh: storeId == null
-                        ? null
-                        : () => unawaited(notifier.loadOrders(storeId)),
+                ? SingleChildScrollView(
+                    child: _CashierNoPayableOrdersPanel(
+                      title: l10n.cashierNoPayableOrdersTitle,
+                      subtitle: orderSearchQuery.isEmpty
+                          ? l10n.cashierNoPayableOrdersMessage
+                          : 'No payable order in the cashier queue for "$orderSearchQuery".',
+                      isOnline: isOnline,
+                      onRefresh: storeId == null
+                          ? null
+                          : () => unawaited(notifier.loadOrders(storeId)),
+                    ),
                   )
                 : ListView.separated(
                     padding: const EdgeInsets.only(bottom: 12),
@@ -660,6 +684,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       context: context,
                       barrierDismissible: false,
                       builder: (_) => DiscountModal(
+                        key: const Key('cashier_discount_dialog'),
                         orderId: selectedOrder.orderId,
                         storeId: storeId,
                         menuSubtotal: selectedOrder.menuSubtotal,
@@ -749,7 +774,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                           paymentId != null &&
                           context.mounted) {
                         try {
-                          await paymentProofService.markProofRequired(
+                          await _paymentProofService.markProofRequired(
                             paymentId: paymentId,
                             storeId: storeId,
                           );
@@ -762,6 +787,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                 context: context,
                                 barrierDismissible: false,
                                 builder: (_) => PaymentProofModal(
+                                  key: const Key(
+                                    'cashier_single_payment_proof_dialog',
+                                  ),
                                   paymentId: paymentId,
                                   storeId: storeId,
                                   methodLabel: paymentMethodDisplayLabel(
@@ -801,6 +829,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                           context: context,
                           barrierDismissible: false,
                           builder: (_) => RedInvoiceModal(
+                            key: const Key('cashier_single_red_invoice_dialog'),
                             orderId: selectedOrder.orderId,
                             storeId: storeId,
                           ),
@@ -861,7 +890,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                           if (paymentId == null || !context.mounted) {
                             continue;
                           }
-                          await paymentProofService.markProofRequired(
+                          await _paymentProofService.markProofRequired(
                             paymentId: paymentId,
                             storeId: storeId,
                           );
@@ -872,6 +901,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                             context: context,
                             barrierDismissible: false,
                             builder: (_) => PaymentProofModal(
+                              key: const Key(
+                                'cashier_split_payment_proof_dialog',
+                              ),
                               paymentId: paymentId,
                               storeId: storeId,
                               methodLabel: paymentMethodDisplayLabel(method),
@@ -885,6 +917,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                           context: context,
                           barrierDismissible: false,
                           builder: (_) => RedInvoiceModal(
+                            key: const Key('cashier_split_red_invoice_dialog'),
                             orderId: selectedOrder.orderId,
                             storeId: storeId,
                           ),
@@ -983,7 +1016,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                 builder: (context, constraints) {
                   final viewport = MediaQuery.sizeOf(context);
                   final forceScrollableCompact =
-                      viewport.width > viewport.height && viewport.height < 720;
+                      (viewport.width > viewport.height &&
+                          viewport.height < 720) ||
+                      MediaQuery.textScalerOf(context).scale(1) > 1.5;
                   final useWideLayout =
                       constraints.maxWidth >= 1180 && !forceScrollableCompact;
                   final useCompactChrome = !useWideLayout;
@@ -1195,12 +1230,24 @@ class _CashierCompactCommandBar extends ConsumerWidget {
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              child: ToastStatusBadge(
-                label: isOnline
-                    ? l10n.cashierTerminalOnline
-                    : l10n.cashierTerminalOffline,
-                color: isOnline ? PosColors.success : PosColors.warning,
-                compact: true,
+              child: Row(
+                children: [
+                  Text(
+                    l10n.cashierTitle,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: PosColors.textPrimary,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ToastStatusBadge(
+                    label: isOnline
+                        ? l10n.cashierTerminalOnline
+                        : l10n.cashierTerminalOffline,
+                    color: isOnline ? PosColors.success : PosColors.warning,
+                    compact: true,
+                  ),
+                ],
               ),
             ),
           ),
@@ -2119,7 +2166,10 @@ class _CashierPaymentRail extends StatelessWidget {
       if (selectedMethod == null) {
         final method = await showDialog<String>(
           context: context,
-          builder: (_) => _CashierPaymentMethodDialog(methods: paymentOptions),
+          builder: (_) => _CashierPaymentMethodDialog(
+            key: const Key('cashier_payment_method_dialog'),
+            methods: paymentOptions,
+          ),
         );
         if (method == null) {
           return;
@@ -2464,6 +2514,7 @@ class _CashierPaymentActions extends StatelessWidget {
               if (PlatformInfo.isPrinterSupported) const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton.icon(
+                  key: const Key('cashier_cancel_order_action'),
                   onPressed: isProcessing ? null : onCancelOrder,
                   icon: const Icon(Icons.cancel_outlined, size: 16),
                   label: Text(l10n.waiterCancelOrderAction),
@@ -2597,7 +2648,7 @@ Future<void> _showCashierOrderItemsSheet(
 }
 
 class _CashierPaymentMethodDialog extends StatelessWidget {
-  const _CashierPaymentMethodDialog({required this.methods});
+  const _CashierPaymentMethodDialog({super.key, required this.methods});
 
   final List<_PaymentMethod> methods;
 
@@ -2963,7 +3014,7 @@ class _CashierNoPayableOrdersPanel extends StatelessWidget {
 }
 
 class _SplitPaymentDialog extends StatefulWidget {
-  const _SplitPaymentDialog({required this.totalAmount});
+  const _SplitPaymentDialog({super.key, required this.totalAmount});
 
   final double totalAmount;
 
@@ -3053,6 +3104,7 @@ class _SplitPaymentDialogState extends State<_SplitPaymentDialog> {
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           initialValue: row.method,
+                          isExpanded: true,
                           decoration: InputDecoration(
                             labelText: l10n.cashierMethodLabel,
                           ),
@@ -3060,7 +3112,11 @@ class _SplitPaymentDialogState extends State<_SplitPaymentDialog> {
                             for (final method in _methods)
                               DropdownMenuItem(
                                 value: method,
-                                child: Text(paymentMethodDisplayLabel(method)),
+                                child: Text(
+                                  paymentMethodDisplayLabel(method),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                           ],
                           onChanged: (value) {

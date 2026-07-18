@@ -124,33 +124,53 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          DropdownButtonFormField<String>(
-            initialValue: _operationMode,
-            dropdownColor: PosColors.surface,
-            style: AppFonts.system(color: PosColors.textPrimary),
-            decoration: InputDecoration(
-              labelText: context.l10n.superAdminOperationMode,
-              prefixIcon: Icon(Icons.tune),
+          Semantics(
+            container: true,
+            button: true,
+            label: context.l10n.superAdminOperationMode,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                minHeight: PosDensity.touchTargetMin,
+              ),
+              child: DropdownButtonFormField<String>(
+                initialValue: _operationMode,
+                isExpanded: true,
+                dropdownColor: PosColors.surface,
+                style: AppFonts.system(color: PosColors.textPrimary),
+                decoration: InputDecoration(
+                  labelText: context.l10n.superAdminOperationMode,
+                  prefixIcon: Icon(Icons.tune),
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: 'standard',
+                    child: Text(
+                      context.l10n.superAdminOperationModeStandard,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'buffet',
+                    child: Text(
+                      context.l10n.superAdminOperationModeBuffet,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'hybrid',
+                    child: Text(
+                      context.l10n.superAdminOperationModeHybrid,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _operationMode = value);
+                  }
+                },
+              ),
             ),
-            items: [
-              DropdownMenuItem(
-                value: 'standard',
-                child: Text(context.l10n.superAdminOperationModeStandard),
-              ),
-              DropdownMenuItem(
-                value: 'buffet',
-                child: Text(context.l10n.superAdminOperationModeBuffet),
-              ),
-              DropdownMenuItem(
-                value: 'hybrid',
-                child: Text(context.l10n.superAdminOperationModeHybrid),
-              ),
-            ],
-            onChanged: (value) {
-              if (value != null) {
-                setState(() => _operationMode = value);
-              }
-            },
           ),
           if (needsPerPerson) ...[
             const SizedBox(height: 10),

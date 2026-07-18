@@ -209,97 +209,125 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
       );
     }
 
+    final sidebarItems = surfaceAccess.showManagementSurfaces
+        ? [
+            ToastSidebarPanelItem(
+              icon: Icons.dashboard_outlined,
+              label: l10n.photoOpsPriorityQueueTitle,
+              sectionLabel: l10n.photoOpsHeroEyebrow,
+            ),
+            ToastSidebarPanelItem(
+              icon: Icons.payments_outlined,
+              label: l10n.photoOpsSalesTitle,
+              sectionLabel: l10n.photoOpsSalesTitle,
+            ),
+            ToastSidebarPanelItem(
+              icon: Icons.schedule_outlined,
+              label: l10n.photoOpsAttendanceTitle,
+              sectionLabel: l10n.photoOpsAttendanceTitle,
+            ),
+            ToastSidebarPanelItem(
+              icon: Icons.inventory_2_outlined,
+              label: l10n.photoOpsInventoryTitle,
+              sectionLabel: l10n.photoOpsInventoryTitle,
+            ),
+            ToastSidebarPanelItem(
+              icon: Icons.group_outlined,
+              label: l10n.photoOpsSalaryTitle,
+              sectionLabel: l10n.photoOpsSalaryTitle,
+            ),
+          ]
+        : [
+            ToastSidebarPanelItem(
+              icon: Icons.schedule_outlined,
+              label: l10n.photoOpsAttendanceTitle,
+              sectionLabel: l10n.photoOpsAttendanceTitle,
+            ),
+            ToastSidebarPanelItem(
+              icon: Icons.inventory_2_outlined,
+              label: l10n.photoOpsInventoryTitle,
+              sectionLabel: l10n.photoOpsInventoryTitle,
+            ),
+          ];
+
     return KeyedSubtree(
       key: const Key('photo_ops_root'),
-      child: ToastShell(
-        sidebar: ToastSidebarPanel(
-          title: l10n.photoOpsBrandName,
-          subtitle: activeStoreName,
-          selectedIndex: safeSurfaceIndex,
-          onItemSelected: (index) =>
-              setState(() => _selectedSurfaceIndex = index),
-          items: surfaceAccess.showManagementSurfaces
-              ? [
-                  ToastSidebarPanelItem(
-                    icon: Icons.dashboard_outlined,
-                    label: l10n.photoOpsPriorityQueueTitle,
-                    sectionLabel: l10n.photoOpsHeroEyebrow,
+      child: LayoutBuilder(
+        builder: (context, shellConstraints) {
+          final compactShell = shellConstraints.maxWidth < 900;
+          return ToastShell(
+            sidebar: compactShell
+                ? null
+                : ToastSidebarPanel(
+                    title: l10n.photoOpsBrandName,
+                    subtitle: activeStoreName,
+                    selectedIndex: safeSurfaceIndex,
+                    onItemSelected: (index) =>
+                        setState(() => _selectedSurfaceIndex = index),
+                    items: sidebarItems,
                   ),
-                  ToastSidebarPanelItem(
-                    icon: Icons.payments_outlined,
-                    label: l10n.photoOpsSalesTitle,
-                    sectionLabel: l10n.photoOpsSalesTitle,
-                  ),
-                  ToastSidebarPanelItem(
-                    icon: Icons.schedule_outlined,
-                    label: l10n.photoOpsAttendanceTitle,
-                    sectionLabel: l10n.photoOpsAttendanceTitle,
-                  ),
-                  ToastSidebarPanelItem(
-                    icon: Icons.inventory_2_outlined,
-                    label: l10n.photoOpsInventoryTitle,
-                    sectionLabel: l10n.photoOpsInventoryTitle,
-                  ),
-                  ToastSidebarPanelItem(
-                    icon: Icons.group_outlined,
-                    label: l10n.photoOpsSalaryTitle,
-                    sectionLabel: l10n.photoOpsSalaryTitle,
-                  ),
-                ]
-              : [
-                  ToastSidebarPanelItem(
-                    icon: Icons.schedule_outlined,
-                    label: l10n.photoOpsAttendanceTitle,
-                    sectionLabel: l10n.photoOpsAttendanceTitle,
-                  ),
-                  ToastSidebarPanelItem(
-                    icon: Icons.inventory_2_outlined,
-                    label: l10n.photoOpsInventoryTitle,
-                    sectionLabel: l10n.photoOpsInventoryTitle,
-                  ),
-                ],
-        ),
-        topbar: ToastTopbar(
-          title: l10n.photoOpsBrandName,
-          actions: const [AppNavBar()],
-          trailing: ToastStatusBadge(
-            label: activeStoreName,
-            color: _surfaceTone(selectedSurface.kind),
-            key: const Key('photo_ops_active_store_badge'),
-          ),
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            if (constraints.maxWidth < 1120) {
-              return RefreshIndicator(
-                onRefresh: notifier.load,
-                color: PosColors.accent,
-                child: ToastResponsiveScrollBody(
-                  maxWidth: 1360,
-                  children: [
-                    surface(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: contentChildren,
-                      ),
+            topbar: ToastTopbar(
+              title: l10n.photoOpsBrandName,
+              actions: const [AppNavBar()],
+              trailing: compactShell
+                  ? null
+                  : ToastStatusBadge(
+                      label: activeStoreName,
+                      color: _surfaceTone(selectedSurface.kind),
+                      key: const Key('photo_ops_active_store_badge'),
                     ),
-                  ],
-                ),
-              );
-            }
+            ),
+            child: Column(
+              children: [
+                if (compactShell) ...[
+                  _PhotoOpsCompactNav(
+                    items: sidebarItems,
+                    selectedIndex: safeSurfaceIndex,
+                    onItemSelected: (index) =>
+                        setState(() => _selectedSurfaceIndex = index),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                ],
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      if (constraints.maxWidth < 1120 ||
+                          MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+                        return RefreshIndicator(
+                          onRefresh: notifier.load,
+                          color: PosColors.accent,
+                          child: ToastResponsiveScrollBody(
+                            maxWidth: 1360,
+                            children: [
+                              surface(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: contentChildren,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
 
-            return ToastResponsiveBody(
-              maxWidth: 1360,
-              child: surface(
-                child: RefreshIndicator(
-                  onRefresh: notifier.load,
-                  color: PosColors.accent,
-                  child: ListView(children: contentChildren),
+                      return ToastResponsiveBody(
+                        maxWidth: 1360,
+                        child: surface(
+                          child: RefreshIndicator(
+                            onRefresh: notifier.load,
+                            color: PosColors.accent,
+                            child: ListView(children: contentChildren),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
-              ),
-            );
-          },
-        ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -580,6 +608,39 @@ class _PhotoOpsSurfaceMeta {
   final String title;
   final String subtitle;
   final PhotoOpsSurfaceKind kind;
+}
+
+class _PhotoOpsCompactNav extends StatelessWidget {
+  const _PhotoOpsCompactNav({
+    required this.items,
+    required this.selectedIndex,
+    required this.onItemSelected,
+  });
+
+  final List<ToastSidebarPanelItem> items;
+  final int selectedIndex;
+  final ValueChanged<int> onItemSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 56,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: ClampingScrollPhysics(),
+        ),
+        itemCount: items.length,
+        separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
+        itemBuilder: (context, index) => ToastFilterChip(
+          key: Key('photo_ops_section_$index'),
+          label: items[index].label,
+          selected: index == selectedIndex,
+          onSelected: () => onItemSelected(index),
+        ),
+      ),
+    );
+  }
 }
 
 class _PhotoOpsHeaderSummary extends StatelessWidget {

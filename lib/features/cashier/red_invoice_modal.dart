@@ -3,7 +3,7 @@ import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/einvoice_service.dart';
-import '../../main.dart';
+import '../../core/ui/pos_design_tokens.dart';
 import '../../widgets/error_toast.dart';
 
 enum _BuyerLookupState { idle, cacheHit, manualFallback }
@@ -134,18 +134,20 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     return AlertDialog(
-      backgroundColor: AppColors.surface1,
+      backgroundColor: PosColors.surface,
       contentPadding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
       title: Row(
         children: [
-          const Icon(Icons.receipt_long, color: AppColors.amber500, size: 22),
+          const Icon(Icons.receipt_long, color: PosColors.accent, size: 22),
           const SizedBox(width: 8),
-          Text(
-            l10n.redInvoiceTitle,
-            style: AppFonts.system(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w700,
-              fontSize: 17,
+          Flexible(
+            child: Text(
+              l10n.redInvoiceTitle,
+              style: AppFonts.system(
+                color: PosColors.textPrimary,
+                fontWeight: FontWeight.w700,
+                fontSize: 17,
+              ),
             ),
           ),
         ],
@@ -168,7 +170,7 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Text(
         context.l10n.redInvoicePrompt,
-        style: AppFonts.system(color: AppColors.textSecondary, fontSize: 15),
+        style: AppFonts.system(color: PosColors.textSecondary, fontSize: 15),
       ),
     );
   }
@@ -179,14 +181,14 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
         onPressed: () => Navigator.of(context).pop(false),
         child: Text(
           context.l10n.no,
-          style: AppFonts.system(color: AppColors.textSecondary),
+          style: AppFonts.system(color: PosColors.textSecondary),
         ),
       ),
       FilledButton.icon(
         onPressed: () => setState(() => _showForm = true),
         style: FilledButton.styleFrom(
-          backgroundColor: AppColors.amber500,
-          foregroundColor: AppColors.surface0,
+          backgroundColor: PosColors.accent,
+          foregroundColor: Colors.white,
         ),
         icon: const Icon(Icons.receipt_long, size: 16),
         label: Text(
@@ -219,7 +221,7 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
               ),
               const SizedBox(width: 8),
               SizedBox(
-                height: 44,
+                height: PosDensity.touchTargetMin,
                 child: _isLookingUp
                     ? const Padding(
                         padding: EdgeInsets.all(10),
@@ -228,15 +230,15 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
                           height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: AppColors.amber500,
+                            color: PosColors.accent,
                           ),
                         ),
                       )
                     : OutlinedButton(
                         onPressed: () => _onTaxCodeSubmitted(_taxCodeCtrl.text),
                         style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: AppColors.surface2),
-                          foregroundColor: AppColors.textSecondary,
+                          side: const BorderSide(color: PosColors.border),
+                          foregroundColor: PosColors.textSecondary,
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                         ),
                         child: Text(l10n.lookup),
@@ -326,14 +328,14 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
             : () => setState(() => _showForm = false),
         child: Text(
           context.l10n.back,
-          style: AppFonts.system(color: AppColors.textSecondary),
+          style: AppFonts.system(color: PosColors.textSecondary),
         ),
       ),
       FilledButton(
         onPressed: _isSubmitting ? null : _submit,
         style: FilledButton.styleFrom(
-          backgroundColor: AppColors.amber500,
-          foregroundColor: AppColors.surface0,
+          backgroundColor: PosColors.accent,
+          foregroundColor: Colors.white,
         ),
         child: _isSubmitting
             ? const SizedBox(
@@ -359,14 +361,14 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
         width: double.infinity,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppColors.surface0,
+          color: PosColors.canvas,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.surface2),
+          border: Border.all(color: PosColors.border),
         ),
         child: Text(
           l10n.redInvoiceLookupIdle,
           style: AppFonts.system(
-            color: AppColors.textSecondary,
+            color: PosColors.textSecondary,
             fontSize: 12,
             height: 1.35,
           ),
@@ -376,17 +378,17 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
 
     final (color, icon, title) = switch (_lookupState) {
       _BuyerLookupState.cacheHit => (
-        AppColors.statusAvailable,
+        PosColors.success,
         Icons.inventory_2_outlined,
         l10n.redInvoiceCacheMatch,
       ),
       _BuyerLookupState.manualFallback => (
-        AppColors.statusOccupied,
+        PosColors.warning,
         Icons.edit_note,
         l10n.redInvoiceManualEntry,
       ),
       _ => (
-        AppColors.textSecondary,
+        PosColors.textSecondary,
         Icons.info_outline,
         l10n.redInvoiceBuyerLookup,
       ),
@@ -421,7 +423,7 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
                 Text(
                   _lookupNote ?? '',
                   style: AppFonts.system(
-                    color: AppColors.textPrimary,
+                    color: PosColors.textPrimary,
                     fontSize: 12,
                     height: 1.35,
                   ),
@@ -440,7 +442,7 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
       child: Text(
         text,
         style: AppFonts.system(
-          color: AppColors.textSecondary,
+          color: PosColors.textSecondary,
           fontSize: 12,
           fontWeight: FontWeight.w600,
         ),
@@ -460,11 +462,11 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
       controller: controller,
       keyboardType: keyboardType,
       onFieldSubmitted: onFieldSubmitted,
-      style: AppFonts.system(color: AppColors.textPrimary, fontSize: 14),
+      style: AppFonts.system(color: PosColors.textPrimary, fontSize: 14),
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: AppFonts.system(
-          color: AppColors.textSecondary,
+          color: PosColors.textSecondary,
           fontSize: 13,
         ),
         contentPadding: const EdgeInsets.symmetric(
@@ -472,18 +474,18 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
           vertical: 10,
         ),
         filled: true,
-        fillColor: AppColors.surface0,
+        fillColor: PosColors.canvas,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppColors.surface2),
+          borderSide: const BorderSide(color: PosColors.border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppColors.surface2),
+          borderSide: const BorderSide(color: PosColors.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppColors.amber500),
+          borderSide: const BorderSide(color: PosColors.accent),
         ),
       ),
       validator: validator,

@@ -48,12 +48,16 @@ class OfflineBanner extends ConsumerWidget {
                   size: 16,
                 ),
                 const SizedBox(width: 6),
-                Text(
-                  l10n.offlineConnectionMessage,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                Flexible(
+                  child: Text(
+                    l10n.offlineConnectionMessage,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ],

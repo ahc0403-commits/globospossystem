@@ -50,6 +50,8 @@ class AppTheme {
     return ThemeData(
       brightness: Brightness.light,
       useMaterial3: true,
+      materialTapTargetSize: MaterialTapTargetSize.padded,
+      visualDensity: VisualDensity.standard,
       scaffoldBackgroundColor: AppColors.surface0,
       cardColor: AppColors.surface1,
       colorScheme: const ColorScheme.light(
@@ -166,6 +168,14 @@ class AppTheme {
           color: AppColors.textSecondary,
         ),
       ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColors.surface1,
+        surfaceTintColor: Colors.transparent,
+        showDragHandle: true,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.surface1,
@@ -206,11 +216,23 @@ class AppTheme {
           foregroundColor: AppColors.textPrimary,
           side: const BorderSide(color: AppColors.surface3),
           backgroundColor: Colors.white,
+          minimumSize: const Size(0, PosDensity.touchTargetMin),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           textStyle: baseTextTheme.labelLarge?.copyWith(
             fontWeight: FontWeight.w700,
           ),
           shape: RoundedRectangleBorder(borderRadius: AppRadius.lg),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          minimumSize: const Size(0, PosDensity.touchTargetMin),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          minimumSize: const Size.square(PosDensity.touchTargetMin),
         ),
       ),
       chipTheme: ChipThemeData(
@@ -254,7 +276,7 @@ class AppTheme {
       elevation: 0,
       surfaceTintColor: Colors.transparent,
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-      minimumSize: const Size(0, 46),
+      minimumSize: const Size(0, PosDensity.touchTargetMin),
       textStyle: AppFonts.system(fontSize: 14, fontWeight: FontWeight.w700),
       shape: RoundedRectangleBorder(borderRadius: AppRadius.lg),
     );

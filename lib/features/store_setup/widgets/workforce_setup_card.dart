@@ -54,15 +54,16 @@ class WorkforceSetupCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    context.l10n.storeSetupWorkforceTitle,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-                Chip(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final compact =
+                    constraints.maxWidth < 480 ||
+                    MediaQuery.textScalerOf(context).scale(1) > 1.5;
+                final title = Text(
+                  context.l10n.storeSetupWorkforceTitle,
+                  style: Theme.of(context).textTheme.titleLarge,
+                );
+                final status = Chip(
                   avatar: Icon(
                     accountsReady ? Icons.check_circle : Icons.warning_amber,
                     size: 18,
@@ -72,8 +73,23 @@ class WorkforceSetupCard extends StatelessWidget {
                         ? context.l10n.storeSetupAccountsReady
                         : context.l10n.storeSetupAccountsNotReady,
                   ),
-                ),
-              ],
+                );
+
+                if (compact) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [title, const SizedBox(height: 8), status],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    Expanded(child: title),
+                    const SizedBox(width: 12),
+                    status,
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 6),
             Text(context.l10n.storeSetupWorkforceSubtitle),
@@ -168,6 +184,7 @@ class WorkforceSetupCard extends StatelessWidget {
       context: outerContext,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
+          key: const Key('store_setup_workforce_config_dialog'),
           title: Text(context.l10n.storeSetupConfigureWorkforce),
           content: SizedBox(
             width: 860,

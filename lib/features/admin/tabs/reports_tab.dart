@@ -169,30 +169,27 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       }
 
       if (!hasOperationalData) {
-        return SizedBox(
-          height: 180,
-          child: PosActionCard(
-            title: l10n.reportsNoDataTitle,
-            subtitle: l10n.reportsNoDataSubtitle,
-            action: storeId == null
-                ? null
-                : PosPrimaryButton(
-                    label: l10n.reportsReloadToday,
-                    icon: Icons.play_arrow_rounded,
-                    onPressed: () {
-                      final now = DateTime.now();
-                      applyQuickRange(
-                        DateTime(now.year, now.month, now.day),
-                        now,
-                      );
-                    },
-                  ),
-            child: Text(
-              l10n.reportsNoDataBody,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: PosColors.textSecondary,
-                height: 1.45,
-              ),
+        return PosActionCard(
+          title: l10n.reportsNoDataTitle,
+          subtitle: l10n.reportsNoDataSubtitle,
+          action: storeId == null
+              ? null
+              : PosPrimaryButton(
+                  label: l10n.reportsReloadToday,
+                  icon: Icons.play_arrow_rounded,
+                  onPressed: () {
+                    final now = DateTime.now();
+                    applyQuickRange(
+                      DateTime(now.year, now.month, now.day),
+                      now,
+                    );
+                  },
+                ),
+          child: Text(
+            l10n.reportsNoDataBody,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: PosColors.textSecondary,
+              height: 1.45,
             ),
           ),
         );
@@ -248,7 +245,8 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       );
     }
 
-    if (MediaQuery.sizeOf(context).width < 1080) {
+    final usesLargeText = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    if (MediaQuery.sizeOf(context).width < 1080 || usesLargeText) {
       return Scaffold(
         key: const Key('reports_root'),
         backgroundColor: AppColors.surface0,

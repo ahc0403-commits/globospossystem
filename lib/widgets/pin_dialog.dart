@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 
 import '../core/i18n/locale_extensions.dart';
-import '../main.dart';
+import '../core/ui/pos_design_tokens.dart';
 
 Future<String?> showPinDialog(BuildContext context, {String? title}) async {
   return showDialog<String>(
@@ -38,7 +38,7 @@ class _PinDialogState extends State<_PinDialog> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     return Dialog(
-      backgroundColor: AppColors.surface1,
+      backgroundColor: PosColors.surface,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -47,27 +47,31 @@ class _PinDialogState extends State<_PinDialog> {
             Text(
               widget.title,
               style: AppFonts.system(
-                color: AppColors.textPrimary,
+                color: PosColors.textPrimary,
                 fontWeight: FontWeight.w700,
                 fontSize: 18,
               ),
             ),
             const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(4, (index) {
-                final filled = index < _pin.length;
-                return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 6),
-                  width: 16,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: filled ? AppColors.amber500 : Colors.transparent,
-                    border: Border.all(color: AppColors.textSecondary),
-                  ),
-                );
-              }),
+            Semantics(
+              liveRegion: true,
+              label: '${_pin.length} / 4',
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(4, (index) {
+                  final filled = index < _pin.length;
+                  return Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 6),
+                    width: 16,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: filled ? PosColors.accent : Colors.transparent,
+                      border: Border.all(color: PosColors.textSecondary),
+                    ),
+                  );
+                }),
+              ),
             ),
             const SizedBox(height: 16),
             for (final row in const [
@@ -84,7 +88,7 @@ class _PinDialogState extends State<_PinDialog> {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: SizedBox(
-                          height: 42,
+                          height: PosDensity.touchTargetMin,
                           child: key.isEmpty
                               ? const SizedBox.shrink()
                               : OutlinedButton(
@@ -97,13 +101,13 @@ class _PinDialogState extends State<_PinDialog> {
                                   },
                                   style: OutlinedButton.styleFrom(
                                     side: const BorderSide(
-                                      color: AppColors.surface2,
+                                      color: PosColors.mutedSurface,
                                     ),
                                   ),
                                   child: Text(
                                     key == '<' ? '⌫' : key,
                                     style: AppFonts.system(
-                                      color: AppColors.textPrimary,
+                                      color: PosColors.textPrimary,
                                       fontSize: 24,
                                     ),
                                   ),
@@ -130,8 +134,8 @@ class _PinDialogState extends State<_PinDialog> {
                         ? () => Navigator.of(context).pop(_pin)
                         : null,
                     style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.amber500,
-                      foregroundColor: AppColors.surface0,
+                      backgroundColor: PosColors.accent,
+                      foregroundColor: Colors.white,
                     ),
                     child: Text(l10n.confirm),
                   ),

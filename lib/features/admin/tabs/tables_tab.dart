@@ -25,7 +25,14 @@ typedef _LayoutAdjustmentCallback =
     void Function({double widthDelta, double heightDelta, int rotationDelta});
 
 class TablesTab extends ConsumerStatefulWidget {
-  const TablesTab({super.key});
+  const TablesTab({
+    super.key,
+    this.tablesServiceOverride,
+    this.tableQrExportServiceOverride,
+  });
+
+  final TablesService? tablesServiceOverride;
+  final TableQrExportService? tableQrExportServiceOverride;
 
   @override
   ConsumerState<TablesTab> createState() => _TablesTabState();
@@ -42,6 +49,11 @@ class _TablesTabState extends ConsumerState<TablesTab> {
   String? _lastOrderError;
   final Map<String, Rect> _draftLayoutByTableId = <String, Rect>{};
   final Map<String, int> _draftRotationByTableId = <String, int>{};
+
+  TablesService get _tablesService =>
+      widget.tablesServiceOverride ?? tablesService;
+  TableQrExportService get _tableQrExportService =>
+      widget.tableQrExportServiceOverride ?? tableQrExportService;
 
   void _ensureLoaded(String? storeId) {
     if (storeId == null || _initializedRestaurantId == storeId) {
@@ -226,7 +238,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     _ensureLoaded(storeId);
 
     if (storeId == null) {
-      return const _RestaurantMissingView();
+      return const _RestaurantMissingView(key: Key('admin_tables_root'));
     }
 
     final tablesState = ref.watch(tablesProvider(storeId));
@@ -727,6 +739,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                 },
               ),
               FilledButton.icon(
+                key: const Key('admin_tables_add_action'),
                 onPressed: () => _showAddTableDialog(context, tablesNotifier),
                 icon: const Icon(Icons.add, size: 18),
                 label: Text(l10n.tablesAddTitle),
@@ -946,6 +959,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
       context: context,
       builder: (context) {
         return AlertDialog(
+          key: const Key('admin_table_add_dialog'),
           backgroundColor: AppColors.surface1,
           title: Text(
             l10n.tablesAddTitle,
@@ -1017,6 +1031,8 @@ class _TablesTabState extends ConsumerState<TablesTab> {
       },
     );
 
+    await Future<void>.delayed(kThemeAnimationDuration);
+
     tableController.dispose();
     seatController.dispose();
     floorController.dispose();
@@ -1038,6 +1054,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
       context: context,
       builder: (context) {
         return AlertDialog(
+          key: const Key('admin_table_edit_dialog'),
           backgroundColor: AppColors.surface1,
           title: Text(
             l10n.tablesEditTable,
@@ -1126,6 +1143,8 @@ class _TablesTabState extends ConsumerState<TablesTab> {
       },
     );
 
+    await Future<void>.delayed(kThemeAnimationDuration);
+
     tableController.dispose();
     seatController.dispose();
     floorController.dispose();
@@ -1139,14 +1158,14 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     final l10n = context.l10n;
     TableQrCardModel card;
     try {
-      final rows = await tablesService.getOrCreateTableQrs(
+      final rows = await _tablesService.getOrCreateTableQrs(
         storeId: tablesNotifier.storeId,
         tableIds: [table.id],
       );
       if (rows.length != 1) {
         throw const FormatException('TABLE_QR_FIELD_REQUIRED:table_id');
       }
-      card = tableQrExportService.cardsFromRpcRows(rows).single;
+      card = _tableQrExportService.cardsFromRpcRows(rows).single;
     } catch (error) {
       if (context.mounted) {
         showErrorToast(context, _tableQrErrorMessage(error, l10n));
@@ -1233,7 +1252,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
             key: const Key('admin_table_qr_pdf_action'),
             onPressed: () async {
               try {
-                await tableQrExportService.savePdf([card]);
+                await _tableQrExportService.savePdf([card]);
                 if (context.mounted) {
                   showSuccessToast(context, l10n.tablesQrPdfSaved);
                 }
@@ -1250,7 +1269,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
             key: const Key('admin_table_qr_png_action'),
             onPressed: () async {
               try {
-                await tableQrExportService.savePng(card);
+                await _tableQrExportService.savePng(card);
                 if (context.mounted) {
                   showSuccessToast(context, l10n.tablesQrPngSaved);
                 }
@@ -1316,7 +1335,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     if (shouldRotate != true || !context.mounted) return;
 
     try {
-      await tablesService.generateTableQr(table.id);
+      await _tablesService.generateTableQr(table.id);
       if (!context.mounted) return;
       showSuccessToast(context, l10n.tablesQrReplaced);
       await _showTableQrDialog(context, tablesNotifier, table);
@@ -1423,10 +1442,10 @@ class _TablesTabState extends ConsumerState<TablesTab> {
           ),
         ),
         operation: () async {
-          final rows = await tablesService.getOrCreateTableQrs(
+          final rows = await _tablesService.getOrCreateTableQrs(
             storeId: tablesNotifier.storeId,
           );
-          final cards = tableQrExportService.cardsFromRpcRows(rows);
+          final cards = _tableQrExportService.cardsFromRpcRows(rows);
           if (cards.isEmpty) {
             throw StateError('TABLE_QR_EXPORT_EMPTY');
           }
@@ -1440,12 +1459,12 @@ class _TablesTabState extends ConsumerState<TablesTab> {
           }
 
           if (kind == TableQrExportKind.pdf) {
-            await tableQrExportService.savePdf(
+            await _tableQrExportService.savePdf(
               cards,
               onProgress: updateProgress,
             );
           } else {
-            await tableQrExportService.savePngZip(
+            await _tableQrExportService.savePngZip(
               cards,
               onProgress: updateProgress,
             );
@@ -2176,7 +2195,7 @@ class _AdminTableOrderLine extends StatelessWidget {
 }
 
 class _RestaurantMissingView extends StatelessWidget {
-  const _RestaurantMissingView();
+  const _RestaurantMissingView({super.key});
 
   @override
   Widget build(BuildContext context) {

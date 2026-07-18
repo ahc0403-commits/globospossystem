@@ -282,6 +282,7 @@ class _QcTabState extends ConsumerState<QcTab>
         children: [
           for (var index = 0; index < surfaces.length; index++)
             _QcSurfaceTab(
+              key: Key('admin_qc_surface_$index'),
               label: _qcSurfaceDisplayLabel(surfaces[index]),
               selected: index == _selectedSurfaceIndex,
               onTap: () => _tabController.animateTo(index),
@@ -406,6 +407,7 @@ class _TemplateManagementTab extends ConsumerWidget {
               ),
               const Spacer(),
               FilledButton.icon(
+                key: const Key('admin_qc_add_template_action'),
                 onPressed: storeId == null
                     ? null
                     : () => _showTemplateSheet(context, ref, picker, storeId!),
@@ -574,7 +576,7 @@ class _TemplateManagementTab extends ConsumerWidget {
                       ),
                     ),
                     trailing: SizedBox(
-                      width: 110,
+                      width: 120,
                       child: Row(
                         children: [
                           IconButton(
@@ -653,6 +655,7 @@ class _TemplateManagementTab extends ConsumerWidget {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return Padding(
+              key: const Key('admin_qc_template_sheet'),
               padding: EdgeInsets.only(
                 left: 16,
                 right: 16,
@@ -798,6 +801,7 @@ class _TemplateManagementTab extends ConsumerWidget {
       },
     );
 
+    await Future<void>.delayed(kThemeAnimationDuration);
     categoryController.dispose();
     criteriaController.dispose();
     sortController.dispose();
@@ -806,6 +810,7 @@ class _TemplateManagementTab extends ConsumerWidget {
 
 class _QcSurfaceTab extends StatelessWidget {
   const _QcSurfaceTab({
+    super.key,
     required this.label,
     required this.selected,
     required this.onTap,
@@ -817,23 +822,34 @@ class _QcSurfaceTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: AppRadius.lg,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? PosColors.accentMuted : PosColors.surface,
-          borderRadius: AppRadius.lg,
-          border: Border.all(
-            color: selected ? PosColors.accent : PosColors.border,
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppRadius.lg,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            minHeight: PosDensity.touchTargetMin,
           ),
-        ),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: selected ? PosColors.accent : PosColors.textSecondary,
-            fontWeight: FontWeight.w700,
+          child: Container(
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: selected ? PosColors.accentMuted : PosColors.surface,
+              borderRadius: AppRadius.lg,
+              border: Border.all(
+                color: selected ? PosColors.accent : PosColors.border,
+              ),
+            ),
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: selected ? PosColors.accent : PosColors.textSecondary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ),
       ),
@@ -929,25 +945,30 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
             ),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              SegmentedButton<bool>(
-                segments: [
-                  ButtonSegment<bool>(
-                    value: false,
-                    label: Text(context.l10n.qcAdminWeeklyView),
-                  ),
-                  ButtonSegment<bool>(
-                    value: true,
-                    label: Text(context.l10n.qcAdminPeriodSearch),
-                  ),
-                ],
-                selected: {_rangeMode},
-                onSelectionChanged: (selection) {
-                  setState(() => _rangeMode = selection.first);
-                },
-              ),
-            ],
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const ClampingScrollPhysics(),
+            child: Row(
+              children: [
+                SegmentedButton<bool>(
+                  key: const Key('admin_qc_range_mode_selector'),
+                  segments: [
+                    ButtonSegment<bool>(
+                      value: false,
+                      label: Text(context.l10n.qcAdminWeeklyView),
+                    ),
+                    ButtonSegment<bool>(
+                      value: true,
+                      label: Text(context.l10n.qcAdminPeriodSearch),
+                    ),
+                  ],
+                  selected: {_rangeMode},
+                  onSelectionChanged: (selection) {
+                    setState(() => _rangeMode = selection.first);
+                  },
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 10),
           if (checkState.error != null) ...[
@@ -1118,25 +1139,23 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                                                       'E',
                                                       'ko',
                                                     ).format(day),
-                                                    style:
-                                                        AppFonts.system(
-                                                          color: AppColors
-                                                              .textSecondary,
-                                                          fontSize: 11,
-                                                        ),
+                                                    style: AppFonts.system(
+                                                      color: AppColors
+                                                          .textSecondary,
+                                                      fontSize: 11,
+                                                    ),
                                                   ),
                                                   Text(
                                                     DateFormat(
                                                       'M/d',
                                                     ).format(day),
-                                                    style:
-                                                        AppFonts.system(
-                                                          color: AppColors
-                                                              .textPrimary,
-                                                          fontWeight:
-                                                              FontWeight.w700,
-                                                          fontSize: 12,
-                                                        ),
+                                                    style: AppFonts.system(
+                                                      color:
+                                                          AppColors.textPrimary,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      fontSize: 12,
+                                                    ),
                                                   ),
                                                 ],
                                               ),
@@ -1193,6 +1212,9 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                                               };
 
                                               return GestureDetector(
+                                                key: Key(
+                                                  'admin_qc_weekly_cell_${row.templateId}_$dayStr',
+                                                ),
                                                 onTap: () => _showCellDialog(
                                                   context,
                                                   day,
@@ -1260,91 +1282,117 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
     return Expanded(
       child: Column(
         children: [
-          Row(
-            children: [
-              _dateButton(
-                context: context,
-                label: context.l10n.from,
-                value: _from,
-                onPicked: (picked) => setState(() => _from = picked),
-              ),
-              const SizedBox(width: 8),
-              _dateButton(
-                context: context,
-                label: context.l10n.to,
-                value: _to,
-                onPicked: (picked) => setState(() => _to = picked),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed: _searchByRange,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.amber500,
-                  foregroundColor: AppColors.surface0,
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const ClampingScrollPhysics(),
+            child: Row(
+              children: [
+                _dateButton(
+                  context: context,
+                  label: context.l10n.from,
+                  value: _from,
+                  onPicked: (picked) => setState(() => _from = picked),
                 ),
-                child: Text(context.l10n.search),
-              ),
-              const Spacer(),
-              SizedBox(
-                width: 140,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _resultFilter,
-                  dropdownColor: AppColors.surface1,
-                  style: AppFonts.system(color: AppColors.textPrimary),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    labelText: context.l10n.qcAdminResult,
-                  ),
-                  items: [
-                    DropdownMenuItem(
-                      value: 'all',
-                      child: Text(context.l10n.all),
-                    ),
-                    DropdownMenuItem(
-                      value: 'pass',
-                      child: Text(context.l10n.qcAdminPass),
-                    ),
-                    DropdownMenuItem(
-                      value: 'fail',
-                      child: Text(context.l10n.qcAdminFail),
-                    ),
-                    DropdownMenuItem(
-                      value: 'na',
-                      child: Text(context.l10n.qcAdminNa),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) setState(() => _resultFilter = value);
-                  },
+                const SizedBox(width: 8),
+                _dateButton(
+                  context: context,
+                  label: context.l10n.to,
+                  value: _to,
+                  onPicked: (picked) => setState(() => _to = picked),
                 ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 180,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _categoryFilter,
-                  dropdownColor: AppColors.surface1,
-                  style: AppFonts.system(color: AppColors.textPrimary),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    labelText: context.l10n.qcAdminCategory,
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: _searchByRange,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.amber500,
+                    foregroundColor: AppColors.surface0,
                   ),
-                  items: categoryOptions
-                      .map(
-                        (category) => DropdownMenuItem(
-                          value: category,
-                          child: Text(
-                            category == 'all' ? context.l10n.all : category,
-                          ),
+                  child: Text(context.l10n.search),
+                ),
+                const SizedBox(width: 24),
+                SizedBox(
+                  width: 140,
+                  child: DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    initialValue: _resultFilter,
+                    dropdownColor: AppColors.surface1,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      labelText: context.l10n.qcAdminResult,
+                    ),
+                    items: [
+                      DropdownMenuItem(
+                        value: 'all',
+                        child: Text(
+                          context.l10n.all,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) setState(() => _categoryFilter = value);
-                  },
+                      ),
+                      DropdownMenuItem(
+                        value: 'pass',
+                        child: Text(
+                          context.l10n.qcAdminPass,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'fail',
+                        child: Text(
+                          context.l10n.qcAdminFail,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'na',
+                        child: Text(
+                          context.l10n.qcAdminNa,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) setState(() => _resultFilter = value);
+                    },
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 180,
+                  child: DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    initialValue: _categoryFilter,
+                    dropdownColor: AppColors.surface1,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      labelText: context.l10n.qcAdminCategory,
+                    ),
+                    items: categoryOptions
+                        .map(
+                          (category) => DropdownMenuItem(
+                            value: category,
+                            child: Text(
+                              category == 'all' ? context.l10n.all : category,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => _categoryFilter = value);
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 10),
           if (isLoading)
@@ -1463,15 +1511,37 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
         color: AppColors.textSecondary,
       );
     }
-    return GestureDetector(
-      onTap: () => _showImageDialog(context, evidencePhotoUrl),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(6),
-        child: Image.network(
-          evidencePhotoUrl,
-          width: 40,
-          height: 40,
-          fit: BoxFit.cover,
+    return Semantics(
+      key: const Key('admin_qc_evidence_thumbnail'),
+      button: true,
+      label: context.l10n.qcReferencePhoto,
+      child: SizedBox.square(
+        dimension: 48,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => _showImageDialog(context, evidencePhotoUrl),
+            child: Center(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Image.network(
+                  evidencePhotoUrl,
+                  width: 40,
+                  height: 40,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => const SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: Icon(
+                      Icons.broken_image_outlined,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -1486,10 +1556,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
       ),
       child: Text(
         label,
-        style: AppFonts.system(
-          color: color,
-          fontWeight: FontWeight.w700,
-        ),
+        style: AppFonts.system(color: color, fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -1541,6 +1608,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                 : null;
 
             return AlertDialog(
+              key: const Key('admin_qc_cell_dialog'),
               backgroundColor: AppColors.surface1,
               title: Text(
                 DateFormat.yMMMMEEEEd(
@@ -1559,17 +1627,13 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                   children: [
                     Text(
                       context.l10n.qcCriterionLabel(row.criteria),
-                      style: AppFonts.system(
-                        color: AppColors.textPrimary,
-                      ),
+                      style: AppFonts.system(color: AppColors.textPrimary),
                     ),
                     const SizedBox(height: 10),
                     if (check == null)
                       Text(
                         context.l10n.qcNotInspectedOnDate,
-                        style: AppFonts.system(
-                          color: AppColors.textSecondary,
-                        ),
+                        style: AppFonts.system(color: AppColors.textSecondary),
                       )
                     else ...[
                       Text(
@@ -1590,6 +1654,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                       if (evidencePhotoUrl != null &&
                           evidencePhotoUrl.isNotEmpty)
                         GestureDetector(
+                          key: const Key('admin_qc_cell_evidence_action'),
                           onTap: () =>
                               _showImageDialog(context, evidencePhotoUrl),
                           child: ClipRRect(
@@ -1598,6 +1663,18 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                               evidencePhotoUrl,
                               height: 160,
                               fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  SizedBox(
+                                    height: 160,
+                                    child: Center(
+                                      child: Icon(
+                                        Icons.broken_image_outlined,
+                                        color: AppColors.textSecondary,
+                                        semanticLabel:
+                                            context.l10n.qcReferencePhoto,
+                                      ),
+                                    ),
+                                  ),
                             ),
                           ),
                         ),
@@ -1686,6 +1763,7 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
       context: context,
       builder: (context) {
         return Dialog(
+          key: const Key('admin_qc_image_dialog'),
           backgroundColor: Colors.black,
           insetPadding: const EdgeInsets.all(20),
           child: Stack(
@@ -1694,7 +1772,18 @@ class _WeeklyViewTabState extends ConsumerState<_WeeklyViewTab> {
                 child: InteractiveViewer(
                   minScale: 0.8,
                   maxScale: 4,
-                  child: Image.network(url, fit: BoxFit.contain),
+                  child: Image.network(
+                    url,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => Center(
+                      child: Icon(
+                        Icons.broken_image_outlined,
+                        color: Colors.white70,
+                        size: 48,
+                        semanticLabel: context.l10n.qcReferencePhoto,
+                      ),
+                    ),
+                  ),
                 ),
               ),
               Positioned(
@@ -2109,10 +2198,7 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
       children: [
         Text(
           label,
-          style: AppFonts.system(
-            color: AppColors.textSecondary,
-            fontSize: 11,
-          ),
+          style: AppFonts.system(color: AppColors.textSecondary, fontSize: 11),
         ),
         const SizedBox(height: 2),
         Text(
