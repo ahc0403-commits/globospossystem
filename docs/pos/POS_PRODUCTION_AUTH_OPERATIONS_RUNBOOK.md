@@ -17,6 +17,17 @@ re-role, or reassign an identity.
 Deployment automation must verify existing operational identities, never
 provision them. Do not store passwords in the repository, commands, or logs.
 
+The production database also rejects these artifacts at write time through
+`20260719013000_production_test_entity_guard.sql`:
+
+- Auth emails ending in `.test`;
+- the five legacy `office.*@globos.vn` POS boundary-test emails;
+- brand or restaurant names/codes/slugs marked test, fixture, smoke, or pilot;
+- reactivation of a historical marked restaurant.
+
+Historical inactive rows are retained only for foreign-key integrity and
+audit evidence. The guard prevents them from becoming operational again.
+
 ## Required check
 
 ```bash
