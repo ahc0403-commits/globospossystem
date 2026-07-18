@@ -6,45 +6,46 @@ DO $$
 DECLARE
   v_currency text;
   v_external_id uuid;
+  v_restaurant_id uuid;
 BEGIN
+  SELECT id INTO v_restaurant_id
+  FROM public.restaurants
+  WHERE is_active
+  ORDER BY id
+  LIMIT 1;
+  IF v_restaurant_id IS NULL THEN
+    RAISE EXCEPTION 'VND_CURRENCY_TEST_ACTIVE_RESTAURANT_MISSING';
+  END IF;
+
+  INSERT INTO public.external_sales (
+    restaurant_id,
+    source_system,
+    external_order_id,
+    gross_amount,
+    net_amount,
+    order_status
+  )
+  VALUES (
+    v_restaurant_id,
+    'deliberry',
+    'vnd-currency-runtime-test-20260718170000',
+    0,
+    0,
+    'completed'
+  )
+  RETURNING id, currency INTO v_external_id, v_currency;
+  IF v_currency <> 'VND' THEN
+    RAISE EXCEPTION 'VND_CURRENCY_TEST_EXTERNAL_DEFAULT_FAILED: %', v_currency;
+  END IF;
+
   BEGIN
-    INSERT INTO ops.brands (id, name, status, currency)
-    VALUES (
-      '00000000-0000-0000-0000-000000000d01',
-      'VND constraint rejection fixture',
-      'active'::core.account_status,
-      'USD'
-    );
-    RAISE EXCEPTION 'VND_CURRENCY_TEST_BRAND_ACCEPTED_USD';
+    UPDATE public.external_sales
+    SET currency = 'USD'
+    WHERE id = v_external_id;
+    RAISE EXCEPTION 'VND_CURRENCY_TEST_EXTERNAL_SALE_ACCEPTED_USD';
   EXCEPTION
     WHEN check_violation THEN NULL;
   END;
-
-  INSERT INTO ops.brands (id, name, status)
-  VALUES (
-    '00000000-0000-0000-0000-000000000d02',
-    'VND default fixture',
-    'active'::core.account_status
-  )
-  RETURNING currency INTO v_currency;
-  IF v_currency <> 'VND' THEN
-    RAISE EXCEPTION 'VND_CURRENCY_TEST_BRAND_DEFAULT_FAILED: %', v_currency;
-  END IF;
-
-  SELECT id INTO v_external_id
-  FROM public.external_sales
-  ORDER BY id
-  LIMIT 1;
-  IF v_external_id IS NOT NULL THEN
-    BEGIN
-      UPDATE public.external_sales
-      SET currency = 'USD'
-      WHERE id = v_external_id;
-      RAISE EXCEPTION 'VND_CURRENCY_TEST_EXTERNAL_SALE_ACCEPTED_USD';
-    EXCEPTION
-      WHEN check_violation THEN NULL;
-    END;
-  END IF;
 END $$;
 
 ROLLBACK;

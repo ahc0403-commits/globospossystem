@@ -4,8 +4,7 @@ DO $$
 DECLARE
   v_bad integer;
 BEGIN
-  IF to_regclass('ops.brands') IS NULL
-     OR to_regclass('public.external_sales') IS NULL
+  IF to_regclass('public.external_sales') IS NULL
      OR to_regclass(
        'public.vnd_currency_enforcement_20260718170000_backup'
      ) IS NULL THEN
@@ -15,7 +14,6 @@ BEGIN
   SELECT count(*) INTO v_bad
   FROM (
     VALUES
-      ('ops', 'brands'),
       ('public', 'external_sales')
   ) expected(table_schema, table_name)
   LEFT JOIN information_schema.columns column_info
@@ -30,13 +28,6 @@ BEGIN
   END IF;
 
   SELECT count(*) INTO v_bad
-  FROM ops.brands
-  WHERE currency IS DISTINCT FROM 'VND';
-  IF v_bad <> 0 THEN
-    RAISE EXCEPTION 'VND_CURRENCY_VERIFY_BRAND_DATA_FAILED: %', v_bad;
-  END IF;
-
-  SELECT count(*) INTO v_bad
   FROM public.external_sales
   WHERE currency IS DISTINCT FROM 'VND';
   IF v_bad <> 0 THEN
@@ -45,19 +36,11 @@ BEGIN
 
   SELECT count(*) INTO v_bad
   FROM pg_constraint
-  WHERE (conrelid, conname) IN (
-    (
-      'ops.brands'::regclass,
-      'ops_brands_currency_vnd_only_20260718170000'
-    ),
-    (
-      'public.external_sales'::regclass,
-      'external_sales_currency_vnd_only_20260718170000'
-    )
-  )
+  WHERE conrelid = 'public.external_sales'::regclass
+    AND conname = 'external_sales_currency_vnd_only_20260718170000'
     AND contype = 'c'
     AND convalidated;
-  IF v_bad <> 2 THEN
+  IF v_bad <> 1 THEN
     RAISE EXCEPTION 'VND_CURRENCY_VERIFY_CONSTRAINT_FAILED: %', v_bad;
   END IF;
 

@@ -17,21 +17,21 @@ void main() {
     'operational currency columns are normalized and constrained to VND',
     () {
       final migration = readRepoFile(migrationPath);
+      final preflight = readRepoFile(preflightPath);
+      final verify = readRepoFile(verifyPath);
 
       expect(migration, contains("upper(btrim(currency)) <> 'VND'"));
-      expect(migration, contains('VND_CURRENCY_NON_VND_BRAND_BLOCKED'));
       expect(migration, contains('VND_CURRENCY_NON_VND_EXTERNAL_SALE_BLOCKED'));
       expect(migration, contains("SET currency = 'VND'"));
       expect(migration, contains("ALTER COLUMN currency SET DEFAULT 'VND'"));
       expect(migration, contains('ALTER COLUMN currency SET NOT NULL'));
       expect(
         migration,
-        contains('ops_brands_currency_vnd_only_20260718170000'),
-      );
-      expect(
-        migration,
         contains('external_sales_currency_vnd_only_20260718170000'),
       );
+      expect(migration, isNot(contains('ops.brands')));
+      expect(preflight, isNot(contains('ops.brands')));
+      expect(verify, isNot(contains('ops.brands')));
       expect(migration, contains("CHECK (currency = 'VND') NOT VALID"));
       expect(migration, contains('VALIDATE CONSTRAINT'));
       expect(migration, isNot(contains('wetax_reference_values')));
@@ -40,15 +40,12 @@ void main() {
 
   test('non-VND data is blocked before any currency mutation', () {
     final migration = readRepoFile(migrationPath);
-    final brandBlock = migration.indexOf('VND_CURRENCY_NON_VND_BRAND_BLOCKED');
     final externalBlock = migration.indexOf(
       'VND_CURRENCY_NON_VND_EXTERNAL_SALE_BLOCKED',
     );
     final firstCurrencyUpdate = migration.indexOf("SET currency = 'VND'");
 
-    expect(brandBlock, greaterThanOrEqualTo(0));
     expect(externalBlock, greaterThanOrEqualTo(0));
-    expect(brandBlock, lessThan(firstCurrencyUpdate));
     expect(externalBlock, lessThan(firstCurrencyUpdate));
   });
 
@@ -66,8 +63,8 @@ void main() {
     );
     expect(rollback, contains('VND_CURRENCY_ROLLBACK_BACKUP_MISSING'));
     expect(rollback, contains('SET currency = backup.original_currency'));
-    expect(rollback, contains('ALTER COLUMN currency DROP NOT NULL'));
-    expect(rollback, contains("ALTER COLUMN currency SET DEFAULT ''"));
+    expect(rollback, isNot(contains('ops.brands')));
+    expect(rollback, contains("ALTER COLUMN currency SET DEFAULT 'VND'"));
     expect(rollback, contains('DROP TABLE public.vnd_currency_enforcement'));
   });
 
