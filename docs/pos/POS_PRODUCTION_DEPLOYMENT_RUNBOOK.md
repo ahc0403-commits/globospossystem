@@ -2,11 +2,11 @@
 
 Last updated: 2026-07-17
 
-## Why pilot login can fail after a good deploy
+## Why operational login can fail after a good deploy
 
 The POS web deploy and Supabase Auth provisioning are separate systems.
 Vercel deploys the Flutter web app; it does not create, restore, or reset
-Supabase Auth users. If a pilot email exists in the spreadsheet but not in the
+Supabase Auth users. If an approved operational email is absent from the
 production Supabase project, Supabase Auth returns `Invalid login credentials`
 even when the live app loads correctly.
 
@@ -49,7 +49,7 @@ This default path runs:
 
 1. Clean Git worktree and freshly fetched `origin/main` ancestry preflight.
 2. Production target preflight.
-3. Required pilot Auth readiness check with
+3. Required production Auth and test-data hygiene check with
    `scripts/check_pilot_auth_accounts.sh`.
 4. `dart analyze`.
 5. Focused Flutter test target, currently
@@ -58,7 +58,7 @@ This default path runs:
 7. `vercel build --prod`.
 8. `vercel deploy --prebuilt --prod --yes`.
 9. Live HTTP check for `https://globospossystem.vercel.app`.
-10. Pilot login smoke with `scripts/smoke_pilot_login.sh`.
+10. Fixed operational account login smoke.
 
 Before any production database or Vercel mutation, the script fetches
 `origin/main` into `refs/remotes/origin/main` and requires that freshly fetched
@@ -75,7 +75,7 @@ REQUIRE_CLEAN_GIT=0 scripts/deploy_pos_production.sh --dry-run
 
 `REQUIRE_CLEAN_GIT=0` exits nonzero without `--dry-run`.
 
-The Auth readiness check verifies required pilot emails exist in production
+The Auth readiness check verifies required operational emails exist in production
 `auth.users`, are confirmed, have active POS profiles in `public.users`, use a
 supported POS role, and carry non-empty `app_metadata.accessible_store_ids`
 claims whose referenced rows exist in `public.restaurants`. The profile link
@@ -84,10 +84,10 @@ public.users.auth_id`. Do not diagnose readiness with `public.users.id =
 auth.users.id`; that is not the POS login lookup. The check never reads,
 prints, creates, or resets passwords.
 
-Provisioning and repair instructions live in:
+Production identity operations and repair instructions live in:
 
 ```bash
-docs/manual_test/pos_pilot_auth_provisioning_runbook.md
+docs/pos/POS_PRODUCTION_AUTH_OPERATIONS_RUNBOOK.md
 ```
 
 If the check reports `MISSING_AUTH`, `UNCONFIRMED_AUTH`,
@@ -97,16 +97,16 @@ This is production account provisioning work. A frontend deploy cannot create,
 confirm, restore, relink, reactivate, re-role, or repair Supabase Auth/POS
 account scope.
 
-The login smoke requires one assigned pilot credential supplied securely via
+The login smoke requires one assigned operational credential supplied securely via
 environment variables:
 
 ```bash
-export PILOT_SMOKE_EMAIL=dung.cashier01@globos.test
-read -r -s PILOT_SMOKE_PASSWORD
-export PILOT_SMOKE_PASSWORD
+export FIXED_SMOKE_ACCOUNT_CODE=bt_pos1
+read -r -s FIXED_SMOKE_PASSWORD
+export FIXED_SMOKE_PASSWORD
 ```
 
-Do not place the pilot password in the command line or in the required-email
+Do not place the operational password in the command line or in the required-email
 file.
 
 ## Deploy with one Supabase migration
@@ -177,18 +177,18 @@ Do not copy `supabase/.temp` from another worktree and do not use
 through the official CLI and requires a Shared Session Pooler host on port
 5432. Direct database credentials and transaction pooler port 6543 fail before
 SQL. `supabase migration list` is the read-only connectivity and history check;
-do not query or modify any pilot or real account for connectivity evidence.
+do not query or modify any operational account for connectivity evidence.
 
 DB-only requires `--migration`, locked dependency bootstrap, static analysis,
 and tests. It rejects `--skip-db`, `--skip-checks`, `--no-tests`,
 `--skip-auth-check`, `--skip-login-smoke`, `--skip-build`, `--skip-vercel`,
 `--rollback-hierarchy`, and non-default deployment modes. The production env
 file is loaded for Supabase CLI authentication and pinned-target validation;
-pilot email/password variables and frontend anon-key readiness are not
+operational login variables and frontend anon-key readiness are not
 required or inspected.
 
-The following stages are explicitly N/A in DB-only output: pilot Auth/account
-readiness, Vercel deployment, live HTTP check, and pilot login smoke. The mode
+The following stages are explicitly N/A in DB-only output: production Auth/account
+readiness, Vercel deployment, live HTTP check, and operational login smoke. The mode
 never invokes the account checker or login-smoke script, never creates,
 recovers, resets, or mutates accounts, and must never be reported as evidence
 that the POS login flow is production-ready.
@@ -232,7 +232,7 @@ SKIP_CHECKS=1 scripts/deploy_pos_production.sh
 Skip Auth or login smoke only when explicitly diagnosing a non-login deploy
 path. If either is skipped, report the result as a blocker-risk, not as
 login-ready production. Do not use skip flags, direct `vercel deploy`, or a
-manual live URL check to call pilot login PASS.
+manual live URL check to call operational login PASS.
 
 ## Production rules
 
@@ -241,9 +241,9 @@ manual live URL check to call pilot login PASS.
 - Start from a clean committed worktree.
 - Require `HEAD` to descend from freshly fetched `origin/main`; update the
   branch before retrying when this guard fails.
-- Stop before deploying if required pilot emails are missing from production
+- Stop before deploying if required operational emails are missing from production
   Auth or their POS profile rows are missing.
-- After deploy, prove at least one assigned pilot account can log in and read
+- After deploy, prove at least one assigned operational account can log in and read
   its POS profile.
 - Apply at most one production migration per run unless there is a written
   reason to do otherwise.

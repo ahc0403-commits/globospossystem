@@ -171,10 +171,10 @@ assert_failure() {
 : >"$CALL_LOG"
 rm -f "$HISTORY_STATE"
 success_output="$(invoke_db_only "$REHEARSAL_REPO" 2>&1)"
-[[ "$success_output" == *'Pilot Auth/account readiness: N/A (not invoked; no pilot credentials required).'* ]]
+[[ "$success_output" == *'Production Auth/account readiness: N/A (not invoked; no login credentials required).'* ]]
 [[ "$success_output" == *'Vercel deployment: N/A.'* ]]
 [[ "$success_output" == *'Live HTTP check: N/A.'* ]]
-[[ "$success_output" == *'Pilot login smoke: N/A (not invoked).'* ]]
+[[ "$success_output" == *'Operational login smoke: N/A (not invoked).'* ]]
 [[ "$success_output" == *'DB-only releases do not establish or claim POS login readiness.'* ]]
 [[ "$success_output" != *'PILOT_SMOKE_EMAIL is required'* ]]
 [[ "$success_output" != *'PILOT_SMOKE_PASSWORD is required'* ]]

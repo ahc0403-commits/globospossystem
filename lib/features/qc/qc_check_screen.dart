@@ -857,7 +857,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
       'pass' => context.l10n.qcResultPass,
       'fail' => context.l10n.qcResultFail,
       'na' => context.l10n.qcResultNa,
-      _ => context.l10n.qscInputCompleteHint,
+      _ => context.l10n.qscPending,
     };
   }
 

@@ -5,22 +5,25 @@ import 'package:flutter_test/flutter_test.dart';
 String readRepoFile(String path) => File(path).readAsStringSync();
 
 void main() {
-  test('production deploy is gated by required POS pilot Auth accounts', () {
+  test('production deploy is gated by operational Auth and data hygiene', () {
     final deploy = readRepoFile('scripts/deploy_pos_production.sh');
     final checker = readRepoFile('scripts/check_pilot_auth_accounts.sh');
+    final legacyLoginMatrix = readRepoFile(
+      'scripts/pilot_gate1_login_matrix.sh',
+    );
     final authProvider = readRepoFile('lib/features/auth/auth_provider.dart');
     final loginSmoke = readRepoFile('scripts/smoke_pilot_login.sh');
     final runbook = readRepoFile(
       'docs/pos/POS_PRODUCTION_DEPLOYMENT_RUNBOOK.md',
     );
     final provisioningRunbook = readRepoFile(
-      'docs/manual_test/pos_pilot_auth_provisioning_runbook.md',
+      'docs/pos/POS_PRODUCTION_AUTH_OPERATIONS_RUNBOOK.md',
     );
     final accounts = readRepoFile(
-      'docs/manual_test/pos_required_pilot_auth_emails.txt',
+      'docs/pos/pos_required_production_auth_emails.txt',
     );
 
-    expect(deploy, contains('PILOT_AUTH_EMAILS_FILE'));
+    expect(deploy, contains('PRODUCTION_AUTH_EMAILS_FILE'));
     expect(deploy, contains('PILOT_LOGIN_SMOKE_SCRIPT'));
     expect(deploy, contains('SKIP_AUTH_CHECK'));
     expect(deploy, contains('SKIP_LOGIN_SMOKE'));
@@ -31,8 +34,8 @@ void main() {
       deploy,
       contains('production checks require locked Flutter dependencies'),
     );
-    expect(deploy, contains('Pilot Auth account readiness'));
-    expect(deploy, contains('Pilot login smoke'));
+    expect(deploy, contains('Production Auth and test-data hygiene'));
+    expect(deploy, contains('operational login smoke'));
     expect(deploy, contains('PILOT_SMOKE_EMAIL'));
     expect(deploy, contains('PILOT_SMOKE_PASSWORD'));
     expect(deploy, contains('Do not report this deploy as login-ready'));
@@ -125,13 +128,22 @@ void main() {
     expect(checker, contains('UNCONFIRMED_AUTH'));
     expect(checker, contains('INACTIVE_POS_PROFILE'));
     expect(checker, contains('UNKNOWN_ROLE'));
+    expect(checker, contains('photo_objet_store_operator'));
     expect(checker, contains('MISSING_STORE_SCOPE'));
     expect(checker, contains('INVALID_STORE_SCOPE'));
     expect(checker, contains('raw_app_meta_data'));
     expect(checker, contains('jsonb_array_elements_text'));
     expect(checker, contains('accessible_store_ids'));
     expect(checker, contains('public.restaurants'));
-    expect(checker, contains('ROOT_CAUSE: Required POS pilot identity state'));
+    expect(
+      checker,
+      contains('ROOT_CAUSE: Required POS operational identity state'),
+    );
+    expect(checker, contains('unbanned_test_auth'));
+    expect(checker, contains('active_test_profiles'));
+    expect(checker, contains('active_test_store_access'));
+    expect(checker, contains('active_test_marker_stores'));
+    expect(checker, contains('Reserved .test identities are forbidden'));
     expect(checker, contains('NEXT_ACTION MISSING_AUTH'));
     expect(checker, contains('NEXT_ACTION UNCONFIRMED_AUTH'));
     expect(checker, contains('NEXT_ACTION MISSING_POS_PROFILE'));
@@ -140,9 +152,14 @@ void main() {
     expect(checker, contains('NEXT_ACTION MISSING_STORE_SCOPE'));
     expect(checker, contains('NEXT_ACTION INVALID_STORE_SCOPE'));
     expect(checker, contains('APP_PROFILE_LOOKUP'));
-    expect(checker, contains('pos_pilot_auth_provisioning_runbook.md'));
+    expect(checker, contains('POS_PRODUCTION_AUTH_OPERATIONS_RUNBOOK.md'));
     expect(checker, contains('reads, prints, creates, or resets passwords'));
     expect(checker, contains('resets passwords'));
+    expect(File('scripts/pilot_provision_accounts.sql').existsSync(), isFalse);
+    expect(
+      legacyLoginMatrix,
+      contains('Test-account login matrix is forbidden against POS production'),
+    );
 
     expect(loginSmoke, contains('PILOT_SMOKE_EMAIL'));
     expect(loginSmoke, contains('PILOT_SMOKE_PASSWORD'));
@@ -166,7 +183,7 @@ void main() {
     expect(runbook, contains('app_metadata.accessible_store_ids'));
     expect(runbook, contains('A frontend deploy cannot create'));
     expect(runbook, contains('manual live URL check'));
-    expect(runbook, contains('pos_pilot_auth_provisioning_runbook.md'));
+    expect(runbook, contains('POS_PRODUCTION_AUTH_OPERATIONS_RUNBOOK.md'));
 
     expect(provisioningRunbook, contains('auth.users.email -> auth.users.id'));
     expect(provisioningRunbook, contains('public.users.auth_id'));
@@ -174,16 +191,13 @@ void main() {
     expect(provisioningRunbook, contains('Do not store passwords'));
     expect(provisioningRunbook, contains('Deployment automation must verify'));
 
-    expect(accounts, contains('waiter@globos.test'));
-    expect(accounts, contains('kitchen@globos.test'));
-    expect(accounts, contains('cashier@globos.test'));
-    expect(accounts, contains('admin@globos.test'));
-    expect(accounts, contains('superadmin@globos.test'));
-    expect(accounts, contains('pos.validation.codex@globos.test'));
-    expect(accounts, isNot(contains('dung.cashier01@globos.test')));
-    expect(accounts, isNot(contains('Dung@POS')));
-    expect(accounts, isNot(contains('1234')));
-    expect(accounts, isNot(contains('!')));
+    expect(accounts, contains('andre@globos.world'));
+    expect(accounts, contains('bt_pos1@globos.world'));
+    expect(accounts, contains('bh_ops1@globos.world'));
+    expect(accounts, contains('photo_bm1@globos.world'));
+    expect(accounts, contains('td_ops1@globos.world'));
+    expect(accounts, isNot(contains('@globos.test')));
+    expect(accounts, isNot(contains('@globosvn.test')));
 
     expect(authProvider, contains(".eq('auth_id', user.id)"));
   });

@@ -13,6 +13,14 @@ void main() {
 
         expect(seed, contains('__SMOKE_SHARED_PASSWORD__'));
         expect(seed, contains('pilot_gate3.smoke_password'));
+        expect(seed, contains('app.allow_local_pos_fixture_seed'));
+        expect(seed, contains('LOCAL_FIXTURE_SEED_ONLY'));
+        expect(
+          seed,
+          contains(
+            'test accounts and fixture restaurants are forbidden in production',
+          ),
+        );
         expect(seed, contains("'qa_run_id', v_qa_run_id"));
         expect(seed, contains("'cleanup_scope', 'dedicated_fixture_store'"));
         expect(seed, isNot(contains('SMOKE_SHARED_PASSWORD=')));

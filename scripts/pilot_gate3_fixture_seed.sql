@@ -4,6 +4,18 @@
 -- Runtime wrapper must replace __SMOKE_SHARED_PASSWORD__ in a temporary copy.
 -- Do not commit or print the generated password.
 
+-- Fail closed unless a local-only test runner explicitly enables this seed in
+-- the same database session. Production runners do not set this GUC.
+DO $local_only_guard$
+BEGIN
+  IF current_setting('app.allow_local_pos_fixture_seed', true)
+       IS DISTINCT FROM 'LOCAL_ONLY' THEN
+    RAISE EXCEPTION
+      'LOCAL_FIXTURE_SEED_ONLY: test accounts and fixture restaurants are forbidden in production';
+  END IF;
+END;
+$local_only_guard$;
+
 BEGIN;
 
 DO $secret$
