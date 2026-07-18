@@ -14,7 +14,7 @@ ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env.local}"
 MIGRATION_FILE="${MIGRATION_FILE:-}"
 TEST_TARGETS="${TEST_TARGETS:-test/pilot_feedback_closure_contract_test.dart}"
 DEPLOY_MODE="${DEPLOY_MODE:-prebuilt}"
-PILOT_AUTH_EMAILS_FILE="${PILOT_AUTH_EMAILS_FILE:-$ROOT_DIR/docs/manual_test/pos_required_pilot_auth_emails.txt}"
+PRODUCTION_AUTH_EMAILS_FILE="${PRODUCTION_AUTH_EMAILS_FILE:-${PILOT_AUTH_EMAILS_FILE:-$ROOT_DIR/docs/pos/pos_required_production_auth_emails.txt}}"
 PILOT_LOGIN_SMOKE_SCRIPT="${PILOT_LOGIN_SMOKE_SCRIPT:-$ROOT_DIR/scripts/smoke_pilot_login.sh}"
 FIXED_ACCOUNT_SMOKE_SCRIPT="${FIXED_ACCOUNT_SMOKE_SCRIPT:-$ROOT_DIR/scripts/smoke_fixed_pos_account_login.sh}"
 
@@ -37,10 +37,10 @@ Usage:
   scripts/deploy_pos_production.sh [options]
 
 Default flow:
-  preflight -> pilot Auth readiness -> locked Flutter dependency bootstrap ->
+  preflight -> production Auth and test-data hygiene -> locked Flutter dependency bootstrap ->
   dart analyze -> focused tests ->
   optional DB migration -> vercel build --prod ->
-  vercel deploy --prebuilt --prod -> live HTTP check -> pilot login smoke
+  vercel deploy --prebuilt --prod -> live HTTP check -> operational login smoke
 
 DB-only flow:
   clean exact-main/source and production Supabase preflight -> locked Flutter
@@ -48,8 +48,8 @@ DB-only flow:
   migration-history absence -> SQL preflight -> atomic apply -> verification ->
   migration-history confirmation
 
-  DB-only never invokes pilot Auth/account checks or pilot login smoke, never
-  requires pilot credentials, and never creates, resets, or mutates accounts.
+  DB-only never invokes production Auth/account checks or login smoke, never
+  requires login credentials, and never creates, resets, or mutates accounts.
   Auth, Vercel, live HTTP, and login readiness are not applicable.
 
 Options:
@@ -61,8 +61,8 @@ Options:
   --test FILE        Add a flutter test target. Use "all" for flutter test.
   --no-tests         Skip flutter test targets while keeping dart analyze.
   --skip-checks      Skip dart analyze and flutter tests.
-  --skip-auth-check  Skip required production pilot Auth account readiness check.
-  --skip-login-smoke Skip post-deploy pilot login smoke. Report as blocker-risk.
+  --skip-auth-check  Skip required production operational Auth readiness check.
+  --skip-login-smoke Skip post-deploy operational login smoke. Report as blocker-risk.
   --skip-db          Skip Supabase migration work.
   --skip-build       In remote mode, skip the local flutter build precheck.
   --skip-vercel      Skip Vercel deployment.
@@ -78,7 +78,7 @@ Useful env:
   MIGRATION_FILE=supabase/migrations/20260616000000_pos_pilot_feedback_closure.sql
   DEPLOY_MODE=remote
   TEST_TARGETS="test/a.dart test/b.dart"
-  PILOT_AUTH_EMAILS_FILE=docs/manual_test/pos_required_pilot_auth_emails.txt
+  PRODUCTION_AUTH_EMAILS_FILE=docs/pos/pos_required_production_auth_emails.txt
   FIXED_SMOKE_ACCOUNT_CODE=<existing fixed POS code>
   FIXED_SMOKE_PASSWORD=<set securely in environment; never print it>
   PILOT_SMOKE_EMAIL=<legacy generic helper only; not used by production release>
@@ -364,9 +364,9 @@ preflight() {
   fi
   if [[ "$DB_ONLY" != "1" && "$SKIP_AUTH_CHECK" != "1" ]]; then
     [[ -f "$ROOT_DIR/scripts/check_pilot_auth_accounts.sh" ]] ||
-      fail "Missing pilot Auth checker: $ROOT_DIR/scripts/check_pilot_auth_accounts.sh"
-    [[ -f "$PILOT_AUTH_EMAILS_FILE" ]] ||
-      fail "Missing pilot Auth account file: $PILOT_AUTH_EMAILS_FILE"
+      fail "Missing production Auth checker: $ROOT_DIR/scripts/check_pilot_auth_accounts.sh"
+    [[ -f "$PRODUCTION_AUTH_EMAILS_FILE" ]] ||
+      fail "Missing production Auth account file: $PRODUCTION_AUTH_EMAILS_FILE"
   fi
   if [[ "$DB_ONLY" != "1" && "$SKIP_LOGIN_SMOKE" != "1" && "$SKIP_VERCEL" != "1" ]]; then
     need_cmd curl
@@ -389,13 +389,13 @@ preflight() {
 
 run_auth_check() {
   if [[ "$SKIP_AUTH_CHECK" == "1" ]]; then
-    log "Pilot Auth account readiness check skipped"
+    log "Production Auth and test-data hygiene check skipped"
     return 0
   fi
 
-  log "Pilot Auth account readiness"
+  log "Production Auth and test-data hygiene"
   run bash "$ROOT_DIR/scripts/check_pilot_auth_accounts.sh" \
-    --file "$PILOT_AUTH_EMAILS_FILE" \
+    --file "$PRODUCTION_AUTH_EMAILS_FILE" \
     --expected-project-ref "$POS_PROJECT_REF"
 }
 
@@ -1007,10 +1007,10 @@ run_login_smoke() {
 
 run_db_only_flow() {
   log "DB-only release scope"
-  printf 'Pilot Auth/account readiness: N/A (not invoked; no pilot credentials required).\n'
+  printf 'Production Auth/account readiness: N/A (not invoked; no login credentials required).\n'
   printf 'Vercel deployment: N/A.\n'
   printf 'Live HTTP check: N/A.\n'
-  printf 'Pilot login smoke: N/A (not invoked).\n'
+  printf 'Operational login smoke: N/A (not invoked).\n'
   warn "DB-only releases do not establish or claim POS login readiness."
 
   load_env

@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_REF_FILE="$ROOT_DIR/supabase/.temp/project-ref"
 EXPECTED_PROJECT_REF="${EXPECTED_PROJECT_REF:-ynriuoomotxuwhuxxmhj}"
-ACCOUNTS_FILE="${PILOT_AUTH_EMAILS_FILE:-$ROOT_DIR/docs/manual_test/pos_required_pilot_auth_emails.txt}"
+ACCOUNTS_FILE="${PRODUCTION_AUTH_EMAILS_FILE:-${PILOT_AUTH_EMAILS_FILE:-$ROOT_DIR/docs/pos/pos_required_production_auth_emails.txt}}"
 DRY_RUN=0
 
 usage() {
@@ -12,16 +12,17 @@ usage() {
 Usage:
   scripts/check_pilot_auth_accounts.sh [options]
 
-Checks that required POS pilot emails exist in production Supabase Auth,
+Checks that required POS operational emails exist in production Supabase Auth,
 have an active POS public.users profile linked by public.users.auth_id, and
-carry loginable app_metadata.accessible_store_ids claims. This check never
-reads, prints, creates, or resets passwords.
+carry loginable app_metadata.accessible_store_ids claims. It also blocks
+active or unbanned .test identities and active test-marker stores. This check
+never reads, prints, creates, or resets passwords.
 
 Failure output is intentionally provisioning-oriented: Vercel cannot fix
 missing Auth users or profile links.
 
 Options:
-  --file FILE                 Required email list. Defaults to docs/manual_test/pos_required_pilot_auth_emails.txt
+  --file FILE                 Required email list. Defaults to docs/pos/pos_required_production_auth_emails.txt
   --expected-project-ref REF  Expected linked Supabase project ref.
   --dry-run                   Validate inputs and print what would be checked.
   -h, --help                  Show this help.
@@ -62,7 +63,7 @@ parse_args() {
 }
 
 read_required_emails() {
-  [[ -f "$ACCOUNTS_FILE" ]] || fail "Missing pilot Auth account file: $ACCOUNTS_FILE"
+  [[ -f "$ACCOUNTS_FILE" ]] || fail "Missing production Auth account file: $ACCOUNTS_FILE"
 
   local line
   local email
@@ -73,10 +74,12 @@ read_required_emails() {
     [[ -z "$email" ]] && continue
     [[ "$email" =~ ^[a-z0-9._%+-]+@[a-z0-9.-]+$ ]] ||
       fail "Invalid email in $ACCOUNTS_FILE: $email"
+    [[ ! "$email" =~ \.test$ ]] ||
+      fail "Reserved .test identities are forbidden in the production Auth requirement file: $email"
     REQUIRED_EMAILS+=("$email")
   done < "$ACCOUNTS_FILE"
 
-  [[ "${#REQUIRED_EMAILS[@]}" -gt 0 ]] || fail "No required pilot Auth emails found."
+  [[ "${#REQUIRED_EMAILS[@]}" -gt 0 ]] || fail "No required production Auth emails found."
 }
 
 verify_project_ref() {
@@ -86,6 +89,115 @@ verify_project_ref() {
   printf 'Supabase linked project: %s\n' "$project_ref"
   [[ "$project_ref" == "$EXPECTED_PROJECT_REF" ]] ||
     fail "Linked Supabase project is not production ($EXPECTED_PROJECT_REF)."
+}
+
+check_production_hygiene() {
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf 'Production test-data hygiene check dry-run: reserved .test identities and test-marker stores are forbidden.\n'
+    return 0
+  fi
+
+  command -v supabase >/dev/null 2>&1 || fail "Missing required command: supabase"
+  command -v python3 >/dev/null 2>&1 || fail "Missing required command: python3"
+
+  local hygiene_query_file
+  hygiene_query_file="$(mktemp)"
+  cat >"$hygiene_query_file" <<'SQL'
+with test_auth as (
+  select id
+  from auth.users
+  where lower(coalesce(email, '')) ~ '@[^@]+\.test$'
+),
+test_profiles as (
+  select u.id
+  from public.users u
+  join test_auth t on t.id = u.auth_id
+)
+select
+  (select count(*) from auth.users au join test_auth t on t.id = au.id
+    where au.banned_until is null or au.banned_until <= now()) as unbanned_test_auth,
+  (select count(*) from public.users u join test_profiles t on t.id = u.id
+    where u.is_active) as active_test_profiles,
+  (select count(*) from public.user_store_access usa join test_profiles t on t.id = usa.user_id
+    where usa.is_active) as active_test_store_access,
+  (select count(*) from public.user_brand_access uba join test_profiles t on t.id = uba.user_id
+    where uba.is_active) as active_test_brand_access,
+  (select count(*) from public.restaurants r
+    left join public.brands b on b.id = r.brand_id
+    where r.is_active and (
+      lower(r.name) ~ '(test|fixture|smoke|pilot)'
+      or upper(coalesce(b.code, '')) like 'SMK_%'
+    )) as active_test_marker_stores,
+  (select count(*) from public.user_store_access usa
+    join public.restaurants r on r.id = usa.store_id
+    where usa.is_active and r.is_active = false) as active_access_to_inactive_store;
+SQL
+
+  local query_output
+  if ! query_output="$(supabase db query --linked -f "$hygiene_query_file" -o json)"; then
+    rm -f "$hygiene_query_file"
+    fail "Could not verify production test-data hygiene."
+  fi
+  rm -f "$hygiene_query_file"
+
+  local counts
+  counts="$(HYGIENE_QUERY_JSON="$query_output" python3 - <<'PY'
+import json
+import os
+
+raw = os.environ["HYGIENE_QUERY_JSON"]
+start = raw.find("{")
+end = raw.rfind("}")
+if start < 0 or end < start:
+    raise SystemExit("Supabase CLI did not return hygiene JSON.")
+data = json.loads(raw[start : end + 1])
+rows = data.get("rows", data)
+if not isinstance(rows, list) or len(rows) != 1:
+    raise SystemExit("Production hygiene query did not return exactly one row.")
+row = rows[0]
+keys = (
+    "unbanned_test_auth",
+    "active_test_profiles",
+    "active_test_store_access",
+    "active_test_brand_access",
+    "active_test_marker_stores",
+    "active_access_to_inactive_store",
+)
+print("\t".join(str(row.get(key, 0)) for key in keys))
+PY
+)"
+
+  local unbanned_test_auth
+  local active_test_profiles
+  local active_test_store_access
+  local active_test_brand_access
+  local active_test_marker_stores
+  local active_access_to_inactive_store
+  IFS=$'\t' read -r \
+    unbanned_test_auth \
+    active_test_profiles \
+    active_test_store_access \
+    active_test_brand_access \
+    active_test_marker_stores \
+    active_access_to_inactive_store <<<"$counts"
+
+  if [[ "$unbanned_test_auth" != "0" \
+     || "$active_test_profiles" != "0" \
+     || "$active_test_store_access" != "0" \
+     || "$active_test_brand_access" != "0" \
+     || "$active_test_marker_stores" != "0" \
+     || "$active_access_to_inactive_store" != "0" ]]; then
+    printf 'BLOCKER: Production test-data hygiene violation: unbanned_test_auth=%s active_test_profiles=%s active_test_store_access=%s active_test_brand_access=%s active_test_marker_stores=%s active_access_to_inactive_store=%s\n' \
+      "$unbanned_test_auth" \
+      "$active_test_profiles" \
+      "$active_test_store_access" \
+      "$active_test_brand_access" \
+      "$active_test_marker_stores" \
+      "$active_access_to_inactive_store" >&2
+    fail "Production contains active test or invalid store-scope artifacts. Deployment is blocked."
+  fi
+
+  printf 'Production test-data hygiene: OK\n'
 }
 
 build_query_file() {
@@ -148,7 +260,8 @@ select
     when coalesce(m.role::text, '') not in (
       'super_admin', 'brand_admin', 'store_admin', 'admin',
       'waiter', 'kitchen', 'cashier',
-      'photo_objet_master', 'photo_objet_store_admin'
+      'photo_objet_master', 'photo_objet_store_admin',
+      'photo_objet_store_operator'
     ) then 'UNKNOWN_ROLE'
     when coalesce(s.accessible_store_count, 0) = 0 then 'MISSING_STORE_SCOPE'
     when coalesce(s.valid_store_count, 0) <> coalesce(s.accessible_store_count, 0)
@@ -205,13 +318,13 @@ print_blocker_report() {
   local missing_scope="$6"
   local invalid_scope="$7"
 
-  printf '\nROOT_CAUSE: Required POS pilot identity state is missing from production Supabase, not from the Vercel frontend.\n' >&2
+  printf '\nROOT_CAUSE: Required POS operational identity state is missing from production Supabase, not from the Vercel frontend.\n' >&2
   printf 'PROJECT: %s\n' "$EXPECTED_PROJECT_REF" >&2
   printf 'SOURCE: %s\n' "$ACCOUNTS_FILE" >&2
   printf 'APP_PROFILE_LOOKUP: auth.users.email -> auth.users.id -> public.users.auth_id\n' >&2
 
   if [[ -n "$missing_auth" ]]; then
-    printf 'NEXT_ACTION MISSING_AUTH: create the production Supabase Auth user with the assigned pilot credential, confirm email, then link/create public.users.auth_id.\n' >&2
+    printf 'NEXT_ACTION MISSING_AUTH: provision only the approved production operational identity, confirm email, then link/create public.users.auth_id.\n' >&2
     printf '%s\n' "$missing_auth" | while IFS= read -r email; do
       [[ -n "$email" ]] && printf '  - %s\n' "$email" >&2
     done
@@ -232,7 +345,7 @@ print_blocker_report() {
   fi
 
   if [[ -n "$inactive_profile" ]]; then
-    printf 'NEXT_ACTION INACTIVE_POS_PROFILE: reactivate the POS public.users row or remove the pilot email from the required list.\n' >&2
+    printf 'NEXT_ACTION INACTIVE_POS_PROFILE: confirm the approved operational assignment before reactivating the POS profile or updating the required list.\n' >&2
     printf '%s\n' "$inactive_profile" | while IFS= read -r email; do
       [[ -n "$email" ]] && printf '  - %s\n' "$email" >&2
     done
@@ -259,13 +372,13 @@ print_blocker_report() {
     done
   fi
 
-  printf 'RUNBOOK: docs/manual_test/pos_pilot_auth_provisioning_runbook.md\n' >&2
-  printf 'SAFETY: do not print, store, reset, or rotate pilot passwords in deployment automation.\n\n' >&2
+  printf 'RUNBOOK: docs/pos/POS_PRODUCTION_AUTH_OPERATIONS_RUNBOOK.md\n' >&2
+  printf 'SAFETY: .test identities are forbidden; do not print, store, reset, or rotate production passwords in deployment automation.\n\n' >&2
 }
 
 check_accounts() {
   if [[ "$DRY_RUN" == "1" ]]; then
-    printf 'Pilot Auth account check dry-run: %s accounts from %s\n' \
+    printf 'Production Auth account check dry-run: %s accounts from %s\n' \
       "${#REQUIRED_EMAILS[@]}" "$ACCOUNTS_FILE"
     return 0
   fi
@@ -329,7 +442,7 @@ check_accounts() {
 
   if [[ "$has_failure" != "0" ]]; then
     print_blocker_report "$missing_auth" "$unconfirmed_auth" "$missing_profile" "$inactive_profile" "$unknown_role" "$missing_scope" "$invalid_scope"
-    fail "Required POS pilot Auth accounts are not ready. Fix accounts in Supabase Auth before deploying."
+    fail "Required POS production Auth accounts are not ready. Fix the approved operational accounts before deploying."
   fi
 }
 
@@ -337,6 +450,7 @@ main() {
   parse_args "$@"
   read_required_emails
   verify_project_ref
+  check_production_hygiene
   check_accounts
 }
 

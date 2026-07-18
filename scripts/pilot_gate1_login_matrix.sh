@@ -66,6 +66,8 @@ fi
 [[ -n "${SUPABASE_URL:-}" ]] || fail "SUPABASE_URL not set (env or --env-file)"
 [[ -n "${SUPABASE_ANON_KEY:-}" ]] || fail "SUPABASE_ANON_KEY not set (env or --env-file)"
 [[ -n "${PILOT_SMOKE_PASSWORD:-}" ]] || fail "PILOT_SMOKE_PASSWORD not set"
+[[ "${SUPABASE_URL%/}" != "https://ynriuoomotxuwhuxxmhj.supabase.co" ]] ||
+  fail "Test-account login matrix is forbidden against POS production."
 command -v python3 >/dev/null || fail "python3 required"
 command -v curl >/dev/null || fail "curl required"
 

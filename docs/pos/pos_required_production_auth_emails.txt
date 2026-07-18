@@ -1,0 +1,19 @@
+# Required POS production operational Auth accounts.
+# Only approved real operating identities belong here. Reserved .test domains
+# are rejected by scripts/check_pilot_auth_accounts.sh before any remote query.
+# Never store passwords or reset instructions in this file.
+
+andre@globos.world
+bh_ops1@globos.world
+bt_kit1@globos.world
+bt_pos1@globos.world
+bt_tab1@globos.world
+bunsik_bm1@globos.world
+bunsik_sm1@globos.world
+da_ops1@globos.world
+lt_ops1@globos.world
+nz_ops1@globos.world
+photo_bm1@globos.world
+photo_bm2@globos.world
+qt_ops1@globos.world
+td_ops1@globos.world
