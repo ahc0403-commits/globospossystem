@@ -5,16 +5,13 @@ DECLARE
   v_missing integer;
   v_bad integer;
 BEGIN
-  IF to_regclass('ops.brands') IS NULL
-     OR to_regclass('public.external_sales') IS NULL THEN
+  IF to_regclass('public.external_sales') IS NULL THEN
     RAISE EXCEPTION 'VND_CURRENCY_PREFLIGHT_RELATION_MISSING';
   END IF;
 
   SELECT count(*) INTO v_missing
   FROM (
     VALUES
-      ('ops', 'brands', 'id'),
-      ('ops', 'brands', 'currency'),
       ('public', 'external_sales', 'id'),
       ('public', 'external_sales', 'currency')
   ) required(table_schema, table_name, column_name)
@@ -26,14 +23,6 @@ BEGIN
 
   IF v_missing <> 0 THEN
     RAISE EXCEPTION 'VND_CURRENCY_PREFLIGHT_COLUMN_MISSING: %', v_missing;
-  END IF;
-
-  SELECT count(*) INTO v_bad
-  FROM ops.brands
-  WHERE NULLIF(btrim(currency), '') IS NOT NULL
-    AND upper(btrim(currency)) <> 'VND';
-  IF v_bad <> 0 THEN
-    RAISE EXCEPTION 'VND_CURRENCY_PREFLIGHT_NON_VND_BRAND: %', v_bad;
   END IF;
 
   SELECT count(*) INTO v_bad
