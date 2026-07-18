@@ -28,6 +28,14 @@ class StoreSetupScreen extends ConsumerWidget {
     final state = ref.watch(storeSetupProvider(storeId));
     final notifier = ref.read(storeSetupProvider(storeId).notifier);
     final auth = ref.watch(authProvider);
+    final compactAppBar =
+        MediaQuery.sizeOf(context).width < 600 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.5;
+    void openAdvancedDestinations() => context.go(
+      auth.role == 'super_admin'
+          ? '/admin/$storeId?tab=settings'
+          : '/admin?tab=settings',
+    );
 
     return Scaffold(
       key: const Key('store_setup_root'),
@@ -40,16 +48,20 @@ class StoreSetupScreen extends ConsumerWidget {
           icon: const Icon(Icons.arrow_back),
         ),
         actions: [
-          TextButton.icon(
-            key: const Key('store_setup_advanced'),
-            onPressed: () => context.go(
-              auth.role == 'super_admin'
-                  ? '/admin/$storeId?tab=settings'
-                  : '/admin?tab=settings',
+          if (compactAppBar)
+            IconButton(
+              key: const Key('store_setup_advanced'),
+              onPressed: openAdvancedDestinations,
+              tooltip: context.l10n.storeSetupAdvancedDestinations,
+              icon: const Icon(Icons.tune),
+            )
+          else
+            TextButton.icon(
+              key: const Key('store_setup_advanced'),
+              onPressed: openAdvancedDestinations,
+              icon: const Icon(Icons.tune),
+              label: Text(context.l10n.storeSetupAdvancedDestinations),
             ),
-            icon: const Icon(Icons.tune),
-            label: Text(context.l10n.storeSetupAdvancedDestinations),
-          ),
         ],
       ),
       body: state.phase == StoreSetupPhase.loadingExisting
@@ -69,7 +81,9 @@ class StoreSetupScreen extends ConsumerWidget {
                 Expanded(
                   child: Stepper(
                     key: const Key('store_setup_six_step_wizard'),
-                    type: MediaQuery.sizeOf(context).width >= 900
+                    type:
+                        MediaQuery.sizeOf(context).width >= 1800 &&
+                            MediaQuery.textScalerOf(context).scale(1) <= 1.2
                         ? StepperType.horizontal
                         : StepperType.vertical,
                     currentStep: state.step,
@@ -80,6 +94,9 @@ class StoreSetupScreen extends ConsumerWidget {
                         children: [
                           if (state.step > 0)
                             OutlinedButton(
+                              key: ValueKey(
+                                'store_setup_previous_${details.stepIndex}',
+                              ),
                               onPressed: state.isBusy
                                   ? null
                                   : () => notifier.goToStep(state.step - 1),
@@ -88,6 +105,9 @@ class StoreSetupScreen extends ConsumerWidget {
                           const SizedBox(width: 8),
                           if (state.step < 5)
                             FilledButton(
+                              key: ValueKey(
+                                'store_setup_next_${details.stepIndex}',
+                              ),
                               onPressed: state.isBusy
                                   ? null
                                   : () => notifier.goToStep(state.step + 1),

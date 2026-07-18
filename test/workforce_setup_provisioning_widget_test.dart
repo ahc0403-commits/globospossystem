@@ -87,6 +87,10 @@ void main() {
 
     await tester.tap(find.byKey(const Key('store_setup_configure_workforce')));
     await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('store_setup_workforce_config_dialog')),
+      findsOneWidget,
+    );
     await tester.enterText(
       find.byKey(const Key('store_setup_short_code_field')),
       'ABCDEFGH',

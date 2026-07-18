@@ -151,29 +151,34 @@ class _NavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        borderRadius: AppRadius.sm,
-        child: Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: enabled ? PosColors.surface : PosColors.canvasAlt,
-            borderRadius: AppRadius.sm,
-            border: Border.all(
-              color: enabled
-                  ? PosColors.border
-                  : PosColors.border.withValues(alpha: 0.7),
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: tooltip,
+      child: Tooltip(
+        message: tooltip,
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          borderRadius: AppRadius.sm,
+          child: Container(
+            width: PosDensity.touchTargetMin,
+            height: PosDensity.touchTargetMin,
+            decoration: BoxDecoration(
+              color: enabled ? PosColors.surface : PosColors.canvasAlt,
+              borderRadius: AppRadius.sm,
+              border: Border.all(
+                color: enabled
+                    ? PosColors.border
+                    : PosColors.border.withValues(alpha: 0.7),
+              ),
             ),
-          ),
-          child: Icon(
-            icon,
-            size: 16,
-            color: enabled
-                ? PosColors.textPrimary
-                : PosColors.textMuted.withValues(alpha: 0.72),
+            child: Icon(
+              icon,
+              size: 18,
+              color: enabled
+                  ? PosColors.textPrimary
+                  : PosColors.textMuted.withValues(alpha: 0.72),
+            ),
           ),
         ),
       ),

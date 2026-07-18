@@ -561,7 +561,14 @@ bool _parseFlag(String? value) {
 }
 
 class EinvoiceTab extends ConsumerStatefulWidget {
-  const EinvoiceTab({super.key});
+  const EinvoiceTab({
+    super.key,
+    this.meInvoiceReadinessOverride,
+    this.meInvoiceSellerConfigsOverride,
+  });
+
+  final List<Map<String, dynamic>>? meInvoiceReadinessOverride;
+  final List<Map<String, dynamic>>? meInvoiceSellerConfigsOverride;
 
   @override
   ConsumerState<EinvoiceTab> createState() => _EinvoiceTabState();
@@ -902,6 +909,7 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
                 : () => _showDownloadHint(filteredCount),
           ),
           PosSecondaryButton(
+            key: const Key('meinvoice_settings_action'),
             label: l10n.einvoiceMeInvoiceSettings,
             icon: Icons.tune_outlined,
             onPressed: _openMeInvoiceConfigDialog,
@@ -1487,8 +1495,23 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
     late final Map<String, _MeInvoiceSellerConfig> configs;
 
     try {
-      profiles = await ref.read(_meinvoiceReadinessProvider.future);
-      configs = await ref.read(_meinvoiceSellerConfigsProvider.future);
+      final readinessOverride = widget.meInvoiceReadinessOverride;
+      final configsOverride = widget.meInvoiceSellerConfigsOverride;
+      profiles = readinessOverride == null
+          ? await ref.read(_meinvoiceReadinessProvider.future)
+          : readinessOverride
+                .map(_MeInvoiceReadiness.fromJson)
+                .toList(growable: false);
+      if (configsOverride == null) {
+        configs = await ref.read(_meinvoiceSellerConfigsProvider.future);
+      } else {
+        configs = {
+          for (final row in configsOverride)
+            if (_MeInvoiceSellerConfig.fromJson(row).taxEntityId.isNotEmpty)
+              _MeInvoiceSellerConfig.fromJson(row).taxEntityId:
+                  _MeInvoiceSellerConfig.fromJson(row),
+        };
+      }
     } catch (error) {
       if (!mounted) return;
       showErrorToast(
@@ -1595,6 +1618,7 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
               }
 
               return AlertDialog(
+                key: const Key('meinvoice_settings_dialog'),
                 title: Text(l10n.einvoiceMeInvoiceSettingsTitle),
                 content: SizedBox(
                   width: 640,
@@ -1773,6 +1797,7 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
         },
       );
     } finally {
+      await Future<void>.delayed(kThemeAnimationDuration);
       appIdController.dispose();
       invoiceSeriesController.dispose();
       authBaseUrlController.dispose();

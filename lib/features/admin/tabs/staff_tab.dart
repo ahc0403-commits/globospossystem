@@ -186,6 +186,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
           width: compact ? 165 : 190,
           child: DropdownButtonFormField<String>(
             initialValue: _roleFilter,
+            isExpanded: true,
             decoration: InputDecoration(
               labelText: context.l10n.staffAllRoles,
               isDense: true,
@@ -193,12 +194,20 @@ class _StaffTabState extends ConsumerState<StaffTab> {
             items: [
               DropdownMenuItem(
                 value: 'all',
-                child: Text(context.l10n.staffAllRoles),
+                child: Text(
+                  context.l10n.staffAllRoles,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               for (final role in _employmentRoles)
                 DropdownMenuItem(
                   value: role,
-                  child: Text(_roleLabel(context, role)),
+                  child: Text(
+                    _roleLabel(context, role),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
             ],
             onChanged: (value) => setState(() => _roleFilter = value ?? 'all'),
@@ -208,6 +217,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
           width: compact ? 165 : 190,
           child: DropdownButtonFormField<String>(
             initialValue: _statusFilter,
+            isExpanded: true,
             decoration: InputDecoration(
               labelText: context.l10n.staffAllStatuses,
               isDense: true,
@@ -215,15 +225,27 @@ class _StaffTabState extends ConsumerState<StaffTab> {
             items: [
               DropdownMenuItem(
                 value: 'all',
-                child: Text(context.l10n.staffAllStatuses),
+                child: Text(
+                  context.l10n.staffAllStatuses,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               DropdownMenuItem(
                 value: 'active',
-                child: Text(context.l10n.staffEmployeeActive),
+                child: Text(
+                  context.l10n.staffEmployeeActive,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               DropdownMenuItem(
                 value: 'inactive',
-                child: Text(context.l10n.staffEmployeeInactive),
+                child: Text(
+                  context.l10n.staffEmployeeInactive,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
             onChanged: (value) =>
@@ -243,7 +265,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
           ),
         ),
         FilledButton.icon(
-          key: const Key('staff_add_employee_action'),
+          key: const Key('admin_staff_add_action'),
           onPressed: storeId == null
               ? null
               : () => _showEmployeeForm(storeId: storeId),
@@ -592,6 +614,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
       backgroundColor: AppColors.surface1,
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setModalState) => Padding(
+          key: const Key('admin_staff_add_sheet'),
           padding: EdgeInsets.fromLTRB(
             18,
             18,
@@ -734,6 +757,8 @@ class _StaffTabState extends ConsumerState<StaffTab> {
       ),
     );
 
+    await Future<void>.delayed(kThemeAnimationDuration);
+
     name.dispose();
     phone.dispose();
     bankNumber.dispose();
@@ -776,6 +801,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        key: const Key('staff_deactivate_employee_dialog'),
         title: Text(context.l10n.staffEmployeeDeactivateTitle),
         content: Text(
           context.l10n.staffEmployeeDeactivateMessage(member.fullName),
@@ -803,6 +829,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
         context: context,
         backgroundColor: AppColors.surface1,
         builder: (context) => Padding(
+          key: const Key('admin_staff_attendance_sheet'),
           padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -938,6 +965,7 @@ class _StaffDetailDisclosure extends StatelessWidget {
                   label: Text(context.l10n.staffEmployeeEditAction),
                 ),
                 OutlinedButton.icon(
+                  key: const Key('admin_staff_attendance_action'),
                   onPressed: onViewAttendance,
                   icon: const Icon(Icons.history_outlined, size: 16),
                   label: Text(context.l10n.staffViewAttendanceLog),

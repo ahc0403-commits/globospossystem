@@ -377,7 +377,7 @@ class _MenuBrowser extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           SizedBox(
-            height: 38,
+            height: 52,
             child: categories.isEmpty
                 ? Align(
                     alignment: Alignment.centerLeft,
@@ -711,18 +711,20 @@ class _SelectedMenuListItem extends StatelessWidget {
             ),
           ),
           IconButton(
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(
+              minWidth: PosDensity.touchTargetMin,
+              minHeight: PosDensity.touchTargetMin,
+            ),
             onPressed: () => onDecrementCartItem(item.menuItemId),
             icon: const Icon(Icons.remove_circle_outline, size: 16),
             color: PosColors.textSecondary,
           ),
           Text('${item.quantity}', style: PosNumericText.qtyUnit),
           IconButton(
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(
+              minWidth: PosDensity.touchTargetMin,
+              minHeight: PosDensity.touchTargetMin,
+            ),
             onPressed: () => onIncrementCartItem(item),
             icon: const Icon(Icons.add_circle_outline, size: 16),
             color: PosColors.accent,
@@ -868,9 +870,10 @@ class _PendingOrderReviewLine extends StatelessWidget {
             ),
           ),
           IconButton(
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(
+              minWidth: PosDensity.touchTargetMin,
+              minHeight: PosDensity.touchTargetMin,
+            ),
             onPressed: () => onDecrementCartItem(item.menuItemId),
             icon: const Icon(Icons.remove_circle_outline, size: 18),
             color: PosColors.textSecondary,
@@ -884,9 +887,10 @@ class _PendingOrderReviewLine extends StatelessWidget {
             ),
           ),
           IconButton(
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(
+              minWidth: PosDensity.touchTargetMin,
+              minHeight: PosDensity.touchTargetMin,
+            ),
             onPressed: () => onIncrementCartItem(item),
             icon: const Icon(Icons.add_circle_outline, size: 18),
             color: PosColors.accent,
@@ -980,6 +984,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
     final result = await showDialog<int>(
       context: context,
       builder: (context) => AlertDialog(
+        key: const Key('order_edit_quantity_dialog'),
         backgroundColor: PosColors.surface,
         title: Text(
           l10n.orderWorkspaceChangeQuantity,
@@ -1063,6 +1068,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
       backgroundColor: PosColors.surface,
       builder: (sheetContext) {
         return _CurrentTicketDetailSheet(
+          key: const Key('order_current_ticket_sheet'),
           order: activeOrder,
           onEditQuantity: widget.onEditOrderItemQuantity == null
               ? null
@@ -1220,6 +1226,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                       ),
                     if (widget.onTransferTable != null)
                       PopupMenuButton<_OrderPanelOverflowAction>(
+                        key: const Key('order_transfer_menu_action'),
                         tooltip: l10n.moreActions,
                         enabled: !widget.state.isSubmitting,
                         onSelected: (action) async {
@@ -1795,6 +1802,7 @@ class _WaiterReadyHandoffNotice extends StatelessWidget {
 
 class _CurrentTicketDetailSheet extends StatelessWidget {
   const _CurrentTicketDetailSheet({
+    super.key,
     required this.order,
     required this.onEditQuantity,
     required this.onCancelItem,
@@ -2168,6 +2176,7 @@ class _CompactCurrentOrderPanel extends StatelessWidget {
                   ),
                 if (onTransferTable != null)
                   PopupMenuButton<_OrderPanelOverflowAction>(
+                    key: const Key('order_transfer_menu_action_compact'),
                     tooltip: l10n.moreActions,
                     enabled: !state.isSubmitting,
                     onSelected: (action) async {

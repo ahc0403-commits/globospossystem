@@ -196,21 +196,23 @@ class _ToastSidebarCompactNav extends StatelessWidget {
         ),
     ];
 
-    return Container(
-      height: 64,
-      decoration: const BoxDecoration(
-        color: PosColors.surface,
-        border: Border(bottom: BorderSide(color: PosColors.border)),
-      ),
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        physics: const AlwaysScrollableScrollPhysics(
-          parent: ClampingScrollPhysics(),
+    return SizedBox(
+      height: 68,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: PosColors.surface,
+          border: Border(bottom: BorderSide(color: PosColors.border)),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        itemCount: items.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        itemBuilder: (context, index) => items[index],
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: ClampingScrollPhysics(),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          itemCount: items.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 8),
+          itemBuilder: (context, index) => items[index],
+        ),
       ),
     );
   }
@@ -237,86 +239,103 @@ class _ToastSidebarCompactSelectNav extends StatelessWidget {
         ? null
         : entries.first.flatIndex;
 
-    return Container(
-      height: 64,
-      decoration: const BoxDecoration(
-        color: PosColors.surface,
-        border: Border(bottom: BorderSide(color: PosColors.border)),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              height: 48,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: PosColors.accentMuted,
-                borderRadius: AppRadius.md,
-                border: Border.all(color: PosColors.accent),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<int>(
-                  key: const Key('toast_compact_section_selector'),
-                  value: safeValue,
-                  isExpanded: true,
-                  borderRadius: AppRadius.md,
-                  dropdownColor: PosColors.surface,
-                  icon: const Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    color: PosColors.accent,
-                  ),
-                  style: AppFonts.system(
-                    color: PosColors.textPrimary,
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w800,
-                  ),
-                  selectedItemBuilder: (context) => [
-                    for (final entry in entries)
-                      _ToastSidebarCompactSelectLabel(
-                        icon: entry.item.icon,
-                        label: entry.item.label,
-                        selected: true,
-                      ),
-                  ],
-                  items: [
-                    for (final entry in entries)
-                      DropdownMenuItem<int>(
-                        value: entry.flatIndex,
-                        child: _ToastSidebarCompactSelectLabel(
-                          icon: entry.item.icon,
-                          label: entry.item.label,
-                          selected: entry.flatIndex == selectedIndex,
+    return SizedBox(
+      height: 68,
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: PosColors.surface,
+          border: Border(bottom: BorderSide(color: PosColors.border)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Semantics(
+                  key: const Key('toast_compact_section_semantics'),
+                  container: true,
+                  button: true,
+                  enabled: entries.isNotEmpty,
+                  selected: true,
+                  label: safeValue == null
+                      ? null
+                      : entries
+                            .firstWhere((entry) => entry.flatIndex == safeValue)
+                            .item
+                            .label,
+                  child: Container(
+                    height: 52,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: PosColors.accentMuted,
+                      borderRadius: AppRadius.md,
+                      border: Border.all(color: PosColors.accent),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<int>(
+                        key: const Key('toast_compact_section_selector'),
+                        value: safeValue,
+                        isExpanded: true,
+                        borderRadius: AppRadius.md,
+                        dropdownColor: PosColors.surface,
+                        icon: const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: PosColors.accent,
                         ),
+                        style: AppFonts.system(
+                          color: PosColors.textPrimary,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w800,
+                        ),
+                        selectedItemBuilder: (context) => [
+                          for (final entry in entries)
+                            _ToastSidebarCompactSelectLabel(
+                              icon: entry.item.icon,
+                              label: entry.item.label,
+                              selected: true,
+                            ),
+                        ],
+                        items: [
+                          for (final entry in entries)
+                            DropdownMenuItem<int>(
+                              value: entry.flatIndex,
+                              child: _ToastSidebarCompactSelectLabel(
+                                icon: entry.item.icon,
+                                label: entry.item.label,
+                                selected: entry.flatIndex == selectedIndex,
+                              ),
+                            ),
+                        ],
+                        onChanged: (index) {
+                          if (index != null) {
+                            onItemSelected(index);
+                          }
+                        },
                       ),
-                  ],
-                  onChanged: (index) {
-                    if (index != null) {
-                      onItemSelected(index);
-                    }
-                  },
+                    ),
+                  ),
                 ),
               ),
-            ),
+              for (final item in bottomItems) ...[
+                const SizedBox(width: 8),
+                Tooltip(
+                  message: item.label,
+                  child: IconButton.filledTonal(
+                    key: item.itemKey,
+                    onPressed: item.onTap ?? () {},
+                    icon: Icon(item.icon),
+                    color: PosColors.textSecondary,
+                    style: IconButton.styleFrom(
+                      fixedSize: const Size(48, 48),
+                      backgroundColor: PosColors.mutedSurface,
+                      shape: RoundedRectangleBorder(borderRadius: AppRadius.md),
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
-          for (final item in bottomItems) ...[
-            const SizedBox(width: 8),
-            Tooltip(
-              message: item.label,
-              child: IconButton.filledTonal(
-                key: item.itemKey,
-                onPressed: item.onTap ?? () {},
-                icon: Icon(item.icon),
-                color: PosColors.textSecondary,
-                style: IconButton.styleFrom(
-                  fixedSize: const Size(48, 48),
-                  backgroundColor: PosColors.mutedSurface,
-                  shape: RoundedRectangleBorder(borderRadius: AppRadius.md),
-                ),
-              ),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -373,40 +392,57 @@ class _ToastSidebarCompactNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: selected ? PosColors.accentMuted : PosColors.mutedSurface,
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(
-              color: selected ? PosColors.accent : PosColors.border,
+    return Semantics(
+      button: true,
+      enabled: true,
+      selected: selected,
+      label: label,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(999),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minHeight: PosDensity.touchTargetMin,
             ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 17,
-                color: selected ? PosColors.accent : PosColors.textSecondary,
-              ),
-              const SizedBox(width: 7),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppFonts.system(
-                  color: selected ? PosColors.accent : PosColors.textSecondary,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w800,
+            child: Ink(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: selected
+                    ? PosColors.accentMuted
+                    : PosColors.mutedSurface,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: selected ? PosColors.accent : PosColors.border,
                 ),
               ),
-            ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    icon,
+                    size: 17,
+                    color: selected
+                        ? PosColors.accent
+                        : PosColors.textSecondary,
+                  ),
+                  const SizedBox(width: 7),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppFonts.system(
+                      color: selected
+                          ? PosColors.accent
+                          : PosColors.textSecondary,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -495,6 +531,7 @@ class _ToastSidebarRail extends StatelessWidget {
           ),
           Expanded(
             child: ListView.builder(
+              key: const Key('toast_sidebar_rail_list'),
               padding: const EdgeInsets.symmetric(vertical: 10),
               itemCount: entries.length,
               itemBuilder: (context, index) {

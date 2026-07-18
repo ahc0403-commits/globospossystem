@@ -6,13 +6,18 @@ import 'package:intl/intl.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/ui/app_fonts.dart';
-import '../../core/ui/app_theme.dart';
+import '../../core/ui/pos_design_tokens.dart';
+import '../../core/ui/toast/toast.dart';
 import '../../widgets/app_nav_bar.dart';
 import 'restaurant_sales_export.dart';
 import 'restaurant_sales_export_service.dart';
 
 class RestaurantSalesExportScreen extends StatefulWidget {
-  const RestaurantSalesExportScreen({super.key});
+  const RestaurantSalesExportScreen({super.key, this.loader});
+
+  /// Optional deterministic loader for operational-state widget tests.
+  /// Production continues to use [restaurantSalesExportService].
+  final Future<RestaurantSalesExport> Function(String businessDate)? loader;
 
   @override
   State<RestaurantSalesExportScreen> createState() =>
@@ -23,6 +28,8 @@ class _RestaurantSalesExportScreenState
     extends State<RestaurantSalesExportScreen> {
   late String _businessDate;
   bool _isDownloading = false;
+  String? _statusMessage;
+  bool _statusIsError = false;
 
   @override
   void initState() {
@@ -33,45 +40,55 @@ class _RestaurantSalesExportScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.surface0,
+      key: const Key('restaurant_sales_export_screen'),
+      backgroundColor: ToastColorTokens.canvas,
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(24),
-          children: [
-            const Align(alignment: Alignment.centerLeft, child: AppNavBar()),
-            const SizedBox(height: 28),
-            Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 720),
-                child: Container(
-                  padding: const EdgeInsets.all(28),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface1,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: AppColors.surface2),
-                  ),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 920),
+            child: ListView(
+              padding: const EdgeInsets.all(24),
+              children: [
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: AppNavBar(),
+                ),
+                const SizedBox(height: ToastSpacingTokens.xxl),
+                ToastWorkSurface(
+                  padding: const EdgeInsets.all(ToastSpacingTokens.xl),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(
-                        context.l10n.restaurantSalesExportTitle,
-                        style: AppFonts.system(
-                          color: AppColors.amber500,
-                          fontSize: 34,
+                      Semantics(
+                        header: true,
+                        child: Text(
+                          context.l10n.restaurantSalesExportTitle,
+                          style: AppFonts.system(
+                            color: ToastColorTokens.textPrimary,
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                            height: 1.2,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: ToastSpacingTokens.sm),
                       Text(
                         context.l10n.restaurantSalesExportSubtitle,
                         style: AppFonts.system(
-                          color: AppColors.textSecondary,
+                          color: ToastColorTokens.textSecondary,
                           fontSize: 14,
+                          height: 1.45,
                         ),
                       ),
-                      const SizedBox(height: 24),
-                      Row(
-                        children: [
-                          Expanded(
+                      const SizedBox(height: ToastSpacingTokens.xl),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final date = Semantics(
+                            selected: true,
+                            label: context.l10n.restaurantSalesExportDate(
+                              _businessDate,
+                            ),
                             child: Text(
                               context.l10n.restaurantSalesExportDate(
                                 _businessDate,
@@ -80,46 +97,100 @@ class _RestaurantSalesExportScreenState
                                 'restaurant_sales_export_business_date',
                               ),
                               style: AppFonts.system(
-                                color: AppColors.textPrimary,
+                                color: ToastColorTokens.textPrimary,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
                               ),
                             ),
-                          ),
-                          OutlinedButton.icon(
+                          );
+                          final choose = OutlinedButton.icon(
                             onPressed: _isDownloading ? null : _chooseDate,
                             icon: const Icon(Icons.calendar_month_outlined),
                             label: Text(
                               context.l10n.restaurantSalesExportChooseDate,
                             ),
-                          ),
-                        ],
+                          );
+                          if (constraints.maxWidth < 520) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                date,
+                                const SizedBox(height: ToastSpacingTokens.sm),
+                                choose,
+                              ],
+                            );
+                          }
+                          return Row(
+                            children: [
+                              Expanded(child: date),
+                              const SizedBox(width: ToastSpacingTokens.lg),
+                              choose,
+                            ],
+                          );
+                        },
                       ),
-                      const SizedBox(height: 18),
-                      FilledButton.icon(
-                        key: const Key('restaurant_sales_export_button'),
-                        onPressed: _isDownloading ? null : _download,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.amber500,
-                          foregroundColor: AppColors.surface0,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
+                      if (_statusMessage != null) ...[
+                        const SizedBox(height: ToastSpacingTokens.lg),
+                        Semantics(
+                          key: const Key('restaurant_sales_export_status'),
+                          liveRegion: true,
+                          container: true,
+                          child: Container(
+                            padding: const EdgeInsets.all(
+                              ToastSpacingTokens.md,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _statusIsError
+                                  ? ToastColorTokens.dangerMuted
+                                  : ToastColorTokens.successMuted,
+                              borderRadius: ToastRadiusTokens.sm,
+                              border: Border.all(
+                                color: _statusIsError
+                                    ? ToastColorTokens.danger
+                                    : ToastColorTokens.success,
+                              ),
+                            ),
+                            child: Text(
+                              _statusMessage!,
+                              style: AppFonts.system(
+                                color: ToastColorTokens.textPrimary,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
                         ),
-                        icon: _isDownloading
-                            ? const SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.download_outlined),
-                        label: Text(context.l10n.restaurantSalesExportDownload),
+                      ],
+                      const SizedBox(height: ToastSpacingTokens.lg),
+                      Semantics(
+                        button: true,
+                        enabled: !_isDownloading,
+                        child: FilledButton.icon(
+                          key: const Key('restaurant_sales_export_button'),
+                          onPressed: _isDownloading ? null : _download,
+                          icon: _isDownloading
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.download_outlined),
+                          label: Text(
+                            context.l10n.restaurantSalesExportDownload,
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -141,9 +212,15 @@ class _RestaurantSalesExportScreenState
   }
 
   Future<void> _download() async {
-    setState(() => _isDownloading = true);
+    setState(() {
+      _isDownloading = true;
+      _statusMessage = null;
+      _statusIsError = false;
+    });
     try {
-      final export = await restaurantSalesExportService.load(_businessDate);
+      final export =
+          await (widget.loader?.call(_businessDate) ??
+              restaurantSalesExportService.load(_businessDate));
       final bytes = buildRestaurantSalesWorkbook(export);
       await FileSaver.instance.saveFile(
         name: 'restaurant_sales_${_businessDate.replaceAll('-', '')}',
@@ -156,12 +233,23 @@ class _RestaurantSalesExportScreenState
         '#,##0.##',
         'vi_VN',
       ).format(export.grossSales);
-      _showMessage(
-        context.l10n.restaurantSalesExportSaved(export.receiptCount, amount),
+      final message = context.l10n.restaurantSalesExportSaved(
+        export.receiptCount,
+        amount,
       );
+      setState(() {
+        _statusMessage = message;
+        _statusIsError = false;
+      });
+      _showMessage(message);
     } catch (error) {
       if (!mounted) return;
-      _showMessage(_localizedError(error));
+      final message = _localizedError(error);
+      setState(() {
+        _statusMessage = message;
+        _statusIsError = true;
+      });
+      _showMessage(message);
     } finally {
       if (mounted) setState(() => _isDownloading = false);
     }

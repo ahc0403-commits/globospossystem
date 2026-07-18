@@ -120,27 +120,60 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
             const OfflineBanner(),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: Row(
-                children: [
-                  Text(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact =
+                      constraints.maxWidth < 700 ||
+                      MediaQuery.textScalerOf(context).scale(1) > 1.5;
+                  final title = Text(
                     context.l10n.attendanceEmployeeKioskTitle,
                     style: AppFonts.system(
                       color: AppColors.textPrimary,
                       fontSize: 22,
                       fontWeight: FontWeight.w800,
                     ),
-                  ),
-                  const Spacer(),
-                  const AppNavBar(),
-                  const SizedBox(width: 12),
-                  Text(
+                  );
+                  final clock = Text(
                     '${_nowVn.hour.toString().padLeft(2, '0')}:${_nowVn.minute.toString().padLeft(2, '0')}',
                     style: AppFonts.system(
                       color: AppColors.textPrimary,
                       fontSize: 32,
                     ),
-                  ),
-                ],
+                  );
+
+                  if (compact) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        title,
+                        const SizedBox(height: 12),
+                        Wrap(
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 12,
+                          runSpacing: 8,
+                          children: [
+                            const SizedBox(width: 110, child: AppNavBar()),
+                            clock,
+                          ],
+                        ),
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(child: title),
+                      const SizedBox(width: 12),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 420),
+                        child: const AppNavBar(),
+                      ),
+                      const SizedBox(width: 12),
+                      clock,
+                    ],
+                  );
+                },
               ),
             ),
             Expanded(

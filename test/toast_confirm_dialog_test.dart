@@ -41,4 +41,53 @@ void main() {
     expect(result, isTrue);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('toast confirm dialog with content lays out and cancels', (
+    tester,
+  ) async {
+    bool? result;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () {
+              unawaited(
+                ToastConfirmDialog.withContent(
+                  context: context,
+                  title: 'Approve adjustment',
+                  content: const TextField(
+                    key: Key('toast_confirm_dialog_content_field'),
+                    decoration: InputDecoration(labelText: 'Reason'),
+                  ),
+                  confirmLabel: 'Approve',
+                  cancelLabel: 'Keep editing',
+                ).then((value) => result = value),
+              );
+            },
+            child: const Text('Open content dialog'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open content dialog'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('toast_confirm_dialog_content_field')),
+      findsOneWidget,
+    );
+    expect(
+      tester.getSize(find.byKey(const Key('toast_confirm_dialog_confirm'))),
+      const Size(140, 48),
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Keep editing'));
+    await tester.pumpAndSettle();
+
+    expect(result, isFalse);
+    expect(tester.takeException(), isNull);
+  });
 }

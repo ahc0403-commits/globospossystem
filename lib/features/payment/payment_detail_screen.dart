@@ -22,9 +22,18 @@ import '../auth/auth_provider.dart';
 import '../settings/printer_provider.dart';
 
 class PaymentDetailScreen extends ConsumerStatefulWidget {
-  const PaymentDetailScreen({super.key, required this.paymentId});
+  const PaymentDetailScreen({
+    super.key,
+    required this.paymentId,
+    this.detailLoader,
+  });
 
   final String paymentId;
+  final Future<Map<String, dynamic>?> Function(
+    String paymentId,
+    String? storeId,
+  )?
+  detailLoader;
 
   @override
   ConsumerState<PaymentDetailScreen> createState() =>
@@ -64,10 +73,12 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
 
   Future<Map<String, dynamic>?> _loadDetail() async {
     final storeId = ref.read(authProvider).storeId;
-    final detail = await paymentService.fetchPaymentDetail(
-      widget.paymentId,
-      storeId: storeId,
-    );
+    final detail = widget.detailLoader == null
+        ? await paymentService.fetchPaymentDetail(
+            widget.paymentId,
+            storeId: storeId,
+          )
+        : await widget.detailLoader!(widget.paymentId, storeId);
     if (mounted) {
       if (detail != null || _lastDetail == null) {
         _lastDetail = detail;
