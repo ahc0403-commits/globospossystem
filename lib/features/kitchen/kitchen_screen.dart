@@ -340,7 +340,11 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                             Expanded(
                               child: LayoutBuilder(
                                 builder: (context, constraints) {
-                                  if (constraints.maxWidth < 1120) {
+                                  if (constraints.maxWidth < 1120 ||
+                                      MediaQuery.textScalerOf(
+                                            context,
+                                          ).scale(1) >
+                                          1.5) {
                                     // Live lanes come BEFORE the completed
                                     // history: on narrow screens the lazy
                                     // ListView otherwise buries new orders
@@ -1698,10 +1702,11 @@ class _KitchenTopBar extends ConsumerWidget {
     final restaurantName = storeId == null
         ? AsyncValue<String>.data(l10n.store)
         : ref.watch(kitchenRestaurantNameProvider(storeId!));
+    final compact = MediaQuery.sizeOf(context).width < 600;
 
     return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      constraints: const BoxConstraints(minHeight: 52),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: const BoxDecoration(
         color: AppColors.surfaceTopbar,
         border: Border(bottom: BorderSide(color: AppColors.surface3)),
@@ -1711,67 +1716,79 @@ class _KitchenTopBar extends ConsumerWidget {
           const AppNavBar(),
           const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  l10n.kitchenTitle.toUpperCase(),
-                  style: AppFonts.system(
-                    color: AppColors.textSecondary,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.35,
-                  ),
-                ),
-                const SizedBox(height: 1),
-                restaurantName.when(
-                  data: (name) => Text(
-                    name.isEmpty ? l10n.store : name,
+            child: compact
+                ? Text(
+                    l10n.kitchenTitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppFonts.system(
                       color: AppColors.textPrimary,
-                      fontSize: 16,
+                      fontSize: 15,
                       fontWeight: FontWeight.w700,
                     ),
+                  )
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.kitchenTitle.toUpperCase(),
+                        style: AppFonts.system(
+                          color: AppColors.textSecondary,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.35,
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      restaurantName.when(
+                        data: (name) => Text(
+                          name.isEmpty ? l10n.store : name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppFonts.system(
+                            color: AppColors.textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        loading: () => Text(
+                          l10n.loading,
+                          style: AppFonts.system(
+                            color: AppColors.textSecondary,
+                            fontSize: 13,
+                          ),
+                        ),
+                        error: (_, _) => Text(
+                          l10n.store,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppFonts.system(
+                            color: AppColors.textSecondary,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  loading: () => Text(
-                    l10n.loading,
-                    style: AppFonts.system(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
-                    ),
-                  ),
-                  error: (_, _) => Text(
-                    l10n.store,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppFonts.system(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ],
-            ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.surface2,
-              borderRadius: AppRadius.pill,
-              border: Border.all(color: AppColors.surface3),
-            ),
-            child: Text(
-              DateFormat('HH:mm:ss').format(TimeUtils.toVietnam(now)),
-              style: AppFonts.system(
-                color: AppColors.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
+          if (!compact)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.surface2,
+                borderRadius: AppRadius.pill,
+                border: Border.all(color: AppColors.surface3),
+              ),
+              child: Text(
+                DateFormat('HH:mm:ss').format(TimeUtils.toVietnam(now)),
+                style: AppFonts.system(
+                  color: AppColors.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
-          ),
           const SizedBox(width: 8),
           if (storeId != null) ...[
             if (PlatformInfo.isKioskSupported) ...[

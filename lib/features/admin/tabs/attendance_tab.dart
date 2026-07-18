@@ -23,7 +23,16 @@ String _formatVnd(NumberFormat currency, num amount) {
 }
 
 class AttendanceTab extends ConsumerStatefulWidget {
-  const AttendanceTab({super.key});
+  const AttendanceTab({
+    super.key,
+    this.attendanceServiceOverride,
+    this.payrollServiceOverride,
+    this.pinServiceOverride,
+  });
+
+  final AttendanceService? attendanceServiceOverride;
+  final PayrollService? payrollServiceOverride;
+  final PinService? pinServiceOverride;
 
   @override
   ConsumerState<AttendanceTab> createState() => _AttendanceTabState();
@@ -44,6 +53,12 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
   String? _payrollError;
   bool? _hasPayrollPin;
   String? _selectedAttendanceUserId;
+
+  AttendanceService get _attendanceService =>
+      widget.attendanceServiceOverride ?? attendanceService;
+  PayrollService get _payrollService =>
+      widget.payrollServiceOverride ?? payrollService;
+  PinService get _pinService => widget.pinServiceOverride ?? pinService;
 
   static DateTime _startOfWeek(DateTime now) {
     final weekday = now.weekday;
@@ -69,13 +84,13 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     });
 
     try {
-      final staff = await attendanceService.fetchStaffList(storeId);
-      final logs = await attendanceService.fetchLogs(
+      final staff = await _attendanceService.fetchStaffList(storeId);
+      final logs = await _attendanceService.fetchLogs(
         storeId: storeId,
         from: _logFrom,
         to: _logTo,
       );
-      final pinHash = await pinService.fetchPinHash(storeId);
+      final pinHash = await _pinService.fetchPinHash(storeId);
 
       if (!mounted) return;
       setState(() {
@@ -101,7 +116,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     });
 
     try {
-      final logs = await attendanceService.fetchLogs(
+      final logs = await _attendanceService.fetchLogs(
         storeId: storeId,
         from: _logFrom,
         to: _logTo,
@@ -135,7 +150,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     });
 
     try {
-      final payrolls = await payrollService.calculatePayroll(
+      final payrolls = await _payrollService.calculatePayroll(
         storeId: storeId,
         periodStart: periodStart,
         periodEnd: periodEnd,
@@ -161,7 +176,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
   }
 
   Future<void> _exportPayrollPreview(List<StaffPayroll> payrolls) async {
-    final bytes = await payrollService.exportToExcel(
+    final bytes = await _payrollService.exportToExcel(
       payrolls: payrolls,
       periodStart: _logFrom,
       periodEnd: _logTo,
@@ -193,6 +208,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
+              key: const Key('attendance_payroll_unlock_dialog'),
               title: Text(context.l10n.attendanceUnlockPayrollPreview),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -227,7 +243,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                       );
                       return;
                     }
-                    final verified = await pinService.verifyPin(storeId, pin);
+                    final verified = await _pinService.verifyPin(storeId, pin);
                     if (!verified) {
                       setDialogState(
                         () => validationError =
@@ -251,6 +267,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
       },
     );
 
+    await Future<void>.delayed(kThemeAnimationDuration);
     controller.dispose();
 
     if (unlocked == true && mounted) {
@@ -622,7 +639,8 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
           scrollable: scrollable,
         );
 
-    if (MediaQuery.sizeOf(context).width < 1120) {
+    if (MediaQuery.sizeOf(context).width < 1120 ||
+        MediaQuery.textScalerOf(context).scale(1) > 1.5) {
       return Scaffold(
         key: const Key('attendance_root'),
         backgroundColor: AppColors.surface0,
@@ -964,6 +982,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                 width: 220,
                 child: DropdownButtonFormField<String>(
                   initialValue: _selectedStaffFilter,
+                  isExpanded: true,
                   dropdownColor: AppColors.surface1,
                   style: Theme.of(context).textTheme.bodyMedium,
                   decoration: InputDecoration(
@@ -974,12 +993,20 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                   items: [
                     DropdownMenuItem(
                       value: 'all',
-                      child: Text(context.l10n.attendanceAllStaff),
+                      child: Text(
+                        context.l10n.attendanceAllStaff,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     ..._staffList.map(
                       (staff) => DropdownMenuItem(
                         value: staff['user_id']?.toString() ?? '',
-                        child: Text(staff['full_name']?.toString() ?? '-'),
+                        child: Text(
+                          staff['full_name']?.toString() ?? '-',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
                   ],
@@ -1240,6 +1267,9 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                               SizedBox(
                                 width: double.infinity,
                                 child: FilledButton.icon(
+                                  key: const Key(
+                                    'attendance_payroll_primary_action',
+                                  ),
                                   onPressed: payrollAction,
                                   icon: Icon(
                                     payrollRequiresUnlock

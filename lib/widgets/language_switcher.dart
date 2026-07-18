@@ -26,7 +26,7 @@ class LanguageSwitcher extends ConsumerWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: PosColors.panel,
         borderRadius: AppRadius.sm,
@@ -125,19 +125,26 @@ class _LanguageChip extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: AppRadius.sm,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? PosColors.accent : Colors.transparent,
-          borderRadius: AppRadius.sm,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          minWidth: PosDensity.touchTargetMin,
+          minHeight: PosDensity.touchTargetMin,
         ),
-        child: Text(
-          language.code.toUpperCase(),
-          style: TextStyle(
-            color: isSelected ? Colors.white : PosColors.textMuted,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isSelected ? PosColors.accent : Colors.transparent,
+            borderRadius: AppRadius.sm,
+          ),
+          child: Text(
+            language.code.toUpperCase(),
+            style: TextStyle(
+              color: isSelected ? Colors.white : PosColors.textMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ),

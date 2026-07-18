@@ -22,7 +22,11 @@ import 'fingerprint_provider.dart';
 enum _KioskViewState { idle, typeSelect, camera, preview, uploading, done }
 
 class AttendanceKioskScreen extends ConsumerStatefulWidget {
-  const AttendanceKioskScreen({super.key});
+  const AttendanceKioskScreen({super.key, this.isAndroidOverride});
+
+  /// Allows widget tests to exercise Android-only kiosk states without
+  /// changing the production platform gate.
+  final bool? isAndroidOverride;
 
   @override
   ConsumerState<AttendanceKioskScreen> createState() =>
@@ -221,14 +225,23 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
     final isOnline = ref.watch(connectivityProvider).asData?.value ?? true;
     final l10n = context.l10n;
 
-    if (!PlatformInfo.isAndroid) {
+    if (!(widget.isAndroidOverride ?? PlatformInfo.isAndroid)) {
       return Scaffold(
         key: const Key('attendance_kiosk_root'),
         backgroundColor: AppColors.surface0,
-        body: AppEmptyState(
-          title: l10n.attendanceAndroidTabletRequired,
-          message: l10n.attendanceAndroidTabletOnlyMessage,
-          icon: Icons.tablet_android,
+        body: SafeArea(
+          child: Column(
+            children: [
+              ToastTopbar(title: l10n.attendance, trailing: const AppNavBar()),
+              Expanded(
+                child: AppEmptyState(
+                  title: l10n.attendanceAndroidTabletRequired,
+                  message: l10n.attendanceAndroidTabletOnlyMessage,
+                  icon: Icons.tablet_android,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }

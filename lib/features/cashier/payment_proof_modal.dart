@@ -7,7 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/layout/platform_info.dart';
 import '../../core/services/payment_proof_service.dart';
-import '../../main.dart';
+import '../../core/ui/pos_design_tokens.dart';
 import '../../widgets/error_toast.dart';
 
 class PaymentProofModal extends StatefulWidget {
@@ -80,56 +80,62 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     return AlertDialog(
-      backgroundColor: AppColors.surface1,
+      backgroundColor: PosColors.surface,
       contentPadding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
       title: Row(
         children: [
-          const Icon(Icons.photo_camera, color: AppColors.amber500, size: 22),
+          const Icon(Icons.photo_camera, color: PosColors.accent, size: 22),
           const SizedBox(width: 8),
-          Text(
-            l10n.paymentProofTitle,
-            style: AppTextStyles.operationalTitle(
-              size: 24,
-              color: AppColors.textPrimary,
+          Flexible(
+            child: Text(
+              l10n.paymentProofTitle,
+              style: AppFonts.system(
+                fontSize: 24,
+                color: PosColors.textPrimary,
+                letterSpacing: -0.2,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
       ),
       content: SizedBox(
         width: 460,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              l10n.paymentProofDirection(widget.methodLabel.toUpperCase()),
-              style: AppFonts.system(
-                color: AppColors.textSecondary,
-                fontSize: 13,
-                height: 1.4,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n.paymentProofDirection(widget.methodLabel.toUpperCase()),
+                style: AppFonts.system(
+                  color: PosColors.textSecondary,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
               ),
-            ),
-            const SizedBox(height: 14),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.surface0,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.surface2),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: PosColors.canvas,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: PosColors.border),
+                ),
+                child: _selectedFile == null ? _emptyState() : _previewCard(),
               ),
-              child: _selectedFile == null ? _emptyState() : _previewCard(),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              l10n.paymentProofUploadQueueHint,
-              style: AppFonts.system(
-                color: AppColors.textSecondary,
-                fontSize: 11,
+              const SizedBox(height: 12),
+              Text(
+                l10n.paymentProofUploadQueueHint,
+                style: AppFonts.system(
+                  color: PosColors.textSecondary,
+                  fontSize: 11,
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-          ],
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
       ),
       actions: [
@@ -137,7 +143,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
           onPressed: _isSaving ? null : () => Navigator.of(context).pop(null),
           child: Text(
             l10n.paymentProofSkipForNow,
-            style: AppFonts.system(color: AppColors.textSecondary),
+            style: AppFonts.system(color: PosColors.textSecondary),
           ),
         ),
         OutlinedButton.icon(
@@ -153,8 +159,8 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
         FilledButton.icon(
           onPressed: _isSaving ? null : _save,
           style: FilledButton.styleFrom(
-            backgroundColor: AppColors.amber500,
-            foregroundColor: AppColors.surface0,
+            backgroundColor: PosColors.accent,
+            foregroundColor: Colors.white,
           ),
           icon: _isSaving
               ? const SizedBox(
@@ -184,12 +190,12 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
           width: 72,
           height: 72,
           decoration: BoxDecoration(
-            color: AppColors.amber500.withValues(alpha: 0.14),
+            color: PosColors.accent.withValues(alpha: 0.14),
             shape: BoxShape.circle,
           ),
           child: const Icon(
             Icons.receipt_long,
-            color: AppColors.amber500,
+            color: PosColors.accent,
             size: 34,
           ),
         ),
@@ -197,7 +203,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
         Text(
           l10n.paymentProofNoPhotoYet,
           style: AppFonts.system(
-            color: AppColors.textPrimary,
+            color: PosColors.textPrimary,
             fontSize: 15,
             fontWeight: FontWeight.w700,
           ),
@@ -207,7 +213,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
           l10n.paymentProofEmptySubtitle,
           textAlign: TextAlign.center,
           style: AppFonts.system(
-            color: AppColors.textSecondary,
+            color: PosColors.textSecondary,
             fontSize: 12,
             height: 1.4,
           ),
@@ -242,7 +248,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
         Text(
           l10n.paymentProofReadyToUpload,
           style: AppFonts.system(
-            color: AppColors.textPrimary,
+            color: PosColors.textPrimary,
             fontSize: 14,
             fontWeight: FontWeight.w700,
           ),
@@ -250,10 +256,7 @@ class _PaymentProofModalState extends State<PaymentProofModal> {
         const SizedBox(height: 4),
         Text(
           _fileLabel(file),
-          style: AppFonts.system(
-            color: AppColors.textSecondary,
-            fontSize: 11,
-          ),
+          style: AppFonts.system(color: PosColors.textSecondary, fontSize: 11),
         ),
       ],
     );

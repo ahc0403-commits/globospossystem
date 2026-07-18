@@ -353,6 +353,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
+                key: const Key('admin_staff_add_action'),
                 onPressed: storeId == null
                     ? null
                     : () => _showAddStaffSheet(
@@ -507,6 +508,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                 ),
               ),
               FilledButton.icon(
+                key: const Key('admin_staff_add_action'),
                 onPressed: storeId == null
                     ? null
                     : () => _showAddStaffSheet(
@@ -1128,6 +1130,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
       backgroundColor: AppColors.surface1,
       builder: (context) {
         return Padding(
+          key: const Key('admin_staff_attendance_sheet'),
           padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1195,6 +1198,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
       isScrollControlled: true,
       builder: (context) {
         return Padding(
+          key: const Key('admin_staff_add_sheet'),
           padding: EdgeInsets.only(
             left: 16,
             right: 16,
@@ -1352,6 +1356,8 @@ class _StaffTabState extends ConsumerState<StaffTab> {
       },
     );
 
+    await Future<void>.delayed(kThemeAnimationDuration);
+
     fullNameController.dispose();
     emailController.dispose();
     passwordController.dispose();
@@ -1412,6 +1418,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return AlertDialog(
+              key: const Key('admin_staff_permission_dialog'),
               backgroundColor: AppColors.surface1,
               title: Text(
                 context.l10n.staffPermissionDialogTitle(member.fullName),
@@ -1621,11 +1628,13 @@ class _StaffDetailDisclosure extends StatelessWidget {
               runSpacing: 8,
               children: [
                 OutlinedButton.icon(
+                  key: const Key('admin_staff_permission_action'),
                   onPressed: canEditPermissions ? onChangePermission : null,
                   icon: const Icon(Icons.verified_user_outlined, size: 16),
                   label: Text(context.l10n.staffChangePermission),
                 ),
                 OutlinedButton.icon(
+                  key: const Key('admin_staff_attendance_action'),
                   onPressed: onViewAttendance,
                   icon: const Icon(Icons.history_outlined, size: 16),
                   label: Text(context.l10n.staffViewAttendanceLog),

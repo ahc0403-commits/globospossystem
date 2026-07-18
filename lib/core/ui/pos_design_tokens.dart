@@ -93,7 +93,7 @@ class ToastShellTokens {
   static const double sidebarWidth = 212;
   static const double sidebarCompactWidth = 68;
   static const double topbarHeight = 56;
-  static const double navItemHeight = 46;
+  static const double navItemHeight = 48;
   static const double workSurfacePadding = ToastSpacingTokens.lg;
   static const double borderWidth = 1;
   static const double focusBorderWidth = 1.5;
@@ -252,11 +252,11 @@ class PosShadows {
 
 class PosMetrics {
   static const double tableRowHeight = 48;
-  static const double tableRowCompactHeight = 40;
-  static const double formFieldHeight = 44;
-  static const double buttonHeight = 44;
-  static const double buttonCompactHeight = 36;
-  static const double touchTarget = 44;
+  static const double tableRowCompactHeight = 48;
+  static const double formFieldHeight = 48;
+  static const double buttonHeight = 48;
+  static const double buttonCompactHeight = 48;
+  static const double touchTarget = PosDensity.touchTargetMin;
   static const double sidebarWidth = ToastShellTokens.sidebarWidth;
   static const double topBarHeight = ToastShellTokens.topbarHeight;
   static const double panelBorderWidth = ToastShellTokens.borderWidth;

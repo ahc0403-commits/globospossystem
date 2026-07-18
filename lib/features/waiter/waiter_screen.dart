@@ -198,6 +198,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
+              key: const Key('waiter_guest_count_dialog'),
               backgroundColor: AppColors.surface1,
               title: Text(
                 l10n.waiterGuestCountTitle,
@@ -289,6 +290,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        key: const Key('waiter_cancel_order_dialog'),
         backgroundColor: AppColors.surface1,
         title: Text(
           l10n.waiterCancelOrderTitle,
@@ -340,6 +342,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     return showDialog<PosTable>(
       context: context,
       builder: (context) => AlertDialog(
+        key: const Key('waiter_transfer_table_dialog'),
         backgroundColor: AppColors.surface1,
         title: Text(
           l10n.waiterMoveTableTitle,
@@ -740,7 +743,8 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                Row(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     ToastStatusBadge(
                       label: isBuffetMode
@@ -751,17 +755,15 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                           : PosColors.success,
                       compact: true,
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        compactMetricsLabel,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: PosColors.textSecondary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
+                    const SizedBox(height: 8),
+                    Text(
+                      compactMetricsLabel,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.textSecondary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
@@ -902,6 +904,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
               (sum, quantity) => sum + quantity,
             );
             return AlertDialog(
+              key: const Key('waiter_staff_meal_dialog'),
               backgroundColor: AppColors.surface1,
               title: Text(
                 l10n.waiterStaffMealTitle,
@@ -1062,6 +1065,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
       },
     );
 
+    await Future<void>.delayed(kThemeAnimationDuration);
     reasonController.dispose();
     pinController.dispose();
   }
@@ -1259,9 +1263,10 @@ class _WaiterTopBar extends ConsumerWidget {
         ? AsyncValue<String>.data(l10n.store)
         : ref.watch(restaurantNameProvider(storeId!));
 
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      constraints: const BoxConstraints(minHeight: 52),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: const BoxDecoration(
         color: AppColors.surfaceTopbar,
         border: Border(bottom: BorderSide(color: AppColors.surface3)),
@@ -1322,21 +1327,32 @@ class _WaiterTopBar extends ConsumerWidget {
               ],
             ),
           ),
-          Tooltip(
-            message: isOnline
-                ? l10n.waiterStaffMealAction
-                : l10n.posDisabledOffline,
-            child: TextButton.icon(
+          if (compact)
+            IconButton(
               key: const Key('waiter_staff_meal_action'),
+              tooltip: isOnline
+                  ? l10n.waiterStaffMealAction
+                  : l10n.posDisabledOffline,
               onPressed: onCreateStaffMeal,
-              icon: const Icon(Icons.restaurant_menu_outlined, size: 17),
-              label: Text(l10n.waiterStaffMealAction),
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.amber500,
-                textStyle: AppFonts.system(fontWeight: FontWeight.w800),
+              icon: const Icon(Icons.restaurant_menu_outlined),
+              color: AppColors.amber500,
+            )
+          else
+            Tooltip(
+              message: isOnline
+                  ? l10n.waiterStaffMealAction
+                  : l10n.posDisabledOffline,
+              child: TextButton.icon(
+                key: const Key('waiter_staff_meal_action'),
+                onPressed: onCreateStaffMeal,
+                icon: const Icon(Icons.restaurant_menu_outlined, size: 17),
+                label: Text(l10n.waiterStaffMealAction),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.amber500,
+                  textStyle: AppFonts.system(fontWeight: FontWeight.w800),
+                ),
               ),
             ),
-          ),
           const SizedBox(width: 6),
           IconButton(
             key: const Key('logout_button'),

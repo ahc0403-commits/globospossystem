@@ -29,7 +29,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     final l10n = context.l10n;
     final storeId = ref.watch(authProvider).storeId;
     if (storeId == null) {
-      return const _RestaurantMissingView();
+      return const _RestaurantMissingView(key: Key('admin_menu_root'));
     }
 
     final menuState = ref.watch(menuProvider(storeId));
@@ -227,6 +227,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                 alignment: WrapAlignment.end,
                 children: [
                   OutlinedButton.icon(
+                    key: const Key('admin_menu_add_category_action'),
                     onPressed: onAddCategory,
                     icon: const Icon(
                       Icons.create_new_folder_outlined,
@@ -235,6 +236,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     label: Text(context.l10n.menuAddCategory),
                   ),
                   FilledButton.icon(
+                    key: const Key('admin_menu_add_item_action'),
                     onPressed: onAddItem,
                     icon: const Icon(Icons.add, size: 18),
                     label: Text(context.l10n.menuAddMenu),
@@ -324,6 +326,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       context: context,
       builder: (context) {
         return AlertDialog(
+          key: const Key('admin_menu_add_category_dialog'),
           backgroundColor: AppColors.surface1,
           title: Text(
             l10n.menuAddCategory,
@@ -366,6 +369,8 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       },
     );
 
+    await Future<void>.delayed(kThemeAnimationDuration);
+
     nameController.dispose();
   }
 
@@ -386,6 +391,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       context: context,
       builder: (context) {
         return AlertDialog(
+          key: const Key('admin_menu_add_item_dialog'),
           backgroundColor: AppColors.surface1,
           title: Text(
             l10n.menuAddMenu,
@@ -445,6 +451,8 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       },
     );
 
+    await Future<void>.delayed(kThemeAnimationDuration);
+
     nameController.dispose();
     priceController.dispose();
   }
@@ -476,6 +484,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       context: context,
       builder: (context) {
         return AlertDialog(
+          key: const Key('admin_menu_edit_item_dialog'),
           backgroundColor: AppColors.surface1,
           title: Text(
             l10n.menuEditMenu,
@@ -542,6 +551,8 @@ class _MenuTabState extends ConsumerState<MenuTab> {
         );
       },
     );
+
+    await Future<void>.delayed(kThemeAnimationDuration);
 
     nameController.dispose();
     priceController.dispose();
@@ -794,6 +805,7 @@ class _ItemsPanel extends StatelessWidget {
                                 },
                         ),
                         IconButton(
+                          key: Key('admin_menu_edit_item_$itemId'),
                           onPressed: itemId.isEmpty
                               ? null
                               : () => onEditItem(item),
@@ -865,7 +877,7 @@ class _MenuAuditDisclosure extends StatelessWidget {
 }
 
 class _RestaurantMissingView extends StatelessWidget {
-  const _RestaurantMissingView();
+  const _RestaurantMissingView({super.key});
 
   @override
   Widget build(BuildContext context) {

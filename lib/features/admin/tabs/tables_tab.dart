@@ -223,7 +223,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     _ensureLoaded(storeId);
 
     if (storeId == null) {
-      return const _RestaurantMissingView();
+      return const _RestaurantMissingView(key: Key('admin_tables_root'));
     }
 
     final tablesState = ref.watch(tablesProvider(storeId));
@@ -724,6 +724,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                 },
               ),
               FilledButton.icon(
+                key: const Key('admin_tables_add_action'),
                 onPressed: () => _showAddTableDialog(context, tablesNotifier),
                 icon: const Icon(Icons.add, size: 18),
                 label: Text(l10n.tablesAddTitle),
@@ -932,6 +933,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
       context: context,
       builder: (context) {
         return AlertDialog(
+          key: const Key('admin_table_add_dialog'),
           backgroundColor: AppColors.surface1,
           title: Text(
             l10n.tablesAddTitle,
@@ -1003,6 +1005,8 @@ class _TablesTabState extends ConsumerState<TablesTab> {
       },
     );
 
+    await Future<void>.delayed(kThemeAnimationDuration);
+
     tableController.dispose();
     seatController.dispose();
     floorController.dispose();
@@ -1024,6 +1028,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
       context: context,
       builder: (context) {
         return AlertDialog(
+          key: const Key('admin_table_edit_dialog'),
           backgroundColor: AppColors.surface1,
           title: Text(
             l10n.tablesEditTable,
@@ -1111,6 +1116,8 @@ class _TablesTabState extends ConsumerState<TablesTab> {
         );
       },
     );
+
+    await Future<void>.delayed(kThemeAnimationDuration);
 
     tableController.dispose();
     seatController.dispose();
@@ -1940,7 +1947,7 @@ class _AdminTableOrderLine extends StatelessWidget {
 }
 
 class _RestaurantMissingView extends StatelessWidget {
-  const _RestaurantMissingView();
+  const _RestaurantMissingView({super.key});
 
   @override
   Widget build(BuildContext context) {

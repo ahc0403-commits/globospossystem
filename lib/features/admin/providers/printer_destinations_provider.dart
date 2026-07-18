@@ -49,9 +49,11 @@ class PrinterDestinationsState {
 
 class PrinterDestinationsNotifier
     extends StateNotifier<PrinterDestinationsState> {
-  PrinterDestinationsNotifier(this.storeId)
+  PrinterDestinationsNotifier(this.storeId, {bool autoLoad = true})
     : super(const PrinterDestinationsState()) {
-    fetchDestinations();
+    if (autoLoad) {
+      fetchDestinations();
+    }
   }
 
   final String storeId;

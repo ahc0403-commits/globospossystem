@@ -20,7 +20,9 @@ import '../auth/auth_provider.dart';
 import 'qc_provider.dart';
 
 class QcCheckScreen extends ConsumerStatefulWidget {
-  const QcCheckScreen({super.key});
+  const QcCheckScreen({super.key, this.pickEvidencePhotoOverride});
+
+  final Future<XFile?> Function()? pickEvidencePhotoOverride;
 
   @override
   ConsumerState<QcCheckScreen> createState() => _QcCheckScreenState();
@@ -93,7 +95,9 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
       final source = PlatformInfo.isAndroid
           ? ImageSource.camera
           : ImageSource.gallery;
-      final picked = await _picker.pickImage(source: source, imageQuality: 90);
+      final picked = widget.pickEvidencePhotoOverride != null
+          ? await widget.pickEvidencePhotoOverride!()
+          : await _picker.pickImage(source: source, imageQuality: 90);
       if (picked == null) return;
 
       final draft = _drafts.putIfAbsent(templateId, () => _CheckDraft());
@@ -299,10 +303,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
             ),
             Text(
               DateFormat('yyyy-MM-dd').format(_todayVn),
-              style: AppFonts.system(
-                color: PosColors.textMuted,
-                fontSize: 12,
-              ),
+              style: AppFonts.system(color: PosColors.textMuted, fontSize: 12),
             ),
           ],
         ),
@@ -468,6 +469,9 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                                 if (criteriaPhotoUrl != null &&
                                     criteriaPhotoUrl.isNotEmpty)
                                   GestureDetector(
+                                    key: ValueKey(
+                                      'qc_check_reference_photo_$templateId',
+                                    ),
                                     onTap: () =>
                                         _showImageDialog(criteriaPhotoUrl),
                                     child: Container(
@@ -625,6 +629,9 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                                 Row(
                                   children: [
                                     OutlinedButton.icon(
+                                      key: ValueKey(
+                                        'qc_check_attach_photo_$templateId',
+                                      ),
                                       onPressed: () =>
                                           _pickEvidencePhoto(templateId),
                                       icon: const Icon(Icons.photo_camera),
@@ -633,24 +640,36 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                                     const SizedBox(width: 8),
                                     if (draft.existingPhotoUrl != null &&
                                         draft.photoFiles.isEmpty)
-                                      GestureDetector(
-                                        onTap: () => _showImageDialog(
-                                          draft.existingPhotoUrl!,
-                                        ),
-                                        child: ClipRRect(
+                                      Semantics(
+                                        button: true,
+                                        label: context.l10n.qcAttachPhoto,
+                                        child: InkWell(
+                                          onTap: () => _showImageDialog(
+                                            draft.existingPhotoUrl!,
+                                          ),
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
-                                          child: Image.network(
-                                            draft.existingPhotoUrl!,
-                                            width: 40,
-                                            height: 40,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) =>
-                                                _imageLoadFallback(
+                                          child: SizedBox.square(
+                                            dimension:
+                                                PosDensity.touchTargetMin,
+                                            child: Center(
+                                              child: ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                child: Image.network(
+                                                  draft.existingPhotoUrl!,
                                                   width: 40,
                                                   height: 40,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (_, __, ___) =>
+                                                      _imageLoadFallback(
+                                                        width: 40,
+                                                        height: 40,
+                                                      ),
                                                 ),
+                                              ),
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -670,6 +689,9 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                                         return Stack(
                                           children: [
                                             GestureDetector(
+                                              key: ValueKey(
+                                                'qc_check_picked_photo_${templateId}_$index',
+                                              ),
                                               onTap: () =>
                                                   _showPickedImageDialog(file),
                                               child: ClipRRect(
@@ -684,13 +706,16 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                                               top: -6,
                                               right: -6,
                                               child: IconButton(
+                                                tooltip: context.l10n.cancel,
                                                 visualDensity:
-                                                    VisualDensity.compact,
+                                                    VisualDensity.standard,
                                                 padding: EdgeInsets.zero,
                                                 constraints:
                                                     const BoxConstraints(
-                                                      minWidth: 24,
-                                                      minHeight: 24,
+                                                      minWidth: PosDensity
+                                                          .touchTargetMin,
+                                                      minHeight: PosDensity
+                                                          .touchTargetMin,
                                                     ),
                                                 onPressed: () =>
                                                     _removeEvidencePhoto(
@@ -789,9 +814,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
                     ),
                     child: Text(
                       context.l10n.qcSaveButton,
-                      style: AppFonts.system(
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: AppFonts.system(fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
@@ -888,6 +911,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
       context: context,
       builder: (context) {
         return Dialog(
+          key: const Key('qc_check_network_image_dialog'),
           backgroundColor: Colors.black,
           insetPadding: const EdgeInsets.all(20),
           child: Stack(
@@ -963,6 +987,7 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
       context: context,
       builder: (context) {
         return Dialog(
+          key: const Key('qc_check_picked_image_dialog'),
           backgroundColor: Colors.black,
           insetPadding: const EdgeInsets.all(20),
           child: Stack(
@@ -1056,7 +1081,7 @@ class _QcDraftPreview extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           SizedBox(
-            height: 66,
+            height: 74,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: visibleTemplates.length,

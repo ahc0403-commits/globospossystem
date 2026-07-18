@@ -21,7 +21,11 @@ import '../auth/auth_provider.dart';
 import '../kitchen/kitchen_provider.dart';
 
 class PrintStationScreen extends ConsumerStatefulWidget {
-  const PrintStationScreen({super.key});
+  const PrintStationScreen({super.key, this.isSupportedOverride});
+
+  /// Allows widget tests to exercise the supported operational states on
+  /// non-printer hosts. Production always uses the hardware capability probe.
+  final bool? isSupportedOverride;
 
   @override
   ConsumerState<PrintStationScreen> createState() => _PrintStationScreenState();
@@ -132,7 +136,10 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
             ),
             child: Row(
               children: [
-                const AppNavBar(),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: const AppNavBar(),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -170,7 +177,7 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
 
   Widget _buildBody(String? storeId) {
     final l10n = context.l10n;
-    if (!_agent.isSupported) {
+    if (!(widget.isSupportedOverride ?? _agent.isSupported)) {
       return Center(
         child: PosExceptionAlert(
           label: l10n.printStationTitle,

@@ -19,7 +19,9 @@ import '../auth/auth_provider.dart';
 import 'qc_provider.dart';
 
 class QcReviewScreen extends ConsumerStatefulWidget {
-  const QcReviewScreen({super.key});
+  const QcReviewScreen({super.key, this.qcServiceOverride});
+
+  final QcService? qcServiceOverride;
 
   @override
   ConsumerState<QcReviewScreen> createState() => _QcReviewScreenState();
@@ -30,6 +32,8 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
   bool _didHandleUnauthorized = false;
   String _filter = 'pending';
   DateTime _weekStart = _startOfWeek(TimeUtils.nowVietnam());
+
+  QcService get _qcService => widget.qcServiceOverride ?? qcService;
 
   static DateTime _startOfWeek(DateTime now) {
     final day = DateTime(now.year, now.month, now.day);
@@ -142,10 +146,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
             ),
             Text(
               _weekLabel(),
-              style: AppFonts.system(
-                color: PosColors.textMuted,
-                fontSize: 12,
-              ),
+              style: AppFonts.system(color: PosColors.textMuted, fontSize: 12),
             ),
           ],
         ),
@@ -357,6 +358,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
           if (photoUrl != null && photoUrl.isNotEmpty) ...[
             const SizedBox(height: 10),
             GestureDetector(
+              key: ValueKey('qc_review_photo_${check['id']}'),
               onTap: () => _openPhotoGallery(check),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
@@ -419,6 +421,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: FilledButton.icon(
+                  key: ValueKey('qc_review_approve_${check['id']}'),
                   onPressed: () => _openReviewSheet(
                     context: context,
                     auth: auth,
@@ -466,6 +469,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
             bottom: MediaQuery.of(context).viewInsets.bottom + 16,
           ),
           child: Column(
+            key: const Key('qc_review_sheet'),
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -542,6 +546,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
       },
     );
 
+    await Future<void>.delayed(kThemeAnimationDuration);
     scoreController.dispose();
     noteController.dispose();
   }
@@ -552,7 +557,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
 
     late final List<Map<String, dynamic>> photos;
     try {
-      photos = await qcService.fetchCheckPhotos(
+      photos = await _qcService.fetchCheckPhotos(
         checkId: checkId,
         fallbackPhotoUrl: check['evidence_photo_url']?.toString(),
       );
@@ -572,6 +577,7 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
       context: context,
       builder: (context) {
         return Dialog(
+          key: const Key('qc_review_photo_gallery_dialog'),
           backgroundColor: Colors.black,
           insetPadding: const EdgeInsets.all(20),
           child: SizedBox(

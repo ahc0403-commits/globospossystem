@@ -9,7 +9,7 @@ import '../../core/layout/platform_info.dart';
 import '../../core/services/discount_proof_service.dart';
 import '../../core/services/discount_service.dart';
 import '../../core/ui/app_fonts.dart';
-import '../../main.dart';
+import '../../core/ui/pos_design_tokens.dart';
 import '../../widgets/error_toast.dart';
 
 class DiscountModal extends StatefulWidget {
@@ -135,17 +135,21 @@ class _DiscountModalState extends State<DiscountModal> {
     final currency = NumberFormat('#,###', 'vi_VN');
     final originalTotal = widget.menuSubtotal + widget.serviceChargeTotal;
     return AlertDialog(
-      backgroundColor: AppColors.surface1,
+      backgroundColor: PosColors.surface,
       contentPadding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
       title: Row(
         children: [
-          const Icon(Icons.local_offer_outlined, color: AppColors.amber500),
+          const Icon(Icons.local_offer_outlined, color: PosColors.accent),
           const SizedBox(width: 8),
-          Text(
-            l10n.cashierDiscountTitle,
-            style: AppTextStyles.operationalTitle(
-              size: 24,
-              color: AppColors.textPrimary,
+          Flexible(
+            child: Text(
+              l10n.cashierDiscountTitle,
+              style: AppFonts.system(
+                fontSize: 24,
+                color: PosColors.textPrimary,
+                letterSpacing: -0.2,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
@@ -156,58 +160,87 @@ class _DiscountModalState extends State<DiscountModal> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _type,
-                      decoration: InputDecoration(
-                        labelText: l10n.cashierDiscountType,
-                      ),
-                      items: [
-                        DropdownMenuItem(
-                          value: 'manual',
-                          child: Text(l10n.cashierDiscountTypeManual),
-                        ),
-                        DropdownMenuItem(
-                          value: 'coupon',
-                          child: Text(l10n.cashierDiscountTypeCoupon),
-                        ),
-                        DropdownMenuItem(
-                          value: 'promotion',
-                          child: Text(l10n.cashierDiscountTypePromotion),
-                        ),
-                      ],
-                      onChanged: _isSaving
-                          ? null
-                          : (value) =>
-                                setState(() => _type = value ?? 'manual'),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final typeField = DropdownButtonFormField<String>(
+                    initialValue: _type,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: l10n.cashierDiscountType,
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _mode,
-                      decoration: InputDecoration(
-                        labelText: l10n.cashierDiscountMode,
+                    items: [
+                      DropdownMenuItem(
+                        value: 'manual',
+                        child: Text(
+                          l10n.cashierDiscountTypeManual,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                      items: [
-                        DropdownMenuItem(
-                          value: 'amount',
-                          child: Text(l10n.cashierDiscountAmountMode),
+                      DropdownMenuItem(
+                        value: 'coupon',
+                        child: Text(
+                          l10n.cashierDiscountTypeCoupon,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        DropdownMenuItem(
-                          value: 'percent',
-                          child: Text(l10n.cashierDiscountPercentMode),
+                      ),
+                      DropdownMenuItem(
+                        value: 'promotion',
+                        child: Text(
+                          l10n.cashierDiscountTypePromotion,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ],
-                      onChanged: _isSaving
-                          ? null
-                          : (value) =>
-                                setState(() => _mode = value ?? 'amount'),
+                      ),
+                    ],
+                    onChanged: _isSaving
+                        ? null
+                        : (value) => setState(() => _type = value ?? 'manual'),
+                  );
+                  final modeField = DropdownButtonFormField<String>(
+                    initialValue: _mode,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: l10n.cashierDiscountMode,
                     ),
-                  ),
-                ],
+                    items: [
+                      DropdownMenuItem(
+                        value: 'amount',
+                        child: Text(
+                          l10n.cashierDiscountAmountMode,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'percent',
+                        child: Text(
+                          l10n.cashierDiscountPercentMode,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                    onChanged: _isSaving
+                        ? null
+                        : (value) => setState(() => _mode = value ?? 'amount'),
+                  );
+                  final stackFields =
+                      constraints.maxWidth < 420 ||
+                      MediaQuery.textScalerOf(context).scale(1) > 1.5;
+                  if (stackFields) {
+                    return Column(
+                      children: [
+                        typeField,
+                        const SizedBox(height: 12),
+                        modeField,
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(child: typeField),
+                      const SizedBox(width: 12),
+                      Expanded(child: modeField),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 12),
               TextField(
@@ -223,9 +256,9 @@ class _DiscountModalState extends State<DiscountModal> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.surface0,
+                  color: PosColors.canvas,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.surface2),
+                  border: Border.all(color: PosColors.border),
                 ),
                 child: Column(
                   children: [
@@ -236,7 +269,7 @@ class _DiscountModalState extends State<DiscountModal> {
                     _DiscountPreviewLine(
                       label: l10n.cashierDiscountSummary,
                       value: '-₫${currency.format(_previewDiscountAmount)}',
-                      valueColor: AppColors.statusReady,
+                      valueColor: PosColors.warning,
                     ),
                     const Divider(height: 16),
                     _DiscountPreviewLine(
@@ -277,15 +310,15 @@ class _DiscountModalState extends State<DiscountModal> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.surface0,
+                  color: PosColors.canvas,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.surface2),
+                  border: Border.all(color: PosColors.border),
                 ),
                 child: _previewBytes == null
                     ? Text(
                         l10n.cashierDiscountNoProof,
                         style: AppFonts.system(
-                          color: AppColors.textSecondary,
+                          color: PosColors.textSecondary,
                           fontWeight: FontWeight.w700,
                         ),
                       )
@@ -350,25 +383,42 @@ class _DiscountPreviewLine extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        children: [
-          Text(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final labelWidget = Text(
             label,
             style: AppFonts.system(
-              color: AppColors.textSecondary,
+              color: PosColors.textSecondary,
               fontWeight: FontWeight.w700,
             ),
-          ),
-          const Spacer(),
-          Text(
+          );
+          final valueWidget = Text(
             value,
             style: AppFonts.system(
-              color: valueColor ?? AppColors.textPrimary,
+              color: valueColor ?? PosColors.textPrimary,
               fontSize: prominent ? 17 : 14,
               fontWeight: prominent ? FontWeight.w900 : FontWeight.w800,
             ),
-          ),
-        ],
+          );
+          if (constraints.maxWidth < 360 ||
+              MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                labelWidget,
+                const SizedBox(height: 2),
+                Align(alignment: Alignment.centerRight, child: valueWidget),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: labelWidget),
+              const SizedBox(width: 12),
+              valueWidget,
+            ],
+          );
+        },
       ),
     );
   }
