@@ -197,6 +197,8 @@ DECLARE
   v_store record;
   v_active_count integer;
   v_inactive_count integer;
+  v_inactive_profile_count integer;
+  v_inactive_access_count integer;
 BEGIN
   SELECT count(*) FILTER (WHERE is_active),
          count(*) FILTER (WHERE NOT is_active)
@@ -220,20 +222,118 @@ BEGIN
     RAISE EXCEPTION 'STORE_PURGE_REVIEWED_TARGET_MISSING';
   END IF;
 
+  CREATE TEMP TABLE store_purge_inactive_profiles
+  ON COMMIT DROP
+  AS
+  SELECT DISTINCT account.id, account.auth_id, account.role
+  FROM public.users account
+  JOIN public.restaurants store
+    ON store.id IN (account.restaurant_id, account.primary_store_id)
+  JOIN auth.users identity ON identity.id = account.auth_id
+  WHERE NOT store.is_active
+    AND NOT account.is_active
+    AND identity.banned_until > now();
+
+  SELECT count(DISTINCT account.id)
+  INTO v_inactive_profile_count
+  FROM public.users account
+  JOIN public.restaurants store
+    ON store.id IN (account.restaurant_id, account.primary_store_id)
+  WHERE NOT store.is_active;
+
+  SELECT count(*)
+  INTO v_inactive_access_count
+  FROM public.user_store_access access
+  JOIN public.restaurants store ON store.id = access.store_id
+  WHERE NOT store.is_active;
+
+  IF v_inactive_profile_count <> 21
+     OR (SELECT count(*) FROM store_purge_inactive_profiles) <> 21
+     OR v_inactive_access_count <> 23 THEN
+    RAISE EXCEPTION
+      'STORE_PURGE_REVIEWED_ACCOUNT_SHAPE_MISMATCH profiles=% safe_profiles=% accesses=%',
+      v_inactive_profile_count,
+      (SELECT count(*) FROM store_purge_inactive_profiles),
+      v_inactive_access_count;
+  END IF;
+
   IF EXISTS (
     SELECT 1
     FROM public.users account
     JOIN public.restaurants store
       ON store.id IN (account.restaurant_id, account.primary_store_id)
+    LEFT JOIN auth.users identity ON identity.id = account.auth_id
     WHERE NOT store.is_active
+      AND (
+        account.is_active
+        OR identity.id IS NULL
+        OR identity.banned_until IS NULL
+        OR identity.banned_until <= now()
+      )
   ) OR EXISTS (
     SELECT 1
     FROM public.user_store_access access
-    JOIN public.restaurants store ON store.id = access.store_id
-    WHERE NOT store.is_active
+    JOIN store_purge_inactive_profiles candidate
+      ON candidate.id = access.user_id
+    JOIN public.restaurants active_store ON active_store.id = access.store_id
+    WHERE active_store.is_active
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.user_store_access access
+    JOIN public.restaurants inactive_store ON inactive_store.id = access.store_id
+    LEFT JOIN store_purge_inactive_profiles candidate
+      ON candidate.id = access.user_id
+    WHERE NOT inactive_store.is_active
+      AND candidate.id IS NULL
   ) THEN
-    RAISE EXCEPTION 'STORE_PURGE_REVIEWED_INACTIVE_STORE_HAS_ACCOUNTS';
+    RAISE EXCEPTION 'STORE_PURGE_REVIEWED_ACCOUNT_NOT_SAFE_TO_REMOVE';
   END IF;
+
+  INSERT INTO public.audit_logs (
+    actor_id,
+    action,
+    entity_type,
+    entity_id,
+    details
+  )
+  SELECT
+    NULL,
+    'admin_purge_inactive_store_profile',
+    'users',
+    candidate.id,
+    jsonb_build_object(
+      'role', candidate.role,
+      'auth_identity_retained_banned', true,
+      'deleted_at', now()
+    )
+  FROM store_purge_inactive_profiles candidate;
+
+  DELETE FROM public.workforce_fixed_account_migration_state state
+  USING store_purge_inactive_profiles candidate
+  WHERE state.user_id = candidate.id;
+
+  UPDATE public.system_config config
+  SET updated_by = NULL
+  FROM store_purge_inactive_profiles candidate
+  WHERE config.updated_by = candidate.id;
+
+  UPDATE public.store_tax_entity_history history
+  SET created_by = NULL
+  FROM store_purge_inactive_profiles candidate
+  WHERE history.created_by = candidate.id;
+
+  UPDATE public.payments payment
+  SET proof_photo_by = NULL
+  FROM store_purge_inactive_profiles candidate
+  WHERE payment.proof_photo_by = candidate.id;
+
+  DELETE FROM public.user_store_access access
+  USING store_purge_inactive_profiles candidate
+  WHERE access.user_id = candidate.id;
+
+  DELETE FROM public.users account
+  USING store_purge_inactive_profiles candidate
+  WHERE account.id = candidate.id;
 
   FOR v_store IN
     SELECT id, slug

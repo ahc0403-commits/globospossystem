@@ -40,6 +40,15 @@ const _operationalStoreAuthState = PosAuthState(
   ],
 );
 
+const _photoMasterAuthState = PosAuthState(
+  role: 'photo_objet_master',
+  storeId: _operationalStoreId,
+  primaryStoreId: _operationalStoreId,
+  accessibleStores: [
+    AccessibleStore(id: _operationalStoreId, name: 'PHOTO OBJET BIEN HOA'),
+  ],
+);
+
 class _ViewportLocale {
   const _ViewportLocale(this.size, this.locale);
 
@@ -157,6 +166,7 @@ Future<GoRouter> _pumpAdmin(
   WidgetTester tester, {
   required _ViewportLocale fixture,
   required int tabIndex,
+  PosAuthState authState = _operationalStoreAuthState,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = fixture.size;
@@ -176,9 +186,7 @@ Future<GoRouter> _pumpAdmin(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        authProvider.overrideWith(
-          (ref) => _FixtureAuthNotifier(_operationalStoreAuthState),
-        ),
+        authProvider.overrideWith((ref) => _FixtureAuthNotifier(authState)),
         connectivityProvider.overrideWith((ref) => Stream.value(true)),
       ],
       child: MaterialApp.router(
@@ -218,6 +226,24 @@ void main() {
 
   tearDown(() {
     FocusManager.instance.primaryFocus?.unfocus();
+  });
+
+  testWidgets('Photo admin hides restaurant table and menu setup', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await _pumpAdmin(
+      tester,
+      fixture: _viewportLocales.last,
+      tabIndex: 0,
+      authState: _photoMasterAuthState,
+    );
+
+    expect(find.byKey(const Key('nav_tables')), findsNothing);
+    expect(find.byKey(const Key('nav_menu')), findsNothing);
+    expect(find.byKey(const Key('nav_staff')), findsOneWidget);
   });
 
   testWidgets(

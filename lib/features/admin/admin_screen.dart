@@ -65,8 +65,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
 
   List<Widget> _tabsForRole(String? role) {
     final tabs = <Widget>[
-      const TablesTab(),
-      const MenuTab(),
+      if (!PermissionUtils.isPhotoObjetRole(role)) ...[
+        const TablesTab(),
+        const MenuTab(),
+      ],
       const StaffTab(),
       const ReportsTab(),
       const AttendanceTab(),
@@ -91,22 +93,24 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   /// order, so shell behavior is unchanged.
   List<ToastSidebarGroup> _sidebarGroupsForRole(String? role) {
     final l10n = context.l10n;
-    final liveOps = <ToastSidebarItem>[
-      ToastSidebarItem(
-        icon: Icons.table_restaurant,
-        label: l10n.tables,
-        urgency: ToastSidebarUrgency.live,
-        helperLabel: l10n.adminNavTablesHelper,
-        itemKey: const Key('nav_tables'),
-      ),
-      ToastSidebarItem(
-        icon: Icons.restaurant_menu,
-        label: l10n.menu,
-        urgency: ToastSidebarUrgency.live,
-        helperLabel: l10n.adminNavMenuHelper,
-        itemKey: const Key('nav_menu'),
-      ),
-    ];
+    final liveOps = PermissionUtils.isPhotoObjetRole(role)
+        ? const <ToastSidebarItem>[]
+        : <ToastSidebarItem>[
+            ToastSidebarItem(
+              icon: Icons.table_restaurant,
+              label: l10n.tables,
+              urgency: ToastSidebarUrgency.live,
+              helperLabel: l10n.adminNavTablesHelper,
+              itemKey: const Key('nav_tables'),
+            ),
+            ToastSidebarItem(
+              icon: Icons.restaurant_menu,
+              label: l10n.menu,
+              urgency: ToastSidebarUrgency.live,
+              helperLabel: l10n.adminNavMenuHelper,
+              itemKey: const Key('nav_menu'),
+            ),
+          ];
 
     final backOffice = <ToastSidebarItem>[
       ToastSidebarItem(
@@ -176,10 +180,11 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     );
 
     return [
-      ToastSidebarGroup(
-        title: l10n.adminWorkflowLiveOperations,
-        items: liveOps,
-      ),
+      if (liveOps.isNotEmpty)
+        ToastSidebarGroup(
+          title: l10n.adminWorkflowLiveOperations,
+          items: liveOps,
+        ),
       ToastSidebarGroup(title: l10n.adminWorkflowBackOffice, items: backOffice),
       ToastSidebarGroup(title: l10n.adminWorkflowExceptions, items: exceptions),
     ];

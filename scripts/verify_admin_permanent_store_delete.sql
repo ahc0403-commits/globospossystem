@@ -62,6 +62,20 @@ BEGIN
       v_inactive_count;
   END IF;
 
+  IF (SELECT count(*) FROM public.users) <> 14
+     OR (SELECT count(*) FROM public.users WHERE is_active) <> 14 THEN
+    RAISE EXCEPTION 'ADMIN_STORE_PURGE_VERIFY_OPERATIONAL_PROFILE_COUNT';
+  END IF;
+
+  IF (
+    SELECT count(*)
+    FROM public.audit_logs
+    WHERE action = 'admin_purge_inactive_store_profile'
+      AND created_at >= now() - interval '10 minutes'
+  ) <> 21 THEN
+    RAISE EXCEPTION 'ADMIN_STORE_PURGE_VERIFY_PROFILE_AUDIT_COUNT';
+  END IF;
+
   IF EXISTS (
     SELECT 1
     FROM public.restaurants
