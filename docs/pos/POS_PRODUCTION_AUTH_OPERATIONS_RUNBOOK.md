@@ -91,3 +91,6 @@ active store access, and claims all match. It verifies every new login and
 proves that profile, role, access, and claim state did not change.
 
 Do not put the password in a command, repository file, account list, or log.
+Run the same command with `--preflight-only` first to exercise the exact live
+account, profile, store-access, and claim reads without prompting for a
+password or changing Auth state.

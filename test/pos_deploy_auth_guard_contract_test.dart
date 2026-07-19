@@ -216,6 +216,8 @@ void main() {
     );
     expect(operationalPasswordReset, contains('check_pilot_auth_accounts.sh'));
     expect(operationalPasswordReset, contains('read -r -s'));
+    expect(operationalPasswordReset, contains('--preflight-only'));
+    expect(operationalPasswordResetCore, contains('config.preflightOnly'));
     expect(operationalPasswordReset, contains('command -v python3'));
     expect(operationalPasswordReset, isNot(contains('deno eval --allow-env')));
     expect(operationalPasswordReset, contains('POS_EXPECTED_CREATED_DATE_VN'));
@@ -225,7 +227,15 @@ void main() {
       contains('APPROVED_AUTH_CREATED_DATE_MISMATCH'),
     );
     expect(operationalPasswordResetCore, contains('STORE_CLAIMS_MISMATCH'));
-    expect(operationalPasswordResetCore, contains('signInWithPassword'));
+    expect(
+      operationalPasswordResetCore,
+      contains('/auth/v1/token?grant_type=password'),
+    );
+    expect(operationalPasswordResetCore, contains('/auth/v1/admin/users/'));
+    expect(
+      operationalPasswordResetCore,
+      isNot(contains('@supabase/supabase-js')),
+    );
     expect(operationalPasswordResetCore, isNot(contains('1234!@#')));
 
     expect(accounts, contains('andre@globos.world'));
