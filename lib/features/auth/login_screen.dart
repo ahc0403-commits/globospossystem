@@ -38,7 +38,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     // 로그인 성공 시 router redirect가 처리
     ref.listen(authProvider, (prev, next) {
       final role = next.role;
-      if (next.user != null && role != null && !next.privacyConsentRequired) {
+      if (next.user != null &&
+          role != null &&
+          !next.passwordChangeRequired &&
+          !next.privacyConsentRequired) {
         context.go(homeRouteForRole(role));
       }
     });

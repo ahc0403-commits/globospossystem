@@ -241,6 +241,16 @@ serve(async (req) => {
       profile = data;
     }
 
+    if (rotatePassword) {
+      const { error } = await serviceClient.from("users")
+        .update({
+          must_change_password: true,
+          password_change_required_at: new Date().toISOString(),
+        })
+        .eq("id", profile.id);
+      if (error) throw error;
+    }
+
     const rollbackNewIdentity = async () => {
       if (createdProfile && profile) {
         await serviceClient.from("user_brand_access").delete().eq(

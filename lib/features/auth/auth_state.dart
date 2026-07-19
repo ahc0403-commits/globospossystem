@@ -22,6 +22,8 @@ class PosAuthState {
   final String? primaryStoreId;
   final List<AccessibleStore> accessibleStores;
   final List<String> extraPermissions;
+  final bool passwordChangeRequired;
+  final bool isPasswordChangeSubmitting;
   final bool privacyConsentRequired;
   final bool isPrivacyConsentSubmitting;
   final String? errorMessage;
@@ -34,6 +36,8 @@ class PosAuthState {
     this.primaryStoreId,
     this.accessibleStores = const [],
     this.extraPermissions = const [],
+    this.passwordChangeRequired = false,
+    this.isPasswordChangeSubmitting = false,
     this.privacyConsentRequired = false,
     this.isPrivacyConsentSubmitting = false,
     this.errorMessage,
@@ -47,6 +51,8 @@ class PosAuthState {
     String? primaryStoreId,
     List<AccessibleStore>? accessibleStores,
     List<String>? extraPermissions,
+    bool? passwordChangeRequired,
+    bool? isPasswordChangeSubmitting,
     bool? privacyConsentRequired,
     bool? isPrivacyConsentSubmitting,
     String? errorMessage,
@@ -67,6 +73,12 @@ class PosAuthState {
       extraPermissions: clearUser
           ? const []
           : (extraPermissions ?? this.extraPermissions),
+      passwordChangeRequired: clearUser
+          ? false
+          : (passwordChangeRequired ?? this.passwordChangeRequired),
+      isPasswordChangeSubmitting: clearUser
+          ? false
+          : (isPasswordChangeSubmitting ?? this.isPasswordChangeSubmitting),
       privacyConsentRequired: clearUser
           ? false
           : (privacyConsentRequired ?? this.privacyConsentRequired),

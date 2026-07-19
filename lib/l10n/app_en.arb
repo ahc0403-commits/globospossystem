@@ -2980,5 +2980,21 @@
   "photoOpsRecorded": "Recorded",
   "photoOpsAttendanceUnknown": "Attendance event",
   "photoOpsPartTimerAttendanceTitle": "Part-timer attendance",
-  "photoOpsAttendanceRecorded": "Attendance recorded."
+  "photoOpsAttendanceRecorded": "Attendance recorded.",
+  "initialPasswordTitle": "Create your private password",
+  "initialPasswordSubtitle": "This is your first sign-in. Change the temporary password before opening any POS workspace.",
+  "initialPasswordAccountLabel": "SIGNED-IN ACCOUNT",
+  "initialPasswordAccountUnknown": "Unknown account",
+  "initialPasswordNewLabel": "New password",
+  "initialPasswordNewHint": "Enter a password only you know",
+  "initialPasswordConfirmLabel": "Confirm new password",
+  "initialPasswordPolicy": "Use at least 12 characters with an uppercase letter, a lowercase letter, a number, and a symbol.",
+  "initialPasswordPolicyError": "Enter at least 12 characters including uppercase, lowercase, number, and symbol.",
+  "initialPasswordMismatch": "The passwords do not match.",
+  "initialPasswordShow": "Show password",
+  "initialPasswordHide": "Hide password",
+  "initialPasswordSubmit": "Save password and continue",
+  "initialPasswordSaving": "Saving securely…",
+  "initialPasswordLogout": "Sign out and change it later",
+  "initialPasswordChangeFailed": "The password could not be confirmed. Check the connection and try again."
 }
