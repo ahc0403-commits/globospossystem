@@ -29,7 +29,7 @@ void main() {
       'scripts/reset_production_operational_passwords.sh',
     );
     final operationalPasswordResetCore = readRepoFile(
-      'scripts/reset_production_operational_passwords.mjs',
+      'scripts/reset_production_operational_passwords_db.mjs',
     );
 
     expect(deploy, contains('PRODUCTION_AUTH_EMAILS_FILE'));
@@ -218,29 +218,33 @@ void main() {
     expect(operationalPasswordReset, contains('read -r -s'));
     expect(operationalPasswordReset, contains('--preflight-only'));
     expect(operationalPasswordResetCore, contains('config.preflightOnly'));
-    expect(operationalPasswordResetCore, contains('Deno.env.get(name)'));
+    expect(operationalPasswordReset, contains('acquire_linked_pg_credentials'));
+    expect(operationalPasswordReset, contains('npm --prefix'));
+    expect(operationalPasswordReset, contains('command -v node'));
     expect(
-      operationalPasswordResetCore,
-      isNot(contains('Deno.env.toObject()')),
+      operationalPasswordReset,
+      isNot(contains('POS_SUPABASE_SERVICE_ROLE_KEY')),
     );
-    expect(operationalPasswordReset, contains('command -v python3'));
-    expect(operationalPasswordReset, isNot(contains('deno eval --allow-env')));
     expect(operationalPasswordReset, contains('POS_EXPECTED_CREATED_DATE_VN'));
-    expect(operationalPasswordResetCore, contains('selectOperationalUsers'));
+    expect(operationalPasswordResetCore, contains('fetchOperationalState'));
     expect(
       operationalPasswordResetCore,
       contains('APPROVED_AUTH_CREATED_DATE_MISMATCH'),
     );
     expect(operationalPasswordResetCore, contains('STORE_CLAIMS_MISMATCH'));
+    expect(operationalPasswordResetCore, contains('set role postgres'));
+    expect(operationalPasswordResetCore, contains('update auth.users'));
+    expect(operationalPasswordResetCore, contains('crypt(\$1'));
+    expect(operationalPasswordResetCore, contains("gen_salt('bf')"));
     expect(
       operationalPasswordResetCore,
       contains('/auth/v1/token?grant_type=password'),
     );
-    expect(operationalPasswordResetCore, contains('/auth/v1/admin/users/'));
     expect(
       operationalPasswordResetCore,
-      isNot(contains('@supabase/supabase-js')),
+      contains('/auth/v1/logout?scope=local'),
     );
+    expect(operationalPasswordResetCore, contains('LOGIN_PROFILE_MISMATCH'));
     expect(operationalPasswordResetCore, isNot(contains('1234!@#')));
 
     expect(accounts, contains('andre@globos.world'));
