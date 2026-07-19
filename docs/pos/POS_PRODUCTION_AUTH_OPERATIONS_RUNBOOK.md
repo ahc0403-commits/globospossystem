@@ -68,3 +68,26 @@ valid `app_metadata.accessible_store_ids` claims.
 
 After an approved repair, rerun the checker and deploy only through
 `scripts/deploy_pos_production.sh`.
+
+## Approved initial-password reset
+
+Never use a broad Auth reset against production. The legacy
+`scripts/reset_all_auth_passwords.js` entry point is intentionally blocked.
+For an explicitly approved initial-password assignment, use only:
+
+```bash
+CONFIRM_PRODUCTION_PASSWORD_RESET=RESET_GLOBOS_PROD_OPERATIONAL_PASSWORDS \
+POS_EXPECTED_CREATED_DATE_VN=YYYY-MM-DD \
+scripts/reset_production_operational_passwords.sh
+```
+
+The date is the expected Auth creation date in `Asia/Ho_Chi_Minh`. The script
+requires a clean exact `origin/main`, the pinned production project, the
+authoritative operational email list, and a mode-600 secure environment file.
+It runs the normal Auth/data-hygiene check before prompting for the password
+without terminal echo. It then resets only the approved operational identities
+whose creation date, confirmation, active profile, role, fixed account code,
+active store access, and claims all match. It verifies every new login and
+proves that profile, role, access, and claim state did not change.
+
+Do not put the password in a command, repository file, account list, or log.

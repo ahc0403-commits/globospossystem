@@ -22,6 +22,15 @@ void main() {
     final accounts = readRepoFile(
       'docs/pos/pos_required_production_auth_emails.txt',
     );
+    final broadPasswordReset = readRepoFile(
+      'scripts/reset_all_auth_passwords.js',
+    );
+    final operationalPasswordReset = readRepoFile(
+      'scripts/reset_production_operational_passwords.sh',
+    );
+    final operationalPasswordResetCore = readRepoFile(
+      'scripts/reset_production_operational_passwords.mjs',
+    );
 
     expect(deploy, contains('PRODUCTION_AUTH_EMAILS_FILE'));
     expect(deploy, contains('PILOT_LOGIN_SMOKE_SCRIPT'));
@@ -190,6 +199,32 @@ void main() {
     expect(provisioningRunbook, contains('For `MISSING_AUTH`'));
     expect(provisioningRunbook, contains('Do not store passwords'));
     expect(provisioningRunbook, contains('Deployment automation must verify'));
+    expect(
+      provisioningRunbook,
+      contains('reset_production_operational_passwords.sh'),
+    );
+    expect(provisioningRunbook, contains('without terminal echo'));
+
+    expect(
+      broadPasswordReset,
+      contains('Broad Auth password resets are forbidden'),
+    );
+    expect(broadPasswordReset, isNot(contains('updateUserById')));
+    expect(
+      operationalPasswordReset,
+      contains('HEAD == freshly fetched origin/main'),
+    );
+    expect(operationalPasswordReset, contains('check_pilot_auth_accounts.sh'));
+    expect(operationalPasswordReset, contains('read -r -s'));
+    expect(operationalPasswordReset, contains('POS_EXPECTED_CREATED_DATE_VN'));
+    expect(operationalPasswordResetCore, contains('selectOperationalUsers'));
+    expect(
+      operationalPasswordResetCore,
+      contains('APPROVED_AUTH_CREATED_DATE_MISMATCH'),
+    );
+    expect(operationalPasswordResetCore, contains('STORE_CLAIMS_MISMATCH'));
+    expect(operationalPasswordResetCore, contains('signInWithPassword'));
+    expect(operationalPasswordResetCore, isNot(contains('1234!@#')));
 
     expect(accounts, contains('andre@globos.world'));
     expect(accounts, contains('bt_pos1@globos.world'));
