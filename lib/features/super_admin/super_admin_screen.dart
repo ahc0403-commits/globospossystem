@@ -990,6 +990,32 @@ class _RestaurantsTab extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
+              Text(
+                l10n.superAdminStatusLabel,
+                style: AppFonts.system(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(width: 8),
+              _activityChip(
+                'active',
+                l10n.superAdminStatusActive,
+                state.selectedActivity,
+              ),
+              const SizedBox(width: 6),
+              _activityChip(
+                'inactive',
+                l10n.superAdminStatusInactive,
+                state.selectedActivity,
+              ),
+              const SizedBox(width: 6),
+              _activityChip(
+                'all',
+                l10n.superAdminStatusAll,
+                state.selectedActivity,
+              ),
+              const SizedBox(width: 16),
               _ownerTypeChip(
                 null,
                 l10n.superAdminFilterAll,
@@ -1197,10 +1223,12 @@ class _RestaurantsTab extends StatelessWidget {
                           ),
                           const SizedBox(width: 8),
                           FilledButton(
-                            onPressed: () {
-                              notifier.selectRestaurant(restaurant);
-                              onGoToAdmin(restaurant.id);
-                            },
+                            onPressed: restaurant.isActive
+                                ? () {
+                                    notifier.selectRestaurant(restaurant);
+                                    onGoToAdmin(restaurant.id);
+                                  }
+                                : null,
                             style: FilledButton.styleFrom(
                               backgroundColor: AppColors.amber500,
                               foregroundColor: AppColors.surface0,
@@ -1235,6 +1263,28 @@ class _RestaurantsTab extends StatelessWidget {
       backgroundColor: AppColors.surface1,
       side: BorderSide.none,
       onSelected: (_) => notifier.setOwnerTypeFilter(type),
+    );
+  }
+
+  Widget _activityChip(String activity, String label, String selected) {
+    final isSelected = activity == selected;
+    return ChoiceChip(
+      key: Key('super_admin_activity_$activity'),
+      label: Text(
+        label,
+        style: AppFonts.system(
+          color: isSelected ? AppColors.surface0 : AppColors.textPrimary,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      selected: isSelected,
+      selectedColor: activity == 'inactive'
+          ? AppColors.statusCancelled
+          : AppColors.amber500,
+      backgroundColor: AppColors.surface1,
+      side: BorderSide.none,
+      onSelected: (_) => notifier.setActivityFilter(activity),
     );
   }
 
@@ -1639,7 +1689,7 @@ class _RestaurantsTab extends StatelessWidget {
                       child: Text(l10n.superAdminSaveUpper),
                     ),
                   ),
-                  if (isEdit) ...[
+                  if (isEdit && initial.isActive) ...[
                     const SizedBox(height: 8),
                     SizedBox(
                       width: double.infinity,
@@ -1662,7 +1712,7 @@ class _RestaurantsTab extends StatelessWidget {
                           ),
                           foregroundColor: AppColors.statusCancelled,
                         ),
-                        child: Text(l10n.superAdminDeleteDeactivate),
+                        child: Text(l10n.superAdminDeactivateStore),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -1677,6 +1727,39 @@ class _RestaurantsTab extends StatelessWidget {
                           foregroundColor: Colors.white,
                         ),
                         child: Text(l10n.superAdminCloseStore),
+                      ),
+                    ),
+                  ] else if (isEdit) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.statusCancelled.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.statusCancelled.withValues(
+                            alpha: 0.45,
+                          ),
+                        ),
+                      ),
+                      child: Text(
+                        l10n.superAdminInactiveStoreNotice,
+                        style: AppFonts.system(color: AppColors.textPrimary),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        key: const Key('super_admin_purge_store_button'),
+                        onPressed: () =>
+                            _confirmAndPurgeStore(context, notifier, initial),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.statusCancelled,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: Text(l10n.superAdminPurgeStore),
                       ),
                     ),
                   ],
@@ -1793,6 +1876,119 @@ class _RestaurantsTab extends StatelessWidget {
             : error,
       );
     }
+  }
+
+  Future<void> _confirmAndPurgeStore(
+    BuildContext context,
+    SuperAdminNotifier notifier,
+    SuperRestaurant store,
+  ) async {
+    final l10n = context.l10n;
+    final slugController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        String? errorText;
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return AlertDialog(
+              key: const Key('super_admin_purge_store_dialog'),
+              backgroundColor: AppColors.surface1,
+              title: Text(
+                l10n.superAdminPurgeStoreTitle,
+                style: AppFonts.system(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.superAdminPurgeStoreMessage(store.name),
+                    style: AppFonts.system(color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 12),
+                  SelectableText(
+                    store.slug,
+                    style: AppFonts.system(
+                      color: AppColors.statusCancelled,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    key: const Key('super_admin_purge_store_slug'),
+                    controller: slugController,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      labelText: l10n.superAdminPurgeStoreSlugLabel,
+                      errorText: errorText,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: Text(l10n.cancel),
+                ),
+                FilledButton(
+                  key: const Key('super_admin_purge_store_confirm'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.statusCancelled,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    if (slugController.text.trim() != store.slug) {
+                      setDialogState(() {
+                        errorText = l10n.superAdminPurgeStoreSlugMismatch;
+                      });
+                      return;
+                    }
+                    Navigator.of(dialogContext).pop(true);
+                  },
+                  child: Text(l10n.superAdminPurgeStoreConfirm),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      await Future<void>.delayed(kThemeAnimationDuration);
+      slugController.dispose();
+      return;
+    }
+
+    final success = await notifier.purgeInactiveRestaurant(
+      id: store.id,
+      confirmationSlug: slugController.text.trim(),
+    );
+    await Future<void>.delayed(kThemeAnimationDuration);
+    slugController.dispose();
+    if (!context.mounted) return;
+
+    if (success) {
+      showSuccessToast(context, l10n.superAdminStorePurged);
+      Navigator.of(context).pop();
+      return;
+    }
+
+    final error = notifier.lastError ?? '';
+    final message = error.contains('STORE_PURGE_HAS_ACCOUNTS')
+        ? l10n.superAdminPurgeStoreHasAccounts
+        : error.contains('STORE_PURGE_REQUIRES_INACTIVE')
+        ? l10n.superAdminPurgeStoreRequiresInactive
+        : error.contains('STORE_PURGE_CONFIRMATION_MISMATCH')
+        ? l10n.superAdminPurgeStoreSlugMismatch
+        : l10n.superAdminPurgeStoreFailed;
+    showErrorToast(context, message);
   }
 
   String _slugify(String input) {

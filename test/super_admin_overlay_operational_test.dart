@@ -35,6 +35,24 @@ final _store = SuperRestaurant(
   ownerType: 'internal',
 );
 
+final _inactiveStore = SuperRestaurant(
+  id: '0446a7e2-97d3-6a53-929c-c1849a3d12c3',
+  name: 'Saigon Bowl Lab Binh Thanh',
+  slug: 'smoke-in-saigon-bowl-2',
+  address: 'Binh Thanh, Ho Chi Minh City',
+  operationMode: 'standard',
+  perPersonCharge: null,
+  isActive: false,
+  createdAt: DateTime(2026, 5, 18),
+  brandId: _brandId,
+  brandName: 'Saigon Bowl Lab',
+  brandCode: 'SAIGON_BOWL',
+  taxEntityId: _taxEntityId,
+  taxEntityName: 'Saigon Bowl Lab',
+  taxCode: '0312345678',
+  ownerType: 'internal',
+);
+
 class _AuthNotifier extends AuthNotifier {
   _AuthNotifier() : super() {
     state = const PosAuthState(role: 'super_admin');
@@ -104,6 +122,26 @@ class _SuperAdminNotifier extends SuperAdminNotifier {
         ),
       ],
     );
+    return true;
+  }
+}
+
+class _InactiveSuperAdminNotifier extends _SuperAdminNotifier {
+  String? purgedStoreId;
+  String? confirmationSlug;
+
+  _InactiveSuperAdminNotifier() {
+    state = state.copyWith(restaurants: [_inactiveStore]);
+  }
+
+  @override
+  Future<bool> purgeInactiveRestaurant({
+    required String id,
+    required String confirmationSlug,
+  }) async {
+    purgedStoreId = id;
+    this.confirmationSlug = confirmationSlug;
+    state = state.copyWith(restaurants: const [], isLoading: false);
     return true;
   }
 }
@@ -237,6 +275,96 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('inactive store requires exact slug before permanent deletion', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1440, 1800);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final notifier = _InactiveSuperAdminNotifier();
+    final router = GoRouter(
+      initialLocation: '/super-admin',
+      routes: [
+        GoRoute(
+          path: '/super-admin',
+          builder: (_, __) => const SuperAdminScreen(),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authProvider.overrideWith((ref) => _AuthNotifier()),
+          superAdminProvider.overrideWith((ref) => notifier),
+          qcTemplateProvider.overrideWith((ref) => _TemplateNotifier()),
+          globalQcTemplatesProvider.overrideWith((ref) async => const []),
+        ],
+        child: MaterialApp.router(
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.build(),
+          locale: const Locale('ko'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          routerConfig: router,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('super_admin_activity_inactive')));
+    await tester.pumpAndSettle();
+
+    final manage = find.byKey(
+      const Key(
+        'super_admin_manage_store_0446a7e2-97d3-6a53-929c-c1849a3d12c3',
+      ),
+    );
+    await tester.dragUntilVisible(
+      manage,
+      find.byType(Scrollable).last,
+      const Offset(0, -400),
+    );
+    await tester.tap(manage);
+    await tester.pumpAndSettle();
+
+    final purge = find.byKey(const Key('super_admin_purge_store_button'));
+    await tester.ensureVisible(purge);
+    await tester.tap(purge);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('super_admin_purge_store_dialog')),
+      findsOneWidget,
+    );
+
+    final slugField = find.byKey(const Key('super_admin_purge_store_slug'));
+    final confirm = find.byKey(const Key('super_admin_purge_store_confirm'));
+    await tester.enterText(slugField, 'wrong-slug');
+    await tester.tap(confirm);
+    await tester.pumpAndSettle();
+    expect(notifier.purgedStoreId, isNull);
+    expect(
+      find.byKey(const Key('super_admin_purge_store_dialog')),
+      findsOneWidget,
+    );
+
+    await tester.enterText(slugField, _inactiveStore.slug);
+    await tester.tap(confirm);
+    await tester.pumpAndSettle();
+
+    expect(notifier.purgedStoreId, _inactiveStore.id);
+    expect(notifier.confirmationSlug, _inactiveStore.slug);
     expect(tester.takeException(), isNull);
   });
 }

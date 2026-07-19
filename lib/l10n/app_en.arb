@@ -1055,6 +1055,27 @@
   "superAdminSaveUpper": "SAVE",
   "superAdminStoreDeactivated": "Store deactivated",
   "superAdminDeleteDeactivate": "DELETE (Deactivate)",
+  "superAdminStatusLabel": "Status",
+  "superAdminStatusActive": "Active",
+  "superAdminStatusInactive": "Inactive",
+  "superAdminStatusAll": "All",
+  "superAdminDeactivateStore": "Deactivate store",
+  "superAdminInactiveStoreNotice": "This store is inactive. It is hidden from the default operating list. Permanent deletion removes all store data and cannot be undone.",
+  "superAdminPurgeStore": "Permanently delete store",
+  "superAdminPurgeStoreTitle": "Permanently delete store?",
+  "superAdminPurgeStoreMessage": "{storeName} and all of its orders, payments, menus, tables, and history will be permanently deleted. Type the exact slug below to continue.",
+  "@superAdminPurgeStoreMessage": {
+    "placeholders": {
+      "storeName": {"type": "String"}
+    }
+  },
+  "superAdminPurgeStoreSlugLabel": "Enter the exact slug",
+  "superAdminPurgeStoreSlugMismatch": "The slug does not match.",
+  "superAdminPurgeStoreConfirm": "DELETE PERMANENTLY",
+  "superAdminStorePurged": "Store permanently deleted.",
+  "superAdminPurgeStoreHasAccounts": "Remove or reassign all store accounts and access first.",
+  "superAdminPurgeStoreRequiresInactive": "Deactivate the store before permanent deletion.",
+  "superAdminPurgeStoreFailed": "Permanent deletion failed. Check the store dependencies and try again.",
   "superAdminCloseStore": "Close Store (폐업)",
   "superAdminCloseStoreTitle": "Close store permanently",
   "superAdminCloseStoreMessage": "This deactivates the store, revokes all staff access, and turns off its printers. Past sales are preserved for tax audit. Live orders must be settled first.",

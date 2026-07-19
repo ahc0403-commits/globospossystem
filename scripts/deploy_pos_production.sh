@@ -687,6 +687,7 @@ apply_migration() {
     20260718170000_vnd_currency_enforcement.sql|\
     20260719013000_production_test_entity_guard.sql|\
     20260719020000_force_initial_password_change.sql|\
+    20260719030000_admin_permanent_store_delete.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -724,6 +725,12 @@ apply_migration() {
       fail "Missing initial password-change rollback file: $rollback_path"
     log "Initial password-change rollback readiness"
     printf 'Rollback ready (not executed): %s\n' "$rollback_path"
+  elif [[ "$migration_name" == "20260719030000_admin_permanent_store_delete.sql" ]]; then
+    local rollback_path="$ROOT_DIR/scripts/rollback_admin_permanent_store_delete.sql"
+    [[ -f "$rollback_path" ]] ||
+      fail "Missing permanent store-delete rollback file: $rollback_path"
+    log "Permanent store-delete rollback readiness"
+    printf 'Function rollback ready; one-time deleted data is intentionally irreversible: %s\n' "$rollback_path"
   fi
 
   require_migration_history_absent "$migration_version"
@@ -789,6 +796,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_force_initial_password_change.sql" \
       "initial password-change migration preflight"
+  elif [[ "$migration_name" == "20260719030000_admin_permanent_store_delete.sql" ]]; then
+    log "Permanent store-delete migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_admin_permanent_store_delete.sql" \
+      "permanent store-delete migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -874,6 +886,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_force_initial_password_change.sql" \
       "initial password-change migration verification"
+  elif [[ "$migration_name" == "20260719030000_admin_permanent_store_delete.sql" ]]; then
+    log "Permanent store-delete migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_admin_permanent_store_delete.sql" \
+      "permanent store-delete migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \

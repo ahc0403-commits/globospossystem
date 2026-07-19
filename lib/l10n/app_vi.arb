@@ -1054,6 +1054,27 @@
   "superAdminSaveUpper": "LƯU",
   "superAdminStoreDeactivated": "Đã vô hiệu hóa cửa hàng",
   "superAdminDeleteDeactivate": "XÓA (Vô hiệu hóa)",
+  "superAdminStatusLabel": "Trạng thái",
+  "superAdminStatusActive": "Đang hoạt động",
+  "superAdminStatusInactive": "Ngừng hoạt động",
+  "superAdminStatusAll": "Tất cả",
+  "superAdminDeactivateStore": "Vô hiệu hóa cửa hàng",
+  "superAdminInactiveStoreNotice": "Cửa hàng ngừng hoạt động được ẩn khỏi danh sách vận hành mặc định. Xóa vĩnh viễn sẽ xóa toàn bộ dữ liệu và không thể khôi phục.",
+  "superAdminPurgeStore": "Xóa vĩnh viễn cửa hàng",
+  "superAdminPurgeStoreTitle": "Xóa vĩnh viễn cửa hàng?",
+  "superAdminPurgeStoreMessage": "Toàn bộ đơn hàng, thanh toán, thực đơn, bàn và lịch sử của {storeName} sẽ bị xóa vĩnh viễn. Nhập chính xác slug bên dưới để tiếp tục.",
+  "@superAdminPurgeStoreMessage": {
+    "placeholders": {
+      "storeName": {"type": "String"}
+    }
+  },
+  "superAdminPurgeStoreSlugLabel": "Nhập chính xác slug",
+  "superAdminPurgeStoreSlugMismatch": "Slug không khớp.",
+  "superAdminPurgeStoreConfirm": "XÓA VĨNH VIỄN",
+  "superAdminStorePurged": "Đã xóa vĩnh viễn cửa hàng.",
+  "superAdminPurgeStoreHasAccounts": "Hãy gỡ hoặc chuyển toàn bộ tài khoản và quyền truy cập của cửa hàng trước.",
+  "superAdminPurgeStoreRequiresInactive": "Hãy vô hiệu hóa cửa hàng trước khi xóa vĩnh viễn.",
+  "superAdminPurgeStoreFailed": "Không thể xóa vĩnh viễn. Hãy kiểm tra dữ liệu liên kết rồi thử lại.",
   "superAdminCloseStore": "Đóng cửa hàng (폐업)",
   "superAdminCloseStoreTitle": "Đóng cửa hàng vĩnh viễn",
   "superAdminCloseStoreMessage": "Thao tác này vô hiệu hóa cửa hàng, thu hồi mọi quyền truy cập của nhân viên và tắt máy in. Dữ liệu doanh thu cũ được giữ lại để phục vụ kiểm tra thuế. Phải tất toán các đơn đang mở trước.",

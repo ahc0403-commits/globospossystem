@@ -160,6 +160,7 @@ class SuperAdminState {
     this.brands = const [],
     this.taxEntities = const [],
     this.taxEntityBrands = const [],
+    this.selectedActivity = 'active',
     this.selectedBrandId,
     this.selectedOwnerType,
     this.selectedTaxEntityId,
@@ -175,6 +176,7 @@ class SuperAdminState {
   final List<Map<String, dynamic>> brands;
   final List<SuperTaxEntity> taxEntities;
   final List<SuperTaxEntityBrand> taxEntityBrands;
+  final String selectedActivity;
   final String? selectedBrandId;
   final String? selectedOwnerType;
   final String? selectedTaxEntityId;
@@ -215,7 +217,12 @@ class SuperAdminState {
 
   /// Returns restaurants filtered by owner type, legal entity, and brand.
   List<SuperRestaurant> get filteredRestaurants {
-    var list = restaurants;
+    var list = switch (selectedActivity) {
+      'inactive' =>
+        restaurants.where((restaurant) => !restaurant.isActive).toList(),
+      'all' => restaurants,
+      _ => restaurants.where((restaurant) => restaurant.isActive).toList(),
+    };
 
     if (selectedOwnerType != null) {
       list = list.where((r) => r.ownerType == selectedOwnerType).toList();
@@ -239,6 +246,7 @@ class SuperAdminState {
     List<Map<String, dynamic>>? brands,
     List<SuperTaxEntity>? taxEntities,
     List<SuperTaxEntityBrand>? taxEntityBrands,
+    String? selectedActivity,
     String? selectedBrandId,
     String? selectedOwnerType,
     String? selectedTaxEntityId,
@@ -260,6 +268,7 @@ class SuperAdminState {
       brands: brands ?? this.brands,
       taxEntities: taxEntities ?? this.taxEntities,
       taxEntityBrands: taxEntityBrands ?? this.taxEntityBrands,
+      selectedActivity: selectedActivity ?? this.selectedActivity,
       selectedBrandId: clearBrandFilter
           ? null
           : (selectedBrandId ?? this.selectedBrandId),
@@ -300,6 +309,8 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
           reportEnd: DateTime.now(),
         ),
       );
+
+  String? get lastError => state.error;
 
   Future<void> loadAllRestaurants() async {
     state = state.copyWith(isLoading: true, clearError: true);
@@ -374,6 +385,11 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
       selectedBrandId: brandId,
       clearBrandFilter: brandId == null,
     );
+  }
+
+  void setActivityFilter(String activity) {
+    if (!const {'active', 'inactive', 'all'}.contains(activity)) return;
+    state = state.copyWith(selectedActivity: activity);
   }
 
   void setOwnerTypeFilter(String? ownerType) {
@@ -516,6 +532,27 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to deactivate restaurant: $error',
+      );
+      return false;
+    }
+  }
+
+  Future<bool> purgeInactiveRestaurant({
+    required String id,
+    required String confirmationSlug,
+  }) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      await restaurantService.purgeInactiveStore(
+        id: id,
+        confirmationSlug: confirmationSlug,
+      );
+      await loadAllRestaurants();
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Failed to permanently delete store: $error',
       );
       return false;
     }
