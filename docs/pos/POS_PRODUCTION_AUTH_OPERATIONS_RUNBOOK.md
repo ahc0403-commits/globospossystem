@@ -87,8 +87,11 @@ authoritative operational email list, and a mode-600 secure environment file.
 It runs the normal Auth/data-hygiene check before prompting for the password
 without terminal echo. It then resets only the approved operational identities
 whose creation date, confirmation, active profile, role, fixed account code,
-active store access, and claims all match. It verifies every new login and
-proves that profile, role, access, and claim state did not change.
+active store access, and claims all match. It uses the same temporary linked
+Postgres credentials as the production deployment gate and sends the password
+only as a bound query parameter inside one transaction. It verifies every new
+login with the production publishable key, closes each verification session,
+and proves that profile, role, access, and claim state did not change.
 
 Do not put the password in a command, repository file, account list, or log.
 Run the same command with `--preflight-only` first to exercise the exact live

@@ -15,7 +15,7 @@ fail() {
 }
 
 cleanup() {
-  unset POS_INITIAL_PASSWORD POS_SUPABASE_SERVICE_ROLE_KEY api_keys_json
+  unset POS_INITIAL_PASSWORD
 }
 trap cleanup EXIT
 
@@ -50,8 +50,8 @@ set +a
   fail "Linked Supabase project is not POS production."
 
 command -v git >/dev/null 2>&1 || fail "git is required."
-command -v deno >/dev/null 2>&1 || fail "deno is required."
-command -v python3 >/dev/null 2>&1 || fail "python3 is required."
+command -v node >/dev/null 2>&1 || fail "node is required."
+command -v npm >/dev/null 2>&1 || fail "npm is required."
 command -v supabase >/dev/null 2>&1 || fail "supabase is required."
 [[ -z "$(git -C "$ROOT_DIR" status --porcelain)" ]] ||
   fail "Refusing production password reset from a dirty worktree."
@@ -61,6 +61,7 @@ git -C "$ROOT_DIR" fetch --quiet origin +refs/heads/main:refs/remotes/origin/mai
 
 [[ -f "$ACCOUNTS_FILE" ]] || fail "Approved operational account list is missing."
 bash "$ROOT_DIR/scripts/check_pilot_auth_accounts.sh" --file "$ACCOUNTS_FILE"
+npm --prefix "$ROOT_DIR/scripts" ci --ignore-scripts --no-audit --no-fund
 
 if [[ "$PREFLIGHT_ONLY" == "1" ]]; then
   POS_INITIAL_PASSWORD="preflight-only-placeholder"
@@ -71,38 +72,26 @@ elif [[ -z "${POS_INITIAL_PASSWORD:-}" ]]; then
 fi
 [[ "${#POS_INITIAL_PASSWORD}" -ge 8 ]] || fail "Initial password must be at least 8 characters."
 
-api_keys_json="$(
-  supabase projects api-keys --project-ref "$POS_PROJECT_REF" -o json
-)"
-POS_SUPABASE_SERVICE_ROLE_KEY="$(
-  API_KEYS_JSON="$api_keys_json" python3 - <<'PY'
-import json
-import os
-import sys
-
-keys = json.loads(os.environ.get("API_KEYS_JSON", "[]"))
-matches = [
-    item for item in keys
-    if item.get("id") == "service_role" and isinstance(item.get("api_key"), str)
-]
-if len(matches) != 1:
-    raise SystemExit(1)
-sys.stdout.write(matches[0]["api_key"])
-PY
-)" || fail "Could not load the POS production service role key."
-[[ -n "$POS_SUPABASE_SERVICE_ROLE_KEY" ]] || fail "POS production service role key is empty."
-unset api_keys_json
-
+ENV_FILE="$ENV_FILE" \
 POS_SUPABASE_URL="$SUPABASE_URL" \
 POS_SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
-POS_SUPABASE_SERVICE_ROLE_KEY="$POS_SUPABASE_SERVICE_ROLE_KEY" \
 POS_INITIAL_PASSWORD="$POS_INITIAL_PASSWORD" \
 POS_EXPECTED_CREATED_DATE_VN="${POS_EXPECTED_CREATED_DATE_VN:-}" \
 POS_OPERATIONAL_ACCOUNTS_FILE="$ACCOUNTS_FILE" \
 POS_PREFLIGHT_ONLY="$PREFLIGHT_ONLY" \
 CONFIRM_PRODUCTION_PASSWORD_RESET="$CONFIRM_PRODUCTION_PASSWORD_RESET" \
-  deno run \
-    --allow-env=POS_SUPABASE_URL,POS_SUPABASE_ANON_KEY,POS_SUPABASE_SERVICE_ROLE_KEY,POS_INITIAL_PASSWORD,POS_EXPECTED_CREATED_DATE_VN,POS_OPERATIONAL_ACCOUNTS_FILE,POS_PREFLIGHT_ONLY,CONFIRM_PRODUCTION_PASSWORD_RESET \
-    --allow-read="$ACCOUNTS_FILE" \
-    --allow-net="$POS_PROJECT_REF.supabase.co" \
-    "$ROOT_DIR/scripts/reset_production_operational_passwords.mjs"
+  bash -c '
+    set -euo pipefail
+    source "$1"
+    DB_ONLY=1
+    acquire_linked_pg_credentials
+    trap '\''unset PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE POS_INITIAL_PASSWORD'\'' EXIT
+    PGHOST="$PGHOST" \
+    PGPORT="$PGPORT" \
+    PGUSER="$PGUSER" \
+    PGPASSWORD="$PGPASSWORD" \
+    PGDATABASE="$PGDATABASE" \
+      node "$2"
+  ' bash \
+    "$ROOT_DIR/scripts/deploy_pos_production.sh" \
+    "$ROOT_DIR/scripts/reset_production_operational_passwords_db.mjs"
