@@ -38,6 +38,7 @@ set +a
 
 command -v git >/dev/null 2>&1 || fail "git is required."
 command -v deno >/dev/null 2>&1 || fail "deno is required."
+command -v python3 >/dev/null 2>&1 || fail "python3 is required."
 command -v supabase >/dev/null 2>&1 || fail "supabase is required."
 [[ -z "$(git -C "$ROOT_DIR" status --porcelain)" ]] ||
   fail "Refusing production password reset from a dirty worktree."
@@ -59,14 +60,20 @@ api_keys_json="$(
   supabase projects api-keys --project-ref "$POS_PROJECT_REF" -o json
 )"
 POS_SUPABASE_SERVICE_ROLE_KEY="$(
-  API_KEYS_JSON="$api_keys_json" deno eval --allow-env=API_KEYS_JSON '
-const keys = JSON.parse(Deno.env.get("API_KEYS_JSON") || "[]");
-const matches = keys.filter(
-  (item) => item.id === "service_role" && typeof item.api_key === "string",
-);
-if (matches.length !== 1) Deno.exit(1);
-Deno.stdout.writeSync(new TextEncoder().encode(matches[0].api_key));
-'
+  API_KEYS_JSON="$api_keys_json" python3 - <<'PY'
+import json
+import os
+import sys
+
+keys = json.loads(os.environ.get("API_KEYS_JSON", "[]"))
+matches = [
+    item for item in keys
+    if item.get("id") == "service_role" and isinstance(item.get("api_key"), str)
+]
+if len(matches) != 1:
+    raise SystemExit(1)
+sys.stdout.write(matches[0]["api_key"])
+PY
 )" || fail "Could not load the POS production service role key."
 [[ -n "$POS_SUPABASE_SERVICE_ROLE_KEY" ]] || fail "POS production service role key is empty."
 unset api_keys_json
