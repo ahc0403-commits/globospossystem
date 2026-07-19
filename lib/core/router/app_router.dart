@@ -9,6 +9,7 @@ import '../../features/admin/admin_screen.dart';
 import '../../features/auth/auth_provider.dart';
 import '../../features/auth/auth_state.dart';
 import '../../features/auth/login_screen.dart';
+import '../../features/auth/initial_password_change_screen.dart';
 import '../../features/auth/privacy_consent_screen.dart';
 import '../../features/cashier/cashier_screen.dart';
 import '../../features/kitchen/kitchen_screen.dart';
@@ -64,6 +65,14 @@ GoRouter buildAppRouter(ProviderContainer container) {
         return redirectTo;
       }
 
+      if (auth.passwordChangeRequired) {
+        redirectTo = location == '/change-initial-password'
+            ? null
+            : '/change-initial-password';
+        NavigationHistoryService.instance.push(redirectTo ?? fullLocation);
+        return redirectTo;
+      }
+
       if (auth.privacyConsentRequired) {
         redirectTo = location == '/privacy-consent' ? null : '/privacy-consent';
         NavigationHistoryService.instance.push(redirectTo ?? fullLocation);
@@ -80,7 +89,12 @@ GoRouter buildAppRouter(ProviderContainer container) {
       // 3. 역할별 허용 경로 정의
       final homeRoute = homeRouteForRole(role);
 
-      const publicRoutes = ['/login', '/onboarding', '/privacy-consent'];
+      const publicRoutes = [
+        '/login',
+        '/onboarding',
+        '/privacy-consent',
+        '/change-initial-password',
+      ];
 
       // 4. 공개 경로에 있으면 → 홈으로
       if (publicRoutes.contains(location)) {
@@ -221,6 +235,10 @@ GoRouter buildAppRouter(ProviderContainer container) {
             QrOrderScreen(token: state.pathParameters['token'] ?? ''),
       ),
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+      GoRoute(
+        path: '/change-initial-password',
+        builder: (_, __) => const InitialPasswordChangeScreen(),
+      ),
       GoRoute(
         path: '/privacy-consent',
         builder: (_, __) => const PrivacyConsentScreen(),

@@ -3,7 +3,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
-    show AuthChangeEvent, AuthException, PostgrestException, User;
+    show
+        AuthChangeEvent,
+        AuthException,
+        PostgrestException,
+        User,
+        UserAttributes;
 import '../../core/services/navigation_history_service.dart';
 import '../../core/utils/role_routes.dart';
 import '../../main.dart';
@@ -34,6 +39,8 @@ const authErrorPrivacyConsentProfileMissing =
     'auth/privacy-consent-profile-missing';
 const authErrorPrivacyConsentSetupMissing =
     'auth/privacy-consent-setup-missing';
+const authErrorPasswordChangeFailed = 'auth/password-change-failed';
+const authErrorPasswordChangeFailedPrefix = 'auth/password-change-failed:';
 const privacyConsentDocumentVersion = 'vn-pdpl-2026-01';
 
 class AuthNotifier extends StateNotifier<PosAuthState> {
@@ -70,7 +77,10 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     try {
       final data = await supabase
           .from('users')
-          .select('role, restaurant_id, is_active, extra_permissions')
+          .select(
+            'role, restaurant_id, is_active, extra_permissions, '
+            'must_change_password',
+          )
           .eq('auth_id', user.id)
           .single();
 
@@ -121,6 +131,7 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         primaryStoreId: primaryStoreId,
         accessibleStores: stores,
         extraPermissions: extraPermissions,
+        passwordChangeRequired: data['must_change_password'] as bool? ?? false,
         privacyConsentRequired: !hasPrivacyConsent,
         clearError: true,
       );
@@ -196,6 +207,50 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     NavigationHistoryService.instance.clear();
     state = const PosAuthState();
     onLogout?.call();
+  }
+
+  Future<bool> changeInitialPassword(String newPassword) async {
+    if (state.user == null || !state.passwordChangeRequired) return false;
+
+    state = state.copyWith(isPasswordChangeSubmitting: true, clearError: true);
+
+    try {
+      await supabase.auth.updateUser(UserAttributes(password: newPassword));
+
+      // The database trigger clears must_change_password only after Auth has
+      // actually replaced encrypted_password. Re-read the profile instead of
+      // trusting a client-side success flag.
+      final profile = await supabase
+          .from('users')
+          .select('must_change_password')
+          .eq('auth_id', state.user!.id)
+          .single();
+      final isStillRequired = profile['must_change_password'] as bool? ?? true;
+      if (isStillRequired) {
+        throw StateError('password change was not confirmed by the server');
+      }
+
+      state = state.copyWith(
+        isPasswordChangeSubmitting: false,
+        passwordChangeRequired: false,
+        clearError: true,
+      );
+      return true;
+    } on AuthException catch (error) {
+      state = state.copyWith(
+        isPasswordChangeSubmitting: false,
+        passwordChangeRequired: true,
+        errorMessage: '$authErrorPasswordChangeFailedPrefix ${error.message}',
+      );
+      return false;
+    } catch (_) {
+      state = state.copyWith(
+        isPasswordChangeSubmitting: false,
+        passwordChangeRequired: true,
+        errorMessage: authErrorPasswordChangeFailed,
+      );
+      return false;
+    }
   }
 
   Future<void> acceptPrivacyConsent({required String localeName}) async {

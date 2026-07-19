@@ -2979,5 +2979,21 @@
   "photoOpsRecorded": "Đã ghi nhận",
   "photoOpsAttendanceUnknown": "Sự kiện chấm công",
   "photoOpsPartTimerAttendanceTitle": "Chấm công nhân viên bán thời gian",
-  "photoOpsAttendanceRecorded": "Đã ghi nhận chấm công."
+  "photoOpsAttendanceRecorded": "Đã ghi nhận chấm công.",
+  "initialPasswordTitle": "Tạo mật khẩu riêng của bạn",
+  "initialPasswordSubtitle": "Đây là lần đăng nhập đầu tiên. Hãy đổi mật khẩu tạm thời trước khi mở bất kỳ màn hình vận hành POS nào.",
+  "initialPasswordAccountLabel": "TÀI KHOẢN ĐANG ĐĂNG NHẬP",
+  "initialPasswordAccountUnknown": "Không rõ tài khoản",
+  "initialPasswordNewLabel": "Mật khẩu mới",
+  "initialPasswordNewHint": "Nhập mật khẩu chỉ bạn biết",
+  "initialPasswordConfirmLabel": "Xác nhận mật khẩu mới",
+  "initialPasswordPolicy": "Dùng ít nhất 12 ký tự, gồm chữ hoa, chữ thường, chữ số và ký hiệu.",
+  "initialPasswordPolicyError": "Nhập ít nhất 12 ký tự, gồm chữ hoa, chữ thường, chữ số và ký hiệu.",
+  "initialPasswordMismatch": "Mật khẩu không khớp.",
+  "initialPasswordShow": "Hiện mật khẩu",
+  "initialPasswordHide": "Ẩn mật khẩu",
+  "initialPasswordSubmit": "Lưu mật khẩu và tiếp tục",
+  "initialPasswordSaving": "Đang lưu an toàn…",
+  "initialPasswordLogout": "Đăng xuất và đổi sau",
+  "initialPasswordChangeFailed": "Không thể xác nhận việc đổi mật khẩu. Hãy kiểm tra kết nối và thử lại."
 }
