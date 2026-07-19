@@ -66,3 +66,97 @@ test("configuration pins production and temporary database credentials", async (
     /EXPLICIT_PRODUCTION_PASSWORD_RESET_CONFIRMATION_REQUIRED/,
   );
 });
+
+test("password reset must rearm a newer lifecycle generation", async () => {
+  const { assertPasswordLifecycleTransition } = await passwordResetModule;
+  const base = {
+    authId: "auth-1",
+    appMetadata: { role: "cashier" },
+    profile: { role: "cashier", fixed_account_code: "cashier_1" },
+    accessIds: ["store-1"],
+  };
+  const before = {
+    ...base,
+    passwordLifecycle: {
+      mustChangePassword: false,
+      requiredAt: null,
+      changedAt: "2026-07-19T00:00:00Z",
+      generation: 4,
+    },
+  };
+  const after = {
+    ...base,
+    passwordLifecycle: {
+      mustChangePassword: true,
+      requiredAt: "2026-07-19T01:00:00Z",
+      changedAt: "2026-07-19T00:00:00Z",
+      generation: 5,
+    },
+  };
+
+  assert.doesNotThrow(() =>
+    assertPasswordLifecycleTransition("cashier_1@globos.world", before, after)
+  );
+  assert.throws(
+    () =>
+      assertPasswordLifecycleTransition(
+        "cashier_1@globos.world",
+        before,
+        {
+          ...after,
+          passwordLifecycle: {
+            ...after.passwordLifecycle,
+            mustChangePassword: false,
+          },
+        },
+      ),
+    /PASSWORD_CHANGE_GATE_NOT_REARMED/,
+  );
+  assert.throws(
+    () =>
+      assertPasswordLifecycleTransition(
+        "cashier_1@globos.world",
+        before,
+        {
+          ...after,
+          passwordLifecycle: {
+            ...after.passwordLifecycle,
+            generation: 4,
+          },
+        },
+      ),
+    /PASSWORD_CHANGE_GATE_NOT_REARMED/,
+  );
+});
+
+test("login verification requires the rearmed password gate", async () => {
+  const { loginProfileMatchesExpected } = await passwordResetModule;
+  const expected = {
+    profile: { role: "cashier", fixed_account_code: "cashier_1" },
+    passwordLifecycle: { generation: 5 },
+  };
+  const valid = {
+    is_active: true,
+    role: "cashier",
+    fixed_account_code: "cashier_1",
+    must_change_password: true,
+    password_change_required_at: "2026-07-19T01:00:00Z",
+    password_change_generation: 5,
+  };
+
+  assert.equal(loginProfileMatchesExpected(valid, expected), true);
+  assert.equal(
+    loginProfileMatchesExpected(
+      { ...valid, must_change_password: false },
+      expected,
+    ),
+    false,
+  );
+  assert.equal(
+    loginProfileMatchesExpected(
+      { ...valid, password_change_generation: 4 },
+      expected,
+    ),
+    false,
+  );
+});

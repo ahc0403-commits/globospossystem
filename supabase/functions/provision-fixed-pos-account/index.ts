@@ -242,13 +242,20 @@ serve(async (req) => {
     }
 
     if (rotatePassword) {
-      const { error } = await serviceClient.from("users")
+      const { data: passwordGate, error } = await serviceClient.from("users")
         .update({
           must_change_password: true,
           password_change_required_at: new Date().toISOString(),
         })
-        .eq("id", profile.id);
-      if (error) throw error;
+        .eq("id", profile.id)
+        .select("must_change_password,password_change_required_at")
+        .single();
+      if (
+        error || passwordGate?.must_change_password !== true ||
+        !passwordGate.password_change_required_at
+      ) {
+        throw error ?? new Error("PASSWORD_CHANGE_GATE_REARM_FAILED");
+      }
     }
 
     const rollbackNewIdentity = async () => {

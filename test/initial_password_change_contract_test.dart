@@ -48,29 +48,43 @@ void main() {
     expect(router, contains("location == '/change-initial-password'"));
   });
 
+  test('database arms every Auth password write and advances its generation', () {
+    final sql = readRepoFile(
+      'supabase/migrations/20260719140000_password_change_lifecycle_fail_closed.sql',
+    );
+
+    expect(
+      sql,
+      contains('password_change_generation bigint NOT NULL DEFAULT 0'),
+    );
+    expect(sql, contains('AFTER UPDATE OF encrypted_password ON auth.users'));
+    expect(sql, contains('SET must_change_password = true'));
+    expect(
+      sql,
+      contains('password_change_generation = password_change_generation + 1'),
+    );
+    expect(sql, isNot(contains('SET must_change_password = false')));
+    expect(
+      sql,
+      contains('REVOKE UPDATE ON public.users FROM anon, authenticated'),
+    );
+  });
+
   test(
-    'database owns and clears the gate only after Auth hash replacement',
+    'authenticated Edge flow is the only client password completion path',
     () {
-      final sql = readRepoFile(
-        'supabase/migrations/20260719020000_force_initial_password_change.sql',
+      final provider = readRepoFile('lib/features/auth/auth_provider.dart');
+      final function = readRepoFile(
+        'supabase/functions/complete-initial-password-change/index.ts',
       );
 
-      expect(
-        sql,
-        contains('must_change_password boolean NOT NULL DEFAULT true'),
-      );
-      expect(sql, contains('AFTER UPDATE OF encrypted_password ON auth.users'));
-      expect(
-        sql,
-        contains(
-          'OLD.encrypted_password IS DISTINCT FROM NEW.encrypted_password',
-        ),
-      );
-      expect(sql, contains('SET must_change_password = false'));
-      expect(
-        sql,
-        contains('REVOKE UPDATE ON public.users FROM anon, authenticated'),
-      );
+      expect(provider, contains("'complete-initial-password-change'"));
+      expect(provider, isNot(contains('supabase.auth.updateUser')));
+      expect(function, contains('callerClient.auth.getUser()'));
+      expect(function, contains('serviceClient.auth.admin.updateUserById'));
+      expect(function, contains('profile.generation + 1'));
+      expect(function, contains('password_change_generation'));
+      expect(function, isNot(contains('body.user_id')));
     },
   );
 
@@ -82,5 +96,6 @@ void main() {
     expect(function, contains('if (rotatePassword)'));
     expect(function, contains('must_change_password: true'));
     expect(function, contains('password_change_required_at'));
+    expect(function, contains('PASSWORD_CHANGE_GATE_REARM_FAILED'));
   });
 }
