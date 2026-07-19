@@ -4,6 +4,8 @@ DO $$
 DECLARE
   v_active_count integer;
   v_inactive_count integer;
+  v_inactive_profile_count integer;
+  v_inactive_access_count integer;
 BEGIN
   IF to_regclass('public.restaurants') IS NULL
      OR to_regclass('public.users') IS NULL
@@ -24,8 +26,41 @@ BEGIN
      OR to_regclass('public.store_employee_number_sequences') IS NULL
      OR to_regclass('public.b2b_buyer_cache') IS NULL
      OR to_regclass('public.store_tax_entity_history') IS NULL
+     OR to_regclass('public.workforce_fixed_account_migration_state') IS NULL
+     OR to_regclass('public.system_config') IS NULL
      OR to_regclass('public.audit_logs') IS NULL THEN
     RAISE EXCEPTION 'ADMIN_STORE_PURGE_PREFLIGHT_RELATION_MISSING';
+  END IF;
+
+  IF NOT EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'workforce_fixed_account_migration_state'
+         AND column_name = 'user_id'
+     )
+     OR NOT EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'system_config'
+         AND column_name = 'updated_by'
+     )
+     OR NOT EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'store_tax_entity_history'
+         AND column_name = 'created_by'
+     )
+     OR NOT EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'payments'
+         AND column_name = 'proof_photo_by'
+     ) THEN
+    RAISE EXCEPTION 'ADMIN_STORE_PURGE_PREFLIGHT_CLEANUP_COLUMN_MISSING';
   END IF;
 
   IF to_regprocedure(
@@ -59,19 +94,69 @@ BEGIN
     RAISE EXCEPTION 'ADMIN_STORE_PURGE_PREFLIGHT_REVIEWED_TARGET_MISSING';
   END IF;
 
+  SELECT count(DISTINCT account.id)
+  INTO v_inactive_profile_count
+  FROM public.users account
+  JOIN public.restaurants store
+    ON store.id IN (account.restaurant_id, account.primary_store_id)
+  WHERE NOT store.is_active;
+
+  SELECT count(*)
+  INTO v_inactive_access_count
+  FROM public.user_store_access access
+  JOIN public.restaurants store ON store.id = access.store_id
+  WHERE NOT store.is_active;
+
+  IF v_inactive_profile_count <> 21 OR v_inactive_access_count <> 23 THEN
+    RAISE EXCEPTION
+      'ADMIN_STORE_PURGE_PREFLIGHT_ACCOUNT_SHAPE profiles=% accesses=%',
+      v_inactive_profile_count,
+      v_inactive_access_count;
+  END IF;
+
   IF EXISTS (
     SELECT 1
     FROM public.users account
     JOIN public.restaurants store
       ON store.id IN (account.restaurant_id, account.primary_store_id)
+    LEFT JOIN auth.users identity ON identity.id = account.auth_id
     WHERE NOT store.is_active
+      AND (
+        account.is_active
+        OR identity.id IS NULL
+        OR identity.banned_until IS NULL
+        OR identity.banned_until <= now()
+      )
   ) OR EXISTS (
     SELECT 1
     FROM public.user_store_access access
-    JOIN public.restaurants store ON store.id = access.store_id
-    WHERE NOT store.is_active
+    JOIN public.users account ON account.id = access.user_id
+    JOIN public.restaurants inactive_store
+      ON inactive_store.id IN (account.restaurant_id, account.primary_store_id)
+     AND NOT inactive_store.is_active
+    JOIN public.restaurants active_store ON active_store.id = access.store_id
+    WHERE active_store.is_active
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.user_store_access access
+    JOIN public.restaurants inactive_store ON inactive_store.id = access.store_id
+    WHERE NOT inactive_store.is_active
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.users account
+        JOIN public.restaurants linked_inactive_store
+          ON linked_inactive_store.id IN (
+            account.restaurant_id,
+            account.primary_store_id
+          )
+        JOIN auth.users identity ON identity.id = account.auth_id
+        WHERE account.id = access.user_id
+          AND NOT linked_inactive_store.is_active
+          AND NOT account.is_active
+          AND identity.banned_until > now()
+      )
   ) THEN
-    RAISE EXCEPTION 'ADMIN_STORE_PURGE_PREFLIGHT_INACTIVE_STORE_HAS_ACCOUNTS';
+    RAISE EXCEPTION 'ADMIN_STORE_PURGE_PREFLIGHT_ACCOUNT_NOT_SAFE_TO_REMOVE';
   END IF;
 END $$;
 

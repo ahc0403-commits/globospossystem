@@ -58,6 +58,13 @@ void main() {
     expect(migration, contains('STORE_PURGE_REQUIRES_INACTIVE'));
     expect(migration, contains('STORE_PURGE_CONFIRMATION_MISMATCH'));
     expect(migration, contains('STORE_PURGE_HAS_ACCOUNTS'));
+    expect(migration, contains('store_purge_inactive_profiles'));
+    expect(migration, contains("'admin_purge_inactive_store_profile'"));
+    expect(migration, contains("'auth_identity_retained_banned', true"));
+    expect(
+      migration,
+      contains('LEFT JOIN store_purge_inactive_profiles candidate'),
+    );
     expect(migration, contains('IF NOT public.is_super_admin()'));
     expect(migration, isNot(contains('office_purchases')));
     expect(migration, isNot(contains('office_qc_followups')));
