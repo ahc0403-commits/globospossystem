@@ -216,6 +216,8 @@ void main() {
     );
     expect(operationalPasswordReset, contains('check_pilot_auth_accounts.sh'));
     expect(operationalPasswordReset, contains('read -r -s'));
+    expect(operationalPasswordReset, contains('command -v python3'));
+    expect(operationalPasswordReset, isNot(contains('deno eval --allow-env')));
     expect(operationalPasswordReset, contains('POS_EXPECTED_CREATED_DATE_VN'));
     expect(operationalPasswordResetCore, contains('selectOperationalUsers'));
     expect(
