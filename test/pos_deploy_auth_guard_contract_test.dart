@@ -218,6 +218,11 @@ void main() {
     expect(operationalPasswordReset, contains('read -r -s'));
     expect(operationalPasswordReset, contains('--preflight-only'));
     expect(operationalPasswordResetCore, contains('config.preflightOnly'));
+    expect(operationalPasswordResetCore, contains('Deno.env.get(name)'));
+    expect(
+      operationalPasswordResetCore,
+      isNot(contains('Deno.env.toObject()')),
+    );
     expect(operationalPasswordReset, contains('command -v python3'));
     expect(operationalPasswordReset, isNot(contains('deno eval --allow-env')));
     expect(operationalPasswordReset, contains('POS_EXPECTED_CREATED_DATE_VN'));
