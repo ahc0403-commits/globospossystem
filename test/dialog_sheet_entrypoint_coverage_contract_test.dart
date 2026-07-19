@@ -99,12 +99,13 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/super_admin/super_admin_screen.dart',
-    directCalls: 4,
+    directCalls: 5,
     test: 'test/super_admin_overlay_operational_test.dart',
     markers: [
       'super_admin_store_sheet',
       'super_admin_global_template_sheet',
       'super_admin_close_store_dialog',
+      'super_admin_purge_store_dialog',
       'super_admin_continue_store_setup_dialog',
     ],
   ),
@@ -231,7 +232,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 69 dialog and sheet entrypoints map to operational tests', () {
+  test('all 70 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -243,10 +244,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 68);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 69);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      69,
+      70,
     );
 
     final settings = File(

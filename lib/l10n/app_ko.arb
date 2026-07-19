@@ -1054,6 +1054,27 @@
   "superAdminSaveUpper": "저장",
   "superAdminStoreDeactivated": "매장이 비활성화되었습니다",
   "superAdminDeleteDeactivate": "삭제 (비활성화)",
+  "superAdminStatusLabel": "운영 상태",
+  "superAdminStatusActive": "활성",
+  "superAdminStatusInactive": "비활성",
+  "superAdminStatusAll": "전체",
+  "superAdminDeactivateStore": "매장 비활성화",
+  "superAdminInactiveStoreNotice": "비활성 매장은 기본 운영 목록에서 숨겨집니다. 영구 삭제하면 매장의 모든 데이터가 삭제되며 복구할 수 없습니다.",
+  "superAdminPurgeStore": "매장 영구 삭제",
+  "superAdminPurgeStoreTitle": "매장을 영구 삭제할까요?",
+  "superAdminPurgeStoreMessage": "{storeName}의 주문, 결제, 메뉴, 테이블, 이력을 모두 영구 삭제합니다. 계속하려면 아래에 정확한 슬러그를 입력하세요.",
+  "@superAdminPurgeStoreMessage": {
+    "placeholders": {
+      "storeName": {"type": "String"}
+    }
+  },
+  "superAdminPurgeStoreSlugLabel": "정확한 슬러그 입력",
+  "superAdminPurgeStoreSlugMismatch": "슬러그가 일치하지 않습니다.",
+  "superAdminPurgeStoreConfirm": "영구 삭제",
+  "superAdminStorePurged": "매장이 영구 삭제되었습니다.",
+  "superAdminPurgeStoreHasAccounts": "먼저 매장 계정과 접근 권한을 모두 해제하거나 다른 매장으로 옮기세요.",
+  "superAdminPurgeStoreRequiresInactive": "영구 삭제 전에 매장을 비활성화하세요.",
+  "superAdminPurgeStoreFailed": "영구 삭제에 실패했습니다. 연결 데이터를 확인한 뒤 다시 시도하세요.",
   "superAdminCloseStore": "매장 폐업 처리",
   "superAdminCloseStoreTitle": "매장 영구 폐업",
   "superAdminCloseStoreMessage": "매장을 비활성화하고 모든 직원 접근을 해제하며 프린터를 끕니다. 과거 매출은 세무조사 대비로 보존됩니다. 진행 중인 주문은 먼저 정산해야 합니다.",

@@ -187,6 +187,17 @@ class StoreService {
     return deactivateStore(id);
   }
 
+  Future<Map<String, dynamic>> purgeInactiveStore({
+    required String id,
+    required String confirmationSlug,
+  }) async {
+    final result = await supabase.rpc(
+      'admin_purge_inactive_store',
+      params: {'p_store_id': id, 'p_confirmation_slug': confirmationSlug},
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
   /// Closes a store while preserving its point-in-time sales history.
   Future<Map<String, dynamic>> closeStore(String id, String reason) async {
     final result = await supabase.rpc(
