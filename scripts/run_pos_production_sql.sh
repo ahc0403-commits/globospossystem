@@ -28,7 +28,8 @@ source "$DEPLOY_SCRIPT"
   printf 'ERROR: secure POS production env is missing\n' >&2
   exit 1
 }
-[[ "$(stat -f '%Lp' "$ENV_FILE" 2>/dev/null || stat -c '%a' "$ENV_FILE")" == "600" ]] || {
+ENV_FILE_MODE="$(stat -c '%a' "$ENV_FILE" 2>/dev/null || stat -f '%Lp' "$ENV_FILE" 2>/dev/null)"
+[[ "$ENV_FILE_MODE" == "600" ]] || {
   printf 'ERROR: secure POS production env must have mode 600\n' >&2
   exit 1
 }
