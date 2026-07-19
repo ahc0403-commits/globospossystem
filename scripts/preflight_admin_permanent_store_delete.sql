@@ -4,6 +4,8 @@ DO $$
 DECLARE
   v_active_count integer;
   v_inactive_count integer;
+  v_total_profile_count integer;
+  v_active_profile_count integer;
   v_inactive_profile_count integer;
   v_inactive_access_count integer;
 BEGIN
@@ -67,6 +69,67 @@ BEGIN
     RAISE EXCEPTION 'ADMIN_STORE_PURGE_PREFLIGHT_CLEANUP_COLUMN_MISSING';
   END IF;
 
+  SELECT count(*) FILTER (WHERE is_active),
+         count(*) FILTER (WHERE NOT is_active)
+  INTO v_active_count, v_inactive_count
+  FROM public.restaurants;
+
+  SELECT count(*), count(*) FILTER (WHERE is_active)
+  INTO v_total_profile_count, v_active_profile_count
+  FROM public.users;
+
+  -- Recovery after the guarded store purge committed but verification found
+  -- six additional inactive, banned waiter profiles with stale active-store
+  -- access rows. No store deletion is repeated in this path.
+  IF v_active_count = 7 AND v_inactive_count = 0 THEN
+    IF to_regprocedure(
+         'public.admin_purge_inactive_store(uuid,text)'
+       ) IS NULL
+       OR to_regprocedure(
+         'public._purge_inactive_store_data(uuid,text,uuid)'
+       ) IS NULL
+       OR v_total_profile_count <> 20
+       OR v_active_profile_count <> 14
+       OR (SELECT count(*) FROM public.users WHERE NOT is_active) <> 6
+       OR EXISTS (
+         SELECT 1
+         FROM public.users account
+         LEFT JOIN auth.users identity ON identity.id = account.auth_id
+         WHERE NOT account.is_active
+           AND (
+             account.role <> 'waiter'
+             OR identity.id IS NULL
+             OR identity.banned_until IS NULL
+             OR identity.banned_until <= now()
+           )
+       )
+       OR (
+         SELECT count(*)
+         FROM public.user_store_access access
+         JOIN public.users account ON account.id = access.user_id
+         WHERE NOT account.is_active
+       ) <> 6
+       OR EXISTS (
+         SELECT 1
+         FROM public.user_store_access access
+         JOIN public.users account ON account.id = access.user_id
+         LEFT JOIN public.restaurants store ON store.id = access.store_id
+         WHERE NOT account.is_active
+           AND (store.id IS NULL OR NOT store.is_active)
+       )
+       OR (
+         SELECT count(*) FROM public.audit_logs
+         WHERE action = 'admin_purge_inactive_store_profile'
+       ) <> 21
+       OR (
+         SELECT count(*) FROM public.audit_logs
+         WHERE action = 'admin_purge_inactive_store'
+       ) <> 23 THEN
+      RAISE EXCEPTION 'ADMIN_STORE_PURGE_PREFLIGHT_RECOVERY_SHAPE_MISMATCH';
+    END IF;
+    RETURN;
+  END IF;
+
   IF to_regprocedure(
        'public.admin_purge_inactive_store(uuid,text)'
      ) IS NOT NULL
@@ -75,11 +138,6 @@ BEGIN
      ) IS NOT NULL THEN
     RAISE EXCEPTION 'ADMIN_STORE_PURGE_PREFLIGHT_FUNCTION_ALREADY_EXISTS';
   END IF;
-
-  SELECT count(*) FILTER (WHERE is_active),
-         count(*) FILTER (WHERE NOT is_active)
-  INTO v_active_count, v_inactive_count
-  FROM public.restaurants;
 
   IF v_active_count <> 7 OR v_inactive_count <> 23 THEN
     RAISE EXCEPTION

@@ -228,6 +228,95 @@ BEGIN
   INTO v_active_count, v_inactive_count
   FROM public.restaurants;
 
+  IF v_active_count = 7 AND v_inactive_count = 0 THEN
+    CREATE TEMP TABLE store_purge_inactive_profiles
+    ON COMMIT DROP
+    AS
+    SELECT account.id, account.auth_id, account.role
+    FROM public.users account
+    JOIN auth.users identity ON identity.id = account.auth_id
+    WHERE NOT account.is_active
+      AND account.role = 'waiter'
+      AND identity.banned_until > now();
+
+    IF (SELECT count(*) FROM public.users) <> 20
+       OR (SELECT count(*) FROM public.users WHERE is_active) <> 14
+       OR (SELECT count(*) FROM store_purge_inactive_profiles) <> 6
+       OR (
+         SELECT count(*)
+         FROM public.user_store_access access
+         JOIN store_purge_inactive_profiles candidate
+           ON candidate.id = access.user_id
+       ) <> 6
+       OR EXISTS (
+         SELECT 1
+         FROM public.user_store_access access
+         JOIN store_purge_inactive_profiles candidate
+           ON candidate.id = access.user_id
+         LEFT JOIN public.restaurants store ON store.id = access.store_id
+         WHERE store.id IS NULL OR NOT store.is_active
+       )
+       OR (
+         SELECT count(*) FROM public.audit_logs
+         WHERE action = 'admin_purge_inactive_store_profile'
+       ) <> 21
+       OR (
+         SELECT count(*) FROM public.audit_logs
+         WHERE action = 'admin_purge_inactive_store'
+       ) <> 23 THEN
+      RAISE EXCEPTION 'STORE_PURGE_POST_APPLY_RECOVERY_SHAPE_MISMATCH';
+    END IF;
+
+    INSERT INTO public.audit_logs (
+      actor_id,
+      action,
+      entity_type,
+      entity_id,
+      details
+    )
+    SELECT
+      NULL,
+      'admin_purge_inactive_store_profile',
+      'users',
+      candidate.id,
+      jsonb_build_object(
+        'role', candidate.role,
+        'auth_identity_retained_banned', true,
+        'post_apply_recovery', true,
+        'deleted_at', now()
+      )
+    FROM store_purge_inactive_profiles candidate;
+
+    DELETE FROM public.workforce_fixed_account_migration_state state
+    USING store_purge_inactive_profiles candidate
+    WHERE state.user_id = candidate.id;
+
+    UPDATE public.system_config config
+    SET updated_by = NULL
+    FROM store_purge_inactive_profiles candidate
+    WHERE config.updated_by = candidate.id;
+
+    UPDATE public.store_tax_entity_history history
+    SET created_by = NULL
+    FROM store_purge_inactive_profiles candidate
+    WHERE history.created_by = candidate.id;
+
+    UPDATE public.payments payment
+    SET proof_photo_by = NULL
+    FROM store_purge_inactive_profiles candidate
+    WHERE payment.proof_photo_by = candidate.id;
+
+    DELETE FROM public.user_store_access access
+    USING store_purge_inactive_profiles candidate
+    WHERE access.user_id = candidate.id;
+
+    DELETE FROM public.users account
+    USING store_purge_inactive_profiles candidate
+    WHERE account.id = candidate.id;
+
+    RETURN;
+  END IF;
+
   IF v_active_count <> 7 OR v_inactive_count <> 23 THEN
     RAISE EXCEPTION
       'STORE_PURGE_REVIEWED_SHAPE_MISMATCH active=% inactive=%',

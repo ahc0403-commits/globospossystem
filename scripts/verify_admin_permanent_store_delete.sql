@@ -71,8 +71,7 @@ BEGIN
     SELECT count(*)
     FROM public.audit_logs
     WHERE action = 'admin_purge_inactive_store_profile'
-      AND created_at >= now() - interval '10 minutes'
-  ) <> 21 THEN
+  ) <> 27 THEN
     RAISE EXCEPTION 'ADMIN_STORE_PURGE_VERIFY_PROFILE_AUDIT_COUNT';
   END IF;
 
@@ -87,8 +86,7 @@ BEGIN
 
   SELECT count(*) INTO v_audit_count
   FROM public.audit_logs
-  WHERE action = 'admin_purge_inactive_store'
-    AND created_at >= now() - interval '10 minutes';
+  WHERE action = 'admin_purge_inactive_store';
 
   IF v_audit_count <> 23 THEN
     RAISE EXCEPTION 'ADMIN_STORE_PURGE_VERIFY_AUDIT_COUNT: %', v_audit_count;
