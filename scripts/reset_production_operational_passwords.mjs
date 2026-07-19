@@ -152,6 +152,20 @@ export function parseConfig(env) {
   };
 }
 
+function readConfigEnvironment() {
+  const names = [
+    "POS_SUPABASE_URL",
+    "POS_SUPABASE_SERVICE_ROLE_KEY",
+    "POS_SUPABASE_ANON_KEY",
+    "POS_INITIAL_PASSWORD",
+    "POS_EXPECTED_CREATED_DATE_VN",
+    "POS_OPERATIONAL_ACCOUNTS_FILE",
+    "POS_PREFLIGHT_ONLY",
+    "CONFIRM_PRODUCTION_PASSWORD_RESET",
+  ];
+  return Object.fromEntries(names.map((name) => [name, Deno.env.get(name)]));
+}
+
 function apiHeaders(key) {
   return {
     apikey: key,
@@ -340,7 +354,7 @@ function sleep(milliseconds) {
 }
 
 async function main() {
-  const config = parseConfig(Deno.env.toObject());
+  const config = parseConfig(readConfigEnvironment());
   const approvedEmails = parseApprovedEmailText(
     Deno.readTextFileSync(config.accountsFile),
   );
