@@ -61,6 +61,11 @@ void main() {
     expect(migration, contains('store_purge_inactive_profiles'));
     expect(migration, contains("'admin_purge_inactive_store_profile'"));
     expect(migration, contains("'auth_identity_retained_banned', true"));
+    expect(migration, contains("'post_apply_recovery', true"));
+    expect(
+      migration,
+      contains('STORE_PURGE_POST_APPLY_RECOVERY_SHAPE_MISMATCH'),
+    );
     expect(migration, contains('inventory_purchase_order_lines'));
     expect(migration, contains('inventory_receipt_lines'));
     expect(migration, contains('inventory_recommendation_lines'));
