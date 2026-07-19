@@ -1,8 +1,6 @@
 #!/usr/bin/env -S deno run --allow-env --allow-read --allow-net
 
 import path from "node:path";
-// deno-lint-ignore no-import-prefix
-import { createClient } from "npm:@supabase/supabase-js@2.110.2";
 
 const POS_PROJECT_REF = "ynriuoomotxuwhuxxmhj";
 const POS_PROJECT_URL = `https://${POS_PROJECT_REF}.supabase.co`;
@@ -148,34 +146,89 @@ export function parseConfig(env) {
     serviceRoleKey: env.POS_SUPABASE_SERVICE_ROLE_KEY,
     anonKey: env.POS_SUPABASE_ANON_KEY,
     password,
+    preflightOnly: env.POS_PREFLIGHT_ONLY === "1",
     expectedCreatedDate,
     accountsFile,
   };
 }
 
-async function fetchAllAuthUsers(client) {
+function apiHeaders(key) {
+  return {
+    apikey: key,
+    Authorization: `Bearer ${key}`,
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+}
+
+async function requestJson(url, key, options, errorCode) {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...apiHeaders(key),
+      ...(options.headers || {}),
+    },
+  });
+  if (!response.ok) fail(`${errorCode}:HTTP_${response.status}`);
+  try {
+    return await response.json();
+  } catch (_) {
+    fail(`${errorCode}:INVALID_JSON`);
+  }
+}
+
+function restUrl(config, table, params) {
+  const url = new URL(`/rest/v1/${table}`, config.url);
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
+  return url;
+}
+
+async function restSelect(config, table, params, errorCode) {
+  const data = await requestJson(
+    restUrl(config, table, params),
+    config.serviceRoleKey,
+    { method: "GET" },
+    errorCode,
+  );
+  if (!Array.isArray(data)) fail(`${errorCode}:EXPECTED_ARRAY`);
+  return data;
+}
+
+async function fetchAllAuthUsers(config) {
   const users = [];
   for (let page = 1; page <= 100; page += 1) {
-    const { data, error } = await client.auth.admin.listUsers({
-      page,
-      perPage: 1000,
-    });
-    if (error) fail(`AUTH_LIST_FAILED:${error.message}`);
+    const url = new URL("/auth/v1/admin/users", config.url);
+    url.searchParams.set("page", String(page));
+    url.searchParams.set("per_page", "1000");
+    const data = await requestJson(
+      url,
+      config.serviceRoleKey,
+      { method: "GET" },
+      "AUTH_LIST_FAILED",
+    );
+    if (!Array.isArray(data.users)) {
+      fail("AUTH_LIST_FAILED:EXPECTED_USERS_ARRAY");
+    }
     users.push(...data.users);
     if (data.users.length < 1000) return users;
   }
   fail("AUTH_LIST_PAGE_LIMIT_EXCEEDED");
 }
 
-async function fetchOperationalState(client, users) {
+async function fetchOperationalState(config, users) {
   const authIds = users.map((user) => user.id);
-  const { data: profiles, error: profileError } = await client
-    .from("users")
-    .select(
-      "id,auth_id,role,restaurant_id,primary_store_id,account_type,fixed_account_code,is_active",
-    )
-    .in("auth_id", authIds);
-  if (profileError) fail(`PROFILE_LOOKUP_FAILED:${profileError.message}`);
+  const profiles = await restSelect(
+    config,
+    "users",
+    {
+      select:
+        "id,auth_id,role,restaurant_id,primary_store_id,account_type,fixed_account_code,is_active",
+      auth_id: `in.(${authIds.join(",")})`,
+    },
+    "PROFILE_LOOKUP_FAILED",
+  );
 
   const profilesByAuth = new Map();
   for (const profile of profiles) {
@@ -201,19 +254,27 @@ async function fetchOperationalState(client, users) {
   });
 
   const profileIds = orderedProfiles.map((profile) => profile.id);
-  const { data: access, error: accessError } = await client
-    .from("user_store_access")
-    .select("user_id,store_id,is_primary,is_active")
-    .in("user_id", profileIds)
-    .eq("is_active", true);
-  if (accessError) fail(`STORE_ACCESS_LOOKUP_FAILED:${accessError.message}`);
+  const access = await restSelect(
+    config,
+    "user_store_access",
+    {
+      select: "user_id,store_id,is_primary,is_active",
+      user_id: `in.(${profileIds.join(",")})`,
+      is_active: "eq.true",
+    },
+    "STORE_ACCESS_LOOKUP_FAILED",
+  );
 
   const storeIds = [...new Set(access.map((row) => row.store_id))];
-  const { data: stores, error: storeError } = await client
-    .from("restaurants")
-    .select("id,is_active")
-    .in("id", storeIds);
-  if (storeError) fail(`STORE_LOOKUP_FAILED:${storeError.message}`);
+  const stores = await restSelect(
+    config,
+    "restaurants",
+    {
+      select: "id,is_active",
+      id: `in.(${storeIds.join(",")})`,
+    },
+    "STORE_LOOKUP_FAILED",
+  );
   const activeStoreIds = new Set(
     stores.filter((store) => store.is_active === true).map((store) => store.id),
   );
@@ -251,14 +312,16 @@ async function fetchOperationalState(client, users) {
 
 async function verifyPasswordLogin(config, user, expectedState) {
   const email = user.email.toLowerCase();
-  const client = createClient(config.url, config.anonKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-  const { data, error } = await client.auth.signInWithPassword({
-    email,
-    password: config.password,
-  });
-  if (error || !data.user) fail(`LOGIN_VERIFY_FAILED:${email}`);
+  const data = await requestJson(
+    `${config.url}/auth/v1/token?grant_type=password`,
+    config.anonKey,
+    {
+      method: "POST",
+      body: JSON.stringify({ email, password: config.password }),
+    },
+    `LOGIN_VERIFY_FAILED:${email}`,
+  );
+  if (!data.user) fail(`LOGIN_VERIFY_FAILED:${email}:USER_MISSING`);
   if (data.user.id !== expectedState.authId) {
     fail(`LOGIN_AUTH_ID_MISMATCH:${email}`);
   }
@@ -270,7 +333,6 @@ async function verifyPasswordLogin(config, user, expectedState) {
   ) {
     fail(`LOGIN_STORE_CLAIMS_MISMATCH:${email}`);
   }
-  await client.auth.signOut();
 }
 
 function sleep(milliseconds) {
@@ -282,32 +344,41 @@ async function main() {
   const approvedEmails = parseApprovedEmailText(
     Deno.readTextFileSync(config.accountsFile),
   );
-  const serviceClient = createClient(config.url, config.serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
 
-  const allUsers = await fetchAllAuthUsers(serviceClient);
+  const allUsers = await fetchAllAuthUsers(config);
   const selectedUsers = selectOperationalUsers(
     allUsers,
     approvedEmails,
     config.expectedCreatedDate,
   );
-  const beforeState = await fetchOperationalState(serviceClient, selectedUsers);
+  const beforeState = await fetchOperationalState(config, selectedUsers);
   console.log(
     `Preflight passed: ${selectedUsers.length} approved operational accounts only.`,
   );
+  if (config.preflightOnly) {
+    console.log(
+      `PASS: ${selectedUsers.length} operational accounts verified; preflight-only mode changed no passwords.`,
+    );
+    return;
+  }
 
   const failures = [];
   for (const user of selectedUsers) {
     const email = user.email.toLowerCase();
-    const { error } = await serviceClient.auth.admin.updateUserById(user.id, {
-      password: config.password,
-    });
-    if (error) {
+    try {
+      await requestJson(
+        `${config.url}/auth/v1/admin/users/${user.id}`,
+        config.serviceRoleKey,
+        {
+          method: "PUT",
+          body: JSON.stringify({ password: config.password }),
+        },
+        `PASSWORD_RESET_FAILED:${email}`,
+      );
+      console.log(`Password reset: ${email}`);
+    } catch (_) {
       failures.push(email);
       console.error(`PASSWORD_RESET_FAILED:${email}`);
-    } else {
-      console.log(`Password reset: ${email}`);
     }
     await sleep(250);
   }
@@ -316,11 +387,11 @@ async function main() {
   }
 
   const refreshedUsers = selectOperationalUsers(
-    await fetchAllAuthUsers(serviceClient),
+    await fetchAllAuthUsers(config),
     approvedEmails,
     config.expectedCreatedDate,
   );
-  const afterState = await fetchOperationalState(serviceClient, refreshedUsers);
+  const afterState = await fetchOperationalState(config, refreshedUsers);
   for (const user of refreshedUsers) {
     const email = user.email.toLowerCase();
     const before = beforeState.get(email);

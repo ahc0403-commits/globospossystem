@@ -7,6 +7,7 @@ readonly POS_PROJECT_URL="https://${POS_PROJECT_REF}.supabase.co"
 readonly REQUIRED_CONFIRMATION="RESET_GLOBOS_PROD_OPERATIONAL_PASSWORDS"
 ENV_FILE="${ENV_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/globos/pos-production.env}"
 ACCOUNTS_FILE="${POS_OPERATIONAL_ACCOUNTS_FILE:-$ROOT_DIR/docs/pos/pos_required_production_auth_emails.txt}"
+PREFLIGHT_ONLY=0
 
 fail() {
   printf 'ERROR: %s\n' "$1" >&2
@@ -17,6 +18,18 @@ cleanup() {
   unset POS_INITIAL_PASSWORD POS_SUPABASE_SERVICE_ROLE_KEY api_keys_json
 }
 trap cleanup EXIT
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --preflight-only) PREFLIGHT_ONLY=1 ;;
+    -h|--help)
+      printf 'Usage: %s [--preflight-only]\n' "$0"
+      exit 0
+      ;;
+    *) fail "Unknown option: $1" ;;
+  esac
+  shift
+done
 
 [[ "${CONFIRM_PRODUCTION_PASSWORD_RESET:-}" == "$REQUIRED_CONFIRMATION" ]] ||
   fail "Explicit production password reset confirmation is required."
@@ -49,7 +62,9 @@ git -C "$ROOT_DIR" fetch --quiet origin +refs/heads/main:refs/remotes/origin/mai
 [[ -f "$ACCOUNTS_FILE" ]] || fail "Approved operational account list is missing."
 bash "$ROOT_DIR/scripts/check_pilot_auth_accounts.sh" --file "$ACCOUNTS_FILE"
 
-if [[ -z "${POS_INITIAL_PASSWORD:-}" ]]; then
+if [[ "$PREFLIGHT_ONLY" == "1" ]]; then
+  POS_INITIAL_PASSWORD="preflight-only-placeholder"
+elif [[ -z "${POS_INITIAL_PASSWORD:-}" ]]; then
   [[ -t 0 ]] || fail "Run interactively so the password can be entered without echo."
   IFS= read -r -s -p "Initial password for approved operational accounts: " POS_INITIAL_PASSWORD
   printf '\n'
@@ -84,9 +99,10 @@ POS_SUPABASE_SERVICE_ROLE_KEY="$POS_SUPABASE_SERVICE_ROLE_KEY" \
 POS_INITIAL_PASSWORD="$POS_INITIAL_PASSWORD" \
 POS_EXPECTED_CREATED_DATE_VN="${POS_EXPECTED_CREATED_DATE_VN:-}" \
 POS_OPERATIONAL_ACCOUNTS_FILE="$ACCOUNTS_FILE" \
+POS_PREFLIGHT_ONLY="$PREFLIGHT_ONLY" \
 CONFIRM_PRODUCTION_PASSWORD_RESET="$CONFIRM_PRODUCTION_PASSWORD_RESET" \
   deno run \
-    --allow-env=POS_SUPABASE_URL,POS_SUPABASE_ANON_KEY,POS_SUPABASE_SERVICE_ROLE_KEY,POS_INITIAL_PASSWORD,POS_EXPECTED_CREATED_DATE_VN,POS_OPERATIONAL_ACCOUNTS_FILE,CONFIRM_PRODUCTION_PASSWORD_RESET \
+    --allow-env=POS_SUPABASE_URL,POS_SUPABASE_ANON_KEY,POS_SUPABASE_SERVICE_ROLE_KEY,POS_INITIAL_PASSWORD,POS_EXPECTED_CREATED_DATE_VN,POS_OPERATIONAL_ACCOUNTS_FILE,POS_PREFLIGHT_ONLY,CONFIRM_PRODUCTION_PASSWORD_RESET \
     --allow-read="$ACCOUNTS_FILE" \
     --allow-net="$POS_PROJECT_REF.supabase.co" \
     "$ROOT_DIR/scripts/reset_production_operational_passwords.mjs"

@@ -80,6 +80,20 @@ const config = parseConfig({
   CONFIRM_PRODUCTION_PASSWORD_RESET: "RESET_GLOBOS_PROD_OPERATIONAL_PASSWORDS",
 });
 assert.strictEqual(config.expectedCreatedDate, "2026-07-18");
+assert.strictEqual(config.preflightOnly, false);
+assert.strictEqual(
+  parseConfig({
+    POS_SUPABASE_URL: config.url,
+    POS_SUPABASE_SERVICE_ROLE_KEY: config.serviceRoleKey,
+    POS_SUPABASE_ANON_KEY: config.anonKey,
+    POS_INITIAL_PASSWORD: "preflight-only-placeholder",
+    POS_EXPECTED_CREATED_DATE_VN: config.expectedCreatedDate,
+    POS_PREFLIGHT_ONLY: "1",
+    CONFIRM_PRODUCTION_PASSWORD_RESET:
+      "RESET_GLOBOS_PROD_OPERATIONAL_PASSWORDS",
+  }).preflightOnly,
+  true,
+);
 expectThrow(
   () =>
     parseConfig({
