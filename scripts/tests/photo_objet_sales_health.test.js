@@ -613,6 +613,11 @@ test('health, backfill, contract, and release proof are independent workflows', 
     /paths:/,
   );
   assert.match(contract, /run: bash scripts\/check_repo\.sh/);
+  assert.match(
+    contract,
+    /subosito\/flutter-action@[0-9a-f]{40}[\s\S]*?cache: false/,
+    'Flutter caching must stay disabled while its composite Action uses an unpinned nested cache Action',
+  );
   assert.doesNotMatch(contract, /secrets\./);
   for (const command of [
     'dart analyze --fatal-infos',
@@ -672,6 +677,13 @@ test('all external GitHub Actions are pinned to full commits with release labels
 
   for (const workflowName of workflowNames) {
     const workflow = fs.readFileSync(path.join(workflowDirectory, workflowName), 'utf8');
+    if (workflow.includes('uses: subosito/flutter-action@')) {
+      assert.match(
+        workflow,
+        /uses: subosito\/flutter-action@[0-9a-f]{40}[\s\S]*?cache: false/,
+        `${workflowName} must not activate the Action's unpinned nested cache dependency`,
+      );
+    }
     for (const [lineIndex, line] of workflow.split('\n').entries()) {
       const use = line.match(/^\s*(?:-\s*)?uses:\s+([^@\s]+)@([^\s#]+)(?:\s+#\s*(.+))?$/);
       if (!use || use[1].startsWith('./')) continue;

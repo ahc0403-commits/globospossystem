@@ -430,6 +430,7 @@ self-review 허용은 완전한 상호 승인보다 약하지만, 현재 인원 
 - all-PR 전환으로 구형 Node 계약 테스트의 경로 필터 가정을 갱신했다.
 - clean-worktree 배포 fixture가 현재 Deno Edge 테스트 계약을 재현하도록 보완했다.
 - Linux에서 production SQL env 파일 mode 검사가 이식성 있게 동작하도록 수정했다.
+- SHA 강제가 `subosito/flutter-action` 내부의 이동 가능한 `actions/cache@v5` 참조를 차단했다. 외부 Action을 fork하지 않고 선택적 Flutter cache 경로를 꺼서 중첩 이동 참조를 실행하지 않도록 했다.
 - 로컬 Docker daemon이 꺼져 있어 Docker 기반 계약 두 개는 로컬에서 완료할 수 없었지만, 동일 wrapper를 실행한 exact-head GitHub runner에서 모두 통과했다.
 
 ### 남은 관찰 항목

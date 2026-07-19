@@ -39,7 +39,7 @@ jobs:
         with:
           channel: stable
           flutter-version: '3.41.6'
-          cache: true
+          cache: false
       - name: Build and package native print station
         shell: pwsh
         run: ./scripts/build_windows_print_station.ps1
