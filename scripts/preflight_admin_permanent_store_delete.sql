@@ -15,7 +15,6 @@ BEGIN
      OR to_regclass('public.meinvoice_jobs') IS NULL
      OR to_regclass('public.meinvoice_job_events') IS NULL
      OR to_regclass('public.office_payroll_reviews') IS NULL
-     OR to_regclass('public.inventory_receipt_confirmation_attempts') IS NULL
      OR to_regclass('public.photo_objet_expected_slots') IS NULL
      OR to_regclass('public.photo_objet_monitoring_policies') IS NULL
      OR to_regclass('public.employee_office_sync_outbox') IS NULL

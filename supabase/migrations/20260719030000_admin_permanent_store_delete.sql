@@ -95,9 +95,6 @@ BEGIN
   DELETE FROM public.office_payroll_reviews
   WHERE restaurant_id = p_store_id;
 
-  DELETE FROM public.inventory_receipt_confirmation_attempts
-  WHERE restaurant_id = p_store_id;
-
   DELETE FROM public.photo_objet_expected_slots
   WHERE store_id = p_store_id;
 

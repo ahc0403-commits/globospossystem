@@ -63,6 +63,10 @@ void main() {
     expect(migration, isNot(contains('office_qc_followups')));
     expect(
       migration,
+      isNot(contains('inventory_receipt_confirmation_attempts')),
+    );
+    expect(
+      migration,
       contains('REVOKE ALL ON FUNCTION public._purge_inactive_store_data'),
     );
     expect(screen, contains("Key('super_admin_purge_store_button')"));
