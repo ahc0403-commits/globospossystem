@@ -95,6 +95,29 @@ BEGIN
   DELETE FROM public.office_payroll_reviews
   WHERE restaurant_id = p_store_id;
 
+  -- These line tables reference inventory_products without ON DELETE CASCADE.
+  -- Remove only lines whose product belongs to the store being purged before
+  -- the restaurants cascade reaches inventory_products.
+  DELETE FROM public.inventory_receipt_lines line
+  USING public.inventory_products product
+  WHERE line.product_id = product.id
+    AND product.restaurant_id = p_store_id;
+
+  DELETE FROM public.inventory_recommendation_lines line
+  USING public.inventory_products product
+  WHERE line.product_id = product.id
+    AND product.restaurant_id = p_store_id;
+
+  DELETE FROM public.inventory_stock_audit_lines line
+  USING public.inventory_products product
+  WHERE line.product_id = product.id
+    AND product.restaurant_id = p_store_id;
+
+  DELETE FROM public.inventory_purchase_order_lines line
+  USING public.inventory_products product
+  WHERE line.product_id = product.id
+    AND product.restaurant_id = p_store_id;
+
   DELETE FROM public.photo_objet_expected_slots
   WHERE store_id = p_store_id;
 
