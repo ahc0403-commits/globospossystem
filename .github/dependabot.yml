@@ -1,0 +1,44 @@
+version: 2
+
+updates:
+  - package-ecosystem: pub
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Asia/Ho_Chi_Minh
+    open-pull-requests-limit: 2
+    groups:
+      pub-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: /scripts
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Asia/Ho_Chi_Minh
+    open-pull-requests-limit: 2
+    groups:
+      npm-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Asia/Ho_Chi_Minh
+    open-pull-requests-limit: 2
+    groups:
+      actions-minor-and-patch:
+        update-types:
+          - minor
+          - patch
