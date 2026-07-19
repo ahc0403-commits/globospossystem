@@ -109,3 +109,11 @@ evidence only. Do not report the release gate as PASS until the required
 GitHub Actions checks succeed on the exact pushed head SHA. Cross-platform
 shell fixtures must explicitly create every required Git state and must not
 depend on Bash-version-specific `errexit` behavior.
+
+## 9. Common verification commands
+
+- Full repository verification: `bash scripts/check_repo.sh`
+- Static analysis: `flutter analyze`
+- Full Flutter tests: `flutter test`
+- Format changed Dart files: `dart format <files>`
+- Production release: use `scripts/deploy_pos_production.sh`; do not bypass it.
