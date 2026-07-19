@@ -52,6 +52,25 @@ auth.users.email -> auth.users.id -> public.users.auth_id
 Each account must be confirmed, active, assigned a supported role, and carry
 valid `app_metadata.accessible_store_ids` claims.
 
+## Password issuance lifecycle
+
+The same lifecycle applies to every active operational role, including super
+administrators, brand and store administrators, managers, cashiers, kitchen
+users, waiters, and Photo Objet operators.
+
+- Every Auth password hash replacement first sets
+  `public.users.must_change_password = true` and advances the server-owned
+  `password_change_generation`.
+- Signing in with an administrator-issued password never clears the gate.
+- Only the authenticated user's `complete-initial-password-change` Edge
+  Function may clear the current generation after it replaces that same
+  user's password.
+- If an administrator reset races with self-service completion, the newer
+  generation remains gated.
+- Auth or profile failures keep the gate armed. Do not clear the flag manually.
+- Never pass a target user ID to the self-service completion function; the
+  verified session identity is the only target.
+
 ## Repair rules
 
 - Never create or reactivate a `.test` identity or test restaurant in
@@ -91,7 +110,18 @@ active store access, and claims all match. It uses the same temporary linked
 Postgres credentials as the production deployment gate and sends the password
 only as a bound query parameter inside one transaction. It verifies every new
 login with the production publishable key, closes each verification session,
-and proves that profile, role, access, and claim state did not change.
+proves that profile, role, access, and claim state did not change, and requires
+every reset account to have a newer `password_change_generation`, a non-null
+`password_change_required_at`, and `must_change_password = true` after login.
+
+Password assignment and application deployment are separate approvals. Never
+run this reset from deployment automation or infer password-reset approval from
+an application or database release request.
+
+For the password lifecycle release, keep the guarded deployment order intact:
+deploy and verify the compatibility-capable Edge Function first, apply and
+verify the fail-closed database migration second, and deploy the Flutter web app
+last. Do not run an operational password reset between these release steps.
 
 Do not put the password in a command, repository file, account list, or log.
 Run the same command with `--preflight-only` first to exercise the exact live

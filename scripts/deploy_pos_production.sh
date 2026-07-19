@@ -354,6 +354,7 @@ preflight() {
   if [[ "$SKIP_CHECKS" != "1" ]]; then
     need_cmd dart
     need_cmd flutter
+    need_cmd deno
   fi
   if [[ "$DB_ONLY" != "1" ]]; then
     need_cmd supabase
@@ -361,6 +362,8 @@ preflight() {
       fail "Missing create_staff_user Edge function."
     [[ -f "$ROOT_DIR/supabase/functions/provision-fixed-pos-account/index.ts" ]] ||
       fail "Missing provision-fixed-pos-account Edge function."
+    [[ -f "$ROOT_DIR/supabase/functions/complete-initial-password-change/index.ts" ]] ||
+      fail "Missing complete-initial-password-change Edge function."
   fi
   if [[ "$DB_ONLY" != "1" && "$SKIP_AUTH_CHECK" != "1" ]]; then
     [[ -f "$ROOT_DIR/scripts/check_pilot_auth_accounts.sh" ]] ||
@@ -413,6 +416,10 @@ run_checks() {
 
   log "Static analysis"
   run dart analyze
+
+  log "Password lifecycle Edge tests"
+  run deno test --allow-env=ALLOWED_ORIGINS \
+    "$ROOT_DIR/supabase/functions/complete-initial-password-change/index_test.ts"
 
   if [[ -z "$TEST_TARGETS" ]]; then
     log "Flutter tests skipped"
@@ -687,6 +694,7 @@ apply_migration() {
     20260718170000_vnd_currency_enforcement.sql|\
     20260719013000_production_test_entity_guard.sql|\
     20260719020000_force_initial_password_change.sql|\
+    20260719140000_password_change_lifecycle_fail_closed.sql|\
     20260719030000_admin_permanent_store_delete.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
@@ -725,6 +733,12 @@ apply_migration() {
       fail "Missing initial password-change rollback file: $rollback_path"
     log "Initial password-change rollback readiness"
     printf 'Rollback ready (not executed): %s\n' "$rollback_path"
+  elif [[ "$migration_name" == "20260719140000_password_change_lifecycle_fail_closed.sql" ]]; then
+    local rollback_path="$ROOT_DIR/scripts/rollback_password_change_lifecycle_fail_closed.sql"
+    [[ -f "$rollback_path" ]] ||
+      fail "Missing fail-closed password lifecycle rollback file: $rollback_path"
+    log "Fail-closed password lifecycle rollback readiness"
+    printf 'Coordinated app and database rollback ready (not executed): %s\n' "$rollback_path"
   elif [[ "$migration_name" == "20260719030000_admin_permanent_store_delete.sql" ]]; then
     local rollback_path="$ROOT_DIR/scripts/rollback_admin_permanent_store_delete.sql"
     [[ -f "$rollback_path" ]] ||
@@ -796,6 +810,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_force_initial_password_change.sql" \
       "initial password-change migration preflight"
+  elif [[ "$migration_name" == "20260719140000_password_change_lifecycle_fail_closed.sql" ]]; then
+    log "Fail-closed password lifecycle migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_password_change_lifecycle_fail_closed.sql" \
+      "fail-closed password lifecycle migration preflight"
   elif [[ "$migration_name" == "20260719030000_admin_permanent_store_delete.sql" ]]; then
     log "Permanent store-delete migration preflight"
     run_linked_psql_file \
@@ -886,6 +905,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_force_initial_password_change.sql" \
       "initial password-change migration verification"
+  elif [[ "$migration_name" == "20260719140000_password_change_lifecycle_fail_closed.sql" ]]; then
+    log "Fail-closed password lifecycle migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_password_change_lifecycle_fail_closed.sql" \
+      "fail-closed password lifecycle migration verification"
   elif [[ "$migration_name" == "20260719030000_admin_permanent_store_delete.sql" ]]; then
     log "Permanent store-delete migration verification"
     run_linked_psql_file \
@@ -998,36 +1022,42 @@ deploy_pos_edge_functions() {
   run supabase functions deploy create_staff_user --project-ref "$POS_PROJECT_REF"
   run supabase functions deploy provision-fixed-pos-account \
     --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy complete-initial-password-change \
+    --project-ref "$POS_PROJECT_REF"
 }
 
 verify_remote_allowed_origin() {
   log "POS Edge production origin verification"
-  if [[ "$DRY_RUN" == "1" ]]; then
-    printf '+ OPTIONS provision-fixed-pos-account with Origin %q; require exact access-control-allow-origin\n' \
-      "$LIVE_URL"
-    return 0
-  fi
+  local function_name headers allowed
+  for function_name in \
+    provision-fixed-pos-account \
+    complete-initial-password-change; do
+    if [[ "$DRY_RUN" == "1" ]]; then
+      printf '+ OPTIONS %s with Origin %q; require exact access-control-allow-origin\n' \
+        "$function_name" "$LIVE_URL"
+      continue
+    fi
 
-  local headers
-  headers="$(mktemp)"
-  if ! curl -sS -o /dev/null -D "$headers" -X OPTIONS \
-    "$SUPABASE_URL/functions/v1/provision-fixed-pos-account" \
-    -H "Origin: $LIVE_URL" \
-    -H "apikey: $SUPABASE_ANON_KEY"; then
+    headers="$(mktemp)"
+    if ! curl -sS -o /dev/null -D "$headers" -X OPTIONS \
+      "$SUPABASE_URL/functions/v1/$function_name" \
+      -H "Origin: $LIVE_URL" \
+      -H "apikey: $SUPABASE_ANON_KEY"; then
+      rm -f "$headers"
+      fail "Could not verify $function_name Edge origin configuration."
+    fi
+    allowed="$(awk 'tolower($0) ~ /^access-control-allow-origin:[[:space:]]*/ {
+      value=$0
+      sub(/^[^:]*:[[:space:]]*/, "", value)
+      sub(/\r$/, "", value)
+      print value
+    }' "$headers" | tail -1)"
     rm -f "$headers"
-    fail "Could not verify the deployed POS Edge origin configuration."
-  fi
-  local allowed
-  allowed="$(awk 'tolower($0) ~ /^access-control-allow-origin:[[:space:]]*/ {
-    value=$0
-    sub(/^[^:]*:[[:space:]]*/, "", value)
-    sub(/\r$/, "", value)
-    print value
-  }' "$headers" | tail -1)"
-  rm -f "$headers"
-  [[ "$allowed" == "$LIVE_URL" ]] ||
-    fail "Deployed POS Edge origin is not exactly $LIVE_URL."
-  printf 'Deployed POS Edge origin verified: %s\n' "$allowed"
+    [[ "$allowed" == "$LIVE_URL" ]] ||
+      fail "Deployed $function_name Edge origin is not exactly $LIVE_URL."
+    printf 'Deployed %s Edge origin verified: %s\n' \
+      "$function_name" "$allowed"
+  done
 }
 
 run_login_smoke() {
@@ -1093,9 +1123,13 @@ main() {
   verify_allowed_production_origins
   run_auth_check
   run_checks
-  apply_migration
+  # Deploy the compatibility-capable self-service endpoint before replacing the
+  # predecessor password trigger. If the DB gate fails, the endpoint remains
+  # safe against the predecessor schema; the web app is deployed only after the
+  # fail-closed migration and verification succeed.
   deploy_pos_edge_functions
   verify_remote_allowed_origin
+  apply_migration
   local_flutter_build
   deploy_vercel
   run_login_smoke

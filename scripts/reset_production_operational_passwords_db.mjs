@@ -124,6 +124,34 @@ function canonical(value) {
   return value;
 }
 
+export function assertPasswordLifecycleTransition(email, beforeState, afterState) {
+  const beforeStable = { ...beforeState };
+  const afterStable = { ...afterState };
+  delete beforeStable.passwordLifecycle;
+  delete afterStable.passwordLifecycle;
+  if (JSON.stringify(beforeStable) !== JSON.stringify(afterStable)) {
+    fail(`OPERATIONAL_STATE_CHANGED:${email}`);
+  }
+  if (
+    afterState.passwordLifecycle.mustChangePassword !== true ||
+    !afterState.passwordLifecycle.requiredAt ||
+    afterState.passwordLifecycle.generation <=
+      beforeState.passwordLifecycle.generation
+  ) {
+    fail(`PASSWORD_CHANGE_GATE_NOT_REARMED:${email}`);
+  }
+}
+
+export function loginProfileMatchesExpected(profile, expected) {
+  return profile.is_active === true &&
+    profile.role === expected.profile.role &&
+    profile.fixed_account_code === expected.profile.fixed_account_code &&
+    profile.must_change_password === true &&
+    Boolean(profile.password_change_required_at) &&
+    Number(profile.password_change_generation) >=
+      expected.passwordLifecycle.generation;
+}
+
 async function fetchOperationalState(
   client,
   approvedEmails,
@@ -171,7 +199,11 @@ async function fetchOperationalState(
        primary_store_id::text as primary_store_id,
        account_type,
        fixed_account_code,
-       is_active
+       is_active,
+       must_change_password,
+       password_change_required_at,
+       password_changed_at,
+       password_change_generation::text as password_change_generation
      from public.users
      where auth_id = any($1::uuid[])`,
     [authIds],
@@ -235,10 +267,21 @@ async function fetchOperationalState(
     if (authRow.app_metadata?.role !== profile.role) {
       fail(`ROLE_CLAIM_MISMATCH:${email}`);
     }
+    const stableProfile = { ...profile };
+    delete stableProfile.must_change_password;
+    delete stableProfile.password_change_required_at;
+    delete stableProfile.password_changed_at;
+    delete stableProfile.password_change_generation;
     state.set(email, {
       authId: authRow.id,
       appMetadata: canonical(authRow.app_metadata),
-      profile: canonical(profile),
+      profile: canonical(stableProfile),
+      passwordLifecycle: {
+        mustChangePassword: profile.must_change_password === true,
+        requiredAt: profile.password_change_required_at,
+        changedAt: profile.password_changed_at,
+        generation: Number(profile.password_change_generation),
+      },
       accessIds: sortedStrings(accessIds),
     });
   });
@@ -277,7 +320,7 @@ async function verifyLogin(config, email, expected) {
   const profileUrl = new URL("/rest/v1/users", config.url);
   profileUrl.searchParams.set(
     "select",
-    "role,restaurant_id,is_active,account_type,fixed_account_code",
+    "role,restaurant_id,is_active,account_type,fixed_account_code,must_change_password,password_change_required_at,password_change_generation",
   );
   profileUrl.searchParams.set("auth_id", `eq.${login.user.id}`);
   profileUrl.searchParams.set("limit", "1");
@@ -295,9 +338,7 @@ async function verifyLogin(config, email, expected) {
   if (
     !Array.isArray(profiles) ||
     profiles.length !== 1 ||
-    profiles[0].is_active !== true ||
-    profiles[0].role !== expected.profile.role ||
-    profiles[0].fixed_account_code !== expected.profile.fixed_account_code
+    !loginProfileMatchesExpected(profiles[0], expected)
   ) {
     fail(`LOGIN_PROFILE_MISMATCH:${email}`);
   }
@@ -337,7 +378,7 @@ async function main() {
     await client.query("set local statement_timeout = '30s'");
     await client.query("set local lock_timeout = '5s'");
     const passwordCapability = await client.query(
-      "select crypt($1, gen_salt('bf')) is not null as available",
+      "select crypt($1, gen_salt('bf', 10)) is not null as available",
       ["password-capability-probe"],
     );
     if (passwordCapability.rows[0]?.available !== true) {
@@ -361,7 +402,7 @@ async function main() {
 
     const updated = await client.query(
       `update auth.users
-       set encrypted_password = crypt($1, gen_salt('bf')),
+       set encrypted_password = crypt($1, gen_salt('bf', 10)),
            updated_at = now()
        where lower(email) = any($2::text[])
        returning lower(email) as email`,
@@ -381,17 +422,34 @@ async function main() {
     if (passwordCheck.rows[0]?.matched !== approvedEmails.length) {
       fail("PASSWORD_HASH_VERIFY_FAILED");
     }
+    const rearmed = await client.query(
+      `update public.users profile
+       set must_change_password = true,
+           password_change_required_at = coalesce(
+             profile.password_change_required_at,
+             clock_timestamp()
+           )
+       from auth.users identity
+       where identity.id = profile.auth_id
+         and lower(identity.email) = any($1::text[])
+       returning lower(identity.email) as email`,
+      [approvedEmails],
+    );
+    const rearmedEmails = rearmed.rows.map((row) => row.email).sort();
+    if (!sameStrings(rearmedEmails, approvedEmails)) {
+      fail("PASSWORD_CHANGE_GATE_TARGET_SET_MISMATCH");
+    }
     const after = await fetchOperationalState(
       client,
       approvedEmails,
       config.expectedCreatedDate,
     );
     for (const email of approvedEmails) {
-      if (
-        JSON.stringify(before.get(email)) !== JSON.stringify(after.get(email))
-      ) {
-        fail(`OPERATIONAL_STATE_CHANGED:${email}`);
-      }
+      assertPasswordLifecycleTransition(
+        email,
+        before.get(email),
+        after.get(email),
+      );
     }
     await client.query("commit");
     committed = true;
@@ -400,7 +458,7 @@ async function main() {
     );
 
     for (const email of approvedEmails) {
-      await verifyLogin(config, email, before.get(email));
+      await verifyLogin(config, email, after.get(email));
       console.log(`Login verified and session closed: ${email}`);
       await sleep(500);
     }

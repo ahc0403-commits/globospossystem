@@ -76,6 +76,26 @@ void main() {
     expect(deploy, contains('has no explicit verification phase'));
     expect(
       deploy,
+      contains('20260719140000_password_change_lifecycle_fail_closed.sql'),
+    );
+    expect(
+      deploy,
+      contains('preflight_password_change_lifecycle_fail_closed.sql'),
+    );
+    expect(
+      deploy,
+      contains('verify_password_change_lifecycle_fail_closed.sql'),
+    );
+    expect(
+      deploy,
+      contains('rollback_password_change_lifecycle_fail_closed.sql'),
+    );
+    expect(
+      deploy,
+      contains('functions deploy complete-initial-password-change'),
+    );
+    expect(
+      deploy,
       contains('CONFIRM_HIERARCHY_ROLLBACK=ROLLBACK_HIERARCHY_20260711090000'),
     );
     expect(deploy, isNot(contains('supabase db query')));
@@ -121,7 +141,15 @@ void main() {
     );
     expect(
       mainBody.indexOf('run_checks'),
+      lessThan(mainBody.indexOf('deploy_pos_edge_functions')),
+    );
+    expect(
+      mainBody.indexOf('deploy_pos_edge_functions'),
       lessThan(mainBody.indexOf('apply_migration')),
+    );
+    expect(
+      mainBody.indexOf('apply_migration'),
+      lessThan(mainBody.indexOf('local_flutter_build')),
     );
     expect(
       mainBody.indexOf('deploy_vercel'),
@@ -235,7 +263,15 @@ void main() {
     expect(operationalPasswordResetCore, contains('set role postgres'));
     expect(operationalPasswordResetCore, contains('update auth.users'));
     expect(operationalPasswordResetCore, contains('crypt(\$1'));
-    expect(operationalPasswordResetCore, contains("gen_salt('bf')"));
+    expect(operationalPasswordResetCore, contains("gen_salt('bf', 10)"));
+    expect(
+      operationalPasswordResetCore,
+      contains('password_change_generation'),
+    );
+    expect(
+      operationalPasswordResetCore,
+      contains('PASSWORD_CHANGE_GATE_NOT_REARMED'),
+    );
     expect(
       operationalPasswordResetCore,
       contains('/auth/v1/token?grant_type=password'),

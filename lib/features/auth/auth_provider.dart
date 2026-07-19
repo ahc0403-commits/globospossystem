@@ -3,12 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
-    show
-        AuthChangeEvent,
-        AuthException,
-        PostgrestException,
-        User,
-        UserAttributes;
+    show AuthChangeEvent, AuthException, PostgrestException, User;
 import '../../core/services/navigation_history_service.dart';
 import '../../core/utils/role_routes.dart';
 import '../../main.dart';
@@ -215,14 +210,20 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     state = state.copyWith(isPasswordChangeSubmitting: true, clearError: true);
 
     try {
-      await supabase.auth.updateUser(UserAttributes(password: newPassword));
+      final response = await supabase.functions.invoke(
+        'complete-initial-password-change',
+        body: {'new_password': newPassword},
+      );
+      if (response.status < 200 || response.status >= 300) {
+        throw StateError('password change function rejected the request');
+      }
 
-      // The database trigger clears must_change_password only after Auth has
-      // actually replaced encrypted_password. Re-read the profile instead of
-      // trusting a client-side success flag.
+      // The Edge Function authenticates the caller, replaces only that user's
+      // password, and clears the gate only for the generation it started.
+      // Re-read the server-owned profile before allowing POS navigation.
       final profile = await supabase
           .from('users')
-          .select('must_change_password')
+          .select('must_change_password, password_change_generation')
           .eq('auth_id', state.user!.id)
           .single();
       final isStillRequired = profile['must_change_password'] as bool? ?? true;
