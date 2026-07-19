@@ -570,7 +570,7 @@ test('collection workflow stays green independently from slot health', () => {
   );
   assert.ok(
     workflow.indexOf('PUPPETEER_CACHE_DIR=${RUNNER_TEMP}/puppeteer') <
-      workflow.indexOf('uses: actions/setup-node@v4'),
+      workflow.indexOf('uses: actions/setup-node@'),
     'runtime cache setup must run before Node and Chromium installation',
   );
   assert.match(workflow, /--preflight-only/);
@@ -642,16 +642,16 @@ test('health, backfill, contract, and release proof are independent workflows', 
   assert.match(release, /ref: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/);
   assert.ok(
     release.indexOf('Reject non-main or stale validation before checkout')
-      < release.indexOf('uses: actions/checkout@v4'),
+      < release.indexOf('uses: actions/checkout@'),
     'event metadata and current main must fail closed before repository checkout',
   );
   assert.ok(
     release.indexOf('test "${current_main_sha}" = "${VALIDATION_HEAD_SHA}"')
-      < release.indexOf('uses: actions/checkout@v4'),
+      < release.indexOf('uses: actions/checkout@'),
     'a stale successful main validation must be rejected before checkout',
   );
   assert.ok(
-    release.indexOf('uses: actions/checkout@v4')
+    release.indexOf('uses: actions/checkout@')
       < release.indexOf('node scripts/verify_photo_objet_release.js'),
     'repository verification scripts must run only after exact-SHA checkout',
   );
@@ -662,4 +662,32 @@ test('health, backfill, contract, and release proof are independent workflows', 
   assert.match(release, /photo_objet_slot_health\.js --read-only/);
   assert.match(release, /globospossystem\.vercel\.app/);
   assert.match(release, /release-proof-evidence\.json/);
+});
+
+test('all external GitHub Actions are pinned to full commits with release labels', () => {
+  const workflowDirectory = path.join(__dirname, '../../.github/workflows');
+  const workflowNames = fs.readdirSync(workflowDirectory)
+    .filter(name => name.endsWith('.yml'));
+  let externalActionCount = 0;
+
+  for (const workflowName of workflowNames) {
+    const workflow = fs.readFileSync(path.join(workflowDirectory, workflowName), 'utf8');
+    for (const [lineIndex, line] of workflow.split('\n').entries()) {
+      const use = line.match(/^\s*(?:-\s*)?uses:\s+([^@\s]+)@([^\s#]+)(?:\s+#\s*(.+))?$/);
+      if (!use || use[1].startsWith('./')) continue;
+      externalActionCount += 1;
+      assert.match(
+        use[2],
+        /^[0-9a-f]{40}$/,
+        `${workflowName}:${lineIndex + 1} must pin a full commit SHA`,
+      );
+      assert.match(
+        use[3] ?? '',
+        /^v\d+(?:\.\d+){1,2}$/,
+        `${workflowName}:${lineIndex + 1} must retain a release label`,
+      );
+    }
+  }
+
+  assert.ok(externalActionCount > 0, 'at least one external Action must be checked');
 });

@@ -22,8 +22,8 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
           cache: npm
@@ -43,7 +43,7 @@ jobs:
       - name: Deliver deduplicated slot alerts
         id: deliver
         if: steps.detect.outcome == 'success' && steps.detect.outputs.alert_count != '0'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
           script: |
             const fs = require('fs');
@@ -76,7 +76,7 @@ jobs:
         run: node photo_objet_slot_health.js --ack-file health-evidence.json
       - name: Escalate detected audit infrastructure failure
         if: always() && steps.detect.outcome == 'success'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
           script: |
             const fs = require('fs');
@@ -104,7 +104,7 @@ jobs:
         run: node photo_objet_slot_health.js --assert-file health-evidence.json
       - name: Escalate audit infrastructure failure
         if: failure() && steps.detect.outcome != 'success'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
           script: |
             const title = '[Photo Objet health] AUDIT_INFRA_FAILED';
