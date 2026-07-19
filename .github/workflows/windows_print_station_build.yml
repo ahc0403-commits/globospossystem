@@ -35,11 +35,21 @@ jobs:
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
-        with:
-          channel: stable
-          flutter-version: '3.41.6'
-          cache: true
+      - name: Install verified Flutter SDK
+        shell: pwsh
+        env:
+          FLUTTER_SDK_URL: https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/flutter_windows_3.41.6-stable.zip
+          FLUTTER_SDK_SHA256: e30303d47ab13c17e0388303ade1a8a24bfe5698b4a28494e6cbee25fc073022
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'flutter_windows_3.41.6-stable.zip'
+          & curl.exe --fail --location --silent --show-error $env:FLUTTER_SDK_URL --output $archive
+          if ($LASTEXITCODE -ne 0) { throw 'Flutter SDK download failed' }
+          $actualHash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
+          if ($actualHash -ne $env:FLUTTER_SDK_SHA256) { throw 'Flutter SDK SHA-256 mismatch' }
+          Expand-Archive -Path $archive -DestinationPath $env:RUNNER_TEMP -Force
+          $flutterBin = Join-Path $env:RUNNER_TEMP 'flutter\bin'
+          $flutterBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & (Join-Path $flutterBin 'flutter.bat') --version
       - name: Build and package native print station
         shell: pwsh
         run: ./scripts/build_windows_print_station.ps1

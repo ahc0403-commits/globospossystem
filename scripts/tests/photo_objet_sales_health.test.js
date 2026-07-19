@@ -613,6 +613,10 @@ test('health, backfill, contract, and release proof are independent workflows', 
     /paths:/,
   );
   assert.match(contract, /run: bash scripts\/check_repo\.sh/);
+  assert.doesNotMatch(contract, /subosito\/flutter-action/);
+  assert.match(contract, /flutter_linux_3\.41\.6-stable\.tar\.xz/);
+  assert.match(contract, /503b3e6b7d352fca5d21b6474eca95ad544d8fc3b053782eab63a360c7fc7569/);
+  assert.match(contract, /sha256sum --check/);
   assert.doesNotMatch(contract, /secrets\./);
   for (const command of [
     'dart analyze --fatal-infos',
@@ -689,5 +693,23 @@ test('all external GitHub Actions are pinned to full commits with release labels
     }
   }
 
-  assert.ok(externalActionCount > 0, 'at least one external Action must be checked');
+  assert.equal(externalActionCount, 18, 'all expected external Actions must be checked');
+});
+
+test('Flutter SDK archives are official, versioned, and checksum verified', () => {
+  const read = name => fs.readFileSync(
+    path.join(__dirname, `../../.github/workflows/${name}`), 'utf8',
+  );
+  const linux = read('photo_objet_sales_contract.yml');
+  const windows = read('windows_print_station_build.yml');
+
+  assert.doesNotMatch(`${linux}\n${windows}`, /subosito\/flutter-action/);
+  assert.match(linux, /storage\.googleapis\.com\/flutter_infra_release\/releases\/stable\/linux/);
+  assert.match(linux, /flutter_linux_3\.41\.6-stable\.tar\.xz/);
+  assert.match(linux, /503b3e6b7d352fca5d21b6474eca95ad544d8fc3b053782eab63a360c7fc7569/);
+  assert.match(linux, /sha256sum --check/);
+  assert.match(windows, /storage\.googleapis\.com\/flutter_infra_release\/releases\/stable\/windows/);
+  assert.match(windows, /flutter_windows_3\.41\.6-stable\.zip/);
+  assert.match(windows, /e30303d47ab13c17e0388303ade1a8a24bfe5698b4a28494e6cbee25fc073022/);
+  assert.match(windows, /Get-FileHash -Algorithm SHA256/);
 });

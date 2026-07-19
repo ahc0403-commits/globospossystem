@@ -17,11 +17,17 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
-        with:
-          channel: stable
-          flutter-version: '3.41.6'
-          cache: true
+      - name: Install verified Flutter SDK
+        env:
+          FLUTTER_SDK_URL: https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.41.6-stable.tar.xz
+          FLUTTER_SDK_SHA256: 503b3e6b7d352fca5d21b6474eca95ad544d8fc3b053782eab63a360c7fc7569
+        run: |
+          archive="${RUNNER_TEMP}/flutter_linux_3.41.6-stable.tar.xz"
+          curl --fail --location --silent --show-error "${FLUTTER_SDK_URL}" --output "${archive}"
+          echo "${FLUTTER_SDK_SHA256}  ${archive}" | sha256sum --check -
+          tar -xJf "${archive}" -C "${RUNNER_TEMP}"
+          echo "${RUNNER_TEMP}/flutter/bin" >> "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/flutter/bin/flutter" --version
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'

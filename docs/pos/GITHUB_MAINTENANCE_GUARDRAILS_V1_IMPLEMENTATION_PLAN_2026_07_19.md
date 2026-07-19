@@ -1,6 +1,6 @@
 # GitHub Maintenance Guardrails v1 구현 계획
 
-- 상태: 코드 및 GitHub 설정 재검증 완료, 실행 승인됨, 구현 진행 중
+- 상태: 구현 및 운영 검증 완료
 - 계획 기준일: 2026-07-19
 - 대상 저장소: `ahc0403-commits/globospossystem`
 - 기본 브랜치: `main`
@@ -43,7 +43,7 @@ flowchart LR
 - `scripts/deploy_pos_production.sh`는 허용 migration 목록과 migration별 사전 검증·사후 확인을 이미 구현한다.
 - 배포 관련 셸 계약 테스트 4개 중 일부만 현재 CI에서 직접 실행된다.
 - `.github/dependabot.yml`이 없고 Dependabot security updates가 꺼져 있다.
-- 여섯 workflow의 외부 Action 참조는 기준선에서 19개이며 모두 이동 가능한 버전 태그를 사용한다. PR 1에서 clean-worktree 배포 계약 테스트에 필요한 `denoland/setup-deno`가 추가되므로 SHA 고정 시점의 대상은 총 20개다. GitHub의 SHA 고정 강제 설정은 꺼져 있다.
+- 여섯 workflow의 외부 Action 참조는 기준선에서 19개이며 모두 이동 가능한 버전 태그를 사용한다. PR 1에서 clean-worktree 배포 계약 테스트에 필요한 `denoland/setup-deno`가 추가되어 최초 SHA 고정 대상은 20개가 됐다. 강제 활성화 검증 중 중첩 이동 참조가 발견된 Flutter composite Action 두 개를 제거해 최종 외부 Action 참조는 18개다.
 - 현재 로컬 작업 브랜치에서는 `flutter test`가 `test/qc_route_overlay_operational_test.dart`의 RenderFlex overflow로 1건 실패했다. 따라서 구현은 이 dirty/failing 작업 트리에서 시작하지 않는다.
 - 원격 `main`의 기존 검사는 재검증 시점에 통과 상태였다.
 
@@ -244,7 +244,7 @@ GitHub repository settings에서 이름이 정확히 `production-backfill`인 En
 
 ## 10. PR 3 — GitHub Actions 공급망 고정
 
-PR 1 반영 후 여섯 workflow에 있는 외부 `uses:` 20개를 모두 전체 40자리 commit SHA로 고정한다.
+PR 1 반영 후 확인된 외부 `uses:` 20개를 먼저 전체 40자리 commit SHA로 고정한다. 강제 활성화가 composite Action 내부의 이동 태그도 검사한다는 사실이 확인되면 해당 composite Action을 제거하고, 최종 18개 직접 참조를 모두 고정 상태로 유지한다.
 
 대상 Action 계열:
 
@@ -253,7 +253,8 @@ PR 1 반영 후 여섯 workflow에 있는 외부 `uses:` 20개를 모두 전체 
 - `actions/github-script`
 - `actions/upload-artifact`
 - `denoland/setup-deno`
-- `subosito/flutter-action`
+
+`subosito/flutter-action`은 최초 고정 후 내부 `actions/cache@v5` 때문에 강제 정책에서 거부됐다. Linux와 Windows workflow는 공식 Flutter 3.41.6 archive를 고정 URL에서 내려받고 공식 release SHA-256을 검증하는 step으로 대체한다.
 
 구현 규칙:
 
@@ -269,11 +270,13 @@ PR 1 반영 후 여섯 workflow에 있는 외부 `uses:` 20개를 모두 전체 
 ### 활성화 순서
 
 1. GitHub의 `sha_pinning_required`는 끈 상태로 둔다.
-2. 20개 참조를 모두 고정한다.
-3. 모든 workflow와 release proof가 성공하는지 확인한다.
-4. merge 후 기본 브랜치의 workflow도 고정됐는지 확인한다.
-5. GitHub settings에서 SHA pinning requirement를 켠다.
-6. workflow_dispatch와 일반 PR로 강제가 정상 동작하는지 확인한다.
+2. 최초 20개 직접 참조를 모두 고정한다.
+3. 강제 정책에서 중첩 이동 참조가 확인된 Flutter composite Action 두 개를 공식 checksum archive 설치로 교체한다.
+4. 최종 외부 Action 18개와 Flutter SDK archive 2개의 checksum 계약을 검증한다.
+5. 모든 workflow와 release proof가 성공하는지 확인한다.
+6. merge 후 기본 브랜치의 workflow도 고정됐는지 확인한다.
+7. GitHub settings에서 SHA pinning requirement를 켠다.
+8. workflow_dispatch와 일반 PR로 강제가 정상 동작하는지 확인한다.
 
 ### PR 3 인수 기준
 
@@ -292,10 +295,14 @@ PR 1 반영 후 여섯 workflow에 있는 외부 `uses:` 20개를 모두 전체 
 | `scripts/check_repo.sh` | 전체 검증 단일 진입점 추가 | PR 1 |
 | `.github/workflows/photo_objet_sales_contract.yml` | 모든 PR 실행 및 wrapper 호출 | PR 1 |
 | `CLAUDE.md` | 기본 전체 검증 명령 추가 | PR 1 |
+| `scripts/run_pos_production_sql.sh` | macOS/Linux 권한 검사 이식성 보강 | PR 1 |
+| `scripts/tests/photo_objet_sales_health.test.js` | all-PR 및 SHA 고정 계약 검증 | PR 1, PR 3 |
+| `test/pos_deploy_clean_worktree_checks_test.sh` | Deno fixture 계약 보강 | PR 1 |
+| `docs/pos/GITHUB_MAINTENANCE_GUARDRAILS_V1_IMPLEMENTATION_PLAN_2026_07_19.md` | 계획 및 실행 증거 | PR 1, 완료 기록 |
 | `.github/dependabot.yml` | 3개 ecosystem 업데이트 정책 | PR 2 |
 | `.github/workflows/*.yml` 6개 | 외부 Action 전체 SHA 고정 | PR 3 |
 
-중복을 포함하면 최대 10개 repository file이 영향을 받는다. 별도로 GitHub repository settings에서 Environment, dependency security, SHA enforcement를 변경한다.
+구현 결과 고유 repository file 13개가 영향을 받았다. 별도로 GitHub repository settings에서 Environment, dependency security, SHA enforcement를 변경했다.
 
 ## 12. 검증 매트릭스
 
@@ -391,7 +398,7 @@ self-review 허용은 완전한 상호 승인보다 약하지만, 현재 인원 
 
 ## 16. 구현 승인 경계
 
-2026-07-19 사용자로부터 계획 전체의 실행 승인을 받았다. PR 1부터 순서대로 진행하며, 각 PR의 merge와 GitHub settings 변경은 해당 단계의 인수 기준이 확인된 뒤 수행한다.
+2026-07-19 사용자로부터 계획 전체의 실행 승인을 받았고, 각 PR과 GitHub settings 변경은 해당 단계의 인수 기준을 확인한 뒤 순서대로 완료했다.
 
 30일 운영 후 다음 질문에 근거가 생길 때만 v2를 기획한다.
 
@@ -400,3 +407,37 @@ self-review 허용은 완전한 상호 승인보다 약하지만, 현재 인원 
 - CodeQL이 현재 언어 구성에서 기존 분석보다 의미 있는 추가 신호를 제공하는가?
 
 위 질문이 실제 문제로 확인되기 전에는 Sentinel, stale bot, CodeQL을 추가하지 않는다.
+
+## 17. 실행 기록
+
+2026-07-19 다음 순서로 v1을 완료했다.
+
+| 단계 | 결과 | 증거 |
+|---|---|---|
+| 전체 CI와 단일 검증 진입점 | 병합 완료 | PR #195, merge `ece39ff40807041b868488fe071961d264d04708` |
+| 모든 PR 필수 검사 | 통과 | PR #195 exact-head `Photo Objet contract`, run `29693007394` |
+| `production-backfill` Environment | `main` 전용, required reviewer, self-review 허용 | Environment ID `18398806062`, branch policy `main` |
+| 승인 전 대기와 dry-run | 통과, DB write 없음 | run `29693217646`, `EXECUTE: false`, `BACKFILL_DRY_RUN` |
+| Dependabot 설정 | 병합 완료 | PR #196, merge `24323d03bdecd173bd694fd31b4939f874995164` |
+| Dependency 보안 | 활성화 | alerts HTTP 204, security updates `enabled`, SBOM 생성 성공 |
+| 초기 Dependabot 동작 | PR 상한과 분리 정책 확인 | PR #197–#199, Actions 2개·npm 1개, 자동 병합 없음 |
+| 외부 Action SHA 고정 | 최초 20/20 고정, 최종 18/18 직접 참조 고정 | PR #200 merge `f499ce956ab3a8e3399660cb1577d8e2c3a64739`, PR #203 |
+| 최신 `main` 전체 CI | 통과 | run `29693831133` |
+| 최신 `main` Windows artifact | 통과 | run `29693831120` |
+| exact-main Vercel release proof | 통과 | run `29693985844` |
+| SHA 고정 강제 | 활성화 | Actions permissions `sha_pinning_required: true` |
+| 강제 활성화 후 workflow dispatch | 승인 대기 및 dry-run 재통과 | run `29694023223`, DB·browser write 없음 |
+
+### 구현 중 확인된 보완 사항
+
+- all-PR 전환으로 구형 Node 계약 테스트의 경로 필터 가정을 갱신했다.
+- clean-worktree 배포 fixture가 현재 Deno Edge 테스트 계약을 재현하도록 보완했다.
+- Linux에서 production SQL env 파일 mode 검사가 이식성 있게 동작하도록 수정했다.
+- SHA 강제가 `subosito/flutter-action` 내부의 이동 가능한 `actions/cache@v5` 참조를 조건과 무관하게 차단했다. 강제를 끄거나 외부 fork를 만들지 않고 composite Action을 제거했으며, 공식 Flutter 3.41.6 Linux/Windows archive를 SHA-256 검증 후 설치하도록 교체했다.
+- 로컬 Docker daemon이 꺼져 있어 Docker 기반 계약 두 개는 로컬에서 완료할 수 없었지만, 동일 wrapper를 실행한 exact-head GitHub runner에서 모두 통과했다.
+
+### 남은 관찰 항목
+
+GitHub runner는 checkout v4, setup-node v4, upload-artifact v4의 Node 20 runtime을 Node 24로 강제 실행한다는 deprecation 경고를 표시했다. Dependabot이 major 업데이트 PR #197과 #198을 독립적으로 생성했으며, v1 원칙에 따라 자동 병합하지 않았다. 해당 major 업그레이드는 별도 검토·검증 대상으로 유지한다.
+
+v1 범위에서 새 secret, 장기 토큰, 외부 서비스, Supabase schema 또는 데이터 mutation은 추가하지 않았다.
