@@ -61,6 +61,10 @@ void main() {
     expect(migration, contains('store_purge_inactive_profiles'));
     expect(migration, contains("'admin_purge_inactive_store_profile'"));
     expect(migration, contains("'auth_identity_retained_banned', true"));
+    expect(migration, contains('inventory_purchase_order_lines'));
+    expect(migration, contains('inventory_receipt_lines'));
+    expect(migration, contains('inventory_recommendation_lines'));
+    expect(migration, contains('inventory_stock_audit_lines'));
     expect(
       migration,
       contains('LEFT JOIN store_purge_inactive_profiles candidate'),
