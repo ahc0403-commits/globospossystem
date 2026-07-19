@@ -59,6 +59,8 @@ void main() {
     expect(migration, contains('STORE_PURGE_CONFIRMATION_MISMATCH'));
     expect(migration, contains('STORE_PURGE_HAS_ACCOUNTS'));
     expect(migration, contains('IF NOT public.is_super_admin()'));
+    expect(migration, isNot(contains('office_purchases')));
+    expect(migration, isNot(contains('office_qc_followups')));
     expect(
       migration,
       contains('REVOKE ALL ON FUNCTION public._purge_inactive_store_data'),
