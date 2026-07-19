@@ -7,6 +7,7 @@ TMP_DIR="$(mktemp -d)"
 REHEARSAL_REPO="$TMP_DIR/rehearsal"
 FAKE_BIN="$TMP_DIR/bin"
 CALL_LOG="$TMP_DIR/calls.log"
+REAL_DENO="$(command -v deno)"
 
 cleanup() {
   rm -rf "$TMP_DIR"
@@ -77,7 +78,14 @@ printf 'dart %s\n' "$*" >>"$CALL_LOG"
 [[ -f .dart_tool/package_config.json ]] || exit 46
 EOF
 
-chmod +x "$FAKE_BIN/flutter" "$FAKE_BIN/dart"
+cat >"$FAKE_BIN/deno" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'deno %s\n' "$*" >>"$CALL_LOG"
+[[ "${1:-}" == 'test' ]] || exit 47
+EOF
+
+chmod +x "$FAKE_BIN/flutter" "$FAKE_BIN/dart" "$FAKE_BIN/deno"
 export PATH="$FAKE_BIN:$PATH" CALL_LOG
 
 bash -c '
@@ -92,8 +100,10 @@ bash -c '
 cat >"$TMP_DIR/expected.log" <<'EOF'
 flutter pub get --enforce-lockfile
 dart analyze
-flutter test test/focused_test.dart
 EOF
+printf 'deno test --allow-env=ALLOWED_ORIGINS %s/supabase/functions/complete-initial-password-change/index_test.ts\n' \
+  "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
+printf 'flutter test test/focused_test.dart\n' >>"$TMP_DIR/expected.log"
 cmp "$TMP_DIR/expected.log" "$CALL_LOG"
 [[ -z "$(git -C "$REHEARSAL_REPO" status --porcelain)" ]]
 
@@ -178,6 +188,6 @@ workforce_output="$(bash -c '
 [[ "$workforce_output" == *'Confirm migration history presence'* ]]
 
 bash "$ROOT_DIR/test/pos_db_only_deploy_contract_test.sh"
-deno test "$ROOT_DIR/scripts/bootstrap_pos_master_account_test.ts"
-deno check "$ROOT_DIR/scripts/bootstrap_pos_master_account.ts"
+"$REAL_DENO" test "$ROOT_DIR/scripts/bootstrap_pos_master_account_test.ts"
+"$REAL_DENO" check "$ROOT_DIR/scripts/bootstrap_pos_master_account.ts"
 printf 'PASS: production checks bootstrap clean worktrees and dry-run guarded store setup/table QR/workforce phases\n'

@@ -589,6 +589,9 @@ test('health, backfill, contract, and release proof are independent workflows', 
   const backfill = read('photo_objet_sales_backfill.yml');
   const contract = read('photo_objet_sales_contract.yml');
   const release = read('photo_objet_release_proof.yml');
+  const repositoryCheck = fs.readFileSync(
+    path.join(__dirname, '../check_repo.sh'), 'utf8',
+  );
 
   assert.deepEqual([...health.matchAll(/cron: '([^']+)'/g)].map(match => match[1]), [
     '40 17 * * *',
@@ -605,7 +608,11 @@ test('health, backfill, contract, and release proof are independent workflows', 
   assert.doesNotMatch(backfill, /schedule:/);
   assert.match(contract, /pull_request:/);
   assert.match(contract, /push:[\s\S]*branches: \[main\]/);
-  assert.match(contract, /photo_objet_release_proof\.yml/);
+  assert.doesNotMatch(
+    contract.match(/pull_request:([\s\S]*?)\npermissions:/)?.[1] ?? '',
+    /paths:/,
+  );
+  assert.match(contract, /run: bash scripts\/check_repo\.sh/);
   assert.doesNotMatch(contract, /secrets\./);
   for (const command of [
     'dart analyze --fatal-infos',
@@ -614,11 +621,14 @@ test('health, backfill, contract, and release proof are independent workflows', 
     'npm test',
     'npm audit',
     'npm run security-scan',
+    'bash test/pos_deploy_clean_worktree_checks_test.sh',
+    'bash test/pos_deploy_git_history_guard_test.sh',
     'bash test/pos_deploy_psql_runner_test.sh',
+    'bash test/pos_production_sql_wrapper_test.sh',
     'bash test/photo_objet_expected_slot_ledger_test.sh',
     'git diff --check',
   ]) {
-    assert.match(contract, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.match(repositoryCheck, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
   assert.match(release, /workflow_run:/);
   assert.match(release, /workflows: \['Photo Objet Sales Contract'\]/);

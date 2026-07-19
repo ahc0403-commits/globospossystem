@@ -4,14 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    paths:
-      - '.flare_memory.md'
-      - '.github/workflows/photo_objet_sales_*.yml'
-      - '.github/workflows/photo_objet_release_proof.yml'
-      - 'scripts/**'
-      - 'supabase/migrations/*photo_objet*'
-      - 'test/*photo_objet*'
-      - 'docs/photo_objet_sales_pull_setup.md'
 
 permissions:
   contents: read
@@ -35,35 +27,12 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: scripts/package-lock.json
-      - name: Install locked dependencies
-        working-directory: scripts
-        env:
-          PUPPETEER_SKIP_DOWNLOAD: 'true'
-        run: npm ci
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: 'v2.7.13'
       - name: Install PostgreSQL client
         run: |
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
-      - name: Validate Flutter source and release build
-        run: |
-          flutter pub get
-          dart analyze --fatal-infos
-          flutter test
-          flutter build web --release
-      - name: Validate Node contracts and repository safety
-        working-directory: scripts
-        run: |
-          npm test
-          npm audit
-          npm run security-scan
-      - name: Validate production SQL runner
-        run: bash test/pos_deploy_psql_runner_test.sh
-      - name: Validate expected-slot replay
-        run: bash test/photo_objet_expected_slot_ledger_test.sh
-      - name: Validate changed shell entrypoints and whitespace
-        run: |
-          bash -n scripts/deploy_pos_production.sh
-          bash -n test/photo_objet_expected_slot_ledger_test.sh
-          bash -n test/pos_deploy_git_history_guard_test.sh
-          git diff --check
-          git show --check --format= HEAD
+      - name: Validate repository
+        run: bash scripts/check_repo.sh
