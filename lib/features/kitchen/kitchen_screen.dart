@@ -1713,7 +1713,7 @@ class _KitchenTopBar extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          const AppNavBar(),
+          const AppNavBar(showLogout: false),
           const SizedBox(width: 10),
           Expanded(
             child: compact

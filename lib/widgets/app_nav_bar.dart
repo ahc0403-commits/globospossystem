@@ -17,12 +17,14 @@ class AppNavBar extends ConsumerWidget {
     super.key,
     this.forceBackEnabled = false,
     this.forceHomeEnabled = false,
+    this.showLogout = true,
     this.onBackPressed,
     this.onHomePressed,
   });
 
   final bool forceBackEnabled;
   final bool forceHomeEnabled;
+  final bool showLogout;
   final VoidCallback? onBackPressed;
   final VoidCallback? onHomePressed;
 
@@ -64,42 +66,45 @@ class AppNavBar extends ConsumerWidget {
         final showStore = !veryCompact && !phoneChrome && availableWidth >= 290;
         final showLanguage =
             !veryCompact && !phoneChrome && availableWidth >= 460;
+        final logoutOnly = showLogout && veryCompact;
         final compactLanguageSwitcher =
             availableWidth < 640 || viewportWidth < 1180;
 
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _NavButton(
-              icon: Icons.arrow_back_ios_new_rounded,
-              tooltip: l10n.back,
-              enabled: canGoBack,
-              onTap: () {
-                if (forceBackEnabled && onBackPressed != null) {
-                  onBackPressed!();
-                  return;
-                }
-                final prev = nav.goBack();
-                if (prev != null) {
-                  context.go(prev);
-                }
-              },
-            ),
-            const SizedBox(width: 6),
-            _NavButton(
-              icon: Icons.home_rounded,
-              tooltip: l10n.home,
-              enabled: canGoHome,
-              onTap: () {
-                if (forceHomeEnabled && onHomePressed != null) {
-                  onHomePressed!();
-                  return;
-                }
-                nav.push(homeRoute);
-                context.go(homeRoute);
-              },
-            ),
-            if (showForward) ...[
+            if (!logoutOnly) ...[
+              _NavButton(
+                icon: Icons.arrow_back_ios_new_rounded,
+                tooltip: l10n.back,
+                enabled: canGoBack,
+                onTap: () {
+                  if (forceBackEnabled && onBackPressed != null) {
+                    onBackPressed!();
+                    return;
+                  }
+                  final prev = nav.goBack();
+                  if (prev != null) {
+                    context.go(prev);
+                  }
+                },
+              ),
+              const SizedBox(width: 6),
+              _NavButton(
+                icon: Icons.home_rounded,
+                tooltip: l10n.home,
+                enabled: canGoHome,
+                onTap: () {
+                  if (forceHomeEnabled && onHomePressed != null) {
+                    onHomePressed!();
+                    return;
+                  }
+                  nav.push(homeRoute);
+                  context.go(homeRoute);
+                },
+              ),
+            ],
+            if (!logoutOnly && showForward) ...[
               const SizedBox(width: 6),
               _NavButton(
                 icon: Icons.arrow_forward_ios_rounded,
@@ -129,6 +134,18 @@ class AppNavBar extends ConsumerWidget {
               const SizedBox(width: 10),
               LanguageSwitcher(compact: compactLanguageSwitcher),
             ],
+            if (showLogout) ...[
+              const SizedBox(width: 6),
+              _NavButton(
+                key: const Key('app_nav_logout_button'),
+                icon: Icons.logout_rounded,
+                tooltip: l10n.logout,
+                enabled: true,
+                onTap: () async {
+                  await ref.read(authProvider.notifier).logout();
+                },
+              ),
+            ],
           ],
         );
       },
@@ -138,6 +155,7 @@ class AppNavBar extends ConsumerWidget {
 
 class _NavButton extends StatelessWidget {
   const _NavButton({
+    super.key,
     required this.icon,
     required this.tooltip,
     required this.enabled,

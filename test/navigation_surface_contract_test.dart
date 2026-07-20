@@ -22,19 +22,19 @@ void main() {
         "Key('dashboard_root')",
       ],
       'lib/features/kitchen/kitchen_screen.dart': [
-        'const AppNavBar()',
+        'AppNavBar(',
         "Key('kitchen_root')",
       ],
       'lib/features/cashier/cashier_screen.dart': [
-        'const AppNavBar()',
+        'AppNavBar(',
         "Key('cashier_root')",
       ],
       'lib/features/admin/admin_screen.dart': [
-        'const AppNavBar()',
+        'AppNavBar(',
         "Key('admin_root')",
       ],
       'lib/features/super_admin/super_admin_screen.dart': [
-        'AppNavBar()',
+        'AppNavBar(',
         "Key('admin_root')",
       ],
       'lib/features/photo_ops/photo_ops_screen.dart': [
@@ -65,6 +65,16 @@ void main() {
         expect(source, contains(marker), reason: '${entry.key}: $marker');
       }
     }
+  });
+
+  test('shared authenticated navigation exposes a working logout control', () {
+    final nav = readRepoFile('lib/widgets/app_nav_bar.dart');
+
+    expect(nav, contains('this.showLogout = true'));
+    expect(nav, contains("Key('app_nav_logout_button')"));
+    expect(nav, contains('tooltip: l10n.logout'));
+    expect(nav, contains('authProvider.notifier).logout()'));
+    expect(nav, contains('final logoutOnly = showLogout && veryCompact'));
   });
 
   test('admin nav order stays aligned with tab body order and roots', () {
