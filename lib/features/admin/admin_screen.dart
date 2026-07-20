@@ -70,7 +70,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         const MenuTab(),
       ],
       const StaffTab(),
-      const ReportsTab(),
+      ReportsTab(overrideStoreId: widget.overrideRestaurantId),
       const AttendanceTab(),
       const InventoryPurchaseScreen(),
       const QcTab(),
