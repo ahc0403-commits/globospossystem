@@ -10,6 +10,7 @@ import '../../core/ui/toast/toast.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/offline_banner.dart';
 import '../../core/utils/permission_utils.dart';
+import '../../main.dart';
 import '../auth/auth_provider.dart';
 import 'tabs/attendance_tab.dart';
 import 'tabs/menu_tab.dart';
@@ -21,6 +22,18 @@ import 'tabs/tables_tab.dart';
 import '../delivery/screens/delivery_settlement_tab.dart';
 import 'tabs/einvoice_tab.dart';
 import '../inventory_purchase/inventory_purchase_screen.dart';
+
+final _adminStoreBrandIdProvider = FutureProvider.family<String?, String>((
+  ref,
+  storeId,
+) async {
+  final response = await supabase
+      .from('restaurants')
+      .select('brand_id')
+      .eq('id', storeId)
+      .maybeSingle();
+  return response?['brand_id']?.toString();
+});
 
 class AdminScreen extends ConsumerStatefulWidget {
   const AdminScreen({
@@ -50,6 +63,14 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   Widget build(BuildContext context) {
     final isSuperAdminView = widget.overrideRestaurantId != null;
     final role = ref.watch(authProvider).role;
+    final overrideStoreId = widget.overrideRestaurantId;
+    final overrideBrandId = overrideStoreId == null
+        ? null
+        : ref.watch(_adminStoreBrandIdProvider(overrideStoreId)).valueOrNull;
+    final isPhotoObjetContext = PermissionUtils.isPhotoObjetContext(
+      role: role,
+      brandId: overrideBrandId,
+    );
     final viewport = MediaQuery.sizeOf(context);
     final useDesktopShell =
         PlatformInfo.isWebOrDesktop &&
@@ -57,23 +78,30 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         viewport.shortestSide >= 600;
 
     if (useDesktopShell) {
-      return _buildWebDesktopLayout(context, isSuperAdminView, role);
+      return _buildWebDesktopLayout(
+        context,
+        isSuperAdminView,
+        role,
+        isPhotoObjetContext,
+      );
     }
 
-    return _buildMobileLayout(context, isSuperAdminView, role);
+    return _buildMobileLayout(
+      context,
+      isSuperAdminView,
+      role,
+      isPhotoObjetContext,
+    );
   }
 
-  List<Widget> _tabsForRole(String? role) {
+  List<Widget> _tabsForRole(String? role, bool isPhotoObjetContext) {
     final tabs = <Widget>[
-      if (!PermissionUtils.isPhotoObjetRole(role)) ...[
-        const TablesTab(),
-        const MenuTab(),
-      ],
+      if (!isPhotoObjetContext) ...[const TablesTab(), const MenuTab()],
       const StaffTab(),
       ReportsTab(overrideStoreId: widget.overrideRestaurantId),
       const AttendanceTab(),
       const InventoryPurchaseScreen(),
-      const QcTab(),
+      if (!isPhotoObjetContext) const QcTab(),
       const SettingsTab(),
     ];
 
@@ -91,9 +119,12 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   /// selected-index/tab mapping is positional. Grouping is expressive
   /// only — the `ToastSidebar` adapter flattens groups while preserving
   /// order, so shell behavior is unchanged.
-  List<ToastSidebarGroup> _sidebarGroupsForRole(String? role) {
+  List<ToastSidebarGroup> _sidebarGroupsForRole(
+    String? role,
+    bool isPhotoObjetContext,
+  ) {
     final l10n = context.l10n;
-    final liveOps = PermissionUtils.isPhotoObjetRole(role)
+    final liveOps = isPhotoObjetContext
         ? const <ToastSidebarItem>[]
         : <ToastSidebarItem>[
             ToastSidebarItem(
@@ -141,13 +172,14 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         helperLabel: l10n.adminNavInventoryHelper,
         itemKey: const Key('nav_inventory'),
       ),
-      ToastSidebarItem(
-        icon: Icons.fact_check,
-        label: l10n.navQuality,
-        urgency: ToastSidebarUrgency.backOffice,
-        helperLabel: l10n.adminNavQcHelper,
-        itemKey: const Key('nav_qc'),
-      ),
+      if (!isPhotoObjetContext)
+        ToastSidebarItem(
+          icon: Icons.fact_check,
+          label: l10n.navQuality,
+          urgency: ToastSidebarUrgency.backOffice,
+          helperLabel: l10n.adminNavQcHelper,
+          itemKey: const Key('nav_qc'),
+        ),
       ToastSidebarItem(
         icon: Icons.settings,
         label: l10n.settings,
@@ -194,9 +226,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     BuildContext context,
     bool isSuperAdminView,
     String? role,
+    bool isPhotoObjetContext,
   ) {
-    final tabs = _tabsForRole(role);
-    final groups = _sidebarGroupsForRole(role);
+    final tabs = _tabsForRole(role, isPhotoObjetContext);
+    final groups = _sidebarGroupsForRole(role, isPhotoObjetContext);
     final safeIndex = _currentIndex.clamp(0, tabs.length - 1);
 
     return ToastSidebar(
@@ -257,9 +290,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     BuildContext context,
     bool isSuperAdminView,
     String? role,
+    bool isPhotoObjetContext,
   ) {
-    final tabs = _tabsForRole(role);
-    final groups = _sidebarGroupsForRole(role);
+    final tabs = _tabsForRole(role, isPhotoObjetContext);
+    final groups = _sidebarGroupsForRole(role, isPhotoObjetContext);
     final safeIndex = _currentIndex.clamp(0, tabs.length - 1);
 
     return ToastSidebar(

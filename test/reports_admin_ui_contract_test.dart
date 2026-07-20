@@ -25,6 +25,9 @@ void main() {
 
       expect(source, contains("Key('reports_compact_scroll')"));
       expect(source, contains('compactReportHeight'));
+      expect(source, contains('maxColumns: 5'));
+      expect(source, contains('520.0 + 12.0 + 240.0'));
+      expect(source, contains('height: 240'));
       expect(source, contains('reportConstraints.maxWidth < 1080'));
       expect(source, contains('compactSecondaryHeight: 520'));
       expect(source, contains('keyboardDismissBehavior:'));

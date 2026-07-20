@@ -203,8 +203,13 @@ class ToastMetric {
 }
 
 class ToastMetricStrip extends StatelessWidget {
-  const ToastMetricStrip({super.key, required this.metrics});
+  const ToastMetricStrip({
+    super.key,
+    required this.metrics,
+    this.maxColumns = 4,
+  });
   final List<ToastMetric> metrics;
+  final int maxColumns;
 
   @override
   Widget build(BuildContext context) {
@@ -238,7 +243,11 @@ class ToastMetricStrip extends StatelessWidget {
         final compactPhone = constraints.maxWidth < 420;
         final columns = compactPhone
             ? 1
-            : _metricColumnsForWidth(constraints.maxWidth, metrics.length);
+            : _metricColumnsForWidth(
+                constraints.maxWidth,
+                metrics.length,
+                maxColumns,
+              );
         final gap = compactPhone ? 6.0 : 8.0;
         final rows = <List<ToastMetric>>[];
         for (var index = 0; index < metrics.length; index += columns) {
@@ -459,7 +468,7 @@ class ToastSelectedContextHeader extends StatelessWidget {
   }
 }
 
-int _metricColumnsForWidth(double width, int itemCount) {
+int _metricColumnsForWidth(double width, int itemCount, int maxColumns) {
   if (itemCount <= 1) {
     return 1;
   }
@@ -472,7 +481,7 @@ int _metricColumnsForWidth(double width, int itemCount) {
   if (width < 1080) {
     return math.min(3, itemCount);
   }
-  return math.min(4, itemCount);
+  return math.min(maxColumns, itemCount);
 }
 
 // =============================================================================

@@ -255,17 +255,17 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
         body: ToastResponsiveScrollBody(
           key: const Key('reports_compact_scroll'),
           maxWidth: 1460,
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           children: [
             compactHeader,
             if (summary != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               _ReportsInsightRow(summary: summary),
             ],
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             compactReportBody(),
             if (storeId != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               _DailyClosingSection(storeId: storeId),
             ],
           ],
@@ -278,7 +278,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       backgroundColor: AppColors.surface0,
       body: ToastResponsiveBody(
         maxWidth: 1460,
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -290,14 +290,14 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
               currency: currency,
               dateFormat: dateFormat,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             if (summary != null) ...[
               _ReportsInsightRow(summary: summary),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
             ],
             if (storeId != null) ...[
               _DailyClosingSection(storeId: storeId),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
             ],
             Expanded(
               child: reportState.isLoading
@@ -334,8 +334,10 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                   : (hasOperationalData
                         ? LayoutBuilder(
                             builder: (context, reportConstraints) {
-                              const compactReportHeight =
-                                  520.0 + 12.0 + 520.0 + 12.0 + 272.0;
+                              final compactReportHeight =
+                                  reportConstraints.maxWidth < 1080
+                                  ? 520.0 + 12.0 + 520.0 + 12.0 + 240.0
+                                  : 520.0 + 12.0 + 240.0;
                               final content = Column(
                                 children: [
                                   Expanded(
@@ -509,7 +511,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                   ),
                                   const SizedBox(height: 12),
                                   SizedBox(
-                                    height: 272,
+                                    height: 240,
                                     child: PosDataPanel(
                                       title:
                                           context.l10n.reportsDailySalesTitle,
@@ -596,7 +598,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
         (summary?.cancelledOrders ?? 0) > 0;
 
     return ToastWorkSurface(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
       backgroundColor: AppColors.surface1,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -632,10 +634,11 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           KeyedSubtree(
             key: const Key('reports_order_accuracy_metrics'),
             child: ToastMetricStrip(
+              maxColumns: 5,
               metrics: [
                 ToastMetric(label: l10n.reportsTotalSales, value: totalRevenue),
                 ToastMetric(
@@ -665,7 +668,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
               ],
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 10,
             runSpacing: 10,
@@ -888,23 +891,23 @@ class _ReportsInsightTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 280,
+      width: 260,
       child: ToastWorkSurface(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
         backgroundColor: PosColors.surface,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 34,
-              height: 34,
+              width: 30,
+              height: 30,
               decoration: BoxDecoration(
                 color: data.tone.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(data.icon, size: 18, color: data.tone),
+              child: Icon(data.icon, size: 16, color: data.tone),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -912,14 +915,16 @@ class _ReportsInsightTile extends StatelessWidget {
                   Text(
                     data.title,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontSize: 15,
+                      fontSize: 14,
                       fontWeight: FontWeight.w800,
                       color: PosColors.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     data.body,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: PosColors.textSecondary,
                       height: 1.35,
@@ -1319,7 +1324,7 @@ class _ReportsBreakdownPanel extends StatelessWidget {
               ? PosColors.warning
               : PosColors.success,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         _ReportsExceptionRow(
           label: context.l10n.reportsFailedEinvoice,
           value: context.l10n.reportsOrderCount(
@@ -2604,7 +2609,10 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
         historyAsync.when(
           data: (records) => records.isEmpty
               ? Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.surface1,
                     borderRadius: BorderRadius.circular(12),
