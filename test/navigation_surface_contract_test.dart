@@ -94,7 +94,7 @@ void main() {
       'const TablesTab()',
       'const MenuTab()',
       'const StaffTab()',
-      'const ReportsTab()',
+      'ReportsTab(overrideStoreId: widget.overrideRestaurantId)',
       'const AttendanceTab()',
       'const InventoryPurchaseScreen()',
       'const QcTab()',
