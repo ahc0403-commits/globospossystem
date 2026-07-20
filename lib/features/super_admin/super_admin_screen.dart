@@ -115,11 +115,11 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
       selectedIndex: safeIndex,
       onItemSelected: (index) => setState(() => _tabIndex = index),
       topBarTrailing: MediaQuery.sizeOf(context).width < 600
-          ? const AppNavBar()
+          ? const AppNavBar(showLogout: false)
           : Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const AppNavBar(),
+                const AppNavBar(showLogout: false),
                 const SizedBox(width: 10),
                 ToastStatusBadge(
                   label: l10n.superAdminHq,

@@ -1121,7 +1121,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       ],
     );
     final actions = <Widget>[
-      const AppNavBar(),
+      const AppNavBar(showLogout: false),
       ToastStatusBadge(
         label: l10n.cashierPendingStatus,
         color: PosColors.accent,
@@ -1225,7 +1225,7 @@ class _CashierCompactCommandBar extends ConsumerWidget {
       backgroundColor: PosColors.surface,
       child: Row(
         children: [
-          const AppNavBar(),
+          const AppNavBar(showLogout: false),
           const SizedBox(width: 8),
           Expanded(
             child: SingleChildScrollView(

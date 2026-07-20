@@ -250,11 +250,11 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       topBarTrailing: isSuperAdminView
           ? MediaQuery.sizeOf(context).width < 600 ||
                     MediaQuery.textScalerOf(context).scale(1) > 1.5
-                ? const AppNavBar()
+                ? AppNavBar(showLogout: isSuperAdminView)
                 : Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const AppNavBar(),
+                      AppNavBar(showLogout: isSuperAdminView),
                       const SizedBox(width: 10),
                       ToastStatusBadge(
                         label: context.l10n.superAdminMode,
@@ -263,7 +263,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                       ),
                     ],
                   )
-          : const AppNavBar(),
+          : const AppNavBar(showLogout: false),
       bottomItems: isSuperAdminView
           ? null
           : [
@@ -314,11 +314,11 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       topBarTrailing: isSuperAdminView
           ? MediaQuery.sizeOf(context).width < 600 ||
                     MediaQuery.textScalerOf(context).scale(1) > 1.5
-                ? const AppNavBar()
+                ? AppNavBar(showLogout: isSuperAdminView)
                 : Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const AppNavBar(),
+                      AppNavBar(showLogout: isSuperAdminView),
                       const SizedBox(width: 8),
                       ToastStatusBadge(
                         label: context.l10n.superAdminMode,
@@ -327,7 +327,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                       ),
                     ],
                   )
-          : const AppNavBar(),
+          : const AppNavBar(showLogout: false),
       bottomItems: isSuperAdminView
           ? null
           : [
