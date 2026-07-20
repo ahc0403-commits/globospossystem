@@ -1,3 +1,5 @@
+import 'photo_objet_utils.dart';
+
 class PermissionUtils {
   static bool isAdminLike(String? role) =>
       role == 'admin' ||
@@ -15,6 +17,9 @@ class PermissionUtils {
 
   static bool isPhotoObjetRole(String? role) =>
       role == 'photo_objet_master' || role == 'photo_objet_store_operator';
+
+  static bool isPhotoObjetContext({String? role, String? brandId}) =>
+      isPhotoObjetRole(role) || isPhotoObjetBrandId(brandId);
 
   static bool canAccessPhotoOps(String? role) =>
       role == 'super_admin' || isPhotoObjetRole(role);
