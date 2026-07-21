@@ -13,23 +13,23 @@ dependencies:
     sdk: flutter
 
   # Backend
-  supabase_flutter: ^2.8.4
+  supabase_flutter: ^2.16.0
 
   # State Management
-  flutter_riverpod: ^2.6.1
-  riverpod_annotation: ^2.6.1
+  flutter_riverpod: ^3.3.2
+  riverpod_annotation: ^4.0.3
 
   # Routing
   go_router: ^15.1.1
 
   # Models
-  freezed_annotation: ^2.4.4
-  json_annotation: ^4.9.0
+  freezed_annotation: ^3.1.0
+  json_annotation: ^4.12.0
 
   # Local Cache (read-only, 메뉴 조회 한정)
-  drift: ^2.22.1
-  sqlite3_flutter_libs: ^0.5.28
-  path_provider: ^2.1.5
+  drift: ^2.34.2
+  sqlite3_flutter_libs: ^0.6.0+eol
+  path_provider: ^2.1.6
   path: ^1.9.1
 
   # Printer (blue_thermal_printer은 Android/iOS 전용 - 하드웨어 연동 시 추가)
@@ -37,19 +37,19 @@ dependencies:
 
   # Utils
   intl: ^0.20.2
-  uuid: ^4.5.1
-  flutter_dotenv: ^6.0.0
+  uuid: ^4.6.0
+  flutter_dotenv: ^6.0.1
   shared_preferences: ^2.3.2
   zkfinger10:
     git:
       url: https://github.com/Mamasodikov/zk_finger_10.git
-  timezone: ^0.11.0
-  camera: ^0.10.5+9
+  timezone: ^0.11.1
+  camera: ^0.12.0+2
   image: ^4.1.7
   excel: ^4.0.6
   file_selector: ^1.1.0
-  file_saver: ^0.2.14
-  image_picker: ^1.1.2
+  file_saver: ^0.4.0
+  image_picker: ^1.2.3
   crypto: ^3.0.3
   fl_chart: ^0.68.0
   url_launcher: ^6.3.1
@@ -64,11 +64,11 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   flutter_lints: ^5.0.0
-  build_runner: ^2.4.14
-  freezed: ^2.5.7
-  json_serializable: ^6.9.2
-  riverpod_generator: ^2.6.3
-  drift_dev: ^2.22.1
+  build_runner: ^2.15.1
+  freezed: ^3.2.6-dev.1
+  json_serializable: ^6.14.0
+  riverpod_generator: ^4.0.4
+  drift_dev: ^2.34.0
 
 flutter:
   uses-material-design: true
