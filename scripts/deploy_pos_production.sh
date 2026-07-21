@@ -696,6 +696,7 @@ apply_migration() {
     20260719020000_force_initial_password_change.sql|\
     20260719140000_password_change_lifecycle_fail_closed.sql|\
     20260719030000_admin_permanent_store_delete.sql|\
+    20260721030000_menu_excel_and_receipt_format.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -820,6 +821,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_admin_permanent_store_delete.sql" \
       "permanent store-delete migration preflight"
+  elif [[ "$migration_name" == "20260721030000_menu_excel_and_receipt_format.sql" ]]; then
+    log "Menu Excel and receipt-format migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_menu_excel_and_receipt_format.sql" \
+      "menu Excel and receipt-format migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -915,6 +921,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_admin_permanent_store_delete.sql" \
       "permanent store-delete migration verification"
+  elif [[ "$migration_name" == "20260721030000_menu_excel_and_receipt_format.sql" ]]; then
+    log "Menu Excel and receipt-format migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_menu_excel_and_receipt_format.sql" \
+      "menu Excel and receipt-format migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \
