@@ -4,6 +4,7 @@ import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/attendance_service.dart';
@@ -38,6 +39,7 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
     final notifier = ref.read(photoOpsProvider.notifier);
     final activeStoreId = auth.storeId;
     final surfaceAccess = PhotoOpsSurfaceAccess.forRole(auth.role);
+    final canManageWorkforce = auth.role == 'photo_objet_master';
     final l10n = context.l10n;
     String activeStoreName = l10n.photoOpsNoActiveStore;
 
@@ -268,7 +270,14 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
                   ),
             topbar: ToastTopbar(
               title: l10n.photoOpsBrandName,
-              actions: const [AppNavBar()],
+              actions: [
+                AppNavBar(
+                  forceHomeEnabled: canManageWorkforce,
+                  onHomePressed: canManageWorkforce
+                      ? () => context.go('/admin')
+                      : null,
+                ),
+              ],
               trailing: compactShell
                   ? null
                   : ToastStatusBadge(
