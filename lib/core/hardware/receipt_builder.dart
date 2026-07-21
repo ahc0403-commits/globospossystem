@@ -10,6 +10,16 @@ class ReceiptBuilder {
     required String paymentMethod,
     required DateTime paidAt,
     bool isService = false,
+    String? legalName,
+    String? taxCode,
+    List<String> addressLines = const [],
+    String? receiptNumber,
+    String? orderNumber,
+    String? cashierCode,
+    double? subtotalAmount,
+    double discountAmount = 0,
+    double? receivedAmount,
+    double changeAmount = 0,
   }) async {
     final profile = await CapabilityProfile.load();
     final generator = Generator(PaperSize.mm80, profile);
@@ -17,7 +27,7 @@ class ReceiptBuilder {
 
     bytes.addAll(
       generator.text(
-        _escText(restaurantName),
+        _escText(restaurantName.toUpperCase()),
         styles: const PosStyles(
           bold: true,
           align: PosAlign.center,
@@ -26,46 +36,88 @@ class ReceiptBuilder {
         ),
       ),
     );
+    if (legalName != null && legalName.trim().isNotEmpty) {
+      bytes.addAll(
+        generator.text(
+          _escText(legalName),
+          styles: const PosStyles(align: PosAlign.center),
+        ),
+      );
+    }
+    if (taxCode != null && taxCode.trim().isNotEmpty) {
+      bytes.addAll(
+        generator.text(
+          'MST: ${_escText(taxCode)}',
+          styles: const PosStyles(align: PosAlign.center),
+        ),
+      );
+    }
+    if (addressLines.isNotEmpty) {
+      bytes.addAll(
+        generator.text(
+          'Dia chi:',
+          styles: const PosStyles(align: PosAlign.center),
+        ),
+      );
+      for (final line in addressLines.where((line) => line.trim().isNotEmpty)) {
+        bytes.addAll(
+          generator.text(
+            _escText(line),
+            styles: const PosStyles(align: PosAlign.center),
+          ),
+        );
+      }
+    }
+    bytes.addAll(generator.hr());
+
     bytes.addAll(
       generator.text(
-        'GLOBOSVN POS',
-        styles: const PosStyles(align: PosAlign.center),
+        'PHIEU THANH TOAN',
+        styles: const PosStyles(
+          bold: true,
+          align: PosAlign.center,
+          height: PosTextSize.size2,
+        ),
+      ),
+    );
+    bytes.addAll(
+      generator.text(
+        '(PAYMENT RECEIPT)',
+        styles: const PosStyles(bold: true, align: PosAlign.center),
       ),
     );
     bytes.addAll(generator.hr());
 
-    bytes.addAll(
-      generator.row([
-        PosColumn(text: _escText('Table / Ban: $tableNumber'), width: 8),
-        PosColumn(
-          text: TimeUtils.formatTime(paidAt), // UTC to Vietnam time
-          width: 4,
-          styles: const PosStyles(align: PosAlign.right),
-        ),
-      ]),
-    );
+    if (receiptNumber != null) {
+      bytes.addAll(generator.text('Receipt No.: ${_escText(receiptNumber)}'));
+    }
     bytes.addAll(
       generator.text(
-        TimeUtils.formatDate(paidAt), // UTC to Vietnam date
+        'Date/Time : ${TimeUtils.formatDate(paidAt)} ${TimeUtils.formatTime(paidAt)}',
       ),
     );
+    if (orderNumber != null) {
+      bytes.addAll(generator.text('Order No. : ${_escText(orderNumber)}'));
+    }
+    if (cashierCode != null) {
+      bytes.addAll(generator.text('Cashier   : ${_escText(cashierCode)}'));
+    }
+    bytes.addAll(generator.hr());
+
+    bytes.addAll(generator.text(_escText('Table / Ban: $tableNumber')));
     bytes.addAll(generator.hr());
 
     bytes.addAll(
       generator.row([
-        PosColumn(
-          text: 'Menu / Món',
-          width: 6,
-          styles: const PosStyles(bold: true),
-        ),
+        PosColumn(text: 'Item', width: 5, styles: const PosStyles(bold: true)),
         PosColumn(
           text: 'SL',
-          width: 2,
+          width: 1,
           styles: const PosStyles(bold: true, align: PosAlign.center),
         ),
         PosColumn(
-          text: 'Gia (VND)',
-          width: 4,
+          text: 'Price  Amount',
+          width: 6,
           styles: const PosStyles(bold: true, align: PosAlign.right),
         ),
       ]),
@@ -82,15 +134,16 @@ class ReceiptBuilder {
     for (final item in billableItems) {
       bytes.addAll(
         generator.row([
-          PosColumn(text: _escText(item.name), width: 6),
+          PosColumn(text: _escText(item.name), width: 5),
           PosColumn(
             text: '${item.quantity}',
-            width: 2,
+            width: 1,
             styles: const PosStyles(align: PosAlign.center),
           ),
           PosColumn(
-            text: _formatVnd(item.unitPrice * item.quantity),
-            width: 4,
+            text:
+                '${_formatVnd(item.unitPrice)} ${_formatVnd(item.unitPrice * item.quantity)}',
+            width: 6,
             styles: const PosStyles(align: PosAlign.right),
           ),
         ]),
@@ -98,10 +151,28 @@ class ReceiptBuilder {
     }
 
     bytes.addAll(generator.hr());
+    final subtotal =
+        subtotalAmount ??
+        billableItems.fold<double>(
+          0,
+          (sum, item) => sum + item.unitPrice * item.quantity,
+        );
+    bytes.addAll(_amountRow(generator, 'Subtotal', subtotal));
+    bytes.addAll(_amountRow(generator, 'Discount', discountAmount));
+    bytes.addAll(
+      generator.row([
+        PosColumn(text: 'VAT (included)', width: 7),
+        PosColumn(
+          text: '***',
+          width: 5,
+          styles: const PosStyles(align: PosAlign.right),
+        ),
+      ]),
+    );
     bytes.addAll(
       generator.row([
         PosColumn(
-          text: isService ? 'DICH VU / Service' : 'TONG CONG / Total',
+          text: isService ? 'SERVICE' : 'TOTAL',
           width: 6,
           styles: const PosStyles(bold: true),
         ),
@@ -114,7 +185,15 @@ class ReceiptBuilder {
     );
 
     final methodLabel = _methodLabel(paymentMethod);
-    bytes.addAll(generator.text('Thanh toan / Payment: $methodLabel'));
+    bytes.addAll(generator.text('Payment Method : $methodLabel'));
+    bytes.addAll(
+      generator.text(
+        'Received       : ${_formatVnd(receivedAmount ?? totalAmount)}',
+      ),
+    );
+    bytes.addAll(
+      generator.text('Change         : ${_formatVnd(changeAmount)}'),
+    );
 
     if (isService) {
       bytes.addAll(generator.hr());
@@ -151,7 +230,7 @@ class ReceiptBuilder {
     bytes.addAll(generator.hr());
     bytes.addAll(
       generator.text(
-        'Cam on quy khach! / Thank you!',
+        'Thank you for your visit!',
         styles: const PosStyles(align: PosAlign.center),
       ),
     );
@@ -160,6 +239,19 @@ class ReceiptBuilder {
 
     return bytes;
   }
+
+  static List<int> _amountRow(
+    Generator generator,
+    String label,
+    double amount,
+  ) => generator.row([
+    PosColumn(text: label, width: 7),
+    PosColumn(
+      text: _formatVnd(amount),
+      width: 5,
+      styles: const PosStyles(align: PosAlign.right),
+    ),
+  ]);
 
   static Future<List<int>> buildKitchenTicket(PrintTicket ticket) async {
     final profile = await CapabilityProfile.load();
@@ -619,6 +711,16 @@ class QueuedPaymentReceipt {
     required this.paymentMethod,
     required this.paidAt,
     required this.isService,
+    required this.legalName,
+    required this.taxCode,
+    required this.addressLines,
+    required this.receiptNumber,
+    required this.orderNumber,
+    required this.cashierCode,
+    required this.subtotalAmount,
+    required this.discountAmount,
+    required this.receivedAmount,
+    required this.changeAmount,
   });
 
   final String restaurantName;
@@ -628,6 +730,16 @@ class QueuedPaymentReceipt {
   final String paymentMethod;
   final DateTime paidAt;
   final bool isService;
+  final String? legalName;
+  final String? taxCode;
+  final List<String> addressLines;
+  final String? receiptNumber;
+  final String? orderNumber;
+  final String? cashierCode;
+  final double? subtotalAmount;
+  final double discountAmount;
+  final double? receivedAmount;
+  final double changeAmount;
 
   factory QueuedPaymentReceipt.fromPayload(Map<String, dynamic> payload) {
     final rawItems = payload['items'];
@@ -671,8 +783,29 @@ class QueuedPaymentReceipt {
         String value => value.toLowerCase() == 'true',
         _ => method.toUpperCase() == 'SERVICE',
       },
+      legalName: payload['legal_name']?.toString(),
+      taxCode: payload['tax_code']?.toString(),
+      addressLines:
+          (payload['address_lines'] is List
+                  ? payload['address_lines'] as List
+                  : const [])
+              .map((value) => value.toString())
+              .toList(),
+      receiptNumber: payload['receipt_number']?.toString(),
+      orderNumber: payload['order_number']?.toString(),
+      cashierCode: payload['cashier_code']?.toString(),
+      subtotalAmount: _payloadDouble(payload['subtotal_amount']),
+      discountAmount: _payloadDouble(payload['discount_amount']) ?? 0,
+      receivedAmount: _payloadDouble(payload['received_amount']),
+      changeAmount: _payloadDouble(payload['change_amount']) ?? 0,
     );
   }
+
+  static double? _payloadDouble(Object? value) => switch (value) {
+    num number => number.toDouble(),
+    String text => double.tryParse(text),
+    _ => null,
+  };
 }
 
 class ReceiptItem {

@@ -1,8 +1,13 @@
+import 'dart:typed_data';
+
+import 'package:excel/excel.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/ui/app_theme.dart';
+import 'package:globos_pos_system/core/services/menu_service.dart';
 import 'package:globos_pos_system/core/services/pin_service.dart';
 import 'package:globos_pos_system/core/services/printer_destination_service.dart';
 import 'package:globos_pos_system/core/services/attendance_service.dart';
@@ -154,6 +159,7 @@ class _MenuNotifier extends MenuNotifier {
   int addCategoryCalls = 0;
   int addItemCalls = 0;
   int editItemCalls = 0;
+  int importCalls = 0;
 
   @override
   Future<void> fetchAll() async {}
@@ -184,6 +190,17 @@ class _MenuNotifier extends MenuNotifier {
   }) async {
     editItemCalls += 1;
     return true;
+  }
+
+  @override
+  Future<MenuImportResult?> importMenuItems(
+    List<Map<String, dynamic>> rows,
+  ) async {
+    importCalls += 1;
+    return MenuImportResult(
+      importedItemCount: rows.length,
+      createdCategoryCount: 1,
+    );
   }
 }
 
@@ -630,17 +647,41 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('all three menu dialog entrypoints validate and save', (
+  testWidgets('all five menu dialog entrypoints validate and save', (
     tester,
   ) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final notifier = _MenuNotifier();
+    final importFiles = <XFile>[
+      XFile.fromData(_menuWorkbookBytes(valid: true), name: 'menu-valid.xlsx'),
+      XFile.fromData(
+        _menuWorkbookBytes(valid: false),
+        name: 'menu-invalid.xlsx',
+      ),
+    ];
     await _pump(
       tester,
-      child: const MenuTab(),
+      child: MenuTab(pickImportFile: () async => importFiles.removeAt(0)),
       overrides: [menuProvider.overrideWith((ref, storeId) => notifier)],
     );
+
+    await tester.tap(find.byKey(const Key('admin_menu_import_excel_action')));
+    await tester.pumpAndSettle();
+    const importPreviewDialog = Key('admin_menu_import_preview_dialog');
+    expect(find.byKey(importPreviewDialog), findsOneWidget);
+    _expectDialogButtonsAreTouchSized(tester, importPreviewDialog);
+    await tester.tap(_dialogAction(importPreviewDialog, FilledButton));
+    await tester.pumpAndSettle();
+    expect(notifier.importCalls, 1);
+
+    await tester.tap(find.byKey(const Key('admin_menu_import_excel_action')));
+    await tester.pumpAndSettle();
+    const validationDialog = Key('admin_menu_import_validation_dialog');
+    expect(find.byKey(validationDialog), findsOneWidget);
+    _expectDialogButtonsAreTouchSized(tester, validationDialog);
+    await tester.tap(_dialogAction(validationDialog, FilledButton));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('admin_menu_add_category_action')));
     await tester.pumpAndSettle();
@@ -988,4 +1029,34 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+}
+
+Uint8List _menuWorkbookBytes({required bool valid}) {
+  final workbook = Excel.createExcel();
+  final sheet = workbook['메뉴등록'];
+  sheet.appendRow(
+    const [
+      '매장코드',
+      '카테고리명',
+      '카테고리순서',
+      '메뉴명',
+      '설명',
+      '가격(VND)',
+      '판매가능',
+      'QR메뉴노출',
+      '메뉴순서',
+    ].map(TextCellValue.new).toList(),
+  );
+  sheet.appendRow([
+    TextCellValue('BT'),
+    TextCellValue('분식'),
+    IntCellValue(1),
+    TextCellValue('떡볶이'),
+    TextCellValue('매운맛'),
+    IntCellValue(valid ? 50000 : 0),
+    BoolCellValue(true),
+    BoolCellValue(true),
+    IntCellValue(1),
+  ]);
+  return Uint8List.fromList(workbook.encode()!);
 }

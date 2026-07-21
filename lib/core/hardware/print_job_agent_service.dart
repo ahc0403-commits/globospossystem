@@ -200,6 +200,16 @@ class PrintJobAgentService implements PrintAgentDriver {
       paymentMethod: receipt.paymentMethod,
       paidAt: receipt.paidAt,
       isService: receipt.isService,
+      legalName: receipt.legalName,
+      taxCode: receipt.taxCode,
+      addressLines: receipt.addressLines,
+      receiptNumber: receipt.receiptNumber,
+      orderNumber: receipt.orderNumber,
+      cashierCode: receipt.cashierCode,
+      subtotalAmount: receipt.subtotalAmount,
+      discountAmount: receipt.discountAmount,
+      receivedAmount: receipt.receivedAmount,
+      changeAmount: receipt.changeAmount,
     );
   }
 }

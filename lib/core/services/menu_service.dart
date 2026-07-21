@@ -1,5 +1,28 @@
 import '../../main.dart';
 
+class MenuImportResult {
+  const MenuImportResult({
+    required this.createdCategoryCount,
+    required this.importedItemCount,
+  });
+
+  final int createdCategoryCount;
+  final int importedItemCount;
+
+  factory MenuImportResult.fromJson(Map<String, dynamic> json) {
+    int asInt(Object? value) => switch (value) {
+      int value => value,
+      num value => value.toInt(),
+      String value => int.tryParse(value) ?? 0,
+      _ => 0,
+    };
+    return MenuImportResult(
+      createdCategoryCount: asInt(json['created_category_count']),
+      importedItemCount: asInt(json['imported_item_count']),
+    );
+  }
+}
+
 class MenuService {
   bool _isRpcSignatureMismatch(Object error, String functionName) {
     final message = error.toString().toLowerCase();
@@ -125,6 +148,19 @@ class MenuService {
     await supabase.rpc(
       'admin_update_menu_item',
       params: {'p_item_id': itemId, 'p_name': name, 'p_price': price},
+    );
+  }
+
+  Future<MenuImportResult> importMenuItems({
+    required String storeId,
+    required List<Map<String, dynamic>> rows,
+  }) async {
+    final response = await supabase.rpc(
+      'admin_import_menu_items',
+      params: {'p_store_id': storeId, 'p_rows': rows},
+    );
+    return MenuImportResult.fromJson(
+      Map<String, dynamic>.from(response as Map),
     );
   }
 }
