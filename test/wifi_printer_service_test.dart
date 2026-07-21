@@ -198,7 +198,8 @@ void main() {
       expect(results.single.result, PrintResult.success);
       final output = String.fromCharCodes(printer.prints.single.bytes);
       expect(output, contains('GLOBOS PILOT'));
-      expect(output, contains('TONG CONG / Total'));
+      expect(output, contains('PAYMENT RECEIPT'));
+      expect(output, contains('TOTAL'));
       expect(output, isNot(contains('KITCHEN TICKET')));
     });
 

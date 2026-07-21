@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:intl/intl.dart';
 
@@ -10,12 +11,17 @@ import '../../../core/utils/number_input_utils.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
+import '../menu_import/menu_excel_import.dart';
 import '../providers/admin_audit_provider.dart';
 import '../providers/menu_provider.dart';
 import '../widgets/admin_audit_trace_panel.dart';
 
+typedef MenuImportFilePicker = Future<XFile?> Function();
+
 class MenuTab extends ConsumerStatefulWidget {
-  const MenuTab({super.key});
+  const MenuTab({super.key, this.pickImportFile});
+
+  final MenuImportFilePicker? pickImportFile;
 
   @override
   ConsumerState<MenuTab> createState() => _MenuTabState();
@@ -23,6 +29,7 @@ class MenuTab extends ConsumerStatefulWidget {
 
 class _MenuTabState extends ConsumerState<MenuTab> {
   String? _lastError;
+  bool _isImporting = false;
 
   @override
   Widget build(BuildContext context) {
@@ -116,6 +123,9 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       availableItems: availableItems,
       selectedItemCount: selectedItems.length,
       selectedCategoryName: _categoryNameForId(categories, selectedCategoryId),
+      onImportExcel: _isImporting
+          ? null
+          : () => _importMenuWorkbook(storeId, menuNotifier),
       onAddCategory: () => _showAddCategoryDialog(context, menuNotifier),
       onAddItem: selectedCategoryId == null
           ? null
@@ -189,6 +199,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     required int availableItems,
     required int selectedItemCount,
     required String? selectedCategoryName,
+    required VoidCallback? onImportExcel,
     required VoidCallback onAddCategory,
     required VoidCallback? onAddItem,
   }) {
@@ -226,6 +237,21 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                 runSpacing: 8,
                 alignment: WrapAlignment.end,
                 children: [
+                  OutlinedButton.icon(
+                    key: const Key('admin_menu_import_excel_action'),
+                    onPressed: onImportExcel,
+                    icon: _isImporting
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.upload_file_outlined, size: 18),
+                    label: Text(
+                      _isImporting
+                          ? context.l10n.menuImportInProgress
+                          : context.l10n.menuImportExcel,
+                    ),
+                  ),
                   OutlinedButton.icon(
                     key: const Key('admin_menu_add_category_action'),
                     onPressed: onAddCategory,
@@ -313,6 +339,145 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     }
 
     return null;
+  }
+
+  Future<void> _importMenuWorkbook(
+    String storeId,
+    MenuNotifier menuNotifier,
+  ) async {
+    const typeGroup = XTypeGroup(
+      label: 'Excel (.xlsx)',
+      extensions: <String>['xlsx'],
+    );
+
+    try {
+      final file =
+          await (widget.pickImportFile?.call() ??
+              openFile(acceptedTypeGroups: const <XTypeGroup>[typeGroup]));
+      if (file == null || !mounted) {
+        return;
+      }
+
+      final workbook = parseMenuImportWorkbook(await file.readAsBytes());
+      if (!mounted) {
+        return;
+      }
+
+      final confirmed = await _showMenuImportPreview(context, workbook);
+      if (confirmed != true || !mounted) {
+        return;
+      }
+
+      setState(() => _isImporting = true);
+      final result = await menuNotifier.importMenuItems(
+        workbook.rows.map((row) => row.toJson()).toList(growable: false),
+      );
+      if (!mounted) {
+        return;
+      }
+
+      setState(() => _isImporting = false);
+      if (result != null) {
+        ref.invalidate(adminAuditTraceProvider(storeId));
+        showSuccessToast(
+          context,
+          context.l10n.menuImportSuccess(
+            result.createdCategoryCount,
+            result.importedItemCount,
+          ),
+        );
+      }
+    } on MenuImportValidationException catch (error) {
+      if (mounted) {
+        await _showMenuImportValidationErrors(context, error.issues);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isImporting = false);
+        showErrorToast(context, context.l10n.menuImportUnknownError);
+      }
+    }
+  }
+
+  Future<bool?> _showMenuImportPreview(
+    BuildContext context,
+    MenuImportWorkbook workbook,
+  ) {
+    final storeCode = workbook.storeCodes.single;
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        key: const Key('admin_menu_import_preview_dialog'),
+        backgroundColor: AppColors.surface1,
+        title: Text(context.l10n.menuImportPreviewTitle),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                context.l10n.menuImportPreviewBody(
+                  storeCode,
+                  workbook.categoryCount,
+                  workbook.itemCount,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                context.l10n.menuImportAtomicHint,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(context.l10n.cancel),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: const Icon(Icons.upload_file_outlined),
+            label: Text(context.l10n.menuImportConfirm),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showMenuImportValidationErrors(
+    BuildContext context,
+    List<String> issues,
+  ) {
+    final visibleIssues = issues.take(12).toList();
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        key: const Key('admin_menu_import_validation_dialog'),
+        backgroundColor: AppColors.surface1,
+        title: Text(context.l10n.menuImportValidationTitle),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620, maxHeight: 420),
+          child: SingleChildScrollView(
+            child: Text(
+              [
+                ...visibleIssues.map((issue) => '• $issue'),
+                if (issues.length > visibleIssues.length) '• …',
+              ].join('\n'),
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(context.l10n.confirm),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _showAddCategoryDialog(

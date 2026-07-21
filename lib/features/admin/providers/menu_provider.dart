@@ -63,6 +63,18 @@ class MenuNotifier extends StateNotifier<MenuState> {
     if (message.contains('MENU_ITEM_NOT_FOUND')) {
       return 'Reload menus and try again.';
     }
+    if (message.contains('MENU_IMPORT_ITEM_EXISTS')) {
+      return 'A menu with the same name already exists in that category.';
+    }
+    if (message.contains('MENU_IMPORT_CATEGORY_INACTIVE')) {
+      return 'An imported category is inactive. Activate it before importing.';
+    }
+    if (message.contains('MENU_IMPORT_CATEGORY_AMBIGUOUS')) {
+      return 'Duplicate category names already exist. Merge them before importing.';
+    }
+    if (message.contains('MENU_IMPORT_')) {
+      return 'The Excel menu data is invalid. Review the file and try again.';
+    }
     if (message.contains('duplicate key value') || message.contains('23505')) {
       return 'An item with the same sort or name already exists.';
     }
@@ -205,6 +217,25 @@ class MenuNotifier extends StateNotifier<MenuState> {
         error: _mapMenuError(error, 'Failed to update menu.'),
       );
       return false;
+    }
+  }
+
+  Future<MenuImportResult?> importMenuItems(
+    List<Map<String, dynamic>> rows,
+  ) async {
+    try {
+      final result = await menuService.importMenuItems(
+        storeId: storeId,
+        rows: rows,
+      );
+      await fetchAll();
+      state = state.copyWith(clearError: true);
+      return result;
+    } catch (error, _) {
+      state = state.copyWith(
+        error: _mapMenuError(error, 'Failed to import menus from Excel.'),
+      );
+      return null;
     }
   }
 }

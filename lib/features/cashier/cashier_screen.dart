@@ -10,8 +10,6 @@ import '../../core/i18n/restaurant_cutoff_localization.dart';
 import '../../core/payments/payment_method_contract.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/layout/platform_info.dart';
-import '../../core/hardware/printer_service.dart';
-import '../../core/hardware/receipt_builder.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../core/utils/permission_utils.dart';
@@ -22,7 +20,6 @@ import '../auth/auth_provider.dart';
 import '../order/order_model.dart';
 import '../payment/payment_provider.dart';
 import '../payment/einvoice_status_badge.dart';
-import '../settings/printer_provider.dart';
 import '../../core/services/payment_service.dart';
 import '../../core/services/payment_proof_service.dart';
 import '../../core/services/restaurant_cutoff_service.dart';
@@ -373,58 +370,22 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     bool reprint = false,
   }) async {
     final l10n = context.l10n;
-    if (!PlatformInfo.isPrinterSupported) {
-      try {
-        final job = await _paymentService.enqueueReceiptPrintJob(
-          orderId: order.orderId,
-          reprint: reprint,
-        );
-        if (!mounted) return;
-        final status = job['status']?.toString();
-        if (status == 'pending' || status == 'printing' || status == 'done') {
-          showSuccessToast(context, l10n.cashierReceiptQueued);
-        } else {
-          showErrorToast(context, l10n.cashierReceiptPrintFailed);
-        }
-      } catch (_) {
-        if (mounted) {
-          showErrorToast(context, l10n.cashierReceiptPrintFailed);
-        }
+    try {
+      final job = await _paymentService.enqueueReceiptPrintJob(
+        orderId: order.orderId,
+        reprint: reprint,
+      );
+      if (!mounted) return;
+      final status = job['status']?.toString();
+      if (status == 'pending' || status == 'printing' || status == 'done') {
+        showSuccessToast(context, l10n.cashierReceiptQueued);
+      } else {
+        showErrorToast(context, l10n.cashierReceiptPrintFailed);
       }
-      return;
-    }
-
-    final printerState = ref.read(printerProvider);
-    if (printerState.printerIp.isEmpty) {
-      showErrorToast(context, l10n.settingsEnterIpFirst);
-      return;
-    }
-
-    final bytes = await ReceiptBuilder.buildPaymentReceipt(
-      restaurantName: 'GLOBOS POS',
-      tableNumber: order.tableNumber,
-      items: order.items
-          .map(
-            (item) => ReceiptItem(
-              name: item.label ?? l10n.cashierItemFallback,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              isServiceItem: item.isServiceItem,
-            ),
-          )
-          .toList(),
-      totalAmount: order.totalAmount,
-      paymentMethod: method,
-      paidAt: DateTime.now(),
-      isService: isServicePaymentMethod(method),
-    );
-
-    final result = await ref.read(printerProvider.notifier).print(bytes);
-    if (!mounted) {
-      return;
-    }
-    if (result != PrintResult.success) {
-      showErrorToast(context, l10n.cashierReceiptPrintFailed);
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(context, l10n.cashierReceiptPrintFailed);
+      }
     }
   }
 

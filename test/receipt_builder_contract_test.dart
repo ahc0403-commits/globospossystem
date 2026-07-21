@@ -14,11 +14,21 @@ void main() {
       totalAmount: 50000,
       paymentMethod: 'cash',
       paidAt: DateTime.utc(2026, 5, 18, 10, 30),
+      legalName: 'CÔNG TY TNHH AKJ INTERNATIONAL',
+      taxCode: '0318453298',
+      addressLines: const ['69/1A2 Nguyễn Gia Trí'],
+      receiptNumber: 'BC-20260721-000123',
+      orderNumber: '12345',
+      cashierCode: 'EMP001',
     );
 
     expect(bytes, isNotEmpty);
     final text = String.fromCharCodes(bytes);
-    expect(text, contains('GLOBOSVN POS'));
+    expect(text, contains('GLOBOS POS'));
+    expect(text, contains('AKJ INTERNATIONAL'));
+    expect(text, contains('0318453298'));
+    expect(text, contains('PAYMENT RECEIPT'));
+    expect(text, contains('BC-20260721-000123'));
     expect(text, contains('Ca phe sua da'));
     expect(text, contains('VND'));
     expect(bytes, contains(0x1d));
