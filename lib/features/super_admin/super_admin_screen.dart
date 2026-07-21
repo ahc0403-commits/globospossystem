@@ -2231,6 +2231,12 @@ class _AllReportsTabState extends State<_AllReportsTab> {
                   icon: const Icon(Icons.download_outlined),
                   label: Text(l10n.restaurantSalesExportDownload),
                 ),
+                OutlinedButton.icon(
+                  key: const Key('super_admin_red_invoice_export_link'),
+                  onPressed: () => context.go('/red-invoice-export'),
+                  icon: const Icon(Icons.receipt_long_outlined),
+                  label: Text(l10n.redInvoiceIntakeTitle),
+                ),
               ],
             ),
             const SizedBox(height: 14),
