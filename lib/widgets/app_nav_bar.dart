@@ -91,6 +91,7 @@ class AppNavBar extends ConsumerWidget {
               ),
               const SizedBox(width: 6),
               _NavButton(
+                key: const Key('app_nav_home_button'),
                 icon: Icons.home_rounded,
                 tooltip: l10n.home,
                 enabled: canGoHome,

@@ -38,7 +38,7 @@ void main() {
         "Key('admin_root')",
       ],
       'lib/features/photo_ops/photo_ops_screen.dart': [
-        'AppNavBar()',
+        'AppNavBar(',
         "Key('photo_ops_root')",
       ],
       'lib/features/payment/payment_detail_screen.dart': [
