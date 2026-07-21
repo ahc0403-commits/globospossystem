@@ -83,6 +83,8 @@ bool canAccessRouteForRole(
   return switch (role) {
     'super_admin' =>
       path == '/super-admin' ||
+          path == '/restaurant-sales-export' ||
+          path == '/red-invoice-export' ||
           path == '/photo-ops' ||
           path.startsWith('/store-setup/') ||
           path.startsWith('/admin/') ||

@@ -1,8 +1,10 @@
 import '../../main.dart';
+import '../../features/red_invoice_intake/red_invoice_intake_service.dart';
 
 class EinvoiceService {
-  /// Request a red invoice for an already-paid order.
-  /// Returns the job_id on success.
+  /// Register complete buyer information for the separate red-invoice batch.
+  /// The original all-receipts export remains unchanged and MISA dispatch is
+  /// never part of payment completion.
   Future<String> requestRedInvoice({
     required String orderId,
     required String storeId,
@@ -17,26 +19,22 @@ class EinvoiceService {
     String? buyerFullName,
     String? buyerId,
   }) async {
-    final result = await supabase.rpc(
-      'request_red_invoice',
-      params: {
-        'p_order_id': orderId,
-        'p_store_id': storeId,
-        'p_buyer_tax_code': buyerTaxCode ?? '',
-        'p_buyer_name': buyerName ?? '',
-        'p_buyer_address': buyerAddress ?? '',
-        'p_receiver_email': receiverEmail,
-        'p_receiver_email_cc': receiverEmailCc,
-        'p_buyer_tel': buyerTel,
-        'p_unit_code': unitCode,
-        'p_unit_name': unitName,
-        'p_buyer_full_name': buyerFullName,
-        'p_buyer_id': buyerId,
-      },
+    final intake = await redInvoiceIntakeService.save(
+      orderId: orderId,
+      storeId: storeId,
+      source: 'cashier',
+      status: 'ready',
+      buyerTaxCode: buyerTaxCode,
+      buyerUnitCode: unitCode,
+      buyerLegalName: unitName ?? buyerName,
+      buyerFullName: buyerFullName,
+      buyerAddress: buyerAddress,
+      buyerEmail: receiverEmail,
+      buyerEmailCc: receiverEmailCc,
+      buyerPhone: buyerTel,
+      buyerId: buyerId,
     );
-    final map = Map<String, dynamic>.from(result as Map);
-    if (map['ok'] != true) throw Exception('request_red_invoice failed');
-    return map['job_id'].toString();
+    return intake.meInvoiceJobId ?? intake.id;
   }
 
   /// Look up cached buyer data for autocomplete.

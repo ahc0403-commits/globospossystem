@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/einvoice_service.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../widgets/error_toast.dart';
+import '../red_invoice_intake/red_invoice_intake_service.dart';
 
 enum _BuyerLookupState { idle, cacheHit, manualFallback }
+
+enum _RedInvoiceStep { prompt, immediate, deferred }
 
 /// Modal shown after successful payment.
 /// Step 1: Ask "Red invoice?" → Step 2: Buyer form.
@@ -25,7 +29,7 @@ class RedInvoiceModal extends StatefulWidget {
 }
 
 class _RedInvoiceModalState extends State<RedInvoiceModal> {
-  bool _showForm = false;
+  _RedInvoiceStep _step = _RedInvoiceStep.prompt;
   bool _isSubmitting = false;
 
   final _taxCodeCtrl = TextEditingController();
@@ -38,6 +42,9 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
   final _phoneCtrl = TextEditingController();
   final _buyerIdCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  final _deferredNoteCtrl = TextEditingController();
+  String _deferredSource = 'business_card';
+  XFile? _deferredEvidence;
 
   bool _isLookingUp = false;
   _BuyerLookupState _lookupState = _BuyerLookupState.idle;
@@ -54,6 +61,7 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
     _emailCcCtrl.dispose();
     _phoneCtrl.dispose();
     _buyerIdCtrl.dispose();
+    _deferredNoteCtrl.dispose();
     super.dispose();
   }
 
@@ -130,6 +138,58 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
     }
   }
 
+  Future<void> _pickDeferredEvidence() async {
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 90,
+    );
+    if (picked != null && mounted) {
+      setState(() => _deferredEvidence = picked);
+    }
+  }
+
+  Future<void> _submitDeferred() async {
+    final note = _deferredNoteCtrl.text.trim();
+    if (_deferredSource == 'business_card' && _deferredEvidence == null) {
+      showErrorToast(context, context.l10n.redInvoiceBusinessCardRequired);
+      return;
+    }
+    if (_deferredSource != 'business_card' && note.isEmpty) {
+      showErrorToast(context, context.l10n.redInvoiceSourceNoteRequired);
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+    try {
+      final intake = await redInvoiceIntakeService.save(
+        orderId: widget.orderId,
+        storeId: widget.storeId,
+        source: _deferredSource,
+        status: 'awaiting_information',
+        sourceNote: note,
+      );
+      final evidence = _deferredEvidence;
+      if (evidence != null) {
+        await redInvoiceIntakeService.uploadEvidence(
+          intakeId: intake.id,
+          storeId: widget.storeId,
+          file: evidence,
+        );
+      }
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } catch (error) {
+      if (mounted) {
+        showErrorToast(
+          context,
+          context.l10n.redInvoiceDeferredSaveFailed('$error'),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -154,14 +214,20 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
       ),
       content: SizedBox(
         width: 460,
-        child: _showForm
-            ? ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 560),
-                child: SingleChildScrollView(child: _buildForm()),
-              )
-            : _buildPrompt(),
+        child: switch (_step) {
+          _RedInvoiceStep.immediate => ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 560),
+            child: SingleChildScrollView(child: _buildForm()),
+          ),
+          _RedInvoiceStep.deferred => _buildDeferredForm(),
+          _RedInvoiceStep.prompt => _buildPrompt(),
+        },
       ),
-      actions: _showForm ? _buildFormActions() : _buildPromptActions(),
+      actions: switch (_step) {
+        _RedInvoiceStep.immediate => _buildFormActions(),
+        _RedInvoiceStep.deferred => _buildDeferredActions(),
+        _RedInvoiceStep.prompt => _buildPromptActions(),
+      },
     );
   }
 
@@ -184,8 +250,13 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
           style: AppFonts.system(color: PosColors.textSecondary),
         ),
       ),
+      OutlinedButton.icon(
+        onPressed: () => setState(() => _step = _RedInvoiceStep.deferred),
+        icon: const Icon(Icons.schedule_send_outlined, size: 16),
+        label: Text(context.l10n.redInvoiceCollectLater),
+      ),
       FilledButton.icon(
-        onPressed: () => setState(() => _showForm = true),
+        onPressed: () => setState(() => _step = _RedInvoiceStep.immediate),
         style: FilledButton.styleFrom(
           backgroundColor: PosColors.accent,
           foregroundColor: Colors.white,
@@ -195,6 +266,97 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
           context.l10n.redInvoiceIssueInvoice,
           style: AppFonts.system(fontWeight: FontWeight.w700),
         ),
+      ),
+    ];
+  }
+
+  Widget _buildDeferredForm() {
+    final l10n = context.l10n;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 500),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Text(
+              l10n.redInvoiceDeferredDescription,
+              style: AppFonts.system(
+                color: PosColors.textSecondary,
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _label(l10n.redInvoiceInformationSource),
+            DropdownButtonFormField<String>(
+              initialValue: _deferredSource,
+              decoration: _inputDecoration(),
+              items: [
+                DropdownMenuItem(
+                  value: 'business_card',
+                  child: Text(l10n.redInvoiceSourceBusinessCard),
+                ),
+                DropdownMenuItem(
+                  value: 'zalo',
+                  child: Text(l10n.redInvoiceSourceZalo),
+                ),
+                DropdownMenuItem(
+                  value: 'other',
+                  child: Text(l10n.redInvoiceSourceOther),
+                ),
+              ],
+              onChanged: _isSubmitting
+                  ? null
+                  : (value) {
+                      if (value != null) {
+                        setState(() => _deferredSource = value);
+                      }
+                    },
+            ),
+            const SizedBox(height: 12),
+            _label(l10n.redInvoiceSourceNote),
+            TextField(
+              controller: _deferredNoteCtrl,
+              minLines: 3,
+              maxLines: 5,
+              decoration: _inputDecoration(
+                hintText: l10n.redInvoiceSourceNoteHint,
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _isSubmitting ? null : _pickDeferredEvidence,
+              icon: const Icon(Icons.add_photo_alternate_outlined),
+              label: Text(
+                _deferredEvidence == null
+                    ? l10n.redInvoiceAttachEvidence
+                    : l10n.redInvoiceEvidenceSelected(_deferredEvidence!.name),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildDeferredActions() {
+    return [
+      TextButton(
+        onPressed: _isSubmitting
+            ? null
+            : () => setState(() => _step = _RedInvoiceStep.prompt),
+        child: Text(context.l10n.back),
+      ),
+      FilledButton(
+        onPressed: _isSubmitting ? null : _submitDeferred,
+        child: _isSubmitting
+            ? const SizedBox.square(
+                dimension: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Text(context.l10n.redInvoiceSaveForLater),
       ),
     ];
   }
@@ -215,7 +377,10 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
                 child: _field(
                   controller: _taxCodeCtrl,
                   hint: l10n.redInvoiceTaxCodeHint,
-                  required: false,
+                  required: true,
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? l10n.redInvoiceTaxCodeRequired
+                      : null,
                   onFieldSubmitted: _onTaxCodeSubmitted,
                 ),
               ),
@@ -260,14 +425,20 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
           _field(
             controller: _companyCtrl,
             hint: l10n.redInvoiceCompanyNameHint,
-            required: false,
+            required: true,
+            validator: (value) => value == null || value.trim().isEmpty
+                ? l10n.redInvoiceCompanyNameRequired
+                : null,
           ),
           const SizedBox(height: 10),
           _label(l10n.address),
           _field(
             controller: _addressCtrl,
             hint: l10n.redInvoiceAddressHint,
-            required: false,
+            required: true,
+            validator: (value) => value == null || value.trim().isEmpty
+                ? l10n.redInvoiceAddressRequired
+                : null,
           ),
           const SizedBox(height: 10),
           _label(l10n.redInvoiceBuyerFullName),
@@ -325,7 +496,7 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
       TextButton(
         onPressed: _isSubmitting
             ? null
-            : () => setState(() => _showForm = false),
+            : () => setState(() => _step = _RedInvoiceStep.prompt),
         child: Text(
           context.l10n.back,
           style: AppFonts.system(color: PosColors.textSecondary),
@@ -463,32 +634,30 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
       keyboardType: keyboardType,
       onFieldSubmitted: onFieldSubmitted,
       style: AppFonts.system(color: PosColors.textPrimary, fontSize: 14),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: AppFonts.system(
-          color: PosColors.textSecondary,
-          fontSize: 13,
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 10,
-        ),
-        filled: true,
-        fillColor: PosColors.canvas,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: PosColors.border),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: PosColors.border),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: PosColors.accent),
-        ),
-      ),
+      decoration: _inputDecoration(hintText: hint),
       validator: validator,
+    );
+  }
+
+  InputDecoration _inputDecoration({String? hintText}) {
+    return InputDecoration(
+      hintText: hintText,
+      hintStyle: AppFonts.system(color: PosColors.textSecondary, fontSize: 13),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      filled: true,
+      fillColor: PosColors.canvas,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: PosColors.border),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: PosColors.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: PosColors.accent),
+      ),
     );
   }
 }

@@ -36,17 +36,19 @@ void main() {
     expect(sql, contains("'buyer_phone', v_row.buyer_phone"));
   });
 
-  test('service forwards extended buyer fields to request_red_invoice RPC', () {
+  test('service forwards extended buyer fields to red-invoice intake', () {
     final source = readRepoFile('lib/core/services/einvoice_service.dart');
 
     expect(source, contains('String? unitCode'));
     expect(source, contains('String? unitName'));
     expect(source, contains('String? buyerFullName'));
     expect(source, contains('String? buyerId'));
-    expect(source, contains("'p_unit_code': unitCode"));
-    expect(source, contains("'p_unit_name': unitName"));
-    expect(source, contains("'p_buyer_full_name': buyerFullName"));
-    expect(source, contains("'p_buyer_id': buyerId"));
+    expect(source, contains('redInvoiceIntakeService.save('));
+    expect(source, contains('buyerUnitCode: unitCode'));
+    expect(source, contains('buyerLegalName: unitName ?? buyerName'));
+    expect(source, contains('buyerFullName: buyerFullName'));
+    expect(source, contains('buyerId: buyerId'));
+    expect(source, isNot(contains("'request_red_invoice'")));
     expect(source, isNot(contains('lookupCompanyByTaxCode')));
     expect(source, isNot(contains('wetax-onboarding')));
   });

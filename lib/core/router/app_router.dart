@@ -19,6 +19,7 @@ import '../../features/payment/payment_detail_screen.dart';
 import '../../features/print_station/print_station_screen.dart';
 import '../../features/qr_order/qr_order_screen.dart';
 import '../../features/restaurant_sales_export/restaurant_sales_export_screen.dart';
+import '../../features/red_invoice_intake/red_invoice_intake_screen.dart';
 import '../../features/attendance/attendance_kiosk_screen.dart';
 import '../../features/qc/qc_check_screen.dart';
 import '../../features/qc/qc_review_screen.dart';
@@ -137,6 +138,12 @@ GoRouter buildAppRouter(ProviderContainer container) {
       }
 
       if (location == '/restaurant-sales-export' && role != 'super_admin') {
+        redirectTo = homeRoute;
+        NavigationHistoryService.instance.push(redirectTo);
+        return redirectTo;
+      }
+
+      if (location == '/red-invoice-export' && role != 'super_admin') {
         redirectTo = homeRoute;
         NavigationHistoryService.instance.push(redirectTo);
         return redirectTo;
@@ -274,6 +281,10 @@ GoRouter buildAppRouter(ProviderContainer container) {
       GoRoute(
         path: '/restaurant-sales-export',
         builder: (_, __) => const RestaurantSalesExportScreen(),
+      ),
+      GoRoute(
+        path: '/red-invoice-export',
+        builder: (_, __) => const RedInvoiceIntakeScreen(),
       ),
       GoRoute(
         path: '/store-setup/:storeId',

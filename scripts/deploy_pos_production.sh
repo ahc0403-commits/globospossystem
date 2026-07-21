@@ -697,6 +697,7 @@ apply_migration() {
     20260719140000_password_change_lifecycle_fail_closed.sql|\
     20260719030000_admin_permanent_store_delete.sql|\
     20260721030000_menu_excel_and_receipt_format.sql|\
+    20260721040000_red_invoice_intake_export.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -826,6 +827,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_menu_excel_and_receipt_format.sql" \
       "menu Excel and receipt-format migration preflight"
+  elif [[ "$migration_name" == "20260721040000_red_invoice_intake_export.sql" ]]; then
+    log "Red invoice intake export migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_red_invoice_intake_export.sql" \
+      "red invoice intake export migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -926,6 +932,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_menu_excel_and_receipt_format.sql" \
       "menu Excel and receipt-format migration verification"
+  elif [[ "$migration_name" == "20260721040000_red_invoice_intake_export.sql" ]]; then
+    log "Red invoice intake export migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_red_invoice_intake_export.sql" \
+      "red invoice intake export migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \
