@@ -705,6 +705,7 @@ apply_migration() {
     20260722050000_kitchen_direct_completion.sql|\
     20260722060000_qr_cashier_multilingual_payroll_rules.sql|\
     20260722070000_menu_excel_roundtrip_i18n.sql|\
+    20260722080000_cashier_native_print_agent.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -1014,6 +1015,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_menu_excel_roundtrip_i18n.sql" \
       "multilingual menu Excel round-trip migration verification"
+  elif [[ "$migration_name" == "20260722080000_cashier_native_print_agent.sql" ]]; then
+    log "Cashier native print-agent migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_cashier_native_print_agent.sql" \
+      "cashier native print-agent migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \
