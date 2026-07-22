@@ -387,6 +387,25 @@ void main() {
         readRepoFile('scripts/verify_fix_table_qr_batch_conflict.sql'),
         contains('ON CONFLICT DO NOTHING'),
       );
+      final returningFix = readRepoFile(
+        'supabase/migrations/20260722030603_fix_table_qr_batch_returning.sql',
+      );
+      expect(
+        returningFix,
+        contains('INSERT INTO public.table_qr_tokens AS created_token'),
+      );
+      expect(returningFix, contains('created_token.id'));
+      expect(returningFix, contains('created_token.restaurant_id'));
+      expect(returningFix, contains('created_token.table_id'));
+      expect(returningFix, contains('ON CONFLICT DO NOTHING'));
+      expect(
+        readRepoFile('scripts/preflight_fix_table_qr_batch_returning.sql'),
+        contains('TABLE_QR_RETURNING_FIX_PREFLIGHT_OK'),
+      );
+      expect(
+        readRepoFile('scripts/verify_fix_table_qr_batch_returning.sql'),
+        contains('TABLE_QR_RETURNING_FIX_VERIFY_OK'),
+      );
       expect(migration, contains('SELECT DISTINCT requested_id'));
       expect(
         migration,

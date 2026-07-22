@@ -700,6 +700,7 @@ apply_migration() {
     20260721040000_red_invoice_intake_export.sql|\
     20260722010000_menu_category_management_and_images.sql|\
     20260722023244_fix_table_qr_batch_conflict.sql|\
+    20260722030603_fix_table_qr_batch_returning.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -844,6 +845,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_fix_table_qr_batch_conflict.sql" \
       "table QR conflict fix migration preflight"
+  elif [[ "$migration_name" == "20260722030603_fix_table_qr_batch_returning.sql" ]]; then
+    log "Table QR returning fix migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_fix_table_qr_batch_returning.sql" \
+      "table QR returning fix migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -959,6 +965,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_fix_table_qr_batch_conflict.sql" \
       "table QR conflict fix migration verification"
+  elif [[ "$migration_name" == "20260722030603_fix_table_qr_batch_returning.sql" ]]; then
+    log "Table QR returning fix migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_fix_table_qr_batch_returning.sql" \
+      "table QR returning fix migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \
