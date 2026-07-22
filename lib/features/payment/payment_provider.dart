@@ -392,6 +392,14 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     );
   }
 
+  void clearSelection() {
+    state = state.copyWith(
+      clearSelectedOrder: true,
+      clearPaymentSuccess: true,
+      clearError: true,
+    );
+  }
+
   Future<CashierOrderSearchResult?> searchActiveOrderForCashier({
     required String storeId,
     required String query,

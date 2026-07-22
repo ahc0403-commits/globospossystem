@@ -24,14 +24,15 @@ void main() {
   });
 
   test(
-    'cashier success flow hands off to payment detail after tracked post-payment steps',
+    'cashier success flow stays in place and opens the completion dialog',
     () {
       final cashier = readRepoFile('lib/features/cashier/cashier_screen.dart');
 
       expect(cashier, contains("final paymentId = payment?['id']"));
       expect(cashier, contains('PaymentProofModal('));
       expect(cashier, contains('RedInvoiceModal('));
-      expect(cashier, contains("context.go('/payments/\$paymentId')"));
+      expect(cashier, contains('_showPaymentCompletion('));
+      expect(cashier, isNot(contains("context.go('/payments/")));
     },
   );
 
