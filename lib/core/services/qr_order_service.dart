@@ -65,6 +65,7 @@ class QrMenuItem {
     required this.name,
     required this.price,
     this.description,
+    this.imageUrl,
   });
 
   final String id;
@@ -72,6 +73,7 @@ class QrMenuItem {
   final String name;
   final double price;
   final String? description;
+  final String? imageUrl;
 
   factory QrMenuItem.fromJson(Map<String, dynamic> json) {
     final priceRaw = json['price'];
@@ -80,6 +82,7 @@ class QrMenuItem {
       categoryId: json['category_id']?.toString(),
       name: json['name']?.toString() ?? '',
       description: json['description']?.toString(),
+      imageUrl: json['image_url']?.toString(),
       price: switch (priceRaw) {
         num value => value.toDouble(),
         String value => double.tryParse(value) ?? 0,

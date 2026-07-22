@@ -403,6 +403,24 @@ class _QrMenuItemTile extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            if ((item.imageUrl ?? '').trim().isNotEmpty) ...[
+              ClipRRect(
+                borderRadius: ToastRadiusTokens.md,
+                child: SizedBox(
+                  width: 96,
+                  height: 96,
+                  child: Image.network(
+                    item.imageUrl!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => ColoredBox(
+                      color: ToastColorTokens.mutedSurface,
+                      child: const Icon(Icons.broken_image_outlined),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: ToastSpacingTokens.md),
+            ],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
