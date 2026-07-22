@@ -17,6 +17,23 @@ void main() {
       contains('ALTER PUBLICATION supabase_realtime ADD TABLE'),
     );
     expect(migration, contains('pg_publication_tables'));
+
+    final deployScript = File(
+      'scripts/deploy_pos_production.sh',
+    ).readAsStringSync();
+    final verification = File(
+      'scripts/verify_cashier_table_realtime_status.sql',
+    ).readAsStringSync();
+    expect(
+      deployScript,
+      contains('20260722110000_cashier_table_realtime_status.sql'),
+    );
+    expect(deployScript, contains('verify_cashier_table_realtime_status.sql'));
+    expect(
+      verification,
+      contains('CASHIER_TABLE_REALTIME_PUBLICATION_INCOMPLETE'),
+    );
+    expect(verification, contains('pg_publication_tables'));
   });
 
   test('active order previews make a table operationally occupied', () {

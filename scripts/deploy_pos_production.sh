@@ -707,6 +707,7 @@ apply_migration() {
     20260722070000_menu_excel_roundtrip_i18n.sql|\
     20260722080000_cashier_native_print_agent.sql|\
     20260722100000_vietnamese_only_printer_output.sql|\
+    20260722110000_cashier_table_realtime_status.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -1031,6 +1032,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_vietnamese_printer_output.sql" \
       "Vietnamese-only printer output migration verification"
+  elif [[ "$migration_name" == "20260722110000_cashier_table_realtime_status.sql" ]]; then
+    log "Cashier table Realtime status migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_cashier_table_realtime_status.sql" \
+      "cashier table Realtime status migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \
