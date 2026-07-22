@@ -11,9 +11,7 @@ void main() {
     expect(cashier, contains('enqueueReceiptPrintJob'));
     expect(cashier, isNot(contains('printerProvider.notifier).print(bytes)')));
     expect(cashier, isNot(contains('ReceiptBuilder.buildPaymentReceipt')));
-    expect(
-      cashier,
-      contains('await _printReceipt(order: selectedOrder, method: method)'),
-    );
+    expect(cashier, contains('await _printReceipt('));
+    expect(cashier, contains('cashTender: cashTender'));
   });
 }
