@@ -31,6 +31,7 @@ class _QrOrderScreenState extends State<QrOrderScreen> {
   String? _clientOrderId;
   bool _isLoading = true;
   bool _isSubmitting = false;
+  String _languageCode = 'vi';
   final Map<String, int> _cart = <String, int>{};
 
   QrOrderService get _service => widget.service ?? qrOrderService;
@@ -66,8 +67,7 @@ class _QrOrderScreenState extends State<QrOrderScreen> {
   }
 
   QrOrderCopy get _copy {
-    final code = Localizations.localeOf(context).languageCode.toLowerCase();
-    return QrOrderCopy.forLanguage(code);
+    return QrOrderCopy.forLanguage(_languageCode);
   }
 
   List<QrMenuItem> get _visibleItems {
@@ -117,6 +117,7 @@ class _QrOrderScreenState extends State<QrOrderScreen> {
       barrierDismissible: false,
       builder: (context) => _QrReviewDialog(
         copy: _copy,
+        languageCode: _languageCode,
         lines: _cartItems,
         totalLabel: '${_currency.format(_cartTotal)} VND',
       ),
@@ -131,6 +132,7 @@ class _QrOrderScreenState extends State<QrOrderScreen> {
     });
 
     try {
+      final submittedItems = _cartItems;
       final result = await _service.placeOrder(
         token: widget.token,
         clientOrderId: _clientOrderId!,
@@ -143,7 +145,19 @@ class _QrOrderScreenState extends State<QrOrderScreen> {
       );
       if (!mounted) return;
       setState(() {
-        _result = result;
+        _result = QrOrderResult(
+          orderCode: result.orderCode,
+          batchNo: result.batchNo,
+          tableNumber: result.tableNumber,
+          floorLabel: result.floorLabel,
+          items: [
+            for (final line in submittedItems)
+              QrOrderResultItem(
+                name: line.item.localizedName(_languageCode),
+                quantity: line.quantity,
+              ),
+          ],
+        );
         _cart.clear();
         _clientOrderId = null;
         _isSubmitting = false;
@@ -175,7 +189,27 @@ class _QrOrderScreenState extends State<QrOrderScreen> {
         key: const Key('qr_state_loading'),
         backgroundColor: ToastColorTokens.canvas,
         body: SafeArea(
-          child: ToastOperationalLoadingState(label: _copy.loadingMenu),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: ToastSpacingTokens.md),
+                  Text(
+                    _copy.loadingMenu,
+                    textAlign: TextAlign.center,
+                    style: AppFonts.system(
+                      color: ToastColorTokens.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       );
     }
@@ -276,6 +310,7 @@ class _QrOrderScreenState extends State<QrOrderScreen> {
                           final item = _visibleItems[index];
                           return _QrMenuItemTile(
                             item: item,
+                            languageCode: _languageCode,
                             quantity: _cart[item.id] ?? 0,
                             priceLabel: '${_currency.format(item.price)} VND',
                             copy: _copy,
@@ -306,6 +341,22 @@ class _QrOrderScreenState extends State<QrOrderScreen> {
               color: ToastColorTokens.textSecondary,
               fontSize: 14,
               fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: ToastSpacingTokens.sm),
+          Align(
+            alignment: Alignment.centerRight,
+            child: DropdownButton<String>(
+              key: const Key('qr_language_selector'),
+              value: _languageCode,
+              items: const [
+                DropdownMenuItem(value: 'vi', child: Text('Tiếng Việt')),
+                DropdownMenuItem(value: 'ko', child: Text('한국어')),
+                DropdownMenuItem(value: 'en', child: Text('English')),
+              ],
+              onChanged: (value) {
+                if (value != null) setState(() => _languageCode = value);
+              },
             ),
           ),
           const SizedBox(height: ToastSpacingTokens.sm),
@@ -355,14 +406,15 @@ class _QrOrderScreenState extends State<QrOrderScreen> {
             const SizedBox(width: ToastSpacingTokens.sm),
         itemBuilder: (context, index) {
           final category = menu.categories[index];
+          final categoryName = category.localizedName(_languageCode);
           final selected = category.id == _selectedCategoryId;
           return Semantics(
             selected: selected,
             button: true,
-            label: category.name,
+            label: categoryName,
             child: ChoiceChip(
               key: Key('qr_category_${category.id}'),
-              label: Text(category.name),
+              label: Text(categoryName),
               selected: selected,
               onSelected: (_) {
                 setState(() {
@@ -380,6 +432,7 @@ class _QrOrderScreenState extends State<QrOrderScreen> {
 class _QrMenuItemTile extends StatelessWidget {
   const _QrMenuItemTile({
     required this.item,
+    required this.languageCode,
     required this.quantity,
     required this.priceLabel,
     required this.copy,
@@ -387,6 +440,7 @@ class _QrMenuItemTile extends StatelessWidget {
   });
 
   final QrMenuItem item;
+  final String languageCode;
   final int quantity;
   final String priceLabel;
   final QrOrderCopy copy;
@@ -394,81 +448,107 @@ class _QrMenuItemTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final itemName = item.localizedName(languageCode);
+    final hasImage = (item.imageUrl ?? '').trim().isNotEmpty;
+    final image = hasImage
+        ? ClipRRect(
+            borderRadius: ToastRadiusTokens.md,
+            child: SizedBox(
+              width: 96,
+              height: 96,
+              child: Image.network(
+                item.imageUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => ColoredBox(
+                  color: ToastColorTokens.mutedSurface,
+                  child: const Icon(Icons.broken_image_outlined),
+                ),
+              ),
+            ),
+          )
+        : null;
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          itemName,
+          style: AppFonts.system(
+            color: ToastColorTokens.textPrimary,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            height: 1.35,
+          ),
+        ),
+        if ((item.description ?? '').isNotEmpty) ...[
+          const SizedBox(height: ToastSpacingTokens.xs),
+          Text(
+            item.description!,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: AppFonts.system(
+              color: ToastColorTokens.textSecondary,
+              fontSize: 14,
+              height: 1.4,
+            ),
+          ),
+        ],
+        const SizedBox(height: ToastSpacingTokens.sm),
+        Text(
+          priceLabel,
+          style: AppFonts.system(
+            color: ToastColorTokens.accentStrong,
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ],
+    );
+    final stepper = _QrStepper(
+      itemId: item.id,
+      itemName: itemName,
+      quantity: quantity,
+      copy: copy,
+      onChanged: onChanged,
+    );
     return Semantics(
       key: Key('qr_menu_item_${item.id}'),
       container: true,
-      label: '${item.name}, $priceLabel, ${copy.quantityLabel(quantity)}',
+      label: '$itemName, $priceLabel, ${copy.quantityLabel(quantity)}',
       child: ToastWorkSurface(
         padding: const EdgeInsets.all(ToastSpacingTokens.md),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            if ((item.imageUrl ?? '').trim().isNotEmpty) ...[
-              ClipRRect(
-                borderRadius: ToastRadiusTokens.md,
-                child: SizedBox(
-                  width: 96,
-                  height: 96,
-                  child: Image.network(
-                    item.imageUrl!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => ColoredBox(
-                      color: ToastColorTokens.mutedSurface,
-                      child: const Icon(Icons.broken_image_outlined),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: ToastSpacingTokens.md),
-            ],
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final stacked =
+                constraints.maxWidth < 520 ||
+                MediaQuery.textScalerOf(context).scale(1) > 1.4;
+            if (stacked) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    item.name,
-                    style: AppFonts.system(
-                      color: ToastColorTokens.textPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      height: 1.35,
-                    ),
-                  ),
-                  if ((item.description ?? '').isNotEmpty) ...[
-                    const SizedBox(height: ToastSpacingTokens.xs),
-                    Text(
-                      item.description!,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppFonts.system(
-                        color: ToastColorTokens.textSecondary,
-                        fontSize: 14,
-                        height: 1.4,
-                      ),
-                    ),
+                  if (image != null) ...[
+                    Align(alignment: Alignment.centerLeft, child: image),
+                    const SizedBox(height: ToastSpacingTokens.md),
                   ],
-                  const SizedBox(height: ToastSpacingTokens.sm),
-                  Text(
-                    priceLabel,
-                    style: AppFonts.system(
-                      color: ToastColorTokens.accentStrong,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
+                  details,
+                  const SizedBox(height: ToastSpacingTokens.md),
+                  Align(alignment: Alignment.centerRight, child: stepper),
                 ],
-              ),
-            ),
-            const SizedBox(width: ToastSpacingTokens.sm),
-            _QrStepper(
-              itemId: item.id,
-              itemName: item.name,
-              quantity: quantity,
-              copy: copy,
-              onChanged: onChanged,
-            ),
-          ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (image != null) ...[
+                  image,
+                  const SizedBox(width: ToastSpacingTokens.md),
+                ],
+                Expanded(child: details),
+                const SizedBox(width: ToastSpacingTokens.sm),
+                stepper,
+              ],
+            );
+          },
         ),
       ),
     );
@@ -649,11 +729,13 @@ class _QrCartBar extends StatelessWidget {
 class _QrReviewDialog extends StatelessWidget {
   const _QrReviewDialog({
     required this.copy,
+    required this.languageCode,
     required this.lines,
     required this.totalLabel,
   });
 
   final QrOrderCopy copy;
+  final String languageCode;
   final List<({QrMenuItem item, int quantity})> lines;
   final String totalLabel;
 
@@ -707,7 +789,7 @@ class _QrReviewDialog extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            line.item.name,
+                            line.item.localizedName(languageCode),
                             style: AppFonts.system(
                               color: ToastColorTokens.textPrimary,
                               fontSize: 15,
@@ -1124,11 +1206,11 @@ class QrOrderCopy {
   };
 
   String get confirmBody => switch (code) {
-    'ko' => '주문을 완료하면 바로 주방으로 전달됩니다. 결제는 식사 후 캐셔에서 진행합니다.',
+    'ko' => '주문완료를 누르면 주문확인서가 주방과 해당 층에 출력되고 캐셔로 바로 전달됩니다.',
     'vi' =>
-      'Sau khi xác nhận, món sẽ được gửi thẳng đến bếp. Thanh toán sau bữa ăn tại quầy thu ngân.',
+      'Khi hoàn tất, phiếu xác nhận sẽ được in tại bếp và tầng hiện tại, đồng thời đơn sẽ được chuyển đến thu ngân.',
     _ =>
-      'When you submit, the order goes directly to the kitchen. Payment is made at the cashier after your meal.',
+      'When completed, confirmation slips print in the kitchen and on this floor, and the order goes straight to the cashier.',
   };
 
   String get review => switch (code) {
@@ -1145,8 +1227,8 @@ class QrOrderCopy {
 
   String get submit => switch (code) {
     'ko' => '주문완료',
-    'vi' => 'Gọi món',
-    _ => 'Place order',
+    'vi' => 'Hoàn tất đơn hàng',
+    _ => 'Complete order',
   };
 
   String get processing => switch (code) {
@@ -1174,17 +1256,17 @@ class QrOrderCopy {
   };
 
   String get successTitle => switch (code) {
-    'ko' => '주문이 접수되었습니다',
-    'vi' => 'Đã nhận món',
-    _ => 'Order received',
+    'ko' => '주문이 완료되었습니다',
+    'vi' => 'Đơn hàng đã hoàn tất',
+    _ => 'Order completed',
   };
 
   String get successBody => switch (code) {
-    'ko' => '직원이 주문확인서를 가져다 드립니다. 결제는 식사 후 캐셔에서 진행해 주세요.',
+    'ko' => '주문확인서가 주방과 해당 층에 출력되었습니다. 결제는 캐셔에서 진행해 주세요.',
     'vi' =>
-      'Nhân viên sẽ mang phiếu xác nhận đến bàn. Vui lòng thanh toán sau bữa ăn tại quầy thu ngân.',
+      'Phiếu xác nhận đã được gửi đến bếp và tầng hiện tại. Vui lòng thanh toán tại quầy thu ngân.',
     _ =>
-      'Staff will bring an order confirmation slip to your table. Please pay at the cashier after your meal.',
+      'Confirmation slips were sent to the kitchen and this floor. Please pay at the cashier.',
   };
 
   String get addMore => switch (code) {

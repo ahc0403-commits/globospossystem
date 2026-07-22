@@ -41,18 +41,6 @@ class MenuImportResult {
 }
 
 class MenuService {
-  bool _isRpcSignatureMismatch(Object error, String functionName) {
-    final message = error.toString().toLowerCase();
-    if (!message.contains(functionName.toLowerCase())) {
-      return false;
-    }
-
-    return message.contains('could not find the function') ||
-        message.contains('function public.') ||
-        message.contains('does not exist') ||
-        message.contains('no function matches');
-  }
-
   Future<List<Map<String, dynamic>>> fetchCategories(String storeId) async {
     // postgrest-dart's order() defaults to DESCENDING; sort_order must be
     // ascending or the menu browser auto-selects the last (often empty test)
@@ -80,75 +68,62 @@ class MenuService {
 
   Future<void> addCategory({
     required String storeId,
-    required String name,
+    required String nameKo,
+    required String nameVi,
+    required String nameEn,
     required int sortOrder,
   }) async {
-    try {
-      await supabase.rpc(
-        'admin_create_menu_category',
-        params: {
-          'p_store_id': storeId,
-          'p_name': name,
-          'p_sort_order': sortOrder,
-        },
-      );
-    } catch (error) {
-      if (!_isRpcSignatureMismatch(error, 'admin_create_menu_category')) {
-        rethrow;
-      }
-
-      await supabase.rpc(
-        'admin_create_menu_category',
-        params: {
-          'p_restaurant_id': storeId,
-          'p_name': name,
-          'p_sort_order': sortOrder,
-        },
-      );
-    }
+    await supabase.rpc(
+      'admin_create_menu_category_i18n',
+      params: {
+        'p_store_id': storeId,
+        'p_name_ko': nameKo,
+        'p_name_vi': nameVi,
+        'p_name_en': nameEn,
+        'p_sort_order': sortOrder,
+      },
+    );
   }
 
   Future<Map<String, dynamic>> addMenuItem({
     required String storeId,
     required String categoryId,
-    required String name,
+    required String nameKo,
+    required String nameVi,
+    required String nameEn,
     required double price,
     required int sortOrder,
   }) async {
-    final itemParams = {
-      'p_category_id': categoryId,
-      'p_name': name,
-      'p_price': price,
-      'p_sort_order': sortOrder,
-      'p_is_available': true,
-    };
-
-    try {
-      final response = await supabase.rpc(
-        'admin_create_menu_item',
-        params: {'p_store_id': storeId, ...itemParams},
-      );
-      return Map<String, dynamic>.from(response as Map);
-    } catch (error) {
-      if (!_isRpcSignatureMismatch(error, 'admin_create_menu_item')) {
-        rethrow;
-      }
-
-      final response = await supabase.rpc(
-        'admin_create_menu_item',
-        params: {'p_restaurant_id': storeId, ...itemParams},
-      );
-      return Map<String, dynamic>.from(response as Map);
-    }
+    final response = await supabase.rpc(
+      'admin_create_menu_item_i18n',
+      params: {
+        'p_store_id': storeId,
+        'p_category_id': categoryId,
+        'p_name_ko': nameKo,
+        'p_name_vi': nameVi,
+        'p_name_en': nameEn,
+        'p_price': price,
+        'p_sort_order': sortOrder,
+        'p_is_available': true,
+      },
+    );
+    return Map<String, dynamic>.from(response as Map);
   }
 
   Future<void> updateCategory({
     required String categoryId,
-    required String name,
+    required String nameKo,
+    required String nameVi,
+    required String nameEn,
   }) async {
     await supabase.rpc(
-      'admin_update_menu_category',
-      params: {'p_category_id': categoryId, 'p_name': name},
+      'admin_update_menu_category_i18n',
+      params: {
+        'p_category_id': categoryId,
+        'p_name_ko': nameKo,
+        'p_name_vi': nameVi,
+        'p_name_en': nameEn,
+      },
     );
   }
 
@@ -178,12 +153,20 @@ class MenuService {
 
   Future<void> updateMenuItem({
     required String itemId,
-    required String name,
+    required String nameKo,
+    required String nameVi,
+    required String nameEn,
     required double price,
   }) async {
     await supabase.rpc(
-      'admin_update_menu_item',
-      params: {'p_item_id': itemId, 'p_name': name, 'p_price': price},
+      'admin_update_menu_item_i18n',
+      params: {
+        'p_item_id': itemId,
+        'p_name_ko': nameKo,
+        'p_name_vi': nameVi,
+        'p_name_en': nameEn,
+        'p_price': price,
+      },
     );
   }
 

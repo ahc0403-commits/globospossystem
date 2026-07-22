@@ -171,8 +171,7 @@ final _routeSurfaces = <_RouteSurface>[
       token: 'fixture-token',
       service: _FixtureQrOrderService(),
     ),
-    label: (_, locale) =>
-        QrOrderCopy.forLanguage(locale.languageCode).headerHint,
+    label: (_, __) => QrOrderCopy.forLanguage('vi').headerHint,
   ),
   _RouteSurface(
     location: '/login',

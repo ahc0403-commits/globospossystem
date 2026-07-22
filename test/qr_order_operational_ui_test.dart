@@ -209,7 +209,7 @@ void main() {
 
       await tester.tap(find.byKey(const Key('qr_confirm_submit')));
       await tester.pump();
-      expect(find.text('Sending order'), findsOneWidget);
+      expect(find.text('Đang gửi món'), findsOneWidget);
       expect(tester.widget<FilledButton>(openReview).onPressed, isNull);
 
       pendingOrder.complete(_result);

@@ -175,7 +175,11 @@ class _MenuNotifier extends MenuNotifier {
   Future<void> fetchItems() async {}
 
   @override
-  Future<bool> addCategory(String name) async {
+  Future<bool> addCategory({
+    required String nameKo,
+    required String nameVi,
+    required String nameEn,
+  }) async {
     addCategoryCalls += 1;
     return true;
   }
@@ -183,7 +187,9 @@ class _MenuNotifier extends MenuNotifier {
   @override
   Future<bool> updateCategory({
     required String categoryId,
-    required String name,
+    required String nameKo,
+    required String nameVi,
+    required String nameEn,
   }) async {
     editCategoryCalls += 1;
     return true;
@@ -196,7 +202,13 @@ class _MenuNotifier extends MenuNotifier {
   }
 
   @override
-  Future<bool> addMenuItem(String categoryId, String name, double price) async {
+  Future<bool> addMenuItem({
+    required String categoryId,
+    required String nameKo,
+    required String nameVi,
+    required String nameEn,
+    required double price,
+  }) async {
     addItemCalls += 1;
     return true;
   }
@@ -204,7 +216,9 @@ class _MenuNotifier extends MenuNotifier {
   @override
   Future<bool> updateMenuItem({
     required String itemId,
-    required String name,
+    required String nameKo,
+    required String nameVi,
+    required String nameEn,
     required double price,
   }) async {
     editItemCalls += 1;
@@ -255,6 +269,13 @@ class _StaffNotifier extends StaffNotifier {
     String? bankName,
     String? bankAccountNumber,
     String? bankAccountHolder,
+    double? hourlyRate,
+    String scheduledStart = '09:00',
+    String nightStart = '22:00',
+    double nightMultiplier = 1.3,
+    double holidayMultiplier = 3,
+    int lateThresholdMinutes = 60,
+    double lateReviewHourlyMultiplier = 2,
   }) async {
     createCalls += 1;
     state = state.copyWith(
@@ -709,13 +730,13 @@ void main() {
     const categoryDialog = Key('admin_menu_add_category_dialog');
     expect(find.byKey(categoryDialog), findsOneWidget);
     _expectDialogButtonsAreTouchSized(tester, categoryDialog);
-    await tester.enterText(
-      find.descendant(
-        of: find.byKey(categoryDialog),
-        matching: find.byType(TextField),
-      ),
-      'Đồ uống',
+    final categoryFields = find.descendant(
+      of: find.byKey(categoryDialog),
+      matching: find.byType(TextField),
     );
+    await tester.enterText(categoryFields.at(0), '음료');
+    await tester.enterText(categoryFields.at(1), 'Đồ uống');
+    await tester.enterText(categoryFields.at(2), 'Drinks');
     await tester.tap(_dialogAction(categoryDialog, FilledButton));
     await tester.pumpAndSettle();
     expect(notifier.addCategoryCalls, 1);
@@ -729,8 +750,10 @@ void main() {
       of: find.byKey(addItemDialog),
       matching: find.byType(TextField),
     );
-    await tester.enterText(addFields.at(0), 'Cà phê sữa');
-    await tester.enterText(addFields.at(1), '45000');
+    await tester.enterText(addFields.at(0), '연유 커피');
+    await tester.enterText(addFields.at(1), 'Cà phê sữa');
+    await tester.enterText(addFields.at(2), 'Milk coffee');
+    await tester.enterText(addFields.at(3), '45000');
     await tester.tap(_dialogAction(addItemDialog, FilledButton));
     await tester.pumpAndSettle();
     expect(notifier.addItemCalls, 1);
@@ -835,6 +858,7 @@ void main() {
       of: addSheet,
       matching: find.byType(FilledButton),
     );
+    await tester.ensureVisible(addButton);
     await tester.tap(addButton);
     await tester.pump();
     expect(
@@ -846,6 +870,11 @@ void main() {
       matching: find.byType(TextField),
     );
     await tester.enterText(fields.at(0), 'Trần Gia Huy');
+    await tester.enterText(
+      find.byKey(const Key('staff_hourly_rate_field')),
+      '30000',
+    );
+    await tester.ensureVisible(addButton);
     await tester.tap(addButton);
     await tester.pumpAndSettle();
     expect(staffNotifier.createCalls, 1);

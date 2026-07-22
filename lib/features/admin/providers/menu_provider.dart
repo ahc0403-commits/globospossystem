@@ -130,12 +130,18 @@ class MenuNotifier extends StateNotifier<MenuState> {
     state = state.copyWith(selectedCategoryId: categoryId);
   }
 
-  Future<bool> addCategory(String name) async {
+  Future<bool> addCategory({
+    required String nameKo,
+    required String nameVi,
+    required String nameEn,
+  }) async {
     try {
       final currentCategories = state.categories.valueOrNull ?? [];
       await menuService.addCategory(
         storeId: storeId,
-        name: name,
+        nameKo: nameKo,
+        nameVi: nameVi,
+        nameEn: nameEn,
         sortOrder: currentCategories.length,
       );
       await fetchCategories();
@@ -151,10 +157,17 @@ class MenuNotifier extends StateNotifier<MenuState> {
 
   Future<bool> updateCategory({
     required String categoryId,
-    required String name,
+    required String nameKo,
+    required String nameVi,
+    required String nameEn,
   }) async {
     try {
-      await menuService.updateCategory(categoryId: categoryId, name: name);
+      await menuService.updateCategory(
+        categoryId: categoryId,
+        nameKo: nameKo,
+        nameVi: nameVi,
+        nameEn: nameEn,
+      );
       await fetchCategories();
       state = state.copyWith(clearError: true);
       return true;
@@ -180,7 +193,13 @@ class MenuNotifier extends StateNotifier<MenuState> {
     }
   }
 
-  Future<bool> addMenuItem(String categoryId, String name, double price) async {
+  Future<bool> addMenuItem({
+    required String categoryId,
+    required String nameKo,
+    required String nameVi,
+    required String nameEn,
+    required double price,
+  }) async {
     try {
       final currentItems = state.items.valueOrNull ?? [];
       final sortOrder = currentItems
@@ -190,7 +209,9 @@ class MenuNotifier extends StateNotifier<MenuState> {
       await menuService.addMenuItem(
         storeId: storeId,
         categoryId: categoryId,
-        name: name,
+        nameKo: nameKo,
+        nameVi: nameVi,
+        nameEn: nameEn,
         price: price,
         sortOrder: sortOrder,
       );
@@ -205,12 +226,14 @@ class MenuNotifier extends StateNotifier<MenuState> {
     }
   }
 
-  Future<bool> addMenuItemWithPhoto(
-    String categoryId,
-    String name,
-    double price,
-    XFile photo,
-  ) async {
+  Future<bool> addMenuItemWithPhoto({
+    required String categoryId,
+    required String nameKo,
+    required String nameVi,
+    required String nameEn,
+    required double price,
+    required XFile photo,
+  }) async {
     Map<String, dynamic>? created;
     MenuImageUploadResult? uploaded;
     try {
@@ -221,7 +244,9 @@ class MenuNotifier extends StateNotifier<MenuState> {
       created = await menuService.addMenuItem(
         storeId: storeId,
         categoryId: categoryId,
-        name: name,
+        nameKo: nameKo,
+        nameVi: nameVi,
+        nameEn: nameEn,
         price: price,
         sortOrder: sortOrder,
       );
@@ -295,13 +320,17 @@ class MenuNotifier extends StateNotifier<MenuState> {
 
   Future<bool> updateMenuItem({
     required String itemId,
-    required String name,
+    required String nameKo,
+    required String nameVi,
+    required String nameEn,
     required double price,
   }) async {
     try {
       await menuService.updateMenuItem(
         itemId: itemId,
-        name: name,
+        nameKo: nameKo,
+        nameVi: nameVi,
+        nameEn: nameEn,
         price: price,
       );
       await fetchItems();

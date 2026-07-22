@@ -565,6 +565,17 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                       ? member.bankAccountNumber!
                       : '-',
                 ),
+                if (member.role == 'part_timer')
+                  _DetailMetric(
+                    label: context.l10n.staffHourlyRuleSummary,
+                    value: member.hourlyPayRule == null
+                        ? context.l10n.staffHourlyRuleNotConfigured
+                        : context.l10n.staffHourlyRuleConfigured(
+                            member.hourlyPayRule!.hourlyRate.toStringAsFixed(0),
+                            member.hourlyPayRule!.nightMultiplier,
+                            member.hourlyPayRule!.holidayMultiplier,
+                          ),
+                  ),
                 _DetailMetric(
                   label: context.l10n.staffRegisteredAt,
                   value: DateFormat('yyyy-MM-dd').format(member.createdAt),
@@ -612,6 +623,28 @@ class _StaffTabState extends ConsumerState<StaffTab> {
     final bankName = TextEditingController(text: employee?.bankName);
     final bankNumber = TextEditingController(text: employee?.bankAccountNumber);
     final bankHolder = TextEditingController(text: employee?.bankAccountHolder);
+    final hourlyRule = employee?.hourlyPayRule;
+    final hourlyRate = TextEditingController(
+      text: hourlyRule == null ? '' : hourlyRule.hourlyRate.toStringAsFixed(0),
+    );
+    final scheduledStart = TextEditingController(
+      text: hourlyRule?.scheduledStart ?? '09:00',
+    );
+    final nightStart = TextEditingController(
+      text: hourlyRule?.nightStart ?? '22:00',
+    );
+    final nightMultiplier = TextEditingController(
+      text: '${hourlyRule?.nightMultiplier ?? 1.3}',
+    );
+    final holidayMultiplier = TextEditingController(
+      text: '${hourlyRule?.holidayMultiplier ?? 3}',
+    );
+    final lateThreshold = TextEditingController(
+      text: '${hourlyRule?.lateThresholdMinutes ?? 60}',
+    );
+    final lateReview = TextEditingController(
+      text: '${hourlyRule?.lateReviewHourlyMultiplier ?? 2}',
+    );
     var role = employee?.role ?? 'part_timer';
     String? validation;
 
@@ -704,6 +737,120 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                     labelText: context.l10n.staffEmployeeBankHolder,
                   ),
                 ),
+                if (role == 'part_timer') ...[
+                  const SizedBox(height: 18),
+                  Text(
+                    context.l10n.staffHourlyRulesTitle,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    context.l10n.staffHourlyRulesHint,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: PosColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    key: const Key('staff_hourly_rate_field'),
+                    controller: hourlyRate,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: context.l10n.staffHourlyRate,
+                      suffixText: 'VND/h',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          key: const Key('staff_scheduled_start_field'),
+                          controller: scheduledStart,
+                          decoration: InputDecoration(
+                            labelText: context.l10n.staffScheduledStart,
+                            hintText: '09:00',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          key: const Key('staff_night_start_field'),
+                          controller: nightStart,
+                          decoration: InputDecoration(
+                            labelText: context.l10n.staffNightStart,
+                            hintText: '22:00',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: nightMultiplier,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: InputDecoration(
+                            labelText: context.l10n.staffNightMultiplier,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: holidayMultiplier,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: InputDecoration(
+                            labelText: context.l10n.staffHolidayMultiplier,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: lateThreshold,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: context.l10n.staffLateThreshold,
+                            suffixText: context.l10n.staffMinutesUnit,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: lateReview,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: InputDecoration(
+                            labelText: context.l10n.staffLateReviewMultiplier,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    context.l10n.staffSundayHolidayExcluded,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: PosColors.textSecondary,
+                    ),
+                  ),
+                ],
                 if (validation != null) ...[
                   const SizedBox(height: 8),
                   Text(
@@ -723,6 +870,41 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                       );
                       return;
                     }
+                    final parsedHourlyRate = double.tryParse(
+                      hourlyRate.text.trim().replaceAll(',', ''),
+                    );
+                    final parsedNightMultiplier = double.tryParse(
+                      nightMultiplier.text.trim(),
+                    );
+                    final parsedHolidayMultiplier = double.tryParse(
+                      holidayMultiplier.text.trim(),
+                    );
+                    final parsedLateThreshold = int.tryParse(
+                      lateThreshold.text.trim(),
+                    );
+                    final parsedLateReview = double.tryParse(
+                      lateReview.text.trim(),
+                    );
+                    final validClock = RegExp(r'^([01]\d|2[0-3]):[0-5]\d$');
+                    if (role == 'part_timer' &&
+                        (parsedHourlyRate == null ||
+                            parsedHourlyRate <= 0 ||
+                            parsedNightMultiplier == null ||
+                            parsedNightMultiplier < 1 ||
+                            parsedHolidayMultiplier == null ||
+                            parsedHolidayMultiplier < 3 ||
+                            parsedLateThreshold == null ||
+                            parsedLateThreshold < 0 ||
+                            parsedLateReview == null ||
+                            parsedLateReview < 0 ||
+                            !validClock.hasMatch(scheduledStart.text.trim()) ||
+                            !validClock.hasMatch(nightStart.text.trim()))) {
+                      setModalState(
+                        () => validation =
+                            context.l10n.staffHourlyRulesValidation,
+                      );
+                      return;
+                    }
                     final notifier = ref.read(staffProvider.notifier);
                     if (employee == null) {
                       await notifier.createStaff(
@@ -733,6 +915,13 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                         bankName: _nullable(bankName.text),
                         bankAccountNumber: _nullable(bankNumber.text),
                         bankAccountHolder: _nullable(bankHolder.text),
+                        hourlyRate: parsedHourlyRate,
+                        scheduledStart: scheduledStart.text.trim(),
+                        nightStart: nightStart.text.trim(),
+                        nightMultiplier: parsedNightMultiplier ?? 1.3,
+                        holidayMultiplier: parsedHolidayMultiplier ?? 3,
+                        lateThresholdMinutes: parsedLateThreshold ?? 60,
+                        lateReviewHourlyMultiplier: parsedLateReview ?? 2,
                       );
                     } else {
                       await notifier.updateStaff(
@@ -744,6 +933,13 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                         bankName: _nullable(bankName.text),
                         bankAccountNumber: _nullable(bankNumber.text),
                         bankAccountHolder: _nullable(bankHolder.text),
+                        hourlyRate: parsedHourlyRate,
+                        scheduledStart: scheduledStart.text.trim(),
+                        nightStart: nightStart.text.trim(),
+                        nightMultiplier: parsedNightMultiplier ?? 1.3,
+                        holidayMultiplier: parsedHolidayMultiplier ?? 3,
+                        lateThresholdMinutes: parsedLateThreshold ?? 60,
+                        lateReviewHourlyMultiplier: parsedLateReview ?? 2,
                       );
                     }
                     if (!sheetContext.mounted) return;
@@ -781,6 +977,13 @@ class _StaffTabState extends ConsumerState<StaffTab> {
     bankName.dispose();
     bankNumber.dispose();
     bankHolder.dispose();
+    hourlyRate.dispose();
+    scheduledStart.dispose();
+    nightStart.dispose();
+    nightMultiplier.dispose();
+    holidayMultiplier.dispose();
+    lateThreshold.dispose();
+    lateReview.dispose();
   }
 
   Future<void> _showCreatedEmployee(StaffMember employee) => showDialog<void>(

@@ -175,6 +175,36 @@ class AttendanceService {
     return Map<String, dynamic>.from(result);
   }
 
+  Future<Map<String, dynamic>?> fetchHourlyPayRule({
+    required String storeId,
+    required String employeeId,
+  }) async {
+    final result = await supabase
+        .from('employee_hourly_pay_rules')
+        .select()
+        .eq('store_id', storeId)
+        .eq('employee_id', employeeId)
+        .maybeSingle();
+    return result == null ? null : Map<String, dynamic>.from(result);
+  }
+
+  Future<Set<DateTime>> fetchVietnamPublicHolidays({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final result = await supabase
+        .from('vietnam_public_holidays')
+        .select('holiday_date')
+        .eq('is_active', true)
+        .gte('holiday_date', from.toIso8601String().substring(0, 10))
+        .lte('holiday_date', to.toIso8601String().substring(0, 10));
+    return List<Map<String, dynamic>>.from(result)
+        .map((row) => DateTime.tryParse(row['holiday_date']?.toString() ?? ''))
+        .whereType<DateTime>()
+        .map((date) => DateTime(date.year, date.month, date.day))
+        .toSet();
+  }
+
   Future<void> upsertWageConfig({
     required String storeId,
     required String userId,
