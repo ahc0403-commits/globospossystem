@@ -39,6 +39,24 @@ class PosTable {
 
   Rect get layoutRect => Rect.fromLTWH(layoutX, layoutY, layoutW, layoutH);
 
+  PosTable copyWithStatus(String status) {
+    return PosTable(
+      id: id,
+      storeId: storeId,
+      tableNumber: tableNumber,
+      seatCount: seatCount,
+      status: status.toLowerCase(),
+      floorLabel: floorLabel,
+      layoutX: layoutX,
+      layoutY: layoutY,
+      layoutW: layoutW,
+      layoutH: layoutH,
+      layoutRotation: layoutRotation,
+      layoutShape: layoutShape,
+      layoutSortOrder: layoutSortOrder,
+    );
+  }
+
   static int normalizeLayoutRotation(int value) {
     var normalized = value % 360;
     if (normalized > 180) {

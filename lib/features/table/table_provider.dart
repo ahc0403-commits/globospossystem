@@ -66,6 +66,14 @@ class WaiterTableNotifier extends StateNotifier<WaiterTableState> {
 
       final tables = response
           .map<PosTable>((row) => PosTable.fromJson(row))
+          // An active order is the operational source of truth for occupancy.
+          // This also closes the short interval where the order row is visible
+          // before a delayed table-status update reaches the client.
+          .map(
+            (table) => orderPreviewByTableId.containsKey(table.id)
+                ? table.copyWithStatus('occupied')
+                : table,
+          )
           .toList();
 
       state = state.copyWith(
