@@ -12,6 +12,7 @@ class StaffMember {
     required this.isActive,
     required this.createdAt,
     this.phone,
+    this.bankName,
     this.bankAccountNumber,
     this.bankAccountHolder,
   });
@@ -23,6 +24,7 @@ class StaffMember {
   final bool isActive;
   final DateTime createdAt;
   final String? phone;
+  final String? bankName;
   final String? bankAccountNumber;
   final String? bankAccountHolder;
 
@@ -38,6 +40,7 @@ class StaffMember {
           ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
           : DateTime.now(),
       phone: json['phone']?.toString(),
+      bankName: json['bank_name']?.toString(),
       bankAccountNumber: json['bank_account_number']?.toString(),
       bankAccountHolder: json['bank_account_holder']?.toString(),
     );
@@ -155,6 +158,7 @@ class StaffNotifier extends StateNotifier<StaffState> {
     required String fullName,
     required String role,
     String? phone,
+    String? bankName,
     String? bankAccountNumber,
     String? bankAccountHolder,
   }) async {
@@ -169,6 +173,7 @@ class StaffNotifier extends StateNotifier<StaffState> {
         employmentRole: role,
         storeId: storeId,
         phone: phone,
+        bankName: bankName,
         bankAccountNumber: bankAccountNumber,
         bankAccountHolder: bankAccountHolder,
       );
@@ -190,6 +195,7 @@ class StaffNotifier extends StateNotifier<StaffState> {
     required String fullName,
     required String role,
     String? phone,
+    String? bankName,
     String? bankAccountNumber,
     String? bankAccountHolder,
   }) async {
@@ -200,6 +206,7 @@ class StaffNotifier extends StateNotifier<StaffState> {
         fullName: fullName,
         employmentRole: role,
         phone: phone,
+        bankName: bankName,
         bankAccountNumber: bankAccountNumber,
         bankAccountHolder: bankAccountHolder,
       );

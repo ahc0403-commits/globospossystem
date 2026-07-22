@@ -252,6 +252,7 @@ class _StaffNotifier extends StaffNotifier {
     required String fullName,
     required String role,
     String? phone,
+    String? bankName,
     String? bankAccountNumber,
     String? bankAccountHolder,
   }) async {
@@ -267,6 +268,7 @@ class _StaffNotifier extends StaffNotifier {
         isActive: true,
         createdAt: DateTime(2026, 7, 18),
         phone: phone,
+        bankName: bankName,
         bankAccountNumber: bankAccountNumber,
         bankAccountHolder: bankAccountHolder,
       ),
@@ -825,6 +827,10 @@ void main() {
     await tester.pumpAndSettle();
     final addSheet = find.byKey(const Key('admin_staff_add_sheet'));
     expect(addSheet, findsOneWidget);
+    expect(
+      find.byKey(const Key('staff_employee_bank_name_field')),
+      findsOneWidget,
+    );
     final addButton = find.descendant(
       of: addSheet,
       matching: find.byType(FilledButton),

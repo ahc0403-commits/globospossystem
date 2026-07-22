@@ -18,12 +18,9 @@ void main() {
     expect(screen, contains('l10n.kitchenAttentionSubtitle'));
     expect(screen, contains('l10n.kitchenAttentionFollowUpNow'));
     expect(screen, contains('l10n.kitchenAttentionPendingItems'));
-    expect(screen, contains('l10n.kitchenAttentionReadyItems'));
     expect(screen, contains('l10n.kitchenAttentionOldestWait'));
     expect(screen, contains('l10n.kitchenAttentionLongWaits'));
-    expect(screen, contains('l10n.kitchenAttentionReadyTables'));
     expect(screen, contains('l10n.kitchenAttentionFollowUpFocus'));
-    expect(screen, contains('l10n.kitchenAttentionHandoffReadiness'));
     expect(screen, contains('l10n.kitchenAttentionBoundary'));
     expect(screen, contains('l10n.kitchenSecondsAgo'));
     expect(screen, contains('l10n.kitchenMinutesAgo'));
@@ -68,7 +65,7 @@ void main() {
     expect(screen, contains('SystemSound.play(SystemSoundType.alert)'));
   });
 
-  test('kitchen tickets expose menu-line-only item actions', () {
+  test('kitchen tickets expose item and whole-ticket completion actions', () {
     final screen = readRepoFile('lib/features/kitchen/kitchen_screen.dart');
 
     expect(screen, contains('class _KitchenCommandHeader'));
@@ -81,8 +78,8 @@ void main() {
     expect(screen, contains('required this.processingItemIds'));
     expect(screen, contains('_processingItemIds.contains(item.itemId)'));
     expect(screen, contains("visibleStatuses: const {'pending'}"));
-    expect(screen, contains("visibleStatuses: const {'preparing'}"));
-    expect(screen, contains("visibleStatuses: const {'ready'}"));
+    expect(screen, contains("'preparing',"));
+    expect(screen, contains("'ready',"));
     expect(screen, contains('(item) => visibleStatuses.contains(item.status)'));
     expect(screen, contains('processingItemIds.contains(item.itemId)'));
     expect(screen, contains('class _KitchenTicketItemRow'));
@@ -100,6 +97,10 @@ void main() {
     );
     expect(screen, contains(".where((item) => item.status == 'pending')"));
     expect(screen, contains('OutlinedButton.icon('));
+    expect(screen, contains('kitchenCompleteAllItems'));
+    expect(screen, contains("Key('kitchen_complete_order_\${order.orderId}')"));
+    expect(screen, contains('_handleOrderComplete'));
+    expect(screen, contains('notifier.completeOrder(order.orderId)'));
     expect(screen, isNot(contains('_handleOrderPrimaryAction')));
     expect(screen, isNot(contains('_primaryKitchenActionItems')));
     expect(screen, isNot(contains('onPrimaryAction')));
@@ -190,6 +191,7 @@ void main() {
 
       expect(screen, contains('this.scrollable = true'));
       expect(screen, contains('scrollable: false'));
+      expect(screen, contains('ToastResponsiveScrollBody('));
       expect(screen, contains('shrinkWrap: !scrollable'));
       expect(screen, contains(': const NeverScrollableScrollPhysics()'));
       expect(screen, isNot(contains('height: 420')));

@@ -554,6 +554,12 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                   value: _formatTime(row.lastClockOut),
                 ),
                 _DetailMetric(
+                  label: context.l10n.staffEmployeeBankName,
+                  value: member.bankName?.isNotEmpty == true
+                      ? member.bankName!
+                      : '-',
+                ),
+                _DetailMetric(
                   label: context.l10n.staffEmployeeBankAccount,
                   value: member.bankAccountNumber?.isNotEmpty == true
                       ? member.bankAccountNumber!
@@ -603,6 +609,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
   }) async {
     final name = TextEditingController(text: employee?.fullName);
     final phone = TextEditingController(text: employee?.phone);
+    final bankName = TextEditingController(text: employee?.bankName);
     final bankNumber = TextEditingController(text: employee?.bankAccountNumber);
     final bankHolder = TextEditingController(text: employee?.bankAccountHolder);
     var role = employee?.role ?? 'part_timer';
@@ -677,6 +684,14 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                 ),
                 const SizedBox(height: 10),
                 TextField(
+                  key: const Key('staff_employee_bank_name_field'),
+                  controller: bankName,
+                  decoration: InputDecoration(
+                    labelText: context.l10n.staffEmployeeBankName,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
                   controller: bankNumber,
                   decoration: InputDecoration(
                     labelText: context.l10n.staffEmployeeBankAccount,
@@ -715,6 +730,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                         fullName: name.text.trim(),
                         role: role,
                         phone: _nullable(phone.text),
+                        bankName: _nullable(bankName.text),
                         bankAccountNumber: _nullable(bankNumber.text),
                         bankAccountHolder: _nullable(bankHolder.text),
                       );
@@ -725,6 +741,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                         fullName: name.text.trim(),
                         role: role,
                         phone: _nullable(phone.text),
+                        bankName: _nullable(bankName.text),
                         bankAccountNumber: _nullable(bankNumber.text),
                         bankAccountHolder: _nullable(bankHolder.text),
                       );
@@ -761,6 +778,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
 
     name.dispose();
     phone.dispose();
+    bankName.dispose();
     bankNumber.dispose();
     bankHolder.dispose();
   }
