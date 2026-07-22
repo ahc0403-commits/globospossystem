@@ -82,6 +82,9 @@ class MenuNotifier extends StateNotifier<MenuState> {
     if (message.contains('MENU_IMPORT_')) {
       return 'The Excel menu data is invalid. Review the file and try again.';
     }
+    if (message.contains('MENU_WORKBOOK_')) {
+      return 'The Excel menu update is invalid. Export a fresh file and try again.';
+    }
     if (message.contains('duplicate key value') || message.contains('23505')) {
       return 'An item with the same sort or name already exists.';
     }
@@ -418,6 +421,27 @@ class MenuNotifier extends StateNotifier<MenuState> {
     } catch (error, _) {
       state = state.copyWith(
         error: _mapMenuError(error, 'Failed to import menus from Excel.'),
+      );
+      return null;
+    }
+  }
+
+  Future<MenuWorkbookUpdateResult?> updateMenuWorkbook({
+    required List<Map<String, dynamic>> categories,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    try {
+      final result = await menuService.updateMenuWorkbook(
+        storeId: storeId,
+        categories: categories,
+        items: items,
+      );
+      await fetchAll();
+      state = state.copyWith(clearError: true);
+      return result;
+    } catch (error, _) {
+      state = state.copyWith(
+        error: _mapMenuError(error, 'Failed to update menus from Excel.'),
       );
       return null;
     }

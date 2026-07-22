@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_selector/file_selector.dart';
+import 'package:file_saver/file_saver.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -15,16 +16,20 @@ import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
 import '../menu_import/menu_excel_import.dart';
+import '../menu_import/menu_excel_roundtrip.dart';
 import '../providers/admin_audit_provider.dart';
 import '../providers/menu_provider.dart';
 import '../widgets/admin_audit_trace_panel.dart';
 
 typedef MenuImportFilePicker = Future<XFile?> Function();
+typedef MenuExportFileSaver =
+    Future<void> Function(String fileName, Uint8List bytes);
 
 class MenuTab extends ConsumerStatefulWidget {
-  const MenuTab({super.key, this.pickImportFile});
+  const MenuTab({super.key, this.pickImportFile, this.saveExportFile});
 
   final MenuImportFilePicker? pickImportFile;
+  final MenuExportFileSaver? saveExportFile;
 
   @override
   ConsumerState<MenuTab> createState() => _MenuTabState();
@@ -33,6 +38,7 @@ class MenuTab extends ConsumerStatefulWidget {
 class _MenuTabState extends ConsumerState<MenuTab> {
   String? _lastError;
   bool _isImporting = false;
+  bool _isExporting = false;
   final ImagePicker _imagePicker = ImagePicker();
 
   @override
@@ -127,7 +133,10 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       availableItems: availableItems,
       selectedItemCount: selectedItems.length,
       selectedCategoryName: _categoryNameForId(categories, selectedCategoryId),
-      onImportExcel: _isImporting
+      onExportExcel: _isImporting || _isExporting
+          ? null
+          : () => _exportMenuWorkbook(storeId, categories, allItems),
+      onImportExcel: _isImporting || _isExporting
           ? null
           : () => _importMenuWorkbook(storeId, menuNotifier),
       onAddCategory: () => _showAddCategoryDialog(context, menuNotifier),
@@ -217,6 +226,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     required int availableItems,
     required int selectedItemCount,
     required String? selectedCategoryName,
+    required VoidCallback? onExportExcel,
     required VoidCallback? onImportExcel,
     required VoidCallback onAddCategory,
     required VoidCallback? onAddItem,
@@ -255,6 +265,21 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                 runSpacing: 8,
                 alignment: WrapAlignment.end,
                 children: [
+                  OutlinedButton.icon(
+                    key: const Key('admin_menu_export_excel_action'),
+                    onPressed: onExportExcel,
+                    icon: _isExporting
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.download_outlined, size: 18),
+                    label: Text(
+                      _isExporting
+                          ? context.l10n.menuExportInProgress
+                          : context.l10n.menuExportExcel,
+                    ),
+                  ),
                   OutlinedButton.icon(
                     key: const Key('admin_menu_import_excel_action'),
                     onPressed: onImportExcel,
@@ -359,6 +384,50 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     return null;
   }
 
+  Future<void> _exportMenuWorkbook(
+    String storeId,
+    List<Map<String, dynamic>> categories,
+    List<Map<String, dynamic>> items,
+  ) async {
+    setState(() => _isExporting = true);
+    try {
+      final bytes = Uint8List.fromList(
+        buildMenuRoundTripWorkbook(
+          storeId: storeId,
+          categories: categories,
+          items: items,
+        ),
+      );
+      final now = DateTime.now();
+      final stamp =
+          '${now.year.toString().padLeft(4, '0')}'
+          '${now.month.toString().padLeft(2, '0')}'
+          '${now.day.toString().padLeft(2, '0')}';
+      final fileName = 'menu_multilingual_$stamp';
+      final saver = widget.saveExportFile;
+      if (saver != null) {
+        await saver('$fileName.xlsx', bytes);
+      } else {
+        await FileSaver.instance.saveFile(
+          name: fileName,
+          bytes: bytes,
+          ext: 'xlsx',
+          mimeType: MimeType.microsoftExcel,
+        );
+      }
+      if (mounted) {
+        showSuccessToast(
+          context,
+          context.l10n.menuExportSuccess(categories.length, items.length),
+        );
+      }
+    } catch (_) {
+      if (mounted) showErrorToast(context, context.l10n.menuExportFailed);
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
   Future<void> _importMenuWorkbook(
     String storeId,
     MenuNotifier menuNotifier,
@@ -376,12 +445,61 @@ class _MenuTabState extends ConsumerState<MenuTab> {
         return;
       }
 
-      final workbook = parseMenuImportWorkbook(await file.readAsBytes());
+      final bytes = await file.readAsBytes();
+      final roundTripWorkbook = tryParseMenuRoundTripWorkbook(bytes);
       if (!mounted) {
         return;
       }
 
-      final confirmed = await _showMenuImportPreview(context, workbook);
+      if (roundTripWorkbook != null) {
+        if (roundTripWorkbook.storeIds.length != 1 ||
+            roundTripWorkbook.storeIds.single != storeId) {
+          throw const MenuImportValidationException([
+            '현재 매장에서 내보낸 Excel 파일만 다시 가져올 수 있습니다.',
+          ]);
+        }
+        final confirmed = await _showMenuImportPreview(
+          context,
+          storeLabel: storeId,
+          categoryCount: roundTripWorkbook.categoryCount,
+          itemCount: roundTripWorkbook.itemCount,
+          isUpdate: true,
+        );
+        if (confirmed != true || !mounted) return;
+
+        setState(() => _isImporting = true);
+        final result = await menuNotifier.updateMenuWorkbook(
+          categories: roundTripWorkbook.categories
+              .map((row) => row.toJson())
+              .toList(growable: false),
+          items: roundTripWorkbook.items
+              .map((row) => row.toJson())
+              .toList(growable: false),
+        );
+        if (!mounted) return;
+
+        setState(() => _isImporting = false);
+        if (result != null) {
+          ref.invalidate(adminAuditTraceProvider(storeId));
+          showSuccessToast(
+            context,
+            context.l10n.menuUpdateSuccess(
+              result.updatedCategoryCount,
+              result.updatedItemCount,
+            ),
+          );
+        }
+        return;
+      }
+
+      final workbook = parseMenuImportWorkbook(bytes);
+
+      final confirmed = await _showMenuImportPreview(
+        context,
+        storeLabel: workbook.storeCodes.single,
+        categoryCount: workbook.categoryCount,
+        itemCount: workbook.itemCount,
+      );
       if (confirmed != true || !mounted) {
         return;
       }
@@ -418,16 +536,22 @@ class _MenuTabState extends ConsumerState<MenuTab> {
   }
 
   Future<bool?> _showMenuImportPreview(
-    BuildContext context,
-    MenuImportWorkbook workbook,
-  ) {
-    final storeCode = workbook.storeCodes.single;
+    BuildContext context, {
+    required String storeLabel,
+    required int categoryCount,
+    required int itemCount,
+    bool isUpdate = false,
+  }) {
     return showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         key: const Key('admin_menu_import_preview_dialog'),
         backgroundColor: AppColors.surface1,
-        title: Text(context.l10n.menuImportPreviewTitle),
+        title: Text(
+          isUpdate
+              ? context.l10n.menuUpdatePreviewTitle
+              : context.l10n.menuImportPreviewTitle,
+        ),
         content: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
           child: Column(
@@ -435,15 +559,22 @@ class _MenuTabState extends ConsumerState<MenuTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                context.l10n.menuImportPreviewBody(
-                  storeCode,
-                  workbook.categoryCount,
-                  workbook.itemCount,
-                ),
+                isUpdate
+                    ? context.l10n.menuUpdatePreviewBody(
+                        categoryCount,
+                        itemCount,
+                      )
+                    : context.l10n.menuImportPreviewBody(
+                        storeLabel,
+                        categoryCount,
+                        itemCount,
+                      ),
               ),
               const SizedBox(height: 12),
               Text(
-                context.l10n.menuImportAtomicHint,
+                isUpdate
+                    ? context.l10n.menuUpdateAtomicHint
+                    : context.l10n.menuImportAtomicHint,
                 style: Theme.of(
                   context,
                 ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
@@ -459,7 +590,11 @@ class _MenuTabState extends ConsumerState<MenuTab> {
           FilledButton.icon(
             onPressed: () => Navigator.of(context).pop(true),
             icon: const Icon(Icons.upload_file_outlined),
-            label: Text(context.l10n.menuImportConfirm),
+            label: Text(
+              isUpdate
+                  ? context.l10n.menuUpdateConfirm
+                  : context.l10n.menuImportConfirm,
+            ),
           ),
         ],
       ),

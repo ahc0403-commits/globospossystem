@@ -704,6 +704,7 @@ apply_migration() {
     20260722040000_employee_bank_name.sql|\
     20260722050000_kitchen_direct_completion.sql|\
     20260722060000_qr_cashier_multilingual_payroll_rules.sql|\
+    20260722070000_menu_excel_roundtrip_i18n.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -868,6 +869,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_qr_cashier_multilingual_payroll_rules.sql" \
       "QR cashier, multilingual menu, and payroll rules migration preflight"
+  elif [[ "$migration_name" == "20260722070000_menu_excel_roundtrip_i18n.sql" ]]; then
+    log "Multilingual menu Excel round-trip migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_menu_excel_roundtrip_i18n.sql" \
+      "multilingual menu Excel round-trip migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -1003,6 +1009,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_qr_cashier_multilingual_payroll_rules.sql" \
       "QR cashier, multilingual menu, and payroll rules migration verification"
+  elif [[ "$migration_name" == "20260722070000_menu_excel_roundtrip_i18n.sql" ]]; then
+    log "Multilingual menu Excel round-trip migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_menu_excel_roundtrip_i18n.sql" \
+      "multilingual menu Excel round-trip migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \
