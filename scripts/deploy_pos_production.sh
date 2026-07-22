@@ -706,6 +706,7 @@ apply_migration() {
     20260722060000_qr_cashier_multilingual_payroll_rules.sql|\
     20260722070000_menu_excel_roundtrip_i18n.sql|\
     20260722080000_cashier_native_print_agent.sql|\
+    20260722100000_vietnamese_only_printer_output.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -875,6 +876,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_menu_excel_roundtrip_i18n.sql" \
       "multilingual menu Excel round-trip migration preflight"
+  elif [[ "$migration_name" == "20260722100000_vietnamese_only_printer_output.sql" ]]; then
+    log "Vietnamese-only printer output migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_vietnamese_printer_output.sql" \
+      "Vietnamese-only printer output migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -1020,6 +1026,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_cashier_native_print_agent.sql" \
       "cashier native print-agent migration verification"
+  elif [[ "$migration_name" == "20260722100000_vietnamese_only_printer_output.sql" ]]; then
+    log "Vietnamese-only printer output migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_vietnamese_printer_output.sql" \
+      "Vietnamese-only printer output migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \

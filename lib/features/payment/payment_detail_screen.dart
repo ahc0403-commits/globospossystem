@@ -796,7 +796,7 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
     final bytes = await ReceiptBuilder.buildPaymentReceipt(
       restaurantName: _receiptRestaurantName(order),
       tableNumber: _extractTableNumber(order),
-      items: _receiptItems(order, l10n.cashierItemFallback),
+      items: _receiptItems(order),
       totalAmount: _numValue(
         payment['amount'] ??
             payment['paid_amount'] ??
@@ -974,10 +974,7 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
     return name == null || name.isEmpty ? 'GLOBOS POS' : name;
   }
 
-  List<ReceiptItem> _receiptItems(
-    Map<String, dynamic> order,
-    String fallbackLabel,
-  ) {
+  List<ReceiptItem> _receiptItems(Map<String, dynamic> order) {
     final items = order['order_items'];
     if (items is! List) return const [];
 
@@ -986,16 +983,16 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
         .where((item) => item['status']?.toString() != 'cancelled')
         .map((item) {
           final menuItem = item['menu_items'];
-          final menuName = menuItem is Map
-              ? menuItem['name']?.toString().trim()
+          final menuNameVi = menuItem is Map
+              ? menuItem['name_vi']?.toString().trim()
               : null;
-          final label = item['label']?.toString().trim();
           return ReceiptItem(
-            name: (label != null && label.isNotEmpty)
-                ? label
-                : (menuName != null && menuName.isNotEmpty)
-                ? menuName
-                : fallbackLabel,
+            name:
+                menuNameVi != null &&
+                    menuNameVi.isNotEmpty &&
+                    !RegExp(r'[\uac00-\ud7a3]').hasMatch(menuNameVi)
+                ? menuNameVi
+                : 'Món',
             quantity: _intValue(item['quantity']),
             unitPrice: _numValue(item['unit_price']).toDouble(),
             isServiceItem: _boolValue(item['is_service_item']),
