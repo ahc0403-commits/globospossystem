@@ -9,6 +9,8 @@ void main() {
     final source = readRepoFile('lib/features/admin/tabs/menu_tab.dart');
 
     expect(source, contains('_buildMenuCommandHeader'));
+    expect(source, contains("Key('admin_menu_export_excel_action')"));
+    expect(source, contains('buildMenuRoundTripWorkbook'));
     expect(source, contains('ToastMetricStrip('));
     expect(source, contains('ToastSplitPane('));
     expect(source, contains("Key('menu_audit_secondary_detail')"));

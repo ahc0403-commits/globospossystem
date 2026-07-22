@@ -40,6 +40,30 @@ class MenuImportResult {
   }
 }
 
+class MenuWorkbookUpdateResult {
+  const MenuWorkbookUpdateResult({
+    required this.updatedCategoryCount,
+    required this.updatedItemCount,
+  });
+
+  final int updatedCategoryCount;
+  final int updatedItemCount;
+
+  factory MenuWorkbookUpdateResult.fromJson(Map<String, dynamic> json) {
+    int asInt(Object? value) => switch (value) {
+      int value => value,
+      num value => value.toInt(),
+      String value => int.tryParse(value) ?? 0,
+      _ => 0,
+    };
+
+    return MenuWorkbookUpdateResult(
+      updatedCategoryCount: asInt(json['updated_category_count']),
+      updatedItemCount: asInt(json['updated_item_count']),
+    );
+  }
+}
+
 class MenuService {
   Future<List<Map<String, dynamic>>> fetchCategories(String storeId) async {
     // postgrest-dart's order() defaults to DESCENDING; sort_order must be
@@ -246,6 +270,25 @@ class MenuService {
     );
 
     return MenuImportResult.fromJson(
+      Map<String, dynamic>.from(response as Map),
+    );
+  }
+
+  Future<MenuWorkbookUpdateResult> updateMenuWorkbook({
+    required String storeId,
+    required List<Map<String, dynamic>> categories,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    final response = await supabase.rpc(
+      'admin_update_menu_workbook_i18n',
+      params: {
+        'p_store_id': storeId,
+        'p_categories': categories,
+        'p_items': items,
+      },
+    );
+
+    return MenuWorkbookUpdateResult.fromJson(
       Map<String, dynamic>.from(response as Map),
     );
   }

@@ -18,6 +18,7 @@ import 'package:globos_pos_system/features/admin/providers/printer_destinations_
 import 'package:globos_pos_system/features/admin/providers/settings_provider.dart';
 import 'package:globos_pos_system/features/admin/providers/staff_provider.dart';
 import 'package:globos_pos_system/features/admin/providers/tables_provider.dart';
+import 'package:globos_pos_system/features/admin/menu_import/menu_excel_roundtrip.dart';
 import 'package:globos_pos_system/features/admin/tabs/menu_tab.dart';
 import 'package:globos_pos_system/features/admin/tabs/attendance_tab.dart';
 import 'package:globos_pos_system/features/admin/tabs/qc_tab.dart';
@@ -164,6 +165,7 @@ class _MenuNotifier extends MenuNotifier {
   int addItemCalls = 0;
   int editItemCalls = 0;
   int importCalls = 0;
+  int updateWorkbookCalls = 0;
 
   @override
   Future<void> fetchAll() async {}
@@ -233,6 +235,18 @@ class _MenuNotifier extends MenuNotifier {
     return MenuImportResult(
       importedItemCount: rows.length,
       createdCategoryCount: 1,
+    );
+  }
+
+  @override
+  Future<MenuWorkbookUpdateResult?> updateMenuWorkbook({
+    required List<Map<String, dynamic>> categories,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    updateWorkbookCalls += 1;
+    return MenuWorkbookUpdateResult(
+      updatedCategoryCount: categories.length,
+      updatedItemCount: items.length,
     );
   }
 }
@@ -689,7 +703,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('all seven menu dialog entrypoints validate and save', (
+  testWidgets('all seven menu dialog entrypoints and menu Excel export execute', (
     tester,
   ) async {
     addTearDown(tester.view.resetPhysicalSize);
@@ -701,12 +715,37 @@ void main() {
         _menuWorkbookBytes(valid: false),
         name: 'menu-invalid.xlsx',
       ),
+      XFile.fromData(
+        Uint8List.fromList(
+          buildMenuRoundTripWorkbook(
+            storeId: _storeId,
+            categories: notifier.state.categories.valueOrNull!,
+            items: notifier.state.items.valueOrNull!,
+          ),
+        ),
+        name: 'menu-roundtrip.xlsx',
+      ),
     ];
+    String? exportedName;
+    Uint8List? exportedBytes;
     await _pump(
       tester,
-      child: MenuTab(pickImportFile: () async => importFiles.removeAt(0)),
+      child: MenuTab(
+        pickImportFile: () async => importFiles.removeAt(0),
+        saveExportFile: (fileName, bytes) async {
+          exportedName = fileName;
+          exportedBytes = bytes;
+        },
+      ),
       overrides: [menuProvider.overrideWith((ref, storeId) => notifier)],
     );
+
+    await tester.tap(find.byKey(const Key('admin_menu_export_excel_action')));
+    await tester.pumpAndSettle();
+    expect(exportedName, startsWith('menu_multilingual_'));
+    expect(exportedName, endsWith('.xlsx'));
+    final exported = Excel.decodeBytes(exportedBytes!);
+    expect(exported.tables['메뉴등록']?.rows.length, 3);
 
     await tester.tap(find.byKey(const Key('admin_menu_import_excel_action')));
     await tester.pumpAndSettle();
@@ -724,6 +763,13 @@ void main() {
     _expectDialogButtonsAreTouchSized(tester, validationDialog);
     await tester.tap(_dialogAction(validationDialog, FilledButton));
     await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('admin_menu_import_excel_action')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(importPreviewDialog), findsOneWidget);
+    await tester.tap(_dialogAction(importPreviewDialog, FilledButton));
+    await tester.pumpAndSettle();
+    expect(notifier.updateWorkbookCalls, 1);
 
     await tester.tap(find.byKey(const Key('admin_menu_add_category_action')));
     await tester.pumpAndSettle();
