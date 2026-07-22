@@ -503,7 +503,9 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     MenuNotifier menuNotifier,
   ) async {
     final l10n = context.l10n;
-    final nameController = TextEditingController();
+    final nameKoController = TextEditingController();
+    final nameViController = TextEditingController();
+    final nameEnController = TextEditingController();
 
     await showDialog<void>(
       context: context,
@@ -515,10 +517,30 @@ class _MenuTabState extends ConsumerState<MenuTab> {
             l10n.menuAddCategory,
             style: AppFonts.system(color: AppColors.textPrimary),
           ),
-          content: TextField(
-            controller: nameController,
-            style: AppFonts.system(color: AppColors.textPrimary),
-            decoration: InputDecoration(labelText: l10n.menuCategoryName),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                key: const Key('admin_menu_category_name_ko'),
+                controller: nameKoController,
+                style: AppFonts.system(color: AppColors.textPrimary),
+                decoration: InputDecoration(labelText: l10n.menuNameKorean),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('admin_menu_category_name_vi'),
+                controller: nameViController,
+                style: AppFonts.system(color: AppColors.textPrimary),
+                decoration: InputDecoration(labelText: l10n.menuNameVietnamese),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('admin_menu_category_name_en'),
+                controller: nameEnController,
+                style: AppFonts.system(color: AppColors.textPrimary),
+                decoration: InputDecoration(labelText: l10n.menuNameEnglish),
+              ),
+            ],
           ),
           actions: [
             TextButton(
@@ -531,17 +553,23 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                 foregroundColor: AppColors.surface0,
               ),
               onPressed: () async {
-                final name = nameController.text.trim();
-                if (name.isEmpty) {
+                final nameKo = nameKoController.text.trim();
+                final nameVi = nameViController.text.trim();
+                final nameEn = nameEnController.text.trim();
+                if (nameKo.isEmpty || nameVi.isEmpty || nameEn.isEmpty) {
                   showErrorToast(context, l10n.menuEnterCategoryName);
                   return;
                 }
 
-                final success = await menuNotifier.addCategory(name);
+                final success = await menuNotifier.addCategory(
+                  nameKo: nameKo,
+                  nameVi: nameVi,
+                  nameEn: nameEn,
+                );
                 if (context.mounted) {
                   if (success) {
                     Navigator.of(context).pop();
-                    showSuccessToast(context, l10n.menuCategoryAdded(name));
+                    showSuccessToast(context, l10n.menuCategoryAdded(nameKo));
                   }
                 }
               },
@@ -554,7 +582,9 @@ class _MenuTabState extends ConsumerState<MenuTab> {
 
     await Future<void>.delayed(kThemeAnimationDuration);
 
-    nameController.dispose();
+    nameKoController.dispose();
+    nameViController.dispose();
+    nameEnController.dispose();
   }
 
   Future<void> _showEditCategoryDialog(
@@ -564,9 +594,14 @@ class _MenuTabState extends ConsumerState<MenuTab> {
   ) async {
     final l10n = context.l10n;
     final categoryId = category['id']?.toString() ?? '';
-    final originalName = category['name']?.toString() ?? '';
+    final originalNameKo =
+        category['name_ko']?.toString() ?? category['name']?.toString() ?? '';
+    final originalNameVi = category['name_vi']?.toString() ?? originalNameKo;
+    final originalNameEn = category['name_en']?.toString() ?? originalNameKo;
     if (categoryId.isEmpty) return;
-    final nameController = TextEditingController(text: originalName);
+    final nameKoController = TextEditingController(text: originalNameKo);
+    final nameViController = TextEditingController(text: originalNameVi);
+    final nameEnController = TextEditingController(text: originalNameEn);
 
     await showDialog<void>(
       context: context,
@@ -574,12 +609,29 @@ class _MenuTabState extends ConsumerState<MenuTab> {
         key: const Key('admin_menu_edit_category_dialog'),
         backgroundColor: AppColors.surface1,
         title: Text(l10n.menuEditCategory),
-        content: TextField(
-          key: const Key('admin_menu_edit_category_name'),
-          controller: nameController,
-          autofocus: true,
-          style: AppFonts.system(color: AppColors.textPrimary),
-          decoration: InputDecoration(labelText: l10n.menuCategoryName),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              key: const Key('admin_menu_edit_category_name'),
+              controller: nameKoController,
+              autofocus: true,
+              style: AppFonts.system(color: AppColors.textPrimary),
+              decoration: InputDecoration(labelText: l10n.menuNameKorean),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: nameViController,
+              style: AppFonts.system(color: AppColors.textPrimary),
+              decoration: InputDecoration(labelText: l10n.menuNameVietnamese),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: nameEnController,
+              style: AppFonts.system(color: AppColors.textPrimary),
+              decoration: InputDecoration(labelText: l10n.menuNameEnglish),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -588,22 +640,28 @@ class _MenuTabState extends ConsumerState<MenuTab> {
           ),
           FilledButton(
             onPressed: () async {
-              final name = nameController.text.trim();
-              if (name.isEmpty) {
+              final nameKo = nameKoController.text.trim();
+              final nameVi = nameViController.text.trim();
+              final nameEn = nameEnController.text.trim();
+              if (nameKo.isEmpty || nameVi.isEmpty || nameEn.isEmpty) {
                 showErrorToast(context, l10n.menuEnterCategoryName);
                 return;
               }
-              if (name == originalName) {
+              if (nameKo == originalNameKo &&
+                  nameVi == originalNameVi &&
+                  nameEn == originalNameEn) {
                 showErrorToast(context, l10n.noChanges);
                 return;
               }
               final success = await menuNotifier.updateCategory(
                 categoryId: categoryId,
-                name: name,
+                nameKo: nameKo,
+                nameVi: nameVi,
+                nameEn: nameEn,
               );
               if (!context.mounted || !success) return;
               Navigator.of(context).pop();
-              showSuccessToast(context, l10n.menuCategorySaved(name));
+              showSuccessToast(context, l10n.menuCategorySaved(nameKo));
             },
             child: Text(l10n.save),
           ),
@@ -612,7 +670,9 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     );
 
     await Future<void>.delayed(kThemeAnimationDuration);
-    nameController.dispose();
+    nameKoController.dispose();
+    nameViController.dispose();
+    nameEnController.dispose();
   }
 
   Future<void> _showDeleteCategoryDialog(
@@ -672,7 +732,9 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     }
 
     final l10n = context.l10n;
-    final nameController = TextEditingController();
+    final nameKoController = TextEditingController();
+    final nameViController = TextEditingController();
+    final nameEnController = TextEditingController();
     final priceController = TextEditingController();
     XFile? selectedPhoto;
     Uint8List? selectedPreviewBytes;
@@ -693,9 +755,28 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   TextField(
-                    controller: nameController,
+                    key: const Key('admin_menu_item_name_ko'),
+                    controller: nameKoController,
                     style: AppFonts.system(color: AppColors.textPrimary),
-                    decoration: InputDecoration(labelText: l10n.menuMenuName),
+                    decoration: InputDecoration(labelText: l10n.menuNameKorean),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('admin_menu_item_name_vi'),
+                    controller: nameViController,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      labelText: l10n.menuNameVietnamese,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('admin_menu_item_name_en'),
+                    controller: nameEnController,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      labelText: l10n.menuNameEnglish,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -740,25 +821,39 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                   foregroundColor: AppColors.surface0,
                 ),
                 onPressed: () async {
-                  final name = nameController.text.trim();
+                  final nameKo = nameKoController.text.trim();
+                  final nameVi = nameViController.text.trim();
+                  final nameEn = nameEnController.text.trim();
                   final price = parseDecimalInput(priceController.text);
-                  if (name.isEmpty || price == null || price <= 0) {
+                  if (nameKo.isEmpty ||
+                      nameVi.isEmpty ||
+                      nameEn.isEmpty ||
+                      price == null ||
+                      price <= 0) {
                     showErrorToast(context, l10n.menuEnterValidNameAndPrice);
                     return;
                   }
 
                   final photo = selectedPhoto;
                   final success = photo == null
-                      ? await menuNotifier.addMenuItem(categoryId, name, price)
+                      ? await menuNotifier.addMenuItem(
+                          categoryId: categoryId,
+                          nameKo: nameKo,
+                          nameVi: nameVi,
+                          nameEn: nameEn,
+                          price: price,
+                        )
                       : await menuNotifier.addMenuItemWithPhoto(
-                          categoryId,
-                          name,
-                          price,
-                          photo,
+                          categoryId: categoryId,
+                          nameKo: nameKo,
+                          nameVi: nameVi,
+                          nameEn: nameEn,
+                          price: price,
+                          photo: photo,
                         );
                   if (context.mounted && success) {
                     Navigator.of(context).pop();
-                    showSuccessToast(context, l10n.menuAdded(name));
+                    showSuccessToast(context, l10n.menuAdded(nameKo));
                   }
                 },
                 child: Text(l10n.add),
@@ -771,7 +866,9 @@ class _MenuTabState extends ConsumerState<MenuTab> {
 
     await Future<void>.delayed(kThemeAnimationDuration);
 
-    nameController.dispose();
+    nameKoController.dispose();
+    nameViController.dispose();
+    nameEnController.dispose();
     priceController.dispose();
   }
 
@@ -785,9 +882,13 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     if (itemId.isEmpty) {
       return;
     }
-    final nameController = TextEditingController(
-      text: item['name']?.toString() ?? '',
-    );
+    final originalNameKo =
+        item['name_ko']?.toString() ?? item['name']?.toString() ?? '';
+    final originalNameVi = item['name_vi']?.toString() ?? originalNameKo;
+    final originalNameEn = item['name_en']?.toString() ?? originalNameKo;
+    final nameKoController = TextEditingController(text: originalNameKo);
+    final nameViController = TextEditingController(text: originalNameVi);
+    final nameEnController = TextEditingController(text: originalNameEn);
     final rawPrice = item['price'];
     final initialPrice = switch (rawPrice) {
       num value => value.toDouble(),
@@ -819,9 +920,25 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   TextField(
-                    controller: nameController,
+                    controller: nameKoController,
                     style: AppFonts.system(color: AppColors.textPrimary),
-                    decoration: InputDecoration(labelText: l10n.menuMenuName),
+                    decoration: InputDecoration(labelText: l10n.menuNameKorean),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: nameViController,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      labelText: l10n.menuNameVietnamese,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: nameEnController,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      labelText: l10n.menuNameEnglish,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -876,15 +993,23 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                   foregroundColor: AppColors.surface0,
                 ),
                 onPressed: () async {
-                  final name = nameController.text.trim();
+                  final nameKo = nameKoController.text.trim();
+                  final nameVi = nameViController.text.trim();
+                  final nameEn = nameEnController.text.trim();
                   final price = parseDecimalInput(priceController.text);
-                  if (name.isEmpty || price == null || price <= 0) {
+                  if (nameKo.isEmpty ||
+                      nameVi.isEmpty ||
+                      nameEn.isEmpty ||
+                      price == null ||
+                      price <= 0) {
                     showErrorToast(context, l10n.menuEnterValidNameAndPrice);
                     return;
                   }
 
                   final detailsChanged =
-                      name != (item['name']?.toString() ?? '') ||
+                      nameKo != originalNameKo ||
+                      nameVi != originalNameVi ||
+                      nameEn != originalNameEn ||
                       price != initialPrice;
                   final photoChanged =
                       selectedPhoto != null || removeExistingPhoto;
@@ -896,7 +1021,9 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                   if (detailsChanged) {
                     final detailsSaved = await menuNotifier.updateMenuItem(
                       itemId: itemId,
-                      name: name,
+                      nameKo: nameKo,
+                      nameVi: nameVi,
+                      nameEn: nameEn,
                       price: price,
                     );
                     if (!detailsSaved) return;
@@ -920,7 +1047,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
 
                   if (context.mounted) {
                     Navigator.of(context).pop();
-                    showSuccessToast(context, l10n.menuSaved(name));
+                    showSuccessToast(context, l10n.menuSaved(nameKo));
                   }
                 },
                 child: Text(l10n.save),
@@ -933,7 +1060,9 @@ class _MenuTabState extends ConsumerState<MenuTab> {
 
     await Future<void>.delayed(kThemeAnimationDuration);
 
-    nameController.dispose();
+    nameKoController.dispose();
+    nameViController.dispose();
+    nameEnController.dispose();
     priceController.dispose();
   }
 }

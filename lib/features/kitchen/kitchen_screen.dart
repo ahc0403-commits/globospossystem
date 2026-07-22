@@ -32,14 +32,81 @@ final kitchenRestaurantNameProvider = FutureProvider.family<String, String>((
   return response?['name']?.toString() ?? '';
 });
 
-class KitchenScreen extends ConsumerStatefulWidget {
+/// Kitchen execution is retained for a future rollout, but the restaurant's
+/// current operating model uses printed tickets and cashier payment only.
+class KitchenScreen extends StatelessWidget {
   const KitchenScreen({super.key});
 
   @override
-  ConsumerState<KitchenScreen> createState() => _KitchenScreenState();
+  Widget build(BuildContext context) {
+    return Scaffold(
+      key: const Key('kitchen_paused_screen'),
+      backgroundColor: ToastColorTokens.canvas,
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: ToastWorkSurface(
+              padding: const EdgeInsets.all(ToastSpacingTokens.xl),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.print_rounded,
+                    size: 42,
+                    color: ToastColorTokens.accentStrong,
+                  ),
+                  const SizedBox(height: ToastSpacingTokens.md),
+                  Text(
+                    context.l10n.kitchenTitle,
+                    textAlign: TextAlign.center,
+                    style: AppFonts.system(
+                      color: ToastColorTokens.textPrimary,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: ToastSpacingTokens.sm),
+                  Text(
+                    context.l10n.kitchenPausedTitle,
+                    textAlign: TextAlign.center,
+                    style: AppFonts.system(
+                      color: ToastColorTokens.textPrimary,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: ToastSpacingTokens.xs),
+                  Text(
+                    context.l10n.kitchenPausedBody,
+                    textAlign: TextAlign.center,
+                    style: AppFonts.system(
+                      color: ToastColorTokens.textSecondary,
+                      fontSize: 15,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-class _KitchenScreenState extends ConsumerState<KitchenScreen> {
+/// Preserved implementation for a later kitchen-tablet rollout.
+class KitchenOperationalScreen extends ConsumerStatefulWidget {
+  const KitchenOperationalScreen({super.key});
+
+  @override
+  ConsumerState<KitchenOperationalScreen> createState() =>
+      _KitchenOperationalScreenState();
+}
+
+class _KitchenOperationalScreenState
+    extends ConsumerState<KitchenOperationalScreen> {
   DateTime _now = DateTime.now().toUtc();
   Timer? _clockTimer;
   String? _initializedRestaurantId;

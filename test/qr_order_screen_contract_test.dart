@@ -26,11 +26,12 @@ void main() {
     expect(screen, contains("Key('qr_order_screen')"));
     expect(screen, contains("Key('qr_confirm_dialog')"));
     expect(screen, contains("Key('qr_confirm_submit')"));
-    expect(screen, contains('주문이 접수되었습니다'));
-    expect(screen, contains('직원이 주문확인서를 가져다 드립니다'));
-    expect(screen, contains('결제는 식사 후 캐셔에서 진행해 주세요'));
-    expect(screen, contains('Payment is made at the cashier after your meal'));
-    expect(screen, contains('Please pay at the cashier after your meal'));
+    expect(screen, contains("String _languageCode = 'vi'"));
+    expect(screen, contains('주문이 완료되었습니다'));
+    expect(screen, contains('주문확인서가 주방과 해당 층에 출력되었습니다'));
+    expect(screen, contains('결제는 캐셔에서 진행해 주세요'));
+    expect(screen, contains('order goes straight to the cashier'));
+    expect(screen, contains('Please pay at the cashier'));
     expect(screen, contains('clientOrderId'));
     expect(screen, contains('const Uuid()'));
     expect(screen, contains('quantity.clamp(1, 20)'));

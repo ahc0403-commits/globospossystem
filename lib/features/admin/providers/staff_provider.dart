@@ -3,6 +3,45 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/staff_service.dart';
 import '../../../main.dart';
 
+class HourlyPayRule {
+  const HourlyPayRule({
+    required this.hourlyRate,
+    required this.scheduledStart,
+    required this.nightStart,
+    required this.nightMultiplier,
+    required this.holidayMultiplier,
+    required this.lateThresholdMinutes,
+    required this.lateReviewHourlyMultiplier,
+  });
+
+  final double hourlyRate;
+  final String scheduledStart;
+  final String nightStart;
+  final double nightMultiplier;
+  final double holidayMultiplier;
+  final int lateThresholdMinutes;
+  final double lateReviewHourlyMultiplier;
+
+  factory HourlyPayRule.fromJson(Map<String, dynamic> json) => HourlyPayRule(
+    hourlyRate: double.tryParse('${json['hourly_rate'] ?? 0}') ?? 0,
+    scheduledStart: _clockText(json['scheduled_start'], '09:00'),
+    nightStart: _clockText(json['night_start'], '22:00'),
+    nightMultiplier:
+        double.tryParse('${json['night_multiplier'] ?? 1.3}') ?? 1.3,
+    holidayMultiplier:
+        double.tryParse('${json['holiday_multiplier'] ?? 3}') ?? 3,
+    lateThresholdMinutes:
+        int.tryParse('${json['late_threshold_minutes'] ?? 60}') ?? 60,
+    lateReviewHourlyMultiplier:
+        double.tryParse('${json['late_review_hourly_multiplier'] ?? 2}') ?? 2,
+  );
+
+  static String _clockText(Object? value, String fallback) {
+    final raw = value?.toString() ?? '';
+    return raw.length >= 5 ? raw.substring(0, 5) : fallback;
+  }
+}
+
 class StaffMember {
   const StaffMember({
     required this.id,
@@ -15,6 +54,7 @@ class StaffMember {
     this.bankName,
     this.bankAccountNumber,
     this.bankAccountHolder,
+    this.hourlyPayRule,
   });
 
   final String id;
@@ -27,9 +67,16 @@ class StaffMember {
   final String? bankName;
   final String? bankAccountNumber;
   final String? bankAccountHolder;
+  final HourlyPayRule? hourlyPayRule;
 
   factory StaffMember.fromJson(Map<String, dynamic> json) {
     final createdAtRaw = json['created_at']?.toString();
+    final ruleRaw = json['employee_hourly_pay_rules'];
+    final rule = ruleRaw is Map
+        ? Map<String, dynamic>.from(ruleRaw)
+        : ruleRaw is List && ruleRaw.isNotEmpty && ruleRaw.first is Map
+        ? Map<String, dynamic>.from(ruleRaw.first as Map)
+        : null;
     return StaffMember(
       id: json['id'].toString(),
       employeeNumber: json['employee_number']?.toString() ?? '',
@@ -43,6 +90,7 @@ class StaffMember {
       bankName: json['bank_name']?.toString(),
       bankAccountNumber: json['bank_account_number']?.toString(),
       bankAccountHolder: json['bank_account_holder']?.toString(),
+      hourlyPayRule: rule == null ? null : HourlyPayRule.fromJson(rule),
     );
   }
 }
@@ -161,6 +209,13 @@ class StaffNotifier extends StateNotifier<StaffState> {
     String? bankName,
     String? bankAccountNumber,
     String? bankAccountHolder,
+    double? hourlyRate,
+    String scheduledStart = '09:00',
+    String nightStart = '22:00',
+    double nightMultiplier = 1.3,
+    double holidayMultiplier = 3,
+    int lateThresholdMinutes = 60,
+    double lateReviewHourlyMultiplier = 2,
   }) async {
     state = state.copyWith(
       isCreating: true,
@@ -168,15 +223,31 @@ class StaffNotifier extends StateNotifier<StaffState> {
       clearLastCreated: true,
     );
     try {
-      final created = await staffService.createStoreEmployee(
-        fullName: fullName,
-        employmentRole: role,
-        storeId: storeId,
-        phone: phone,
-        bankName: bankName,
-        bankAccountNumber: bankAccountNumber,
-        bankAccountHolder: bankAccountHolder,
-      );
+      final created = role == 'part_timer' && hourlyRate != null
+          ? await staffService.createStorePartTimerWithPayRule(
+              fullName: fullName,
+              storeId: storeId,
+              phone: phone,
+              bankName: bankName,
+              bankAccountNumber: bankAccountNumber,
+              bankAccountHolder: bankAccountHolder,
+              hourlyRate: hourlyRate,
+              scheduledStart: scheduledStart,
+              nightStart: nightStart,
+              nightMultiplier: nightMultiplier,
+              holidayMultiplier: holidayMultiplier,
+              lateThresholdMinutes: lateThresholdMinutes,
+              lateReviewHourlyMultiplier: lateReviewHourlyMultiplier,
+            )
+          : await staffService.createStoreEmployee(
+              fullName: fullName,
+              employmentRole: role,
+              storeId: storeId,
+              phone: phone,
+              bankName: bankName,
+              bankAccountNumber: bankAccountNumber,
+              bankAccountHolder: bankAccountHolder,
+            );
 
       state = state.copyWith(
         isCreating: false,
@@ -198,6 +269,13 @@ class StaffNotifier extends StateNotifier<StaffState> {
     String? bankName,
     String? bankAccountNumber,
     String? bankAccountHolder,
+    double? hourlyRate,
+    String scheduledStart = '09:00',
+    String nightStart = '22:00',
+    double nightMultiplier = 1.3,
+    double holidayMultiplier = 3,
+    int lateThresholdMinutes = 60,
+    double lateReviewHourlyMultiplier = 2,
   }) async {
     try {
       await staffService.updateStoreEmployee(
@@ -210,6 +288,19 @@ class StaffNotifier extends StateNotifier<StaffState> {
         bankAccountNumber: bankAccountNumber,
         bankAccountHolder: bankAccountHolder,
       );
+      if (role == 'part_timer' && hourlyRate != null) {
+        await staffService.upsertHourlyPayRule(
+          employeeId: employeeId,
+          storeId: storeId,
+          hourlyRate: hourlyRate,
+          scheduledStart: scheduledStart,
+          nightStart: nightStart,
+          nightMultiplier: nightMultiplier,
+          holidayMultiplier: holidayMultiplier,
+          lateThresholdMinutes: lateThresholdMinutes,
+          lateReviewHourlyMultiplier: lateReviewHourlyMultiplier,
+        );
+      }
       await loadStaff(storeId);
     } catch (error) {
       state = state.copyWith(error: _cleanException(error));

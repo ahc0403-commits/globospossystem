@@ -47,70 +47,76 @@ void main() {
     );
   });
 
-  testWidgets('Kitchen failed-print dialog executes from the top-bar control', (
-    tester,
-  ) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(1440, 900);
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets(
+    'Dormant kitchen implementation retains the failed-print workflow',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1440, 900);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    final router = GoRouter(
-      initialLocation: '/kitchen',
-      routes: [
-        GoRoute(path: '/kitchen', builder: (_, __) => const KitchenScreen()),
-      ],
-    );
-    addTearDown(router.dispose);
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authProvider.overrideWith((ref) => _AuthNotifier()),
-          kitchenProvider.overrideWith((ref) => _KitchenNotifier()),
-          connectivityProvider.overrideWith((ref) => Stream.value(true)),
-          kitchenRestaurantNameProvider.overrideWith(
-            (ref, storeId) async => 'GLOBOS Nguyễn Huệ',
-          ),
-          failedPrintJobsProvider.overrideWith(
-            (ref, storeId) async => [
-              FailedPrintJob(
-                id: 'print-job-failed-1',
-                copyType: 'kitchen',
-                batchNo: 1,
-                tableNumber: 'A1',
-                floorLabel: 'Ground',
-                status: 'failed',
-                updatedAt: DateTime(2026, 7, 18, 12),
-                lastError: 'Printer offline',
-              ),
-            ],
+      final router = GoRouter(
+        initialLocation: '/kitchen',
+        routes: [
+          GoRoute(
+            path: '/kitchen',
+            builder: (_, __) => const KitchenOperationalScreen(),
           ),
         ],
-        child: MaterialApp.router(
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.build(),
-          locale: const Locale('vi'),
-          supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: const [
-            AppLocalizations.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
+      );
+      addTearDown(router.dispose);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith((ref) => _AuthNotifier()),
+            kitchenProvider.overrideWith((ref) => _KitchenNotifier()),
+            connectivityProvider.overrideWith((ref) => Stream.value(true)),
+            kitchenRestaurantNameProvider.overrideWith(
+              (ref, storeId) async => 'GLOBOS Nguyễn Huệ',
+            ),
+            failedPrintJobsProvider.overrideWith(
+              (ref, storeId) async => [
+                FailedPrintJob(
+                  id: 'print-job-failed-1',
+                  copyType: 'kitchen',
+                  batchNo: 1,
+                  tableNumber: 'A1',
+                  floorLabel: 'Ground',
+                  status: 'failed',
+                  updatedAt: DateTime(2026, 7, 18, 12),
+                  lastError: 'Printer offline',
+                ),
+              ],
+            ),
           ],
-          routerConfig: router,
+          child: MaterialApp.router(
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.build(),
+            locale: const Locale('vi'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            routerConfig: router,
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('kitchen_failed_print_jobs_button')));
-    await tester.pumpAndSettle();
-    final dialog = find.byKey(const Key('kitchen_failed_print_jobs_dialog'));
-    expect(dialog, findsOneWidget);
-    Navigator.of(tester.element(dialog)).pop();
-    await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('kitchen_failed_print_jobs_button')),
+      );
+      await tester.pumpAndSettle();
+      final dialog = find.byKey(const Key('kitchen_failed_print_jobs_dialog'));
+      expect(dialog, findsOneWidget);
+      Navigator.of(tester.element(dialog)).pop();
+      await tester.pumpAndSettle();
 
-    expect(tester.takeException(), isNull);
-  });
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

@@ -45,15 +45,34 @@ class QrOrderMenu {
 }
 
 class QrMenuCategory {
-  const QrMenuCategory({required this.id, required this.name});
+  const QrMenuCategory({
+    required this.id,
+    required this.name,
+    this.nameKo = '',
+    this.nameVi = '',
+    this.nameEn = '',
+  });
 
   final String id;
   final String name;
+  final String nameKo;
+  final String nameVi;
+  final String nameEn;
+
+  String localizedName(String languageCode) => switch (languageCode) {
+    'ko' => nameKo.isEmpty ? name : nameKo,
+    'vi' => nameVi.isEmpty ? name : nameVi,
+    _ => nameEn.isEmpty ? name : nameEn,
+  };
 
   factory QrMenuCategory.fromJson(Map<String, dynamic> json) {
+    final fallback = json['name']?.toString() ?? '';
     return QrMenuCategory(
       id: json['id']?.toString() ?? '',
-      name: json['name']?.toString() ?? '',
+      name: fallback,
+      nameKo: json['name_ko']?.toString() ?? fallback,
+      nameVi: json['name_vi']?.toString() ?? fallback,
+      nameEn: json['name_en']?.toString() ?? fallback,
     );
   }
 }
@@ -63,6 +82,9 @@ class QrMenuItem {
     required this.id,
     required this.categoryId,
     required this.name,
+    this.nameKo = '',
+    this.nameVi = '',
+    this.nameEn = '',
     required this.price,
     this.description,
     this.imageUrl,
@@ -71,16 +93,29 @@ class QrMenuItem {
   final String id;
   final String? categoryId;
   final String name;
+  final String nameKo;
+  final String nameVi;
+  final String nameEn;
   final double price;
   final String? description;
   final String? imageUrl;
 
+  String localizedName(String languageCode) => switch (languageCode) {
+    'ko' => nameKo.isEmpty ? name : nameKo,
+    'vi' => nameVi.isEmpty ? name : nameVi,
+    _ => nameEn.isEmpty ? name : nameEn,
+  };
+
   factory QrMenuItem.fromJson(Map<String, dynamic> json) {
     final priceRaw = json['price'];
+    final fallback = json['name']?.toString() ?? '';
     return QrMenuItem(
       id: json['id']?.toString() ?? '',
       categoryId: json['category_id']?.toString(),
-      name: json['name']?.toString() ?? '',
+      name: fallback,
+      nameKo: json['name_ko']?.toString() ?? fallback,
+      nameVi: json['name_vi']?.toString() ?? fallback,
+      nameEn: json['name_en']?.toString() ?? fallback,
       description: json['description']?.toString(),
       imageUrl: json['image_url']?.toString(),
       price: switch (priceRaw) {
