@@ -365,6 +365,20 @@ void main() {
         migration,
         contains('ON CONFLICT (table_id) WHERE is_active DO NOTHING'),
       );
+      final conflictFix = readRepoFile(
+        'supabase/migrations/20260722023244_fix_table_qr_batch_conflict.sql',
+      );
+      expect(
+        conflictFix,
+        contains(
+          'CREATE OR REPLACE FUNCTION public.admin_get_or_create_table_qrs',
+        ),
+      );
+      expect(conflictFix, contains('ON CONFLICT DO NOTHING'));
+      expect(
+        conflictFix,
+        isNot(contains('ON CONFLICT (table_id) WHERE is_active DO NOTHING')),
+      );
       expect(migration, contains('SELECT DISTINCT requested_id'));
       expect(
         migration,
