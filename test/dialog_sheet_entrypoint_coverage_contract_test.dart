@@ -162,10 +162,12 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/admin/tabs/menu_tab.dart',
-    directCalls: 5,
+    directCalls: 7,
     test: 'test/admin_core_overlay_operational_test.dart',
     markers: [
       'admin_menu_add_category_dialog',
+      'admin_menu_edit_category_dialog',
+      'admin_menu_delete_category_dialog',
       'admin_menu_add_item_dialog',
       'admin_menu_edit_item_dialog',
       'admin_menu_import_preview_dialog',
@@ -240,7 +242,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 73 dialog and sheet entrypoints map to operational tests', () {
+  test('all 75 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -252,10 +254,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 72);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 74);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      73,
+      75,
     );
 
     final settings = File(

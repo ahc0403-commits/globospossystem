@@ -462,6 +462,7 @@ class _MenuBrowser extends StatelessWidget {
                             context,
                             name,
                           );
+                          final imageUrl = item['image_url']?.toString().trim();
                           final rawPrice = item['price'];
                           final price = switch (rawPrice) {
                             num value => value.toDouble(),
@@ -503,6 +504,33 @@ class _MenuBrowser extends StatelessWidget {
                                   padding: const EdgeInsets.all(12),
                                   child: Row(
                                     children: [
+                                      if (imageUrl != null &&
+                                          imageUrl.isNotEmpty) ...[
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                          child: SizedBox(
+                                            width: 58,
+                                            height: 58,
+                                            child: Image.network(
+                                              imageUrl,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, _, _) =>
+                                                  ColoredBox(
+                                                    color: PosColors.panelMuted,
+                                                    child: const Icon(
+                                                      Icons
+                                                          .broken_image_outlined,
+                                                      color:
+                                                          PosColors.textMuted,
+                                                    ),
+                                                  ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                      ],
                                       Expanded(
                                         child: Column(
                                           crossAxisAlignment:

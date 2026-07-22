@@ -35,6 +35,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 const _storeId = '7f6c9d22-6d84-4c7f-b923-79c81c4015d1';
 const _tableId = '2d6f0ea0-3940-43cb-9378-e8ce45e77d4e';
 const _categoryId = 'b77cfb5d-d565-4fc7-a924-b966559202ef';
+const _emptyCategoryId = '7f16ab34-c423-4df3-a8b0-c9c754d64f29';
 const _menuItemId = 'e28fa085-bdf1-49bc-a728-370ee5a8a433';
 
 const _authState = PosAuthState(
@@ -141,6 +142,7 @@ class _MenuNotifier extends MenuNotifier {
     state = const MenuState(
       categories: AsyncValue.data([
         {'id': _categoryId, 'name': 'Phở'},
+        {'id': _emptyCategoryId, 'name': 'Món mới'},
       ]),
       items: AsyncValue.data([
         {
@@ -157,6 +159,8 @@ class _MenuNotifier extends MenuNotifier {
   }
 
   int addCategoryCalls = 0;
+  int editCategoryCalls = 0;
+  int deleteCategoryCalls = 0;
   int addItemCalls = 0;
   int editItemCalls = 0;
   int importCalls = 0;
@@ -173,6 +177,21 @@ class _MenuNotifier extends MenuNotifier {
   @override
   Future<bool> addCategory(String name) async {
     addCategoryCalls += 1;
+    return true;
+  }
+
+  @override
+  Future<bool> updateCategory({
+    required String categoryId,
+    required String name,
+  }) async {
+    editCategoryCalls += 1;
+    return true;
+  }
+
+  @override
+  Future<bool> deleteCategory(String categoryId) async {
+    deleteCategoryCalls += 1;
     return true;
   }
 
@@ -647,7 +666,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('all five menu dialog entrypoints validate and save', (
+  testWidgets('all seven menu dialog entrypoints validate and save', (
     tester,
   ) async {
     addTearDown(tester.view.resetPhysicalSize);
@@ -729,6 +748,36 @@ void main() {
     await tester.tap(_dialogAction(editItemDialog, FilledButton));
     await tester.pumpAndSettle();
     expect(notifier.editItemCalls, 1);
+
+    await tester.tap(
+      find.byKey(const Key('admin_menu_edit_category_$_categoryId')),
+    );
+    await tester.pumpAndSettle();
+    const editCategoryDialog = Key('admin_menu_edit_category_dialog');
+    expect(find.byKey(editCategoryDialog), findsOneWidget);
+    _expectDialogButtonsAreTouchSized(tester, editCategoryDialog);
+    await tester.enterText(
+      find.byKey(const Key('admin_menu_edit_category_name')),
+      'Phở đặc biệt',
+    );
+    await tester.tap(_dialogAction(editCategoryDialog, FilledButton));
+    await tester.pumpAndSettle();
+    expect(notifier.editCategoryCalls, 1);
+
+    await tester.tap(find.text('Món mới'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('admin_menu_delete_category_$_emptyCategoryId')),
+    );
+    await tester.pumpAndSettle();
+    const deleteCategoryDialog = Key('admin_menu_delete_category_dialog');
+    expect(find.byKey(deleteCategoryDialog), findsOneWidget);
+    _expectDialogButtonsAreTouchSized(tester, deleteCategoryDialog);
+    await tester.tap(
+      find.byKey(const Key('admin_menu_delete_category_confirm')),
+    );
+    await tester.pumpAndSettle();
+    expect(notifier.deleteCategoryCalls, 1);
     expect(tester.takeException(), isNull);
   });
 

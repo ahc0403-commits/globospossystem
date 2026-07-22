@@ -1,7 +1,10 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
@@ -30,6 +33,7 @@ class MenuTab extends ConsumerStatefulWidget {
 class _MenuTabState extends ConsumerState<MenuTab> {
   String? _lastError;
   bool _isImporting = false;
+  final ImagePicker _imagePicker = ImagePicker();
 
   @override
   Widget build(BuildContext context) {
@@ -135,9 +139,23 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     Widget categoryPane({required bool scrollable}) => _CategoryPanel(
       categories: categories,
       selectedCategoryId: selectedCategoryId,
+      itemCountsByCategory: {
+        for (final category in categories)
+          category['id'].toString(): allItems
+              .where(
+                (item) =>
+                    item['category_id']?.toString() ==
+                    category['id'].toString(),
+              )
+              .length,
+      },
       auditTraceAsync: auditTraceAsync,
       scrollable: scrollable,
       onSelect: menuNotifier.selectCategory,
+      onEdit: (category) =>
+          _showEditCategoryDialog(context, category, menuNotifier),
+      onDelete: (category, itemCount) =>
+          _showDeleteCategoryDialog(context, category, itemCount, menuNotifier),
     );
 
     Widget itemsPane({required bool scrollable}) => _ItemsPanel(
@@ -539,6 +557,111 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     nameController.dispose();
   }
 
+  Future<void> _showEditCategoryDialog(
+    BuildContext context,
+    Map<String, dynamic> category,
+    MenuNotifier menuNotifier,
+  ) async {
+    final l10n = context.l10n;
+    final categoryId = category['id']?.toString() ?? '';
+    final originalName = category['name']?.toString() ?? '';
+    if (categoryId.isEmpty) return;
+    final nameController = TextEditingController(text: originalName);
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        key: const Key('admin_menu_edit_category_dialog'),
+        backgroundColor: AppColors.surface1,
+        title: Text(l10n.menuEditCategory),
+        content: TextField(
+          key: const Key('admin_menu_edit_category_name'),
+          controller: nameController,
+          autofocus: true,
+          style: AppFonts.system(color: AppColors.textPrimary),
+          decoration: InputDecoration(labelText: l10n.menuCategoryName),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final name = nameController.text.trim();
+              if (name.isEmpty) {
+                showErrorToast(context, l10n.menuEnterCategoryName);
+                return;
+              }
+              if (name == originalName) {
+                showErrorToast(context, l10n.noChanges);
+                return;
+              }
+              final success = await menuNotifier.updateCategory(
+                categoryId: categoryId,
+                name: name,
+              );
+              if (!context.mounted || !success) return;
+              Navigator.of(context).pop();
+              showSuccessToast(context, l10n.menuCategorySaved(name));
+            },
+            child: Text(l10n.save),
+          ),
+        ],
+      ),
+    );
+
+    await Future<void>.delayed(kThemeAnimationDuration);
+    nameController.dispose();
+  }
+
+  Future<void> _showDeleteCategoryDialog(
+    BuildContext context,
+    Map<String, dynamic> category,
+    int itemCount,
+    MenuNotifier menuNotifier,
+  ) async {
+    final l10n = context.l10n;
+    final categoryId = category['id']?.toString() ?? '';
+    final name = category['name']?.toString() ?? '-';
+    if (categoryId.isEmpty) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        key: const Key('admin_menu_delete_category_dialog'),
+        backgroundColor: AppColors.surface1,
+        title: Text(l10n.menuDeleteCategoryTitle),
+        content: Text(
+          itemCount > 0
+              ? l10n.menuCategoryDeleteBlocked(itemCount)
+              : l10n.menuDeleteCategoryConfirm(name),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(itemCount > 0 ? l10n.confirm : l10n.cancel),
+          ),
+          if (itemCount == 0)
+            FilledButton(
+              key: const Key('admin_menu_delete_category_confirm'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.statusCancelled,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                final success = await menuNotifier.deleteCategory(categoryId);
+                if (!context.mounted || !success) return;
+                Navigator.of(context).pop();
+                showSuccessToast(context, l10n.menuCategoryDeleted(name));
+              },
+              child: Text(l10n.menuDelete),
+            ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _showAddItemDialog(
     BuildContext context,
     String? categoryId,
@@ -551,67 +674,97 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     final l10n = context.l10n;
     final nameController = TextEditingController();
     final priceController = TextEditingController();
+    XFile? selectedPhoto;
+    Uint8List? selectedPreviewBytes;
 
     await showDialog<void>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          key: const Key('admin_menu_add_item_dialog'),
-          backgroundColor: AppColors.surface1,
-          title: Text(
-            l10n.menuAddMenu,
-            style: AppFonts.system(color: AppColors.textPrimary),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                style: AppFonts.system(color: AppColors.textPrimary),
-                decoration: InputDecoration(labelText: l10n.menuMenuName),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: priceController,
-                keyboardType: TextInputType.number,
-                style: AppFonts.system(color: AppColors.textPrimary),
-                decoration: InputDecoration(labelText: l10n.menuPrice),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(l10n.cancel),
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            key: const Key('admin_menu_add_item_dialog'),
+            backgroundColor: AppColors.surface1,
+            title: Text(
+              l10n.menuAddMenu,
+              style: AppFonts.system(color: AppColors.textPrimary),
             ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.amber500,
-                foregroundColor: AppColors.surface0,
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(labelText: l10n.menuMenuName),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: priceController,
+                    keyboardType: TextInputType.number,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(labelText: l10n.menuPrice),
+                  ),
+                  const SizedBox(height: 16),
+                  _MenuPhotoPicker(
+                    previewBytes: selectedPreviewBytes,
+                    imageUrl: null,
+                    onChoose: () async {
+                      final photo = await _imagePicker.pickImage(
+                        source: ImageSource.gallery,
+                      );
+                      if (photo == null) return;
+                      final bytes = await photo.readAsBytes();
+                      setDialogState(() {
+                        selectedPhoto = photo;
+                        selectedPreviewBytes = bytes;
+                      });
+                    },
+                    onRemove: selectedPhoto == null
+                        ? null
+                        : () => setDialogState(() {
+                            selectedPhoto = null;
+                            selectedPreviewBytes = null;
+                          }),
+                  ),
+                ],
               ),
-              onPressed: () async {
-                final name = nameController.text.trim();
-                final price = parseDecimalInput(priceController.text);
-                if (name.isEmpty || price == null || price <= 0) {
-                  showErrorToast(context, l10n.menuEnterValidNameAndPrice);
-                  return;
-                }
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.amber500,
+                  foregroundColor: AppColors.surface0,
+                ),
+                onPressed: () async {
+                  final name = nameController.text.trim();
+                  final price = parseDecimalInput(priceController.text);
+                  if (name.isEmpty || price == null || price <= 0) {
+                    showErrorToast(context, l10n.menuEnterValidNameAndPrice);
+                    return;
+                  }
 
-                final success = await menuNotifier.addMenuItem(
-                  categoryId,
-                  name,
-                  price,
-                );
-                if (context.mounted) {
-                  if (success) {
+                  final photo = selectedPhoto;
+                  final success = photo == null
+                      ? await menuNotifier.addMenuItem(categoryId, name, price)
+                      : await menuNotifier.addMenuItemWithPhoto(
+                          categoryId,
+                          name,
+                          price,
+                          photo,
+                        );
+                  if (context.mounted && success) {
                     Navigator.of(context).pop();
                     showSuccessToast(context, l10n.menuAdded(name));
                   }
-                }
-              },
-              child: Text(l10n.add),
-            ),
-          ],
+                },
+                child: Text(l10n.add),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -644,75 +797,136 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     final priceController = TextEditingController(
       text: initialPrice <= 0 ? '' : initialPrice.toStringAsFixed(0),
     );
+    final existingImageUrl = item['image_url']?.toString();
+    final existingStoragePath = item['image_storage_path']?.toString();
+    XFile? selectedPhoto;
+    Uint8List? selectedPreviewBytes;
+    var removeExistingPhoto = false;
 
     await showDialog<void>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          key: const Key('admin_menu_edit_item_dialog'),
-          backgroundColor: AppColors.surface1,
-          title: Text(
-            l10n.menuEditMenu,
-            style: AppFonts.system(color: AppColors.textPrimary),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                style: AppFonts.system(color: AppColors.textPrimary),
-                decoration: InputDecoration(labelText: l10n.menuMenuName),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: priceController,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                style: AppFonts.system(color: AppColors.textPrimary),
-                decoration: InputDecoration(labelText: l10n.menuPrice),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(l10n.cancel),
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            key: const Key('admin_menu_edit_item_dialog'),
+            backgroundColor: AppColors.surface1,
+            title: Text(
+              l10n.menuEditMenu,
+              style: AppFonts.system(color: AppColors.textPrimary),
             ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.amber500,
-                foregroundColor: AppColors.surface0,
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(labelText: l10n.menuMenuName),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: priceController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(labelText: l10n.menuPrice),
+                  ),
+                  const SizedBox(height: 16),
+                  _MenuPhotoPicker(
+                    previewBytes: selectedPreviewBytes,
+                    imageUrl: removeExistingPhoto ? null : existingImageUrl,
+                    onChoose: () async {
+                      final photo = await _imagePicker.pickImage(
+                        source: ImageSource.gallery,
+                      );
+                      if (photo == null) return;
+                      final bytes = await photo.readAsBytes();
+                      setDialogState(() {
+                        selectedPhoto = photo;
+                        selectedPreviewBytes = bytes;
+                        removeExistingPhoto = false;
+                      });
+                    },
+                    onRemove:
+                        selectedPhoto != null ||
+                            (!removeExistingPhoto &&
+                                existingImageUrl != null &&
+                                existingImageUrl.isNotEmpty)
+                        ? () => setDialogState(() {
+                            selectedPhoto = null;
+                            selectedPreviewBytes = null;
+                            removeExistingPhoto =
+                                existingImageUrl != null &&
+                                existingImageUrl.isNotEmpty;
+                          })
+                        : null,
+                  ),
+                ],
               ),
-              onPressed: () async {
-                final name = nameController.text.trim();
-                final price = parseDecimalInput(priceController.text);
-                if (name.isEmpty || price == null || price <= 0) {
-                  showErrorToast(context, l10n.menuEnterValidNameAndPrice);
-                  return;
-                }
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.amber500,
+                  foregroundColor: AppColors.surface0,
+                ),
+                onPressed: () async {
+                  final name = nameController.text.trim();
+                  final price = parseDecimalInput(priceController.text);
+                  if (name.isEmpty || price == null || price <= 0) {
+                    showErrorToast(context, l10n.menuEnterValidNameAndPrice);
+                    return;
+                  }
 
-                if (name == (item['name']?.toString() ?? '') &&
-                    price == initialPrice) {
-                  showErrorToast(context, l10n.noChanges);
-                  return;
-                }
+                  final detailsChanged =
+                      name != (item['name']?.toString() ?? '') ||
+                      price != initialPrice;
+                  final photoChanged =
+                      selectedPhoto != null || removeExistingPhoto;
+                  if (!detailsChanged && !photoChanged) {
+                    showErrorToast(context, l10n.noChanges);
+                    return;
+                  }
 
-                final success = await menuNotifier.updateMenuItem(
-                  itemId: itemId,
-                  name: name,
-                  price: price,
-                );
-                if (context.mounted) {
-                  if (success) {
+                  if (detailsChanged) {
+                    final detailsSaved = await menuNotifier.updateMenuItem(
+                      itemId: itemId,
+                      name: name,
+                      price: price,
+                    );
+                    if (!detailsSaved) return;
+                  }
+
+                  final photo = selectedPhoto;
+                  if (photo != null) {
+                    final photoSaved = await menuNotifier.replaceMenuItemImage(
+                      itemId: itemId,
+                      photo: photo,
+                      previousStoragePath: existingStoragePath,
+                    );
+                    if (!photoSaved) return;
+                  } else if (removeExistingPhoto) {
+                    final photoRemoved = await menuNotifier.removeMenuItemImage(
+                      itemId: itemId,
+                      storagePath: existingStoragePath,
+                    );
+                    if (!photoRemoved) return;
+                  }
+
+                  if (context.mounted) {
                     Navigator.of(context).pop();
                     showSuccessToast(context, l10n.menuSaved(name));
                   }
-                }
-              },
-              child: Text(l10n.save),
-            ),
-          ],
+                },
+                child: Text(l10n.save),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -724,19 +938,137 @@ class _MenuTabState extends ConsumerState<MenuTab> {
   }
 }
 
+class _MenuPhotoPicker extends StatelessWidget {
+  const _MenuPhotoPicker({
+    required this.previewBytes,
+    required this.imageUrl,
+    required this.onChoose,
+    required this.onRemove,
+  });
+
+  final Uint8List? previewBytes;
+  final String? imageUrl;
+  final VoidCallback onChoose;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasNetworkImage = imageUrl != null && imageUrl!.trim().isNotEmpty;
+    final hasImage = previewBytes != null || hasNetworkImage;
+
+    Widget preview;
+    if (previewBytes != null) {
+      preview = Image.memory(previewBytes!, fit: BoxFit.cover);
+    } else if (hasNetworkImage) {
+      preview = Image.network(
+        imageUrl!,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => const Icon(
+          Icons.broken_image_outlined,
+          color: AppColors.textSecondary,
+        ),
+      );
+    } else {
+      preview = const Icon(
+        Icons.restaurant_menu_outlined,
+        color: AppColors.textSecondary,
+        size: 32,
+      );
+    }
+
+    return Container(
+      key: const Key('admin_menu_photo_picker'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface3),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: ColoredBox(
+              color: AppColors.surface2,
+              child: SizedBox(
+                width: 88,
+                height: 88,
+                child: Center(child: preview),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.l10n.menuPhoto,
+                  style: AppFonts.system(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  context.l10n.menuPhotoHint,
+                  style: AppFonts.system(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      key: const Key('admin_menu_choose_photo'),
+                      onPressed: onChoose,
+                      icon: const Icon(Icons.photo_library_outlined, size: 18),
+                      label: Text(
+                        hasImage
+                            ? context.l10n.menuReplacePhoto
+                            : context.l10n.menuChoosePhoto,
+                      ),
+                    ),
+                    if (onRemove != null)
+                      TextButton.icon(
+                        key: const Key('admin_menu_remove_photo'),
+                        onPressed: onRemove,
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        label: Text(context.l10n.menuRemovePhoto),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CategoryPanel extends StatelessWidget {
   const _CategoryPanel({
     required this.categories,
     required this.selectedCategoryId,
+    required this.itemCountsByCategory,
     required this.auditTraceAsync,
     required this.onSelect,
+    required this.onEdit,
+    required this.onDelete,
     this.scrollable = true,
   });
 
   final List<Map<String, dynamic>> categories;
   final String? selectedCategoryId;
+  final Map<String, int> itemCountsByCategory;
   final AsyncValue<List<Map<String, dynamic>>> auditTraceAsync;
   final ValueChanged<String> onSelect;
+  final ValueChanged<Map<String, dynamic>> onEdit;
+  final void Function(Map<String, dynamic> category, int itemCount) onDelete;
   final bool scrollable;
 
   @override
@@ -761,13 +1093,50 @@ class _CategoryPanel extends StatelessWidget {
                 selected: isSelected,
                 statusColor: AppColors.amber500,
                 onTap: categoryId.isEmpty ? null : () => onSelect(categoryId),
-                child: Text(
-                  category['name']?.toString() ?? '-',
-                  style: AppFonts.system(
-                    color: AppColors.textPrimary,
-                    fontSize: 15,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                  ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        category['name']?.toString() ?? '-',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppFonts.system(
+                          color: AppColors.textPrimary,
+                          fontSize: 15,
+                          fontWeight: isSelected
+                              ? FontWeight.w700
+                              : FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    if (isSelected) ...[
+                      IconButton(
+                        key: Key('admin_menu_edit_category_$categoryId'),
+                        visualDensity: VisualDensity.compact,
+                        tooltip: l10n.menuEditCategory,
+                        onPressed: categoryId.isEmpty
+                            ? null
+                            : () => onEdit(category),
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                      ),
+                      IconButton(
+                        key: Key('admin_menu_delete_category_$categoryId'),
+                        visualDensity: VisualDensity.compact,
+                        tooltip: l10n.menuDeleteCategory,
+                        onPressed: categoryId.isEmpty
+                            ? null
+                            : () => onDelete(
+                                category,
+                                itemCountsByCategory[categoryId] ?? 0,
+                              ),
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          size: 18,
+                          color: AppColors.statusCancelled,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               );
             },
@@ -857,6 +1226,7 @@ class _ItemsPanel extends StatelessWidget {
                   final priceRaw = item['price'];
                   final isAvailable = item['is_available'] == true;
                   final isVisiblePublic = item['is_visible_public'] != false;
+                  final imageUrl = item['image_url']?.toString();
                   final priceValue = switch (priceRaw) {
                     num value => value.toDouble(),
                     _ => 0.0,
@@ -874,6 +1244,8 @@ class _ItemsPanel extends StatelessWidget {
                     ),
                     child: Row(
                       children: [
+                        _MenuItemThumbnail(imageUrl: imageUrl),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -987,6 +1359,37 @@ class _ItemsPanel extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _MenuItemThumbnail extends StatelessWidget {
+  const _MenuItemThumbnail({required this.imageUrl});
+
+  final String? imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = imageUrl?.trim() ?? '';
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: ColoredBox(
+        color: AppColors.surface2,
+        child: SizedBox(
+          width: 54,
+          height: 54,
+          child: url.isEmpty
+              ? const Icon(Icons.image_outlined, color: AppColors.textSecondary)
+              : Image.network(
+                  url,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const Icon(
+                    Icons.broken_image_outlined,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+        ),
       ),
     );
   }
