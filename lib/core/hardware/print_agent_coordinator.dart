@@ -71,7 +71,7 @@ class SharedPreferencesPrintAgentPreferenceStore
   @override
   Future<bool> readEnabled() async {
     final preferences = await SharedPreferences.getInstance();
-    return preferences.getBool(preferenceKey) ?? false;
+    return preferences.getBool(preferenceKey) ?? true;
   }
 
   @override

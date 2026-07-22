@@ -22,6 +22,7 @@ class StaffService {
     required String employmentRole,
     required String storeId,
     String? phone,
+    String? bankName,
     String? bankAccountNumber,
     String? bankAccountHolder,
   }) async {
@@ -32,6 +33,7 @@ class StaffService {
         'p_full_name': fullName,
         'p_employment_role': employmentRole,
         'p_phone': phone,
+        'p_bank_name': bankName,
         'p_bank_account_number': bankAccountNumber,
         'p_bank_account_holder': bankAccountHolder,
       },
@@ -45,6 +47,7 @@ class StaffService {
     required String fullName,
     required String employmentRole,
     String? phone,
+    String? bankName,
     String? bankAccountNumber,
     String? bankAccountHolder,
   }) async {
@@ -56,6 +59,7 @@ class StaffService {
         'p_full_name': fullName,
         'p_employment_role': employmentRole,
         'p_phone': phone,
+        'p_bank_name': bankName,
         'p_bank_account_number': bankAccountNumber,
         'p_bank_account_holder': bankAccountHolder,
       },

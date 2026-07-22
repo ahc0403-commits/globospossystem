@@ -156,6 +156,16 @@ class OrderService {
     );
   }
 
+  Future<void> completeKitchenOrder({
+    required String orderId,
+    required String storeId,
+  }) async {
+    await supabase.rpc(
+      'complete_kitchen_order',
+      params: {'p_order_id': orderId, 'p_store_id': storeId},
+    );
+  }
+
   Future<Map<String, dynamic>> cancelOrder({
     required String orderId,
     required String storeId,

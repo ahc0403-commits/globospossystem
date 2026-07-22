@@ -473,6 +473,35 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
     }
   }
 
+  Future<void> completeOrder(String orderId) async {
+    final storeId = _restaurantId;
+    if (storeId == null) {
+      state = state.copyWith(
+        error: 'Failed to complete kitchen order: restaurant context missing',
+      );
+      return;
+    }
+
+    final previous = state.orders;
+    state = state.copyWith(
+      orders: state.orders.where((order) => order.orderId != orderId).toList(),
+      clearError: true,
+    );
+
+    try {
+      await orderService.completeKitchenOrder(
+        orderId: orderId,
+        storeId: storeId,
+      );
+      await loadOrders(storeId, showLoading: false);
+    } catch (error) {
+      state = state.copyWith(
+        orders: previous,
+        error: 'Failed to complete kitchen order: $error',
+      );
+    }
+  }
+
   Future<void> reprintPrintJob(String jobId) async {
     await supabase.rpc('reprint_print_job', params: {'p_job_id': jobId});
   }
