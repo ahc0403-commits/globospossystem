@@ -32,6 +32,16 @@ class PlatformInfo {
     }
   }
 
+  /// Windows native environment (the supported store print-agent host).
+  static bool get isWindows {
+    if (kIsWeb) return false;
+    try {
+      return Platform.isWindows;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Web 또는 데스크탑 (admin/super_admin 대상 플랫폼)
   static bool get isWebOrDesktop {
     if (kIsWeb) return true;
