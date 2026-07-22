@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:archive/archive.dart';
 import 'package:file_saver/file_saver.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
@@ -175,11 +176,20 @@ class TableQrExportService {
     TableQrProgressCallback? onProgress,
   }) async {
     _requireCards(cards);
-    final fontData = await rootBundle.load(AppFonts.assetPath);
-    final font = pw.Font.ttf(fontData);
-    final document = pw.Document(
-      theme: pw.ThemeData.withFont(base: font, bold: font),
-    );
+    final supportsUnicode = !kIsWeb;
+    final pw.Document document;
+    if (supportsUnicode) {
+      final fontData = await rootBundle.load(AppFonts.assetPath);
+      final font = pw.Font.ttf(fontData);
+      document = pw.Document(
+        theme: pw.ThemeData.withFont(base: font, bold: font),
+      );
+    } else {
+      // Embedding the 6.7 MB Unicode font makes browser PDF generation stall
+      // before FileSaver can start the download. QR labels contain only the
+      // ASCII fallback below on web, so the built-in PDF font is sufficient.
+      document = pw.Document();
+    }
 
     for (var index = 0; index < cards.length; index++) {
       final card = cards[index];
@@ -187,7 +197,7 @@ class TableQrExportService {
         pw.Page(
           pageFormat: PdfPageFormat.a6,
           margin: const pw.EdgeInsets.all(18),
-          build: (_) => _buildPdfCard(card),
+          build: (_) => _buildPdfCard(card, supportsUnicode: supportsUnicode),
         ),
       );
       onProgress?.call(
@@ -357,7 +367,25 @@ class TableQrExportService {
     );
   }
 
-  pw.Widget _buildPdfCard(TableQrCardModel card) {
+  pw.Widget _buildPdfCard(
+    TableQrCardModel card, {
+    required bool supportsUnicode,
+  }) {
+    final storeName = supportsUnicode
+        ? card.storeName
+        : _toPdfAscii(card.storeName, fallback: 'GLOBOS POS');
+    final tableNumber = supportsUnicode
+        ? card.tableNumber
+        : _toPdfAscii(card.tableNumber, fallback: 'TABLE');
+    final floorLabel = supportsUnicode
+        ? card.floorLabel
+        : _toPdfAscii(card.floorLabel, fallback: 'FLOOR');
+    final scanCopy = supportsUnicode
+        ? TableQrCardModel.scanCopy
+        : const <String>[
+            'SCAN WITH YOUR PHONE TO ORDER',
+            'QUET MA QR DE GOI MON',
+          ];
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.stretch,
       children: [
@@ -366,7 +394,7 @@ class TableQrExportService {
           child: pw.FittedBox(
             fit: pw.BoxFit.scaleDown,
             child: pw.Text(
-              card.storeName,
+              storeName,
               style: pw.TextStyle(fontSize: 17, fontWeight: pw.FontWeight.bold),
             ),
           ),
@@ -382,7 +410,7 @@ class TableQrExportService {
           child: pw.FittedBox(
             fit: pw.BoxFit.scaleDown,
             child: pw.Text(
-              card.tableNumber,
+              tableNumber,
               style: pw.TextStyle(fontSize: 37, fontWeight: pw.FontWeight.bold),
             ),
           ),
@@ -392,7 +420,7 @@ class TableQrExportService {
           child: pw.FittedBox(
             fit: pw.BoxFit.scaleDown,
             child: pw.Text(
-              card.floorLabel,
+              floorLabel,
               style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
             ),
           ),
@@ -413,7 +441,7 @@ class TableQrExportService {
           ),
         ),
         pw.Spacer(),
-        for (final copy in TableQrCardModel.scanCopy)
+        for (final copy in scanCopy)
           pw.Padding(
             padding: const pw.EdgeInsets.only(top: 2),
             child: pw.Text(
@@ -473,6 +501,41 @@ class TableQrExportService {
         .replaceAll(RegExp(r'\s+'), '_')
         .replaceAll(RegExp(r'_+'), '_');
     return sanitized.isEmpty ? 'table' : sanitized;
+  }
+
+  static String _toPdfAscii(String value, {required String fallback}) {
+    const replacements = <String, String>{
+      'àáạảãâầấậẩẫăằắặẳẵ': 'a',
+      'ÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴ': 'A',
+      'èéẹẻẽêềếệểễ': 'e',
+      'ÈÉẸẺẼÊỀẾỆỂỄ': 'E',
+      'ìíịỉĩ': 'i',
+      'ÌÍỊỈĨ': 'I',
+      'òóọỏõôồốộổỗơờớợởỡ': 'o',
+      'ÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠ': 'O',
+      'ùúụủũưừứựửữ': 'u',
+      'ÙÚỤỦŨƯỪỨỰỬỮ': 'U',
+      'ỳýỵỷỹ': 'y',
+      'ỲÝỴỶỸ': 'Y',
+      'đ': 'd',
+      'Đ': 'D',
+    };
+    final characterMap = <String, String>{
+      for (final entry in replacements.entries)
+        for (final character in entry.key.split('')) character: entry.value,
+    };
+    final result = StringBuffer();
+    for (final rune in value.runes) {
+      final character = String.fromCharCode(rune);
+      final replacement = characterMap[character];
+      if (replacement != null) {
+        result.write(replacement);
+      } else if (rune >= 0x20 && rune <= 0x7E) {
+        result.write(character);
+      }
+    }
+    final normalized = result.toString().trim();
+    return normalized.isEmpty ? fallback : normalized;
   }
 
   static void _requireCards(List<TableQrCardModel> cards) {
