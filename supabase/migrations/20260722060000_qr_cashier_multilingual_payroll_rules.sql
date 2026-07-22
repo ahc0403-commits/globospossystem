@@ -455,7 +455,7 @@ FOR SELECT TO authenticated
 USING (true);
 
 REVOKE ALL ON TABLE public.employee_hourly_pay_rules,
-  public.vietnam_public_holidays FROM PUBLIC, anon;
+  public.vietnam_public_holidays FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON TABLE public.employee_hourly_pay_rules,
   public.vietnam_public_holidays TO authenticated;
 

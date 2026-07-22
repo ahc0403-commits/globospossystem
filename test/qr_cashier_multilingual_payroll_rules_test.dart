@@ -15,9 +15,16 @@ void main() {
       final qrScreen = _read('lib/features/qr_order/qr_order_screen.dart');
       final menuTab = _read('lib/features/admin/tabs/menu_tab.dart');
       final kitchen = _read('lib/features/kitchen/kitchen_screen.dart');
+      final deploy = _read('scripts/deploy_pos_production.sh');
 
       expect(migration, contains("NEW.status := 'ready'"));
       expect(migration, contains("NEW.copy_type = 'floor'"));
+      expect(
+        migration,
+        contains(
+          'public.vietnam_public_holidays FROM PUBLIC, anon, authenticated',
+        ),
+      );
       expect(migration, contains('admin_create_menu_category_i18n'));
       expect(migration, contains('admin_create_menu_item_i18n'));
       expect(migration, contains("'name_vi'"));
@@ -29,6 +36,18 @@ void main() {
       expect(menuTab, contains("Key('admin_menu_item_name_en')"));
       expect(kitchen, contains("Key('kitchen_paused_screen')"));
       expect(kitchen, contains('class KitchenOperationalScreen'));
+      expect(
+        deploy,
+        contains('20260722060000_qr_cashier_multilingual_payroll_rules.sql'),
+      );
+      expect(
+        deploy,
+        contains('preflight_qr_cashier_multilingual_payroll_rules.sql'),
+      );
+      expect(
+        deploy,
+        contains('verify_qr_cashier_multilingual_payroll_rules.sql'),
+      );
     },
   );
 
