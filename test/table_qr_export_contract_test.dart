@@ -379,6 +379,14 @@ void main() {
         conflictFix,
         isNot(contains('ON CONFLICT (table_id) WHERE is_active DO NOTHING')),
       );
+      expect(
+        readRepoFile('scripts/preflight_fix_table_qr_batch_conflict.sql'),
+        contains('TABLE_QR_CONFLICT_FIX_PREFLIGHT_OK'),
+      );
+      expect(
+        readRepoFile('scripts/verify_fix_table_qr_batch_conflict.sql'),
+        contains('ON CONFLICT DO NOTHING'),
+      );
       expect(migration, contains('SELECT DISTINCT requested_id'));
       expect(
         migration,
