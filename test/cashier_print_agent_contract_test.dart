@@ -19,10 +19,22 @@ void main() {
     final migration = readRepoFile(
       'supabase/migrations/20260722080000_cashier_native_print_agent.sql',
     );
+    final deployGate = readRepoFile('scripts/deploy_pos_production.sh');
+    final verification = readRepoFile(
+      'scripts/verify_cashier_native_print_agent.sql',
+    );
 
     expect(migration, contains("'cashier'"));
     expect(migration, contains('public.user_accessible_stores(auth.uid())'));
     expect(migration, contains('public.print_routing_actor_can_run'));
+    expect(
+      deployGate,
+      contains('20260722080000_cashier_native_print_agent.sql'),
+    );
+    expect(
+      verification,
+      contains('CASHIER_PRINT_AGENT_VERIFY_STORE_SCOPE_INCOMPLETE'),
+    );
   });
 
   test('cashier payment stays in place and opens completion dialog', () {
