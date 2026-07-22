@@ -8,6 +8,7 @@ import '../../core/hardware/print_job_agent_service.dart';
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/i18n/restaurant_cutoff_localization.dart';
 import '../../core/models/pos_table.dart';
+import '../../core/payments/cash_tender.dart';
 import '../../core/payments/payment_method_contract.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/layout/platform_info.dart';
@@ -27,6 +28,7 @@ import '../../core/services/payment_service.dart';
 import '../../core/services/payment_proof_service.dart';
 import '../../core/services/restaurant_cutoff_service.dart';
 import 'discount_modal.dart';
+import 'cash_tender_dialog.dart';
 import 'payment_proof_modal.dart';
 import 'payment_completion_dialog.dart';
 import 'red_invoice_modal.dart';
@@ -292,6 +294,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   Future<void> _showPaymentCompletion({
     required CashierOrder order,
     required String paymentMethod,
+    CashTender? cashTender,
   }) {
     return showDialog<void>(
       context: context,
@@ -299,8 +302,13 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       builder: (_) => PaymentCompletionDialog(
         order: order,
         paymentMethod: paymentMethod,
-        onReprint: () =>
-            _printReceipt(order: order, method: paymentMethod, reprint: true),
+        cashTender: cashTender,
+        onReprint: () => _printReceipt(
+          order: order,
+          method: paymentMethod,
+          cashTender: cashTender,
+          reprint: true,
+        ),
       ),
     );
   }
@@ -400,12 +408,14 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   Future<void> _printReceipt({
     required CashierOrder order,
     required String method,
+    CashTender? cashTender,
     bool reprint = false,
   }) async {
     final l10n = context.l10n;
     try {
       final job = await _paymentService.enqueueReceiptPrintJob(
         orderId: order.orderId,
+        receivedAmount: cashTender?.receivedAmount,
         reprint: reprint,
       );
       if (!mounted) return;
@@ -770,7 +780,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       );
                     }
                   },
-                  onProcess: (method) async {
+                  onProcess: (method, cashTender) async {
                     final selectedOrder = paymentState.selectedOrder;
                     if (storeId == null || selectedOrder == null) {
                       return;
@@ -792,7 +802,11 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       method,
                     );
                     if (mounted && ref.read(paymentProvider).paymentSuccess) {
-                      await _printReceipt(order: selectedOrder, method: method);
+                      await _printReceipt(
+                        order: selectedOrder,
+                        method: method,
+                        cashTender: cashTender,
+                      );
                       setState(() {
                         _selectedMethod = null;
                         _lastCompletedOrderId = selectedOrder.orderId;
@@ -871,6 +885,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                         await _showPaymentCompletion(
                           order: selectedOrder,
                           paymentMethod: method,
+                          cashTender: cashTender,
                         );
                         if (context.mounted) {
                           unawaited(
@@ -1675,7 +1690,7 @@ class _SelectedOrderView extends StatelessWidget {
   final ValueChanged<String> onSelectMethod;
   final Future<void> Function() onApplyDiscount;
   final Future<void> Function(OrderItem item) onToggleServiceItem;
-  final Future<void> Function(String method) onProcess;
+  final Future<void> Function(String method, CashTender? cashTender) onProcess;
   final Future<void> Function() onProcessSplit;
   final Future<void> Function() onCancelOrder;
   final Future<void> Function() onReprint;
@@ -2184,7 +2199,7 @@ class _CashierPaymentRail extends StatelessWidget {
   final bool expandMethodSection;
   final ValueChanged<String> onSelectMethod;
   final Future<void> Function() onApplyDiscount;
-  final Future<void> Function(String method) onProcess;
+  final Future<void> Function(String method, CashTender? cashTender) onProcess;
   final Future<void> Function() onProcessSplit;
   final Future<void> Function() onCancelOrder;
   final Future<void> Function() onReprint;
@@ -2252,7 +2267,17 @@ class _CashierPaymentRail extends StatelessWidget {
         return;
       }
 
-      await onProcess(selectedMethod!);
+      CashTender? cashTender;
+      if (selectedMethod == paymentMethodCash) {
+        cashTender = await showDialog<CashTender>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => CashTenderDialog(amountDue: order.remainingDue),
+        );
+        if (cashTender == null) return;
+      }
+
+      await onProcess(selectedMethod!, cashTender);
     }
 
     final submitState = isProcessing

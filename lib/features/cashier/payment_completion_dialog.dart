@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/payments/cash_tender.dart';
 import '../../core/payments/payment_method_contract.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../payment/payment_provider.dart';
@@ -11,11 +12,13 @@ class PaymentCompletionDialog extends StatefulWidget {
     super.key,
     required this.order,
     required this.paymentMethod,
+    this.cashTender,
     required this.onReprint,
   });
 
   final CashierOrder order;
   final String paymentMethod;
+  final CashTender? cashTender;
   final Future<void> Function() onReprint;
 
   @override
@@ -120,6 +123,21 @@ class _PaymentCompletionDialogState extends State<PaymentCompletionDialog> {
                         value: l10n.cashierItemsCount(activeItems.length),
                         icon: Icons.table_restaurant_rounded,
                       ),
+                      if (widget.cashTender != null)
+                        _CompletionMetric(
+                          label: l10n.cashierCashReceived,
+                          value:
+                              '₫${currency.format(widget.cashTender!.receivedAmount)}',
+                          icon: Icons.account_balance_wallet_rounded,
+                        ),
+                      if (widget.cashTender != null)
+                        _CompletionMetric(
+                          label: l10n.cashierCashChange,
+                          value:
+                              '₫${currency.format(widget.cashTender!.changeAmount)}',
+                          icon: Icons.change_circle_rounded,
+                          emphasized: true,
+                        ),
                       _CompletionMetric(
                         label: l10n.cashierPaymentMethod,
                         value: methodLabel,

@@ -1352,6 +1352,7 @@ class _CategoryPanel extends StatelessWidget {
               final category = categories[index];
               final categoryId = category['id']?.toString() ?? '';
               final isSelected = categoryId == selectedCategoryId;
+              final isSystemAlcohol = category['system_key'] == 'alcohol';
 
               return PosListRow(
                 selected: isSelected,
@@ -1360,20 +1361,43 @@ class _CategoryPanel extends StatelessWidget {
                 child: Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        category['name']?.toString() ?? '-',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppFonts.system(
-                          color: AppColors.textPrimary,
-                          fontSize: 15,
-                          fontWeight: isSelected
-                              ? FontWeight.w700
-                              : FontWeight.w600,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            category['name']?.toString() ?? '-',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppFonts.system(
+                              color: AppColors.textPrimary,
+                              fontSize: 15,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
+                            ),
+                          ),
+                          if (isSystemAlcohol)
+                            Text(
+                              l10n.menuProtectedAlcoholCategory,
+                              style: AppFonts.system(
+                                color: AppColors.textSecondary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                    if (isSelected) ...[
+                    if (isSystemAlcohol)
+                      Tooltip(
+                        message: l10n.menuProtectedAlcoholCategory,
+                        child: const Icon(
+                          Icons.lock_outline,
+                          size: 18,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    if (isSelected && !isSystemAlcohol) ...[
                       IconButton(
                         key: Key('admin_menu_edit_category_$categoryId'),
                         visualDensity: VisualDensity.compact,

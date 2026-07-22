@@ -708,6 +708,7 @@ apply_migration() {
     20260722080000_cashier_native_print_agent.sql|\
     20260722100000_vietnamese_only_printer_output.sql|\
     20260722110000_cashier_table_realtime_status.sql|\
+    20260722120000_cash_tender_and_protected_alcohol_vat.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -882,6 +883,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_vietnamese_printer_output.sql" \
       "Vietnamese-only printer output migration preflight"
+  elif [[ "$migration_name" == "20260722120000_cash_tender_and_protected_alcohol_vat.sql" ]]; then
+    log "Cash tender and protected alcohol VAT migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_cash_tender_and_alcohol_vat.sql" \
+      "cash tender and protected alcohol VAT migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -1037,6 +1043,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_cashier_table_realtime_status.sql" \
       "cashier table Realtime status migration verification"
+  elif [[ "$migration_name" == "20260722120000_cash_tender_and_protected_alcohol_vat.sql" ]]; then
+    log "Cash tender and protected alcohol VAT migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_cash_tender_and_alcohol_vat.sql" \
+      "cash tender and protected alcohol VAT migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \

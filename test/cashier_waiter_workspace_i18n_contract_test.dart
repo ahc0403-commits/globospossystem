@@ -79,7 +79,7 @@ void main() {
     expect(cashier, contains('paymentMethodDisplayLabel('));
     expect(cashier, contains("onSelectMethod(method);"));
     expect(cashier, contains('if (selectedMethod == null)'));
-    expect(cashier, contains('await onProcess(selectedMethod!)'));
+    expect(cashier, contains('await onProcess(selectedMethod!, cashTender)'));
     expect(cashier, isNot(contains('await onProcess(method)')));
     expect(cashier, isNot(contains('var method = selectedMethod')));
     expect(cashier, contains('? l10n.cashierPaymentMethod'));

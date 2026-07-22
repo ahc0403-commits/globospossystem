@@ -166,11 +166,17 @@ class _PaymentProofService extends PaymentProofService {
 }
 
 class _PaymentService extends PaymentService {
+  double? receivedAmount;
+
   @override
   Future<Map<String, dynamic>> enqueueReceiptPrintJob({
     required String orderId,
+    double? receivedAmount,
     bool reprint = false,
-  }) async => {'status': 'done'};
+  }) async {
+    this.receivedAmount = receivedAmount;
+    return {'status': 'done'};
+  }
 }
 
 class _CutoffService extends RestaurantCutoffService {
@@ -283,6 +289,46 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('cash payment calculates change and sends tender to receipt', (
+    tester,
+  ) async {
+    final harness = await _pumpCashier(tester);
+    await _selectOrder(tester);
+
+    await tester.ensureVisible(
+      find.byKey(const Key('cashier_method_tile_$paymentMethodCash')),
+    );
+    await tester.tap(
+      find.byKey(const Key('cashier_method_tile_$paymentMethodCash')),
+    );
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(const Key('payment_submit_button')));
+    await tester.tap(find.byKey(const Key('payment_submit_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('cashier_cash_tender_dialog')), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('cashier_cash_received_input')),
+      '400000',
+    );
+    await tester.pump();
+    expect(find.text('₫260.000'), findsWidgets);
+    await tester.tap(find.byKey(const Key('cashier_cash_tender_confirm')));
+
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('cashier_single_red_invoice_dialog')),
+    );
+    _dismiss(tester, const Key('cashier_single_red_invoice_dialog'));
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('cashier_payment_completion_dialog')),
+    );
+
+    expect(harness.paymentService.receivedAmount, 400000);
+    expect(find.text('₫260.000'), findsWidgets);
+  });
+
   testWidgets('split payment executes proof and red-invoice call sites', (
     tester,
   ) async {
@@ -325,10 +371,15 @@ void main() {
 }
 
 class _CashierHarness {
-  const _CashierHarness({required this.notifier, required this.proofService});
+  const _CashierHarness({
+    required this.notifier,
+    required this.proofService,
+    required this.paymentService,
+  });
 
   final _PaymentNotifier notifier;
   final _PaymentProofService proofService;
+  final _PaymentService paymentService;
 }
 
 Future<_CashierHarness> _pumpCashier(WidgetTester tester) async {
@@ -339,6 +390,7 @@ Future<_CashierHarness> _pumpCashier(WidgetTester tester) async {
 
   final notifier = _PaymentNotifier();
   final proofService = _PaymentProofService();
+  final paymentService = _PaymentService();
   final router = GoRouter(
     initialLocation: '/cashier',
     routes: [
@@ -346,7 +398,7 @@ Future<_CashierHarness> _pumpCashier(WidgetTester tester) async {
         path: '/cashier',
         builder: (_, __) => CashierScreen(
           paymentProofServiceOverride: proofService,
-          paymentServiceOverride: _PaymentService(),
+          paymentServiceOverride: paymentService,
           restaurantCutoffServiceOverride: _CutoffService(),
         ),
       ),
@@ -395,7 +447,11 @@ Future<_CashierHarness> _pumpCashier(WidgetTester tester) async {
     ),
   );
   await tester.pumpAndSettle();
-  return _CashierHarness(notifier: notifier, proofService: proofService);
+  return _CashierHarness(
+    notifier: notifier,
+    proofService: proofService,
+    paymentService: paymentService,
+  );
 }
 
 Future<void> _selectOrder(WidgetTester tester) async {
