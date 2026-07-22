@@ -42,6 +42,20 @@ void main() {
     );
     expect(script, contains('SUPABASE_ANON_KEY'));
     expect(script, isNot(contains('SUPABASE_SERVICE_KEY')));
+    expect(script, contains('function Find-VisualCppRuntimeDirectory'));
+    for (final runtimeFile in <String>[
+      'msvcp140.dll',
+      'vcruntime140.dll',
+      'vcruntime140_1.dll',
+    ]) {
+      expect(
+        script,
+        contains(runtimeFile),
+        reason: '$runtimeFile must be bundled for clean Windows installs.',
+      );
+    }
+    expect(script, contains('Copy-Item -LiteralPath'));
+    expect(script, contains('Required Visual C++ runtime was not bundled'));
     expect(
       script,
       contains('test/windows_print_station_build_contract_test.dart'),
