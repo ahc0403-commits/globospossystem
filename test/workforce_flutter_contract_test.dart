@@ -29,7 +29,7 @@ void main() {
     expect(screen, isNot(contains('emailController')));
   });
 
-  test('attendance is employee-number-only on kiosk and Photo surface', () {
+  test('attendance kiosk combines employee number with a required photo', () {
     final attendanceService = readRepoFile(
       'lib/core/services/attendance_service.dart',
     );
@@ -39,10 +39,14 @@ void main() {
     final photo = readRepoFile('lib/features/photo_ops/photo_ops_screen.dart');
 
     expect(attendanceService, contains("'record_employee_attendance'"));
+    expect(
+      attendanceService,
+      contains("'record_employee_attendance_with_photo'"),
+    );
     expect(attendanceService, contains("'p_employee_number'"));
     expect(kiosk, contains("Key('attendance_employee_number_field')"));
-    expect(kiosk, isNot(contains('CameraController')));
-    expect(kiosk, isNot(contains('availableCameras')));
+    expect(kiosk, contains('ImageSource.camera'));
+    expect(kiosk, contains("Key('attendance_photo_preview')"));
     expect(kiosk, isNot(contains('fingerprint')));
     expect(kiosk, isNot(contains('PIN')));
     expect(photo, contains("Key('photo_ops_employee_number_field')"));

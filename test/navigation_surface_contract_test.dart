@@ -26,6 +26,8 @@ void main() {
     expect(source, contains("context.go('/attendance-kiosk')"));
     expect(source, contains("Key('cashier_attendance_kiosk_entry')"));
     expect(source, contains("Key('cashier_compact_attendance_kiosk_entry')"));
+    expect(source, contains('label: Text(l10n.attendance)'));
+    expect(source, contains('minimumSize: const Size(112, 48)'));
     expect(platformInfo, contains('isAndroid || isWeb'));
   });
 

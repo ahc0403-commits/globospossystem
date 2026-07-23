@@ -1194,11 +1194,17 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     final actions = <Widget>[
       const AppNavBar(showLogout: false),
       if (PlatformInfo.isKioskSupported)
-        IconButton.outlined(
+        FilledButton.icon(
           key: const Key('cashier_attendance_kiosk_entry'),
-          tooltip: l10n.attendance,
           onPressed: () => context.go('/attendance-kiosk'),
-          icon: const Icon(Icons.badge_outlined, size: 20),
+          icon: const Icon(Icons.badge_outlined, size: 22),
+          label: Text(l10n.attendance),
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(112, 48),
+            backgroundColor: PosColors.accent,
+            foregroundColor: Colors.white,
+            textStyle: const TextStyle(fontWeight: FontWeight.w900),
+          ),
         ),
       ToastStatusBadge(
         label: l10n.cashierPendingStatus,
@@ -1331,11 +1337,17 @@ class _CashierCompactCommandBar extends ConsumerWidget {
           ),
           if (PlatformInfo.isKioskSupported) ...[
             const SizedBox(width: 6),
-            IconButton.outlined(
+            FilledButton.icon(
               key: const Key('cashier_compact_attendance_kiosk_entry'),
-              tooltip: l10n.attendance,
               onPressed: () => context.go('/attendance-kiosk'),
-              icon: const Icon(Icons.badge_outlined, size: 20),
+              icon: const Icon(Icons.badge_outlined, size: 22),
+              label: Text(l10n.attendance),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(112, 48),
+                backgroundColor: PosColors.accent,
+                foregroundColor: Colors.white,
+                textStyle: const TextStyle(fontWeight: FontWeight.w900),
+              ),
             ),
           ],
           IconButton(
