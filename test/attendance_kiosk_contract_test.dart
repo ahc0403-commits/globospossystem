@@ -13,6 +13,10 @@ void main() {
     final migration = readRepoFile(
       'supabase/migrations/20260723010000_employee_attendance_required_photo.sql',
     );
+    final verification = readRepoFile(
+      'scripts/verify_employee_attendance_required_photo.sql',
+    );
+    final deployment = readRepoFile('scripts/deploy_pos_production.sh');
 
     expect(service, contains("'record_employee_attendance_with_photo'"));
     expect(service, contains("'p_employee_number'"));
@@ -25,6 +29,17 @@ void main() {
     expect(kioskScreen, contains("Key('attendance_confirm_photo')"));
     expect(migration, contains('ATTENDANCE_PHOTO_REQUIRED'));
     expect(migration, contains('photo_url = v_photo_url'));
+    expect(verification, contains('ATTENDANCE_PHOTO_VERIFY_RPC_MISSING'));
+    expect(verification, contains("'authenticated'"));
+    expect(verification, contains("'anon'"));
+    expect(
+      deployment,
+      contains('20260723010000_employee_attendance_required_photo.sql'),
+    );
+    expect(
+      deployment,
+      contains('verify_employee_attendance_required_photo.sql'),
+    );
     expect(kioskScreen, isNot(contains('fingerprint')));
     expect(kioskScreen, isNot(contains('pin')));
   });
