@@ -63,9 +63,10 @@ class AppNavBar extends ConsumerWidget {
         final phoneChrome = viewportWidth < 560;
         final veryCompact = availableWidth < 132 || viewportWidth < 420;
         final showForward = !veryCompact && availableWidth >= 132;
-        final showStore = !veryCompact && !phoneChrome && availableWidth >= 290;
+        final showStore = !veryCompact && !phoneChrome && availableWidth >= 390;
         final showLanguage =
             !veryCompact && !phoneChrome && availableWidth >= 460;
+        final storeControlWidth = availableWidth >= 640 ? 300.0 : 210.0;
         final logoutOnly = showLogout && veryCompact;
         final compactLanguageSwitcher =
             availableWidth < 640 || viewportWidth < 1180;
@@ -124,12 +125,13 @@ class AppNavBar extends ConsumerWidget {
               _StoreSwitcher(
                 value: authState.storeId,
                 stores: authState.accessibleStores,
+                width: storeControlWidth,
                 onChanged: (storeId) =>
                     ref.read(authProvider.notifier).setActiveStore(storeId),
               ),
             ] else if (showStore && activeStore != null) ...[
               const SizedBox(width: 10),
-              _StorePill(store: activeStore),
+              _StorePill(store: activeStore, width: storeControlWidth),
             ],
             if (showLanguage) ...[
               const SizedBox(width: 10),
@@ -209,17 +211,19 @@ class _StoreSwitcher extends StatelessWidget {
   const _StoreSwitcher({
     required this.value,
     required this.stores,
+    required this.width,
     required this.onChanged,
   });
 
   final String? value;
   final List<AccessibleStore> stores;
+  final double width;
   final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 170,
+      width: width,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: PosColors.surface,
@@ -243,16 +247,31 @@ class _StoreSwitcher extends StatelessWidget {
               .map(
                 (store) => DropdownMenuItem<String>(
                   value: store.id,
-                  child: Text(
-                    store.brandName == null || store.brandName!.isEmpty
-                        ? store.name
-                        : '${store.brandName} / ${store.name}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  child: Tooltip(
+                    message: _storeDisplayName(store),
+                    child: Text(
+                      _storeDisplayName(store),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
               )
               .toList(),
+          selectedItemBuilder: (context) => [
+            for (final store in stores)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Tooltip(
+                  message: _storeDisplayName(store),
+                  child: Text(
+                    _storeDisplayName(store),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+          ],
           onChanged: (next) {
             if (next != null) onChanged(next);
           },
@@ -263,18 +282,17 @@ class _StoreSwitcher extends StatelessWidget {
 }
 
 class _StorePill extends StatelessWidget {
-  const _StorePill({required this.store});
+  const _StorePill({required this.store, required this.width});
 
   final AccessibleStore store;
+  final double width;
 
   @override
   Widget build(BuildContext context) {
-    final label = store.brandName == null || store.brandName!.isEmpty
-        ? store.name
-        : '${store.brandName} / ${store.name}';
+    final label = _storeDisplayName(store);
 
     return Container(
-      constraints: const BoxConstraints(maxWidth: 170),
+      constraints: BoxConstraints(maxWidth: width),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
         color: PosColors.surface,
@@ -293,4 +311,14 @@ class _StorePill extends StatelessWidget {
       ),
     );
   }
+}
+
+String _storeDisplayName(AccessibleStore store) {
+  final storeName = store.name.trim();
+  final brandName = store.brandName?.trim() ?? '';
+  if (brandName.isEmpty ||
+      storeName.toLowerCase().startsWith(brandName.toLowerCase())) {
+    return storeName;
+  }
+  return '$brandName / $storeName';
 }

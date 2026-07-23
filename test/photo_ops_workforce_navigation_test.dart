@@ -23,7 +23,11 @@ class _AuthNotifier extends AuthNotifier {
       storeId: _storeId,
       primaryStoreId: _storeId,
       accessibleStores: const [
-        AccessibleStore(id: _storeId, name: 'PHOTO OBJET DI AN'),
+        AccessibleStore(
+          id: _storeId,
+          name: 'PHOTO OBJET DI AN',
+          brandName: 'PHOTO OBJET',
+        ),
       ],
     );
   }
@@ -112,6 +116,9 @@ void main() {
     tester,
   ) async {
     await _pumpPhotoOps(tester, 'photo_objet_master');
+
+    expect(find.text('PHOTO OBJET DI AN'), findsWidgets);
+    expect(find.text('PHOTO OBJET / PHOTO OBJET DI AN'), findsNothing);
 
     await tester.tap(find.byKey(const Key('app_nav_home_button')));
     await tester.pumpAndSettle();

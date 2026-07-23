@@ -4134,21 +4134,17 @@ class _PageShell extends StatelessWidget {
           final titleBlock = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: _textStyle(
-                  size: compactPhone ? 21 : 24,
-                  weight: FontWeight.w900,
-                  color: ToastColorTokens.textPrimary,
-                ),
-              ),
-              const SizedBox(height: ToastSpacingTokens.xs),
-              Text(
-                subtitle,
-                style: _textStyle(
-                  size: compactPhone ? 12.5 : 13,
-                  weight: FontWeight.w500,
-                  color: ToastColorTokens.textSecondary,
+              Tooltip(
+                message: subtitle,
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _textStyle(
+                    size: compactPhone ? 18 : 20,
+                    weight: FontWeight.w900,
+                    color: ToastColorTokens.textPrimary,
+                  ),
                 ),
               ),
             ],
@@ -4165,10 +4161,10 @@ class _PageShell extends StatelessWidget {
             children: [
               Padding(
                 padding: EdgeInsets.fromLTRB(
-                  compactPhone ? 16 : 20,
-                  18,
-                  compactPhone ? 16 : 20,
-                  14,
+                  compactPhone ? 10 : 12,
+                  8,
+                  compactPhone ? 10 : 12,
+                  8,
                 ),
                 child: stackHeader
                     ? Column(

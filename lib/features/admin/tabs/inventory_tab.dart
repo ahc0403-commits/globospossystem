@@ -258,9 +258,31 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     final l10n = context.l10n;
     final selectedTab = tabs[_selectedSurfaceIndex];
     // Contract anchor: title: l10n.inventoryManagementTitle; subtitle: l10n.inventoryManagementSubtitle.
+    final inventoryMetrics = [
+      ToastMetric(
+        label: l10n.inventoryIngredientsStat,
+        value: '${ingredientState.items.length}',
+      ),
+      ToastMetric(
+        label: l10n.inventoryRecipeStat,
+        value: '${recipeState.allRecipes.length}',
+      ),
+      ToastMetric(
+        label: l10n.inventoryPhysicalCountEntry,
+        value: canCount
+            ? '${physicalCountState.counts.length}'
+            : l10n.inventoryLocked,
+        tone: canCount ? PosColors.info : PosColors.textSecondary,
+      ),
+      ToastMetric(
+        label: l10n.inventoryTransactionLog,
+        value: '${reportState.transactions.length}',
+        tone: PosColors.success,
+      ),
+    ];
 
     return ToastWorkSurface(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+      padding: const EdgeInsets.all(4),
       backgroundColor: AppColors.surface1,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -269,24 +291,20 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.inventoryManagementTitle,
-                      style: Theme.of(context).textTheme.headlineLarge,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      l10n.inventoryManagementSubtitle,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: PosColors.textSecondary,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
+                flex: 2,
+                child: Text(
+                  l10n.inventoryManagementTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 5,
+                child: ToastMetricStrip(dense: true, metrics: inventoryMetrics),
+              ),
+              const SizedBox(width: 10),
               ToastStatusBadge(
                 label: _inventorySurfaceLabel(selectedTab),
                 color: _inventorySurfaceColor(selectedTab),
@@ -294,32 +312,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          ToastMetricStrip(
-            metrics: [
-              ToastMetric(
-                label: l10n.inventoryIngredientsStat,
-                value: '${ingredientState.items.length}',
-              ),
-              ToastMetric(
-                label: l10n.inventoryRecipeStat,
-                value: '${recipeState.allRecipes.length}',
-              ),
-              ToastMetric(
-                label: l10n.inventoryPhysicalCountEntry,
-                value: canCount
-                    ? '${physicalCountState.counts.length}'
-                    : l10n.inventoryLocked,
-                tone: canCount ? PosColors.info : PosColors.textSecondary,
-              ),
-              ToastMetric(
-                label: l10n.inventoryTransactionLog,
-                value: '${reportState.transactions.length}',
-                tone: PosColors.success,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 4),
           Row(
             children: [
               Expanded(

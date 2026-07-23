@@ -611,10 +611,38 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
         : printerState.lastTestResult == false
         ? PosColors.warning
         : PosColors.textPrimary;
+    final settingsMetrics = [
+      ToastMetric(
+        label: context.l10n.settingsActiveStores,
+        value: storeId == null ? '0' : '1',
+        tone: storeId == null ? PosColors.warning : PosColors.success,
+      ),
+      ToastMetric(
+        label: context.l10n.settingsPermissionGroups,
+        value: context.l10n.settingsPermissionGroupCount(
+          _permissionGroupCount(activeRole),
+        ),
+        tone: PosColors.accent,
+      ),
+      ToastMetric(
+        label: context.l10n.settingsPaymentConfig,
+        value: _hasPayrollPin == true
+            ? context.l10n.settingsProtected
+            : _hasPayrollPin == false
+            ? context.l10n.settingsNotSet
+            : context.l10n.settingsChecking,
+        tone: _hasPayrollPin == true ? PosColors.success : PosColors.warning,
+      ),
+      ToastMetric(
+        label: context.l10n.settingsSyncStatus,
+        value: printerSyncLabel,
+        tone: printerTone,
+      ),
+    ];
 
     return ToastWorkSurface(
       key: const Key('settings_configuration_header'),
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -622,80 +650,24 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n.settings,
-                      style: Theme.of(context).textTheme.headlineMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      context.l10n.settingsScreenSubtitle,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: PosColors.textSecondary,
-                      ),
-                    ),
-                  ],
+                flex: 2,
+                child: Text(
+                  context.l10n.settings,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 5,
+                child: ToastMetricStrip(dense: true, metrics: settingsMetrics),
+              ),
+              const SizedBox(width: 10),
               ToastStatusBadge(
                 label: selectedCategory.label,
                 color: PosColors.accent,
                 compact: true,
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          ToastMetricStrip(
-            metrics: [
-              ToastMetric(
-                label: context.l10n.settingsActiveStores,
-                value: storeId == null ? '0' : '1',
-                tone: storeId == null ? PosColors.warning : PosColors.success,
-              ),
-              ToastMetric(
-                label: context.l10n.settingsPermissionGroups,
-                value: context.l10n.settingsPermissionGroupCount(
-                  _permissionGroupCount(activeRole),
-                ),
-                tone: PosColors.accent,
-              ),
-              ToastMetric(
-                label: context.l10n.settingsPaymentConfig,
-                value: _hasPayrollPin == true
-                    ? context.l10n.settingsProtected
-                    : _hasPayrollPin == false
-                    ? context.l10n.settingsNotSet
-                    : context.l10n.settingsChecking,
-                tone: _hasPayrollPin == true
-                    ? PosColors.success
-                    : PosColors.warning,
-              ),
-              ToastMetric(
-                label: context.l10n.settingsSyncStatus,
-                value: printerSyncLabel,
-                tone: printerTone,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              ToastStatusBadge(
-                label: selectedCategory.label,
-                color: PosColors.textSecondary,
-                compact: true,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  selectedCategory.summary,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: PosColors.textSecondary,
-                  ),
-                ),
               ),
             ],
           ),

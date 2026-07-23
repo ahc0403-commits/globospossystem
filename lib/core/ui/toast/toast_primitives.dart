@@ -207,9 +207,11 @@ class ToastMetricStrip extends StatelessWidget {
     super.key,
     required this.metrics,
     this.maxColumns = 4,
+    this.dense = true,
   });
   final List<ToastMetric> metrics;
   final int maxColumns;
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
@@ -262,10 +264,12 @@ class ToastMetricStrip extends StatelessWidget {
             borderRadius: AppRadius.lg,
             border: Border.all(color: AppColors.surface3),
           ),
-          padding: EdgeInsets.symmetric(
-            horizontal: compactPhone ? 5 : 6,
-            vertical: compactPhone ? 5 : 6,
-          ),
+          padding: dense
+              ? const EdgeInsets.all(2)
+              : EdgeInsets.symmetric(
+                  horizontal: compactPhone ? 5 : 6,
+                  vertical: compactPhone ? 5 : 6,
+                ),
           child: Column(
             children: [
               for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) ...[
@@ -299,6 +303,44 @@ class ToastMetricStrip extends StatelessWidget {
 
   Widget _tile(ToastMetric m, {required bool compactPhone}) {
     final tone = m.tone;
+    if (dense) {
+      return Container(
+        constraints: const BoxConstraints(minHeight: 26),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(
+          color: AppColors.surface1,
+          borderRadius: AppRadius.md,
+          border: Border.all(color: AppColors.surface3),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                m.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppFonts.system(
+                  color: AppColors.textSecondary,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              m.value,
+              maxLines: 1,
+              style: AppFonts.system(
+                color: tone ?? AppColors.textPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                height: 1,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface1,
