@@ -74,3 +74,5 @@ assets/fonts/SourceHanSerif-VF.otf.ttc
 # Flutter gen-l10n output (generated from lib/l10n/*.arb at flutter pub get time
 # when pubspec `generate: true` is set; do not commit generated dart code)
 lib/l10n/app_localizations*.dart
+.vercel
+.env*.local
