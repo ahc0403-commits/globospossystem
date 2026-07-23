@@ -16,6 +16,7 @@ const _storeId = '7f6c9d22-6d84-4c7f-b923-79c81c4015d1';
 const _supplier = <String, dynamic>{
   'id': 'supplier-fresh',
   'supplier_name': 'Fresh Food Saigon',
+  'bank_account_number': '0123456789',
   'status': 'active',
 };
 const _product = <String, dynamic>{

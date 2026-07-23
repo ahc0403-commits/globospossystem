@@ -1912,6 +1912,9 @@ class _InventoryPurchaseScreenState
     final businessController = TextEditingController(
       text: _string(supplier?['business_registration_no']),
     );
+    final bankAccountController = TextEditingController(
+      text: _string(supplier?['bank_account_number']),
+    );
     final paymentController = TextEditingController(
       text: _string(supplier?['payment_terms']),
     );
@@ -1984,6 +1987,14 @@ class _InventoryPurchaseScreenState
                       ),
                     ),
                     TextField(
+                      key: const Key('inventory_supplier_bank_account_field'),
+                      controller: bankAccountController,
+                      keyboardType: TextInputType.text,
+                      decoration: InputDecoration(
+                        labelText: l10n.inventoryPurchaseBankAccountNumber,
+                      ),
+                    ),
+                    TextField(
                       controller: startController,
                       decoration: InputDecoration(
                         labelText: l10n.inventoryPurchaseContractStartDate,
@@ -2040,6 +2051,9 @@ class _InventoryPurchaseScreenState
                     address: _nullableText(addressController.text),
                     businessRegistrationNo: _nullableText(
                       businessController.text,
+                    ),
+                    bankAccountNumber: _nullableText(
+                      bankAccountController.text,
                     ),
                     paymentTerms: _nullableText(paymentController.text),
                     contractStartDate: _parseDateOrNull(startController.text),
@@ -4935,6 +4949,12 @@ class _SupplierDetailPanel extends StatelessWidget {
           value: _string(supplier!['payment_terms'], fallback: '-'),
           helper:
               '${_date(supplier!['contract_start_date'])} ~ ${_date(supplier!['contract_end_date'])}',
+        ),
+        const Divider(height: 1),
+        _KeyValueRow(
+          label: l10n.inventoryPurchaseBankAccountNumber,
+          value: _string(supplier!['bank_account_number'], fallback: '-'),
+          helper: _string(supplier!['business_registration_no'], fallback: '-'),
         ),
         const Divider(height: 1),
         _KeyValueRow(
