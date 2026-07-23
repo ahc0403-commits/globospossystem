@@ -349,15 +349,32 @@ class PayrollService {
     required DateTime periodEnd,
   }) async {
     final excel = Excel.createExcel();
-    final sheet = excel['Payroll Calculation'];
+    excel.rename('Sheet1', 'Summary');
+    excel.setDefaultSheet('Summary');
+    final summary = excel['Summary'];
+    final details = excel['Daily Details'];
 
-    sheet.appendRow([
+    summary.appendRow([
       TextCellValue(
         'GLOBOS Payroll Statement ${periodStart.toIso8601String().substring(0, 10)} ~ ${periodEnd.toIso8601String().substring(0, 10)}',
       ),
     ]);
-    sheet.appendRow([TextCellValue('')]);
-    sheet.appendRow([
+    summary.appendRow([TextCellValue('')]);
+    summary.appendRow([
+      TextCellValue('Employee Name'),
+      TextCellValue('Work Days'),
+      TextCellValue('Completed Shifts'),
+      TextCellValue('Total Hours'),
+      TextCellValue('Night Hours'),
+      TextCellValue('Holiday Hours'),
+      TextCellValue('Unpaired Records'),
+      TextCellValue('Late Minutes'),
+      TextCellValue('Gross Amount (VND)'),
+      TextCellValue('Review Reference (VND)'),
+      TextCellValue('Payable Amount (VND)'),
+    ]);
+
+    details.appendRow([
       TextCellValue('Employee Name'),
       TextCellValue('Date'),
       TextCellValue('Clock In'),
@@ -366,16 +383,57 @@ class PayrollService {
       TextCellValue('Night hours'),
       TextCellValue('Holiday hours'),
       TextCellValue('Amount (VND)'),
+      TextCellValue('Status'),
     ]);
 
     double totalHours = 0;
     double totalAmount = 0;
+    var totalWorkDays = 0;
+    var totalShifts = 0;
 
     for (final payroll in payrolls) {
+      final completedRecords = payroll.dailyRecords
+          .where((record) => !record.isUnpaired)
+          .toList();
+      final workDays = completedRecords
+          .map(
+            (record) =>
+                '${record.date.year}-${record.date.month}-${record.date.day}',
+          )
+          .toSet()
+          .length;
+      final nightHours = payroll.dailyRecords.fold<double>(
+        0,
+        (sum, record) => sum + record.nightHours,
+      );
+      final holidayHours = payroll.dailyRecords.fold<double>(
+        0,
+        (sum, record) => sum + record.holidayHours,
+      );
+      final unpairedCount = payroll.dailyRecords
+          .where((record) => record.isUnpaired)
+          .length;
+      totalWorkDays += workDays;
+      totalShifts += completedRecords.length;
+
+      summary.appendRow([
+        TextCellValue(payroll.userName),
+        IntCellValue(workDays),
+        IntCellValue(completedRecords.length),
+        DoubleCellValue(payroll.totalHours),
+        DoubleCellValue(double.parse(nightHours.toStringAsFixed(2))),
+        DoubleCellValue(double.parse(holidayHours.toStringAsFixed(2))),
+        IntCellValue(unpairedCount),
+        IntCellValue(payroll.lateMinutes),
+        DoubleCellValue(payroll.grossAmount),
+        DoubleCellValue(payroll.lateReviewAmount),
+        DoubleCellValue(payroll.totalAmount),
+      ]);
+
       for (final r in payroll.dailyRecords) {
         totalHours += r.hours;
         totalAmount += r.amount;
-        sheet.appendRow([
+        details.appendRow([
           TextCellValue(payroll.userName),
           TextCellValue(r.date.toIso8601String().substring(0, 10)),
           TextCellValue(r.clockIn == null ? '-' : _fmtTime(r.clockIn!)),
@@ -384,10 +442,11 @@ class PayrollService {
           DoubleCellValue(r.nightHours),
           DoubleCellValue(r.holidayHours),
           DoubleCellValue(r.amount),
+          TextCellValue(r.isUnpaired ? 'Review required' : 'Complete'),
         ]);
       }
       if (payroll.lateReviewAmount > 0) {
-        sheet.appendRow([
+        details.appendRow([
           TextCellValue(payroll.userName),
           TextCellValue(
             'Lateness review required: ${payroll.lateMinutes} min; '
@@ -400,11 +459,47 @@ class PayrollService {
           TextCellValue(''),
           TextCellValue(''),
           DoubleCellValue(0),
+          TextCellValue('Review required'),
         ]);
       }
     }
 
-    sheet.appendRow([
+    summary.appendRow([
+      TextCellValue('Total'),
+      IntCellValue(totalWorkDays),
+      IntCellValue(totalShifts),
+      DoubleCellValue(double.parse(totalHours.toStringAsFixed(2))),
+      TextCellValue(''),
+      TextCellValue(''),
+      IntCellValue(
+        payrolls.fold(
+          0,
+          (sum, payroll) =>
+              sum +
+              payroll.dailyRecords.where((record) => record.isUnpaired).length,
+        ),
+      ),
+      IntCellValue(
+        payrolls.fold(0, (sum, payroll) => sum + payroll.lateMinutes),
+      ),
+      DoubleCellValue(
+        double.parse(
+          payrolls
+              .fold<double>(0, (sum, payroll) => sum + payroll.grossAmount)
+              .toStringAsFixed(2),
+        ),
+      ),
+      DoubleCellValue(
+        double.parse(
+          payrolls
+              .fold<double>(0, (sum, payroll) => sum + payroll.lateReviewAmount)
+              .toStringAsFixed(2),
+        ),
+      ),
+      DoubleCellValue(double.parse(totalAmount.toStringAsFixed(2))),
+    ]);
+
+    details.appendRow([
       TextCellValue('Total'),
       TextCellValue(''),
       TextCellValue(''),
@@ -413,7 +508,35 @@ class PayrollService {
       TextCellValue(''),
       TextCellValue(''),
       DoubleCellValue(double.parse(totalAmount.toStringAsFixed(2))),
+      TextCellValue(''),
     ]);
+
+    for (var index = 0; index < 11; index++) {
+      summary.setColumnWidth(index, index == 0 ? 28 : 18);
+      summary
+          .cell(CellIndex.indexByColumnRow(columnIndex: index, rowIndex: 2))
+          .cellStyle = CellStyle(
+        bold: true,
+        backgroundColorHex: ExcelColor.blue50,
+        textWrapping: TextWrapping.WrapText,
+      );
+    }
+    for (var index = 0; index < 9; index++) {
+      details.setColumnWidth(index, index == 0 ? 28 : 18);
+      details
+          .cell(CellIndex.indexByColumnRow(columnIndex: index, rowIndex: 0))
+          .cellStyle = CellStyle(
+        bold: true,
+        backgroundColorHex: ExcelColor.blue50,
+        textWrapping: TextWrapping.WrapText,
+      );
+    }
+    summary
+        .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0))
+        .cellStyle = CellStyle(
+      bold: true,
+      fontSize: 14,
+    );
 
     final bytes = excel.encode();
     return bytes ?? <int>[];

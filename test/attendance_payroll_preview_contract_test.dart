@@ -40,6 +40,9 @@ void main() {
       contains('Future<List<StaffPayroll>> calculatePayroll'),
     );
     expect(payrollService, contains('Future<List<int>> exportToExcel'));
+    expect(payrollService, contains("excel.rename('Sheet1', 'Summary')"));
+    expect(payrollService, contains("final details = excel['Daily Details']"));
+    expect(payrollService, contains("'Payable Amount (VND)'"));
     expect(
       pinService,
       contains('Future<bool> verifyPin(String storeId, String enteredPin)'),
