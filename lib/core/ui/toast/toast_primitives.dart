@@ -207,7 +207,7 @@ class ToastMetricStrip extends StatelessWidget {
     super.key,
     required this.metrics,
     this.maxColumns = 4,
-    this.dense = true,
+    this.dense = false,
   });
   final List<ToastMetric> metrics;
   final int maxColumns;
@@ -327,14 +327,20 @@ class ToastMetricStrip extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 6),
-            Text(
-              m.value,
-              maxLines: 1,
-              style: AppFonts.system(
-                color: tone ?? AppColors.textPrimary,
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-                height: 1,
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Text(
+                  m.value,
+                  maxLines: 1,
+                  style: AppFonts.system(
+                    color: tone ?? AppColors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    height: 1,
+                  ),
+                ),
               ),
             ),
           ],
