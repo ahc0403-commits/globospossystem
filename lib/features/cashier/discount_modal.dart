@@ -92,6 +92,10 @@ class _DiscountModalState extends State<DiscountModal> {
       showErrorToast(context, context.l10n.cashierDiscountValueRequired);
       return;
     }
+    if (_reasonController.text.trim().isEmpty) {
+      showErrorToast(context, context.l10n.cashierDiscountReasonRequired);
+      return;
+    }
     if (_pinController.text.trim().isEmpty) {
       showErrorToast(context, context.l10n.cashierDiscountPinRequired);
       return;

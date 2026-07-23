@@ -711,6 +711,7 @@ apply_migration() {
     20260722120000_cash_tender_and_protected_alcohol_vat.sql|\
     20260723010000_employee_attendance_required_photo.sql|\
     20260723020000_inventory_supplier_bank_account.sql|\
+    20260723030000_cashier_non_revenue_checkout.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -890,6 +891,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_cash_tender_and_alcohol_vat.sql" \
       "cash tender and protected alcohol VAT migration preflight"
+  elif [[ "$migration_name" == "20260723030000_cashier_non_revenue_checkout.sql" ]]; then
+    log "Cashier non-revenue checkout migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_cashier_non_revenue_checkout.sql" \
+      "cashier non-revenue checkout migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -1060,6 +1066,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_inventory_supplier_bank_account.sql" \
       "inventory supplier bank-account migration verification"
+  elif [[ "$migration_name" == "20260723030000_cashier_non_revenue_checkout.sql" ]]; then
+    log "Cashier non-revenue checkout migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_cashier_non_revenue_checkout.sql" \
+      "cashier non-revenue checkout migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \

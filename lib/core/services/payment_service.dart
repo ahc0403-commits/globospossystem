@@ -67,6 +67,30 @@ class PaymentService {
     return Map<String, dynamic>.from(result as Map);
   }
 
+  Future<Map<String, dynamic>> processNonRevenuePayment({
+    required String orderId,
+    required String storeId,
+    required double amount,
+    required String type,
+    required String reason,
+    String? staffName,
+    required String managerPin,
+  }) async {
+    final result = await supabase.rpc(
+      'process_non_revenue_payment',
+      params: {
+        'p_order_id': orderId,
+        'p_store_id': storeId,
+        'p_amount': amount,
+        'p_type': type,
+        'p_reason': reason,
+        'p_staff_name': staffName,
+        'p_manager_pin': managerPin,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
   Future<Map<String, dynamic>> enqueueReceiptPrintJob({
     required String orderId,
     double? receivedAmount,

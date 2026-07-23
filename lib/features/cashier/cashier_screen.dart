@@ -196,15 +196,156 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     return result ?? false;
   }
 
-  Future<bool> _showServiceConfirmDialog() async {
+  Future<Map<String, String>?> _showNonRevenueDialog() async {
     final l10n = context.l10n;
-    final result = await ToastConfirmDialog.show(
-      context: context,
-      title: l10n.cashierServiceProvisionTitle,
-      description: l10n.cashierServiceProvisionMessage,
-      confirmLabel: l10n.cashierServiceAction,
-    );
-    return result ?? false;
+    final reasonController = TextEditingController();
+    final staffNameController = TextEditingController();
+    final pinController = TextEditingController();
+    var type = 'staff_meal';
+    String? validationMessage;
+
+    try {
+      return await showDialog<Map<String, String>?>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setModalState) {
+            final requiresStaffName = type == 'staff_meal';
+            return AlertDialog(
+              key: const Key('cashier_non_revenue_dialog'),
+              title: Text(l10n.cashierServiceProvisionTitle),
+              content: SizedBox(
+                width: 480,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        l10n.cashierServiceProvisionMessage,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: PosColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        key: const Key('cashier_non_revenue_type_input'),
+                        initialValue: type,
+                        decoration: InputDecoration(
+                          labelText: l10n.cashierNonRevenueType,
+                        ),
+                        items: [
+                          DropdownMenuItem(
+                            value: 'staff_meal',
+                            child: Text(l10n.cashierNonRevenueStaffMeal),
+                          ),
+                          DropdownMenuItem(
+                            value: 'influencer_invite',
+                            child: Text(l10n.cashierNonRevenueInfluencer),
+                          ),
+                          DropdownMenuItem(
+                            value: 'customer_recovery',
+                            child: Text(l10n.cashierNonRevenueRecovery),
+                          ),
+                          DropdownMenuItem(
+                            value: 'tasting',
+                            child: Text(l10n.cashierNonRevenueTasting),
+                          ),
+                          DropdownMenuItem(
+                            value: 'other',
+                            child: Text(l10n.cashierNonRevenueOther),
+                          ),
+                        ],
+                        onChanged: (value) => setModalState(() {
+                          type = value ?? 'staff_meal';
+                          validationMessage = null;
+                        }),
+                      ),
+                      if (requiresStaffName) ...[
+                        const SizedBox(height: 12),
+                        TextField(
+                          key: const Key('cashier_non_revenue_staff_input'),
+                          controller: staffNameController,
+                          decoration: InputDecoration(
+                            labelText: l10n.cashierNonRevenueStaffName,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      TextField(
+                        key: const Key('cashier_non_revenue_reason_input'),
+                        controller: reasonController,
+                        minLines: 2,
+                        maxLines: 3,
+                        decoration: InputDecoration(
+                          labelText: l10n.cashierNonRevenueReason,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        key: const Key('cashier_non_revenue_pin_input'),
+                        controller: pinController,
+                        keyboardType: TextInputType.number,
+                        obscureText: true,
+                        decoration: InputDecoration(
+                          labelText: l10n.cashierDiscountManagerPin,
+                        ),
+                      ),
+                      if (validationMessage != null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          validationMessage!,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: PosColors.danger,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(l10n.cancel),
+                ),
+                FilledButton.icon(
+                  key: const Key('cashier_non_revenue_submit'),
+                  onPressed: () {
+                    final reason = reasonController.text.trim();
+                    final staffName = staffNameController.text.trim();
+                    final managerPin = pinController.text.trim();
+                    if (reason.isEmpty ||
+                        managerPin.isEmpty ||
+                        (requiresStaffName && staffName.isEmpty)) {
+                      setModalState(() {
+                        validationMessage = l10n.cashierNonRevenueRequired;
+                      });
+                      return;
+                    }
+                    Navigator.of(dialogContext).pop({
+                      'type': type,
+                      'reason': reason,
+                      'staffName': staffName,
+                      'managerPin': managerPin,
+                    });
+                  },
+                  icon: const Icon(Icons.volunteer_activism_rounded, size: 18),
+                  label: Text(l10n.cashierNonRevenueComplete),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    } finally {
+      await Future<void>.delayed(kThemeAnimationDuration);
+      reasonController.dispose();
+      staffNameController.dispose();
+      pinController.dispose();
+    }
   }
 
   Future<Map<String, String>?> _showServiceItemDialog({
@@ -479,6 +620,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     final storeId = authState.storeId;
     final role = authState.role ?? '';
     final isAdmin = PermissionUtils.isAdminLike(role);
+    final canProcessNonRevenue = role == 'cashier' || isAdmin;
     final canApplyDiscount = PermissionUtils.hasPermission(
       role,
       authState.extraPermissions,
@@ -702,6 +844,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                   order: selectedOrder,
                   selectedMethod: _selectedMethod,
                   isAdmin: isAdmin,
+                  canProcessNonRevenue: canProcessNonRevenue,
                   canApplyDiscount: canApplyDiscount,
                   canManageServiceItems: canManageServiceItems,
                   isProcessing: paymentState.isProcessing,
@@ -789,19 +932,30 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                     if (!await _canCompleteRestaurantPayment(storeId)) {
                       return;
                     }
+                    Map<String, String>? nonRevenueInput;
                     if (isServicePaymentMethod(method)) {
-                      final proceed = await _showServiceConfirmDialog();
-                      if (!proceed) {
+                      nonRevenueInput = await _showNonRevenueDialog();
+                      if (nonRevenueInput == null) {
                         return;
                       }
                     }
 
-                    final payment = await notifier.processPayment(
-                      storeId,
-                      selectedOrder.orderId,
-                      selectedOrder.remainingDue,
-                      method,
-                    );
+                    final payment = nonRevenueInput == null
+                        ? await notifier.processPayment(
+                            storeId,
+                            selectedOrder.orderId,
+                            selectedOrder.remainingDue,
+                            method,
+                          )
+                        : await notifier.processNonRevenuePayment(
+                            storeId: storeId,
+                            orderId: selectedOrder.orderId,
+                            amount: selectedOrder.remainingDue,
+                            type: nonRevenueInput['type'] ?? '',
+                            reason: nonRevenueInput['reason'] ?? '',
+                            staffName: nonRevenueInput['staffName'],
+                            managerPin: nonRevenueInput['managerPin'] ?? '',
+                          );
                     if (mounted && ref.read(paymentProvider).paymentSuccess) {
                       await _printReceipt(
                         order: selectedOrder,
@@ -1693,6 +1847,7 @@ class _SelectedOrderView extends StatelessWidget {
     required this.order,
     required this.selectedMethod,
     required this.isAdmin,
+    required this.canProcessNonRevenue,
     required this.canApplyDiscount,
     required this.canManageServiceItems,
     required this.isProcessing,
@@ -1711,6 +1866,7 @@ class _SelectedOrderView extends StatelessWidget {
   final CashierOrder order;
   final String? selectedMethod;
   final bool isAdmin;
+  final bool canProcessNonRevenue;
   final bool canApplyDiscount;
   final bool canManageServiceItems;
   final bool isProcessing;
@@ -1768,7 +1924,7 @@ class _SelectedOrderView extends StatelessWidget {
           order: order,
           selectedMethod: effectiveSelectedMethod,
           regularMethods: regularMethods,
-          isAdmin: isAdmin,
+          canProcessNonRevenue: canProcessNonRevenue,
           canApplyDiscount: canApplyDiscount,
           isServiceSelected: isServiceSelected,
           isProcessing: isProcessing,
@@ -1807,7 +1963,7 @@ class _SelectedOrderView extends StatelessWidget {
                       order: order,
                       selectedMethod: effectiveSelectedMethod,
                       regularMethods: regularMethods,
-                      isAdmin: isAdmin,
+                      canProcessNonRevenue: canProcessNonRevenue,
                       canApplyDiscount: canApplyDiscount,
                       isServiceSelected: isServiceSelected,
                       isProcessing: isProcessing,
@@ -2199,7 +2355,7 @@ class _CashierPaymentRail extends StatelessWidget {
     required this.order,
     required this.selectedMethod,
     required this.regularMethods,
-    required this.isAdmin,
+    required this.canProcessNonRevenue,
     required this.canApplyDiscount,
     required this.isServiceSelected,
     required this.isProcessing,
@@ -2218,7 +2374,7 @@ class _CashierPaymentRail extends StatelessWidget {
   final CashierOrder order;
   final String? selectedMethod;
   final List<_PaymentMethod> regularMethods;
-  final bool isAdmin;
+  final bool canProcessNonRevenue;
   final bool canApplyDiscount;
   final bool isServiceSelected;
   final bool isProcessing;
@@ -2245,7 +2401,10 @@ class _CashierPaymentRail extends StatelessWidget {
     );
     final paymentOptions = order.isStaffMeal
         ? [serviceMethod]
-        : [...regularMethods, if (isAdmin) serviceMethod];
+        : [
+            ...regularMethods,
+            if (canProcessNonRevenue && order.paymentCount == 0) serviceMethod,
+          ];
     final selectedMethodData = selectedMethod == null
         ? null
         : paymentOptions.firstWhere((method) => method.value == selectedMethod);
