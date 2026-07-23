@@ -125,6 +125,12 @@ const _coverage = <_OperationalCoverage>[
     markers: ['photo_ops_inventory_adjustment_dialog'],
   ),
   _OperationalCoverage(
+    source: 'lib/features/photo_inventory/photo_inventory_screen.dart',
+    directCalls: 1,
+    test: 'test/photo_inventory_management_test.dart',
+    markers: ['photo_inventory_item_dialog'],
+  ),
+  _OperationalCoverage(
     source: 'lib/features/store_setup/widgets/workforce_setup_card.dart',
     directCalls: 2,
     test: 'test/workforce_setup_provisioning_widget_test.dart',
@@ -245,7 +251,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 78 dialog and sheet entrypoints map to operational tests', () {
+  test('all 79 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -257,10 +263,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 77);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 78);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      78,
+      79,
     );
 
     final settings = File(

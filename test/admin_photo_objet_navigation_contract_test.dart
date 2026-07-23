@@ -35,6 +35,8 @@ void main() {
 
       expect(source, contains('if (!isPhotoObjetContext) ...['));
       expect(source, contains('if (!isPhotoObjetContext) const QcTab()'));
+      expect(source, contains('const PhotoInventoryScreen()'));
+      expect(source, contains('const InventoryPurchaseScreen()'));
       expect(source, contains(".select('brand_id')"));
       expect(
         source,

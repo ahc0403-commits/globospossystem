@@ -180,6 +180,21 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
             topbar: ToastTopbar(
               title: l10n.photoOpsBrandName,
               actions: [
+                if (canManageWorkforce)
+                  if (compactShell)
+                    IconButton(
+                      key: const Key('photo_ops_open_brand_manager'),
+                      onPressed: () => context.go('/admin'),
+                      tooltip: l10n.roleBrandAdminMenu,
+                      icon: const Icon(Icons.business_outlined),
+                    )
+                  else
+                    OutlinedButton.icon(
+                      key: const Key('photo_ops_open_brand_manager'),
+                      onPressed: () => context.go('/admin'),
+                      icon: const Icon(Icons.business_outlined, size: 18),
+                      label: Text(l10n.roleBrandAdminMenu),
+                    ),
                 AppNavBar(
                   forceHomeEnabled: canManageWorkforce,
                   onHomePressed: canManageWorkforce

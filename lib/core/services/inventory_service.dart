@@ -31,6 +31,24 @@ Map<String, dynamic> normalizeInventoryItemPatch(Map<String, dynamic> data) {
 }
 
 class InventoryService {
+  Future<Map<String, dynamic>> upsertPhotoObjetInventoryItem({
+    required String storeId,
+    String? itemId,
+    required String name,
+    required double currentStock,
+  }) async {
+    final response = await supabase.rpc(
+      'upsert_photo_objet_inventory_item',
+      params: {
+        'p_store_id': storeId,
+        'p_item_id': itemId,
+        'p_name': name.trim(),
+        'p_current_stock': currentStock,
+      },
+    );
+    return Map<String, dynamic>.from(response as Map);
+  }
+
   Future<Map<String, dynamic>> recordEmployeeInventoryAdjustment({
     required String storeId,
     required String employeeNumber,
