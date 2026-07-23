@@ -63,10 +63,9 @@ class AppNavBar extends ConsumerWidget {
         final phoneChrome = viewportWidth < 560;
         final veryCompact = availableWidth < 132 || viewportWidth < 420;
         final showForward = !veryCompact && availableWidth >= 132;
-        final showStore = !veryCompact && !phoneChrome && availableWidth >= 390;
+        final showStore = !veryCompact && !phoneChrome && availableWidth >= 290;
         final showLanguage =
             !veryCompact && !phoneChrome && availableWidth >= 460;
-        final storeControlWidth = availableWidth >= 640 ? 300.0 : 210.0;
         final logoutOnly = showLogout && veryCompact;
         final compactLanguageSwitcher =
             availableWidth < 640 || viewportWidth < 1180;
@@ -125,13 +124,12 @@ class AppNavBar extends ConsumerWidget {
               _StoreSwitcher(
                 value: authState.storeId,
                 stores: authState.accessibleStores,
-                width: storeControlWidth,
                 onChanged: (storeId) =>
                     ref.read(authProvider.notifier).setActiveStore(storeId),
               ),
             ] else if (showStore && activeStore != null) ...[
               const SizedBox(width: 10),
-              _StorePill(store: activeStore, width: storeControlWidth),
+              _StorePill(store: activeStore),
             ],
             if (showLanguage) ...[
               const SizedBox(width: 10),
@@ -211,19 +209,17 @@ class _StoreSwitcher extends StatelessWidget {
   const _StoreSwitcher({
     required this.value,
     required this.stores,
-    required this.width,
     required this.onChanged,
   });
 
   final String? value;
   final List<AccessibleStore> stores;
-  final double width;
   final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: width,
+      width: 170,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: PosColors.surface,
@@ -282,17 +278,16 @@ class _StoreSwitcher extends StatelessWidget {
 }
 
 class _StorePill extends StatelessWidget {
-  const _StorePill({required this.store, required this.width});
+  const _StorePill({required this.store});
 
   final AccessibleStore store;
-  final double width;
 
   @override
   Widget build(BuildContext context) {
     final label = _storeDisplayName(store);
 
     return Container(
-      constraints: BoxConstraints(maxWidth: width),
+      constraints: const BoxConstraints(maxWidth: 170),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
         color: PosColors.surface,

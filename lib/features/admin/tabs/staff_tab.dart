@@ -312,10 +312,26 @@ class _StaffTabState extends ConsumerState<StaffTab> {
               const SizedBox(width: 10),
               Expanded(
                 flex: 5,
-                child: ToastMetricStrip(
-                  dense: true,
-                  metrics: _staffMetrics(staffCount, activeCount, workingCount),
-                ),
+                child: compact
+                    ? SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: ToastMetricStrip(
+                          dense: true,
+                          metrics: _staffMetrics(
+                            staffCount,
+                            activeCount,
+                            workingCount,
+                          ),
+                        ),
+                      )
+                    : ToastMetricStrip(
+                        dense: true,
+                        metrics: _staffMetrics(
+                          staffCount,
+                          activeCount,
+                          workingCount,
+                        ),
+                      ),
               ),
               const SizedBox(width: 10),
               ToastStatusBadge(
