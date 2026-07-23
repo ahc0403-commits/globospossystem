@@ -305,7 +305,8 @@ class _PhotoInventoryHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ToastWorkSurface(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      key: const Key('photo_inventory_header'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       backgroundColor: AppColors.surface1,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -319,7 +320,9 @@ class _PhotoInventoryHeader extends StatelessWidget {
                   context.l10n.inventoryPurchaseStockStatusTitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleLarge,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
               ToastStatusBadge(
@@ -333,12 +336,24 @@ class _PhotoInventoryHeader extends StatelessWidget {
                   key: const Key('photo_inventory_add_item'),
                   onPressed: canAdd ? onAdd : null,
                   tooltip: context.l10n.inventoryAddIngredientAction,
-                  icon: const Icon(Icons.add),
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size.square(36),
+                    maximumSize: const Size.square(36),
+                    padding: const EdgeInsets.all(6),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  icon: const Icon(Icons.add, size: 20),
                 )
               else
                 FilledButton.icon(
                   key: const Key('photo_inventory_add_item'),
                   onPressed: canAdd ? onAdd : null,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 36),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  ),
                   icon: const Icon(Icons.add, size: 18),
                   label: Text(context.l10n.inventoryAddIngredientAction),
                 ),
