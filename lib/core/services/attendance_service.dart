@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../main.dart';
@@ -12,16 +13,34 @@ class AttendanceService {
     required String storeId,
     required String employeeNumber,
     required String type,
+    String? photoUrl,
   }) async {
     final response = await supabase.rpc(
-      'record_employee_attendance',
+      photoUrl == null
+          ? 'record_employee_attendance'
+          : 'record_employee_attendance_with_photo',
       params: {
         'p_store_id': storeId,
         'p_employee_number': employeeNumber.trim().toUpperCase(),
         'p_type': type,
+        if (photoUrl != null) 'p_photo_url': photoUrl,
       },
     );
     return Map<String, dynamic>.from(response as Map);
+  }
+
+  Future<String?> uploadEmployeeAttendancePhoto({
+    required String storeId,
+    required String employeeNumber,
+    required XFile originalFile,
+    required String type,
+  }) async {
+    return _uploadAttendancePhotoBytes(
+      storeId: storeId,
+      subjectId: employeeNumber.trim().toUpperCase(),
+      bytes: await originalFile.readAsBytes(),
+      type: type,
+    );
   }
 
   Future<String?> uploadAttendancePhoto({
@@ -30,7 +49,20 @@ class AttendanceService {
     required File originalFile,
     required String type,
   }) async {
-    final bytes = await originalFile.readAsBytes();
+    return _uploadAttendancePhotoBytes(
+      storeId: storeId,
+      subjectId: userId,
+      bytes: await originalFile.readAsBytes(),
+      type: type,
+    );
+  }
+
+  Future<String?> _uploadAttendancePhotoBytes({
+    required String storeId,
+    required String subjectId,
+    required Uint8List bytes,
+    required String type,
+  }) async {
     final original = img.decodeImage(bytes);
     if (original == null) {
       return null;
@@ -49,7 +81,8 @@ class AttendanceService {
     final dateStr =
         '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     final ts = now.millisecondsSinceEpoch;
-    final path = '$storeId/$userId/$dateStr/${ts}_$type.jpg';
+    final safeSubjectId = subjectId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+    final path = '$storeId/$safeSubjectId/$dateStr/${ts}_$type.jpg';
 
     await supabase.storage
         .from('attendance-photos')
@@ -105,7 +138,8 @@ class AttendanceService {
     final result = await supabase
         .from('attendance_logs')
         .select(
-          'id, restaurant_id, employee_id, type, logged_at, created_at, '
+          'id, restaurant_id, employee_id, type, photo_url, '
+          'photo_thumbnail_url, logged_at, created_at, '
           'store_employees(employee_number, full_name, employment_role)',
         )
         .eq('restaurant_id', storeId)
@@ -125,6 +159,8 @@ class AttendanceService {
         'user_id': map['employee_id'],
         'employee_number': employee['employee_number'],
         'type': map['type'],
+        'photo_url': map['photo_url'],
+        'photo_thumbnail_url': map['photo_thumbnail_url'],
         'logged_at': map['logged_at'],
         'created_at': map['created_at'],
         'users': {

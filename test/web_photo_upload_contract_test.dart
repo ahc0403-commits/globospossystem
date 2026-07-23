@@ -34,6 +34,12 @@ void main() {
     );
     final qcService = readRepoFile('lib/core/services/qc_service.dart');
     final qcProvider = readRepoFile('lib/features/qc/qc_provider.dart');
+    final attendanceService = readRepoFile(
+      'lib/core/services/attendance_service.dart',
+    );
+    final attendanceKiosk = readRepoFile(
+      'lib/features/attendance/attendance_kiosk_screen.dart',
+    );
 
     expect(paymentProofService, contains('required XFile originalFile'));
     expect(paymentProofService, contains('await originalFile.readAsBytes()'));
@@ -44,5 +50,9 @@ void main() {
     expect(qcService, contains('_prepareQcPhotoUpload(file)'));
     expect(qcProvider, contains('XFile file'));
     expect(qcProvider, isNot(contains("import 'dart:io';")));
+    expect(attendanceService, contains('required XFile originalFile'));
+    expect(attendanceService, contains('await originalFile.readAsBytes()'));
+    expect(attendanceKiosk, contains('Image.memory('));
+    expect(attendanceKiosk, isNot(contains('Image.file(')));
   });
 }

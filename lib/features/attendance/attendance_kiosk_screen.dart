@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/connectivity_service.dart';
@@ -16,10 +17,14 @@ import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
 import 'attendance_kiosk_provider.dart';
 
-enum _KioskViewState { idle, submitting, done }
+typedef AttendancePhotoPicker = Future<XFile?> Function();
+
+enum _KioskViewState { idle, preview, submitting, done }
 
 class AttendanceKioskScreen extends ConsumerStatefulWidget {
-  const AttendanceKioskScreen({super.key});
+  const AttendanceKioskScreen({super.key, this.photoPickerOverride});
+
+  final AttendancePhotoPicker? photoPickerOverride;
 
   @override
   ConsumerState<AttendanceKioskScreen> createState() =>
@@ -33,6 +38,9 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
   Timer? _clockTimer;
   Timer? _doneTimer;
   DateTime _nowVn = TimeUtils.nowVietnam();
+  String? _pendingType;
+  XFile? _capturedPhoto;
+  Uint8List? _capturedPhotoBytes;
 
   @override
   void initState() {
@@ -58,11 +66,16 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
     _doneTimer?.cancel();
     ref.read(attendanceKioskProvider.notifier).clearResult();
     _employeeNumberController.clear();
-    setState(() => _viewState = _KioskViewState.idle);
+    setState(() {
+      _pendingType = null;
+      _capturedPhoto = null;
+      _capturedPhotoBytes = null;
+      _viewState = _KioskViewState.idle;
+    });
     _employeeNumberFocus.requestFocus();
   }
 
-  Future<void> _submit(String type) async {
+  Future<void> _beginAttendance(String type) async {
     final storeId = ref.read(authProvider).storeId;
     final employeeNumber = _employeeNumberController.text.trim();
     if (storeId == null) {
@@ -75,6 +88,53 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
       return;
     }
 
+    await _capturePhoto(type);
+  }
+
+  Future<void> _capturePhoto(String type) async {
+    try {
+      final photo =
+          await (widget.photoPickerOverride?.call() ??
+              ImagePicker().pickImage(
+                source: ImageSource.camera,
+                preferredCameraDevice: CameraDevice.front,
+                imageQuality: 85,
+                requestFullMetadata: false,
+              ));
+      if (photo == null) {
+        if (mounted) {
+          showErrorToast(context, context.l10n.attendancePhotoRequired);
+        }
+        return;
+      }
+      final bytes = await photo.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _pendingType = type;
+        _capturedPhoto = photo;
+        _capturedPhotoBytes = bytes;
+        _viewState = _KioskViewState.preview;
+      });
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(context, context.l10n.attendancePhotoCaptureFailed);
+      }
+    }
+  }
+
+  Future<void> _submit() async {
+    final storeId = ref.read(authProvider).storeId;
+    final employeeNumber = _employeeNumberController.text.trim();
+    final type = _pendingType;
+    final photo = _capturedPhoto;
+    if (storeId == null ||
+        employeeNumber.isEmpty ||
+        type == null ||
+        photo == null) {
+      showErrorToast(context, context.l10n.attendancePhotoRequired);
+      return;
+    }
+
     setState(() => _viewState = _KioskViewState.submitting);
     final recorded = await ref
         .read(attendanceKioskProvider.notifier)
@@ -82,6 +142,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
           employeeNumber: employeeNumber,
           storeId: storeId,
           type: type,
+          photoFile: photo,
         );
     if (!mounted) return;
 
@@ -103,6 +164,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
     'EMPLOYEE_NOT_FOUND' => context.l10n.attendanceEmployeeNotFound,
     'EMPLOYEE_INACTIVE' => context.l10n.attendanceEmployeeInactive,
     'ATTENDANCE_FORBIDDEN' => context.l10n.attendanceEmployeeForbidden,
+    'ATTENDANCE_PHOTO_FAILED' => context.l10n.attendancePhotoUploadFailed,
     _ => context.l10n.attendanceRecordFailed,
   };
 
@@ -181,6 +243,7 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                 padding: const EdgeInsets.all(20),
                 child: switch (_viewState) {
                   _KioskViewState.idle => _buildIdle(isOnline),
+                  _KioskViewState.preview => _buildPreview(),
                   _KioskViewState.submitting => _buildSubmitting(),
                   _KioskViewState.done => _buildDone(kioskState),
                 },
@@ -231,7 +294,8 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp('[A-Za-z0-9_-]')),
                 ],
-                onSubmitted: (_) => isOnline ? _submit('clock_in') : null,
+                onSubmitted: (_) =>
+                    isOnline ? _beginAttendance('clock_in') : null,
                 decoration: InputDecoration(
                   labelText: context.l10n.attendanceEmployeeNumber,
                   hintText: context.l10n.attendanceEmployeeNumberHint,
@@ -249,7 +313,9 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                   Expanded(
                     child: FilledButton(
                       key: const Key('attendance_employee_clock_in'),
-                      onPressed: isOnline ? () => _submit('clock_in') : null,
+                      onPressed: isOnline
+                          ? () => _beginAttendance('clock_in')
+                          : null,
                       style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(72),
                         backgroundColor: AppColors.amber500,
@@ -268,7 +334,9 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                   Expanded(
                     child: OutlinedButton(
                       key: const Key('attendance_employee_clock_out'),
-                      onPressed: isOnline ? () => _submit('clock_out') : null,
+                      onPressed: isOnline
+                          ? () => _beginAttendance('clock_out')
+                          : null,
                       style: OutlinedButton.styleFrom(
                         minimumSize: const Size.fromHeight(72),
                       ),
@@ -295,6 +363,78 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
                   ),
                 ),
               ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPreview() {
+    final bytes = _capturedPhotoBytes;
+    final type = _pendingType;
+    if (bytes == null || type == null) {
+      return _buildIdle(true);
+    }
+
+    return ToastResponsiveBody(
+      key: const Key('attendance_photo_preview'),
+      maxWidth: 760,
+      padding: EdgeInsets.zero,
+      child: Center(
+        child: ToastWorkSurface(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                context.l10n.attendanceConfirmCapturedPhoto,
+                textAlign: TextAlign.center,
+                style: AppFonts.system(
+                  color: AppColors.textPrimary,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 440),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(18),
+                  child: Image.memory(bytes, fit: BoxFit.contain),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      key: const Key('attendance_retake_photo'),
+                      onPressed: () => _capturePhoto(type),
+                      icon: const Icon(Icons.camera_alt_outlined),
+                      label: Text(context.l10n.attendanceRetakePhoto),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(58),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      key: const Key('attendance_confirm_photo'),
+                      onPressed: _submit,
+                      icon: const Icon(Icons.check_circle_outline),
+                      label: Text(context.l10n.attendanceConfirmPhoto),
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(58),
+                        backgroundColor: AppColors.amber500,
+                        foregroundColor: AppColors.surface0,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),

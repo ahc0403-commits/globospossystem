@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/services/attendance_service.dart';
@@ -42,6 +43,7 @@ class AttendanceKioskNotifier extends StateNotifier<AttendanceKioskState> {
     required String employeeNumber,
     required String storeId,
     required String type,
+    required XFile photoFile,
   }) async {
     state = state.copyWith(
       isSubmitting: true,
@@ -51,10 +53,20 @@ class AttendanceKioskNotifier extends StateNotifier<AttendanceKioskState> {
 
     final normalizedNumber = employeeNumber.trim().toUpperCase();
     try {
+      final photoUrl = await attendanceService.uploadEmployeeAttendancePhoto(
+        storeId: storeId,
+        employeeNumber: normalizedNumber,
+        originalFile: photoFile,
+        type: type,
+      );
+      if (photoUrl == null || photoUrl.isEmpty) {
+        throw StateError('ATTENDANCE_PHOTO_UPLOAD_FAILED');
+      }
       await attendanceService.recordEmployeeAttendance(
         storeId: storeId,
         employeeNumber: normalizedNumber,
         type: type,
+        photoUrl: photoUrl,
       );
       state = state.copyWith(
         isSubmitting: false,
@@ -91,6 +103,9 @@ String _attendanceErrorCode(Object error) {
   }
   if (message.contains('FORBIDDEN')) {
     return 'ATTENDANCE_FORBIDDEN';
+  }
+  if (message.contains('ATTENDANCE_PHOTO')) {
+    return 'ATTENDANCE_PHOTO_FAILED';
   }
   return 'ATTENDANCE_RECORD_FAILED';
 }
