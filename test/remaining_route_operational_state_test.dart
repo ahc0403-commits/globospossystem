@@ -513,11 +513,11 @@ void main() {
         ),
       ],
     );
-    expect(find.text('Nguyễn Minh Anh'), findsWidgets);
-    expect(find.text('Thịt bò'), findsOneWidget);
-    expect(find.byKey(const Key('photo_ops_section_1')), findsOneWidget);
+    expect(find.text('Nguyễn Minh Anh'), findsOneWidget);
+    expect(find.text('Thịt bò'), findsNothing);
     await tester.tap(find.byKey(const Key('photo_ops_section_1')));
     await tester.pump();
+    expect(find.text('Thịt bò'), findsOneWidget);
     final adjustInventory = find.byKey(
       const ValueKey('photo_ops_inventory_adjust_ingredient-beef'),
     );
