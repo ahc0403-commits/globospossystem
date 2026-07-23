@@ -15,6 +15,20 @@ void expectInOrder(String source, List<String> markers) {
 }
 
 void main() {
+  test('cashier exposes attendance kiosk entry for tablet web use', () {
+    final source = File(
+      'lib/features/cashier/cashier_screen.dart',
+    ).readAsStringSync();
+    final platformInfo = File(
+      'lib/core/layout/platform_info.dart',
+    ).readAsStringSync();
+
+    expect(source, contains("context.go('/attendance-kiosk')"));
+    expect(source, contains("Key('cashier_attendance_kiosk_entry')"));
+    expect(source, contains("Key('cashier_compact_attendance_kiosk_entry')"));
+    expect(platformInfo, contains('isAndroid || isWeb'));
+  });
+
   test('authenticated routed screens expose shared nav and root keys', () {
     final surfaces = <String, List<String>>{
       'lib/features/waiter/waiter_screen.dart': [

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/hardware/print_job_agent_service.dart';
@@ -1192,6 +1193,13 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     );
     final actions = <Widget>[
       const AppNavBar(showLogout: false),
+      if (PlatformInfo.isKioskSupported)
+        IconButton.outlined(
+          key: const Key('cashier_attendance_kiosk_entry'),
+          tooltip: l10n.attendance,
+          onPressed: () => context.go('/attendance-kiosk'),
+          icon: const Icon(Icons.badge_outlined, size: 20),
+        ),
       ToastStatusBadge(
         label: l10n.cashierPendingStatus,
         color: PosColors.accent,
@@ -1321,6 +1329,15 @@ class _CashierCompactCommandBar extends ConsumerWidget {
               ),
             ),
           ),
+          if (PlatformInfo.isKioskSupported) ...[
+            const SizedBox(width: 6),
+            IconButton.outlined(
+              key: const Key('cashier_compact_attendance_kiosk_entry'),
+              tooltip: l10n.attendance,
+              onPressed: () => context.go('/attendance-kiosk'),
+              icon: const Icon(Icons.badge_outlined, size: 20),
+            ),
+          ],
           IconButton(
             key: const Key('logout_button'),
             icon: const Icon(Icons.logout, color: PosColors.textSecondary),
