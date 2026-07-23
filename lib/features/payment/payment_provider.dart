@@ -533,6 +533,47 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     }
   }
 
+  Future<Map<String, dynamic>?> processNonRevenuePayment({
+    required String storeId,
+    required String orderId,
+    required double amount,
+    required String type,
+    required String reason,
+    String? staffName,
+    required String managerPin,
+  }) async {
+    state = state.copyWith(
+      isProcessing: true,
+      paymentSuccess: false,
+      clearError: true,
+    );
+
+    try {
+      final payment = await paymentService.processNonRevenuePayment(
+        orderId: orderId,
+        storeId: storeId,
+        amount: amount,
+        type: type,
+        reason: reason,
+        staffName: staffName,
+        managerPin: managerPin,
+      );
+      await loadOrders(storeId);
+      state = state.copyWith(
+        isProcessing: false,
+        paymentSuccess: true,
+        clearSelectedOrder: true,
+      );
+      return payment;
+    } catch (error) {
+      state = state.copyWith(
+        isProcessing: false,
+        error: _mapPaymentError(error, 'Failed to close non-revenue order'),
+      );
+      return null;
+    }
+  }
+
   Future<List<Map<String, dynamic>>?> processPaymentSplits(
     String storeId,
     String orderId,
@@ -878,6 +919,7 @@ String _mapPaymentError(Object error, String fallbackPrefix) {
       'DISCOUNT_PIN_NOT_CONFIGURED' =>
         'Set a discount manager PIN before applying discounts.',
       'DISCOUNT_PROOF_REQUIRED' => 'A discount proof photo is required.',
+      'DISCOUNT_REASON_REQUIRED' => 'Enter a reason for the discount.',
       'DISCOUNT_ALREADY_ACTIVE' => 'This order already has an active discount.',
       'DISCOUNT_ORDER_NOT_PAYABLE' =>
         'Discounts can be applied only when the order is ready for payment.',
@@ -885,6 +927,18 @@ String _mapPaymentError(Object error, String fallbackPrefix) {
         'Staff meals must be closed with SERVICE.',
       'STAFF_MEAL_FORBIDDEN' =>
         'You do not have permission to create staff meals.',
+      'NON_REVENUE_FORBIDDEN' =>
+        'You do not have permission to close non-revenue orders.',
+      'NON_REVENUE_TYPE_INVALID' =>
+        'Select a valid non-revenue classification.',
+      'NON_REVENUE_REASON_REQUIRED' =>
+        'Enter a reason for the non-revenue checkout.',
+      'NON_REVENUE_STAFF_REQUIRED' =>
+        'Enter the staff member name for a staff meal.',
+      'NON_REVENUE_ORDER_NOT_PAYABLE' =>
+        'Only orders ready for payment can be excluded from revenue.',
+      'NON_REVENUE_AFTER_PAYMENT' =>
+        'An order cannot be excluded from revenue after payment has started.',
       'SERVICE_MARK_FORBIDDEN' =>
         'You do not have permission to mark service items.',
       'SERVICE_REASON_REQUIRED' => 'Enter a reason for the service item.',

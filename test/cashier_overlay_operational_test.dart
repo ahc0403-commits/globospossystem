@@ -239,6 +239,18 @@ void main() {
       action: find.byKey(const Key('cashier_split_payment_button')),
       surface: find.byKey(const Key('cashier_split_payment_dialog')),
     );
+    await tester.ensureVisible(
+      find.byKey(const Key('cashier_method_tile_$paymentMethodService')),
+    );
+    await tester.tap(
+      find.byKey(const Key('cashier_method_tile_$paymentMethodService')),
+    );
+    await tester.pump();
+    await _openAndDismiss(
+      tester,
+      action: find.byKey(const Key('payment_submit_button')),
+      surface: find.byKey(const Key('cashier_non_revenue_dialog')),
+    );
     await _openAndDismiss(
       tester,
       action: find.byKey(const Key('cashier_cancel_order_action')),
