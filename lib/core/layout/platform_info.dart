@@ -58,6 +58,6 @@ class PlatformInfo {
   /// 지문 인식기 하드웨어 지원 여부 (Android만 가능)
   static bool get isFingerprintSupported => isAndroid;
 
-  /// Kiosk 모드 지원 여부 (Android만)
-  static bool get isKioskSupported => isAndroid;
+  /// Attendance kiosk support (Android native and browser-based tablets).
+  static bool get isKioskSupported => isAndroid || isWeb;
 }
