@@ -26,13 +26,13 @@ class PhotoOpsKpi {
   final int activeInventoryAlerts;
   final double activePayrollEstimate;
 
-  /// Gross sales for the active store on the latest completed sales date.
+  /// Gross sales for the active store in the selected sales period.
   final double activeStoreSales;
 
-  /// Gross sales across every accessible store on the latest completed date.
+  /// Gross sales across every accessible store in the selected sales period.
   final double networkSales;
 
-  /// Transaction count for the active store on the latest completed date.
+  /// Transaction count for the active store in the selected sales period.
   final int activeStoreTransactions;
 
   /// Timestamp of the most recent sales pull in the accessible scope.
@@ -131,7 +131,7 @@ class PhotoOpsDashboardData {
   /// for KPI and priority-queue presentation.
   final List<PhotoOpsInventoryRow> inventoryItems;
 
-  /// Latest completed HCM sales-date rows for accessible stores.
+  /// Daily HCM sales rows for accessible stores in the selected period.
   final List<PhotoOpsSalesRow> salesSummary;
 
   /// Wave 1.6 sales-overlay: warning code emitted by the sales loader
@@ -366,6 +366,8 @@ class PhotoOpsService {
   Future<PhotoOpsDashboardData> loadDashboard({
     required String activeStoreId,
     required List<String> accessibleStoreIds,
+    required DateTime salesStartDate,
+    required DateTime salesEndDate,
   }) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -375,7 +377,13 @@ class PhotoOpsService {
     String? salesWarningCode;
     String? salesWarningDetail;
     try {
-      final response = await supabase.rpc('get_photo_ops_latest_sales');
+      final response = await supabase.rpc(
+        'get_photo_ops_sales_range',
+        params: {
+          'p_start_date': photoOpsHcmDate(salesStartDate),
+          'p_end_date': photoOpsHcmDate(salesEndDate),
+        },
+      );
       salesRowsRaw = List<Map<String, dynamic>>.from(response);
     } catch (error) {
       salesWarningCode = 'photo_ops_sales_load_failed';

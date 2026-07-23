@@ -9,18 +9,24 @@ class PhotoOpsState {
     this.data,
     this.error,
     this.lastLoadedStoreId,
+    this.salesStartDate,
+    this.salesEndDate,
   });
 
   final bool isLoading;
   final PhotoOpsDashboardData? data;
   final String? error;
   final String? lastLoadedStoreId;
+  final DateTime? salesStartDate;
+  final DateTime? salesEndDate;
 
   PhotoOpsState copyWith({
     bool? isLoading,
     PhotoOpsDashboardData? data,
     String? error,
     String? lastLoadedStoreId,
+    DateTime? salesStartDate,
+    DateTime? salesEndDate,
     bool clearError = false,
   }) {
     return PhotoOpsState(
@@ -28,14 +34,34 @@ class PhotoOpsState {
       data: data ?? this.data,
       error: clearError ? null : (error ?? this.error),
       lastLoadedStoreId: lastLoadedStoreId ?? this.lastLoadedStoreId,
+      salesStartDate: salesStartDate ?? this.salesStartDate,
+      salesEndDate: salesEndDate ?? this.salesEndDate,
     );
   }
 }
 
 class PhotoOpsNotifier extends StateNotifier<PhotoOpsState> {
-  PhotoOpsNotifier(this._ref) : super(const PhotoOpsState());
+  PhotoOpsNotifier(this._ref)
+    : super(
+        PhotoOpsState(
+          salesStartDate: _photoOpsDefaultSalesStart(),
+          salesEndDate: _photoOpsToday(),
+        ),
+      );
 
   final Ref _ref;
+
+  Future<void> setSalesDateRange(DateTime start, DateTime end) async {
+    final normalizedStart = DateTime(start.year, start.month, start.day);
+    final normalizedEnd = DateTime(end.year, end.month, end.day);
+    if (normalizedEnd.isBefore(normalizedStart)) return;
+    state = state.copyWith(
+      salesStartDate: normalizedStart,
+      salesEndDate: normalizedEnd,
+      clearError: true,
+    );
+    await load();
+  }
 
   Future<void> load() async {
     final auth = _ref.read(authProvider);
@@ -64,6 +90,9 @@ class PhotoOpsNotifier extends StateNotifier<PhotoOpsState> {
           : await photoOpsService.loadDashboard(
               activeStoreId: activeStoreId,
               accessibleStoreIds: accessibleStoreIds,
+              salesStartDate:
+                  state.salesStartDate ?? _photoOpsDefaultSalesStart(),
+              salesEndDate: state.salesEndDate ?? _photoOpsToday(),
             );
       state = state.copyWith(
         isLoading: false,
@@ -83,3 +112,11 @@ class PhotoOpsNotifier extends StateNotifier<PhotoOpsState> {
 final photoOpsProvider = StateNotifierProvider<PhotoOpsNotifier, PhotoOpsState>(
   (ref) => PhotoOpsNotifier(ref),
 );
+
+DateTime _photoOpsToday() {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month, now.day);
+}
+
+DateTime _photoOpsDefaultSalesStart() =>
+    _photoOpsToday().subtract(const Duration(days: 6));

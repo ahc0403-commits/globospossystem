@@ -9,7 +9,7 @@ void main() {
     );
   });
 
-  test('Photo Ops aggregates today sales by active and accessible stores', () {
+  test('Photo Ops aggregates range sales by active and accessible stores', () {
     final snapshot = summarizePhotoOpsSales(
       activeStoreId: 'store-a',
       rows: const [
@@ -33,14 +33,28 @@ void main() {
           'active_machines': '1',
           'last_pulled_at': '2026-07-11T09:00:00Z',
         },
+        {
+          'store_id': 'store-a',
+          'store_name': 'Store A',
+          'sale_date': '2026-07-10',
+          'total_gross_sales': 30000,
+          'total_transactions': 1,
+          'total_service_amount': 0,
+          'active_machines': 1,
+          'last_pulled_at': '2026-07-10T09:00:00Z',
+        },
       ],
     );
 
-    expect(snapshot.activeStoreSales, 120000);
-    expect(snapshot.networkSales, 200000);
-    expect(snapshot.activeStoreTransactions, 3);
+    expect(snapshot.activeStoreSales, 150000);
+    expect(snapshot.networkSales, 230000);
+    expect(snapshot.activeStoreTransactions, 4);
     expect(snapshot.lastSalesPulledAt, DateTime.parse('2026-07-11T09:00:00Z'));
-    expect(snapshot.rows.map((row) => row.storeName), ['Store A', 'Store B']);
+    expect(snapshot.rows.map((row) => row.storeName), [
+      'Store A',
+      'Store B',
+      'Store A',
+    ]);
   });
 
   test('Photo Ops ignores malformed rows and safely parses invalid totals', () {
