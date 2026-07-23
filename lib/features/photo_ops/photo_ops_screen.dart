@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/attendance_service.dart';
 import '../../core/services/inventory_service.dart';
+import '../../core/services/payroll_service.dart';
 import '../../core/ui/app_primitives.dart';
 import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
@@ -20,8 +22,23 @@ import 'photo_ops_provider.dart';
 import 'photo_ops_sales_export.dart';
 import 'photo_ops_service.dart';
 
+typedef PhotoOpsAttendancePhotoPicker = Future<XFile?> Function();
+typedef PhotoOpsPayrollFileSaver =
+    Future<void> Function(String fileName, List<int> bytes);
+
 class PhotoOpsScreen extends ConsumerStatefulWidget {
-  const PhotoOpsScreen({super.key});
+  const PhotoOpsScreen({
+    super.key,
+    this.attendanceServiceOverride,
+    this.payrollServiceOverride,
+    this.attendancePhotoPickerOverride,
+    this.payrollFileSaverOverride,
+  });
+
+  final AttendanceService? attendanceServiceOverride;
+  final PayrollService? payrollServiceOverride;
+  final PhotoOpsAttendancePhotoPicker? attendancePhotoPickerOverride;
+  final PhotoOpsPayrollFileSaver? payrollFileSaverOverride;
 
   @override
   ConsumerState<PhotoOpsScreen> createState() => _PhotoOpsScreenState();
@@ -31,6 +48,7 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
   String? _lastLoadedScopeKey;
   int _selectedSurfaceIndex = 0;
   bool _isExportingSales = false;
+  bool _isExportingPayroll = false;
 
   @override
   Widget build(BuildContext context) {
@@ -337,6 +355,55 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
     }
   }
 
+  Future<void> _exportPayroll(String storeId) async {
+    final today = DateTime.now();
+    final periodStart = DateTime(today.year, today.month, 1);
+    final periodEnd = DateTime(today.year, today.month, today.day, 23, 59, 59);
+    setState(() => _isExportingPayroll = true);
+
+    try {
+      final service = widget.payrollServiceOverride ?? payrollService;
+      final payrolls = await service.calculatePayroll(
+        storeId: storeId,
+        periodStart: periodStart,
+        periodEnd: periodEnd,
+      );
+      final bytes = await service.exportToExcel(
+        payrolls: payrolls,
+        periodStart: periodStart,
+        periodEnd: periodEnd,
+      );
+      if (bytes.isEmpty) {
+        throw StateError('PAYROLL_EXPORT_EMPTY');
+      }
+
+      final fileName =
+          'photo_payroll_${DateFormat('yyyyMM').format(periodStart)}';
+      final saver = widget.payrollFileSaverOverride;
+      if (saver != null) {
+        await saver(fileName, bytes);
+      } else {
+        await FileSaver.instance.saveFile(
+          name: fileName,
+          bytes: Uint8List.fromList(bytes),
+          ext: 'xlsx',
+          mimeType: MimeType.microsoftExcel,
+        );
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.attendancePayrollSaved)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.attendancePayrollLoadFailed)),
+      );
+    } finally {
+      if (mounted) setState(() => _isExportingPayroll = false);
+    }
+  }
+
   List<Widget> _selectedSurfaceChildren({
     required int index,
     required bool showManagementSurfaces,
@@ -366,6 +433,9 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
           _EmployeeAttendanceActions(
             storeId: activeStoreId,
             onRecorded: onReload,
+            attendanceService:
+                widget.attendanceServiceOverride ?? attendanceService,
+            photoPicker: widget.attendancePhotoPickerOverride,
           ),
           const SizedBox(height: 12),
           _AttendanceList(rows: data.recentAttendance),
@@ -502,6 +572,23 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
                 ),
                 const SizedBox(height: AppSpacing.md),
               ],
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  key: const Key('photo_ops_payroll_export_button'),
+                  onPressed: _isExportingPayroll
+                      ? null
+                      : () => _exportPayroll(activeStoreId),
+                  icon: _isExportingPayroll
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.download_outlined),
+                  label: Text(context.l10n.download),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
               _PayrollList(rows: data.payrollPreview),
             ],
           ),
@@ -1251,10 +1338,14 @@ class _EmployeeAttendanceActions extends StatefulWidget {
   const _EmployeeAttendanceActions({
     required this.storeId,
     required this.onRecorded,
+    required this.attendanceService,
+    this.photoPicker,
   });
 
   final String storeId;
   final Future<void> Function() onRecorded;
+  final AttendanceService attendanceService;
+  final PhotoOpsAttendancePhotoPicker? photoPicker;
 
   @override
   State<_EmployeeAttendanceActions> createState() =>
@@ -1283,10 +1374,37 @@ class _EmployeeAttendanceActionsState
       _error = null;
     });
     try {
-      await attendanceService.recordEmployeeAttendance(
+      final photo =
+          await (widget.photoPicker?.call() ??
+              ImagePicker().pickImage(
+                source: ImageSource.camera,
+                preferredCameraDevice: CameraDevice.front,
+                imageQuality: 85,
+                requestFullMetadata: false,
+              ));
+      if (photo == null) {
+        if (mounted) {
+          setState(() => _error = context.l10n.attendancePhotoRequired);
+        }
+        return;
+      }
+
+      final photoUrl = await widget.attendanceService
+          .uploadEmployeeAttendancePhoto(
+            storeId: widget.storeId,
+            employeeNumber: _employeeNumber.text,
+            originalFile: photo,
+            type: type,
+          );
+      if (photoUrl == null || photoUrl.isEmpty) {
+        throw StateError('ATTENDANCE_PHOTO_FAILED');
+      }
+
+      await widget.attendanceService.recordEmployeeAttendance(
         storeId: widget.storeId,
         employeeNumber: _employeeNumber.text,
         type: type,
+        photoUrl: photoUrl,
       );
       await widget.onRecorded();
       if (!mounted) return;
