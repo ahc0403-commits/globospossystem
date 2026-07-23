@@ -862,8 +862,30 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     required int payrollTargetCount,
   }) {
     // Contract anchor: title: context.l10n.attendanceManagementTitle; label: context.l10n.payrollPreview; label: context.l10n.download; title: context.l10n.attendancePayrollSummaryTitle.
+    final attendanceMetrics = [
+      ToastMetric(
+        label: context.l10n.staff,
+        value: context.l10n.staffCount(_staffList.length),
+      ),
+      ToastMetric(
+        label: context.l10n.attendanceTodayPresent,
+        value: context.l10n.staffCount(todayPresentCount),
+        tone: PosColors.success,
+      ),
+      ToastMetric(
+        label: context.l10n.attendanceUnreviewedLogs,
+        value: context.l10n.countCases(reviewCount),
+        tone: reviewCount > 0 ? PosColors.warning : PosColors.textSecondary,
+      ),
+      ToastMetric(
+        label: context.l10n.attendancePayrollTargets,
+        value: context.l10n.staffCount(payrollTargetCount),
+        tone: PosColors.accent,
+      ),
+    ];
+
     return ToastWorkSurface(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+      padding: const EdgeInsets.all(4),
       backgroundColor: AppColors.surface1,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -872,24 +894,23 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n.attendanceManagementTitle,
-                      style: Theme.of(context).textTheme.headlineLarge,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      context.l10n.attendanceManagementSubtitle,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: PosColors.textSecondary,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
+                flex: 2,
+                child: Text(
+                  context.l10n.attendanceManagementTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 5,
+                child: ToastMetricStrip(
+                  dense: true,
+                  metrics: attendanceMetrics,
+                ),
+              ),
+              const SizedBox(width: 10),
               ToastStatusBadge(
                 label: _payrollUnlocked
                     ? context.l10n.attendancePayrollUnlockedBadge
@@ -899,33 +920,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          ToastMetricStrip(
-            metrics: [
-              ToastMetric(
-                label: context.l10n.staff,
-                value: context.l10n.staffCount(_staffList.length),
-              ),
-              ToastMetric(
-                label: context.l10n.attendanceTodayPresent,
-                value: context.l10n.staffCount(todayPresentCount),
-                tone: PosColors.success,
-              ),
-              ToastMetric(
-                label: context.l10n.attendanceUnreviewedLogs,
-                value: context.l10n.countCases(reviewCount),
-                tone: reviewCount > 0
-                    ? PosColors.warning
-                    : PosColors.textSecondary,
-              ),
-              ToastMetric(
-                label: context.l10n.attendancePayrollTargets,
-                value: context.l10n.staffCount(payrollTargetCount),
-                tone: PosColors.accent,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 4),
           Wrap(
             spacing: 10,
             runSpacing: 10,

@@ -190,6 +190,10 @@ class _StaffTabState extends ConsumerState<StaffTab> {
             decoration: InputDecoration(
               labelText: context.l10n.staffAllRoles,
               isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
             ),
             items: [
               DropdownMenuItem(
@@ -221,6 +225,10 @@ class _StaffTabState extends ConsumerState<StaffTab> {
             decoration: InputDecoration(
               labelText: context.l10n.staffAllStatuses,
               isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
             ),
             items: [
               DropdownMenuItem(
@@ -260,7 +268,15 @@ class _StaffTabState extends ConsumerState<StaffTab> {
             decoration: InputDecoration(
               hintText: context.l10n.staffEmployeeSearchHint,
               prefixIcon: const Icon(Icons.search),
+              prefixIconConstraints: const BoxConstraints(
+                minWidth: 40,
+                minHeight: 40,
+              ),
               isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
             ),
           ),
         ),
@@ -276,7 +292,8 @@ class _StaffTabState extends ConsumerState<StaffTab> {
     );
 
     return ToastWorkSurface(
-      padding: EdgeInsets.all(compact ? 14 : 18),
+      key: const Key('staff_command_header'),
+      padding: EdgeInsets.all(compact ? 6 : 4),
       backgroundColor: AppColors.surface1,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -284,27 +301,39 @@ class _StaffTabState extends ConsumerState<StaffTab> {
           Row(
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n.staffManagementTitle,
-                      style: compact
-                          ? Theme.of(context).textTheme.titleLarge
-                          : Theme.of(context).textTheme.headlineLarge,
-                    ),
-                    if (!compact) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        context.l10n.staffEmployeeManagementSubtitle,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: PosColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ],
+                flex: 2,
+                child: Text(
+                  context.l10n.staffManagementTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 5,
+                child: compact
+                    ? SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: ToastMetricStrip(
+                          dense: true,
+                          metrics: _staffMetrics(
+                            staffCount,
+                            activeCount,
+                            workingCount,
+                          ),
+                        ),
+                      )
+                    : ToastMetricStrip(
+                        dense: true,
+                        metrics: _staffMetrics(
+                          staffCount,
+                          activeCount,
+                          workingCount,
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 10),
               ToastStatusBadge(
                 label: context.l10n.staffEmployeeNumberOnlyBadge,
                 color: PosColors.success,
@@ -312,19 +341,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          if (compact)
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: ToastMetricStrip(
-                metrics: _staffMetrics(staffCount, activeCount, workingCount),
-              ),
-            )
-          else
-            ToastMetricStrip(
-              metrics: _staffMetrics(staffCount, activeCount, workingCount),
-            ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 4),
           filterBar,
         ],
       ),

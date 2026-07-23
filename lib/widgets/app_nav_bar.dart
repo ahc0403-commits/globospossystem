@@ -243,16 +243,31 @@ class _StoreSwitcher extends StatelessWidget {
               .map(
                 (store) => DropdownMenuItem<String>(
                   value: store.id,
-                  child: Text(
-                    store.brandName == null || store.brandName!.isEmpty
-                        ? store.name
-                        : '${store.brandName} / ${store.name}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  child: Tooltip(
+                    message: _storeDisplayName(store),
+                    child: Text(
+                      _storeDisplayName(store),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
               )
               .toList(),
+          selectedItemBuilder: (context) => [
+            for (final store in stores)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Tooltip(
+                  message: _storeDisplayName(store),
+                  child: Text(
+                    _storeDisplayName(store),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+          ],
           onChanged: (next) {
             if (next != null) onChanged(next);
           },
@@ -269,9 +284,7 @@ class _StorePill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = store.brandName == null || store.brandName!.isEmpty
-        ? store.name
-        : '${store.brandName} / ${store.name}';
+    final label = _storeDisplayName(store);
 
     return Container(
       constraints: const BoxConstraints(maxWidth: 170),
@@ -293,4 +306,14 @@ class _StorePill extends StatelessWidget {
       ),
     );
   }
+}
+
+String _storeDisplayName(AccessibleStore store) {
+  final storeName = store.name.trim();
+  final brandName = store.brandName?.trim() ?? '';
+  if (brandName.isEmpty ||
+      storeName.toLowerCase().startsWith(brandName.toLowerCase())) {
+    return storeName;
+  }
+  return '$brandName / $storeName';
 }

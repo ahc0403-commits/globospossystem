@@ -596,9 +596,34 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
         (summary?.failedEinvoiceJobsCount ?? 0) > 0 ||
         (summary?.missingProofPhotosCount ?? 0) > 0 ||
         (summary?.cancelledOrders ?? 0) > 0;
+    final reportMetrics = [
+      ToastMetric(label: l10n.reportsTotalSales, value: totalRevenue),
+      ToastMetric(
+        label: l10n.reportsTotalOrders,
+        value: summary == null ? '—' : '${summary.totalOrders}',
+        tone: PosColors.info,
+      ),
+      ToastMetric(
+        label: l10n.pending,
+        value: summary == null ? '—' : '${summary.openOrders}',
+        tone: (summary?.openOrders ?? 0) > 0
+            ? PosColors.warning
+            : PosColors.textSecondary,
+      ),
+      ToastMetric(
+        label: l10n.reportsAverageOrderAmount,
+        value: averageOrder,
+        tone: PosColors.success,
+      ),
+      ToastMetric(
+        label: l10n.reportsCanceledAmount,
+        value: summary == null ? '—' : l10n.countCases(summary.cancelledOrders),
+        tone: cancellationTone,
+      ),
+    ];
 
     return ToastWorkSurface(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+      padding: const EdgeInsets.all(4),
       backgroundColor: AppColors.surface1,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -607,24 +632,27 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.reports,
-                      style: Theme.of(context).textTheme.headlineLarge,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      l10n.reportsScreenSubtitle,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: PosColors.textSecondary,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
+                flex: 2,
+                child: Text(
+                  l10n.reports,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 6,
+                child: KeyedSubtree(
+                  key: const Key('reports_order_accuracy_metrics'),
+                  child: ToastMetricStrip(
+                    dense: true,
+                    maxColumns: 5,
+                    metrics: reportMetrics,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
               ToastStatusBadge(
                 label: hasException
                     ? l10n.reportsNeedsReviewShort
@@ -634,41 +662,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          KeyedSubtree(
-            key: const Key('reports_order_accuracy_metrics'),
-            child: ToastMetricStrip(
-              maxColumns: 5,
-              metrics: [
-                ToastMetric(label: l10n.reportsTotalSales, value: totalRevenue),
-                ToastMetric(
-                  label: l10n.reportsTotalOrders,
-                  value: summary == null ? '—' : '${summary.totalOrders}',
-                  tone: PosColors.info,
-                ),
-                ToastMetric(
-                  label: l10n.pending,
-                  value: summary == null ? '—' : '${summary.openOrders}',
-                  tone: (summary?.openOrders ?? 0) > 0
-                      ? PosColors.warning
-                      : PosColors.textSecondary,
-                ),
-                ToastMetric(
-                  label: l10n.reportsAverageOrderAmount,
-                  value: averageOrder,
-                  tone: PosColors.success,
-                ),
-                ToastMetric(
-                  label: l10n.reportsCanceledAmount,
-                  value: summary == null
-                      ? '—'
-                      : l10n.countCases(summary.cancelledOrders),
-                  tone: cancellationTone,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Wrap(
             spacing: 10,
             runSpacing: 10,

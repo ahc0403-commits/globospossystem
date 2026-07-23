@@ -703,154 +703,158 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('all seven menu dialog entrypoints and menu Excel export execute', (
-    tester,
-  ) async {
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final notifier = _MenuNotifier();
-    final importFiles = <XFile>[
-      XFile.fromData(_menuWorkbookBytes(valid: true), name: 'menu-valid.xlsx'),
-      XFile.fromData(
-        _menuWorkbookBytes(valid: false),
-        name: 'menu-invalid.xlsx',
-      ),
-      XFile.fromData(
-        Uint8List.fromList(
-          buildMenuRoundTripWorkbook(
-            storeId: _storeId,
-            categories: notifier.state.categories.valueOrNull!,
-            items: notifier.state.items.valueOrNull!,
-          ),
+  testWidgets(
+    'all seven menu dialog entrypoints and menu Excel export execute',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final notifier = _MenuNotifier();
+      final importFiles = <XFile>[
+        XFile.fromData(
+          _menuWorkbookBytes(valid: true),
+          name: 'menu-valid.xlsx',
         ),
-        name: 'menu-roundtrip.xlsx',
-      ),
-    ];
-    String? exportedName;
-    Uint8List? exportedBytes;
-    await _pump(
-      tester,
-      child: MenuTab(
-        pickImportFile: () async => importFiles.removeAt(0),
-        saveExportFile: (fileName, bytes) async {
-          exportedName = fileName;
-          exportedBytes = bytes;
-        },
-      ),
-      overrides: [menuProvider.overrideWith((ref, storeId) => notifier)],
-    );
+        XFile.fromData(
+          _menuWorkbookBytes(valid: false),
+          name: 'menu-invalid.xlsx',
+        ),
+        XFile.fromData(
+          Uint8List.fromList(
+            buildMenuRoundTripWorkbook(
+              storeId: _storeId,
+              categories: notifier.state.categories.valueOrNull!,
+              items: notifier.state.items.valueOrNull!,
+            ),
+          ),
+          name: 'menu-roundtrip.xlsx',
+        ),
+      ];
+      String? exportedName;
+      Uint8List? exportedBytes;
+      await _pump(
+        tester,
+        child: MenuTab(
+          pickImportFile: () async => importFiles.removeAt(0),
+          saveExportFile: (fileName, bytes) async {
+            exportedName = fileName;
+            exportedBytes = bytes;
+          },
+        ),
+        overrides: [menuProvider.overrideWith((ref, storeId) => notifier)],
+      );
 
-    await tester.tap(find.byKey(const Key('admin_menu_export_excel_action')));
-    await tester.pumpAndSettle();
-    expect(exportedName, startsWith('menu_multilingual_'));
-    expect(exportedName, endsWith('.xlsx'));
-    final exported = Excel.decodeBytes(exportedBytes!);
-    expect(exported.tables['메뉴등록']?.rows.length, 3);
+      await tester.tap(find.byKey(const Key('admin_menu_export_excel_action')));
+      await tester.pumpAndSettle();
+      expect(exportedName, startsWith('menu_multilingual_'));
+      expect(exportedName, endsWith('.xlsx'));
+      final exported = Excel.decodeBytes(exportedBytes!);
+      expect(exported.tables['메뉴등록']?.rows.length, 3);
 
-    await tester.tap(find.byKey(const Key('admin_menu_import_excel_action')));
-    await tester.pumpAndSettle();
-    const importPreviewDialog = Key('admin_menu_import_preview_dialog');
-    expect(find.byKey(importPreviewDialog), findsOneWidget);
-    _expectDialogButtonsAreTouchSized(tester, importPreviewDialog);
-    await tester.tap(_dialogAction(importPreviewDialog, FilledButton));
-    await tester.pumpAndSettle();
-    expect(notifier.importCalls, 1);
+      await tester.tap(find.byKey(const Key('admin_menu_import_excel_action')));
+      await tester.pumpAndSettle();
+      const importPreviewDialog = Key('admin_menu_import_preview_dialog');
+      expect(find.byKey(importPreviewDialog), findsOneWidget);
+      _expectDialogButtonsAreTouchSized(tester, importPreviewDialog);
+      await tester.tap(_dialogAction(importPreviewDialog, FilledButton));
+      await tester.pumpAndSettle();
+      expect(notifier.importCalls, 1);
 
-    await tester.tap(find.byKey(const Key('admin_menu_import_excel_action')));
-    await tester.pumpAndSettle();
-    const validationDialog = Key('admin_menu_import_validation_dialog');
-    expect(find.byKey(validationDialog), findsOneWidget);
-    _expectDialogButtonsAreTouchSized(tester, validationDialog);
-    await tester.tap(_dialogAction(validationDialog, FilledButton));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('admin_menu_import_excel_action')));
+      await tester.pumpAndSettle();
+      const validationDialog = Key('admin_menu_import_validation_dialog');
+      expect(find.byKey(validationDialog), findsOneWidget);
+      _expectDialogButtonsAreTouchSized(tester, validationDialog);
+      await tester.tap(_dialogAction(validationDialog, FilledButton));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('admin_menu_import_excel_action')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(importPreviewDialog), findsOneWidget);
-    await tester.tap(_dialogAction(importPreviewDialog, FilledButton));
-    await tester.pumpAndSettle();
-    expect(notifier.updateWorkbookCalls, 1);
+      await tester.tap(find.byKey(const Key('admin_menu_import_excel_action')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(importPreviewDialog), findsOneWidget);
+      await tester.tap(_dialogAction(importPreviewDialog, FilledButton));
+      await tester.pumpAndSettle();
+      expect(notifier.updateWorkbookCalls, 1);
 
-    await tester.tap(find.byKey(const Key('admin_menu_add_category_action')));
-    await tester.pumpAndSettle();
-    const categoryDialog = Key('admin_menu_add_category_dialog');
-    expect(find.byKey(categoryDialog), findsOneWidget);
-    _expectDialogButtonsAreTouchSized(tester, categoryDialog);
-    final categoryFields = find.descendant(
-      of: find.byKey(categoryDialog),
-      matching: find.byType(TextField),
-    );
-    await tester.enterText(categoryFields.at(0), '음료');
-    await tester.enterText(categoryFields.at(1), 'Đồ uống');
-    await tester.enterText(categoryFields.at(2), 'Drinks');
-    await tester.tap(_dialogAction(categoryDialog, FilledButton));
-    await tester.pumpAndSettle();
-    expect(notifier.addCategoryCalls, 1);
+      await tester.tap(find.byKey(const Key('admin_menu_add_category_action')));
+      await tester.pumpAndSettle();
+      const categoryDialog = Key('admin_menu_add_category_dialog');
+      expect(find.byKey(categoryDialog), findsOneWidget);
+      _expectDialogButtonsAreTouchSized(tester, categoryDialog);
+      final categoryFields = find.descendant(
+        of: find.byKey(categoryDialog),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(categoryFields.at(0), '음료');
+      await tester.enterText(categoryFields.at(1), 'Đồ uống');
+      await tester.enterText(categoryFields.at(2), 'Drinks');
+      await tester.tap(_dialogAction(categoryDialog, FilledButton));
+      await tester.pumpAndSettle();
+      expect(notifier.addCategoryCalls, 1);
 
-    await tester.tap(find.byKey(const Key('admin_menu_add_item_action')));
-    await tester.pumpAndSettle();
-    const addItemDialog = Key('admin_menu_add_item_dialog');
-    expect(find.byKey(addItemDialog), findsOneWidget);
-    _expectDialogButtonsAreTouchSized(tester, addItemDialog);
-    final addFields = find.descendant(
-      of: find.byKey(addItemDialog),
-      matching: find.byType(TextField),
-    );
-    await tester.enterText(addFields.at(0), '연유 커피');
-    await tester.enterText(addFields.at(1), 'Cà phê sữa');
-    await tester.enterText(addFields.at(2), 'Milk coffee');
-    await tester.enterText(addFields.at(3), '45000');
-    await tester.tap(_dialogAction(addItemDialog, FilledButton));
-    await tester.pumpAndSettle();
-    expect(notifier.addItemCalls, 1);
+      await tester.tap(find.byKey(const Key('admin_menu_add_item_action')));
+      await tester.pumpAndSettle();
+      const addItemDialog = Key('admin_menu_add_item_dialog');
+      expect(find.byKey(addItemDialog), findsOneWidget);
+      _expectDialogButtonsAreTouchSized(tester, addItemDialog);
+      final addFields = find.descendant(
+        of: find.byKey(addItemDialog),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(addFields.at(0), '연유 커피');
+      await tester.enterText(addFields.at(1), 'Cà phê sữa');
+      await tester.enterText(addFields.at(2), 'Milk coffee');
+      await tester.enterText(addFields.at(3), '45000');
+      await tester.tap(_dialogAction(addItemDialog, FilledButton));
+      await tester.pumpAndSettle();
+      expect(notifier.addItemCalls, 1);
 
-    await tester.tap(
-      find.byKey(const Key('admin_menu_edit_item_$_menuItemId')),
-    );
-    await tester.pumpAndSettle();
-    const editItemDialog = Key('admin_menu_edit_item_dialog');
-    expect(find.byKey(editItemDialog), findsOneWidget);
-    _expectDialogButtonsAreTouchSized(tester, editItemDialog);
-    final editFields = find.descendant(
-      of: find.byKey(editItemDialog),
-      matching: find.byType(TextField),
-    );
-    await tester.enterText(editFields.at(0), 'Phở bò tái');
-    await tester.tap(_dialogAction(editItemDialog, FilledButton));
-    await tester.pumpAndSettle();
-    expect(notifier.editItemCalls, 1);
+      await tester.tap(
+        find.byKey(const Key('admin_menu_edit_item_$_menuItemId')),
+      );
+      await tester.pumpAndSettle();
+      const editItemDialog = Key('admin_menu_edit_item_dialog');
+      expect(find.byKey(editItemDialog), findsOneWidget);
+      _expectDialogButtonsAreTouchSized(tester, editItemDialog);
+      final editFields = find.descendant(
+        of: find.byKey(editItemDialog),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(editFields.at(0), 'Phở bò tái');
+      await tester.tap(_dialogAction(editItemDialog, FilledButton));
+      await tester.pumpAndSettle();
+      expect(notifier.editItemCalls, 1);
 
-    await tester.tap(
-      find.byKey(const Key('admin_menu_edit_category_$_categoryId')),
-    );
-    await tester.pumpAndSettle();
-    const editCategoryDialog = Key('admin_menu_edit_category_dialog');
-    expect(find.byKey(editCategoryDialog), findsOneWidget);
-    _expectDialogButtonsAreTouchSized(tester, editCategoryDialog);
-    await tester.enterText(
-      find.byKey(const Key('admin_menu_edit_category_name')),
-      'Phở đặc biệt',
-    );
-    await tester.tap(_dialogAction(editCategoryDialog, FilledButton));
-    await tester.pumpAndSettle();
-    expect(notifier.editCategoryCalls, 1);
+      await tester.tap(
+        find.byKey(const Key('admin_menu_edit_category_$_categoryId')),
+      );
+      await tester.pumpAndSettle();
+      const editCategoryDialog = Key('admin_menu_edit_category_dialog');
+      expect(find.byKey(editCategoryDialog), findsOneWidget);
+      _expectDialogButtonsAreTouchSized(tester, editCategoryDialog);
+      await tester.enterText(
+        find.byKey(const Key('admin_menu_edit_category_name')),
+        'Phở đặc biệt',
+      );
+      await tester.tap(_dialogAction(editCategoryDialog, FilledButton));
+      await tester.pumpAndSettle();
+      expect(notifier.editCategoryCalls, 1);
 
-    await tester.tap(find.text('Món mới'));
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const Key('admin_menu_delete_category_$_emptyCategoryId')),
-    );
-    await tester.pumpAndSettle();
-    const deleteCategoryDialog = Key('admin_menu_delete_category_dialog');
-    expect(find.byKey(deleteCategoryDialog), findsOneWidget);
-    _expectDialogButtonsAreTouchSized(tester, deleteCategoryDialog);
-    await tester.tap(
-      find.byKey(const Key('admin_menu_delete_category_confirm')),
-    );
-    await tester.pumpAndSettle();
-    expect(notifier.deleteCategoryCalls, 1);
-    expect(tester.takeException(), isNull);
-  });
+      await tester.tap(find.text('Món mới'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('admin_menu_delete_category_$_emptyCategoryId')),
+      );
+      await tester.pumpAndSettle();
+      const deleteCategoryDialog = Key('admin_menu_delete_category_dialog');
+      expect(find.byKey(deleteCategoryDialog), findsOneWidget);
+      _expectDialogButtonsAreTouchSized(tester, deleteCategoryDialog);
+      await tester.tap(
+        find.byKey(const Key('admin_menu_delete_category_confirm')),
+      );
+      await tester.pumpAndSettle();
+      expect(notifier.deleteCategoryCalls, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('all four staff sheet and dialog entrypoints execute', (
     tester,
@@ -869,6 +873,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('staff_root')), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const Key('staff_command_header'))).height,
+      lessThanOrEqualTo(135),
+    );
     expect(find.text('Nguyễn Minh Anh'), findsWidgets);
     await tester.tap(find.byKey(const Key('staff_detail_secondary_detail')));
     await tester.pumpAndSettle();
