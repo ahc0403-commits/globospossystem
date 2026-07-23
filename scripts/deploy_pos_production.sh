@@ -716,6 +716,7 @@ apply_migration() {
     20260723050000_payroll_pin_rpc_repair.sql|\
     20260723060000_photo_ops_latest_sales_rpc.sql|\
     20260723070000_photo_ops_inventory_cleanup_sales_range.sql|\
+    20260723081529_photo_objet_simple_inventory_management.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -920,6 +921,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_photo_ops_inventory_cleanup_sales_range.sql" \
       "Photo Ops inventory cleanup and sales-range migration preflight"
+  elif [[ "$migration_name" == "20260723081529_photo_objet_simple_inventory_management.sql" ]]; then
+    log "Photo Objet simple inventory management migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_photo_objet_simple_inventory_management.sql" \
+      "Photo Objet simple inventory management migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -1115,6 +1121,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_photo_ops_inventory_cleanup_sales_range.sql" \
       "Photo Ops inventory cleanup and sales-range migration verification"
+  elif [[ "$migration_name" == "20260723081529_photo_objet_simple_inventory_management.sql" ]]; then
+    log "Photo Objet simple inventory management migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_photo_objet_simple_inventory_management.sql" \
+      "Photo Objet simple inventory management migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \

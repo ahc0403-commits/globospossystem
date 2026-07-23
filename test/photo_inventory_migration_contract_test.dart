@@ -22,4 +22,34 @@ void main() {
     expect(sql, contains('FROM PUBLIC, anon'));
     expect(sql, contains('TO authenticated'));
   });
+
+  test('PHOTO simple inventory migration has production deployment gates', () {
+    final deployScript = File(
+      'scripts/deploy_pos_production.sh',
+    ).readAsStringSync();
+    final preflight = File(
+      'scripts/preflight_photo_objet_simple_inventory_management.sql',
+    ).readAsStringSync();
+    final verification = File(
+      'scripts/verify_photo_objet_simple_inventory_management.sql',
+    ).readAsStringSync();
+
+    expect(
+      deployScript,
+      contains('20260723081529_photo_objet_simple_inventory_management.sql'),
+    );
+    expect(
+      deployScript,
+      contains('preflight_photo_objet_simple_inventory_management.sql'),
+    );
+    expect(
+      deployScript,
+      contains('verify_photo_objet_simple_inventory_management.sql'),
+    );
+    expect(preflight, contains('require_admin_actor_for_restaurant(uuid)'));
+    expect(verification, contains('prosecdef'));
+    expect(verification, contains('search_path=public, auth, pg_catalog'));
+    expect(verification, contains("'anon'"));
+    expect(verification, contains("'authenticated'"));
+  });
 }
