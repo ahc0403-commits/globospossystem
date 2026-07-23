@@ -14,7 +14,6 @@ import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../features/auth/auth_provider.dart';
-import '../../features/auth/auth_state.dart';
 import '../../widgets/app_nav_bar.dart';
 import 'photo_ops_provider.dart';
 import 'photo_ops_sales_export.dart';
@@ -28,7 +27,7 @@ class PhotoOpsScreen extends ConsumerStatefulWidget {
 }
 
 class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
-  String? _lastLoadedStoreId;
+  String? _lastLoadedScopeKey;
   int _selectedSurfaceIndex = 0;
   bool _isExportingSales = false;
 
@@ -50,8 +49,13 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
       }
     }
 
-    if (activeStoreId != null && _lastLoadedStoreId != activeStoreId) {
-      _lastLoadedStoreId = activeStoreId;
+    final scopeKey = activeStoreId == null
+        ? null
+        : '$activeStoreId:${auth.accessibleStores.map((store) => store.id).join(',')}';
+    if (scopeKey != null &&
+        auth.accessibleStores.isNotEmpty &&
+        _lastLoadedScopeKey != scopeKey) {
+      _lastLoadedScopeKey = scopeKey;
       Future.microtask(notifier.load);
     }
 
@@ -62,14 +66,6 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
     );
     final selectedSurface = surfaceMeta[safeSurfaceIndex];
     final contentChildren = <Widget>[
-      if (surfaceAccess.showManagementSurfaces) ...[
-        _HeroBanner(
-          role: auth.role,
-          activeStoreName: activeStoreName,
-          storeCount: auth.accessibleStores.length,
-        ),
-        const SizedBox(height: 18),
-      ],
       if (state.isLoading && state.data == null)
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 80),
@@ -86,7 +82,6 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
           data: state.data!,
           activeStoreId: activeStoreId!,
           activeStoreName: activeStoreName,
-          stores: auth.accessibleStores,
           onReload: notifier.load,
         ),
     ];
@@ -97,11 +92,8 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
         subtitle: selectedSurface.subtitle,
         headerBottom: _PhotoOpsHeaderSummary(
           selectedSurface: selectedSurface,
-          role: auth.role,
           activeStoreName: activeStoreName,
           storeCount: auth.accessibleStores.length,
-          data: state.data,
-          surfaceAccess: surfaceAccess,
         ),
         child: child,
       );
@@ -174,7 +166,7 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
                     subtitle: activeStoreName,
                     selectedIndex: safeSurfaceIndex,
                     onItemSelected: (index) =>
-                        setState(() => _selectedSurfaceIndex = index),
+                        _selectSurface(index, notifier.load),
                     items: sidebarItems,
                   ),
             topbar: ToastTopbar(
@@ -202,7 +194,7 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
                     items: sidebarItems,
                     selectedIndex: safeSurfaceIndex,
                     onItemSelected: (index) =>
-                        setState(() => _selectedSurfaceIndex = index),
+                        _selectSurface(index, notifier.load),
                   ),
                   const SizedBox(height: AppSpacing.md),
                 ],
@@ -250,10 +242,21 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
     );
   }
 
+  void _selectSurface(int index, Future<void> Function() onReload) {
+    setState(() => _selectedSurfaceIndex = index);
+    Future.microtask(onReload);
+  }
+
   Future<void> _exportLegalEntitySales() async {
     final auth = ref.read(authProvider);
+    final dashboard = ref.read(photoOpsProvider).data;
     final storeIds = auth.accessibleStores.map((store) => store.id).toList();
-    final saleDate = photoOpsHcmDate(DateTime.now());
+    final saleDate = dashboard == null || dashboard.salesSummary.isEmpty
+        ? photoOpsHcmDate(DateTime.now())
+        : dashboard.salesSummary.first.saleDate.toIso8601String().substring(
+            0,
+            10,
+          );
     setState(() => _isExportingSales = true);
 
     try {
@@ -300,7 +303,6 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
     required PhotoOpsDashboardData data,
     required String activeStoreId,
     required String activeStoreName,
-    required List<AccessibleStore> stores,
     required Future<void> Function() onReload,
   }) {
     final l10n = context.l10n;
@@ -308,6 +310,7 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
       title: l10n.photoOpsAttendanceTitle,
       subtitle: l10n.photoOpsAttendanceSubtitle,
       kind: PhotoOpsSurfaceKind.live,
+      showHeader: false,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -331,6 +334,7 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
       title: l10n.photoOpsInventoryTitle,
       subtitle: '$activeStoreName · ${l10n.photoOpsInventorySubtitle}',
       kind: PhotoOpsSurfaceKind.priority,
+      showHeader: false,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -367,6 +371,7 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
           title: l10n.photoOpsPriorityQueueTitle,
           subtitle: l10n.photoOpsPriorityQueueSubtitle,
           kind: PhotoOpsSurfaceKind.priority,
+          showHeader: false,
           child: _PriorityList(items: _buildPriorityItems(context, data.kpi)),
         ),
       ],
@@ -379,6 +384,7 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
           title: l10n.photoOpsSalesTitle,
           subtitle: l10n.photoOpsSalesSubtitle,
           kind: PhotoOpsSurfaceKind.backOffice,
+          showHeader: false,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -427,6 +433,7 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
           title: l10n.photoOpsSalaryTitle,
           subtitle: '$activeStoreName · ${l10n.photoOpsSalarySubtitle}',
           kind: PhotoOpsSurfaceKind.backOffice,
+          showHeader: false,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -441,13 +448,6 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 18),
-        _WorkflowSurface(
-          title: l10n.photoOpsStoreScopeTitle,
-          subtitle: l10n.photoOpsStoreScopeSubtitle,
-          kind: PhotoOpsSurfaceKind.backOffice,
-          child: _StoreScopeList(stores: stores, activeStoreId: activeStoreId),
-        ),
       ],
       _ => [
         _WorkflowSurface(
@@ -455,6 +455,7 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
           subtitle:
               '$activeStoreName · ${l10n.staffEmployeeManagementSubtitle}',
           kind: PhotoOpsSurfaceKind.backOffice,
+          showHeader: false,
           child: Align(
             alignment: Alignment.centerLeft,
             child: FilledButton.icon(
@@ -744,97 +745,109 @@ class _PhotoOpsCompactNav extends StatelessWidget {
 class _PhotoOpsHeaderSummary extends StatelessWidget {
   const _PhotoOpsHeaderSummary({
     required this.selectedSurface,
-    required this.role,
     required this.activeStoreName,
     required this.storeCount,
-    required this.data,
-    required this.surfaceAccess,
   });
 
   final _PhotoOpsSurfaceMeta selectedSurface;
-  final String? role;
   final String activeStoreName;
   final int storeCount;
-  final PhotoOpsDashboardData? data;
-  final PhotoOpsSurfaceAccess surfaceAccess;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        ToastWorkSurface(
-          padding: EdgeInsets.zero,
-          child: Column(
-            children: [
-              ToastSelectedContextHeader(
-                title: selectedSurface.title,
-                subtitle: context.l10n.photoOpsContextSubtitle,
-                urgentReason: _surfaceUrgencyCopy(
-                  context,
-                  selectedSurface.kind,
-                ),
-                noteColor: _surfaceNoteColor(selectedSurface.kind),
-                noteBackgroundColor: _surfaceNoteBackground(
-                  selectedSurface.kind,
-                ),
-                noteIcon: _surfaceNoteIcon(selectedSurface.kind),
-                trailing: ToastStatusBadge(
-                  label: _surfaceLabel(context, selectedSurface.kind),
-                  color: _surfaceTone(selectedSurface.kind),
-                  compact: true,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-                child: ToastMetricStrip(
-                  metrics: [
-                    ToastMetric(label: context.l10n.role, value: role ?? '-'),
-                    ToastMetric(
-                      label: context.l10n.photoOpsMetaActiveStore,
-                      value: activeStoreName,
-                    ),
-                    if (surfaceAccess.showManagementSurfaces)
-                      ToastMetric(
-                        label: context.l10n.photoOpsMetaAccessibleStores,
-                        value: context.l10n.photoOpsStoreCount(storeCount),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+    return Semantics(
+      container: true,
+      label: '${selectedSurface.title}, $activeStoreName',
+      child: Container(
+        key: const Key('photo_ops_compact_context'),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: PosColors.panelMuted,
+          borderRadius: AppRadius.sm,
+          border: Border.all(color: PosColors.border),
         ),
-        if (data != null && surfaceAccess.showManagementSurfaces) ...[
-          const SizedBox(height: 12),
-          ToastMetricStrip(
-            metrics: [
-              ToastMetric(
-                label: context.l10n.photoOpsKpiSales,
-                value: '${data!.kpi.activeStoreSales.toStringAsFixed(0)} VND',
+        child: Row(
+          children: [
+            const Icon(
+              Icons.storefront_outlined,
+              size: 18,
+              color: PosColors.textSecondary,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '$activeStoreName · ${context.l10n.photoOpsStoreCount(storeCount)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppFonts.system(
+                  color: PosColors.textSecondary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-              ToastMetric(
-                label: context.l10n.photoOpsKpiAttendance,
-                value: '${data!.kpi.activeAttendanceEvents}',
-                tone: data!.kpi.activeAttendanceEvents > 0
-                    ? PosColors.accent
-                    : PosColors.textSecondary,
+            ),
+            const SizedBox(width: 8),
+            ToastStatusBadge(
+              label: _surfaceLabel(context, selectedSurface.kind),
+              color: _surfaceTone(selectedSurface.kind),
+              compact: true,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WorkflowSurface extends StatelessWidget {
+  const _WorkflowSurface({
+    required this.title,
+    required this.subtitle,
+    required this.kind,
+    required this.child,
+    this.showHeader = true,
+  });
+
+  final String title;
+  final String subtitle;
+  final PhotoOpsSurfaceKind kind;
+  final Widget child;
+  final bool showHeader;
+
+  @override
+  Widget build(BuildContext context) {
+    return ToastWorkSurface(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (showHeader)
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+              decoration: const BoxDecoration(
+                border: Border(bottom: BorderSide(color: PosColors.border)),
               ),
-              ToastMetric(
-                label: context.l10n.photoOpsKpiInventoryAlerts,
-                value: '${data!.kpi.activeInventoryAlerts}',
-                tone: data!.kpi.activeInventoryAlerts > 0
-                    ? PosColors.warning
-                    : PosColors.textSecondary,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: AppSectionHeader(title: title, subtitle: subtitle),
+                  ),
+                  const SizedBox(width: 12),
+                  ToastStatusBadge(
+                    label: _surfaceLabel(context, kind),
+                    color: _surfaceTone(kind),
+                    compact: true,
+                  ),
+                ],
               ),
-              ToastMetric(
-                label: context.l10n.photoOpsKpiPayrollEstimate,
-                value:
-                    '${data!.kpi.activePayrollEstimate.toStringAsFixed(0)} VND',
-              ),
-            ],
+            ),
+          Padding(
+            padding: EdgeInsets.all(showHeader ? AppSpacing.md : AppSpacing.sm),
+            child: child,
           ),
         ],
-      ],
+      ),
     );
   }
 }
@@ -852,72 +865,6 @@ String _localizedSalesWarning(
     ),
     _ => context.l10n.photoOpsSalesLoadFailed(detail),
   };
-}
-
-class _HeroBanner extends StatelessWidget {
-  const _HeroBanner({
-    required this.role,
-    required this.activeStoreName,
-    required this.storeCount,
-  });
-
-  final String? role;
-  final String activeStoreName;
-  final int storeCount;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: PosColors.surface,
-        borderRadius: AppRadius.sm,
-        border: Border.all(color: PosColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            context.l10n.photoOpsHeroEyebrow,
-            style: AppFonts.system(
-              color: PosColors.textMuted,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            context.l10n.photoOpsHeroTitle,
-            style: AppFonts.system(
-              color: PosColors.textPrimary,
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-              height: 1.3,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _MetaPill(
-                label: context.l10n.photoOpsMetaRole,
-                value: role ?? '-',
-              ),
-              _MetaPill(
-                label: context.l10n.photoOpsMetaActiveStore,
-                value: activeStoreName,
-              ),
-              _MetaPill(
-                label: context.l10n.photoOpsMetaAccessibleStores,
-                value: '$storeCount',
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 List<String> _buildPriorityItems(BuildContext context, PhotoOpsKpi data) {
@@ -968,33 +915,6 @@ List<String> _buildPriorityItems(BuildContext context, PhotoOpsKpi data) {
   }
 
   return items;
-}
-
-class _MetaPill extends StatelessWidget {
-  const _MetaPill({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: PosColors.panelMuted,
-        borderRadius: AppRadius.pill,
-        border: Border.all(color: PosColors.border),
-      ),
-      child: Text(
-        '$label: $value',
-        style: AppFonts.system(
-          color: PosColors.textSecondary,
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
 }
 
 class _KpiGrid extends StatelessWidget {
@@ -1126,53 +1046,6 @@ class _SectionWarning extends StatelessWidget {
   }
 }
 
-class _WorkflowSurface extends StatelessWidget {
-  const _WorkflowSurface({
-    required this.title,
-    required this.subtitle,
-    required this.kind,
-    required this.child,
-  });
-
-  final String title;
-  final String subtitle;
-  final PhotoOpsSurfaceKind kind;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return ToastWorkSurface(
-      padding: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: PosColors.border)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: AppSectionHeader(title: title, subtitle: subtitle),
-                ),
-                const SizedBox(width: 12),
-                ToastStatusBadge(
-                  label: _surfaceLabel(context, kind),
-                  color: _surfaceTone(kind),
-                  compact: true,
-                ),
-              ],
-            ),
-          ),
-          Padding(padding: const EdgeInsets.all(AppSpacing.md), child: child),
-        ],
-      ),
-    );
-  }
-}
-
 String _surfaceLabel(BuildContext context, PhotoOpsSurfaceKind kind) {
   final l10n = context.l10n;
   return switch (kind) {
@@ -1182,44 +1055,11 @@ String _surfaceLabel(BuildContext context, PhotoOpsSurfaceKind kind) {
   };
 }
 
-String _surfaceUrgencyCopy(BuildContext context, PhotoOpsSurfaceKind kind) {
-  final l10n = context.l10n;
-  return switch (kind) {
-    PhotoOpsSurfaceKind.priority => l10n.photoOpsPriorityUrgency,
-    PhotoOpsSurfaceKind.live => l10n.photoOpsLiveUrgency,
-    PhotoOpsSurfaceKind.backOffice => l10n.photoOpsBackOfficeUrgency,
-  };
-}
-
 Color _surfaceTone(PhotoOpsSurfaceKind kind) {
   return switch (kind) {
     PhotoOpsSurfaceKind.priority => PosColors.warning,
     PhotoOpsSurfaceKind.live => PosColors.accent,
     PhotoOpsSurfaceKind.backOffice => PosColors.textSecondary,
-  };
-}
-
-Color _surfaceNoteColor(PhotoOpsSurfaceKind kind) {
-  return switch (kind) {
-    PhotoOpsSurfaceKind.priority => PosColors.warning,
-    PhotoOpsSurfaceKind.live => PosColors.accent,
-    PhotoOpsSurfaceKind.backOffice => PosColors.textSecondary,
-  };
-}
-
-Color _surfaceNoteBackground(PhotoOpsSurfaceKind kind) {
-  return switch (kind) {
-    PhotoOpsSurfaceKind.priority => PosColors.warningMuted,
-    PhotoOpsSurfaceKind.live => PosColors.accentMuted,
-    PhotoOpsSurfaceKind.backOffice => PosColors.panelMuted,
-  };
-}
-
-IconData _surfaceNoteIcon(PhotoOpsSurfaceKind kind) {
-  return switch (kind) {
-    PhotoOpsSurfaceKind.priority => Icons.priority_high_rounded,
-    PhotoOpsSurfaceKind.live => Icons.bolt_rounded,
-    PhotoOpsSurfaceKind.backOffice => Icons.insights_rounded,
   };
 }
 
@@ -1495,36 +1335,6 @@ class _PriorityList extends StatelessWidget {
               title: context.l10n.photoOpsAction,
               subtitle: item,
               trailing: context.l10n.photoOpsReview,
-            ),
-          )
-          .toList(),
-    );
-  }
-}
-
-class _StoreScopeList extends StatelessWidget {
-  const _StoreScopeList({required this.stores, required this.activeStoreId});
-
-  final List<AccessibleStore> stores;
-  final String? activeStoreId;
-
-  @override
-  Widget build(BuildContext context) {
-    if (stores.isEmpty) {
-      return _EmptyLabel(context.l10n.photoOpsNoAccessibleStores);
-    }
-
-    return Column(
-      children: stores
-          .map(
-            (store) => _SimpleRow(
-              title: store.name,
-              subtitle: store.brandName == null
-                  ? context.l10n.photoOpsOfficeLinkedStoreAccess
-                  : context.l10n.photoOpsBrandLabel(store.brandName!),
-              trailing: store.id == activeStoreId
-                  ? context.l10n.photoOpsActive
-                  : context.l10n.photoOpsAvailable,
             ),
           )
           .toList(),

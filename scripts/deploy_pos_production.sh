@@ -714,6 +714,7 @@ apply_migration() {
     20260723030000_cashier_non_revenue_checkout.sql|\
     20260723040000_photo_ops_manager_inventory_access.sql|\
     20260723050000_payroll_pin_rpc_repair.sql|\
+    20260723060000_photo_ops_latest_sales_rpc.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -908,6 +909,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_payroll_pin_rpc_repair.sql" \
       "payroll PIN RPC repair migration preflight"
+  elif [[ "$migration_name" == "20260723060000_photo_ops_latest_sales_rpc.sql" ]]; then
+    log "Photo Ops latest-sales RPC migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_photo_ops_latest_sales_rpc.sql" \
+      "Photo Ops latest-sales RPC migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -1093,6 +1099,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_payroll_pin_rpc_repair.sql" \
       "payroll PIN RPC repair migration verification"
+  elif [[ "$migration_name" == "20260723060000_photo_ops_latest_sales_rpc.sql" ]]; then
+    log "Photo Ops latest-sales RPC migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_photo_ops_latest_sales_rpc.sql" \
+      "Photo Ops latest-sales RPC migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \

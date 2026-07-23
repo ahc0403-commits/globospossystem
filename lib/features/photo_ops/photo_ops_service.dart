@@ -375,25 +375,7 @@ class PhotoOpsService {
     String? salesWarningCode;
     String? salesWarningDetail;
     try {
-      final latestRow = await supabase
-          .from('v_photo_objet_daily_summary')
-          .select('sale_date')
-          .inFilter('store_id', accessibleStoreIds)
-          .order('sale_date', ascending: false)
-          .limit(1)
-          .maybeSingle();
-      final latestSalesDate = latestRow?['sale_date']?.toString();
-      final response = latestSalesDate == null
-          ? const <Map<String, dynamic>>[]
-          : await supabase
-                .from('v_photo_objet_daily_summary')
-                .select(
-                  'store_id, store_name, sale_date, total_gross_sales, '
-                  'total_transactions, total_service_amount, active_machines, '
-                  'last_pulled_at',
-                )
-                .inFilter('store_id', accessibleStoreIds)
-                .eq('sale_date', latestSalesDate);
+      final response = await supabase.rpc('get_photo_ops_latest_sales');
       salesRowsRaw = List<Map<String, dynamic>>.from(response);
     } catch (error) {
       salesWarningCode = 'photo_ops_sales_load_failed';

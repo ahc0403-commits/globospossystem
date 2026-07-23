@@ -178,6 +178,11 @@ void main() {
       physicalSize: const Size(1440, 1800),
     );
 
+    expect(
+      tester.getSize(find.byKey(const Key('photo_ops_compact_context'))).height,
+      lessThanOrEqualTo(56),
+    );
+
     final sidebar = tester.widget<ToastSidebarPanel>(
       find.byType(ToastSidebarPanel),
     );
@@ -194,6 +199,7 @@ void main() {
       find.byKey(const Key('photo_ops_inventory_adjust_inventory-1')),
       findsNothing,
     );
+    expect(find.byType(ToastMetricStrip), findsOne);
 
     sidebar.onItemSelected(3);
     await tester.pump();
@@ -205,6 +211,7 @@ void main() {
       find.byKey(const Key('photo_ops_inventory_adjust_inventory-1')),
       findsOne,
     );
+    expect(find.byType(ToastMetricStrip), findsNothing);
 
     sidebar.onItemSelected(5);
     await tester.pump();
