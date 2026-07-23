@@ -111,6 +111,10 @@ void main() {
     expect(find.text('Photo paper'), findsOne);
     expect(find.textContaining('8'), findsWidgets);
     expect(find.byKey(const Key('photo_inventory_add_item')), findsOne);
+    expect(
+      tester.getSize(find.byKey(const Key('photo_inventory_header'))).height,
+      lessThanOrEqualTo(48),
+    );
   });
 
   testWidgets('PHOTO manager can open add and edit item forms', (tester) async {

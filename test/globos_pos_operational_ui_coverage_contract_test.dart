@@ -5,8 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:globos_pos_system/core/ui/app_theme.dart';
 import 'package:globos_pos_system/core/services/connectivity_service.dart';
+import 'package:globos_pos_system/core/ui/app_theme.dart';
+import 'package:globos_pos_system/core/ui/toast/toast.dart';
 import 'package:globos_pos_system/features/admin/admin_screen.dart';
 import 'package:globos_pos_system/features/auth/auth_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_state.dart';
@@ -264,6 +265,14 @@ void main() {
 
           expect(root, findsOneWidget);
           expect(find.text(_inventoryTitles[index](l10n)), findsWidgets);
+          final topMetricStrip = tester.widget<ToastMetricStrip>(
+            find.byType(ToastMetricStrip).first,
+          );
+          expect(
+            topMetricStrip.dense,
+            isTrue,
+            reason: 'Inventory step $index must keep its summary compact.',
+          );
           await tester.scrollUntilVisible(
             selectedItem,
             180,

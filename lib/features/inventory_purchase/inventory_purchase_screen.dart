@@ -367,6 +367,7 @@ class _InventoryPurchaseScreenState
       actions: [_RefreshButton(onPressed: () => _reloadStoreScope(storeId))],
       children: [
         ToastMetricStrip(
+          dense: true,
           metrics: [
             ToastMetric(
               label: l10n.inventoryPurchaseAssetAmount,
@@ -475,6 +476,7 @@ class _InventoryPurchaseScreenState
       error: state.error,
       children: [
         ToastMetricStrip(
+          dense: true,
           metrics: [
             ToastMetric(
               label: l10n.inventoryPurchaseTotalItems,
@@ -654,6 +656,7 @@ class _InventoryPurchaseScreenState
       ],
       children: [
         ToastMetricStrip(
+          dense: true,
           metrics: [
             ToastMetric(
               label: l10n.inventoryPurchaseRecommendationSnapshot,
@@ -966,6 +969,7 @@ class _InventoryPurchaseScreenState
       error: state.error ?? detail.error ?? creationState.error,
       children: [
         ToastMetricStrip(
+          dense: true,
           metrics: [
             ToastMetric(
               label: l10n.inventoryPurchaseVisibleOrders,
@@ -1658,6 +1662,7 @@ class _InventoryPurchaseScreenState
       ],
       children: [
         ToastMetricStrip(
+          dense: true,
           metrics: [
             ToastMetric(
               label: l10n.inventoryPurchaseTotalSuppliers,
@@ -1810,6 +1815,7 @@ class _InventoryPurchaseScreenState
       ],
       children: [
         ToastMetricStrip(
+          dense: true,
           metrics: [
             ToastMetric(
               label: l10n.inventoryPurchaseTotalProducts,
@@ -3481,6 +3487,7 @@ class _InventoryPurchaseScreenState
       ],
       children: [
         ToastMetricStrip(
+          dense: true,
           metrics: [
             ToastMetric(
               label: l10n.inventoryPurchaseRecipeMenus,
@@ -3601,6 +3608,7 @@ class _InventoryPurchaseScreenState
       ],
       children: [
         ToastMetricStrip(
+          dense: true,
           metrics: [
             ToastMetric(
               label: l10n.inventoryPurchaseTotalDailyConsumption,
@@ -3736,6 +3744,7 @@ class _InventoryPurchaseScreenState
       ],
       children: [
         ToastMetricStrip(
+          dense: true,
           metrics: [
             ToastMetric(
               label: l10n.inventoryPurchaseAssetAmount,
@@ -3854,6 +3863,7 @@ class _InventoryPurchaseScreenState
       ],
       children: [
         ToastMetricStrip(
+          dense: true,
           metrics: [
             ToastMetric(
               label: l10n.inventoryPurchaseAuditTargets,
@@ -3946,6 +3956,7 @@ class _InventoryPurchaseScreenState
         ),
         const SizedBox(height: ToastSpacingTokens.md),
         ToastMetricStrip(
+          dense: true,
           metrics: [
             ToastMetric(
               label: l10n.inventoryPurchaseMenuCategories,
