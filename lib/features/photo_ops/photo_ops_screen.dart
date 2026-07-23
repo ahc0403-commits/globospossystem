@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/attendance_service.dart';
@@ -65,6 +66,11 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
       surfaceMeta.length - 1,
     );
     final selectedSurface = surfaceMeta[safeSurfaceIndex];
+    final today = DateTime.now();
+    final salesEndDate =
+        state.salesEndDate ?? DateTime(today.year, today.month, today.day);
+    final salesStartDate =
+        state.salesStartDate ?? salesEndDate.subtract(const Duration(days: 6));
     final contentChildren = <Widget>[
       if (state.isLoading && state.data == null)
         const Padding(
@@ -82,6 +88,8 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
           data: state.data!,
           activeStoreId: activeStoreId!,
           activeStoreName: activeStoreName,
+          salesStartDate: salesStartDate,
+          salesEndDate: salesEndDate,
           onReload: notifier.load,
         ),
     ];
@@ -247,6 +255,23 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
     Future.microtask(onReload);
   }
 
+  Future<void> _selectSalesDateRange(
+    DateTime salesStartDate,
+    DateTime salesEndDate,
+  ) async {
+    final picked = await showDateRangePicker(
+      context: context,
+      initialDateRange: DateTimeRange(start: salesStartDate, end: salesEndDate),
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now(),
+      helpText: '${context.l10n.photoOpsSalesTitle} · ${context.l10n.date}',
+    );
+    if (picked == null || !mounted) return;
+    await ref
+        .read(photoOpsProvider.notifier)
+        .setSalesDateRange(picked.start, picked.end);
+  }
+
   Future<void> _exportLegalEntitySales() async {
     final auth = ref.read(authProvider);
     final dashboard = ref.read(photoOpsProvider).data;
@@ -303,6 +328,8 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
     required PhotoOpsDashboardData data,
     required String activeStoreId,
     required String activeStoreName,
+    required DateTime salesStartDate,
+    required DateTime salesEndDate,
     required Future<void> Function() onReload,
   }) {
     final l10n = context.l10n;
@@ -388,6 +415,22 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  key: const Key('photo_ops_sales_date_range_button'),
+                  onPressed: () =>
+                      _selectSalesDateRange(salesStartDate, salesEndDate),
+                  icon: const Icon(Icons.date_range_outlined, size: 18),
+                  label: Text(
+                    '${context.l10n.from} '
+                    '${DateFormat('yyyy-MM-dd').format(salesStartDate)}  ·  '
+                    '${context.l10n.to} '
+                    '${DateFormat('yyyy-MM-dd').format(salesEndDate)}',
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
               ToastMetricStrip(
                 metrics: [
                   ToastMetric(

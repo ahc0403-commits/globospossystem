@@ -199,7 +199,18 @@ void main() {
       find.byKey(const Key('photo_ops_inventory_adjust_inventory-1')),
       findsNothing,
     );
+    expect(
+      find.byKey(const Key('photo_ops_sales_date_range_button')),
+      findsOne,
+    );
     expect(find.byType(ToastMetricStrip), findsOne);
+    await tester.tap(
+      find.byKey(const Key('photo_ops_sales_date_range_button')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(DateRangePickerDialog), findsOne);
+    Navigator.of(tester.element(find.byType(DateRangePickerDialog))).pop();
+    await tester.pumpAndSettle();
 
     sidebar.onItemSelected(3);
     await tester.pump();

@@ -24,26 +24,40 @@ void main() {
     );
   });
 
-  test('latest Photo Ops sales are loaded through the scoped server RPC', () {
+  test('Photo Ops sales are loaded through the scoped range RPC', () {
     final service = File(
       'lib/features/photo_ops/photo_ops_service.dart',
     ).readAsStringSync();
     final migration = File(
-      'supabase/migrations/20260723060000_photo_ops_latest_sales_rpc.sql',
+      'supabase/migrations/20260723070000_photo_ops_inventory_cleanup_sales_range.sql',
     ).readAsStringSync();
 
-    expect(service, contains("rpc('get_photo_ops_latest_sales')"));
-    expect(migration, contains('max(s.sale_date)'));
+    expect(service, contains("'get_photo_ops_sales_range'"));
+    expect(service, contains("'p_start_date':"));
+    expect(service, contains("'p_end_date':"));
+    expect(
+      migration,
+      contains('s.sale_date BETWEEN p_start_date AND p_end_date'),
+    );
     expect(migration, contains('public.user_accessible_stores(auth.uid())'));
     expect(migration, contains("'photo_objet_master'"));
     expect(migration, contains('FROM PUBLIC, anon'));
   });
 
-  test('production deployment gates the latest-sales RPC migration', () {
+  test('production deployment gates inventory cleanup and sales range', () {
     final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
 
-    expect(deploy, contains('20260723060000_photo_ops_latest_sales_rpc.sql'));
-    expect(deploy, contains('preflight_photo_ops_latest_sales_rpc.sql'));
-    expect(deploy, contains('verify_photo_ops_latest_sales_rpc.sql'));
+    expect(
+      deploy,
+      contains('20260723070000_photo_ops_inventory_cleanup_sales_range.sql'),
+    );
+    expect(
+      deploy,
+      contains('preflight_photo_ops_inventory_cleanup_sales_range.sql'),
+    );
+    expect(
+      deploy,
+      contains('verify_photo_ops_inventory_cleanup_sales_range.sql'),
+    );
   });
 }
