@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -30,6 +31,7 @@ import 'package:globos_pos_system/features/store_setup/store_setup_screen.dart';
 import 'package:globos_pos_system/features/store_setup/store_setup_service.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -70,6 +72,7 @@ class _AttendanceNotifier extends AttendanceKioskNotifier {
     required String employeeNumber,
     required String storeId,
     required String type,
+    required XFile photoFile,
   }) => completion?.future ?? Future<bool>.value(true);
 }
 
@@ -370,7 +373,15 @@ void main() {
       final attendanceResult = Completer<bool>();
       await _pump(
         tester,
-        child: const AttendanceKioskScreen(),
+        child: AttendanceKioskScreen(
+          photoPickerOverride: () async => XFile.fromData(
+            base64Decode(
+              'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+            ),
+            mimeType: 'image/png',
+            name: 'attendance.png',
+          ),
+        ),
         overrides: [
           connectivityProvider.overrideWith((ref) => Stream.value(true)),
           attendanceKioskProvider.overrideWith(
@@ -383,6 +394,9 @@ void main() {
         'NV-001',
       );
       await tester.tap(find.byKey(const Key('attendance_employee_clock_in')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('attendance_photo_preview')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('attendance_confirm_photo')));
       await tester.pump();
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
       attendanceResult.complete(true);
