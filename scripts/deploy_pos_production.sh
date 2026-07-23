@@ -712,6 +712,7 @@ apply_migration() {
     20260723010000_employee_attendance_required_photo.sql|\
     20260723020000_inventory_supplier_bank_account.sql|\
     20260723030000_cashier_non_revenue_checkout.sql|\
+    20260723040000_photo_ops_manager_inventory_access.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -896,6 +897,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_cashier_non_revenue_checkout.sql" \
       "cashier non-revenue checkout migration preflight"
+  elif [[ "$migration_name" == "20260723040000_photo_ops_manager_inventory_access.sql" ]]; then
+    log "Photo Ops manager inventory access migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_photo_ops_manager_inventory_access.sql" \
+      "Photo Ops manager inventory access migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -1071,6 +1077,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_cashier_non_revenue_checkout.sql" \
       "cashier non-revenue checkout migration verification"
+  elif [[ "$migration_name" == "20260723040000_photo_ops_manager_inventory_access.sql" ]]; then
+    log "Photo Ops manager inventory access migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_photo_ops_manager_inventory_access.sql" \
+      "Photo Ops manager inventory access migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \

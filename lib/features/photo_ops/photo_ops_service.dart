@@ -26,13 +26,13 @@ class PhotoOpsKpi {
   final int activeInventoryAlerts;
   final double activePayrollEstimate;
 
-  /// Gross sales for the active store on the current HCM calendar day.
+  /// Gross sales for the active store on the latest completed sales date.
   final double activeStoreSales;
 
-  /// Current-day gross sales across every accessible store.
+  /// Gross sales across every accessible store on the latest completed date.
   final double networkSales;
 
-  /// Current-day transaction count for the active store.
+  /// Transaction count for the active store on the latest completed date.
   final int activeStoreTransactions;
 
   /// Timestamp of the most recent sales pull in the accessible scope.
@@ -113,9 +113,13 @@ class PhotoOpsDashboardData {
     required this.recentAttendance,
     required this.inventoryAlerts,
     required this.payrollPreview,
+    this.inventoryItems = const [],
     this.salesSummary = const [],
     this.salesWarningCode,
     this.salesWarningDetail,
+    this.attendanceWarningDetail,
+    this.inventoryWarningDetail,
+    this.payrollWarningDetail,
   });
 
   final PhotoOpsKpi kpi;
@@ -123,7 +127,11 @@ class PhotoOpsDashboardData {
   final List<PhotoOpsInventoryRow> inventoryAlerts;
   final List<PhotoOpsPayrollRow> payrollPreview;
 
-  /// Current HCM calendar-day sales rows for accessible stores.
+  /// Full catalog for the active store. Alerts remain available separately
+  /// for KPI and priority-queue presentation.
+  final List<PhotoOpsInventoryRow> inventoryItems;
+
+  /// Latest completed HCM sales-date rows for accessible stores.
   final List<PhotoOpsSalesRow> salesSummary;
 
   /// Wave 1.6 sales-overlay: warning code emitted by the sales loader
@@ -133,6 +141,9 @@ class PhotoOpsDashboardData {
   /// Wave 1.6 sales-overlay: human-readable diagnostic for the warning
   /// code above. Null when no warning is active.
   final String? salesWarningDetail;
+  final String? attendanceWarningDetail;
+  final String? inventoryWarningDetail;
+  final String? payrollWarningDetail;
 }
 
 class PhotoOpsSalesSnapshot {
@@ -230,31 +241,52 @@ class PhotoOpsService {
     required String activeStoreId,
   }) async {
     final now = DateTime.now();
-    final results = await Future.wait([
-      attendanceService.fetchLogs(
-        storeId: activeStoreId,
-        from: now.subtract(const Duration(days: 6)),
-        to: now.add(const Duration(days: 1)),
-      ),
-      inventoryService.fetchIngredients(activeStoreId),
+    var attendanceRaw = <Map<String, dynamic>>[];
+    var inventoryRaw = <Map<String, dynamic>>[];
+    String? attendanceWarningDetail;
+    String? inventoryWarningDetail;
+
+    await Future.wait<void>([
+      () async {
+        try {
+          attendanceRaw = await attendanceService.fetchLogs(
+            storeId: activeStoreId,
+            from: now.subtract(const Duration(days: 6)),
+            to: now.add(const Duration(days: 1)),
+          );
+        } catch (error) {
+          attendanceWarningDetail = error.toString();
+        }
+      }(),
+      () async {
+        try {
+          inventoryRaw = await inventoryService.fetchIngredients(activeStoreId);
+        } catch (error) {
+          inventoryWarningDetail = error.toString();
+        }
+      }(),
     ]);
-    final attendance = _attendanceRows(
-      List<Map<String, dynamic>>.from(results[0] as List),
-    );
-    final inventory = _inventoryRows(
-      List<Map<String, dynamic>>.from(results[1] as List),
-    );
+
+    final attendance = _attendanceRows(attendanceRaw);
+    final inventoryItems = _inventoryRows(inventoryRaw);
+    final inventoryAlerts = inventoryItems
+        .where((row) => row.needsReorder)
+        .take(10)
+        .toList();
     return PhotoOpsDashboardData(
       kpi: PhotoOpsKpi(
         allAttendanceEvents: attendance.length,
         activeAttendanceEvents: attendance.length,
-        allInventoryAlerts: inventory.length,
-        activeInventoryAlerts: inventory.length,
+        allInventoryAlerts: inventoryAlerts.length,
+        activeInventoryAlerts: inventoryAlerts.length,
         activePayrollEstimate: 0,
       ),
       recentAttendance: attendance,
-      inventoryAlerts: inventory,
+      inventoryAlerts: inventoryAlerts,
+      inventoryItems: inventoryItems,
       payrollPreview: const [],
+      attendanceWarningDetail: attendanceWarningDetail,
+      inventoryWarningDetail: inventoryWarningDetail,
     );
   }
 
@@ -339,21 +371,29 @@ class PhotoOpsService {
     final today = DateTime(now.year, now.month, now.day);
     final monthStart = DateTime(now.year, now.month, 1);
     final attendanceWindowStart = today.subtract(const Duration(days: 6));
-    final salesDate = photoOpsHcmDate(now);
-
     var salesRowsRaw = <Map<String, dynamic>>[];
     String? salesWarningCode;
     String? salesWarningDetail;
     try {
-      final response = await supabase
+      final latestRow = await supabase
           .from('v_photo_objet_daily_summary')
-          .select(
-            'store_id, store_name, sale_date, total_gross_sales, '
-            'total_transactions, total_service_amount, active_machines, '
-            'last_pulled_at',
-          )
+          .select('sale_date')
           .inFilter('store_id', accessibleStoreIds)
-          .eq('sale_date', salesDate);
+          .order('sale_date', ascending: false)
+          .limit(1)
+          .maybeSingle();
+      final latestSalesDate = latestRow?['sale_date']?.toString();
+      final response = latestSalesDate == null
+          ? const <Map<String, dynamic>>[]
+          : await supabase
+                .from('v_photo_objet_daily_summary')
+                .select(
+                  'store_id, store_name, sale_date, total_gross_sales, '
+                  'total_transactions, total_service_amount, active_machines, '
+                  'last_pulled_at',
+                )
+                .inFilter('store_id', accessibleStoreIds)
+                .eq('sale_date', latestSalesDate);
       salesRowsRaw = List<Map<String, dynamic>>.from(response);
     } catch (error) {
       salesWarningCode = 'photo_ops_sales_load_failed';
@@ -365,46 +405,81 @@ class PhotoOpsService {
       rows: salesRowsRaw,
     );
 
-    final results = await Future.wait([
-      supabase
-          .from('v_store_attendance_summary')
-          .select('store_id, user_id, work_date')
-          .inFilter('store_id', accessibleStoreIds)
-          .eq('work_date', today.toIso8601String().substring(0, 10)),
-      supabase
-          .from('v_inventory_status')
-          .select('store_id, item_id, needs_reorder')
-          .inFilter('store_id', accessibleStoreIds)
-          .eq('needs_reorder', true),
-      attendanceService.fetchLogs(
-        storeId: activeStoreId,
-        from: attendanceWindowStart,
-        to: now.add(const Duration(days: 1)),
-      ),
-      inventoryService.fetchIngredients(activeStoreId),
-      payrollService.calculatePayroll(
-        storeId: activeStoreId,
-        periodStart: monthStart,
-        periodEnd: now,
-      ),
+    var attendanceSummary = <Map<String, dynamic>>[];
+    var inventorySummary = <Map<String, dynamic>>[];
+    var recentAttendanceRaw = <Map<String, dynamic>>[];
+    var inventoryCatalog = <Map<String, dynamic>>[];
+    var payrollPreviewRaw = <StaffPayroll>[];
+    String? attendanceWarningDetail;
+    String? inventoryWarningDetail;
+    String? payrollWarningDetail;
+
+    await Future.wait<void>([
+      () async {
+        try {
+          attendanceSummary = List<Map<String, dynamic>>.from(
+            await supabase
+                .from('v_store_attendance_summary')
+                .select('store_id, user_id, work_date')
+                .inFilter('store_id', accessibleStoreIds)
+                .eq('work_date', today.toIso8601String().substring(0, 10)),
+          );
+        } catch (error) {
+          attendanceWarningDetail = error.toString();
+        }
+      }(),
+      () async {
+        try {
+          inventorySummary = List<Map<String, dynamic>>.from(
+            await supabase
+                .from('v_inventory_status')
+                .select('store_id, item_id, needs_reorder')
+                .inFilter('store_id', accessibleStoreIds)
+                .eq('needs_reorder', true),
+          );
+        } catch (error) {
+          inventoryWarningDetail = error.toString();
+        }
+      }(),
+      () async {
+        try {
+          recentAttendanceRaw = await attendanceService.fetchLogs(
+            storeId: activeStoreId,
+            from: attendanceWindowStart,
+            to: now.add(const Duration(days: 1)),
+          );
+        } catch (error) {
+          attendanceWarningDetail ??= error.toString();
+        }
+      }(),
+      () async {
+        try {
+          inventoryCatalog = await inventoryService.fetchIngredients(
+            activeStoreId,
+          );
+        } catch (error) {
+          inventoryWarningDetail ??= error.toString();
+        }
+      }(),
+      () async {
+        try {
+          payrollPreviewRaw = await payrollService.calculatePayroll(
+            storeId: activeStoreId,
+            periodStart: monthStart,
+            periodEnd: now,
+          );
+        } catch (error) {
+          payrollWarningDetail = error.toString();
+        }
+      }(),
     ]);
 
-    final attendanceSummary = List<Map<String, dynamic>>.from(
-      results[0] as List,
-    );
-    final inventorySummary = List<Map<String, dynamic>>.from(
-      results[1] as List,
-    );
-    final recentAttendanceRaw = List<Map<String, dynamic>>.from(
-      results[2] as List,
-    );
-    final inventoryCatalog = List<Map<String, dynamic>>.from(
-      results[3] as List,
-    );
-    final payrollPreviewRaw = results[4] as List<StaffPayroll>;
-
     final recentAttendance = _attendanceRows(recentAttendanceRaw);
-    final inventoryAlerts = _inventoryRows(inventoryCatalog);
+    final inventoryItems = _inventoryRows(inventoryCatalog);
+    final inventoryAlerts = inventoryItems
+        .where((row) => row.needsReorder)
+        .take(10)
+        .toList();
 
     final payrollPreview =
         payrollPreviewRaw
@@ -440,10 +515,14 @@ class PhotoOpsService {
       ),
       recentAttendance: recentAttendance,
       inventoryAlerts: inventoryAlerts,
+      inventoryItems: inventoryItems,
       payrollPreview: payrollPreview.take(10).toList(),
       salesSummary: sales.rows,
       salesWarningCode: salesWarningCode,
       salesWarningDetail: salesWarningDetail,
+      attendanceWarningDetail: attendanceWarningDetail,
+      inventoryWarningDetail: inventoryWarningDetail,
+      payrollWarningDetail: payrollWarningDetail,
     );
   }
 
@@ -472,8 +551,7 @@ class PhotoOpsService {
 
   List<PhotoOpsInventoryRow> _inventoryRows(List<Map<String, dynamic>> rows) =>
       rows
-          .where((row) => (row['needs_reorder'] as bool?) ?? false)
-          .take(10)
+          .take(100)
           .map(
             (row) => PhotoOpsInventoryRow(
               ingredientId:

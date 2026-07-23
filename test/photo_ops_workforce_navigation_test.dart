@@ -3,10 +3,12 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/ui/app_theme.dart';
+import 'package:globos_pos_system/core/ui/toast/toast.dart';
 import 'package:globos_pos_system/features/auth/auth_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_state.dart';
 import 'package:globos_pos_system/features/photo_ops/photo_ops_provider.dart';
 import 'package:globos_pos_system/features/photo_ops/photo_ops_screen.dart';
+import 'package:globos_pos_system/features/photo_ops/photo_ops_service.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,17 +33,22 @@ class _AuthNotifier extends AuthNotifier {
 }
 
 class _PhotoOpsNotifier extends PhotoOpsNotifier {
-  _PhotoOpsNotifier(super.ref) {
-    state = const PhotoOpsState(isLoading: true);
+  _PhotoOpsNotifier(super.ref, {PhotoOpsState? initialState}) {
+    state = initialState ?? const PhotoOpsState(isLoading: true);
   }
 
   @override
   Future<void> load() async {}
 }
 
-Future<GoRouter> _pumpPhotoOps(WidgetTester tester, String role) async {
+Future<GoRouter> _pumpPhotoOps(
+  WidgetTester tester,
+  String role, {
+  PhotoOpsState? photoOpsState,
+  Size physicalSize = const Size(1440, 900),
+}) async {
   tester.view.devicePixelRatio = 1;
-  tester.view.physicalSize = const Size(1440, 900);
+  tester.view.physicalSize = physicalSize;
   addTearDown(tester.view.resetDevicePixelRatio);
   addTearDown(tester.view.resetPhysicalSize);
 
@@ -68,7 +75,9 @@ Future<GoRouter> _pumpPhotoOps(WidgetTester tester, String role) async {
     ProviderScope(
       overrides: [
         authProvider.overrideWith((ref) => _AuthNotifier(role)),
-        photoOpsProvider.overrideWith((ref) => _PhotoOpsNotifier(ref)),
+        photoOpsProvider.overrideWith(
+          (ref) => _PhotoOpsNotifier(ref, initialState: photoOpsState),
+        ),
       ],
       child: MaterialApp.router(
         debugShowCheckedModeBanner: false,
@@ -121,5 +130,86 @@ void main() {
 
     expect(inkWell.onTap, isNull);
     expect(router.routeInformationProvider.value.uri.path, '/photo-ops');
+  });
+
+  testWidgets('Photo master menus render independent operational surfaces', (
+    tester,
+  ) async {
+    final data = PhotoOpsDashboardData(
+      kpi: const PhotoOpsKpi(
+        allAttendanceEvents: 1,
+        activeAttendanceEvents: 1,
+        allInventoryAlerts: 1,
+        activeInventoryAlerts: 1,
+        activePayrollEstimate: 100000,
+        activeStoreSales: 200000,
+        networkSales: 900000,
+        activeStoreTransactions: 2,
+      ),
+      recentAttendance: const [],
+      inventoryAlerts: const [],
+      inventoryItems: const [
+        PhotoOpsInventoryRow(
+          ingredientId: 'inventory-1',
+          itemName: 'Photo paper',
+          currentStock: 12,
+          unit: 'box',
+          reorderPoint: 5,
+          needsReorder: false,
+        ),
+      ],
+      payrollPreview: const [],
+      salesSummary: [
+        PhotoOpsSalesRow(
+          storeId: _storeId,
+          storeName: 'PHOTO OBJET DI AN',
+          saleDate: DateTime(2026, 7, 22),
+          grossSales: 200000,
+          totalTransactions: 2,
+          serviceAmount: 0,
+          activeMachines: 2,
+        ),
+      ],
+    );
+    await _pumpPhotoOps(
+      tester,
+      'photo_objet_master',
+      photoOpsState: PhotoOpsState(data: data, lastLoadedStoreId: _storeId),
+      physicalSize: const Size(1440, 1800),
+    );
+
+    final sidebar = tester.widget<ToastSidebarPanel>(
+      find.byType(ToastSidebarPanel),
+    );
+    sidebar.onItemSelected(1);
+    await tester.pump();
+    expect(
+      tester
+          .widget<ToastSidebarPanel>(find.byType(ToastSidebarPanel))
+          .selectedIndex,
+      1,
+    );
+    expect(find.byKey(const Key('photo_ops_sales_export_button')), findsOne);
+    expect(
+      find.byKey(const Key('photo_ops_inventory_adjust_inventory-1')),
+      findsNothing,
+    );
+
+    sidebar.onItemSelected(3);
+    await tester.pump();
+    expect(
+      find.byKey(const Key('photo_ops_sales_export_button')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('photo_ops_inventory_adjust_inventory-1')),
+      findsOne,
+    );
+
+    sidebar.onItemSelected(5);
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('photo_ops_open_staff_management')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('employee_management_destination')), findsOne);
   });
 }

@@ -79,120 +79,16 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
         )
       else if (state.error != null && state.data == null)
         _ErrorCard(message: state.error!, onRetry: notifier.load)
-      else if (state.data != null) ...[
-        if (surfaceAccess.showManagementSurfaces &&
-            state.data!.salesWarningCode != null) ...[
-          _WarningSurface(
-            message: _localizedSalesWarning(context, state.data!),
-          ),
-          const SizedBox(height: 18),
-        ],
-        PhotoOpsManagementSurfaceGate(
-          role: auth.role,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _KpiGrid(data: state.data!.kpi),
-              const SizedBox(height: 18),
-              _WorkflowSurface(
-                title: l10n.photoOpsPriorityQueueTitle,
-                subtitle: l10n.photoOpsPriorityQueueSubtitle,
-                kind: PhotoOpsSurfaceKind.priority,
-                child: _PriorityList(
-                  items: _buildPriorityItems(context, state.data!.kpi),
-                ),
-              ),
-              const SizedBox(height: 18),
-              _WorkflowSurface(
-                title: l10n.photoOpsSalesTitle,
-                subtitle: l10n.photoOpsSalesSubtitle,
-                kind: PhotoOpsSurfaceKind.backOffice,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: FilledButton.icon(
-                        key: const Key('photo_ops_sales_export_button'),
-                        onPressed: _isExportingSales
-                            ? null
-                            : _exportLegalEntitySales,
-                        icon: _isExportingSales
-                            ? const SizedBox.square(
-                                dimension: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.download_outlined),
-                        label: Text(l10n.photoOpsSalesDownloadExcel),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    _SalesList(rows: state.data!.salesSummary),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-            ],
-          ),
+      else if (state.data != null)
+        ..._selectedSurfaceChildren(
+          index: safeSurfaceIndex,
+          showManagementSurfaces: surfaceAccess.showManagementSurfaces,
+          data: state.data!,
+          activeStoreId: activeStoreId!,
+          activeStoreName: activeStoreName,
+          stores: auth.accessibleStores,
+          onReload: notifier.load,
         ),
-        _WorkflowSurface(
-          title: l10n.photoOpsAttendanceTitle,
-          subtitle: l10n.photoOpsAttendanceSubtitle,
-          kind: PhotoOpsSurfaceKind.live,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _EmployeeAttendanceActions(
-                storeId: activeStoreId!,
-                onRecorded: notifier.load,
-              ),
-              const SizedBox(height: 12),
-              _AttendanceList(rows: state.data!.recentAttendance),
-            ],
-          ),
-        ),
-        const SizedBox(height: 18),
-        _WorkflowSurface(
-          title: l10n.photoOpsInventoryTitle,
-          subtitle: l10n.photoOpsInventorySubtitle,
-          kind: PhotoOpsSurfaceKind.priority,
-          child: _InventoryList(
-            rows: state.data!.inventoryAlerts,
-            onAdjust: (row) => _showInventoryAdjustment(
-              storeId: activeStoreId,
-              row: row,
-              onRecorded: notifier.load,
-            ),
-          ),
-        ),
-        const SizedBox(height: 18),
-        PhotoOpsManagementSurfaceGate(
-          role: auth.role,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _WorkflowSurface(
-                title: l10n.photoOpsSalaryTitle,
-                subtitle: l10n.photoOpsSalarySubtitle,
-                kind: PhotoOpsSurfaceKind.backOffice,
-                child: _PayrollList(rows: state.data!.payrollPreview),
-              ),
-              const SizedBox(height: 18),
-              _WorkflowSurface(
-                title: l10n.photoOpsStoreScopeTitle,
-                subtitle: l10n.photoOpsStoreScopeSubtitle,
-                kind: PhotoOpsSurfaceKind.backOffice,
-                child: _StoreScopeList(
-                  stores: auth.accessibleStores,
-                  activeStoreId: activeStoreId,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     ];
 
     Widget surface({required Widget child}) {
@@ -217,26 +113,37 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
               icon: Icons.dashboard_outlined,
               label: l10n.photoOpsPriorityQueueTitle,
               sectionLabel: l10n.photoOpsHeroEyebrow,
+              itemKey: const Key('photo_ops_nav_priority'),
             ),
             ToastSidebarPanelItem(
               icon: Icons.payments_outlined,
               label: l10n.photoOpsSalesTitle,
               sectionLabel: l10n.photoOpsSalesTitle,
+              itemKey: const Key('photo_ops_nav_sales'),
             ),
             ToastSidebarPanelItem(
               icon: Icons.schedule_outlined,
               label: l10n.photoOpsAttendanceTitle,
               sectionLabel: l10n.photoOpsAttendanceTitle,
+              itemKey: const Key('photo_ops_nav_attendance'),
             ),
             ToastSidebarPanelItem(
               icon: Icons.inventory_2_outlined,
               label: l10n.photoOpsInventoryTitle,
               sectionLabel: l10n.photoOpsInventoryTitle,
+              itemKey: const Key('photo_ops_nav_inventory'),
             ),
             ToastSidebarPanelItem(
               icon: Icons.group_outlined,
               label: l10n.photoOpsSalaryTitle,
               sectionLabel: l10n.photoOpsSalaryTitle,
+              itemKey: const Key('photo_ops_nav_payroll'),
+            ),
+            ToastSidebarPanelItem(
+              icon: Icons.manage_accounts_outlined,
+              label: l10n.staffManagementTitle,
+              sectionLabel: l10n.staffManagementTitle,
+              itemKey: const Key('photo_ops_nav_staff'),
             ),
           ]
         : [
@@ -244,11 +151,13 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
               icon: Icons.schedule_outlined,
               label: l10n.photoOpsAttendanceTitle,
               sectionLabel: l10n.photoOpsAttendanceTitle,
+              itemKey: const Key('photo_ops_nav_attendance'),
             ),
             ToastSidebarPanelItem(
               icon: Icons.inventory_2_outlined,
               label: l10n.photoOpsInventoryTitle,
               sectionLabel: l10n.photoOpsInventoryTitle,
+              itemKey: const Key('photo_ops_nav_inventory'),
             ),
           ];
 
@@ -385,6 +294,181 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
     }
   }
 
+  List<Widget> _selectedSurfaceChildren({
+    required int index,
+    required bool showManagementSurfaces,
+    required PhotoOpsDashboardData data,
+    required String activeStoreId,
+    required String activeStoreName,
+    required List<AccessibleStore> stores,
+    required Future<void> Function() onReload,
+  }) {
+    final l10n = context.l10n;
+    final attendance = _WorkflowSurface(
+      title: l10n.photoOpsAttendanceTitle,
+      subtitle: l10n.photoOpsAttendanceSubtitle,
+      kind: PhotoOpsSurfaceKind.live,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (data.attendanceWarningDetail != null) ...[
+            _SectionWarning(
+              section: l10n.photoOpsAttendanceTitle,
+              onRetry: onReload,
+            ),
+            const SizedBox(height: AppSpacing.md),
+          ],
+          _EmployeeAttendanceActions(
+            storeId: activeStoreId,
+            onRecorded: onReload,
+          ),
+          const SizedBox(height: 12),
+          _AttendanceList(rows: data.recentAttendance),
+        ],
+      ),
+    );
+    final inventory = _WorkflowSurface(
+      title: l10n.photoOpsInventoryTitle,
+      subtitle: '$activeStoreName · ${l10n.photoOpsInventorySubtitle}',
+      kind: PhotoOpsSurfaceKind.priority,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (data.inventoryWarningDetail != null) ...[
+            _SectionWarning(
+              section: l10n.photoOpsInventoryTitle,
+              onRetry: onReload,
+            ),
+            const SizedBox(height: AppSpacing.md),
+          ],
+          _InventoryList(
+            rows: data.inventoryItems.isEmpty
+                ? data.inventoryAlerts
+                : data.inventoryItems,
+            onAdjust: (row) => _showInventoryAdjustment(
+              storeId: activeStoreId,
+              row: row,
+              onRecorded: onReload,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (!showManagementSurfaces) {
+      return [index == 0 ? attendance : inventory];
+    }
+
+    return switch (index) {
+      0 => [
+        _KpiGrid(data: data.kpi),
+        const SizedBox(height: 18),
+        _WorkflowSurface(
+          title: l10n.photoOpsPriorityQueueTitle,
+          subtitle: l10n.photoOpsPriorityQueueSubtitle,
+          kind: PhotoOpsSurfaceKind.priority,
+          child: _PriorityList(items: _buildPriorityItems(context, data.kpi)),
+        ),
+      ],
+      1 => [
+        if (data.salesWarningCode != null) ...[
+          _WarningSurface(message: _localizedSalesWarning(context, data)),
+          const SizedBox(height: 18),
+        ],
+        _WorkflowSurface(
+          title: l10n.photoOpsSalesTitle,
+          subtitle: l10n.photoOpsSalesSubtitle,
+          kind: PhotoOpsSurfaceKind.backOffice,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ToastMetricStrip(
+                metrics: [
+                  ToastMetric(
+                    label: '$activeStoreName · ${l10n.photoOpsKpiSales}',
+                    value:
+                        '${data.kpi.activeStoreSales.toStringAsFixed(0)} VND',
+                  ),
+                  ToastMetric(
+                    label: l10n.photoOpsKpiNetworkSales,
+                    value: '${data.kpi.networkSales.toStringAsFixed(0)} VND',
+                  ),
+                  ToastMetric(
+                    label: l10n.photoOpsKpiTransactions,
+                    value: '${data.kpi.activeStoreTransactions}',
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  key: const Key('photo_ops_sales_export_button'),
+                  onPressed: _isExportingSales ? null : _exportLegalEntitySales,
+                  icon: _isExportingSales
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.download_outlined),
+                  label: Text(l10n.photoOpsSalesDownloadExcel),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _SalesList(rows: data.salesSummary),
+            ],
+          ),
+        ),
+      ],
+      2 => [attendance],
+      3 => [inventory],
+      4 => [
+        _WorkflowSurface(
+          title: l10n.photoOpsSalaryTitle,
+          subtitle: '$activeStoreName · ${l10n.photoOpsSalarySubtitle}',
+          kind: PhotoOpsSurfaceKind.backOffice,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (data.payrollWarningDetail != null) ...[
+                _SectionWarning(
+                  section: l10n.photoOpsSalaryTitle,
+                  onRetry: onReload,
+                ),
+                const SizedBox(height: AppSpacing.md),
+              ],
+              _PayrollList(rows: data.payrollPreview),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        _WorkflowSurface(
+          title: l10n.photoOpsStoreScopeTitle,
+          subtitle: l10n.photoOpsStoreScopeSubtitle,
+          kind: PhotoOpsSurfaceKind.backOffice,
+          child: _StoreScopeList(stores: stores, activeStoreId: activeStoreId),
+        ),
+      ],
+      _ => [
+        _WorkflowSurface(
+          title: l10n.staffManagementTitle,
+          subtitle:
+              '$activeStoreName · ${l10n.staffEmployeeManagementSubtitle}',
+          kind: PhotoOpsSurfaceKind.backOffice,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.icon(
+              key: const Key('photo_ops_open_staff_management'),
+              onPressed: () => context.go('/admin'),
+              icon: const Icon(Icons.manage_accounts_outlined),
+              label: Text(l10n.staffAddAction),
+            ),
+          ),
+        ),
+      ],
+    };
+  }
+
   List<_PhotoOpsSurfaceMeta> _surfaceMeta(
     BuildContext context,
     PhotoOpsSurfaceAccess access,
@@ -428,6 +512,11 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
       _PhotoOpsSurfaceMeta(
         title: l10n.photoOpsSalaryTitle,
         subtitle: l10n.photoOpsSalarySubtitle,
+        kind: PhotoOpsSurfaceKind.backOffice,
+      ),
+      _PhotoOpsSurfaceMeta(
+        title: l10n.staffManagementTitle,
+        subtitle: l10n.staffEmployeeManagementSubtitle,
         kind: PhotoOpsSurfaceKind.backOffice,
       ),
     ];
@@ -1006,6 +1095,31 @@ class _WarningSurface extends StatelessWidget {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionWarning extends StatelessWidget {
+  const _SectionWarning({required this.section, required this.onRetry});
+
+  final String section;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return ToastWorkSurface(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      backgroundColor: PosColors.warningMuted,
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: PosColors.warning),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(context.l10n.photoOpsSectionLoadFailed(section)),
+          ),
+          TextButton(onPressed: onRetry, child: Text(context.l10n.retry)),
         ],
       ),
     );
