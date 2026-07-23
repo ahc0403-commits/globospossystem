@@ -1544,6 +1544,7 @@
   "inventoryPurchaseBaseUnitRequired": "Đơn vị cơ sở *",
   "inventoryPurchaseBeforeSaveAuditReview": "Xem lại kiểm kê trước khi lưu",
   "inventoryPurchaseBusinessNo": "Mã số đăng ký kinh doanh",
+  "inventoryPurchaseBankAccountNumber": "Số tài khoản ngân hàng",
   "inventoryPurchaseCompleteAudit": "Hoàn tất kiểm kê",
   "inventoryPurchaseCompleted": "Hoàn tất",
   "inventoryPurchaseConsumedAmount": "Giá trị tiêu hao",

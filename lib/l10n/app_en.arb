@@ -1545,6 +1545,7 @@
   "inventoryPurchaseBaseUnitRequired": "Base unit *",
   "inventoryPurchaseBeforeSaveAuditReview": "Pre-save count review",
   "inventoryPurchaseBusinessNo": "Business registration no.",
+  "inventoryPurchaseBankAccountNumber": "Bank account number",
   "inventoryPurchaseCompleteAudit": "Complete count",
   "inventoryPurchaseCompleted": "Completed",
   "inventoryPurchaseConsumedAmount": "Consumed amount",

@@ -463,7 +463,7 @@ class InventoryService {
     dynamic query = supabase
         .from('inventory_suppliers')
         .select(
-          'id, brand_id, supplier_name, supplier_type, contact_name, phone, email, address, business_registration_no, payment_terms, contract_start_date, contract_end_date, status, memo, created_at, updated_at',
+          'id, brand_id, supplier_name, supplier_type, contact_name, phone, email, address, business_registration_no, bank_account_number, payment_terms, contract_start_date, contract_end_date, status, memo, created_at, updated_at',
         );
 
     if (brandId != null && brandId.isNotEmpty) {
@@ -486,6 +486,7 @@ class InventoryService {
     String? email,
     String? address,
     String? businessRegistrationNo,
+    String? bankAccountNumber,
     String? paymentTerms,
     DateTime? contractStartDate,
     DateTime? contractEndDate,
@@ -503,6 +504,7 @@ class InventoryService {
         'p_email': email,
         'p_address': address,
         'p_business_registration_no': businessRegistrationNo,
+        'p_bank_account_number': bankAccountNumber,
         'p_payment_terms': paymentTerms,
         'p_contract_start_date': contractStartDate
             ?.toIso8601String()

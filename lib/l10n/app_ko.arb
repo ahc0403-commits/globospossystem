@@ -1544,6 +1544,7 @@
   "inventoryPurchaseBaseUnitRequired": "기준 단위 *",
   "inventoryPurchaseBeforeSaveAuditReview": "저장 전 실사 확인",
   "inventoryPurchaseBusinessNo": "사업자번호",
+  "inventoryPurchaseBankAccountNumber": "계좌번호",
   "inventoryPurchaseCompleteAudit": "실사 완료",
   "inventoryPurchaseCompleted": "완료",
   "inventoryPurchaseConsumedAmount": "소진 금액",
