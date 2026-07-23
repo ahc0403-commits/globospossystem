@@ -22,6 +22,7 @@ import 'tabs/tables_tab.dart';
 import '../delivery/screens/delivery_settlement_tab.dart';
 import 'tabs/einvoice_tab.dart';
 import '../inventory_purchase/inventory_purchase_screen.dart';
+import '../photo_inventory/photo_inventory_screen.dart';
 
 final _adminStoreBrandIdProvider = FutureProvider.family<String?, String>((
   ref,
@@ -100,7 +101,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       const StaffTab(),
       ReportsTab(overrideStoreId: widget.overrideRestaurantId),
       const AttendanceTab(),
-      const InventoryPurchaseScreen(),
+      if (isPhotoObjetContext)
+        const PhotoInventoryScreen()
+      else
+        const InventoryPurchaseScreen(),
       if (!isPhotoObjetContext) const QcTab(),
       const SettingsTab(),
     ];

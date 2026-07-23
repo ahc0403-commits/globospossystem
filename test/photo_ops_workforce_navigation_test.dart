@@ -112,15 +112,16 @@ void main() {
     );
   });
 
-  testWidgets('Photo master home opens the existing employee manager', (
+  testWidgets('Photo master can open the brand manager workspace', (
     tester,
   ) async {
     await _pumpPhotoOps(tester, 'photo_objet_master');
 
     expect(find.text('PHOTO OBJET DI AN'), findsWidgets);
     expect(find.text('PHOTO OBJET / PHOTO OBJET DI AN'), findsNothing);
+    expect(find.byKey(const Key('photo_ops_open_brand_manager')), findsOne);
 
-    await tester.tap(find.byKey(const Key('app_nav_home_button')));
+    await tester.tap(find.byKey(const Key('photo_ops_open_brand_manager')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('employee_management_destination')), findsOne);
@@ -136,6 +137,7 @@ void main() {
     );
 
     expect(inkWell.onTap, isNull);
+    expect(find.byKey(const Key('photo_ops_open_brand_manager')), findsNothing);
     expect(router.routeInformationProvider.value.uri.path, '/photo-ops');
   });
 
