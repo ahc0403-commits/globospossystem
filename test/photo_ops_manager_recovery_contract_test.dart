@@ -42,7 +42,7 @@ void main() {
   });
 
   test(
-    'Photo dashboard isolates section failures and uses latest sales date',
+    'Photo dashboard isolates section failures and loads scoped latest sales',
     () {
       final service = File(
         'lib/features/photo_ops/photo_ops_service.dart',
@@ -51,8 +51,7 @@ void main() {
       expect(service, contains('attendanceWarningDetail'));
       expect(service, contains('inventoryWarningDetail'));
       expect(service, contains('payrollWarningDetail'));
-      expect(service, contains(".order('sale_date', ascending: false)"));
-      expect(service, contains(".eq('sale_date', latestSalesDate)"));
+      expect(service, contains("rpc('get_photo_ops_latest_sales')"));
     },
   );
 }
