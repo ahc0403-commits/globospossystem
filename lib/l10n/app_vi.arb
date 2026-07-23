@@ -2028,6 +2028,7 @@
   "cashierCashMethod": "Tiền mặt",
   "cashierCardMethod": "Thẻ",
   "cashierQrPaymentMethod": "Pay",
+  "cashierBankTransferMethod": "Chuyển khoản",
   "cashierTableLabel": "Bàn {tableNumber}",
   "@cashierTableLabel": {"placeholders": {"tableNumber": {"type": "String"}}},
   "cashierInternetRequired": "Cần kết nối internet",
