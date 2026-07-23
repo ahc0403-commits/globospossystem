@@ -2028,6 +2028,7 @@
   "cashierCashMethod": "현금",
   "cashierCardMethod": "카드",
   "cashierQrPaymentMethod": "페이",
+  "cashierBankTransferMethod": "계좌이체",
   "cashierTableLabel": "{tableNumber} 테이블",
   "@cashierTableLabel": {"placeholders": {"tableNumber": {"type": "String"}}},
   "cashierInternetRequired": "인터넷 연결이 필요합니다",

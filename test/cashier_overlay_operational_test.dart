@@ -85,6 +85,7 @@ class _PaymentNotifier extends PaymentNotifier {
 
   int cancelledOrders = 0;
   int serviceItemMutations = 0;
+  String? processedMethod;
 
   @override
   Future<void> loadOrders(String storeId) async {}
@@ -96,6 +97,7 @@ class _PaymentNotifier extends PaymentNotifier {
     double amount,
     String method,
   ) async {
+    processedMethod = method;
     state = state.copyWith(paymentSuccess: true, isProcessing: false);
     return {'id': 'payment-single'};
   }
@@ -268,10 +270,10 @@ void main() {
     await _selectOrder(tester);
 
     await tester.ensureVisible(
-      find.byKey(const Key('cashier_method_tile_$paymentMethodOther')),
+      find.byKey(const Key('cashier_method_tile_$paymentMethodBankTransfer')),
     );
     await tester.tap(
-      find.byKey(const Key('cashier_method_tile_$paymentMethodOther')),
+      find.byKey(const Key('cashier_method_tile_$paymentMethodBankTransfer')),
     );
     await tester.pump();
     await tester.ensureVisible(find.byKey(const Key('payment_submit_button')));
@@ -292,6 +294,7 @@ void main() {
     );
 
     expect(harness.proofService.markRequiredCalls, 1);
+    expect(harness.notifier.processedMethod, paymentMethodBankTransfer);
     expect(
       find.byKey(const Key('cashier_payment_completion_dialog')),
       findsOneWidget,

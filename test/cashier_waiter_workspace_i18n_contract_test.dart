@@ -71,9 +71,11 @@ void main() {
     expect(cashier, contains("l10n.cashierCashMethod"));
     expect(cashier, contains("l10n.cashierQrPaymentMethod"));
     expect(cashier, contains("l10n.cashierCardMethod"));
+    expect(cashier, contains("l10n.cashierBankTransferMethod"));
     expect(cashier, contains('paymentMethodCash'));
     expect(cashier, contains('paymentMethodOther'));
     expect(cashier, contains('paymentMethodCreditCard'));
+    expect(cashier, contains('paymentMethodBankTransfer'));
     expect(cashier, contains('requiresPaymentProof(method)'));
     expect(cashier, contains('isServicePaymentMethod(method)'));
     expect(cashier, contains('paymentMethodDisplayLabel('));
@@ -89,6 +91,7 @@ void main() {
     expect(ko, contains('"cashierCashMethod": "현금"'));
     expect(ko, contains('"cashierQrPaymentMethod": "페이"'));
     expect(ko, contains('"cashierCardMethod": "카드"'));
+    expect(ko, contains('"cashierBankTransferMethod": "계좌이체"'));
     expect(ko, contains('"cashierCompletedStatus": "결제 완료"'));
   });
 

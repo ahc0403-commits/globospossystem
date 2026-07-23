@@ -6,6 +6,10 @@ void main() {
     expect(normalizePaymentMethodInput('cash'), paymentMethodCash);
     expect(normalizePaymentMethodInput('card'), paymentMethodCreditCard);
     expect(normalizePaymentMethodInput('pay'), paymentMethodOther);
+    expect(
+      normalizePaymentMethodInput('banktransfer'),
+      paymentMethodBankTransfer,
+    );
     expect(normalizePaymentMethodInput('service'), paymentMethodService);
   });
 
@@ -13,6 +17,19 @@ void main() {
     expect(requiresPaymentProof('cash'), isFalse);
     expect(requiresPaymentProof('card'), isTrue);
     expect(requiresPaymentProof('pay'), isTrue);
+    expect(requiresPaymentProof(paymentMethodBankTransfer), isTrue);
     expect(requiresPaymentProof('service'), isFalse);
+  });
+
+  test('bank transfer is selectable revenue and has a receipt label', () {
+    expect(
+      cashierSelectablePaymentMethods,
+      contains(paymentMethodBankTransfer),
+    );
+    expect(isRevenuePaymentMethod(paymentMethodBankTransfer), isTrue);
+    expect(
+      paymentMethodDisplayLabel(paymentMethodBankTransfer),
+      'Bank Transfer',
+    );
   });
 }

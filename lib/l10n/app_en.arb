@@ -2029,6 +2029,7 @@
   "cashierCashMethod": "Cash",
   "cashierCardMethod": "Card",
   "cashierQrPaymentMethod": "Pay",
+  "cashierBankTransferMethod": "Bank transfer",
   "cashierTableLabel": "Table {tableNumber}",
   "@cashierTableLabel": {"placeholders": {"tableNumber": {"type": "String"}}},
   "cashierInternetRequired": "Internet connection required",

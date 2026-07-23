@@ -1903,6 +1903,12 @@ class _SelectedOrderView extends StatelessWidget {
         Color(0xFF1565C0),
         Icons.credit_card_rounded,
       ),
+      _PaymentMethod(
+        paymentMethodBankTransfer,
+        l10n.cashierBankTransferMethod,
+        Color(0xFF0F766E),
+        Icons.account_balance_rounded,
+      ),
     ];
     final canCancelOrder = isAdmin && order.status.toLowerCase() != 'completed';
     final effectiveSelectedMethod =
