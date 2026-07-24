@@ -1,3 +1,7 @@
+import 'dart:typed_data';
+
+import 'package:excel/excel.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +10,7 @@ import 'package:globos_pos_system/core/ui/app_theme.dart';
 import 'package:globos_pos_system/features/auth/auth_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_state.dart';
 import 'package:globos_pos_system/features/inventory/inventory_provider.dart';
+import 'package:globos_pos_system/features/inventory/recipe_excel_import.dart';
 import 'package:globos_pos_system/features/inventory_purchase/inventory_purchase_screen.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -192,6 +197,31 @@ void main() {
   testWidgets('all eleven Inventory Purchase dialog entrypoints execute', (
     tester,
   ) async {
+    final validExcel = Excel.createExcel();
+    validExcel.rename('Sheet1', recipeImportSheetName);
+    final recipeSheet = validExcel[recipeImportSheetName];
+    recipeSheet.appendRow(recipeImportHeaders.map(TextCellValue.new).toList());
+    recipeSheet.appendRow([
+      TextCellValue('menu-pho'),
+      TextCellValue('Phở bò đặc biệt'),
+      TextCellValue('ingredient-beef'),
+      TextCellValue('Thịt bò'),
+      DoubleCellValue(100),
+    ]);
+    final recipeFiles = <XFile>[
+      XFile.fromData(
+        Uint8List.fromList(validExcel.encode()!),
+        name: 'recipes.xlsx',
+        mimeType:
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      ),
+      XFile.fromData(
+        Uint8List.fromList([1, 2, 3]),
+        name: 'invalid.xlsx',
+        mimeType:
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      ),
+    ];
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(1600, 1100);
     addTearDown(tester.view.resetPhysicalSize);
@@ -235,10 +265,11 @@ void main() {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          home: const Scaffold(
+          home: Scaffold(
             body: InventoryPurchaseScreen(
               initialSectionIndex: 2,
               autoLoad: false,
+              pickRecipeImportFile: () async => recipeFiles.removeAt(0),
             ),
           ),
         ),
@@ -294,6 +325,24 @@ void main() {
     );
 
     await _selectSection(tester, 6);
+    expect(
+      find.byKey(const Key('inventory_recipe_template_download_action')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('inventory_recipe_excel_import_action')),
+      findsOneWidget,
+    );
+    await _openAndDismiss(
+      tester,
+      const Key('inventory_recipe_excel_import_action'),
+      const Key('inventory_recipe_excel_preview_dialog'),
+    );
+    await _openAndDismiss(
+      tester,
+      const Key('inventory_recipe_excel_import_action'),
+      const Key('inventory_recipe_excel_error_dialog'),
+    );
     await _openAndDismiss(
       tester,
       const Key('inventory_recipe_line_add_action'),

@@ -1,3 +1,7 @@
+import 'dart:typed_data';
+
+import 'package:file_saver/file_saver.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -10,17 +14,22 @@ import '../../core/ui/toast/toast.dart';
 import '../../core/utils/number_input_utils.dart';
 import '../auth/auth_provider.dart';
 import '../inventory/inventory_provider.dart';
+import '../inventory/recipe_excel_import.dart';
 import 'inventory_purchase_document_service.dart';
+
+typedef RecipeImportFilePicker = Future<XFile?> Function();
 
 class InventoryPurchaseScreen extends ConsumerStatefulWidget {
   const InventoryPurchaseScreen({
     super.key,
     this.initialSectionIndex = 0,
     this.autoLoad = true,
+    this.pickRecipeImportFile,
   });
 
   final int initialSectionIndex;
   final bool autoLoad;
+  final RecipeImportFilePicker? pickRecipeImportFile;
 
   @override
   ConsumerState<InventoryPurchaseScreen> createState() =>
@@ -34,6 +43,8 @@ class _InventoryPurchaseScreenState
   String? _printingOrderId;
   String? _selectedSupplierId;
   String? _selectedProductId;
+  bool _isExportingRecipeTemplate = false;
+  bool _isImportingRecipes = false;
 
   @override
   void initState() {
@@ -3437,6 +3448,152 @@ class _InventoryPurchaseScreenState
         );
   }
 
+  Future<void> _downloadRecipeTemplate({
+    required List<Map<String, dynamic>> menuItems,
+    required List<Map<String, dynamic>> products,
+  }) async {
+    setState(() => _isExportingRecipeTemplate = true);
+    try {
+      final bytes = Uint8List.fromList(
+        buildRecipeImportTemplate(menuItems: menuItems, products: products),
+      );
+      final now = DateTime.now();
+      final stamp =
+          '${now.year.toString().padLeft(4, '0')}'
+          '${now.month.toString().padLeft(2, '0')}'
+          '${now.day.toString().padLeft(2, '0')}';
+      await FileSaver.instance.saveFile(
+        name: 'recipe_import_$stamp',
+        bytes: bytes,
+        ext: 'xlsx',
+        mimeType: MimeType.microsoftExcel,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.inventoryPurchaseRecipeTemplateSaved),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        _showRecipeImportIssues([
+          context.l10n.inventoryPurchaseRecipeTemplateFailed,
+        ]);
+      }
+    } finally {
+      if (mounted) setState(() => _isExportingRecipeTemplate = false);
+    }
+  }
+
+  Future<void> _importRecipeWorkbook({
+    required String storeId,
+    required List<Map<String, dynamic>> menuItems,
+    required List<Map<String, dynamic>> products,
+  }) async {
+    const typeGroup = XTypeGroup(
+      label: 'Excel (.xlsx)',
+      extensions: <String>['xlsx'],
+    );
+    try {
+      final file =
+          await widget.pickRecipeImportFile?.call() ??
+          await openFile(acceptedTypeGroups: const <XTypeGroup>[typeGroup]);
+      if (file == null || !mounted) return;
+      final workbook = parseRecipeImportWorkbook(
+        await file.readAsBytes(),
+        menuItems: menuItems,
+        products: products,
+      );
+      if (!mounted) return;
+
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          key: const Key('inventory_recipe_excel_preview_dialog'),
+          title: Text(context.l10n.inventoryPurchaseRecipeImportPreviewTitle),
+          content: Text(
+            context.l10n.inventoryPurchaseRecipeImportPreview(
+              workbook.menuCount,
+              workbook.lineCount,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(context.l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(context.l10n.inventoryPurchaseRegister),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+
+      setState(() => _isImportingRecipes = true);
+      final ok = await ref
+          .read(recipeProvider.notifier)
+          .bulkUpsert(
+            storeId: storeId,
+            lines: workbook.rows.map((row) => row.toJson()).toList(),
+          );
+      if (!mounted) return;
+      if (!ok) {
+        _showRecipeImportIssues([
+          ref.read(recipeProvider).error ??
+              context.l10n.inventoryPurchaseRecipeImportFailed,
+        ]);
+        return;
+      }
+      await _reloadStoreScope(storeId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              context.l10n.inventoryPurchaseRecipeImportSuccess(
+                workbook.lineCount,
+              ),
+            ),
+          ),
+        );
+      }
+    } on RecipeImportValidationException catch (error) {
+      if (mounted) _showRecipeImportIssues(error.issues);
+    } catch (_) {
+      if (mounted) {
+        _showRecipeImportIssues([
+          context.l10n.inventoryPurchaseRecipeImportFailed,
+        ]);
+      }
+    } finally {
+      if (mounted) setState(() => _isImportingRecipes = false);
+    }
+  }
+
+  void _showRecipeImportIssues(List<String> issues) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        key: const Key('inventory_recipe_excel_error_dialog'),
+        title: Text(context.l10n.inventoryPurchaseRecipeImportErrorTitle),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620, maxHeight: 420),
+          child: SingleChildScrollView(
+            child: SelectableText(issues.take(30).join('\n')),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(context.l10n.confirm),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRecipePage({
     required String storeId,
     required RecipeState recipeState,
@@ -3465,6 +3622,37 @@ class _InventoryPurchaseScreenState
       isLoading: recipeState.isLoading || productCatalog.isLoading,
       error: recipeState.error ?? productCatalog.error,
       actions: [
+        PosActionButton(
+          key: const Key('inventory_recipe_template_download_action'),
+          label: l10n.inventoryPurchaseRecipeTemplateDownload,
+          tone: PosActionTone.secondary,
+          icon: Icons.download_outlined,
+          loading: _isExportingRecipeTemplate,
+          onPressed:
+              recipeState.menuItems.isEmpty || productCatalog.products.isEmpty
+              ? null
+              : () => _downloadRecipeTemplate(
+                  menuItems: recipeState.menuItems,
+                  products: productCatalog.products,
+                ),
+          compact: true,
+        ),
+        PosActionButton(
+          key: const Key('inventory_recipe_excel_import_action'),
+          label: l10n.inventoryPurchaseRecipeExcelImport,
+          tone: PosActionTone.affirm,
+          icon: Icons.upload_file_outlined,
+          loading: _isImportingRecipes,
+          onPressed:
+              recipeState.menuItems.isEmpty || productCatalog.products.isEmpty
+              ? null
+              : () => _importRecipeWorkbook(
+                  storeId: storeId,
+                  menuItems: recipeState.menuItems,
+                  products: productCatalog.products,
+                ),
+          compact: true,
+        ),
         PosActionButton(
           key: const Key('inventory_recipe_line_add_action'),
           label: l10n.inventoryPurchaseAddRecipeLine,

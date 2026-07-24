@@ -203,6 +203,17 @@ class InventoryService {
     );
   }
 
+  Future<Map<String, dynamic>> bulkUpsertRecipes({
+    required String storeId,
+    required List<Map<String, dynamic>> lines,
+  }) async {
+    final result = await supabase.rpc(
+      'bulk_upsert_inventory_recipe_lines',
+      params: {'p_store_id': storeId, 'p_lines': lines},
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
   Future<void> deleteRecipe(
     String menuItemId,
     String ingredientId, {
