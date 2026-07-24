@@ -582,6 +582,32 @@
   },
   "inventoryUnit": "Đơn vị",
   "inventoryCurrentStock": "Tồn hiện tại",
+  "inventoryAdjustmentHistory": "Lịch sử điều chỉnh tồn kho",
+  "inventoryHistoryEmpty": "Không có điều chỉnh tồn kho nào trong khoảng thời gian đã chọn.",
+  "inventoryHistoryLoadFailed": "Không tải được lịch sử điều chỉnh tồn kho.",
+  "inventoryHistoryChangeOnly": "Thay đổi {change} {unit}",
+  "@inventoryHistoryChangeOnly": {
+    "placeholders": {
+      "change": {"type": "String"},
+      "unit": {"type": "String"}
+    }
+  },
+  "inventoryHistoryQuantityChange": "{before} → {after} {unit} (thay đổi {change})",
+  "@inventoryHistoryQuantityChange": {
+    "placeholders": {
+      "before": {"type": "String"},
+      "after": {"type": "String"},
+      "change": {"type": "String"},
+      "unit": {"type": "String"}
+    }
+  },
+  "inventoryHistoryRecordedBy": "{recordedAt} · {name}",
+  "@inventoryHistoryRecordedBy": {
+    "placeholders": {
+      "name": {"type": "String"},
+      "recordedAt": {"type": "String"}
+    }
+  },
   "inventoryReorderThreshold": "Ngưỡng đặt lại",
   "inventoryUnitPriceVnd": "Đơn giá (VND)",
   "inventorySupplier": "Nhà cung cấp",

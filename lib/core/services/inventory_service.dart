@@ -36,18 +36,40 @@ class InventoryService {
     String? itemId,
     required String name,
     required double currentStock,
+    required DateTime countDate,
+    String? note,
   }) async {
+    final trimmedNote = note?.trim();
     final response = await supabase.rpc(
-      'upsert_photo_objet_inventory_item',
+      'save_photo_objet_daily_inventory_item',
       params: {
         'p_store_id': storeId,
         'p_item_id': itemId,
         'p_name': name.trim(),
         'p_current_stock': currentStock,
+        'p_count_date': _dateOnly(countDate),
+        'p_note': trimmedNote == null || trimmedNote.isEmpty
+            ? null
+            : trimmedNote,
       },
     );
     return Map<String, dynamic>.from(response as Map);
   }
+
+  Future<List<Map<String, dynamic>>> fetchInventoryAdjustmentHistory({
+    required String storeId,
+    required DateTime from,
+    required DateTime to,
+    int limit = 200,
+  }) => _rpcList(
+    'get_inventory_stock_adjustment_history',
+    params: {
+      'p_store_id': storeId,
+      'p_from': _dateOnly(from),
+      'p_to': _dateOnly(to),
+      'p_limit': limit,
+    },
+  );
 
   Future<Map<String, dynamic>> recordEmployeeInventoryAdjustment({
     required String storeId,
@@ -1258,3 +1280,8 @@ class InventoryService {
 }
 
 final inventoryService = InventoryService();
+
+String _dateOnly(DateTime value) =>
+    '${value.year.toString().padLeft(4, '0')}-'
+    '${value.month.toString().padLeft(2, '0')}-'
+    '${value.day.toString().padLeft(2, '0')}';

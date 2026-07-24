@@ -11,9 +11,10 @@ import '../../features/auth/auth_provider.dart';
 import '../../features/inventory/inventory_provider.dart';
 
 class PhotoInventoryScreen extends ConsumerStatefulWidget {
-  const PhotoInventoryScreen({super.key, this.autoLoad = true});
+  const PhotoInventoryScreen({super.key, this.autoLoad = true, this.service});
 
   final bool autoLoad;
+  final InventoryService? service;
 
   @override
   ConsumerState<PhotoInventoryScreen> createState() =>
@@ -22,6 +23,7 @@ class PhotoInventoryScreen extends ConsumerStatefulWidget {
 
 class _PhotoInventoryScreenState extends ConsumerState<PhotoInventoryScreen> {
   String? _loadedStoreId;
+  InventoryService get _inventoryService => widget.service ?? inventoryService;
 
   @override
   Widget build(BuildContext context) {
@@ -48,9 +50,13 @@ class _PhotoInventoryScreenState extends ConsumerState<PhotoInventoryScreen> {
             _PhotoInventoryHeader(
               itemCount: state.items.length,
               canAdd: storeId != null && !state.isLoading,
+              canViewHistory: storeId != null,
               onAdd: storeId == null
                   ? null
                   : () => _showItemDialog(storeId: storeId),
+              onHistory: storeId == null
+                  ? null
+                  : () => _showAdjustmentHistory(storeId),
             ),
             const SizedBox(height: 12),
             Expanded(
@@ -137,6 +143,8 @@ class _PhotoInventoryScreenState extends ConsumerState<PhotoInventoryScreen> {
     final stockController = TextEditingController(
       text: editing ? _formatQuantity(_number(initial['current_stock'])) : '',
     );
+    final noteController = TextEditingController();
+    var countDate = DateTime.now();
     String? validationMessage;
     bool isSaving = false;
 
@@ -170,11 +178,13 @@ class _PhotoInventoryScreenState extends ConsumerState<PhotoInventoryScreen> {
               isSaving = true;
             });
             try {
-              await inventoryService.upsertPhotoObjetInventoryItem(
+              await _inventoryService.upsertPhotoObjetInventoryItem(
                 storeId: storeId,
                 itemId: initial?['id']?.toString(),
                 name: name,
                 currentStock: stock,
+                countDate: countDate,
+                note: noteController.text,
               );
               await ref.read(ingredientProvider.notifier).load(storeId);
               if (!dialogContext.mounted) return;
@@ -237,6 +247,44 @@ class _PhotoInventoryScreenState extends ConsumerState<PhotoInventoryScreen> {
                         labelText: context.l10n.inventoryCurrentStock,
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      key: const Key('photo_inventory_count_date'),
+                      onPressed: isSaving
+                          ? null
+                          : () async {
+                              final picked = await showDatePicker(
+                                context: dialogContext,
+                                initialDate: countDate,
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime.now(),
+                              );
+                              if (picked == null) return;
+                              setDialogState(
+                                () => countDate = DateTime(
+                                  picked.year,
+                                  picked.month,
+                                  picked.day,
+                                ),
+                              );
+                            },
+                      icon: const Icon(Icons.event_outlined),
+                      label: Text(
+                        context.l10n.inventoryCountDate(
+                          DateFormat('yyyy-MM-dd').format(countDate),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      key: const Key('photo_inventory_adjustment_note'),
+                      controller: noteController,
+                      enabled: !isSaving,
+                      maxLength: 200,
+                      decoration: InputDecoration(
+                        labelText: context.l10n.inventoryMemoOptional,
+                      ),
+                    ),
                     if (validationMessage != null) ...[
                       const SizedBox(height: 10),
                       _InlineError(message: validationMessage!),
@@ -274,7 +322,115 @@ class _PhotoInventoryScreenState extends ConsumerState<PhotoInventoryScreen> {
     Future<void>.delayed(const Duration(milliseconds: 300), () {
       nameController.dispose();
       stockController.dispose();
+      noteController.dispose();
     });
+  }
+
+  Future<void> _showAdjustmentHistory(String storeId) async {
+    var range = DateTimeRange(
+      start: DateTime.now().subtract(const Duration(days: 29)),
+      end: DateTime.now(),
+    );
+    late Future<List<Map<String, dynamic>>> history;
+
+    Future<List<Map<String, dynamic>>> load() =>
+        _inventoryService.fetchInventoryAdjustmentHistory(
+          storeId: storeId,
+          from: range.start,
+          to: range.end,
+        );
+
+    history = load();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          key: const Key('photo_inventory_history_dialog'),
+          backgroundColor: AppColors.surface1,
+          title: Text(context.l10n.inventoryAdjustmentHistory),
+          content: SizedBox(
+            width: 620,
+            height: 520,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    key: const Key('photo_inventory_history_date_range'),
+                    onPressed: () async {
+                      final picked = await showDateRangePicker(
+                        context: dialogContext,
+                        initialDateRange: range,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now(),
+                      );
+                      if (picked == null) return;
+                      setDialogState(() {
+                        range = picked;
+                        history = load();
+                      });
+                    },
+                    icon: const Icon(Icons.date_range_outlined),
+                    label: Text(
+                      '${DateFormat('yyyy-MM-dd').format(range.start)}'
+                      ' – ${DateFormat('yyyy-MM-dd').format(range.end)}',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: FutureBuilder<List<Map<String, dynamic>>>(
+                    future: history,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState != ConnectionState.done) {
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            color: PosColors.accent,
+                          ),
+                        );
+                      }
+                      if (snapshot.hasError) {
+                        return _PhotoInventoryEmptyState(
+                          icon: Icons.error_outline,
+                          title: context.l10n.inventoryHistoryLoadFailed,
+                          message: snapshot.error.toString(),
+                          actionLabel: context.l10n.retry,
+                          onAction: () =>
+                              setDialogState(() => history = load()),
+                        );
+                      }
+                      final rows = snapshot.data ?? const [];
+                      if (rows.isEmpty) {
+                        return Center(
+                          child: Text(
+                            context.l10n.inventoryHistoryEmpty,
+                            textAlign: TextAlign.center,
+                          ),
+                        );
+                      }
+                      return ListView.separated(
+                        key: const Key('photo_inventory_history_list'),
+                        itemCount: rows.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) =>
+                            _PhotoInventoryHistoryRow(row: rows[index]),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(context.l10n.close),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   String _saveErrorMessage(Object error) {
@@ -295,12 +451,16 @@ class _PhotoInventoryHeader extends StatelessWidget {
   const _PhotoInventoryHeader({
     required this.itemCount,
     required this.canAdd,
+    required this.canViewHistory,
     required this.onAdd,
+    required this.onHistory,
   });
 
   final int itemCount;
   final bool canAdd;
+  final bool canViewHistory;
   final VoidCallback? onAdd;
+  final VoidCallback? onHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -332,6 +492,27 @@ class _PhotoInventoryHeader extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               if (compact)
+                IconButton(
+                  key: const Key('photo_inventory_history'),
+                  onPressed: canViewHistory ? onHistory : null,
+                  tooltip: context.l10n.inventoryAdjustmentHistory,
+                  icon: const Icon(Icons.history, size: 20),
+                )
+              else
+                OutlinedButton.icon(
+                  key: const Key('photo_inventory_history'),
+                  onPressed: canViewHistory ? onHistory : null,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 36),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  icon: const Icon(Icons.history, size: 18),
+                  label: Text(context.l10n.inventoryAdjustmentHistory),
+                ),
+              const SizedBox(width: 8),
+              if (compact)
                 IconButton.filled(
                   key: const Key('photo_inventory_add_item'),
                   onPressed: canAdd ? onAdd : null,
@@ -360,6 +541,72 @@ class _PhotoInventoryHeader extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _PhotoInventoryHistoryRow extends StatelessWidget {
+  const _PhotoInventoryHistoryRow({required this.row});
+
+  final Map<String, dynamic> row;
+
+  @override
+  Widget build(BuildContext context) {
+    final unit = row['ingredient_unit']?.toString() ?? 'ea';
+    final before = _nullableNumber(row['stock_before']);
+    final after = _nullableNumber(row['stock_after']);
+    final change = _number(row['quantity_change']);
+    final date = row['effective_date']?.toString() ?? '-';
+    final actor = row['recorded_by_name']?.toString() ?? '-';
+    final recordedAt = DateTime.tryParse(
+      row['recorded_at']?.toString() ?? '',
+    )?.toLocal();
+    final note = row['note']?.toString().trim() ?? '';
+
+    return ListTile(
+      key: ValueKey('photo_inventory_history_${row['transaction_id']}'),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              row['ingredient_name']?.toString() ?? '-',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          Text(date, style: Theme.of(context).textTheme.labelMedium),
+        ],
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 4),
+          Text(
+            before == null || after == null
+                ? context.l10n.inventoryHistoryChangeOnly(
+                    _signedQuantity(change),
+                    unit,
+                  )
+                : context.l10n.inventoryHistoryQuantityChange(
+                    _formatQuantity(before),
+                    _formatQuantity(after),
+                    _signedQuantity(change),
+                    unit,
+                  ),
+          ),
+          Text(
+            context.l10n.inventoryHistoryRecordedBy(
+              actor,
+              recordedAt == null
+                  ? date
+                  : DateFormat('yyyy-MM-dd HH:mm').format(recordedAt),
+            ),
+          ),
+          if (note.isNotEmpty) Text(note),
+        ],
       ),
     );
   }
@@ -482,6 +729,19 @@ class _InlineError extends StatelessWidget {
 double _number(Object? value) {
   if (value is num) return value.toDouble();
   return double.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+double? _nullableNumber(Object? value) {
+  if (value == null) return null;
+  if (value is num) return value.toDouble();
+  return double.tryParse(value.toString());
+}
+
+String _signedQuantity(double value) {
+  final formatted = _formatQuantity(value.abs());
+  if (value > 0) return '+$formatted';
+  if (value < 0) return '-$formatted';
+  return formatted;
 }
 
 String _formatQuantity(double value) => NumberFormat('#,##0.###').format(value);
