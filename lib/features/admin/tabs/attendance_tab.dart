@@ -89,6 +89,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         storeId: storeId,
         from: _logFrom,
         to: _logTo,
+        limit: attendanceScreenRecordLimit,
       );
       final pinHash = await _pinService.fetchPinHash(storeId);
 
@@ -120,6 +121,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         storeId: storeId,
         from: _logFrom,
         to: _logTo,
+        limit: attendanceScreenRecordLimit,
       );
       if (!mounted) return;
       setState(() {

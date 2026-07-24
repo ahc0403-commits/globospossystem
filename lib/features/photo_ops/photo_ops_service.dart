@@ -437,6 +437,7 @@ class PhotoOpsService {
             storeId: activeStoreId,
             from: attendanceWindowStart,
             to: now.add(const Duration(days: 1)),
+            limit: attendanceScreenRecordLimit,
           );
         } catch (error) {
           attendanceWarningDetail ??= error.toString();
@@ -524,11 +525,14 @@ class PhotoOpsService {
 
   List<PhotoOpsAttendanceRow> _attendanceRows(
     List<Map<String, dynamic>> rows,
-  ) => rows.take(10).map((row) {
-    final employeeRaw = row['store_employees'];
-    var employeeName = 'Unknown';
+  ) => rows.take(attendanceScreenRecordLimit).map((row) {
+    final employeeRaw = row['users'];
+    var employeeName = '-';
     if (employeeRaw is Map) {
-      employeeName = employeeRaw['full_name']?.toString() ?? 'Unknown';
+      final fullName = employeeRaw['full_name']?.toString().trim();
+      if (fullName != null && fullName.isNotEmpty) {
+        employeeName = fullName;
+      }
     }
     return PhotoOpsAttendanceRow(
       employeeName: employeeName,

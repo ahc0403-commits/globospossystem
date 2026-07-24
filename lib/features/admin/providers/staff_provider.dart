@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/attendance_service.dart';
 import '../../../core/services/staff_service.dart';
-import '../../../main.dart';
 
 class HourlyPayRule {
   const HourlyPayRule({
@@ -342,26 +342,25 @@ class AttendanceNotifier extends StateNotifier<AttendanceState> {
     );
 
     try {
-      final response = await supabase
-          .from('attendance_logs')
-          .select(
-            'id, employee_id, type, logged_at, '
-            'store_employees(employee_number, full_name, employment_role)',
-          )
-          .eq('restaurant_id', storeId)
-          .gte('logged_at', dayStart.toIso8601String())
-          .lt('logged_at', dayEnd.toIso8601String())
-          .order('logged_at', ascending: false)
-          .limit(50);
+      final response = await attendanceService.fetchLogs(
+        storeId: storeId,
+        from: dayStart,
+        to: dayEnd,
+        limit: attendanceScreenRecordLimit,
+      );
 
       final logs = response.map<AttendanceRecord>((row) {
         final data = Map<String, dynamic>.from(row);
-        final userRaw = data['store_employees'];
-        String userName = 'Unknown';
+        final userRaw = data['users'];
+        String userName = '-';
         String? role;
-        if (userRaw is Map<String, dynamic>) {
-          userName = userRaw['full_name']?.toString() ?? 'Unknown';
-          role = userRaw['employment_role']?.toString();
+        if (userRaw is Map) {
+          final user = Map<String, dynamic>.from(userRaw);
+          final fullName = user['full_name']?.toString().trim();
+          if (fullName != null && fullName.isNotEmpty) {
+            userName = fullName;
+          }
+          role = user['role']?.toString();
         }
 
         final loggedAtRaw = data['logged_at']?.toString();

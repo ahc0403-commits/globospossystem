@@ -8,6 +8,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../main.dart';
 import 'rpc_compat.dart';
 
+const attendanceScreenRecordLimit = 10;
+
 class AttendanceService {
   Future<Map<String, dynamic>> recordEmployeeAttendance({
     required String storeId,
@@ -134,42 +136,30 @@ class AttendanceService {
     required String storeId,
     required DateTime from,
     required DateTime to,
+    int limit = 500,
   }) async {
+    if (limit < 1) {
+      throw ArgumentError.value(limit, 'limit', 'must be at least 1');
+    }
     final result = await supabase
         .from('attendance_logs')
         .select(
-          'id, restaurant_id, employee_id, type, photo_url, '
+          'id, restaurant_id, user_id, employee_id, type, photo_url, '
           'photo_thumbnail_url, logged_at, created_at, '
-          'store_employees(employee_number, full_name, employment_role)',
+          'employee:store_employees!attendance_logs_employee_id_fkey('
+          'id, employee_number, full_name, employment_role), '
+          'legacy_user:users!attendance_logs_user_id_fkey('
+          'id, full_name, role)',
         )
         .eq('restaurant_id', storeId)
         .gte('logged_at', from.toUtc().toIso8601String())
         .lt('logged_at', to.toUtc().toIso8601String())
         .order('logged_at', ascending: false)
-        .limit(500);
+        .limit(limit);
 
-    return List<Map<String, dynamic>>.from(result).map((row) {
-      final map = Map<String, dynamic>.from(row);
-      final employee = map['store_employees'] is Map
-          ? Map<String, dynamic>.from(map['store_employees'] as Map)
-          : const <String, dynamic>{};
-      return {
-        'id': map['id'],
-        'restaurant_id': map['restaurant_id'],
-        'user_id': map['employee_id'],
-        'employee_number': employee['employee_number'],
-        'type': map['type'],
-        'photo_url': map['photo_url'],
-        'photo_thumbnail_url': map['photo_thumbnail_url'],
-        'logged_at': map['logged_at'],
-        'created_at': map['created_at'],
-        'users': {
-          'id': map['employee_id'],
-          'full_name': employee['full_name'],
-          'role': employee['employment_role'],
-        },
-      };
-    }).toList();
+    return List<Map<String, dynamic>>.from(
+      result,
+    ).map(normalizeAttendanceLogRow).toList(growable: false);
   }
 
   Future<List<Map<String, dynamic>>> fetchStaffList(String storeId) async {
@@ -263,6 +253,45 @@ class AttendanceService {
       },
     );
   }
+}
+
+Map<String, dynamic> normalizeAttendanceLogRow(Map<String, dynamic> row) {
+  final employee = row['employee'] is Map
+      ? Map<String, dynamic>.from(row['employee'] as Map)
+      : const <String, dynamic>{};
+  final legacyUser = row['legacy_user'] is Map
+      ? Map<String, dynamic>.from(row['legacy_user'] as Map)
+      : const <String, dynamic>{};
+  final employeeId = row['employee_id']?.toString();
+  final legacyUserId = row['user_id']?.toString();
+  final personId = employeeId?.isNotEmpty == true ? employeeId : legacyUserId;
+  final fullName =
+      _nonEmptyAttendanceValue(employee['full_name']) ??
+      _nonEmptyAttendanceValue(legacyUser['full_name']) ??
+      _nonEmptyAttendanceValue(employee['employee_number']) ??
+      '-';
+  final role =
+      _nonEmptyAttendanceValue(employee['employment_role']) ??
+      _nonEmptyAttendanceValue(legacyUser['role']) ??
+      'staff';
+
+  return {
+    'id': row['id'],
+    'restaurant_id': row['restaurant_id'],
+    'user_id': personId,
+    'employee_number': employee['employee_number'],
+    'type': row['type'],
+    'photo_url': row['photo_url'],
+    'photo_thumbnail_url': row['photo_thumbnail_url'],
+    'logged_at': row['logged_at'],
+    'created_at': row['created_at'],
+    'users': {'id': personId, 'full_name': fullName, 'role': role},
+  };
+}
+
+String? _nonEmptyAttendanceValue(dynamic value) {
+  final text = value?.toString().trim();
+  return text == null || text.isEmpty ? null : text;
 }
 
 final attendanceService = AttendanceService();

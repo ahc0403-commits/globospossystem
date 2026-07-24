@@ -512,6 +512,7 @@ class _AttendanceService extends AttendanceService {
     required String storeId,
     required DateTime from,
     required DateTime to,
+    int limit = 500,
   }) async => [
     {
       'id': 'attendance-log-1',
