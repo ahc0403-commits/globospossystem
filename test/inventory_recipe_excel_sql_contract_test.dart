@@ -14,5 +14,22 @@ void main() {
     expect(sql, contains('ON CONFLICT (menu_item_id, ingredient_id)'));
     expect(sql, contains('INVENTORY_RECIPE_IMPORT_DUPLICATE'));
     expect(sql, contains('inventory_recipe_excel_imported'));
+    expect(
+      sql,
+      contains(
+        'REVOKE ALL ON FUNCTION public.bulk_upsert_inventory_recipe_lines',
+      ),
+    );
+  });
+
+  test('production deploy gate runs recipe migration preflight and verify', () {
+    final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
+
+    expect(
+      deploy,
+      contains('20260724010000_inventory_recipe_excel_import.sql'),
+    );
+    expect(deploy, contains('preflight_inventory_recipe_excel_import.sql'));
+    expect(deploy, contains('verify_inventory_recipe_excel_import.sql'));
   });
 }
