@@ -582,6 +582,32 @@
   },
   "inventoryUnit": "단위",
   "inventoryCurrentStock": "현재 재고",
+  "inventoryAdjustmentHistory": "재고 조정 이력",
+  "inventoryHistoryEmpty": "선택한 기간에 저장된 재고 조정 이력이 없습니다.",
+  "inventoryHistoryLoadFailed": "재고 조정 이력을 불러오지 못했습니다.",
+  "inventoryHistoryChangeOnly": "변경 {change} {unit}",
+  "@inventoryHistoryChangeOnly": {
+    "placeholders": {
+      "change": {"type": "String"},
+      "unit": {"type": "String"}
+    }
+  },
+  "inventoryHistoryQuantityChange": "{before} → {after} {unit} (변경 {change})",
+  "@inventoryHistoryQuantityChange": {
+    "placeholders": {
+      "before": {"type": "String"},
+      "after": {"type": "String"},
+      "change": {"type": "String"},
+      "unit": {"type": "String"}
+    }
+  },
+  "inventoryHistoryRecordedBy": "{recordedAt} · {name}",
+  "@inventoryHistoryRecordedBy": {
+    "placeholders": {
+      "name": {"type": "String"},
+      "recordedAt": {"type": "String"}
+    }
+  },
   "inventoryReorderThreshold": "재주문 기준",
   "inventoryUnitPriceVnd": "단가(VND)",
   "inventorySupplier": "공급처",

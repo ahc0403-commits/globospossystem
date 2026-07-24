@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/ui/app_theme.dart';
+import 'package:globos_pos_system/core/services/inventory_service.dart';
 import 'package:globos_pos_system/features/auth/auth_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_state.dart';
 import 'package:globos_pos_system/features/inventory/inventory_provider.dart';
@@ -51,10 +52,36 @@ class _IngredientNotifier extends IngredientNotifier {
   Future<void> load(String storeId) async {}
 }
 
+class _InventoryService extends InventoryService {
+  @override
+  Future<List<Map<String, dynamic>>> fetchInventoryAdjustmentHistory({
+    required String storeId,
+    required DateTime from,
+    required DateTime to,
+    int limit = 200,
+  }) async => [
+    {
+      'transaction_id': 'history-1',
+      'ingredient_id': 'paper',
+      'ingredient_name': 'Photo paper',
+      'ingredient_unit': 'ea',
+      'transaction_type': 'adjust',
+      'quantity_change': -2,
+      'stock_before': 10,
+      'stock_after': 8,
+      'effective_date': '2026-07-24',
+      'note': 'Daily count',
+      'recorded_at': '2026-07-24T02:00:00Z',
+      'recorded_by_name': 'Manager',
+    },
+  ];
+}
+
 Future<void> _pumpScreen(
   WidgetTester tester, {
   Size size = const Size(1200, 800),
   double textScale = 1,
+  InventoryService? inventoryService,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
@@ -84,7 +111,7 @@ Future<void> _pumpScreen(
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
-        home: const PhotoInventoryScreen(autoLoad: false),
+        home: PhotoInventoryScreen(autoLoad: false, service: inventoryService),
       ),
     ),
   );
@@ -111,6 +138,7 @@ void main() {
     expect(find.text('Photo paper'), findsOne);
     expect(find.textContaining('8'), findsWidgets);
     expect(find.byKey(const Key('photo_inventory_add_item')), findsOne);
+    expect(find.byKey(const Key('photo_inventory_history')), findsOne);
     expect(
       tester.getSize(find.byKey(const Key('photo_inventory_header'))).height,
       lessThanOrEqualTo(48),
@@ -125,6 +153,8 @@ void main() {
     expect(find.byKey(const Key('photo_inventory_item_dialog')), findsOne);
     expect(find.byKey(const Key('photo_inventory_item_name')), findsOne);
     expect(find.byKey(const Key('photo_inventory_current_stock')), findsOne);
+    expect(find.byKey(const Key('photo_inventory_count_date')), findsOne);
+    expect(find.byKey(const Key('photo_inventory_adjustment_note')), findsOne);
 
     await tester.tap(find.byKey(const Key('photo_inventory_save')));
     await tester.pump();
@@ -143,6 +173,21 @@ void main() {
     );
     expect(nameField.controller!.text, 'Photo paper');
     expect(stockField.controller!.text, '8');
+  });
+
+  testWidgets('PHOTO manager can review dated stock adjustment history', (
+    tester,
+  ) async {
+    await _pumpScreen(tester, inventoryService: _InventoryService());
+
+    await tester.tap(find.byKey(const Key('photo_inventory_history')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('photo_inventory_history_dialog')), findsOne);
+    expect(find.byKey(const Key('photo_inventory_history_list')), findsOne);
+    expect(find.text('Photo paper'), findsWidgets);
+    expect(find.textContaining('10'), findsOne);
+    expect(find.textContaining('Manager'), findsOne);
   });
 
   testWidgets('PHOTO inventory remains usable on a narrow large-text screen', (

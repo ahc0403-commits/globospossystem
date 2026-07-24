@@ -583,6 +583,32 @@
   },
   "inventoryUnit": "Unit",
   "inventoryCurrentStock": "Current Stock",
+  "inventoryAdjustmentHistory": "Stock Adjustment History",
+  "inventoryHistoryEmpty": "No stock adjustments were recorded in this period.",
+  "inventoryHistoryLoadFailed": "Failed to load stock adjustment history.",
+  "inventoryHistoryChangeOnly": "Change {change} {unit}",
+  "@inventoryHistoryChangeOnly": {
+    "placeholders": {
+      "change": {"type": "String"},
+      "unit": {"type": "String"}
+    }
+  },
+  "inventoryHistoryQuantityChange": "{before} → {after} {unit} (change {change})",
+  "@inventoryHistoryQuantityChange": {
+    "placeholders": {
+      "before": {"type": "String"},
+      "after": {"type": "String"},
+      "change": {"type": "String"},
+      "unit": {"type": "String"}
+    }
+  },
+  "inventoryHistoryRecordedBy": "{recordedAt} · {name}",
+  "@inventoryHistoryRecordedBy": {
+    "placeholders": {
+      "name": {"type": "String"},
+      "recordedAt": {"type": "String"}
+    }
+  },
   "inventoryReorderThreshold": "Reorder Threshold",
   "inventoryUnitPriceVnd": "Unit Price (VND)",
   "inventorySupplier": "Supplier",
