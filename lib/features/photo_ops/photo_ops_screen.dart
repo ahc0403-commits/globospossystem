@@ -128,12 +128,6 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
     final sidebarItems = surfaceAccess.showManagementSurfaces
         ? [
             ToastSidebarPanelItem(
-              icon: Icons.dashboard_outlined,
-              label: l10n.photoOpsPriorityQueueTitle,
-              sectionLabel: l10n.photoOpsHeroEyebrow,
-              itemKey: const Key('photo_ops_nav_priority'),
-            ),
-            ToastSidebarPanelItem(
               icon: Icons.payments_outlined,
               label: l10n.photoOpsSalesTitle,
               sectionLabel: l10n.photoOpsSalesTitle,
@@ -445,7 +439,7 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
     final inventory = _WorkflowSurface(
       title: l10n.photoOpsInventoryTitle,
       subtitle: '$activeStoreName · ${l10n.photoOpsInventorySubtitle}',
-      kind: PhotoOpsSurfaceKind.priority,
+      kind: PhotoOpsSurfaceKind.attention,
       showHeader: false,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -477,17 +471,6 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
 
     return switch (index) {
       0 => [
-        _KpiGrid(data: data.kpi),
-        const SizedBox(height: 18),
-        _WorkflowSurface(
-          title: l10n.photoOpsPriorityQueueTitle,
-          subtitle: l10n.photoOpsPriorityQueueSubtitle,
-          kind: PhotoOpsSurfaceKind.priority,
-          showHeader: false,
-          child: _PriorityList(items: _buildPriorityItems(context, data.kpi)),
-        ),
-      ],
-      1 => [
         if (data.salesWarningCode != null) ...[
           _WarningSurface(message: _localizedSalesWarning(context, data)),
           const SizedBox(height: 18),
@@ -554,9 +537,9 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
           ),
         ),
       ],
-      2 => [attendance],
-      3 => [inventory],
-      4 => [
+      1 => [attendance],
+      2 => [inventory],
+      3 => [
         _WorkflowSurface(
           title: l10n.photoOpsSalaryTitle,
           subtitle: '$activeStoreName · ${l10n.photoOpsSalarySubtitle}',
@@ -630,16 +613,11 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
         _PhotoOpsSurfaceMeta(
           title: l10n.photoOpsInventoryTitle,
           subtitle: l10n.photoOpsInventorySubtitle,
-          kind: PhotoOpsSurfaceKind.priority,
+          kind: PhotoOpsSurfaceKind.attention,
         ),
       ];
     }
     return [
-      _PhotoOpsSurfaceMeta(
-        title: l10n.photoOpsPriorityQueueTitle,
-        subtitle: l10n.photoOpsPriorityQueueSubtitle,
-        kind: PhotoOpsSurfaceKind.priority,
-      ),
       _PhotoOpsSurfaceMeta(
         title: l10n.photoOpsSalesTitle,
         subtitle: l10n.photoOpsSalesSubtitle,
@@ -653,7 +631,7 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
       _PhotoOpsSurfaceMeta(
         title: l10n.photoOpsInventoryTitle,
         subtitle: l10n.photoOpsInventorySubtitle,
-        kind: PhotoOpsSurfaceKind.priority,
+        kind: PhotoOpsSurfaceKind.attention,
       ),
       _PhotoOpsSurfaceMeta(
         title: l10n.photoOpsSalaryTitle,
@@ -811,7 +789,7 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
   }
 }
 
-enum PhotoOpsSurfaceKind { priority, live, backOffice }
+enum PhotoOpsSurfaceKind { attention, live, backOffice }
 
 class PhotoOpsSurfaceAccess {
   const PhotoOpsSurfaceAccess._({required this.showManagementSurfaces});
@@ -1012,128 +990,6 @@ String _localizedSalesWarning(
   };
 }
 
-List<String> _buildPriorityItems(BuildContext context, PhotoOpsKpi data) {
-  final l10n = context.l10n;
-  final items = <String>[];
-
-  if (data.activeInventoryAlerts > 0) {
-    items.add(l10n.photoOpsPriorityInventoryAlert(data.activeInventoryAlerts));
-  }
-
-  if (data.activeStoreSales > 0) {
-    items.add(
-      l10n.photoOpsPrioritySalesSummary(
-        data.activeStoreSales.toStringAsFixed(0),
-        data.activeStoreTransactions,
-      ),
-    );
-  } else {
-    items.add(l10n.photoOpsPriorityNoSalesSummary);
-  }
-
-  if (data.activeAttendanceEvents == 0) {
-    items.add(l10n.photoOpsPriorityNoAttendance);
-  } else {
-    items.add(
-      l10n.photoOpsPriorityAttendanceLogged(data.activeAttendanceEvents),
-    );
-  }
-
-  if (data.activePayrollEstimate > 0) {
-    items.add(
-      l10n.photoOpsPriorityPayrollEstimate(
-        data.activePayrollEstimate.toStringAsFixed(0),
-      ),
-    );
-  }
-
-  if (data.lastSalesPulledAt != null) {
-    items.add(
-      l10n.photoOpsPriorityLastSalesPull(
-        data.lastSalesPulledAt!.toLocal().toString(),
-      ),
-    );
-  }
-
-  if (items.isEmpty) {
-    items.add(l10n.photoOpsPriorityNoUrgentActions);
-  }
-
-  return items;
-}
-
-class _KpiGrid extends StatelessWidget {
-  const _KpiGrid({required this.data});
-
-  final PhotoOpsKpi data;
-
-  @override
-  Widget build(BuildContext context) {
-    final items = [
-      (
-        context.l10n.photoOpsKpiAttendance,
-        '${data.activeAttendanceEvents}',
-        context.l10n.photoOpsKpiAttendanceScope,
-      ),
-      (
-        context.l10n.photoOpsKpiInventoryAlerts,
-        '${data.activeInventoryAlerts}',
-        context.l10n.photoOpsKpiInventoryAlertsScope,
-      ),
-      (
-        context.l10n.photoOpsKpiSales,
-        _currency(data.activeStoreSales),
-        context.l10n.photoOpsKpiSalesScope,
-      ),
-      (
-        context.l10n.photoOpsKpiNetworkSales,
-        _currency(data.networkSales),
-        context.l10n.photoOpsKpiNetworkSalesScope,
-      ),
-      (
-        context.l10n.photoOpsKpiTransactions,
-        '${data.activeStoreTransactions}',
-        context.l10n.photoOpsKpiTransactionsScope,
-      ),
-      (
-        context.l10n.photoOpsKpiPayrollEstimate,
-        _currency(data.activePayrollEstimate),
-        context.l10n.photoOpsKpiPayrollEstimateScope,
-      ),
-      (
-        context.l10n.photoOpsKpiAllAttendance,
-        '${data.allAttendanceEvents}',
-        context.l10n.photoOpsKpiAllAttendanceScope,
-      ),
-      (
-        context.l10n.photoOpsKpiAllAlerts,
-        '${data.allInventoryAlerts}',
-        context.l10n.photoOpsKpiAllAlertsScope,
-      ),
-    ];
-
-    final metricItems = items
-        .map(
-          (item) => ToastMetricItem(
-            label: item.$1,
-            value: item.$2,
-            color: PosColors.accent,
-          ),
-        )
-        .toList();
-
-    return Column(
-      children: [
-        ToastMetricItemStrip(items: metricItems.take(4).toList()),
-        const SizedBox(height: AppSpacing.sm),
-        ToastMetricItemStrip(items: metricItems.skip(4).take(4).toList()),
-      ],
-    );
-  }
-
-  static String _currency(double value) => '${value.toStringAsFixed(0)} VND';
-}
-
 class _WarningSurface extends StatelessWidget {
   const _WarningSurface({required this.message});
 
@@ -1194,7 +1050,7 @@ class _SectionWarning extends StatelessWidget {
 String _surfaceLabel(BuildContext context, PhotoOpsSurfaceKind kind) {
   final l10n = context.l10n;
   return switch (kind) {
-    PhotoOpsSurfaceKind.priority => l10n.photoOpsPriorityQueueTitle,
+    PhotoOpsSurfaceKind.attention => l10n.photoOpsKpiInventoryAlerts,
     PhotoOpsSurfaceKind.live => l10n.photoOpsLiveOps,
     PhotoOpsSurfaceKind.backOffice => l10n.photoOpsBackOffice,
   };
@@ -1202,7 +1058,7 @@ String _surfaceLabel(BuildContext context, PhotoOpsSurfaceKind kind) {
 
 Color _surfaceTone(PhotoOpsSurfaceKind kind) {
   return switch (kind) {
-    PhotoOpsSurfaceKind.priority => PosColors.warning,
+    PhotoOpsSurfaceKind.attention => PosColors.warning,
     PhotoOpsSurfaceKind.live => PosColors.accent,
     PhotoOpsSurfaceKind.backOffice => PosColors.textSecondary,
   };
@@ -1490,27 +1346,6 @@ class _PayrollList extends StatelessWidget {
                 row.totalHours.toStringAsFixed(1),
               ),
               trailing: '${row.totalAmount.toStringAsFixed(0)} VND',
-            ),
-          )
-          .toList(),
-    );
-  }
-}
-
-class _PriorityList extends StatelessWidget {
-  const _PriorityList({required this.items});
-
-  final List<String> items;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: items
-          .map(
-            (item) => _SimpleRow(
-              title: context.l10n.photoOpsAction,
-              subtitle: item,
-              trailing: context.l10n.photoOpsReview,
             ),
           )
           .toList(),
