@@ -275,6 +275,24 @@ class RecipeNotifier extends StateNotifier<RecipeState> {
     }
   }
 
+  Future<bool> bulkUpsert({
+    required String storeId,
+    required List<Map<String, dynamic>> lines,
+  }) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      await inventoryService.bulkUpsertRecipes(storeId: storeId, lines: lines);
+      await loadAll(storeId);
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        error: _mapRecipeError(e, 'Failed to import recipe mappings.'),
+      );
+      return false;
+    }
+  }
+
   Future<void> delete(
     String storeId,
     String menuItemId,

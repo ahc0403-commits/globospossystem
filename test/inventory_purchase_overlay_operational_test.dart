@@ -294,6 +294,14 @@ void main() {
     );
 
     await _selectSection(tester, 6);
+    expect(
+      find.byKey(const Key('inventory_recipe_template_download_action')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('inventory_recipe_excel_import_action')),
+      findsOneWidget,
+    );
     await _openAndDismiss(
       tester,
       const Key('inventory_recipe_line_add_action'),
