@@ -420,7 +420,7 @@ void main() {
     },
   );
 
-  testWidgets('Photo Ops executes loading, error, and populated queue states', (
+  testWidgets('Photo Ops executes loading, error, and populated states', (
     tester,
   ) async {
     addTearDown(tester.view.resetPhysicalSize);

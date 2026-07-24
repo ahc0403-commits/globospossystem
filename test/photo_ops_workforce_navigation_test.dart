@@ -272,7 +272,7 @@ void main() {
     final sidebar = tester.widget<ToastSidebarPanel>(
       find.byType(ToastSidebarPanel),
     );
-    sidebar.onItemSelected(4);
+    sidebar.onItemSelected(3);
     await tester.pump();
     await tester.tap(find.byKey(const Key('photo_ops_payroll_export_button')));
     await tester.pumpAndSettle();
@@ -337,13 +337,15 @@ void main() {
     final sidebar = tester.widget<ToastSidebarPanel>(
       find.byType(ToastSidebarPanel),
     );
-    sidebar.onItemSelected(1);
+    expect(find.byKey(const Key('photo_ops_nav_priority')), findsNothing);
+    expect(find.byKey(const Key('photo_ops_sales_export_button')), findsOne);
+    sidebar.onItemSelected(0);
     await tester.pump();
     expect(
       tester
           .widget<ToastSidebarPanel>(find.byType(ToastSidebarPanel))
           .selectedIndex,
-      1,
+      0,
     );
     expect(find.byKey(const Key('photo_ops_sales_export_button')), findsOne);
     expect(
@@ -363,7 +365,7 @@ void main() {
     Navigator.of(tester.element(find.byType(DateRangePickerDialog))).pop();
     await tester.pumpAndSettle();
 
-    sidebar.onItemSelected(3);
+    sidebar.onItemSelected(2);
     await tester.pump();
     expect(
       find.byKey(const Key('photo_ops_sales_export_button')),
@@ -375,11 +377,11 @@ void main() {
     );
     expect(find.byType(ToastMetricStrip), findsNothing);
 
-    sidebar.onItemSelected(4);
+    sidebar.onItemSelected(3);
     await tester.pump();
     expect(find.byKey(const Key('photo_ops_payroll_export_button')), findsOne);
 
-    sidebar.onItemSelected(5);
+    sidebar.onItemSelected(4);
     await tester.pump();
     await tester.tap(find.byKey(const Key('photo_ops_open_staff_management')));
     await tester.pumpAndSettle();
