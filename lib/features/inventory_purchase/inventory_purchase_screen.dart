@@ -17,15 +17,19 @@ import '../inventory/inventory_provider.dart';
 import '../inventory/recipe_excel_import.dart';
 import 'inventory_purchase_document_service.dart';
 
+typedef RecipeImportFilePicker = Future<XFile?> Function();
+
 class InventoryPurchaseScreen extends ConsumerStatefulWidget {
   const InventoryPurchaseScreen({
     super.key,
     this.initialSectionIndex = 0,
     this.autoLoad = true,
+    this.pickRecipeImportFile,
   });
 
   final int initialSectionIndex;
   final bool autoLoad;
+  final RecipeImportFilePicker? pickRecipeImportFile;
 
   @override
   ConsumerState<InventoryPurchaseScreen> createState() =>
@@ -3492,9 +3496,9 @@ class _InventoryPurchaseScreenState
       extensions: <String>['xlsx'],
     );
     try {
-      final file = await openFile(
-        acceptedTypeGroups: const <XTypeGroup>[typeGroup],
-      );
+      final file =
+          await widget.pickRecipeImportFile?.call() ??
+          await openFile(acceptedTypeGroups: const <XTypeGroup>[typeGroup]);
       if (file == null || !mounted) return;
       final workbook = parseRecipeImportWorkbook(
         await file.readAsBytes(),
