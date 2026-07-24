@@ -141,21 +141,15 @@ class AttendanceService {
     if (limit < 1) {
       throw ArgumentError.value(limit, 'limit', 'must be at least 1');
     }
-    final result = await supabase
-        .from('attendance_logs')
-        .select(
-          'id, restaurant_id, user_id, employee_id, type, photo_url, '
-          'photo_thumbnail_url, logged_at, created_at, '
-          'employee:store_employees!attendance_logs_employee_id_fkey('
-          'id, employee_number, full_name, employment_role), '
-          'legacy_user:users!attendance_logs_user_id_fkey('
-          'id, full_name, role)',
-        )
-        .eq('restaurant_id', storeId)
-        .gte('logged_at', from.toUtc().toIso8601String())
-        .lt('logged_at', to.toUtc().toIso8601String())
-        .order('logged_at', ascending: false)
-        .limit(limit);
+    final result = await supabase.rpc(
+      'get_attendance_logs_with_names',
+      params: {
+        'p_store_id': storeId,
+        'p_from': from.toUtc().toIso8601String(),
+        'p_to': to.toUtc().toIso8601String(),
+        'p_limit': limit,
+      },
+    );
 
     return List<Map<String, dynamic>>.from(
       result,
@@ -266,11 +260,13 @@ Map<String, dynamic> normalizeAttendanceLogRow(Map<String, dynamic> row) {
   final legacyUserId = row['user_id']?.toString();
   final personId = employeeId?.isNotEmpty == true ? employeeId : legacyUserId;
   final fullName =
+      _nonEmptyAttendanceValue(row['person_name']) ??
       _nonEmptyAttendanceValue(employee['full_name']) ??
       _nonEmptyAttendanceValue(legacyUser['full_name']) ??
       _nonEmptyAttendanceValue(employee['employee_number']) ??
       '-';
   final role =
+      _nonEmptyAttendanceValue(row['person_role']) ??
       _nonEmptyAttendanceValue(employee['employment_role']) ??
       _nonEmptyAttendanceValue(legacyUser['role']) ??
       'staff';
@@ -279,7 +275,8 @@ Map<String, dynamic> normalizeAttendanceLogRow(Map<String, dynamic> row) {
     'id': row['id'],
     'restaurant_id': row['restaurant_id'],
     'user_id': personId,
-    'employee_number': employee['employee_number'],
+    'employee_id': employeeId,
+    'employee_number': row['employee_number'] ?? employee['employee_number'],
     'type': row['type'],
     'photo_url': row['photo_url'],
     'photo_thumbnail_url': row['photo_thumbnail_url'],
