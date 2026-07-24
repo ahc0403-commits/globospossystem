@@ -718,6 +718,7 @@ apply_migration() {
     20260723070000_photo_ops_inventory_cleanup_sales_range.sql|\
     20260723081529_photo_objet_simple_inventory_management.sql|\
     20260724010000_inventory_recipe_excel_import.sql|\
+    20260724025456_attendance_logs_with_names.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -1137,6 +1138,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_inventory_recipe_excel_import.sql" \
       "inventory recipe Excel import migration verification"
+  elif [[ "$migration_name" == "20260724025456_attendance_logs_with_names.sql" ]]; then
+    log "Attendance names migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_attendance_logs_with_names.sql" \
+      "attendance names migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \
