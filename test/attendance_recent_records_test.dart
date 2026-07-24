@@ -55,4 +55,27 @@ void main() {
       'role': 'cashier',
     });
   });
+
+  test('scoped attendance RPC row exposes its resolved employee name', () {
+    final row = normalizeAttendanceLogRow({
+      'id': 'log-3',
+      'restaurant_id': 'store-1',
+      'user_id': null,
+      'employee_id': 'employee-2',
+      'type': 'clock_in',
+      'logged_at': '2026-07-24T02:46:24Z',
+      'person_name': 'My Thao',
+      'person_role': 'part_timer',
+      'employee_number': 'NZ1',
+    });
+
+    expect(row['user_id'], 'employee-2');
+    expect(row['employee_id'], 'employee-2');
+    expect(row['employee_number'], 'NZ1');
+    expect(row['users'], {
+      'id': 'employee-2',
+      'full_name': 'My Thao',
+      'role': 'part_timer',
+    });
+  });
 }
