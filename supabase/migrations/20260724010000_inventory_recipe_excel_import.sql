@@ -139,8 +139,10 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
 
+REVOKE ALL ON FUNCTION public.bulk_upsert_inventory_recipe_lines(UUID, JSONB)
+  FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.bulk_upsert_inventory_recipe_lines(UUID, JSONB)
-  TO authenticated;
+  TO authenticated, service_role;
 
 -- Align manual recipe registration with the same accessible-store contract.
 CREATE OR REPLACE FUNCTION public.upsert_inventory_recipe_line(
@@ -193,6 +195,9 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, auth;
 
+REVOKE ALL ON FUNCTION public.upsert_inventory_recipe_line(
+  UUID, UUID, UUID, DECIMAL
+) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.upsert_inventory_recipe_line(
   UUID, UUID, UUID, DECIMAL
-) TO authenticated;
+) TO authenticated, service_role;
