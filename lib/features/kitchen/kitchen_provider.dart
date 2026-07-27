@@ -7,6 +7,25 @@ import '../../core/services/order_service.dart';
 import '../../core/utils/live_sync_scope.dart';
 import '../../main.dart';
 
+class KitchenComboComponent {
+  const KitchenComboComponent({required this.label, required this.quantity});
+
+  final String label;
+  final int quantity;
+
+  factory KitchenComboComponent.fromJson(Map<String, dynamic> json) {
+    return KitchenComboComponent(
+      label: json['label']?.toString() ?? 'Item',
+      quantity: switch (json['quantity']) {
+        int value => value,
+        num value => value.toInt(),
+        String value => int.tryParse(value) ?? 1,
+        _ => 1,
+      },
+    );
+  }
+}
+
 class KitchenItem {
   const KitchenItem({
     required this.itemId,
@@ -15,6 +34,7 @@ class KitchenItem {
     required this.status,
     required this.createdAt,
     this.isSupplemental = false,
+    this.comboComponents = const [],
   });
 
   final String itemId;
@@ -23,6 +43,7 @@ class KitchenItem {
   final String status;
   final DateTime createdAt;
   final bool isSupplemental;
+  final List<KitchenComboComponent> comboComponents;
 
   KitchenItem copyWith({
     String? itemId,
@@ -31,6 +52,7 @@ class KitchenItem {
     String? status,
     DateTime? createdAt,
     bool? isSupplemental,
+    List<KitchenComboComponent>? comboComponents,
   }) {
     return KitchenItem(
       itemId: itemId ?? this.itemId,
@@ -39,6 +61,7 @@ class KitchenItem {
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       isSupplemental: isSupplemental ?? this.isSupplemental,
+      comboComponents: comboComponents ?? this.comboComponents,
     );
   }
 
@@ -50,6 +73,17 @@ class KitchenItem {
     if (menuItemRaw is Map<String, dynamic>) {
       menuItemName = menuItemRaw['name']?.toString();
     }
+    final comboRaw = json['combo_components'];
+    final comboComponents = comboRaw is List
+        ? comboRaw
+              .whereType<Map>()
+              .map(
+                (component) => KitchenComboComponent.fromJson(
+                  Map<String, dynamic>.from(component),
+                ),
+              )
+              .toList(growable: false)
+        : const <KitchenComboComponent>[];
     return KitchenItem(
       itemId: json['id'].toString(),
       label:
@@ -67,6 +101,7 @@ class KitchenItem {
       createdAt: createdAtRaw != null
           ? DateTime.tryParse(createdAtRaw) ?? DateTime.now().toUtc()
           : DateTime.now().toUtc(),
+      comboComponents: comboComponents,
     );
   }
 }
@@ -213,7 +248,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
       final response = await supabase
           .from('orders')
           .select(
-            'id, created_at, status, order_purpose, order_source, tables(table_number), order_items(id, created_at, label, quantity, status, menu_items(name))',
+            'id, created_at, status, order_purpose, order_source, tables(table_number), order_items(id, created_at, label, quantity, status, combo_components, menu_items(name))',
           )
           .eq('restaurant_id', storeId)
           .inFilter('status', ['pending', 'confirmed', 'serving', 'completed'])

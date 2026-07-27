@@ -164,8 +164,11 @@ class _MenuNotifier extends MenuNotifier {
   int deleteCategoryCalls = 0;
   int addItemCalls = 0;
   int editItemCalls = 0;
+  int reorderCategoryCalls = 0;
   int importCalls = 0;
   int updateWorkbookCalls = 0;
+  bool lastAddedItemWasCombo = false;
+  List<Map<String, dynamic>> lastComboComponents = const [];
 
   @override
   Future<void> fetchAll() async {}
@@ -204,14 +207,25 @@ class _MenuNotifier extends MenuNotifier {
   }
 
   @override
+  Future<bool> reorderCategories(List<Map<String, dynamic>> categories) async {
+    reorderCategoryCalls += 1;
+    state = state.copyWith(categories: AsyncValue.data(categories));
+    return true;
+  }
+
+  @override
   Future<bool> addMenuItem({
     required String categoryId,
     required String nameKo,
     required String nameVi,
     required String nameEn,
     required double price,
+    bool isCombo = false,
+    List<Map<String, dynamic>> comboComponents = const [],
   }) async {
     addItemCalls += 1;
+    lastAddedItemWasCombo = isCombo;
+    lastComboComponents = comboComponents;
     return true;
   }
 
@@ -775,6 +789,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(notifier.updateWorkbookCalls, 1);
 
+      await tester.tap(
+        find.byKey(const Key('admin_menu_category_down_$_categoryId')),
+      );
+      await tester.pumpAndSettle();
+      expect(notifier.reorderCategoryCalls, 1);
+
       await tester.tap(find.byKey(const Key('admin_menu_add_category_action')));
       await tester.pumpAndSettle();
       const categoryDialog = Key('admin_menu_add_category_dialog');
@@ -804,9 +824,19 @@ void main() {
       await tester.enterText(addFields.at(1), 'Cà phê sữa');
       await tester.enterText(addFields.at(2), 'Milk coffee');
       await tester.enterText(addFields.at(3), '45000');
+      await tester.tap(find.byKey(const Key('admin_menu_combo_toggle')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('admin_menu_combo_component_$_menuItemId')),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(_dialogAction(addItemDialog, FilledButton));
       await tester.pumpAndSettle();
       expect(notifier.addItemCalls, 1);
+      expect(notifier.lastAddedItemWasCombo, isTrue);
+      expect(notifier.lastComboComponents, [
+        {'menu_item_id': _menuItemId, 'quantity': 1},
+      ]);
 
       await tester.tap(
         find.byKey(const Key('admin_menu_edit_item_$_menuItemId')),

@@ -1334,6 +1334,40 @@ class _KitchenTicketItemRow extends StatelessWidget {
               ),
             ],
           ),
+          if (item.comboComponents.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              key: Key('kitchen_combo_components_${item.itemId}'),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: PosSurfaceRole.background.fill,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: PosSurfaceRole.background.stroke),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    context.l10n.kitchenComboComponents,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: PosColors.textSecondary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  for (final component in item.comboComponents)
+                    Text(
+                      '• ${_localizedKitchenItemLabel(context, component.label)} ×${component.quantity * item.quantity}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosSurfaceRole.action.text,
+                        fontWeight: FontWeight.w700,
+                        height: 1.35,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
