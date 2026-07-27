@@ -67,6 +67,15 @@ class MenuNotifier extends StateNotifier<MenuState> {
     if (message.contains('MENU_ITEM_NOT_FOUND')) {
       return 'Reload menus and try again.';
     }
+    if (message.contains('MENU_CATEGORY_ORDER_')) {
+      return 'Categories changed on another screen. Reload and reorder them again.';
+    }
+    if (message.contains('MENU_COMBO_COMPONENT_IN_USE')) {
+      return 'This menu is used inside a combo. Remove it from the combo first.';
+    }
+    if (message.contains('MENU_COMBO_')) {
+      return 'Choose at least one valid non-combo menu and quantity.';
+    }
     if (message.contains('MENU_IMAGE_')) {
       return 'The menu photo could not be saved. Choose another image and try again.';
     }
@@ -196,20 +205,46 @@ class MenuNotifier extends StateNotifier<MenuState> {
     }
   }
 
+  Future<bool> reorderCategories(List<Map<String, dynamic>> categories) async {
+    final previous = state.categories.valueOrNull ?? const [];
+    state = state.copyWith(categories: AsyncValue.data(categories));
+    try {
+      await menuService.reorderCategories(
+        storeId: storeId,
+        categoryIds: categories
+            .map((category) => category['id']?.toString() ?? '')
+            .where((id) => id.isNotEmpty)
+            .toList(growable: false),
+      );
+      await fetchCategories();
+      state = state.copyWith(clearError: true);
+      return true;
+    } catch (error, _) {
+      state = state.copyWith(
+        categories: AsyncValue.data(previous),
+        error: _mapMenuError(error, 'Failed to reorder categories.'),
+      );
+      return false;
+    }
+  }
+
   Future<bool> addMenuItem({
     required String categoryId,
     required String nameKo,
     required String nameVi,
     required String nameEn,
     required double price,
+    bool isCombo = false,
+    List<Map<String, dynamic>> comboComponents = const [],
   }) async {
+    Map<String, dynamic>? created;
     try {
       final currentItems = state.items.valueOrNull ?? [];
       final sortOrder = currentItems
           .where((item) => item['category_id'].toString() == categoryId)
           .length;
 
-      await menuService.addMenuItem(
+      created = await menuService.addMenuItem(
         storeId: storeId,
         categoryId: categoryId,
         nameKo: nameKo,
@@ -218,10 +253,27 @@ class MenuNotifier extends StateNotifier<MenuState> {
         price: price,
         sortOrder: sortOrder,
       );
+      final itemId = created['id']?.toString() ?? '';
+      if (itemId.isEmpty) {
+        throw StateError('MENU_ITEM_ID_REQUIRED');
+      }
+      if (isCombo) {
+        await menuService.setMenuCombo(
+          itemId: itemId,
+          isCombo: true,
+          components: comboComponents,
+        );
+      }
       await fetchItems();
       state = state.copyWith(clearError: true);
       return true;
     } catch (error, _) {
+      final itemId = created?['id']?.toString();
+      if (itemId != null && itemId.isNotEmpty) {
+        try {
+          await menuService.deleteMenuItem(itemId);
+        } catch (_) {}
+      }
       state = state.copyWith(
         error: _mapMenuError(error, 'Failed to add menu.'),
       );
@@ -236,6 +288,8 @@ class MenuNotifier extends StateNotifier<MenuState> {
     required String nameEn,
     required double price,
     required XFile photo,
+    bool isCombo = false,
+    List<Map<String, dynamic>> comboComponents = const [],
   }) async {
     Map<String, dynamic>? created;
     MenuImageUploadResult? uploaded;
@@ -256,6 +310,13 @@ class MenuNotifier extends StateNotifier<MenuState> {
       final itemId = created['id']?.toString() ?? '';
       if (itemId.isEmpty) {
         throw StateError('MENU_ITEM_ID_REQUIRED');
+      }
+      if (isCombo) {
+        await menuService.setMenuCombo(
+          itemId: itemId,
+          isCombo: true,
+          components: comboComponents,
+        );
       }
 
       uploaded = await menuService.uploadMenuImage(
@@ -342,6 +403,28 @@ class MenuNotifier extends StateNotifier<MenuState> {
     } catch (error, _) {
       state = state.copyWith(
         error: _mapMenuError(error, 'Failed to update menu.'),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> setMenuCombo({
+    required String itemId,
+    required bool isCombo,
+    required List<Map<String, dynamic>> components,
+  }) async {
+    try {
+      await menuService.setMenuCombo(
+        itemId: itemId,
+        isCombo: isCombo,
+        components: components,
+      );
+      await fetchItems();
+      state = state.copyWith(clearError: true);
+      return true;
+    } catch (error, _) {
+      state = state.copyWith(
+        error: _mapMenuError(error, 'Failed to save combo components.'),
       );
       return false;
     }

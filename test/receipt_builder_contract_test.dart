@@ -135,4 +135,37 @@ void main() {
     expect(ticket.items.single.quantity, 1);
     expect(ticket.items.single.supplemental, isTrue);
   });
+
+  test('combo components are preserved and printed for kitchen prep', () async {
+    final ticket = PrintTicket.fromPayload({
+      'ticket': 'kitchen',
+      'floor_label': '1F',
+      'table_number': 'T03',
+      'ticket_code': 'combo123',
+      'batch_no': 1,
+      'printed_reason': 'initial',
+      'at': '2026-07-27T08:00:00+07:00',
+      'items': [
+        {
+          'label': 'Lunch Combo',
+          'qty': 2,
+          'components': [
+            {'label': 'Kimbap', 'quantity': 1},
+            {'label': 'Ramen', 'quantity': 2},
+          ],
+        },
+      ],
+    });
+
+    expect(ticket.items.single.components, hasLength(2));
+    expect(ticket.items.single.components.last.label, 'Ramen');
+    expect(ticket.items.single.components.last.quantity, 2);
+
+    final bytes = await ReceiptBuilder.buildKitchenTicket(ticket);
+    final text = String.fromCharCodes(bytes);
+    expect(text, contains('Lunch Combo'));
+    expect(text, contains('Kimbap'));
+    expect(text, contains('Ramen'));
+    expect(text, contains('x4'));
+  });
 }

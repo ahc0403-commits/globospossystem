@@ -82,7 +82,16 @@ class MenuService {
   Future<List<Map<String, dynamic>>> fetchItems(String storeId) async {
     final response = await supabase
         .from('menu_items')
-        .select()
+        .select(
+          '*, '
+          'menu_combo_components!'
+          'menu_combo_components_combo_menu_item_id_fkey('
+          'id, component_menu_item_id, quantity, sort_order, '
+          'component:menu_items!'
+          'menu_combo_components_component_menu_item_id_fkey('
+          'id, name, name_ko, name_vi, name_en, is_available'
+          '))',
+        )
         .eq('restaurant_id', storeId)
         .order('sort_order', ascending: true);
     return response
@@ -155,6 +164,31 @@ class MenuService {
     await supabase.rpc(
       'admin_delete_menu_category',
       params: {'p_category_id': categoryId},
+    );
+  }
+
+  Future<void> reorderCategories({
+    required String storeId,
+    required List<String> categoryIds,
+  }) async {
+    await supabase.rpc(
+      'admin_reorder_menu_categories',
+      params: {'p_store_id': storeId, 'p_category_ids': categoryIds},
+    );
+  }
+
+  Future<void> setMenuCombo({
+    required String itemId,
+    required bool isCombo,
+    required List<Map<String, dynamic>> components,
+  }) async {
+    await supabase.rpc(
+      'admin_set_menu_combo',
+      params: {
+        'p_item_id': itemId,
+        'p_is_combo': isCombo,
+        'p_components': components,
+      },
     );
   }
 

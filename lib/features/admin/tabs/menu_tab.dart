@@ -142,7 +142,12 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       onAddCategory: () => _showAddCategoryDialog(context, menuNotifier),
       onAddItem: selectedCategoryId == null
           ? null
-          : () => _showAddItemDialog(context, selectedCategoryId, menuNotifier),
+          : () => _showAddItemDialog(
+              context,
+              selectedCategoryId,
+              allItems,
+              menuNotifier,
+            ),
     );
 
     Widget categoryPane({required bool scrollable}) => _CategoryPanel(
@@ -161,6 +166,12 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       auditTraceAsync: auditTraceAsync,
       scrollable: scrollable,
       onSelect: menuNotifier.selectCategory,
+      onMove: (fromIndex, toIndex) {
+        final reordered = [...categories];
+        final category = reordered.removeAt(fromIndex);
+        reordered.insert(toIndex, category);
+        menuNotifier.reorderCategories(reordered);
+      },
       onEdit: (category) =>
           _showEditCategoryDialog(context, category, menuNotifier),
       onDelete: (category, itemCount) =>
@@ -174,7 +185,8 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       scrollable: scrollable,
       onToggleAvailability: menuNotifier.toggleAvailability,
       onTogglePublicVisibility: menuNotifier.togglePublicVisibility,
-      onEditItem: (item) => _showEditItemDialog(context, item, menuNotifier),
+      onEditItem: (item) =>
+          _showEditItemDialog(context, item, allItems, menuNotifier),
     );
 
     return Scaffold(
@@ -860,6 +872,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
   Future<void> _showAddItemDialog(
     BuildContext context,
     String? categoryId,
+    List<Map<String, dynamic>> allItems,
     MenuNotifier menuNotifier,
   ) async {
     if (categoryId == null) {
@@ -873,6 +886,11 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     final priceController = TextEditingController();
     XFile? selectedPhoto;
     Uint8List? selectedPreviewBytes;
+    var isCombo = false;
+    final comboQuantities = <String, int>{};
+    final comboCandidates = allItems
+        .where((candidate) => candidate['is_combo'] != true)
+        .toList(growable: false);
 
     await showDialog<void>(
       context: context,
@@ -919,6 +937,23 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     keyboardType: TextInputType.number,
                     style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(labelText: l10n.menuPrice),
+                  ),
+                  const SizedBox(height: 16),
+                  _ComboMenuEditor(
+                    isCombo: isCombo,
+                    candidates: comboCandidates,
+                    quantities: comboQuantities,
+                    onComboChanged: (value) => setDialogState(() {
+                      isCombo = value;
+                      if (!value) comboQuantities.clear();
+                    }),
+                    onQuantityChanged: (itemId, quantity) => setDialogState(() {
+                      if (quantity == null) {
+                        comboQuantities.remove(itemId);
+                      } else {
+                        comboQuantities[itemId] = quantity;
+                      }
+                    }),
                   ),
                   const SizedBox(height: 16),
                   _MenuPhotoPicker(
@@ -968,8 +1003,13 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     showErrorToast(context, l10n.menuEnterValidNameAndPrice);
                     return;
                   }
+                  if (isCombo && comboQuantities.isEmpty) {
+                    showErrorToast(context, l10n.menuComboComponentRequired);
+                    return;
+                  }
 
                   final photo = selectedPhoto;
+                  final comboComponents = _comboPayload(comboQuantities);
                   final success = photo == null
                       ? await menuNotifier.addMenuItem(
                           categoryId: categoryId,
@@ -977,6 +1017,8 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                           nameVi: nameVi,
                           nameEn: nameEn,
                           price: price,
+                          isCombo: isCombo,
+                          comboComponents: comboComponents,
                         )
                       : await menuNotifier.addMenuItemWithPhoto(
                           categoryId: categoryId,
@@ -985,6 +1027,8 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                           nameEn: nameEn,
                           price: price,
                           photo: photo,
+                          isCombo: isCombo,
+                          comboComponents: comboComponents,
                         );
                   if (context.mounted && success) {
                     Navigator.of(context).pop();
@@ -1010,6 +1054,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
   Future<void> _showEditItemDialog(
     BuildContext context,
     Map<String, dynamic> item,
+    List<Map<String, dynamic>> allItems,
     MenuNotifier menuNotifier,
   ) async {
     final l10n = context.l10n;
@@ -1038,6 +1083,17 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     XFile? selectedPhoto;
     Uint8List? selectedPreviewBytes;
     var removeExistingPhoto = false;
+    final originalIsCombo = item['is_combo'] == true;
+    var isCombo = originalIsCombo;
+    final originalComboQuantities = _comboQuantitiesFromItem(item);
+    final comboQuantities = Map<String, int>.from(originalComboQuantities);
+    final comboCandidates = allItems
+        .where(
+          (candidate) =>
+              candidate['id']?.toString() != itemId &&
+              candidate['is_combo'] != true,
+        )
+        .toList(growable: false);
 
     await showDialog<void>(
       context: context,
@@ -1083,6 +1139,24 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     ),
                     style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(labelText: l10n.menuPrice),
+                  ),
+                  const SizedBox(height: 16),
+                  _ComboMenuEditor(
+                    isCombo: isCombo,
+                    candidates: comboCandidates,
+                    quantities: comboQuantities,
+                    onComboChanged: (value) => setDialogState(() {
+                      isCombo = value;
+                      if (!value) comboQuantities.clear();
+                    }),
+                    onQuantityChanged: (componentId, quantity) =>
+                        setDialogState(() {
+                          if (quantity == null) {
+                            comboQuantities.remove(componentId);
+                          } else {
+                            comboQuantities[componentId] = quantity;
+                          }
+                        }),
                   ),
                   const SizedBox(height: 16),
                   _MenuPhotoPicker(
@@ -1140,6 +1214,10 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     showErrorToast(context, l10n.menuEnterValidNameAndPrice);
                     return;
                   }
+                  if (isCombo && comboQuantities.isEmpty) {
+                    showErrorToast(context, l10n.menuComboComponentRequired);
+                    return;
+                  }
 
                   final detailsChanged =
                       nameKo != originalNameKo ||
@@ -1148,7 +1226,13 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                       price != initialPrice;
                   final photoChanged =
                       selectedPhoto != null || removeExistingPhoto;
-                  if (!detailsChanged && !photoChanged) {
+                  final comboChanged =
+                      isCombo != originalIsCombo ||
+                      !_sameComboQuantities(
+                        comboQuantities,
+                        originalComboQuantities,
+                      );
+                  if (!detailsChanged && !photoChanged && !comboChanged) {
                     showErrorToast(context, l10n.noChanges);
                     return;
                   }
@@ -1162,6 +1246,15 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                       price: price,
                     );
                     if (!detailsSaved) return;
+                  }
+
+                  if (comboChanged) {
+                    final comboSaved = await menuNotifier.setMenuCombo(
+                      itemId: itemId,
+                      isCombo: isCombo,
+                      components: _comboPayload(comboQuantities),
+                    );
+                    if (!comboSaved) return;
                   }
 
                   final photo = selectedPhoto;
@@ -1199,6 +1292,193 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     nameViController.dispose();
     nameEnController.dispose();
     priceController.dispose();
+  }
+}
+
+Map<String, int> _comboQuantitiesFromItem(Map<String, dynamic> item) {
+  final rawComponents = item['menu_combo_components'];
+  if (rawComponents is! List) return {};
+
+  return {
+    for (final raw in rawComponents.whereType<Map>())
+      if ((raw['component_menu_item_id']?.toString() ?? '').isNotEmpty)
+        raw['component_menu_item_id'].toString(): switch (raw['quantity']) {
+          int value => value,
+          num value => value.toInt(),
+          String value => int.tryParse(value) ?? 1,
+          _ => 1,
+        },
+  };
+}
+
+List<Map<String, dynamic>> _comboPayload(Map<String, int> quantities) {
+  return quantities.entries
+      .map((entry) => {'menu_item_id': entry.key, 'quantity': entry.value})
+      .toList(growable: false);
+}
+
+bool _sameComboQuantities(Map<String, int> left, Map<String, int> right) {
+  if (left.length != right.length) return false;
+  for (final entry in left.entries) {
+    if (right[entry.key] != entry.value) return false;
+  }
+  return true;
+}
+
+class _ComboMenuEditor extends StatelessWidget {
+  const _ComboMenuEditor({
+    required this.isCombo,
+    required this.candidates,
+    required this.quantities,
+    required this.onComboChanged,
+    required this.onQuantityChanged,
+  });
+
+  final bool isCombo;
+  final List<Map<String, dynamic>> candidates;
+  final Map<String, int> quantities;
+  final ValueChanged<bool> onComboChanged;
+  final void Function(String itemId, int? quantity) onQuantityChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Container(
+      key: const Key('admin_menu_combo_editor'),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface3),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SwitchListTile(
+            key: const Key('admin_menu_combo_toggle'),
+            value: isCombo,
+            onChanged: onComboChanged,
+            title: Text(l10n.menuComboToggle),
+            subtitle: Text(l10n.menuComboDescription),
+            activeThumbColor: AppColors.amber500,
+          ),
+          if (isCombo) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+              child: Text(
+                l10n.menuComboComponents,
+                style: AppFonts.system(
+                  color: AppColors.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (candidates.isEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
+                child: Text(
+                  l10n.menuComboNoCandidates,
+                  style: AppFonts.system(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+              )
+            else
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 240),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                  child: Column(
+                    children: [
+                      for (final (index, candidate) in candidates.indexed) ...[
+                        _ComboCandidateRow(
+                          candidate: candidate,
+                          quantity:
+                              quantities[candidate['id']?.toString() ?? ''],
+                          onQuantityChanged: onQuantityChanged,
+                        ),
+                        if (index != candidates.length - 1)
+                          const Divider(height: 1),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ComboCandidateRow extends StatelessWidget {
+  const _ComboCandidateRow({
+    required this.candidate,
+    required this.quantity,
+    required this.onQuantityChanged,
+  });
+
+  final Map<String, dynamic> candidate;
+  final int? quantity;
+  final void Function(String itemId, int? quantity) onQuantityChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final itemId = candidate['id']?.toString() ?? '';
+    final selected = quantity != null;
+    final currentQuantity = quantity ?? 1;
+    return CheckboxListTile(
+      key: Key('admin_menu_combo_component_$itemId'),
+      value: selected,
+      onChanged: itemId.isEmpty
+          ? null
+          : (value) => onQuantityChanged(
+              itemId,
+              value == true ? currentQuantity : null,
+            ),
+      controlAffinity: ListTileControlAffinity.leading,
+      title: Text(
+        candidate['name']?.toString() ?? '-',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: candidate['is_available'] == false
+          ? Text(l10n.menuSoldOut)
+          : null,
+      secondary: selected
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  key: Key('admin_menu_combo_decrease_$itemId'),
+                  tooltip: l10n.menuComboDecreaseQuantity,
+                  onPressed: currentQuantity <= 1
+                      ? null
+                      : () => onQuantityChanged(itemId, currentQuantity - 1),
+                  icon: const Icon(Icons.remove_circle_outline, size: 20),
+                ),
+                Text(
+                  '$currentQuantity',
+                  style: AppFonts.system(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                IconButton(
+                  key: Key('admin_menu_combo_increase_$itemId'),
+                  tooltip: l10n.menuComboIncreaseQuantity,
+                  onPressed: currentQuantity >= 99
+                      ? null
+                      : () => onQuantityChanged(itemId, currentQuantity + 1),
+                  icon: const Icon(Icons.add_circle_outline, size: 20),
+                ),
+              ],
+            )
+          : null,
+    );
   }
 }
 
@@ -1321,6 +1601,7 @@ class _CategoryPanel extends StatelessWidget {
     required this.itemCountsByCategory,
     required this.auditTraceAsync,
     required this.onSelect,
+    required this.onMove,
     required this.onEdit,
     required this.onDelete,
     this.scrollable = true,
@@ -1331,6 +1612,7 @@ class _CategoryPanel extends StatelessWidget {
   final Map<String, int> itemCountsByCategory;
   final AsyncValue<List<Map<String, dynamic>>> auditTraceAsync;
   final ValueChanged<String> onSelect;
+  final void Function(int fromIndex, int toIndex) onMove;
   final ValueChanged<Map<String, dynamic>> onEdit;
   final void Function(Map<String, dynamic> category, int itemCount) onDelete;
   final bool scrollable;
@@ -1397,6 +1679,26 @@ class _CategoryPanel extends StatelessWidget {
                           color: AppColors.textSecondary,
                         ),
                       ),
+                    if (isSelected) ...[
+                      IconButton(
+                        key: Key('admin_menu_category_up_$categoryId'),
+                        visualDensity: VisualDensity.compact,
+                        tooltip: l10n.menuMoveCategoryUp,
+                        onPressed: index == 0
+                            ? null
+                            : () => onMove(index, index - 1),
+                        icon: const Icon(Icons.arrow_upward, size: 18),
+                      ),
+                      IconButton(
+                        key: Key('admin_menu_category_down_$categoryId'),
+                        visualDensity: VisualDensity.compact,
+                        tooltip: l10n.menuMoveCategoryDown,
+                        onPressed: index == categories.length - 1
+                            ? null
+                            : () => onMove(index, index + 1),
+                        icon: const Icon(Icons.arrow_downward, size: 18),
+                      ),
+                    ],
                     if (isSelected && !isSystemAlcohol) ...[
                       IconButton(
                         key: Key('admin_menu_edit_category_$categoryId'),
@@ -1515,6 +1817,11 @@ class _ItemsPanel extends StatelessWidget {
                   final isAvailable = item['is_available'] == true;
                   final isVisiblePublic = item['is_visible_public'] != false;
                   final imageUrl = item['image_url']?.toString();
+                  final isCombo = item['is_combo'] == true;
+                  final comboComponentsRaw = item['menu_combo_components'];
+                  final comboComponents = comboComponentsRaw is List
+                      ? comboComponentsRaw.whereType<Map>().toList()
+                      : const <Map>[];
                   final priceValue = switch (priceRaw) {
                     num value => value.toDouble(),
                     _ => 0.0,
@@ -1556,10 +1863,45 @@ class _ItemsPanel extends StatelessWidget {
                                   fontSize: 13,
                                 ),
                               ),
+                              if (isCombo) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  comboComponents
+                                      .map((component) {
+                                        final componentItem =
+                                            component['component'];
+                                        final componentName =
+                                            componentItem is Map
+                                            ? componentItem['name']
+                                                      ?.toString() ??
+                                                  '-'
+                                            : '-';
+                                        final quantity =
+                                            component['quantity']?.toString() ??
+                                            '1';
+                                        return '$componentName ×$quantity';
+                                      })
+                                      .join(' · '),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppFonts.system(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
                         const SizedBox(width: 12),
+                        if (isCombo) ...[
+                          ToastStatusBadge(
+                            label: l10n.menuComboBadge,
+                            color: PosColors.accent,
+                            compact: true,
+                          ),
+                          const SizedBox(width: 8),
+                        ],
                         ToastStatusBadge(
                           label: isAvailable
                               ? l10n.menuAvailable

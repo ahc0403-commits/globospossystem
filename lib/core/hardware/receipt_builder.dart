@@ -417,6 +417,21 @@ class ReceiptBuilder {
       if (notes != null && notes.isNotEmpty) {
         bytes.addAll(generator.text(_escText('  * $notes')));
       }
+      for (final component in item.components) {
+        bytes.addAll(
+          generator.row([
+            PosColumn(
+              text: _escText('  - ${component.label}'),
+              width: compact ? 8 : 9,
+            ),
+            PosColumn(
+              text: 'x${component.quantity * item.quantity}',
+              width: compact ? 4 : 3,
+              styles: const PosStyles(align: PosAlign.right, bold: true),
+            ),
+          ]),
+        );
+      }
     }
 
     final orderNotes = ticket.orderNotes?.trim();
@@ -676,12 +691,14 @@ class PrintTicketItem {
     required this.quantity,
     this.notes,
     this.supplemental = false,
+    this.components = const [],
   });
 
   final String label;
   final int quantity;
   final String? notes;
   final bool supplemental;
+  final List<PrintTicketComboComponent> components;
 
   factory PrintTicketItem.fromPayload(Map<String, dynamic> payload) {
     return PrintTicketItem(
@@ -697,6 +714,40 @@ class PrintTicketItem {
         bool value => value,
         String value => value.toLowerCase() == 'true',
         _ => false,
+      },
+      components: switch (payload['components']) {
+        final List value =>
+          value
+              .whereType<Map>()
+              .map(
+                (component) => PrintTicketComboComponent.fromPayload(
+                  Map<String, dynamic>.from(component),
+                ),
+              )
+              .toList(growable: false),
+        _ => const [],
+      },
+    );
+  }
+}
+
+class PrintTicketComboComponent {
+  const PrintTicketComboComponent({
+    required this.label,
+    required this.quantity,
+  });
+
+  final String label;
+  final int quantity;
+
+  factory PrintTicketComboComponent.fromPayload(Map<String, dynamic> payload) {
+    return PrintTicketComboComponent(
+      label: payload['label']?.toString() ?? 'Item',
+      quantity: switch (payload['quantity']) {
+        int value => value,
+        num value => value.toInt(),
+        String value => int.tryParse(value) ?? 1,
+        _ => 1,
       },
     );
   }
