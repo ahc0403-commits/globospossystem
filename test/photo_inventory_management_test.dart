@@ -158,7 +158,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('photo_inventory_save')));
     await tester.pump();
-    expect(find.text('제품명 *'), findsOne);
+    expect(find.text('원재료명 *'), findsOne);
 
     await tester.tap(find.text('취소'));
     await tester.pumpAndSettle();

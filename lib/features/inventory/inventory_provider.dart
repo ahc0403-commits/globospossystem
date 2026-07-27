@@ -694,6 +694,8 @@ class InventoryPurchaseSupplierCatalogNotifier
     String? address,
     String? businessRegistrationNo,
     String? bankAccountNumber,
+    String? bankName,
+    String? bankAccountHolder,
     String? paymentTerms,
     DateTime? contractStartDate,
     DateTime? contractEndDate,
@@ -712,6 +714,8 @@ class InventoryPurchaseSupplierCatalogNotifier
         address: address,
         businessRegistrationNo: businessRegistrationNo,
         bankAccountNumber: bankAccountNumber,
+        bankName: bankName,
+        bankAccountHolder: bankAccountHolder,
         paymentTerms: paymentTerms,
         contractStartDate: contractStartDate,
         contractEndDate: contractEndDate,
@@ -988,6 +992,28 @@ class InventoryPurchaseProductCatalogNotifier
     }
   }
 
+  Future<bool> bulkUpsertIngredients({
+    required String storeId,
+    required List<Map<String, dynamic>> rows,
+  }) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await inventoryService.bulkUpsertInventoryIngredients(
+        storeId: storeId,
+        rows: rows,
+      );
+      await load(storeId);
+      state = state.copyWith(isSaving: false);
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isSaving: false,
+        error: _mapProductCatalogError(e, 'Failed to import ingredients.'),
+      );
+      return false;
+    }
+  }
+
   String _mapProductCatalogError(Object error, String fallback) {
     final message = error is PostgrestException
         ? error.message
@@ -995,6 +1021,9 @@ class InventoryPurchaseProductCatalogNotifier
 
     if (message.contains('INVENTORY_PRODUCT_FORBIDDEN')) {
       return 'No permission to manage products for this store.';
+    }
+    if (message.contains('INVENTORY_INGREDIENT_IMPORT_FORBIDDEN')) {
+      return 'No permission to import ingredients for this store.';
     }
     if (message.contains('PRODUCT_NAME_REQUIRED')) {
       return 'Enter a product name.';

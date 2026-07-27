@@ -721,6 +721,7 @@ apply_migration() {
     20260724025456_attendance_logs_with_names.sql|\
     20260724040704_inventory_daily_stock_history.sql|\
     20260727005957_category_reordering_and_combo_menu.sql|\
+    20260727013210_inventory_ingredient_excel_supplier_banking.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -940,6 +941,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_inventory_daily_stock_history.sql" \
       "inventory daily stock history migration preflight"
+  elif [[ "$migration_name" == "20260727013210_inventory_ingredient_excel_supplier_banking.sql" ]]; then
+    log "Inventory ingredient Excel and supplier banking migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_inventory_ingredient_excel_supplier_banking.sql" \
+      "inventory ingredient Excel and supplier banking migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -1160,6 +1166,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_category_reordering_and_combo_menu.sql" \
       "category reordering and combo-menu migration verification"
+  elif [[ "$migration_name" == "20260727013210_inventory_ingredient_excel_supplier_banking.sql" ]]; then
+    log "Inventory ingredient Excel and supplier banking migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_inventory_ingredient_excel_supplier_banking.sql" \
+      "inventory ingredient Excel and supplier banking migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \

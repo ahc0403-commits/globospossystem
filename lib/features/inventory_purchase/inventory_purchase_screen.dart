@@ -13,11 +13,13 @@ import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../core/utils/number_input_utils.dart';
 import '../auth/auth_provider.dart';
+import '../inventory/ingredient_excel_import.dart';
 import '../inventory/inventory_provider.dart';
 import '../inventory/recipe_excel_import.dart';
 import 'inventory_purchase_document_service.dart';
 
 typedef RecipeImportFilePicker = Future<XFile?> Function();
+typedef IngredientImportFilePicker = Future<XFile?> Function();
 
 class InventoryPurchaseScreen extends ConsumerStatefulWidget {
   const InventoryPurchaseScreen({
@@ -25,11 +27,13 @@ class InventoryPurchaseScreen extends ConsumerStatefulWidget {
     this.initialSectionIndex = 0,
     this.autoLoad = true,
     this.pickRecipeImportFile,
+    this.pickIngredientImportFile,
   });
 
   final int initialSectionIndex;
   final bool autoLoad;
   final RecipeImportFilePicker? pickRecipeImportFile;
+  final IngredientImportFilePicker? pickIngredientImportFile;
 
   @override
   ConsumerState<InventoryPurchaseScreen> createState() =>
@@ -45,6 +49,8 @@ class _InventoryPurchaseScreenState
   String? _selectedProductId;
   bool _isExportingRecipeTemplate = false;
   bool _isImportingRecipes = false;
+  bool _isExportingIngredientTemplate = false;
+  bool _isImportingIngredients = false;
 
   @override
   void initState() {
@@ -1792,6 +1798,31 @@ class _InventoryPurchaseScreenState
       error: productCatalog.error ?? supplierCatalog.error,
       actions: [
         PosActionButton(
+          key: const Key('inventory_ingredient_template_download_action'),
+          label: l10n.inventoryPurchaseIngredientTemplateDownload,
+          tone: PosActionTone.secondary,
+          icon: Icons.download_outlined,
+          loading: _isExportingIngredientTemplate,
+          onPressed: _isExportingIngredientTemplate
+              ? null
+              : () => _downloadIngredientTemplate(products: products),
+          compact: true,
+        ),
+        PosActionButton(
+          key: const Key('inventory_ingredient_excel_import_action'),
+          label: l10n.inventoryPurchaseIngredientExcelImport,
+          tone: PosActionTone.affirm,
+          icon: Icons.upload_file_outlined,
+          loading: _isImportingIngredients,
+          onPressed: _isImportingIngredients || productCatalog.isSaving
+              ? null
+              : () => _importIngredientWorkbook(
+                  storeId: storeId,
+                  products: products,
+                ),
+          compact: true,
+        ),
+        PosActionButton(
           key: const Key('inventory_product_add_action'),
           label: l10n.inventoryPurchaseAddProduct,
           tone: PosActionTone.primary,
@@ -1932,6 +1963,12 @@ class _InventoryPurchaseScreenState
     final bankAccountController = TextEditingController(
       text: _string(supplier?['bank_account_number']),
     );
+    final bankNameController = TextEditingController(
+      text: _string(supplier?['bank_name']),
+    );
+    final bankAccountHolderController = TextEditingController(
+      text: _string(supplier?['bank_account_holder']),
+    );
     final paymentController = TextEditingController(
       text: _string(supplier?['payment_terms']),
     );
@@ -2012,6 +2049,22 @@ class _InventoryPurchaseScreenState
                       ),
                     ),
                     TextField(
+                      key: const Key('inventory_supplier_bank_name_field'),
+                      controller: bankNameController,
+                      decoration: InputDecoration(
+                        labelText: l10n.inventoryPurchaseBankName,
+                      ),
+                    ),
+                    TextField(
+                      key: const Key(
+                        'inventory_supplier_bank_account_holder_field',
+                      ),
+                      controller: bankAccountHolderController,
+                      decoration: InputDecoration(
+                        labelText: l10n.inventoryPurchaseBankAccountHolder,
+                      ),
+                    ),
+                    TextField(
                       controller: startController,
                       decoration: InputDecoration(
                         labelText: l10n.inventoryPurchaseContractStartDate,
@@ -2071,6 +2124,10 @@ class _InventoryPurchaseScreenState
                     ),
                     bankAccountNumber: _nullableText(
                       bankAccountController.text,
+                    ),
+                    bankName: _nullableText(bankNameController.text),
+                    bankAccountHolder: _nullableText(
+                      bankAccountHolderController.text,
                     ),
                     paymentTerms: _nullableText(paymentController.text),
                     contractStartDate: _parseDateOrNull(startController.text),
@@ -2158,7 +2215,7 @@ class _InventoryPurchaseScreenState
                           decoration: InputDecoration(
                             labelText: '${l10n.inventoryPurchaseProductCode} *',
                             helperText:
-                                'Unique per store. Use the agreed pilot product-code rule before saving.',
+                                'Unique ingredient code within this store.',
                           ),
                         ),
                         TextField(
@@ -3486,6 +3543,131 @@ class _InventoryPurchaseScreenState
     }
   }
 
+  Future<void> _downloadIngredientTemplate({
+    required List<Map<String, dynamic>> products,
+  }) async {
+    setState(() => _isExportingIngredientTemplate = true);
+    try {
+      final bytes = Uint8List.fromList(
+        buildIngredientImportTemplate(products: products),
+      );
+      final now = DateTime.now();
+      final stamp =
+          '${now.year.toString().padLeft(4, '0')}'
+          '${now.month.toString().padLeft(2, '0')}'
+          '${now.day.toString().padLeft(2, '0')}';
+      await FileSaver.instance.saveFile(
+        name: 'ingredient_import_$stamp',
+        bytes: bytes,
+        ext: 'xlsx',
+        mimeType: MimeType.microsoftExcel,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              context.l10n.inventoryPurchaseIngredientTemplateSaved,
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        _showRecipeImportIssues([
+          context.l10n.inventoryPurchaseIngredientTemplateFailed,
+        ]);
+      }
+    } finally {
+      if (mounted) setState(() => _isExportingIngredientTemplate = false);
+    }
+  }
+
+  Future<void> _importIngredientWorkbook({
+    required String storeId,
+    required List<Map<String, dynamic>> products,
+  }) async {
+    const typeGroup = XTypeGroup(
+      label: 'Excel (.xlsx)',
+      extensions: <String>['xlsx'],
+    );
+    try {
+      final file =
+          await widget.pickIngredientImportFile?.call() ??
+          await openFile(acceptedTypeGroups: const <XTypeGroup>[typeGroup]);
+      if (file == null || !mounted) return;
+      final workbook = parseIngredientImportWorkbook(
+        await file.readAsBytes(),
+        existingProducts: products,
+      );
+      if (!mounted) return;
+
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          key: const Key('inventory_ingredient_excel_preview_dialog'),
+          title: Text(
+            context.l10n.inventoryPurchaseIngredientImportPreviewTitle,
+          ),
+          content: Text(
+            context.l10n.inventoryPurchaseIngredientImportPreview(
+              workbook.createCount,
+              workbook.updateCount,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(context.l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(context.l10n.inventoryPurchaseRegister),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+
+      setState(() => _isImportingIngredients = true);
+      final ok = await ref
+          .read(inventoryPurchaseProductCatalogProvider.notifier)
+          .bulkUpsertIngredients(
+            storeId: storeId,
+            rows: workbook.rows.map((row) => row.toJson()).toList(),
+          );
+      if (!mounted) return;
+      if (!ok) {
+        _showRecipeImportIssues([
+          ref.read(inventoryPurchaseProductCatalogProvider).error ??
+              context.l10n.inventoryPurchaseIngredientImportFailed,
+        ]);
+        return;
+      }
+      await _reloadStoreScope(storeId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              context.l10n.inventoryPurchaseIngredientImportSuccess(
+                workbook.rowCount,
+              ),
+            ),
+          ),
+        );
+      }
+    } on IngredientImportValidationException catch (error) {
+      if (mounted) _showRecipeImportIssues(error.issues);
+    } catch (_) {
+      if (mounted) {
+        _showRecipeImportIssues([
+          context.l10n.inventoryPurchaseIngredientImportFailed,
+        ]);
+      }
+    } finally {
+      if (mounted) setState(() => _isImportingIngredients = false);
+    }
+  }
+
   Future<void> _importRecipeWorkbook({
     required String storeId,
     required List<Map<String, dynamic>> menuItems,
@@ -3628,8 +3810,7 @@ class _InventoryPurchaseScreenState
           tone: PosActionTone.secondary,
           icon: Icons.download_outlined,
           loading: _isExportingRecipeTemplate,
-          onPressed:
-              recipeState.menuItems.isEmpty || productCatalog.products.isEmpty
+          onPressed: _isExportingRecipeTemplate
               ? null
               : () => _downloadRecipeTemplate(
                   menuItems: recipeState.menuItems,
@@ -3643,8 +3824,7 @@ class _InventoryPurchaseScreenState
           tone: PosActionTone.affirm,
           icon: Icons.upload_file_outlined,
           loading: _isImportingRecipes,
-          onPressed:
-              recipeState.menuItems.isEmpty || productCatalog.products.isEmpty
+          onPressed: _isImportingRecipes
               ? null
               : () => _importRecipeWorkbook(
                   storeId: storeId,
@@ -5149,6 +5329,12 @@ class _SupplierDetailPanel extends StatelessWidget {
         _KeyValueRow(
           label: l10n.inventoryPurchaseBankAccountNumber,
           value: _string(supplier!['bank_account_number'], fallback: '-'),
+          helper: _string(supplier!['bank_name'], fallback: '-'),
+        ),
+        const Divider(height: 1),
+        _KeyValueRow(
+          label: l10n.inventoryPurchaseBankAccountHolder,
+          value: _string(supplier!['bank_account_holder'], fallback: '-'),
           helper: _string(supplier!['business_registration_no'], fallback: '-'),
         ),
         const Divider(height: 1),

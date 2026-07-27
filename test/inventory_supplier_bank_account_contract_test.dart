@@ -24,7 +24,12 @@ void main() {
     expect(screen, contains('bankAccountNumber: _nullableText('));
     expect(provider, contains('String? bankAccountNumber'));
     expect(service, contains("'p_bank_account_number': bankAccountNumber"));
-    expect(service, contains('bank_account_number, payment_terms'));
+    expect(
+      service,
+      contains(
+        'bank_account_number, bank_name, bank_account_holder, payment_terms',
+      ),
+    );
     expect(migration, contains('ADD COLUMN IF NOT EXISTS bank_account_number'));
     expect(migration, contains('p_bank_account_number text DEFAULT NULL'));
     expect(verification, contains('SUPPLIER_BANK_ACCOUNT_VERIFY_RPC_MISSING'));
@@ -33,6 +38,23 @@ void main() {
       contains('20260723020000_inventory_supplier_bank_account.sql'),
     );
     expect(deploy, contains('verify_inventory_supplier_bank_account.sql'));
+  });
+
+  test('supplier bank name and account holder are persisted and localized', () {
+    final screen = _read(
+      'lib/features/inventory_purchase/inventory_purchase_screen.dart',
+    );
+    final service = _read('lib/core/services/inventory_service.dart');
+    final migration = _read(
+      'supabase/migrations/20260727013210_inventory_ingredient_excel_supplier_banking.sql',
+    );
+
+    expect(screen, contains('inventory_supplier_bank_name_field'));
+    expect(screen, contains('inventory_supplier_bank_account_holder_field'));
+    expect(service, contains("'p_bank_name': bankName"));
+    expect(service, contains("'p_bank_account_holder': bankAccountHolder"));
+    expect(migration, contains('bank_name text'));
+    expect(migration, contains('bank_account_holder text'));
   });
 
   test('supplier bank account label is localized', () {

@@ -514,7 +514,7 @@ class InventoryService {
     dynamic query = supabase
         .from('inventory_suppliers')
         .select(
-          'id, brand_id, supplier_name, supplier_type, contact_name, phone, email, address, business_registration_no, bank_account_number, payment_terms, contract_start_date, contract_end_date, status, memo, created_at, updated_at',
+          'id, brand_id, supplier_name, supplier_type, contact_name, phone, email, address, business_registration_no, bank_account_number, bank_name, bank_account_holder, payment_terms, contract_start_date, contract_end_date, status, memo, created_at, updated_at',
         );
 
     if (brandId != null && brandId.isNotEmpty) {
@@ -538,6 +538,8 @@ class InventoryService {
     String? address,
     String? businessRegistrationNo,
     String? bankAccountNumber,
+    String? bankName,
+    String? bankAccountHolder,
     String? paymentTerms,
     DateTime? contractStartDate,
     DateTime? contractEndDate,
@@ -556,6 +558,8 @@ class InventoryService {
         'p_address': address,
         'p_business_registration_no': businessRegistrationNo,
         'p_bank_account_number': bankAccountNumber,
+        'p_bank_name': bankName,
+        'p_bank_account_holder': bankAccountHolder,
         'p_payment_terms': paymentTerms,
         'p_contract_start_date': contractStartDate
             ?.toIso8601String()
@@ -646,6 +650,17 @@ class InventoryService {
         'p_product_id': productId,
         'p_is_active': isActive,
       },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<Map<String, dynamic>> bulkUpsertInventoryIngredients({
+    required String storeId,
+    required List<Map<String, dynamic>> rows,
+  }) async {
+    final result = await supabase.rpc(
+      'bulk_upsert_inventory_ingredients',
+      params: {'p_store_id': storeId, 'p_rows': rows},
     );
     return Map<String, dynamic>.from(result as Map);
   }
