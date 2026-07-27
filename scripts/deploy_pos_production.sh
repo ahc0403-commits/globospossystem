@@ -720,6 +720,7 @@ apply_migration() {
     20260724010000_inventory_recipe_excel_import.sql|\
     20260724025456_attendance_logs_with_names.sql|\
     20260724040704_inventory_daily_stock_history.sql|\
+    20260727005957_category_reordering_and_combo_menu.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -1154,6 +1155,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_inventory_daily_stock_history.sql" \
       "inventory daily stock history migration verification"
+  elif [[ "$migration_name" == "20260727005957_category_reordering_and_combo_menu.sql" ]]; then
+    log "Category reordering and combo-menu migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_category_reordering_and_combo_menu.sql" \
+      "category reordering and combo-menu migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \
