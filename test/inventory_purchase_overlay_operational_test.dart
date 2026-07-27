@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/ui/app_theme.dart';
 import 'package:globos_pos_system/features/auth/auth_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_state.dart';
+import 'package:globos_pos_system/features/inventory/ingredient_excel_import.dart';
 import 'package:globos_pos_system/features/inventory/inventory_provider.dart';
 import 'package:globos_pos_system/features/inventory/recipe_excel_import.dart';
 import 'package:globos_pos_system/features/inventory_purchase/inventory_purchase_screen.dart';
@@ -22,6 +23,8 @@ const _supplier = <String, dynamic>{
   'id': 'supplier-fresh',
   'supplier_name': 'Fresh Food Saigon',
   'bank_account_number': '0123456789',
+  'bank_name': 'Vietcombank',
+  'bank_account_holder': 'FRESH FOOD SAIGON',
   'status': 'active',
 };
 const _product = <String, dynamic>{
@@ -194,9 +197,17 @@ void main() {
     );
   });
 
-  testWidgets('all eleven Inventory Purchase dialog entrypoints execute', (
+  testWidgets('all twelve Inventory Purchase dialog entrypoints execute', (
     tester,
   ) async {
+    final ingredientFile = XFile.fromData(
+      Uint8List.fromList(
+        buildIngredientImportTemplate(products: const [_product]),
+      ),
+      name: 'ingredients.xlsx',
+      mimeType:
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
     final validExcel = Excel.createExcel();
     validExcel.rename('Sheet1', recipeImportSheetName);
     final recipeSheet = validExcel[recipeImportSheetName];
@@ -270,6 +281,7 @@ void main() {
               initialSectionIndex: 2,
               autoLoad: false,
               pickRecipeImportFile: () async => recipeFiles.removeAt(0),
+              pickIngredientImportFile: () async => ingredientFile,
             ),
           ),
         ),
@@ -322,6 +334,11 @@ void main() {
       tester,
       const Key('inventory_product_add_action'),
       const Key('inventory_product_dialog'),
+    );
+    await _openAndDismiss(
+      tester,
+      const Key('inventory_ingredient_excel_import_action'),
+      const Key('inventory_ingredient_excel_preview_dialog'),
     );
 
     await _selectSection(tester, 6);

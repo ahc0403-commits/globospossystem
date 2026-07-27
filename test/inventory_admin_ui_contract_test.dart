@@ -45,7 +45,7 @@ void main() {
     );
     expect(
       koArb,
-      contains('"inventoryPurchaseProductManagementTitle": "제품 관리"'),
+      contains('"inventoryPurchaseProductManagementTitle": "원재료 관리"'),
     );
     expect(
       koArb,
