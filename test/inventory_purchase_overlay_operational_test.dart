@@ -330,11 +330,21 @@ void main() {
     );
 
     await _selectSection(tester, 5);
-    await _openAndDismiss(
-      tester,
+    final productAddAction = find.byKey(
       const Key('inventory_product_add_action'),
-      const Key('inventory_product_dialog'),
     );
+    await tester.ensureVisible(productAddAction);
+    await tester.tap(productAddAction);
+    await tester.pumpAndSettle();
+    final productDialog = find.byKey(const Key('inventory_product_dialog'));
+    expect(productDialog, findsOneWidget);
+    expect(
+      find.byKey(const Key('inventory_product_primary_supplier_field')),
+      findsOneWidget,
+    );
+    expect(find.text('Fresh Food Saigon'), findsWidgets);
+    Navigator.of(tester.element(productDialog)).pop();
+    await tester.pumpAndSettle();
     await _openAndDismiss(
       tester,
       const Key('inventory_ingredient_excel_import_action'),

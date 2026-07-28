@@ -382,6 +382,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         'clockOut': lastClockOut,
         'hours': totalHours,
         'logCount': userLogs.length,
+        'logs': userLogs,
         'needsReview': needsReview,
         'statusLabel': needsReview
             ? context.l10n.reportsNeedsReviewShort
@@ -1055,6 +1056,11 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     final statusLabel = selectedAttendanceRow?['statusLabel'] as String?;
     final statusColor =
         selectedAttendanceRow?['statusColor'] as Color? ?? PosColors.info;
+    final selectedLogs = selectedAttendanceRow?['logs'] is List
+        ? List<Map<String, dynamic>>.from(
+            selectedAttendanceRow!['logs'] as List,
+          )
+        : const <Map<String, dynamic>>[];
     final payrollActionLabel = payrollRequiresUnlock
         ? context.l10n.attendanceUnlockPayrollAction
         : filteredPayrolls.isEmpty
@@ -1170,6 +1176,8 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                           ],
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      _buildAttendancePhotoEvidence(selectedLogs),
                       const SizedBox(height: 12),
                       Container(
                         decoration: BoxDecoration(
@@ -1290,6 +1298,176 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
       ),
     );
   }
+
+  Widget _buildAttendancePhotoEvidence(
+    List<Map<String, dynamic>> attendanceLogs,
+  ) {
+    final photoLogs =
+        attendanceLogs
+            .where((log) => (log['photo_url']?.toString() ?? '').isNotEmpty)
+            .toList()
+          ..sort((a, b) {
+            final aTime = DateTime.tryParse(a['logged_at']?.toString() ?? '');
+            final bTime = DateTime.tryParse(b['logged_at']?.toString() ?? '');
+            return (bTime ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(
+              aTime ?? DateTime.fromMillisecondsSinceEpoch(0),
+            );
+          });
+
+    return Container(
+      key: const Key('attendance_photo_evidence_panel'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            context.l10n.attendancePhotosTitle,
+            style: AppFonts.system(
+              color: AppColors.textPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (photoLogs.isEmpty)
+            Text(
+              context.l10n.attendanceNoPhotos,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
+            )
+          else
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (final log in photoLogs) _attendancePhotoTile(log),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _attendancePhotoTile(Map<String, dynamic> log) {
+    final photoUrl = log['photo_url']?.toString() ?? '';
+    final thumbnailUrl =
+        log['photo_thumbnail_url']?.toString().trim().isNotEmpty == true
+        ? log['photo_thumbnail_url'].toString()
+        : photoUrl;
+    final loggedAt = DateTime.tryParse(log['logged_at']?.toString() ?? '');
+    final localTime = loggedAt == null ? null : TimeUtils.toVietnam(loggedAt);
+    final type = log['type']?.toString() == 'clock_out'
+        ? context.l10n.clockOut
+        : context.l10n.clockIn;
+    final logId = log['id']?.toString() ?? photoUrl.hashCode.toString();
+
+    return Semantics(
+      button: true,
+      label: context.l10n.attendanceViewPhoto,
+      child: InkWell(
+        key: Key('attendance_photo_$logId'),
+        onTap: () => _showAttendancePhoto(
+          photoUrl: photoUrl,
+          title: localTime == null
+              ? type
+              : '$type · ${DateFormat('yyyy-MM-dd HH:mm').format(localTime)}',
+        ),
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: 132,
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: PosColors.mutedSurface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: PosColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  width: 116,
+                  height: 86,
+                  child: Image.network(
+                    thumbnailUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      color: PosColors.panelMuted,
+                      alignment: Alignment.center,
+                      child: const Icon(
+                        Icons.broken_image_outlined,
+                        color: PosColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                type,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              if (localTime != null)
+                Text(
+                  DateFormat('MM-dd HH:mm').format(localTime),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: PosColors.textSecondary,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showAttendancePhoto({
+    required String photoUrl,
+    required String title,
+  }) => showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      key: const Key('attendance_photo_dialog'),
+      title: Text(title),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720, maxHeight: 720),
+        child: InteractiveViewer(
+          minScale: 0.8,
+          maxScale: 4,
+          child: Image.network(
+            photoUrl,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) => SizedBox(
+              width: 420,
+              height: 240,
+              child: PosEmptyState(
+                title: context.l10n.attendancePhotoLoadFailed,
+                icon: Icons.broken_image_outlined,
+              ),
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: Text(context.l10n.close),
+        ),
+      ],
+    ),
+  );
 
   Widget _compactAttendanceChip(String label) {
     return Container(

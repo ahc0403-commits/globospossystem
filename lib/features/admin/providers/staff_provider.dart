@@ -95,6 +95,67 @@ class StaffMember {
   }
 }
 
+StaffMember? findDuplicateStaffMember({
+  required Iterable<StaffMember> staff,
+  required String fullName,
+  String? phone,
+  String? bankName,
+  String? bankAccountNumber,
+  String? bankAccountHolder,
+  String? excludeEmployeeId,
+}) {
+  final identity = _staffIdentity(
+    fullName: fullName,
+    phone: phone,
+    bankName: bankName,
+    bankAccountNumber: bankAccountNumber,
+    bankAccountHolder: bankAccountHolder,
+  );
+  for (final member in staff) {
+    if (!member.isActive || member.id == excludeEmployeeId) continue;
+    if (_staffIdentity(
+          fullName: member.fullName,
+          phone: member.phone,
+          bankName: member.bankName,
+          bankAccountNumber: member.bankAccountNumber,
+          bankAccountHolder: member.bankAccountHolder,
+        ) ==
+        identity) {
+      return member;
+    }
+  }
+  return null;
+}
+
+String _staffIdentity({
+  required String fullName,
+  String? phone,
+  String? bankName,
+  String? bankAccountNumber,
+  String? bankAccountHolder,
+}) {
+  String words(String? value) =>
+      (value ?? '').trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+  String compact(String? value) =>
+      (value ?? '').toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  String phoneIdentity(String? value) {
+    final digits = (value ?? '').replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.startsWith('840')) return digits.substring(2);
+    if (digits.startsWith('84') && digits.length == 11) {
+      return '0${digits.substring(2)}';
+    }
+    return digits;
+  }
+
+  return [
+    words(fullName),
+    phoneIdentity(phone),
+    compact(bankName),
+    compact(bankAccountNumber),
+    words(bankAccountHolder),
+  ].join('|');
+}
+
 class StaffState {
   const StaffState({
     this.staff = const [],
@@ -256,7 +317,13 @@ class StaffNotifier extends StateNotifier<StaffState> {
       );
       await loadStaff(storeId);
     } catch (error) {
-      state = state.copyWith(isCreating: false, error: _cleanException(error));
+      final message = _cleanException(error);
+      state = state.copyWith(
+        isCreating: false,
+        error: message.contains('EMPLOYEE_DUPLICATE')
+            ? 'EMPLOYEE_DUPLICATE'
+            : message,
+      );
     }
   }
 

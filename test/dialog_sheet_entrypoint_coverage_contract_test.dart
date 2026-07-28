@@ -188,12 +188,13 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/admin/tabs/staff_tab.dart',
-    directCalls: 4,
+    directCalls: 5,
     test: 'test/admin_core_overlay_operational_test.dart',
     markers: [
       'admin_staff_attendance_sheet',
       'staff_deactivate_employee_dialog',
       'admin_staff_add_sheet',
+      'staff_duplicate_employee_dialog',
       'staff_created_employee_number_dialog',
     ],
   ),
@@ -232,9 +233,9 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/admin/tabs/attendance_tab.dart',
-    directCalls: 1,
+    directCalls: 2,
     test: 'test/admin_core_overlay_operational_test.dart',
-    markers: ['attendance_payroll_unlock_dialog'],
+    markers: ['attendance_photo_dialog', 'attendance_payroll_unlock_dialog'],
   ),
   _OperationalCoverage(
     source: 'lib/features/admin/tabs/einvoice_tab.dart',
@@ -254,7 +255,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 83 dialog and sheet entrypoints map to operational tests', () {
+  test('all 85 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -266,10 +267,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 82);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 84);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      83,
+      85,
     );
 
     final settings = File(

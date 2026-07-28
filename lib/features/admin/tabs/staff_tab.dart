@@ -665,7 +665,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
     var role = employee?.role ?? 'part_timer';
     String? validation;
 
-    await showModalBottomSheet<void>(
+    final duplicateToEdit = await showModalBottomSheet<StaffMember>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.surface1,
@@ -922,6 +922,54 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                       );
                       return;
                     }
+                    if (employee == null) {
+                      final duplicate = findDuplicateStaffMember(
+                        staff: ref.read(staffProvider).staff,
+                        fullName: name.text,
+                        phone: _nullable(phone.text),
+                        bankName: _nullable(bankName.text),
+                        bankAccountNumber: _nullable(bankNumber.text),
+                        bankAccountHolder: _nullable(bankHolder.text),
+                      );
+                      if (duplicate != null) {
+                        final editExisting = await showDialog<bool>(
+                          context: sheetContext,
+                          builder: (dialogContext) => AlertDialog(
+                            key: const Key('staff_duplicate_employee_dialog'),
+                            title: Text(
+                              context.l10n.staffDuplicateEmployeeTitle,
+                            ),
+                            content: Text(
+                              context.l10n.staffDuplicateEmployeeMessage(
+                                duplicate.fullName,
+                                duplicate.employeeNumber,
+                              ),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(false),
+                                child: Text(context.l10n.cancel),
+                              ),
+                              FilledButton(
+                                key: const Key(
+                                  'staff_edit_existing_employee_action',
+                                ),
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(true),
+                                child: Text(
+                                  context.l10n.staffEditExistingEmployee,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (editExisting == true && sheetContext.mounted) {
+                          Navigator.of(sheetContext).pop(duplicate);
+                        }
+                        return;
+                      }
+                    }
                     final notifier = ref.read(staffProvider.notifier);
                     if (employee == null) {
                       await notifier.createStaff(
@@ -1001,6 +1049,10 @@ class _StaffTabState extends ConsumerState<StaffTab> {
     holidayMultiplier.dispose();
     lateThreshold.dispose();
     lateReview.dispose();
+
+    if (duplicateToEdit != null && mounted) {
+      await _showEmployeeForm(storeId: storeId, employee: duplicateToEdit);
+    }
   }
 
   Future<void> _showCreatedEmployee(StaffMember employee) => showDialog<void>(
