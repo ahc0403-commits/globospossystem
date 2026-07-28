@@ -638,6 +638,44 @@ class InventoryService {
     return Map<String, dynamic>.from(result as Map);
   }
 
+  Future<Map<String, dynamic>> upsertInventoryProductWithSupplier({
+    required String storeId,
+    required String supplierId,
+    String? productId,
+    String? productCode,
+    required String name,
+    String? category,
+    required String stockUnit,
+    required String baseUnit,
+    required double baseUnitFactor,
+    String? imageUrl,
+    String? storageType,
+    int? shelfLifeDays,
+    bool isOrderable = true,
+    String? supplierSku,
+  }) async {
+    final result = await supabase.rpc(
+      'upsert_inventory_product_with_supplier',
+      params: {
+        'p_store_id': storeId,
+        'p_supplier_id': supplierId,
+        'p_product_id': productId,
+        'p_product_code': productCode,
+        'p_name': name,
+        'p_category': category,
+        'p_stock_unit': stockUnit,
+        'p_base_unit': baseUnit,
+        'p_base_unit_factor': baseUnitFactor,
+        'p_image_url': imageUrl,
+        'p_storage_type': storageType,
+        'p_shelf_life_days': shelfLifeDays,
+        'p_is_orderable': isOrderable,
+        'p_supplier_sku': supplierSku,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
   Future<Map<String, dynamic>> setInventoryProductActive({
     required String storeId,
     required String productId,

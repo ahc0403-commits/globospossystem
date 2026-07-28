@@ -968,6 +968,55 @@ class InventoryPurchaseProductCatalogNotifier
     }
   }
 
+  Future<bool> saveProductWithSupplier({
+    required String storeId,
+    required String supplierId,
+    String? productId,
+    String? productCode,
+    required String name,
+    String? category,
+    required String stockUnit,
+    required String baseUnit,
+    required double baseUnitFactor,
+    String? imageUrl,
+    String? storageType,
+    int? shelfLifeDays,
+    bool isOrderable = true,
+    String? supplierSku,
+  }) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await inventoryService.upsertInventoryProductWithSupplier(
+        storeId: storeId,
+        supplierId: supplierId,
+        productId: productId,
+        productCode: productCode,
+        name: name,
+        category: category,
+        stockUnit: stockUnit,
+        baseUnit: baseUnit,
+        baseUnitFactor: baseUnitFactor,
+        imageUrl: imageUrl,
+        storageType: storageType,
+        shelfLifeDays: shelfLifeDays,
+        isOrderable: isOrderable,
+        supplierSku: supplierSku,
+      );
+      await load(storeId);
+      state = state.copyWith(isSaving: false);
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isSaving: false,
+        error: _mapProductCatalogError(
+          e,
+          'Failed to save the ingredient and supplier link.',
+        ),
+      );
+      return false;
+    }
+  }
+
   Future<bool> setProductActive({
     required String storeId,
     required String productId,

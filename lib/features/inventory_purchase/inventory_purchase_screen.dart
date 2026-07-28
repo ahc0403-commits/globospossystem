@@ -1895,6 +1895,7 @@ class _InventoryPurchaseScreenState
               ),
               child: _ProductManagementList(
                 products: products,
+                supplierItems: supplierCatalog.supplierItems,
                 selectedProductId: _selectedProductId,
                 saving: productCatalog.isSaving,
                 onSelect: (product) => setState(
@@ -2153,6 +2154,36 @@ class _InventoryPurchaseScreenState
     required String storeId,
     Map<String, dynamic>? product,
   }) async {
+    final supplierCatalog = ref.read(inventoryPurchaseSupplierCatalogProvider);
+    final selectableSuppliers = supplierCatalog.suppliers
+        .where(
+          (supplier) =>
+              _string(supplier['id']).isNotEmpty &&
+              _string(supplier['status'], fallback: 'active') == 'active',
+        )
+        .toList();
+    final linkedSupplierItems = supplierCatalog.supplierItems
+        .where(
+          (item) =>
+              item['product_id']?.toString() == product?['id']?.toString() &&
+              item['is_active'] != false,
+        )
+        .toList();
+    final preferredSupplierItem = _firstWhereOrNull(
+      linkedSupplierItems,
+      (item) => item['is_preferred'] == true,
+    );
+    final initialSupplierItem =
+        preferredSupplierItem ??
+        (linkedSupplierItems.isEmpty ? null : linkedSupplierItems.first);
+    String? supplierId =
+        initialSupplierItem?['supplier_id']?.toString() ??
+        (selectableSuppliers.isEmpty
+            ? null
+            : selectableSuppliers.first['id']?.toString());
+    final supplierSkuController = TextEditingController(
+      text: _string(initialSupplierItem?['supplier_sku']),
+    );
     final codeController = TextEditingController(
       text: _string(product?['product_code']),
     );
@@ -2223,6 +2254,49 @@ class _InventoryPurchaseScreenState
                           decoration: InputDecoration(
                             labelText:
                                 l10n.inventoryPurchaseProductNameRequired,
+                          ),
+                        ),
+                        DropdownButtonFormField<String>(
+                          key: const Key(
+                            'inventory_product_primary_supplier_field',
+                          ),
+                          initialValue: supplierId,
+                          isExpanded: true,
+                          decoration: InputDecoration(
+                            labelText: l10n.inventoryPurchaseSupplierRequired,
+                            helperText: selectableSuppliers.isEmpty
+                                ? 'Register an active supplier first.'
+                                : 'The preferred source for this ingredient.',
+                          ),
+                          items: [
+                            for (final supplier in selectableSuppliers)
+                              DropdownMenuItem(
+                                value: supplier['id'].toString(),
+                                child: Text(
+                                  _string(
+                                    supplier['supplier_name'],
+                                    fallback: '-',
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                          ],
+                          onChanged: selectableSuppliers.isEmpty
+                              ? null
+                              : (value) {
+                                  setDialogState(() => supplierId = value);
+                                },
+                        ),
+                        TextField(
+                          key: const Key(
+                            'inventory_product_supplier_sku_field',
+                          ),
+                          controller: supplierSkuController,
+                          decoration: InputDecoration(
+                            labelText: l10n.inventoryPurchaseSupplierSku,
+                            helperText:
+                                'Optional code used by the selected supplier.',
                           ),
                         ),
                         TextField(
@@ -2365,6 +2439,13 @@ class _InventoryPurchaseScreenState
                     });
                     return;
                   }
+                  if (supplierId == null || supplierId!.isEmpty) {
+                    setDialogState(() {
+                      validationMessage =
+                          'An active supplier is required. Register a supplier first.';
+                    });
+                    return;
+                  }
                   if (name.isEmpty) {
                     setDialogState(() {
                       validationMessage = 'Product name is required.';
@@ -2395,8 +2476,9 @@ class _InventoryPurchaseScreenState
                   setDialogState(() => validationMessage = null);
                   final ok = await ref
                       .read(inventoryPurchaseProductCatalogProvider.notifier)
-                      .saveProduct(
+                      .saveProductWithSupplier(
                         storeId: storeId,
+                        supplierId: supplierId!,
                         productId: product?['id']?.toString(),
                         productCode: productCode,
                         name: name,
@@ -2408,6 +2490,7 @@ class _InventoryPurchaseScreenState
                         storageType: _nullableText(storageController.text),
                         shelfLifeDays: shelfLife,
                         isOrderable: isOrderable,
+                        supplierSku: _nullableText(supplierSkuController.text),
                       );
                   if (context.mounted) {
                     Navigator.of(context).pop(ok);
@@ -5354,6 +5437,7 @@ class _SupplierDetailPanel extends StatelessWidget {
 class _ProductManagementList extends StatelessWidget {
   const _ProductManagementList({
     required this.products,
+    required this.supplierItems,
     required this.selectedProductId,
     required this.saving,
     required this.onSelect,
@@ -5362,6 +5446,7 @@ class _ProductManagementList extends StatelessWidget {
   });
 
   final List<Map<String, dynamic>> products;
+  final List<Map<String, dynamic>> supplierItems;
   final String? selectedProductId;
   final bool saving;
   final ValueChanged<Map<String, dynamic>> onSelect;
@@ -5382,6 +5467,14 @@ class _ProductManagementList extends StatelessWidget {
         for (final product in products) ...[
           _ProductManagementRow(
             product: product,
+            supplierItems: supplierItems
+                .where(
+                  (item) =>
+                      item['product_id']?.toString() ==
+                          product['id']?.toString() &&
+                      item['is_active'] != false,
+                )
+                .toList(),
             selected: product['id']?.toString() == selectedProductId,
             saving: saving,
             onSelect: onSelect,
@@ -5398,6 +5491,7 @@ class _ProductManagementList extends StatelessWidget {
 class _ProductManagementRow extends StatelessWidget {
   const _ProductManagementRow({
     required this.product,
+    required this.supplierItems,
     required this.selected,
     required this.saving,
     required this.onSelect,
@@ -5406,6 +5500,7 @@ class _ProductManagementRow extends StatelessWidget {
   });
 
   final Map<String, dynamic> product;
+  final List<Map<String, dynamic>> supplierItems;
   final bool selected;
   final bool saving;
   final ValueChanged<Map<String, dynamic>> onSelect;
@@ -5417,6 +5512,12 @@ class _ProductManagementRow extends StatelessWidget {
     final l10n = context.l10n;
     final active = product['is_active'] == true;
     final orderable = product['is_orderable'] == true;
+    final supplierNames = supplierItems
+        .map((item) => _nestedMap(item['supplier']))
+        .map((supplier) => _string(supplier['supplier_name']))
+        .where((name) => name.isNotEmpty)
+        .toSet()
+        .join(', ');
     return Material(
       color: selected ? ToastColorTokens.accentMuted : Colors.transparent,
       borderRadius: ToastRadiusTokens.sm,
@@ -5461,6 +5562,19 @@ class _ProductManagementRow extends StatelessWidget {
                         size: 11,
                         weight: FontWeight.w600,
                         color: ToastColorTokens.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${l10n.inventoryPurchaseSupplier}: ${supplierNames.isEmpty ? '-' : supplierNames}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _textStyle(
+                        size: 11,
+                        weight: FontWeight.w700,
+                        color: supplierNames.isEmpty
+                            ? ToastColorTokens.danger
+                            : ToastColorTokens.textSecondary,
                       ),
                     ),
                   ],
