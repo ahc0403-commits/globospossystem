@@ -533,6 +533,9 @@ class _AttendanceService extends AttendanceService {
       'restaurant_id': _storeId,
       'user_id': 'attendance-staff-1',
       'type': 'clock_in',
+      'photo_url': 'https://fixture.invalid/attendance-clock-in.jpg',
+      'photo_thumbnail_url':
+          'https://fixture.invalid/attendance-clock-in-thumb.jpg',
       'logged_at': DateTime.now()
           .subtract(const Duration(hours: 8))
           .toUtc()
@@ -887,7 +890,7 @@ void main() {
     },
   );
 
-  testWidgets('all four staff sheet and dialog entrypoints execute', (
+  testWidgets('all five staff sheet and dialog entrypoints execute', (
     tester,
   ) async {
     addTearDown(tester.view.resetPhysicalSize);
@@ -954,13 +957,45 @@ void main() {
       of: addSheet,
       matching: find.byType(TextField),
     );
-    await tester.enterText(fields.at(0), 'Trần Gia Huy');
+    await tester.enterText(fields.at(0), 'Nguyễn Minh Anh');
+    await tester.enterText(fields.at(1), '+84 090-123-4567');
     await tester.enterText(
       find.byKey(const Key('staff_hourly_rate_field')),
       '30000',
     );
     await tester.ensureVisible(addButton);
     await tester.tap(addButton);
+    await tester.pumpAndSettle();
+    const duplicateDialog = Key('staff_duplicate_employee_dialog');
+    expect(find.byKey(duplicateDialog), findsOneWidget);
+    _expectDialogButtonsAreTouchSized(tester, duplicateDialog);
+    await tester.tap(
+      find.byKey(const Key('staff_edit_existing_employee_action')),
+    );
+    await tester.pumpAndSettle();
+    final editExistingSheet = find.byKey(const Key('admin_staff_add_sheet'));
+    expect(editExistingSheet, findsOneWidget);
+    Navigator.of(tester.element(editExistingSheet)).pop();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('admin_staff_add_action')));
+    await tester.pumpAndSettle();
+    final createSheet = find.byKey(const Key('admin_staff_add_sheet'));
+    final createFields = find.descendant(
+      of: createSheet,
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(createFields.at(0), 'Trần Gia Huy');
+    await tester.enterText(
+      find.byKey(const Key('staff_hourly_rate_field')),
+      '30000',
+    );
+    final createButton = find.descendant(
+      of: createSheet,
+      matching: find.byType(FilledButton),
+    );
+    await tester.ensureVisible(createButton);
+    await tester.tap(createButton);
     await tester.pumpAndSettle();
     expect(staffNotifier.createCalls, 1);
     const employeeNumberDialog = Key('staff_created_employee_number_dialog');
@@ -1172,6 +1207,19 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Nguyễn Minh Anh'), findsWidgets);
+    expect(
+      find.byKey(const Key('attendance_photo_evidence_panel')),
+      findsOneWidget,
+    );
+    final photo = find.byKey(const Key('attendance_photo_attendance-log-1'));
+    await tester.ensureVisible(photo);
+    await tester.tap(photo);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('attendance_photo_dialog')), findsOneWidget);
+    Navigator.of(
+      tester.element(find.byKey(const Key('attendance_photo_dialog'))),
+    ).pop();
+    await tester.pumpAndSettle();
 
     await tester.tap(
       find.byKey(const Key('attendance_payroll_secondary_detail')),

@@ -154,7 +154,7 @@ const _routeStateCoverage = <_RouteStateCoverage>[
     stateMarkers: [
       'all five table dialog entrypoints',
       'all seven menu dialog entrypoints',
-      'all four staff sheet and dialog entrypoints',
+      'all five staff sheet and dialog entrypoints',
       'all four Settings dialog entrypoints',
     ],
   ),
