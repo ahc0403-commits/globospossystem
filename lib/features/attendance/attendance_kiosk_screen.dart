@@ -163,6 +163,11 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
   String _localizedAttendanceError(String? code) => switch (code) {
     'EMPLOYEE_NOT_FOUND' => context.l10n.attendanceEmployeeNotFound,
     'EMPLOYEE_INACTIVE' => context.l10n.attendanceEmployeeInactive,
+    'ATTENDANCE_ALREADY_CLOCKED_IN_TODAY' =>
+      context.l10n.attendanceAlreadyClockedInToday,
+    'ATTENDANCE_ALREADY_CLOCKED_OUT_TODAY' =>
+      context.l10n.attendanceAlreadyClockedOutToday,
+    'ATTENDANCE_CLOCK_IN_REQUIRED' => context.l10n.attendanceClockInRequired,
     'ATTENDANCE_FORBIDDEN' => context.l10n.attendanceEmployeeForbidden,
     'ATTENDANCE_PHOTO_FAILED' => context.l10n.attendancePhotoUploadFailed,
     _ => context.l10n.attendanceRecordFailed,

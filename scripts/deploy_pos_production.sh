@@ -724,6 +724,8 @@ apply_migration() {
     20260727013210_inventory_ingredient_excel_supplier_banking.sql|\
     20260728005705_inventory_ingredient_supplier_link.sql|\
     20260728042659_attendance_photo_review_duplicate_employee_guard.sql|\
+    20260728050000_part_timer_employee_id.sql|\
+    20260728060000_employee_attendance_daily_guard.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -958,6 +960,16 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_attendance_photo_review_duplicate_employee_guard.sql" \
       "attendance photo review and duplicate employee guard migration preflight"
+  elif [[ "$migration_name" == "20260728050000_part_timer_employee_id.sql" ]]; then
+    log "Part-timer employee ID migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_part_timer_employee_id.sql" \
+      "part-timer employee ID migration preflight"
+  elif [[ "$migration_name" == "20260728060000_employee_attendance_daily_guard.sql" ]]; then
+    log "Employee attendance daily guard migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_employee_attendance_daily_guard.sql" \
+      "employee attendance daily guard migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -1193,6 +1205,16 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_attendance_photo_review_duplicate_employee_guard.sql" \
       "attendance photo review and duplicate employee guard migration verification"
+  elif [[ "$migration_name" == "20260728050000_part_timer_employee_id.sql" ]]; then
+    log "Part-timer employee ID migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_part_timer_employee_id.sql" \
+      "part-timer employee ID migration verification"
+  elif [[ "$migration_name" == "20260728060000_employee_attendance_daily_guard.sql" ]]; then
+    log "Employee attendance daily guard migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_employee_attendance_daily_guard.sql" \
+      "employee attendance daily guard migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \

@@ -91,6 +91,15 @@ class AttendanceKioskNotifier extends StateNotifier<AttendanceKioskState> {
 
 String _attendanceErrorCode(Object error) {
   final message = error is PostgrestException ? error.message : '$error';
+  if (message.contains('ATTENDANCE_ALREADY_CLOCKED_IN_TODAY')) {
+    return 'ATTENDANCE_ALREADY_CLOCKED_IN_TODAY';
+  }
+  if (message.contains('ATTENDANCE_ALREADY_CLOCKED_OUT_TODAY')) {
+    return 'ATTENDANCE_ALREADY_CLOCKED_OUT_TODAY';
+  }
+  if (message.contains('ATTENDANCE_CLOCK_IN_REQUIRED')) {
+    return 'ATTENDANCE_CLOCK_IN_REQUIRED';
+  }
   if (message.contains('EMPLOYEE_NUMBER') ||
       message.contains('EMPLOYEE_NOT_FOUND')) {
     return 'EMPLOYEE_NOT_FOUND';

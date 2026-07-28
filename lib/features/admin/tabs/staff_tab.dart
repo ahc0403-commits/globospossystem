@@ -923,7 +923,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                       return;
                     }
                     if (employee == null) {
-                      final duplicate = findDuplicateStaffMember(
+                      final identityDuplicate = findDuplicateStaffMember(
                         staff: ref.read(staffProvider).staff,
                         fullName: name.text,
                         phone: _nullable(phone.text),
@@ -931,6 +931,13 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                         bankAccountNumber: _nullable(bankNumber.text),
                         bankAccountHolder: _nullable(bankHolder.text),
                       );
+                      final idConflict = role == 'part_timer'
+                          ? findPartTimerEmployeeIdConflict(
+                              staff: ref.read(staffProvider).staff,
+                              fullName: name.text,
+                            )
+                          : null;
+                      final duplicate = identityDuplicate ?? idConflict;
                       if (duplicate != null) {
                         final editExisting = await showDialog<bool>(
                           context: sheetContext,
@@ -940,10 +947,15 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                               context.l10n.staffDuplicateEmployeeTitle,
                             ),
                             content: Text(
-                              context.l10n.staffDuplicateEmployeeMessage(
-                                duplicate.fullName,
-                                duplicate.employeeNumber,
-                              ),
+                              identityDuplicate != null
+                                  ? context.l10n.staffDuplicateEmployeeMessage(
+                                      duplicate.fullName,
+                                      duplicate.employeeNumber,
+                                    )
+                                  : context.l10n
+                                        .staffDuplicateEmployeeIdMessage(
+                                          duplicate.employeeNumber,
+                                        ),
                             ),
                             actions: [
                               TextButton(
@@ -1011,7 +1023,11 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                     final next = ref.read(staffProvider);
                     if (next.error != null) {
                       setModalState(
-                        () => validation = context.l10n.staffEmployeeSaveFailed,
+                        () => validation = next.error == 'EMPLOYEE_ID_DUPLICATE'
+                            ? context.l10n.staffDuplicateEmployeeIdRace
+                            : next.error == 'EMPLOYEE_DUPLICATE'
+                            ? context.l10n.staffDuplicateEmployeeRace
+                            : context.l10n.staffEmployeeSaveFailed,
                       );
                       return;
                     }

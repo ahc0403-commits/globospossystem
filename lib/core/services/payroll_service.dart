@@ -53,18 +53,33 @@ class StaffPayroll {
 }
 
 class PayrollService {
+  PayrollService({AttendanceService? attendanceSource})
+    : _attendanceService = attendanceSource ?? attendanceService;
+
+  final AttendanceService _attendanceService;
+
   Future<List<StaffPayroll>> calculatePayroll({
     required String storeId,
     required DateTime periodStart,
     required DateTime periodEnd,
   }) async {
-    final logs = await attendanceService.fetchLogs(
-      storeId: storeId,
-      from: periodStart,
-      to: periodEnd,
+    final normalizedPeriodStart = DateTime(
+      periodStart.year,
+      periodStart.month,
+      periodStart.day,
     );
-    final holidays = await attendanceService.fetchVietnamPublicHolidays(
-      from: periodStart,
+    final normalizedPeriodEndExclusive = DateTime(
+      periodEnd.year,
+      periodEnd.month,
+      periodEnd.day + 1,
+    );
+    final logs = await _attendanceService.fetchLogs(
+      storeId: storeId,
+      from: normalizedPeriodStart,
+      to: normalizedPeriodEndExclusive,
+    );
+    final holidays = await _attendanceService.fetchVietnamPublicHolidays(
+      from: normalizedPeriodStart,
       to: periodEnd,
     );
 
@@ -74,11 +89,13 @@ class PayrollService {
     for (final row in logs) {
       final userId = row['user_id']?.toString() ?? '';
       if (userId.isEmpty) continue;
-      groupedByUser.putIfAbsent(userId, () => []).add(row);
       final user = row['users'];
-      if (user is Map<String, dynamic>) {
-        userNames[userId] = user['full_name']?.toString() ?? 'Unknown';
+      if (user is! Map ||
+          user['role']?.toString().trim().toLowerCase() != 'part_timer') {
+        continue;
       }
+      groupedByUser.putIfAbsent(userId, () => []).add(row);
+      userNames[userId] = user['full_name']?.toString() ?? 'Unknown';
     }
 
     final result = <StaffPayroll>[];
@@ -86,44 +103,12 @@ class PayrollService {
     for (final entry in groupedByUser.entries) {
       final userId = entry.key;
       final userLogs = entry.value;
-      userLogs.sort((a, b) {
-        final atRaw = DateTime.tryParse(a['logged_at']?.toString() ?? '');
-        final btRaw = DateTime.tryParse(b['logged_at']?.toString() ?? '');
-        final at = atRaw == null
-            ? DateTime.fromMillisecondsSinceEpoch(0)
-            : TimeUtils.toVietnam(atRaw);
-        final bt = btRaw == null
-            ? DateTime.fromMillisecondsSinceEpoch(0)
-            : TimeUtils.toVietnam(btRaw);
-        return at.compareTo(bt);
-      });
-
-      final hourlyRule = await attendanceService.fetchHourlyPayRule(
+      final hourlyRule = await _attendanceService.fetchHourlyPayRule(
         storeId: storeId,
         employeeId: userId,
       );
-      final wageConfig = hourlyRule == null
-          ? await attendanceService.fetchWageConfig(
-              storeId: storeId,
-              userId: userId,
-            )
-          : null;
-
-      final wageType = hourlyRule == null
-          ? (wageConfig?['wage_type']?.toString() ?? 'hourly')
-          : 'hourly';
       final hourlyRate =
-          double.tryParse(
-            '${hourlyRule?['hourly_rate'] ?? wageConfig?['hourly_rate'] ?? 0}',
-          ) ??
-          0;
-      final shiftRates = (wageConfig?['shift_rates'] is List)
-          ? List<Map<String, dynamic>>.from(
-              (wageConfig!['shift_rates'] as List).map(
-                (e) => Map<String, dynamic>.from(e as Map),
-              ),
-            )
-          : const <Map<String, dynamic>>[];
+          double.tryParse('${hourlyRule?['hourly_rate'] ?? 0}') ?? 0;
 
       final pairs = pairLogs(userLogs);
       final records = <DailyRecord>[];
@@ -163,9 +148,7 @@ class PayrollService {
         double nightHours = 0;
         double holidayHours = 0;
         if (clockIn != null && clockOut != null) {
-          if (wageType == 'shift') {
-            amount = calcShiftAmount(clockIn, clockOut, shiftRates);
-          } else if (hourlyRule != null) {
+          if (hourlyRule != null) {
             final calculation = calcRuleBasedHourlyAmount(
               clockIn: clockIn,
               clockOut: clockOut,
@@ -179,8 +162,6 @@ class PayrollService {
             amount = calculation.amount;
             nightHours = calculation.nightHours;
             holidayHours = calculation.holidayHours;
-          } else {
-            amount = calcHourlyAmount(hours, hourlyRate);
           }
         }
 
@@ -234,33 +215,69 @@ class PayrollService {
 
   List<(DateTime?, DateTime?)> pairLogs(List<Map<String, dynamic>> logs) {
     final pairs = <(DateTime?, DateTime?)>[];
-    DateTime? pendingIn;
+    final chronologicalLogs = [...logs]
+      ..sort((a, b) {
+        final aTime = DateTime.tryParse(a['logged_at']?.toString() ?? '');
+        final bTime = DateTime.tryParse(b['logged_at']?.toString() ?? '');
+        if (aTime == null && bTime == null) return 0;
+        if (aTime == null) return 1;
+        if (bTime == null) return -1;
+        return aTime.compareTo(bTime);
+      });
 
-    for (final row in logs) {
+    DateTime? pendingClockIn;
+    DateTime? pendingClockOut;
+    DateTime? orphanClockOut;
+
+    void finishPendingShift() {
+      if (pendingClockIn != null) {
+        pairs.add((pendingClockIn, pendingClockOut));
+      } else if (orphanClockOut != null) {
+        pairs.add((null, orphanClockOut));
+      }
+      pendingClockIn = null;
+      pendingClockOut = null;
+      orphanClockOut = null;
+    }
+
+    for (final row in chronologicalLogs) {
       final type = row['type']?.toString().toLowerCase();
+      if (type != 'clock_in' && type != 'clock_out') continue;
       final raw = DateTime.tryParse(row['logged_at']?.toString() ?? '');
       if (raw == null) continue;
       final dt = TimeUtils.toVietnam(raw);
 
       if (type == 'clock_in') {
-        if (pendingIn != null) {
-          pairs.add((pendingIn, null));
+        if (pendingClockIn == null) {
+          if (orphanClockOut != null) finishPendingShift();
+          pendingClockIn = dt;
+          continue;
         }
-        pendingIn = dt;
-      } else if (type == 'clock_out') {
-        if (pendingIn == null) {
-          pairs.add((null, dt));
-        } else {
-          pairs.add((pendingIn, dt));
-          pendingIn = null;
+        final activeClockIn = pendingClockIn!;
+        final pendingDay = DateTime(
+          activeClockIn.year,
+          activeClockIn.month,
+          activeClockIn.day,
+        );
+        final currentDay = DateTime(dt.year, dt.month, dt.day);
+        if (currentDay != pendingDay) {
+          finishPendingShift();
+          pendingClockIn = dt;
         }
+        continue;
+      }
+
+      final activeClockIn = pendingClockIn;
+      if (activeClockIn != null && !dt.isBefore(activeClockIn)) {
+        // Historical repeated check-outs are recovered by keeping the last
+        // check-out before the employee's next shift.
+        pendingClockOut = dt;
+      } else if (pendingClockIn == null) {
+        orphanClockOut = dt;
       }
     }
 
-    if (pendingIn != null) {
-      pairs.add((pendingIn, null));
-    }
-
+    finishPendingShift();
     return pairs;
   }
 
