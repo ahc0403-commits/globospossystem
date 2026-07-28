@@ -112,7 +112,7 @@ StaffMember? findDuplicateStaffMember({
     bankAccountHolder: bankAccountHolder,
   );
   for (final member in staff) {
-    if (!member.isActive || member.id == excludeEmployeeId) continue;
+    if (member.id == excludeEmployeeId) continue;
     if (_staffIdentity(
           fullName: member.fullName,
           phone: member.phone,
@@ -125,6 +125,65 @@ StaffMember? findDuplicateStaffMember({
     }
   }
   return null;
+}
+
+StaffMember? findPartTimerEmployeeIdConflict({
+  required Iterable<StaffMember> staff,
+  required String fullName,
+  String? excludeEmployeeId,
+}) {
+  final expectedNameToken = partTimerEmployeeNameToken(fullName);
+  if (expectedNameToken.isEmpty) return null;
+  for (final member in staff) {
+    if (member.id == excludeEmployeeId) continue;
+    final separator = member.employeeNumber.indexOf('_');
+    if (separator < 0 || separator == member.employeeNumber.length - 1) {
+      continue;
+    }
+    final existingNameToken = member.employeeNumber.substring(separator + 1);
+    if (existingNameToken.toLowerCase() == expectedNameToken.toLowerCase()) {
+      return member;
+    }
+  }
+  return null;
+}
+
+String partTimerEmployeeNameToken(String fullName) {
+  final words = fullName
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((word) => word.isNotEmpty)
+      .toList();
+  if (words.isEmpty) return '';
+  final ascii = _foldVietnamese(
+    words.last,
+  ).replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+  if (ascii.isEmpty) return '';
+  return '${ascii.substring(0, 1).toUpperCase()}'
+      '${ascii.substring(1).toLowerCase()}';
+}
+
+String _foldVietnamese(String value) {
+  const source = [
+    'àáạảãâầấậẩẫăằắặẳẵ',
+    'èéẹẻẽêềếệểễ',
+    'ìíịỉĩ',
+    'òóọỏõôồốộổỗơờớợởỡ',
+    'ùúụủũưừứựửữ',
+    'ỳýỵỷỹ',
+    'đ',
+  ];
+  const target = ['a', 'e', 'i', 'o', 'u', 'y', 'd'];
+  var folded = value;
+  for (var index = 0; index < source.length; index++) {
+    for (final rune in source[index].runes) {
+      final character = String.fromCharCode(rune);
+      folded = folded
+          .replaceAll(character, target[index])
+          .replaceAll(character.toUpperCase(), target[index].toUpperCase());
+    }
+  }
+  return folded;
 }
 
 String _staffIdentity({
@@ -320,8 +379,12 @@ class StaffNotifier extends StateNotifier<StaffState> {
       final message = _cleanException(error);
       state = state.copyWith(
         isCreating: false,
-        error: message.contains('EMPLOYEE_DUPLICATE')
-            ? 'EMPLOYEE_DUPLICATE'
+        error:
+            message.contains('EMPLOYEE_DUPLICATE') ||
+                message.contains('EMPLOYEE_ID_DUPLICATE')
+            ? message.contains('EMPLOYEE_ID_DUPLICATE')
+                  ? 'EMPLOYEE_ID_DUPLICATE'
+                  : 'EMPLOYEE_DUPLICATE'
             : message,
       );
     }

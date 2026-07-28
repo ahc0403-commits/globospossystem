@@ -215,10 +215,6 @@ class PayrollService {
 
   List<(DateTime?, DateTime?)> pairLogs(List<Map<String, dynamic>> logs) {
     final pairs = <(DateTime?, DateTime?)>[];
-    DateTime? pendingIn;
-    String? lastEventType;
-    final completedClockInDates = <DateTime>{};
-
     final chronologicalLogs = [...logs]
       ..sort((a, b) {
         final aTime = DateTime.tryParse(a['logged_at']?.toString() ?? '');
@@ -229,37 +225,59 @@ class PayrollService {
         return aTime.compareTo(bTime);
       });
 
+    DateTime? pendingClockIn;
+    DateTime? pendingClockOut;
+    DateTime? orphanClockOut;
+
+    void finishPendingShift() {
+      if (pendingClockIn != null) {
+        pairs.add((pendingClockIn, pendingClockOut));
+      } else if (orphanClockOut != null) {
+        pairs.add((null, orphanClockOut));
+      }
+      pendingClockIn = null;
+      pendingClockOut = null;
+      orphanClockOut = null;
+    }
+
     for (final row in chronologicalLogs) {
       final type = row['type']?.toString().toLowerCase();
+      if (type != 'clock_in' && type != 'clock_out') continue;
       final raw = DateTime.tryParse(row['logged_at']?.toString() ?? '');
       if (raw == null) continue;
       final dt = TimeUtils.toVietnam(raw);
 
       if (type == 'clock_in') {
-        final clockInDate = DateTime(dt.year, dt.month, dt.day);
-        if (completedClockInDates.contains(clockInDate)) {
+        if (pendingClockIn == null) {
+          if (orphanClockOut != null) finishPendingShift();
+          pendingClockIn = dt;
           continue;
         }
-        pendingIn ??= dt;
-        lastEventType = type;
-      } else if (type == 'clock_out') {
-        if (pendingIn != null && !dt.isBefore(pendingIn)) {
-          pairs.add((pendingIn, dt));
-          completedClockInDates.add(
-            DateTime(pendingIn.year, pendingIn.month, pendingIn.day),
-          );
-          pendingIn = null;
-        } else if (pendingIn == null && lastEventType != 'clock_out') {
-          pairs.add((null, dt));
+        final activeClockIn = pendingClockIn!;
+        final pendingDay = DateTime(
+          activeClockIn.year,
+          activeClockIn.month,
+          activeClockIn.day,
+        );
+        final currentDay = DateTime(dt.year, dt.month, dt.day);
+        if (currentDay != pendingDay) {
+          finishPendingShift();
+          pendingClockIn = dt;
         }
-        lastEventType = type;
+        continue;
+      }
+
+      final activeClockIn = pendingClockIn;
+      if (activeClockIn != null && !dt.isBefore(activeClockIn)) {
+        // Historical repeated check-outs are recovered by keeping the last
+        // check-out before the employee's next shift.
+        pendingClockOut = dt;
+      } else if (pendingClockIn == null) {
+        orphanClockOut = dt;
       }
     }
 
-    if (pendingIn != null) {
-      pairs.add((pendingIn, null));
-    }
-
+    finishPendingShift();
     return pairs;
   }
 

@@ -26,17 +26,18 @@ void main() {
       expect(service.calcHourlyAmount(hours, 10000), 48000);
     });
 
-    test('duplicate clock-in is idempotent and creates one paid shift', () {
+    test('duplicate events use first clock-in and last clock-out', () {
       final service = PayrollService();
       final pairs = service.pairLogs([
         _log('clock_in', '2026-07-27T01:00:00Z'),
         _log('clock_in', '2026-07-27T01:05:00Z'),
+        _log('clock_out', '2026-07-27T01:06:00Z'),
         _log('clock_out', '2026-07-27T02:05:00Z'),
       ]);
 
       expect(pairs, hasLength(1));
-      expect(pairs.single.$1, isNotNull);
-      expect(pairs.single.$2, isNotNull);
+      expect(pairs.single.$1, DateTime(2026, 7, 27, 8));
+      expect(pairs.single.$2, DateTime(2026, 7, 27, 9, 5));
     });
 
     test('orphan clock-out is review-only and has no payable duration', () {
@@ -59,7 +60,18 @@ void main() {
 
       expect(pairs, hasLength(1));
       expect(pairs.single.$1, DateTime(2026, 7, 27, 8));
-      expect(pairs.single.$2, DateTime(2026, 7, 27, 10));
+      expect(pairs.single.$2, DateTime(2026, 7, 27, 14));
+    });
+
+    test('overnight shift remains one payable pair', () {
+      final pairs = PayrollService().pairLogs([
+        _log('clock_in', '2026-07-27T16:00:00Z'),
+        _log('clock_out', '2026-07-27T19:00:00Z'),
+      ]);
+
+      expect(pairs, hasLength(1));
+      expect(pairs.single.$1, DateTime(2026, 7, 27, 23));
+      expect(pairs.single.$2, DateTime(2026, 7, 28, 2));
     });
   });
 

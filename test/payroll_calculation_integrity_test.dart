@@ -123,42 +123,45 @@ void main() {
     },
   );
 
-  test('pairing sorts events and ignores repeated same-state submissions', () {
-    final pairs = PayrollService().pairLogs([
-      _log(
-        employeeId: 'part-timer',
-        name: 'Mai',
-        role: 'part_timer',
-        type: 'clock_out',
-        loggedAt: '2026-07-27T09:15:01Z',
-      ),
-      _log(
-        employeeId: 'part-timer',
-        name: 'Mai',
-        role: 'part_timer',
-        type: 'clock_in',
-        loggedAt: '2026-07-27T04:27:01Z',
-      ),
-      _log(
-        employeeId: 'part-timer',
-        name: 'Mai',
-        role: 'part_timer',
-        type: 'clock_out',
-        loggedAt: '2026-07-27T09:15:00Z',
-      ),
-      _log(
-        employeeId: 'part-timer',
-        name: 'Mai',
-        role: 'part_timer',
-        type: 'clock_in',
-        loggedAt: '2026-07-27T04:27:00Z',
-      ),
-    ]);
+  test(
+    'pairing uses first clock-in and last clock-out for historical duplicates',
+    () {
+      final pairs = PayrollService().pairLogs([
+        _log(
+          employeeId: 'part-timer',
+          name: 'Mai',
+          role: 'part_timer',
+          type: 'clock_out',
+          loggedAt: '2026-07-27T09:15:23Z',
+        ),
+        _log(
+          employeeId: 'part-timer',
+          name: 'Mai',
+          role: 'part_timer',
+          type: 'clock_out',
+          loggedAt: '2026-07-27T04:28:17Z',
+        ),
+        _log(
+          employeeId: 'part-timer',
+          name: 'Mai',
+          role: 'part_timer',
+          type: 'clock_in',
+          loggedAt: '2026-07-27T04:27:54Z',
+        ),
+        _log(
+          employeeId: 'part-timer',
+          name: 'Mai',
+          role: 'part_timer',
+          type: 'clock_in',
+          loggedAt: '2026-07-27T04:27:55Z',
+        ),
+      ]);
 
-    expect(pairs, hasLength(1));
-    expect(pairs.single.$1, DateTime(2026, 7, 27, 11, 27));
-    expect(pairs.single.$2, DateTime(2026, 7, 27, 16, 15));
-  });
+      expect(pairs, hasLength(1));
+      expect(pairs.single.$1, DateTime(2026, 7, 27, 11, 27, 54));
+      expect(pairs.single.$2, DateTime(2026, 7, 27, 16, 15, 23));
+    },
+  );
 
   test(
     'historical duplicate cycles cannot create two paid shifts in one day',
@@ -196,7 +199,7 @@ void main() {
 
       expect(pairs, hasLength(1));
       expect(pairs.single.$1, DateTime(2026, 7, 27, 8));
-      expect(pairs.single.$2, DateTime(2026, 7, 27, 10));
+      expect(pairs.single.$2, DateTime(2026, 7, 27, 13));
     },
   );
 }

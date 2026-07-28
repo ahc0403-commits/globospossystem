@@ -1268,9 +1268,18 @@ class _EmployeeAttendanceActionsState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.l10n.photoOpsAttendanceRecorded)),
       );
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        setState(() => _error = context.l10n.attendanceRecordFailed);
+        final message = '$error';
+        setState(() {
+          _error = message.contains('ATTENDANCE_ALREADY_CLOCKED_IN_TODAY')
+              ? context.l10n.attendanceAlreadyClockedInToday
+              : message.contains('ATTENDANCE_ALREADY_CLOCKED_OUT_TODAY')
+              ? context.l10n.attendanceAlreadyClockedOutToday
+              : message.contains('ATTENDANCE_CLOCK_IN_REQUIRED')
+              ? context.l10n.attendanceClockInRequired
+              : context.l10n.attendanceRecordFailed;
+        });
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
