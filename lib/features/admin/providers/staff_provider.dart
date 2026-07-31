@@ -113,6 +113,7 @@ StaffMember? findDuplicateStaffMember({
   );
   for (final member in staff) {
     if (member.id == excludeEmployeeId) continue;
+    if (!member.isActive) continue;
     if (_staffIdentity(
           fullName: member.fullName,
           phone: member.phone,
@@ -136,11 +137,14 @@ StaffMember? findPartTimerEmployeeIdConflict({
   if (expectedNameToken.isEmpty) return null;
   for (final member in staff) {
     if (member.id == excludeEmployeeId) continue;
+    if (!member.isActive) continue;
     final separator = member.employeeNumber.indexOf('_');
     if (separator < 0 || separator == member.employeeNumber.length - 1) {
       continue;
     }
-    final existingNameToken = member.employeeNumber.substring(separator + 1);
+    final existingNameToken = member.employeeNumber
+        .substring(separator + 1)
+        .replaceFirst(RegExp(r'_[0-9]+$'), '');
     if (existingNameToken.toLowerCase() == expectedNameToken.toLowerCase()) {
       return member;
     }

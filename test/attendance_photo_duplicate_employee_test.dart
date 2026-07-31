@@ -54,6 +54,33 @@ void main() {
     );
   });
 
+  test('inactive employee identity can be registered again', () {
+    final inactive = StaffMember(
+      id: 'employee-inactive',
+      employeeNumber: 'BH1',
+      fullName: 'Đỗ Thị Hoa',
+      role: 'full_time',
+      isActive: false,
+      createdAt: DateTime.utc(2026, 7, 24),
+      phone: '0376325394',
+      bankName: 'TechcomBank',
+      bankAccountNumber: '910376325394',
+      bankAccountHolder: 'DO THI HOA',
+    );
+
+    expect(
+      findDuplicateStaffMember(
+        staff: [inactive],
+        fullName: 'Đỗ Thị Hoa',
+        phone: '0376325394',
+        bankName: 'TechcomBank',
+        bankAccountNumber: '910376325394',
+        bankAccountHolder: 'DO THI HOA',
+      ),
+      isNull,
+    );
+  });
+
   test('photo review and database duplicate guard stay wired', () {
     final attendance = File(
       'lib/features/admin/tabs/attendance_tab.dart',
