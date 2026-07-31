@@ -117,4 +117,29 @@ void main() {
     expect(staffTab, contains("'staff_edit_existing_employee_action'"));
     expect(staffTab, contains("'EMPLOYEE_ID_DUPLICATE'"));
   });
+
+  test('production deploy gate covers inactive employee recreation', () {
+    final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
+    const migration = '20260731103153_allow_recreate_inactive_employee.sql';
+
+    expect(deploy, contains(migration));
+    expect(
+      deploy,
+      contains('scripts/preflight_allow_recreate_inactive_employee.sql'),
+    );
+    expect(
+      deploy,
+      contains('scripts/verify_allow_recreate_inactive_employee.sql'),
+    );
+    expect(
+      File(
+        'scripts/preflight_allow_recreate_inactive_employee.sql',
+      ).existsSync(),
+      isTrue,
+    );
+    expect(
+      File('scripts/verify_allow_recreate_inactive_employee.sql').existsSync(),
+      isTrue,
+    );
+  });
 }
