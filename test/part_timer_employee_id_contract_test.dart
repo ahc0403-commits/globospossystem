@@ -36,7 +36,7 @@ void main() {
     );
   });
 
-  test('inactive historical employee still blocks a duplicate identity', () {
+  test('inactive historical employee does not block a new account', () {
     final inactive = StaffMember(
       id: 'employee-old-mai',
       employeeNumber: 'DA_Mai',
@@ -52,21 +52,41 @@ void main() {
         staff: [inactive],
         fullName: 'Nguyễn Quỳnh Mai',
         phone: '0901234567',
-      )?.id,
-      'employee-old-mai',
+      ),
+      isNull,
     );
     expect(
       findPartTimerEmployeeIdConflict(
         staff: [inactive],
         fullName: 'Another Mai',
+      ),
+      isNull,
+    );
+  });
+
+  test('active suffixed part-timer ID still blocks the same name token', () {
+    final existing = StaffMember(
+      id: 'employee-2',
+      employeeNumber: 'DA_Nhu_2',
+      fullName: 'Hồ Thị Quỳnh Như',
+      role: 'part_timer',
+      isActive: true,
+      createdAt: DateTime.utc(2026, 7, 31),
+    );
+
+    expect(
+      findPartTimerEmployeeIdConflict(
+        staff: [existing],
+        fullName: 'Nguyễn Văn Như',
       )?.id,
-      'employee-old-mai',
+      'employee-2',
     );
   });
 
   test('database rule is part-timer only and race-safe', () {
     final migration = File(
-      'supabase/migrations/20260728050000_part_timer_employee_id.sql',
+      'supabase/migrations/'
+      '20260731103153_allow_recreate_inactive_employee.sql',
     ).readAsStringSync();
 
     expect(migration, contains("p_employment_role = 'part_timer'"));
@@ -78,10 +98,12 @@ void main() {
     );
     expect(migration, contains('pg_advisory_xact_lock'));
     expect(migration, contains("RAISE EXCEPTION 'EMPLOYEE_ID_DUPLICATE'"));
-    expect(migration, isNot(contains('employee.is_active = TRUE')));
+    expect(migration, contains('employee.is_active = TRUE'));
+    expect(migration, contains('v_employee_number_base'));
+    expect(migration, contains("v_employee_number_base || '_' || v_suffix"));
     expect(
       migration,
-      contains('Full-time and manager IDs keep the existing monotonic rule.'),
+      contains('Full-time and manager IDs keep the monotonic rule'),
     );
   });
 
@@ -94,5 +116,30 @@ void main() {
     expect(staffTab, contains('staffDuplicateEmployeeIdMessage'));
     expect(staffTab, contains("'staff_edit_existing_employee_action'"));
     expect(staffTab, contains("'EMPLOYEE_ID_DUPLICATE'"));
+  });
+
+  test('production deploy gate covers inactive employee recreation', () {
+    final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
+    const migration = '20260731103153_allow_recreate_inactive_employee.sql';
+
+    expect(deploy, contains(migration));
+    expect(
+      deploy,
+      contains('scripts/preflight_allow_recreate_inactive_employee.sql'),
+    );
+    expect(
+      deploy,
+      contains('scripts/verify_allow_recreate_inactive_employee.sql'),
+    );
+    expect(
+      File(
+        'scripts/preflight_allow_recreate_inactive_employee.sql',
+      ).existsSync(),
+      isTrue,
+    );
+    expect(
+      File('scripts/verify_allow_recreate_inactive_employee.sql').existsSync(),
+      isTrue,
+    );
   });
 }

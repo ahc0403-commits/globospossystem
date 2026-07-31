@@ -726,6 +726,7 @@ apply_migration() {
     20260728042659_attendance_photo_review_duplicate_employee_guard.sql|\
     20260728050000_part_timer_employee_id.sql|\
     20260728060000_employee_attendance_daily_guard.sql|\
+    20260731103153_allow_recreate_inactive_employee.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -970,6 +971,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_employee_attendance_daily_guard.sql" \
       "employee attendance daily guard migration preflight"
+  elif [[ "$migration_name" == "20260731103153_allow_recreate_inactive_employee.sql" ]]; then
+    log "Inactive employee recreation migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_allow_recreate_inactive_employee.sql" \
+      "inactive employee recreation migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -1215,6 +1221,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_employee_attendance_daily_guard.sql" \
       "employee attendance daily guard migration verification"
+  elif [[ "$migration_name" == "20260731103153_allow_recreate_inactive_employee.sql" ]]; then
+    log "Inactive employee recreation migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_allow_recreate_inactive_employee.sql" \
+      "inactive employee recreation migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \
