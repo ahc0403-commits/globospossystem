@@ -26,6 +26,7 @@ class PaymentQuoteResult {
     required this.menuSubtotal,
     required this.serviceChargeTotal,
     required this.serviceItemTotal,
+    required this.fixedChargeTotal,
     required this.discountTotal,
     required this.payableTotal,
   });
@@ -33,6 +34,7 @@ class PaymentQuoteResult {
   final double menuSubtotal;
   final double serviceChargeTotal;
   final double serviceItemTotal;
+  final double fixedChargeTotal;
   final double discountTotal;
   final double payableTotal;
 }
@@ -49,6 +51,7 @@ PaymentQuoteResult calculatePaymentQuote({
   var alcoholPretaxSubtotal = 0.0;
   var existingServiceChargeTotal = 0.0;
   var serviceItemTotal = 0.0;
+  var fixedChargeTotal = 0.0;
   var hasExistingServiceCharge = false;
 
   for (final line in lines) {
@@ -69,6 +72,12 @@ PaymentQuoteResult calculatePaymentQuote({
             line.payingAmountIncTax != null && line.payingAmountIncTax! > 0
             ? line.payingAmountIncTax!
             : line.unitPrice * line.quantity;
+      } else if (itemType == 'wet_tissue_charge') {
+        fixedChargeTotal += _roundMoney(
+          line.payingAmountIncTax != null && line.payingAmountIncTax! > 0
+              ? line.payingAmountIncTax!
+              : line.unitPrice * line.quantity,
+        );
       }
       continue;
     }
@@ -111,9 +120,10 @@ PaymentQuoteResult calculatePaymentQuote({
     menuSubtotal: _roundMoney(menuSubtotal),
     serviceChargeTotal: _roundMoney(serviceChargeTotal),
     serviceItemTotal: _roundMoney(serviceItemTotal),
+    fixedChargeTotal: _roundMoney(fixedChargeTotal),
     discountTotal: resolvedDiscount,
     payableTotal: _roundMoney(
-      menuSubtotal + serviceChargeTotal - resolvedDiscount,
+      menuSubtotal + serviceChargeTotal + fixedChargeTotal - resolvedDiscount,
     ),
   );
 }

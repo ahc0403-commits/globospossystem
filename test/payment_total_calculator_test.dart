@@ -99,6 +99,40 @@ void main() {
   });
 
   test(
+    'wet tissues add an exact fixed charge outside discount and service charge bases',
+    () {
+      final quote = calculatePaymentQuote(
+        vatPricingMode: vatPricingModeExclusive,
+        serviceChargeEnabled: true,
+        serviceChargeRate: 10,
+        discountTotal: 108000,
+        lines: const [
+          PaymentQuoteLine(
+            unitPrice: 100000,
+            quantity: 1,
+            status: 'served',
+            itemType: 'menu_item',
+            vatCategory: 'food',
+          ),
+          PaymentQuoteLine(
+            unitPrice: 3000,
+            quantity: 3,
+            status: 'ready',
+            itemType: 'wet_tissue_charge',
+            payingAmountIncTax: 9000,
+          ),
+        ],
+      );
+
+      expect(quote.menuSubtotal, 108000);
+      expect(quote.serviceChargeTotal, 10800);
+      expect(quote.fixedChargeTotal, 9000);
+      expect(quote.discountTotal, 108000);
+      expect(quote.payableTotal, 19800);
+    },
+  );
+
+  test(
     'discount reduces menu subtotal but does not discount service charge',
     () {
       final quote = calculatePaymentQuote(
