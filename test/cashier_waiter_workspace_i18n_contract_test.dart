@@ -108,7 +108,9 @@ void main() {
         cashier,
         contains('onTap: () => _showCashierOrderItemsSheet(context, order)'),
       );
-      expect(cashier, contains('onTap: () => onSelectMethod(method.value)'));
+      expect(cashier, contains('onTap: paymentMethodsEnabled'));
+      expect(cashier, contains('? () => onSelectMethod(method.value)'));
+      expect(cashier, contains(': null,'));
       expect(provider, contains('void selectOrder(CashierOrder order)'));
       expect(
         provider,
