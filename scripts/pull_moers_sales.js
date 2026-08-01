@@ -373,8 +373,11 @@ function parseArgs(argv, env = process.env) {
 }
 
 function parseAmount(raw) {
-  if (!raw && raw !== 0) return 0;
-  return parseInt(String(raw).replace(/,/g, '').trim(), 10) || 0;
+  if (raw === null || raw === undefined) return Number.NaN;
+  const normalized = String(raw).replace(/,/g, '').trim();
+  if (!/^-?\d+$/.test(normalized)) return Number.NaN;
+  const amount = Number(normalized);
+  return Number.isSafeInteger(amount) ? amount : Number.NaN;
 }
 
 function aggregateByDevice(rows) {
@@ -385,11 +388,12 @@ function aggregateByDevice(rows) {
     const amount = parseAmount(row['Amount']);
 
     if (!deviceName) continue;
-    if (amount <= 0) {
+    if (!Number.isSafeInteger(amount) || amount < 0) {
       throw deterministic(
-        `Moers immutable sales row has a non-positive or invalid Amount: ${String(row['Amount'] ?? '<empty>')}`,
+        `Moers immutable sales row has a negative or invalid Amount: ${String(row['Amount'] ?? '<empty>')}`,
       );
     }
+    if (amount === 0) continue;
 
     if (!devices[deviceName]) {
       devices[deviceName] = {
@@ -441,9 +445,9 @@ function selectRowsForInterval(rows, targetDate, identity) {
       const saleTimeText = String(row['Time'] || '').trim();
       const amount = parseAmount(row['Amount']);
       if (!deviceName) return null;
-      if (amount <= 0) {
+      if (!Number.isSafeInteger(amount) || amount < 0) {
         throw deterministic(
-          `Moers immutable sales row has a non-positive or invalid Amount: ${String(row['Amount'] ?? '<empty>')}`,
+          `Moers immutable sales row has a negative or invalid Amount: ${String(row['Amount'] ?? '<empty>')}`,
         );
       }
 
@@ -459,6 +463,10 @@ function selectRowsForInterval(rows, targetDate, identity) {
       return { row, soldAt };
     })
     .filter(Boolean);
+}
+
+function isZeroSalesInterval(selectedRows) {
+  return selectedRows.every(({ row }) => parseAmount(row['Amount']) === 0);
 }
 
 function assertImmutableSourceRows(existingHashes, incomingRows) {
@@ -527,6 +535,8 @@ function normalizeRawSalesRows(selectedRows, store, targetDate, method, pullRunI
         interval_start_at: identity.intervalStartAt,
         interval_end_at: identity.intervalEndAt,
         pull_run_id: pullRunId,
+        invoice_enqueue_status: amount === 0 ? 'skipped' : 'pending',
+        invoice_enqueue_error: amount === 0 ? 'ZERO_AMOUNT_NON_REVENUE' : null,
         last_seen_at: new Date().toISOString(),
       };
     });
@@ -922,9 +932,10 @@ function aggregateDailyRawRows(rows) {
   for (const row of rows) {
     const deviceName = String(row.device_name || '').trim();
     const amount = Number(row.amount || 0);
-    if (!deviceName || !Number.isSafeInteger(amount) || amount <= 0) {
+    if (!deviceName || !Number.isSafeInteger(amount) || amount < 0) {
       throw deterministic('Canonical Photo Objet raw ledger contains an invalid sales row');
     }
+    if (amount === 0) continue;
     if (!devices.has(deviceName)) {
       devices.set(deviceName, {
         device_name: deviceName,
@@ -1046,7 +1057,7 @@ async function processStore(supabase, store, targetDate, downloadDir, runIdentit
     console.log(`  Method: ${method}, ${rows.length} rows`);
 
     const selectedRows = selectRowsForInterval(rows, targetDate, runIdentity);
-    const zeroSalesInterval = selectedRows.length === 0;
+    const zeroSalesInterval = isZeroSalesInterval(selectedRows);
     console.log(
       `  ${storeName}: accepted ${selectedRows.length}/${rows.length} rows for ` +
         `${runIdentity.intervalStartAt} <= sold_at < ${runIdentity.intervalEndAt}`,
@@ -1421,6 +1432,7 @@ module.exports = {
   completeScheduledExpectation,
   failScheduledExpectation,
   inclusiveDateRange,
+  isZeroSalesInterval,
   parseArgs,
   parseSoldAt,
   parseSpreadsheetFile,
