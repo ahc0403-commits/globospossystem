@@ -9,6 +9,8 @@ readonly POS_PSQL_ROLE="postgres"
 readonly POS_VERCEL_PROJECT="globospossystem"
 readonly POS_VERCEL_PROJECT_ID="prj_glOhZuHqHUHyAsGaSx5BVip3MIJJ"
 readonly POS_VERCEL_ORG_ID="team_4AfACJKDlP09zRqoJKce3Tib"
+readonly POS_GITHUB_ORG="ahc0403-commits"
+readonly POS_GITHUB_REPO="globospossystem"
 readonly LIVE_URL="https://globospossystem.vercel.app"
 ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env.local}"
 MIGRATION_FILE="${MIGRATION_FILE:-}"
@@ -1308,20 +1310,28 @@ deploy_vercel() {
 
   local deploy_log
   deploy_log="$(mktemp)"
+  local release_sha
+  release_sha="$(git -C "$ROOT_DIR" rev-parse HEAD)"
+  local -a release_meta=(
+    --meta "githubCommitSha=$release_sha"
+    --meta "githubCommitRef=main"
+    --meta "githubCommitOrg=$POS_GITHUB_ORG"
+    --meta "githubCommitRepo=$POS_GITHUB_REPO"
+  )
 
   if [[ "$DEPLOY_MODE" == "prebuilt" ]]; then
     log "Vercel local build"
     run vercel build --prod
     log "Vercel prebuilt deploy"
-    printf '+ vercel deploy --prebuilt --prod --yes\n'
+    printf '+ vercel deploy --prebuilt --prod --yes --meta <exact-main-provenance>\n'
     if [[ "$DRY_RUN" != "1" ]]; then
-      vercel deploy --prebuilt --prod --yes 2>&1 | tee "$deploy_log"
+      vercel deploy --prebuilt --prod --yes "${release_meta[@]}" 2>&1 | tee "$deploy_log"
     fi
   else
     log "Vercel remote deploy"
-    printf '+ vercel deploy --prod --yes\n'
+    printf '+ vercel deploy --prod --yes --meta <exact-main-provenance>\n'
     if [[ "$DRY_RUN" != "1" ]]; then
-      vercel deploy --prod --yes 2>&1 | tee "$deploy_log"
+      vercel deploy --prod --yes "${release_meta[@]}" 2>&1 | tee "$deploy_log"
     fi
   fi
 
