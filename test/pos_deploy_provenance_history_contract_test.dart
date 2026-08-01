@@ -26,6 +26,10 @@ void main() {
       deploy,
       contains('Production deployment requires exact HEAD == freshly fetched origin/main'),
     );
+    expect(deploy, contains('--meta "githubCommitSha=\$release_sha"'));
+    expect(deploy, contains('--meta "githubCommitRef=main"'));
+    expect(deploy, contains('--meta "githubCommitOrg=\$POS_GITHUB_ORG"'));
+    expect(deploy, contains('--meta "githubCommitRepo=\$POS_GITHUB_REPO"'));
     expect(deploy, isNot(contains('ALLOW_GIT_ANCESTRY')));
     expect(deploy, isNot(contains('SKIP_GIT')));
     expect(
