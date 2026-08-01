@@ -61,6 +61,7 @@ final _cashierOrder = CashierOrder(
   menuSubtotal: 140000,
   serviceChargeTotal: 0,
   serviceItemTotal: 0,
+  fixedChargeTotal: 0,
   discountTotal: 0,
   totalAmount: 140000,
   paidTotal: 0,
@@ -85,10 +86,21 @@ class _PaymentNotifier extends PaymentNotifier {
 
   int cancelledOrders = 0;
   int serviceItemMutations = 0;
+  int? confirmedWetTissueQuantity;
   String? processedMethod;
 
   @override
   Future<void> loadOrders(String storeId) async {}
+
+  @override
+  Future<bool> setWetTissueQuantity({
+    required String storeId,
+    required String orderId,
+    required int quantity,
+  }) async {
+    confirmedWetTissueQuantity = quantity;
+    return true;
+  }
 
   @override
   Future<Map<String, dynamic>?> processPayment(
@@ -202,12 +214,53 @@ void main() {
     );
   });
 
+  testWidgets(
+    'wet-tissue quantity is confirmed before cashier payment methods unlock',
+    (tester) async {
+      final harness = await _pumpCashier(tester);
+      await tester.tap(find.byKey(const Key('cashier_order_$_orderId')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('cashier_wet_tissue_required_hint')),
+        findsOneWidget,
+      );
+      final cashMethod = find.byKey(
+        const Key('cashier_method_tile_$paymentMethodCash'),
+      );
+      final cashMethodInkWell = find.descendant(
+        of: cashMethod,
+        matching: find.byType(InkWell),
+      );
+      expect(tester.widget<InkWell>(cashMethodInkWell).onTap, isNull);
+      expect(harness.notifier.processedMethod, isNull);
+
+      final increment = find.byKey(const Key('cashier_wet_tissue_increment'));
+      await tester.ensureVisible(increment);
+      await tester.tap(increment);
+      await tester.pump();
+      await tester.tap(increment);
+      await tester.pump();
+      expect(find.text('2'), findsOneWidget);
+      expect(find.text('₫6.000'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('cashier_wet_tissue_confirm')));
+      await tester.pumpAndSettle();
+      expect(harness.notifier.confirmedWetTissueQuantity, 2);
+      expect(
+        find.byKey(const Key('cashier_wet_tissue_required_hint')),
+        findsNothing,
+      );
+    },
+  );
+
   testWidgets('all non-post-payment Cashier overlays open from live controls', (
     tester,
   ) async {
     final harness = await _pumpCashier(tester);
     await _selectOrder(tester);
 
+    await tester.ensureVisible(find.byKey(const Key('payment_submit_button')));
     await tester.tap(find.byKey(const Key('payment_submit_button')));
     await tester.pumpAndSettle();
     expect(
@@ -473,6 +526,18 @@ Future<void> _selectOrder(WidgetTester tester) async {
   await tester.tap(find.byKey(const Key('cashier_order_$_orderId')));
   await tester.pumpAndSettle();
   expect(find.byKey(const Key('cashier_payment_surface')), findsOneWidget);
+  expect(
+    find.byKey(const Key('cashier_wet_tissue_required_hint')),
+    findsOneWidget,
+  );
+  final confirm = find.byKey(const Key('cashier_wet_tissue_confirm'));
+  await tester.ensureVisible(confirm);
+  await tester.tap(confirm);
+  await tester.pumpAndSettle();
+  expect(
+    find.byKey(const Key('cashier_wet_tissue_required_hint')),
+    findsNothing,
+  );
 }
 
 Future<void> _openAndDismiss(

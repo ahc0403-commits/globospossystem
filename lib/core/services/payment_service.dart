@@ -67,6 +67,22 @@ class PaymentService {
     return Map<String, dynamic>.from(result as Map);
   }
 
+  Future<Map<String, dynamic>> setOrderWetTissueQuantity({
+    required String orderId,
+    required String storeId,
+    required int quantity,
+  }) async {
+    final result = await supabase.rpc(
+      'set_order_wet_tissue_quantity',
+      params: {
+        'p_order_id': orderId,
+        'p_store_id': storeId,
+        'p_quantity': quantity,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
   Future<Map<String, dynamic>> processNonRevenuePayment({
     required String orderId,
     required String storeId,

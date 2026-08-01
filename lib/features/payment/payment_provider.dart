@@ -22,6 +22,7 @@ class CashierOrder {
     required this.menuSubtotal,
     required this.serviceChargeTotal,
     required this.serviceItemTotal,
+    required this.fixedChargeTotal,
     required this.discountTotal,
     required this.totalAmount,
     required this.paidTotal,
@@ -42,6 +43,7 @@ class CashierOrder {
   final double menuSubtotal;
   final double serviceChargeTotal;
   final double serviceItemTotal;
+  final double fixedChargeTotal;
   final double discountTotal;
   final double totalAmount;
   final double paidTotal;
@@ -59,6 +61,13 @@ class CashierOrder {
             item.isServiceItem && item.status.toLowerCase() != 'cancelled',
       )
       .length;
+  int get wetTissueQuantity => items
+      .where(
+        (item) =>
+            item.itemType == 'wet_tissue_charge' &&
+            item.status.toLowerCase() != 'cancelled',
+      )
+      .fold(0, (total, item) => total + item.quantity);
 }
 
 class ActiveOrderDiscount {
@@ -257,6 +266,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
               menuSubtotal: quote.menuSubtotal,
               serviceChargeTotal: quote.serviceChargeTotal,
               serviceItemTotal: quote.serviceItemTotal,
+              fixedChargeTotal: quote.fixedChargeTotal,
               discountTotal: quote.discountTotal,
               totalAmount: quote.payableTotal,
               paidTotal: paidTotal,
@@ -368,6 +378,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         menuSubtotal: quote.menuSubtotal,
         serviceChargeTotal: quote.serviceChargeTotal,
         serviceItemTotal: quote.serviceItemTotal,
+        fixedChargeTotal: quote.fixedChargeTotal,
         discountTotal: quote.discountTotal,
         totalAmount: quote.payableTotal,
         paidTotal: paidTotal,
@@ -530,6 +541,30 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         error: _mapPaymentError(error, 'Failed to process payment'),
       );
       return null;
+    }
+  }
+
+  Future<bool> setWetTissueQuantity({
+    required String storeId,
+    required String orderId,
+    required int quantity,
+  }) async {
+    state = state.copyWith(isProcessing: true, clearError: true);
+    try {
+      await paymentService.setOrderWetTissueQuantity(
+        orderId: orderId,
+        storeId: storeId,
+        quantity: quantity,
+      );
+      await loadOrders(storeId);
+      state = state.copyWith(isProcessing: false, clearError: true);
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        isProcessing: false,
+        error: _mapPaymentError(error, 'Failed to update wet tissues'),
+      );
+      return false;
     }
   }
 
@@ -909,6 +944,14 @@ String _mapPaymentError(Object error, String fallbackPrefix) {
       'PAYMENT_ALREADY_EXISTS' => 'This order has already been paid.',
       'ORDER_NOT_FOUND' => 'The selected order could not be found.',
       'ORDER_NOT_PAYABLE' => 'Only open dine-in orders can be paid.',
+      'WET_TISSUE_FORBIDDEN' =>
+        'You do not have permission to update the wet-tissue charge.',
+      'WET_TISSUE_QUANTITY_INVALID' =>
+        'Wet-tissue quantity must be between 0 and 100.',
+      'WET_TISSUE_CUSTOMER_ORDER_ONLY' =>
+        'Wet-tissue charges apply only to customer orders.',
+      'WET_TISSUE_AFTER_PAYMENT' =>
+        'Wet-tissue quantity cannot be changed after payment has started.',
       'ORDER_TOTAL_INVALID' =>
         'This order total is invalid and cannot be processed.',
       'PAYMENT_AMOUNT_EXCEEDS_REMAINING' =>

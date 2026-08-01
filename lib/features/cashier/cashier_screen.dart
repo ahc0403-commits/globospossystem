@@ -54,6 +54,8 @@ class CashierScreen extends ConsumerStatefulWidget {
 
 class _CashierScreenState extends ConsumerState<CashierScreen> {
   String? _selectedMethod;
+  int _wetTissueDraftQuantity = 0;
+  String? _wetTissueConfirmedOrderId;
   String? _initializedRestaurantId;
   String? _printAgentStoreId;
   String? _selectedTableId;
@@ -76,6 +78,11 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       widget.paymentServiceOverride ?? paymentService;
   RestaurantCutoffService get _restaurantCutoffService =>
       widget.restaurantCutoffServiceOverride ?? restaurantCutoffService;
+
+  void _prepareWetTissueForOrder(CashierOrder order) {
+    _wetTissueDraftQuantity = order.wetTissueQuantity;
+    _wetTissueConfirmedOrderId = order.paymentCount > 0 ? order.orderId : null;
+  }
 
   @override
   void initState() {
@@ -529,6 +536,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
 
       setState(() {
         _selectedMethod = null;
+        _prepareWetTissueForOrder(payableOrder!);
         _showPaymentQueueOnCompact = false;
         _orderSearchResult = result;
         _orderSearchFeedback = 'Order ready for cashier payment.';
@@ -607,6 +615,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       _selectedTableId = table.id;
       if (payableOrder != null) {
         _selectedMethod = null;
+        _prepareWetTissueForOrder(payableOrder);
         _showPaymentQueueOnCompact = false;
       }
     });
@@ -646,6 +655,11 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       Future.microtask(() => _flushProofQueueIfNeeded(isOnline));
     }
     final selectedOrder = paymentState.selectedOrder;
+    final wetTissueConfirmed =
+        selectedOrder == null ||
+        selectedOrder.isStaffMeal ||
+        selectedOrder.paymentCount > 0 ||
+        _wetTissueConfirmedOrderId == selectedOrder.orderId;
     final queueTotalAmount = paymentState.orders.fold<double>(
       0,
       (sum, order) => sum + order.remainingDue,
@@ -718,6 +732,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                           onTap: () {
                             setState(() {
                               _selectedMethod = null;
+                              _prepareWetTissueForOrder(order);
                               _showPaymentQueueOnCompact = false;
                             });
                             notifier.selectOrder(order);
@@ -850,6 +865,32 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                   isProcessing: paymentState.isProcessing,
                   isOnline: isOnline,
                   canCompletePayment: cutoffState.canCompletePayment,
+                  wetTissueQuantity: _wetTissueDraftQuantity,
+                  wetTissueConfirmed: wetTissueConfirmed,
+                  onWetTissueQuantityChanged: (quantity) {
+                    setState(() {
+                      _wetTissueDraftQuantity = quantity;
+                      _wetTissueConfirmedOrderId = null;
+                      _selectedMethod = null;
+                    });
+                  },
+                  onConfirmWetTissue: (quantity) async {
+                    if (storeId == null) {
+                      return false;
+                    }
+                    final success = await notifier.setWetTissueQuantity(
+                      storeId: storeId,
+                      orderId: selectedOrder.orderId,
+                      quantity: quantity,
+                    );
+                    if (success && mounted) {
+                      setState(() {
+                        _wetTissueConfirmedOrderId = selectedOrder.orderId;
+                        _selectedMethod = null;
+                      });
+                    }
+                    return success;
+                  },
                   onSelectMethod: (method) {
                     setState(() => _selectedMethod = method);
                   },
@@ -927,6 +968,13 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                   onProcess: (method, cashTender) async {
                     final selectedOrder = paymentState.selectedOrder;
                     if (storeId == null || selectedOrder == null) {
+                      return;
+                    }
+                    if (!wetTissueConfirmed) {
+                      showErrorToast(
+                        context,
+                        context.l10n.cashierWetTissueRequired,
+                      );
                       return;
                     }
                     if (!await _canCompleteRestaurantPayment(storeId)) {
@@ -1055,6 +1103,13 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                   onProcessSplit: () async {
                     final selectedOrder = paymentState.selectedOrder;
                     if (storeId == null || selectedOrder == null) {
+                      return;
+                    }
+                    if (!wetTissueConfirmed) {
+                      showErrorToast(
+                        context,
+                        context.l10n.cashierWetTissueRequired,
+                      );
                       return;
                     }
                     if (!await _canCompleteRestaurantPayment(storeId)) {
@@ -1853,6 +1908,10 @@ class _SelectedOrderView extends StatelessWidget {
     required this.isProcessing,
     required this.isOnline,
     required this.canCompletePayment,
+    required this.wetTissueQuantity,
+    required this.wetTissueConfirmed,
+    required this.onWetTissueQuantityChanged,
+    required this.onConfirmWetTissue,
     required this.onSelectMethod,
     required this.onApplyDiscount,
     required this.onToggleServiceItem,
@@ -1872,6 +1931,10 @@ class _SelectedOrderView extends StatelessWidget {
   final bool isProcessing;
   final bool isOnline;
   final bool canCompletePayment;
+  final int wetTissueQuantity;
+  final bool wetTissueConfirmed;
+  final ValueChanged<int> onWetTissueQuantityChanged;
+  final Future<bool> Function(int quantity) onConfirmWetTissue;
   final ValueChanged<String> onSelectMethod;
   final Future<void> Function() onApplyDiscount;
   final Future<void> Function(OrderItem item) onToggleServiceItem;
@@ -1937,6 +2000,10 @@ class _SelectedOrderView extends StatelessWidget {
           isOnline: isOnline,
           canCompletePayment: canCompletePayment,
           canCancelOrder: canCancelOrder,
+          wetTissueQuantity: wetTissueQuantity,
+          wetTissueConfirmed: wetTissueConfirmed,
+          onWetTissueQuantityChanged: onWetTissueQuantityChanged,
+          onConfirmWetTissue: onConfirmWetTissue,
           onSelectMethod: onSelectMethod,
           onApplyDiscount: onApplyDiscount,
           onProcess: onProcess,
@@ -1976,6 +2043,10 @@ class _SelectedOrderView extends StatelessWidget {
                       isOnline: isOnline,
                       canCompletePayment: canCompletePayment,
                       canCancelOrder: canCancelOrder,
+                      wetTissueQuantity: wetTissueQuantity,
+                      wetTissueConfirmed: wetTissueConfirmed,
+                      onWetTissueQuantityChanged: onWetTissueQuantityChanged,
+                      onConfirmWetTissue: onConfirmWetTissue,
                       expandMethodSection: false,
                       onSelectMethod: onSelectMethod,
                       onApplyDiscount: onApplyDiscount,
@@ -2088,6 +2159,11 @@ class _CashierOrderSummarySurface extends StatelessWidget {
             _AmountLine(
               label: l10n.cashierServiceCharge,
               value: '₫${currency.format(order.serviceChargeTotal)}',
+            ),
+          if (order.fixedChargeTotal > 0)
+            _AmountLine(
+              label: l10n.cashierWetTissueCharge,
+              value: '₫${currency.format(order.fixedChargeTotal)}',
             ),
           if (order.serviceItemTotal > 0)
             _AmountLine(
@@ -2368,6 +2444,10 @@ class _CashierPaymentRail extends StatelessWidget {
     required this.isOnline,
     required this.canCompletePayment,
     required this.canCancelOrder,
+    required this.wetTissueQuantity,
+    required this.wetTissueConfirmed,
+    required this.onWetTissueQuantityChanged,
+    required this.onConfirmWetTissue,
     this.expandMethodSection = true,
     required this.onSelectMethod,
     required this.onApplyDiscount,
@@ -2387,6 +2467,10 @@ class _CashierPaymentRail extends StatelessWidget {
   final bool isOnline;
   final bool canCompletePayment;
   final bool canCancelOrder;
+  final int wetTissueQuantity;
+  final bool wetTissueConfirmed;
+  final ValueChanged<int> onWetTissueQuantityChanged;
+  final Future<bool> Function(int quantity) onConfirmWetTissue;
   final bool expandMethodSection;
   final ValueChanged<String> onSelectMethod;
   final Future<void> Function() onApplyDiscount;
@@ -2427,6 +2511,7 @@ class _CashierPaymentRail extends StatelessWidget {
       isProcessing: isProcessing,
       isOnline: isOnline,
       canCompletePayment: canCompletePayment,
+      paymentMethodsEnabled: wetTissueConfirmed,
       canCancelOrder: canCancelOrder,
       canApplyDiscount: canApplyDiscount && !order.isStaffMeal,
       canProcessSplit: !order.isStaffMeal && order.remainingDue > 0,
@@ -2476,6 +2561,8 @@ class _CashierPaymentRail extends StatelessWidget {
 
     final submitState = isProcessing
         ? PosActionTileState.processing
+        : !wetTissueConfirmed
+        ? PosActionTileState.disabled
         : !canCompletePayment
         ? PosActionTileState.disabled
         : !isOnline
@@ -2488,6 +2575,8 @@ class _CashierPaymentRail extends StatelessWidget {
         : l10n.cashierCompletedStatus;
     final submitHelper = !canCompletePayment
         ? l10n.restaurantDailySalesClosed
+        : !wetTissueConfirmed
+        ? l10n.cashierWetTissueRequired
         : !isOnline
         ? PosDisabledCopy.forReason(l10n, PosActionDisabledReason.offline)
         : selectedLabel;
@@ -2559,6 +2648,17 @@ class _CashierPaymentRail extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
+          if (!order.isStaffMeal) ...[
+            _WetTissueQuantityControl(
+              quantity: wetTissueQuantity,
+              confirmed: wetTissueConfirmed,
+              isProcessing: isProcessing,
+              isOnline: isOnline,
+              onQuantityChanged: onWetTissueQuantityChanged,
+              onConfirm: onConfirmWetTissue,
+            ),
+            const SizedBox(height: 12),
+          ],
           Material(
             color: Colors.transparent,
             child: InkWell(
@@ -2629,7 +2729,11 @@ class _CashierPaymentRail extends StatelessWidget {
               helper: submitHelper,
               icon: PosActionIcons.processPayment,
               state: submitState,
-              onTap: isProcessing || !isOnline || !canCompletePayment
+              onTap:
+                  isProcessing ||
+                      !isOnline ||
+                      !canCompletePayment ||
+                      !wetTissueConfirmed
                   ? null
                   : () => unawaited(handlePayPressed()),
             ),
@@ -2645,6 +2749,146 @@ class _CashierPaymentRail extends StatelessWidget {
   }
 }
 
+class _WetTissueQuantityControl extends StatelessWidget {
+  const _WetTissueQuantityControl({
+    required this.quantity,
+    required this.confirmed,
+    required this.isProcessing,
+    required this.isOnline,
+    required this.onQuantityChanged,
+    required this.onConfirm,
+  });
+
+  final int quantity;
+  final bool confirmed;
+  final bool isProcessing;
+  final bool isOnline;
+  final ValueChanged<int> onQuantityChanged;
+  final Future<bool> Function(int quantity) onConfirm;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final currency = NumberFormat('#,###', 'vi_VN');
+    final enabled = !isProcessing && isOnline;
+    final total = quantity * 3000;
+
+    return Container(
+      key: const Key('cashier_wet_tissue_control'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: confirmed ? PosColors.successMuted : PosColors.warningMuted,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: (confirmed ? PosColors.success : PosColors.warning).withValues(
+            alpha: 0.38,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.cashierWetTissueTitle,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: PosColors.textPrimary,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      l10n.cashierWetTissueUnitPrice,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.textSecondary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '₫${currency.format(total)}',
+                key: const Key('cashier_wet_tissue_total'),
+                style: PosNumericText.amountLine.copyWith(
+                  color: PosColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              IconButton.outlined(
+                key: const Key('cashier_wet_tissue_decrement'),
+                tooltip: '-',
+                onPressed: enabled && quantity > 0
+                    ? () => onQuantityChanged(quantity - 1)
+                    : null,
+                icon: const Icon(Icons.remove_rounded),
+              ),
+              SizedBox(
+                width: 56,
+                child: Text(
+                  '$quantity',
+                  key: const Key('cashier_wet_tissue_quantity'),
+                  textAlign: TextAlign.center,
+                  style: PosNumericText.amountLine.copyWith(
+                    color: PosColors.textPrimary,
+                  ),
+                ),
+              ),
+              IconButton.filledTonal(
+                key: const Key('cashier_wet_tissue_increment'),
+                tooltip: '+',
+                onPressed: enabled && quantity < 100
+                    ? () => onQuantityChanged(quantity + 1)
+                    : null,
+                icon: const Icon(Icons.add_rounded),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.icon(
+                  key: const Key('cashier_wet_tissue_confirm'),
+                  onPressed: enabled && !confirmed
+                      ? () => unawaited(onConfirm(quantity))
+                      : null,
+                  icon: Icon(
+                    confirmed ? Icons.check_circle_rounded : Icons.done_rounded,
+                    size: 18,
+                  ),
+                  label: Text(
+                    confirmed
+                        ? l10n.cashierWetTissueConfirmed
+                        : l10n.cashierWetTissueConfirm,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (!confirmed) ...[
+            const SizedBox(height: 8),
+            Text(
+              l10n.cashierWetTissueRequired,
+              key: const Key('cashier_wet_tissue_required_hint'),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: PosColors.warning,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _CashierPaymentActions extends StatelessWidget {
   const _CashierPaymentActions({
     required this.paymentOptions,
@@ -2653,6 +2897,7 @@ class _CashierPaymentActions extends StatelessWidget {
     required this.isProcessing,
     required this.isOnline,
     required this.canCompletePayment,
+    required this.paymentMethodsEnabled,
     required this.canCancelOrder,
     required this.canApplyDiscount,
     required this.canProcessSplit,
@@ -2670,6 +2915,7 @@ class _CashierPaymentActions extends StatelessWidget {
   final bool isProcessing;
   final bool isOnline;
   final bool canCompletePayment;
+  final bool paymentMethodsEnabled;
   final bool canCancelOrder;
   final bool canApplyDiscount;
   final bool canProcessSplit;
@@ -2709,7 +2955,9 @@ class _CashierPaymentActions extends StatelessWidget {
                       key: Key('cashier_method_tile_${method.value}'),
                       method: method,
                       selected: selectedMethod == method.value,
-                      onTap: () => onSelectMethod(method.value),
+                      onTap: paymentMethodsEnabled
+                          ? () => onSelectMethod(method.value)
+                          : null,
                     ),
                   ),
               ],
@@ -2765,7 +3013,11 @@ class _CashierPaymentActions extends StatelessWidget {
             width: double.infinity,
             child: OutlinedButton.icon(
               key: const Key('cashier_split_payment_button'),
-              onPressed: isProcessing || !isOnline || !canCompletePayment
+              onPressed:
+                  isProcessing ||
+                      !isOnline ||
+                      !canCompletePayment ||
+                      !paymentMethodsEnabled
                   ? null
                   : onProcessSplit,
               icon: const Icon(Icons.call_split_rounded, size: 16),
@@ -2991,12 +3243,12 @@ class _CashierMethodTile extends StatelessWidget {
     super.key,
     required this.method,
     required this.selected,
-    required this.onTap,
+    this.onTap,
   });
 
   final _PaymentMethod method;
   final bool selected;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
