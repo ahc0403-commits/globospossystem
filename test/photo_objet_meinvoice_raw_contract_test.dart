@@ -48,7 +48,12 @@ void main() {
     expect(source, contains('slot_date_hcm: identity.slotDateHcm'));
     expect(source, contains('slot_time_hcm: identity.slotTimeHcm'));
     expect(source, contains('selectRowsForInterval'));
-    expect(source, contains('zeroSalesInterval = selectedRows.length === 0'));
+    expect(
+      source,
+      contains('zeroSalesInterval = isZeroSalesInterval(selectedRows)'),
+    );
+    expect(source, contains("amount === 0 ? 'skipped' : 'pending'"));
+    expect(source, contains("amount === 0 ? 'ZERO_AMOUNT_NON_REVENUE' : null"));
     expect(source, contains('interval_rows: selectedRows.length'));
     expect(source, contains('photo_objet_complete_expected_slot'));
     expect(source, contains('AUDIT_INFRA_FAILED'));

@@ -730,6 +730,7 @@ apply_migration() {
     20260728060000_employee_attendance_daily_guard.sql|\
     20260731103153_allow_recreate_inactive_employee.sql|\
     20260801055557_restaurant_wet_tissue_charge.sql|\
+    20260801070557_photo_objet_zero_amount_raw_rows.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -984,6 +985,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_restaurant_wet_tissue_charge.sql" \
       "restaurant wet-tissue charge migration preflight"
+  elif [[ "$migration_name" == "20260801070557_photo_objet_zero_amount_raw_rows.sql" ]]; then
+    log "Photo Objet zero-amount raw-row migration preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_photo_objet_zero_amount_raw_rows.sql" \
+      "Photo Objet zero-amount raw-row migration preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -1239,6 +1245,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_restaurant_wet_tissue_charge.sql" \
       "restaurant wet-tissue charge migration verification"
+  elif [[ "$migration_name" == "20260801070557_photo_objet_zero_amount_raw_rows.sql" ]]; then
+    log "Photo Objet zero-amount raw-row migration verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_photo_objet_zero_amount_raw_rows.sql" \
+      "Photo Objet zero-amount raw-row migration verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \

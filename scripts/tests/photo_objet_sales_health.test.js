@@ -17,6 +17,7 @@ const {
   completeScheduledExpectation,
   createRunIdentity,
   inclusiveDateRange,
+  isZeroSalesInterval,
   parseArgs,
   parseSoldAt,
   parseSpreadsheetFile,
@@ -439,20 +440,62 @@ test('scheduled collection has exactly one 22:20 HCM slot', () => {
   }
 });
 
-test('immutable Moers rows reject zero, negative, and invalid amounts', () => {
+test('immutable Moers rows reject negative and invalid amounts', () => {
   const identity = {
     intervalStartAt: '2026-07-11T04:00:00.000Z',
     intervalEndAt: '2026-07-11T05:00:00.000Z',
   };
-  for (const amount of ['0', '-10000', 'not-a-number']) {
+  for (const amount of ['-10000', 'not-a-number']) {
     assert.throws(
       () => selectRowsForInterval([
         { 'Device Name': 'M1', Time: '11:30:00', Amount: amount },
       ], '2026-07-11', identity),
       error => error.failureClass === FAILURE.DETERMINISTIC &&
-        /non-positive or invalid Amount/.test(error.message),
+        /negative or invalid Amount/.test(error.message),
     );
   }
+});
+
+test('zero-amount Moers rows are preserved as non-revenue audit rows', () => {
+  const identity = {
+    intervalStartAt: '2026-07-11T04:00:00.000Z',
+    intervalEndAt: '2026-07-11T05:00:00.000Z',
+  };
+  const selected = selectRowsForInterval([
+    {
+      'Device Name': 'M1',
+      'Device ID': 'D1',
+      Time: '11:30:00',
+      Amount: '0',
+      Type: 'Zero amount source row',
+    },
+  ], '2026-07-11', identity);
+  const [normalized] = normalizeRawSalesRows(
+    selected,
+    { storeId: '77000000-0000-0000-0000-000000000103', storeName: 'DI AN' },
+    '2026-07-11',
+    'excel',
+    'run-zero',
+    identity,
+  );
+
+  assert.equal(normalized.amount, 0);
+  assert.equal(normalized.raw_type, 'Zero amount source row');
+  assert.equal(normalized.invoice_enqueue_status, 'skipped');
+  assert.equal(normalized.invoice_enqueue_error, 'ZERO_AMOUNT_NON_REVENUE');
+  assert.equal(isZeroSalesInterval(selected), true);
+});
+
+test('zero-sales interval requires every accepted source row to be zero', () => {
+  assert.equal(isZeroSalesInterval([]), true);
+  assert.equal(
+    isZeroSalesInterval([{ row: { Amount: '0' } }, { row: { Amount: 0 } }]),
+    true,
+  );
+  assert.equal(
+    isZeroSalesInterval([{ row: { Amount: '0' } }, { row: { Amount: '10000' } }]),
+    false,
+  );
 });
 
 test('immutable source drift rejects removed or corrected rows', () => {
@@ -516,6 +559,7 @@ test('stable source identity ignores workbook order and preserves identical mult
 
 test('daily aggregate is recomputed from the canonical raw ledger', () => {
   const rows = [
+    { device_name: 'M1', device_id: 'D1', amount: 0, raw_payload: { row: { id: 0 } } },
     { device_name: 'M1', device_id: 'D1', amount: 100000, raw_payload: { row: { id: 1 } } },
     { device_name: 'M1', device_id: 'D1', amount: 120000, raw_payload: { row: { id: 2 } } },
     { device_name: 'M2', device_id: 'D2', amount: 90000, raw_payload: { row: { id: 3 } } },
