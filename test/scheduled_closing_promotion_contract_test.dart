@@ -57,6 +57,9 @@ void main() {
 
   test('production deployment has explicit preflight and verification gates', () {
     final script = deploy.readAsStringSync();
+    final verification = File(
+      'scripts/verify_scheduled_closing_and_promotions.sql',
+    ).readAsStringSync();
 
     expect(
       script,
@@ -70,5 +73,6 @@ void main() {
       script,
       contains('verify_scheduled_closing_and_promotions.sql'),
     );
+    expect(verification, contains('END;\n\$verify\$;'));
   });
 }
