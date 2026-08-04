@@ -732,6 +732,7 @@ apply_migration() {
     20260801055557_restaurant_wet_tissue_charge.sql|\
     20260801070557_photo_objet_zero_amount_raw_rows.sql|\
     20260804010000_scheduled_closing_and_promotions.sql|\
+    20260804090000_combined_table_payment.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
