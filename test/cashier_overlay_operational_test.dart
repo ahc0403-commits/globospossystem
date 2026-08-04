@@ -70,6 +70,36 @@ final _cashierOrder = CashierOrder(
   createdAt: DateTime(2026, 7, 18, 12),
 );
 
+final _cashierOrderB = CashierOrder(
+  orderId: 'cashier-order-b2',
+  tableNumber: 'B2',
+  tableId: 'table-b2',
+  status: 'serving',
+  orderPurpose: 'customer',
+  orderSource: 'qr',
+  items: const [
+    OrderItem(
+      id: 'cashier-item-b2',
+      menuItemId: 'menu-b2',
+      label: 'Bánh xèo',
+      unitPrice: 80000,
+      quantity: 1,
+      status: 'ready',
+      itemType: 'menu_item',
+    ),
+  ],
+  menuSubtotal: 80000,
+  serviceChargeTotal: 0,
+  serviceItemTotal: 0,
+  fixedChargeTotal: 0,
+  discountTotal: 0,
+  totalAmount: 80000,
+  paidTotal: 0,
+  paymentCount: 0,
+  remainingDue: 80000,
+  createdAt: DateTime(2026, 7, 18, 12, 5),
+);
+
 class _AuthNotifier extends AuthNotifier {
   _AuthNotifier() : super() {
     state = _authState;
@@ -80,14 +110,17 @@ class _AuthNotifier extends AuthNotifier {
 }
 
 class _PaymentNotifier extends PaymentNotifier {
-  _PaymentNotifier() {
-    state = PaymentState(orders: [_cashierOrder]);
+  _PaymentNotifier({bool includeSecondOrder = false}) {
+    state = PaymentState(
+      orders: [_cashierOrder, if (includeSecondOrder) _cashierOrderB],
+    );
   }
 
   int cancelledOrders = 0;
   int serviceItemMutations = 0;
   int? confirmedWetTissueQuantity;
   String? processedMethod;
+  Map<String, int>? combinedWetTissueQuantities;
 
   @override
   Future<void> loadOrders(String storeId) async {}
@@ -112,6 +145,32 @@ class _PaymentNotifier extends PaymentNotifier {
     processedMethod = method;
     state = state.copyWith(paymentSuccess: true, isProcessing: false);
     return {'id': 'payment-single'};
+  }
+
+  @override
+  Future<Map<String, dynamic>?> processCombinedTablePayment(
+    String storeId,
+    List<CashierOrder> orders,
+    String method,
+  ) async {
+    processedMethod = method;
+    state = state.copyWith(paymentSuccess: true, isProcessing: false);
+    return {
+      'group_id': 'combined-group',
+      'payments': [
+        for (var index = 0; index < orders.length; index++)
+          {'id': 'combined-payment-$index'},
+      ],
+    };
+  }
+
+  @override
+  Future<bool> prepareCombinedTablePayment({
+    required String storeId,
+    required Map<String, int> wetTissueQuantities,
+  }) async {
+    combinedWetTissueQuantities = Map<String, int>.from(wetTissueQuantities);
+    return true;
   }
 
   @override
@@ -146,16 +205,24 @@ class _PaymentNotifier extends PaymentNotifier {
 }
 
 class _TableNotifier extends WaiterTableNotifier {
-  _TableNotifier() {
-    state = const WaiterTableState(
+  _TableNotifier({bool includeSecondOrder = false}) {
+    state = WaiterTableState(
       tables: [
-        PosTable(
+        const PosTable(
           id: 'table-a1',
           storeId: _storeId,
           tableNumber: 'A1',
           seatCount: 4,
           status: 'occupied',
         ),
+        if (includeSecondOrder)
+          const PosTable(
+            id: 'table-b2',
+            storeId: _storeId,
+            tableNumber: 'B2',
+            seatCount: 4,
+            status: 'occupied',
+          ),
       ],
     );
   }
@@ -436,6 +503,115 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'combined payment selects multiple tables and confirms wet tissues first',
+    (tester) async {
+      final harness = await _pumpCashier(
+        tester,
+        includeSecondOrder: true,
+        physicalSize: const Size(1440, 1600),
+      );
+
+      await tester.tap(find.byKey(const Key('cashier_combined_payment_mode')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('cashier_combined_order_$_orderId')),
+      );
+      await tester.tap(
+        find.byKey(const Key('cashier_combined_order_cashier-order-b2')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Đã chọn 2 bàn'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('cashier_combined_payment_start')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('cashier_combined_payment_dialog')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.byKey(const Key('cashier_combined_wet_tissue_plus_$_orderId')),
+      );
+      await tester.tap(
+        find.byKey(const Key('cashier_combined_payment_confirm')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(harness.notifier.combinedWetTissueQuantities, {
+        _orderId: 1,
+        'cashier-order-b2': 0,
+      });
+      expect(
+        find.byKey(const Key('cashier_combined_payment_method_dialog')),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.byKey(const Key('cashier_method_dialog_$paymentMethodCash')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('cashier_combined_cash_tender_dialog')),
+        findsOneWidget,
+      );
+      _dismiss(tester, const Key('cashier_combined_cash_tender_dialog'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('combined non-cash payment reaches proof and invoice flows', (
+    tester,
+  ) async {
+    final harness = await _pumpCashier(
+      tester,
+      includeSecondOrder: true,
+      physicalSize: const Size(1440, 1600),
+    );
+    await tester.tap(find.byKey(const Key('cashier_combined_payment_mode')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('cashier_combined_order_$_orderId')));
+    await tester.tap(
+      find.byKey(const Key('cashier_combined_order_cashier-order-b2')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('cashier_combined_payment_start')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('cashier_combined_payment_confirm')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('cashier_method_dialog_$paymentMethodCreditCard')),
+    );
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('cashier_combined_payment_proof_dialog')),
+    );
+    _dismiss(tester, const Key('cashier_combined_payment_proof_dialog'));
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('cashier_combined_red_invoice_$_orderId')),
+    );
+    _dismiss(tester, const Key('cashier_combined_red_invoice_$_orderId'));
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('cashier_combined_red_invoice_cashier-order-b2')),
+    );
+    _dismiss(
+      tester,
+      const Key('cashier_combined_red_invoice_cashier-order-b2'),
+    );
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('cashier_combined_payment_completion_dialog')),
+    );
+
+    expect(harness.notifier.processedMethod, paymentMethodCreditCard);
+    expect(harness.proofService.markRequiredCalls, 1);
+    _dismiss(tester, const Key('cashier_combined_payment_completion_dialog'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
 }
 
 class _CashierHarness {
@@ -450,13 +626,17 @@ class _CashierHarness {
   final _PaymentService paymentService;
 }
 
-Future<_CashierHarness> _pumpCashier(WidgetTester tester) async {
+Future<_CashierHarness> _pumpCashier(
+  WidgetTester tester, {
+  bool includeSecondOrder = false,
+  Size physicalSize = const Size(1440, 1000),
+}) async {
   tester.view.devicePixelRatio = 1;
-  tester.view.physicalSize = const Size(1440, 1000);
+  tester.view.physicalSize = physicalSize;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
-  final notifier = _PaymentNotifier();
+  final notifier = _PaymentNotifier(includeSecondOrder: includeSecondOrder);
   final proofService = _PaymentProofService();
   final paymentService = _PaymentService();
   final router = GoRouter(
@@ -487,7 +667,9 @@ Future<_CashierHarness> _pumpCashier(WidgetTester tester) async {
         authProvider.overrideWith((ref) => _AuthNotifier()),
         connectivityProvider.overrideWith((ref) => Stream.value(true)),
         paymentProvider.overrideWith((ref) => notifier),
-        waiterTableProvider.overrideWith((ref) => _TableNotifier()),
+        waiterTableProvider.overrideWith(
+          (ref) => _TableNotifier(includeSecondOrder: includeSecondOrder),
+        ),
         restaurantCutoffStateProvider.overrideWith(
           (ref, storeId) => Stream.value(
             const RestaurantCutoffState(

@@ -65,6 +65,8 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   bool _isFlushingProofQueue = false;
   bool _hasAttemptedProofFlush = false;
   bool _showPaymentQueueOnCompact = true;
+  bool _isCombinedPaymentMode = false;
+  final Set<String> _combinedOrderIds = <String>{};
   bool _isOrderSearchLoading = false;
   final TextEditingController _orderSearchController = TextEditingController();
   CashierOrderSearchResult? _orderSearchResult;
@@ -440,6 +442,207 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     );
   }
 
+  List<_PaymentMethod> _regularPaymentMethods() {
+    final l10n = context.l10n;
+    return <_PaymentMethod>[
+      _PaymentMethod(
+        paymentMethodCash,
+        l10n.cashierCashMethod,
+        const Color(0xFF2E7D32),
+        Icons.payments_rounded,
+      ),
+      _PaymentMethod(
+        paymentMethodOther,
+        l10n.cashierQrPaymentMethod,
+        const Color(0xFF8E44AD),
+        Icons.qr_code_2_rounded,
+      ),
+      _PaymentMethod(
+        paymentMethodCreditCard,
+        l10n.cashierCardMethod,
+        const Color(0xFF1565C0),
+        Icons.credit_card_rounded,
+      ),
+      _PaymentMethod(
+        paymentMethodBankTransfer,
+        l10n.cashierBankTransferMethod,
+        const Color(0xFF0F766E),
+        Icons.account_balance_rounded,
+      ),
+    ];
+  }
+
+  Future<void> _processCombinedTablePayment({
+    required String storeId,
+    required List<CashierOrder> orders,
+    required PaymentNotifier notifier,
+  }) async {
+    final l10n = context.l10n;
+    var paymentOrders = orders;
+    if (orders.length < 2) {
+      showErrorToast(context, l10n.cashierCombinedSelectAtLeastTwo);
+      return;
+    }
+    if (!await _canCompleteRestaurantPayment(storeId)) {
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+
+    final wetTissueQuantities = await showDialog<Map<String, int>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _CombinedTablePaymentDialog(
+        key: const Key('cashier_combined_payment_dialog'),
+        orders: orders,
+      ),
+    );
+    if (wetTissueQuantities == null || !mounted) {
+      return;
+    }
+
+    final prepared = await notifier.prepareCombinedTablePayment(
+      storeId: storeId,
+      wetTissueQuantities: {
+        for (final order in orders)
+          if (order.paymentCount == 0)
+            order.orderId: wetTissueQuantities[order.orderId] ?? 0,
+      },
+    );
+    if (!prepared || !mounted) {
+      return;
+    }
+    final requestedIds = orders.map((order) => order.orderId).toSet();
+    paymentOrders = ref
+        .read(paymentProvider)
+        .orders
+        .where((order) => requestedIds.contains(order.orderId))
+        .toList(growable: false);
+    if (paymentOrders.length != orders.length) {
+      showErrorToast(context, l10n.cashierCombinedOrderChanged);
+      return;
+    }
+
+    final method = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _CashierPaymentMethodDialog(
+        key: const Key('cashier_combined_payment_method_dialog'),
+        methods: _regularPaymentMethods(),
+      ),
+    );
+    if (method == null || !mounted) {
+      return;
+    }
+
+    final combinedTotal = paymentOrders.fold<double>(
+      0,
+      (sum, order) => sum + order.remainingDue,
+    );
+    CashTender? cashTender;
+    if (method == paymentMethodCash) {
+      cashTender = await showDialog<CashTender>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => CashTenderDialog(
+          key: const Key('cashier_combined_cash_tender_dialog'),
+          amountDue: combinedTotal,
+        ),
+      );
+      if (cashTender == null || !mounted) {
+        return;
+      }
+    }
+
+    final result = await notifier.processCombinedTablePayment(
+      storeId,
+      paymentOrders,
+      method,
+    );
+    if (!mounted ||
+        !ref.read(paymentProvider).paymentSuccess ||
+        result == null) {
+      return;
+    }
+
+    for (final order in paymentOrders) {
+      await _printReceipt(order: order, method: method);
+    }
+
+    final rawPayments = result['payments'];
+    final payments = rawPayments is List
+        ? rawPayments
+              .whereType<Map>()
+              .map((payment) => Map<String, dynamic>.from(payment))
+              .toList(growable: false)
+        : const <Map<String, dynamic>>[];
+    if (requiresPaymentProof(method) && payments.isNotEmpty && mounted) {
+      final paymentId = payments.first['id']?.toString();
+      if (paymentId != null) {
+        await _paymentProofService.markProofRequired(
+          paymentId: paymentId,
+          storeId: storeId,
+        );
+        if (!mounted) return;
+        await showDialog<PaymentProofSaveResult?>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => PaymentProofModal(
+            key: const Key('cashier_combined_payment_proof_dialog'),
+            paymentId: paymentId,
+            storeId: storeId,
+            methodLabel: paymentMethodDisplayLabel(method),
+          ),
+        );
+      }
+    }
+
+    for (final order in paymentOrders) {
+      if (!mounted) return;
+      await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => RedInvoiceModal(
+          key: Key('cashier_combined_red_invoice_${order.orderId}'),
+          orderId: order.orderId,
+          storeId: storeId,
+        ),
+      );
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _combinedOrderIds.clear();
+      _isCombinedPaymentMode = false;
+      _selectedMethod = null;
+      _showPaymentQueueOnCompact = true;
+    });
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _CombinedPaymentCompletionDialog(
+        key: const Key('cashier_combined_payment_completion_dialog'),
+        orders: paymentOrders,
+        totalAmount: combinedTotal,
+        paymentMethod: method,
+        cashTender: cashTender,
+        onReprint: () async {
+          for (final order in paymentOrders) {
+            await _printReceipt(order: order, method: method, reprint: true);
+          }
+        },
+      ),
+    );
+    if (mounted) {
+      unawaited(
+        ref
+            .read(waiterTableProvider.notifier)
+            .loadTables(storeId, showLoading: false),
+      );
+    }
+  }
+
   Future<void> _showPaymentCompletion({
     required CashierOrder order,
     required String paymentMethod,
@@ -669,17 +872,53 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       paymentState.orders,
       orderSearchQuery,
     );
+    final combinedOrders = paymentState.orders
+        .where((order) => _combinedOrderIds.contains(order.orderId))
+        .toList(growable: false);
+    final combinedTotal = combinedOrders.fold<double>(
+      0,
+      (sum, order) => sum + order.remainingDue,
+    );
     final queuePane = PosDataPanel(
       key: const Key('cashier_pending_payment_list'),
       title: l10n.cashierPendingStatus,
       subtitle: l10n.cashierSelectOrderToPay,
-      trailing: selectedOrder == null
-          ? null
-          : ToastStatusBadge(
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton.outlined(
+            key: const Key('cashier_combined_payment_mode'),
+            tooltip: _isCombinedPaymentMode
+                ? l10n.cancel
+                : l10n.cashierCombinedPayment,
+            onPressed: paymentState.isProcessing
+                ? null
+                : () {
+                    setState(() {
+                      _isCombinedPaymentMode = !_isCombinedPaymentMode;
+                      _combinedOrderIds.clear();
+                      if (_isCombinedPaymentMode) {
+                        _selectedMethod = null;
+                      }
+                    });
+                  },
+            icon: Icon(
+              _isCombinedPaymentMode
+                  ? Icons.close_rounded
+                  : Icons.call_merge_rounded,
+              size: 17,
+            ),
+          ),
+          if (!_isCombinedPaymentMode && selectedOrder != null) ...[
+            const SizedBox(width: 8),
+            ToastStatusBadge(
               label: l10n.selected,
               color: PosColors.accent,
               compact: true,
             ),
+          ],
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -696,6 +935,23 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
               key: const Key('cashier_order_search_status'),
               result: _orderSearchResult,
               message: _orderSearchFeedback!,
+            ),
+          ],
+          if (_isCombinedPaymentMode) ...[
+            const SizedBox(height: 10),
+            _CombinedPaymentSelectionBar(
+              selectedCount: combinedOrders.length,
+              totalAmount: combinedTotal,
+              isProcessing: paymentState.isProcessing,
+              onPay: storeId == null || combinedOrders.length < 2
+                  ? null
+                  : () => unawaited(
+                      _processCombinedTablePayment(
+                        storeId: storeId,
+                        orders: combinedOrders,
+                        notifier: notifier,
+                      ),
+                    ),
             ),
           ],
           const SizedBox(height: 12),
@@ -721,105 +977,168 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       final order = visiblePaymentOrders[index];
                       final selected =
                           paymentState.selectedOrder?.orderId == order.orderId;
+                      final combinedSelected = _combinedOrderIds.contains(
+                        order.orderId,
+                      );
+                      void handleOrderTap() {
+                        if (_isCombinedPaymentMode) {
+                          if (order.isStaffMeal) {
+                            showErrorToast(
+                              context,
+                              l10n.cashierCombinedCustomerOnly,
+                            );
+                            return;
+                          }
+                          setState(() {
+                            if (combinedSelected) {
+                              _combinedOrderIds.remove(order.orderId);
+                            } else {
+                              _combinedOrderIds.add(order.orderId);
+                            }
+                          });
+                          return;
+                        }
+                        setState(() {
+                          _selectedMethod = null;
+                          _prepareWetTissueForOrder(order);
+                          _showPaymentQueueOnCompact = false;
+                        });
+                        notifier.selectOrder(order);
+                      }
+
                       return KeyedSubtree(
                         key: Key('cashier_order_${order.orderId}'),
-                        child: PosDataGridRow(
-                          key: index == 0
-                              ? const Key('payment_first_candidate')
-                              : null,
-                          selected: selected,
-                          statusColor: selected ? PosColors.accent : null,
-                          onTap: () {
-                            setState(() {
-                              _selectedMethod = null;
-                              _prepareWetTissueForOrder(order);
-                              _showPaymentQueueOnCompact = false;
-                            });
-                            notifier.selectOrder(order);
-                          },
-                          cells: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  '#${_shortCashierOrderId(order.orderId)}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: PosNumericText.orderId.copyWith(
-                                    color: PosColors.textPrimary,
-                                  ),
+                        child: Row(
+                          children: [
+                            if (_isCombinedPaymentMode) ...[
+                              Checkbox(
+                                key: Key(
+                                  'cashier_combined_order_${order.orderId}',
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  _formatCashierOrderAge(
-                                    context,
-                                    order.createdAt,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(
-                                        color: PosColors.textSecondary,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                ),
-                              ],
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  l10n.cashierTableLabel(order.tableNumber),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.bodyMedium
-                                      ?.copyWith(fontWeight: FontWeight.w800),
-                                ),
-                                const SizedBox(height: 2),
-                                Wrap(
-                                  spacing: 6,
-                                  runSpacing: 4,
-                                  children: [
-                                    _OrderStatusBadge(status: order.status),
-                                    if (order.isQrOrder)
-                                      ToastStatusBadge(
-                                        key: Key(
-                                          'cashier_qr_order_badge_${order.orderId}',
-                                        ),
-                                        label: 'QR',
-                                        color: PosColors.accent,
-                                        compact: true,
-                                      ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                l10n.cashierItemsCount(order.items.length),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color: PosColors.textSecondary,
-                                      fontWeight: FontWeight.w800,
-                                    ),
+                                value: combinedSelected,
+                                onChanged: order.isStaffMeal
+                                    ? null
+                                    : (_) => handleOrderTap(),
                               ),
-                            ),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: Text(
-                                '₫${currency.format(order.remainingDue)}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.right,
-                                style: PosNumericText.amountLine.copyWith(
-                                  color: PosColors.accent,
-                                ),
+                              const SizedBox(width: 4),
+                            ],
+                            Expanded(
+                              child: PosDataGridRow(
+                                key: index == 0
+                                    ? const Key('payment_first_candidate')
+                                    : null,
+                                selected: _isCombinedPaymentMode
+                                    ? combinedSelected
+                                    : selected,
+                                statusColor:
+                                    (_isCombinedPaymentMode
+                                        ? combinedSelected
+                                        : selected)
+                                    ? PosColors.accent
+                                    : null,
+                                onTap: handleOrderTap,
+                                cells: [
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        '#${_shortCashierOrderId(order.orderId)}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: PosNumericText.orderId.copyWith(
+                                          color: PosColors.textPrimary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        _formatCashierOrderAge(
+                                          context,
+                                          order.createdAt,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: PosColors.textSecondary,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        l10n.cashierTableLabel(
+                                          order.tableNumber,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Wrap(
+                                        spacing: 6,
+                                        runSpacing: 4,
+                                        children: [
+                                          _OrderStatusBadge(
+                                            status: order.status,
+                                          ),
+                                          if (order.isQrOrder)
+                                            ToastStatusBadge(
+                                              key: Key(
+                                                'cashier_qr_order_badge_${order.orderId}',
+                                              ),
+                                              label: 'QR',
+                                              color: PosColors.accent,
+                                              compact: true,
+                                            ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      l10n.cashierItemsCount(
+                                        order.items.length,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: PosColors.textSecondary,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                    ),
+                                  ),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      '₫${currency.format(order.remainingDue)}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.right,
+                                      style: PosNumericText.amountLine.copyWith(
+                                        color: PosColors.accent,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -3669,6 +3988,310 @@ class _CashierNoPayableOrdersPanel extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CombinedPaymentSelectionBar extends StatelessWidget {
+  const _CombinedPaymentSelectionBar({
+    required this.selectedCount,
+    required this.totalAmount,
+    required this.isProcessing,
+    required this.onPay,
+  });
+
+  final int selectedCount;
+  final double totalAmount;
+  final bool isProcessing;
+  final VoidCallback? onPay;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final currency = NumberFormat('#,###', 'vi_VN');
+    return Container(
+      key: const Key('cashier_combined_payment_selection_bar'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: PosColors.accentMuted,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: PosColors.accent.withValues(alpha: 0.35)),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final summary = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n.cashierCombinedSelectedCount(selectedCount),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: PosColors.textPrimary,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '₫${currency.format(totalAmount)}',
+                style: PosNumericText.amountLine.copyWith(
+                  color: PosColors.accent,
+                ),
+              ),
+            ],
+          );
+          final payButton = FilledButton.icon(
+            key: const Key('cashier_combined_payment_start'),
+            onPressed: isProcessing ? null : onPay,
+            icon: isProcessing
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.payments_rounded, size: 18),
+            label: Text(l10n.cashierCombinedPayNow),
+          );
+          if (constraints.maxWidth < 340) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [summary, const SizedBox(height: 8), payButton],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: summary),
+              const SizedBox(width: 8),
+              payButton,
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _CombinedTablePaymentDialog extends StatefulWidget {
+  const _CombinedTablePaymentDialog({super.key, required this.orders});
+
+  final List<CashierOrder> orders;
+
+  @override
+  State<_CombinedTablePaymentDialog> createState() =>
+      _CombinedTablePaymentDialogState();
+}
+
+class _CombinedTablePaymentDialogState
+    extends State<_CombinedTablePaymentDialog> {
+  late final Map<String, int> _wetTissueQuantities;
+
+  @override
+  void initState() {
+    super.initState();
+    _wetTissueQuantities = {
+      for (final order in widget.orders) order.orderId: order.wetTissueQuantity,
+    };
+  }
+
+  double get _adjustedTotal => widget.orders.fold<double>(0, (sum, order) {
+    final quantity = _wetTissueQuantities[order.orderId] ?? 0;
+    final wetTissueDifference = quantity - order.wetTissueQuantity;
+    return sum + order.remainingDue + (wetTissueDifference * 3000);
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final currency = NumberFormat('#,###', 'vi_VN');
+    final dialogHeight = (230 + (widget.orders.length * 88))
+        .clamp(360, 520)
+        .toDouble();
+    return AlertDialog(
+      title: Text(l10n.cashierCombinedPayment),
+      content: SizedBox(
+        width: 520,
+        height: dialogHeight,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              l10n.cashierCombinedWetTissueHelp,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: PosColors.textSecondary),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: ListView.separated(
+                itemCount: widget.orders.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final order = widget.orders[index];
+                  final quantity = _wetTissueQuantities[order.orderId] ?? 0;
+                  final canChange = order.paymentCount == 0;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: PosColors.mutedSurface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: PosColors.border),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                l10n.cashierTableLabel(order.tableNumber),
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(fontWeight: FontWeight.w900),
+                              ),
+                              Text(
+                                '₫${currency.format(order.remainingDue)}',
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: PosColors.textSecondary,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton.outlined(
+                          key: Key(
+                            'cashier_combined_wet_tissue_minus_${order.orderId}',
+                          ),
+                          onPressed: canChange && quantity > 0
+                              ? () => setState(() {
+                                  _wetTissueQuantities[order.orderId] =
+                                      quantity - 1;
+                                })
+                              : null,
+                          icon: const Icon(Icons.remove_rounded, size: 18),
+                        ),
+                        SizedBox(
+                          width: 44,
+                          child: Text(
+                            '$quantity',
+                            textAlign: TextAlign.center,
+                            style: PosNumericText.amountLine,
+                          ),
+                        ),
+                        IconButton.filled(
+                          key: Key(
+                            'cashier_combined_wet_tissue_plus_${order.orderId}',
+                          ),
+                          onPressed: canChange
+                              ? () => setState(() {
+                                  _wetTissueQuantities[order.orderId] =
+                                      quantity + 1;
+                                })
+                              : null,
+                          icon: const Icon(Icons.add_rounded, size: 18),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 14),
+            PosAmountAnchor(
+              label: l10n.cashierCombinedTotal,
+              amount: '₫${currency.format(_adjustedTotal)}',
+              helper: l10n.cashierCombinedSelectedCount(widget.orders.length),
+              role: PosSurfaceRole.selected,
+              amountStyle: PosNumericText.amountHero,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(l10n.cancel),
+        ),
+        FilledButton.icon(
+          key: const Key('cashier_combined_payment_confirm'),
+          onPressed: () => Navigator.of(context).pop(_wetTissueQuantities),
+          icon: const Icon(Icons.check_rounded, size: 18),
+          label: Text(l10n.cashierCombinedConfirmWetTissue),
+        ),
+      ],
+    );
+  }
+}
+
+class _CombinedPaymentCompletionDialog extends StatelessWidget {
+  const _CombinedPaymentCompletionDialog({
+    super.key,
+    required this.orders,
+    required this.totalAmount,
+    required this.paymentMethod,
+    required this.cashTender,
+    required this.onReprint,
+  });
+
+  final List<CashierOrder> orders;
+  final double totalAmount;
+  final String paymentMethod;
+  final CashTender? cashTender;
+  final Future<void> Function() onReprint;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final currency = NumberFormat('#,###', 'vi_VN');
+    final tableNumbers = orders.map((order) => order.tableNumber).join(', ');
+    return AlertDialog(
+      title: Text(l10n.cashierCombinedCompleted),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              l10n.cashierCombinedTables(tableNumbers),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: PosColors.textSecondary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            PosAmountAnchor(
+              label: l10n.cashierCombinedTotal,
+              amount: '₫${currency.format(totalAmount)}',
+              helper: paymentMethodDisplayLabel(paymentMethod),
+              role: PosSurfaceRole.selected,
+              amountStyle: PosNumericText.amountHero,
+            ),
+            if (cashTender != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                '${l10n.cashierCashReceived}: ₫${currency.format(cashTender!.receivedAmount)} · ${l10n.cashierCashChange}: ₫${currency.format(cashTender!.changeAmount)}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: PosColors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton.icon(
+          key: const Key('cashier_combined_payment_reprint'),
+          onPressed: () => unawaited(onReprint()),
+          icon: const Icon(Icons.print_rounded, size: 18),
+          label: Text(l10n.cashierReprint),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(l10n.confirm),
+        ),
+      ],
     );
   }
 }

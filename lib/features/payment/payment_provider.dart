@@ -548,6 +548,78 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     }
   }
 
+  Future<Map<String, dynamic>?> processCombinedTablePayment(
+    String storeId,
+    List<CashierOrder> orders,
+    String method,
+  ) async {
+    state = state.copyWith(
+      isProcessing: true,
+      paymentSuccess: false,
+      clearError: true,
+    );
+
+    try {
+      final result = await paymentService.processCombinedTablePayment(
+        storeId: storeId,
+        orders: orders
+            .map(
+              (order) => CombinedOrderPaymentInput(
+                orderId: order.orderId,
+                amount: order.remainingDue,
+              ),
+            )
+            .toList(growable: false),
+        method: method,
+      );
+
+      await loadOrders(storeId);
+      state = state.copyWith(
+        isProcessing: false,
+        paymentSuccess: true,
+        clearSelectedOrder: true,
+      );
+      return result;
+    } catch (error) {
+      state = state.copyWith(
+        isProcessing: false,
+        error: _mapPaymentError(
+          error,
+          'Failed to process combined table payment',
+        ),
+      );
+      return null;
+    }
+  }
+
+  Future<bool> prepareCombinedTablePayment({
+    required String storeId,
+    required Map<String, int> wetTissueQuantities,
+  }) async {
+    state = state.copyWith(isProcessing: true, clearError: true);
+    try {
+      for (final entry in wetTissueQuantities.entries) {
+        await paymentService.setOrderWetTissueQuantity(
+          orderId: entry.key,
+          storeId: storeId,
+          quantity: entry.value,
+        );
+      }
+      await loadOrders(storeId);
+      state = state.copyWith(isProcessing: false, clearError: true);
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        isProcessing: false,
+        error: _mapPaymentError(
+          error,
+          'Failed to prepare combined table payment',
+        ),
+      );
+      return false;
+    }
+  }
+
   Future<bool> setWetTissueQuantity({
     required String storeId,
     required String orderId,
