@@ -26,11 +26,13 @@ String _formatVnd(NumberFormat currency, num amount) {
 class AttendanceTab extends ConsumerStatefulWidget {
   const AttendanceTab({
     super.key,
+    this.isPhotoObjetContext = false,
     this.attendanceServiceOverride,
     this.payrollServiceOverride,
     this.pinServiceOverride,
   });
 
+  final bool isPhotoObjetContext;
   final AttendanceService? attendanceServiceOverride;
   final PayrollService? payrollServiceOverride;
   final PinService? pinServiceOverride;
@@ -419,7 +421,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                   icon: const Icon(Icons.event_outlined),
                   label: Text(DateFormat('yyyy-MM-dd').format(workDate)),
                 ),
-                if (role == 'part_timer') ...[
+                if (widget.isPhotoObjetContext && role == 'part_timer') ...[
                   const SizedBox(height: 12),
                   SwitchListTile.adaptive(
                     key: const Key('attendance_allowance_split_shift'),
@@ -494,7 +496,10 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                           storeId: storeId,
                           employeeId: employeeId,
                           workDate: workDate,
-                          isSplitShift: role == 'part_timer' && isSplitShift,
+                          isSplitShift:
+                              widget.isPhotoObjetContext &&
+                              role == 'part_timer' &&
+                              isSplitShift,
                           parkingAllowanceAmount: parkingAmount,
                           note: note.text.trim().isEmpty
                               ? null
