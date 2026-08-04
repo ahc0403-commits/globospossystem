@@ -5,6 +5,87 @@
   const shellId = 'globos-web-shell';
   const body = document.body;
   const searchParams = new URLSearchParams(window.location.search);
+  const isQrOrderRoute =
+    window.location.hash.startsWith('#/qr/') ||
+    window.location.pathname.startsWith('/qr/');
+
+  const languageCode = (navigator.language || 'en').toLowerCase();
+  const language = languageCode.startsWith('ko')
+    ? 'ko'
+    : languageCode.startsWith('vi')
+      ? 'vi'
+      : 'en';
+
+  const shellCopy = {
+    ko: {
+      qr: {
+        title: '주문 화면을 준비하고 있습니다',
+        body: '메뉴를 불러오는 동안 잠시만 기다려 주세요.',
+        status: '메뉴 불러오는 중',
+        errorTitle: '주문 화면을 열 수 없습니다',
+        errorBody: '주문 화면을 불러오는 중 문제가 발생했습니다.',
+        errorStatus: '연결 확인 필요',
+        errorHint:
+          '인터넷 연결을 확인한 후 페이지를 새로고침해 주세요. 계속 문제가 발생하면 매장 직원에게 문의해 주세요.',
+      },
+      staff: {
+        title: '매장 운영 화면을 준비하고 있습니다',
+        body: '현재 매장 정보를 불러오는 동안 잠시만 기다려 주세요.',
+        status: '운영 화면 불러오는 중',
+        errorTitle: '운영 화면을 열 수 없습니다',
+        errorBody: '매장 운영 화면을 불러오는 중 문제가 발생했습니다.',
+        errorStatus: '연결 확인 필요',
+        errorHint:
+          '인터넷 연결을 확인한 후 페이지를 새로고침해 주세요. 계속 문제가 발생하면 시스템 관리자에게 문의해 주세요.',
+      },
+    },
+    vi: {
+      qr: {
+        title: 'Đang chuẩn bị trang gọi món',
+        body: 'Vui lòng chờ trong khi hệ thống tải thực đơn.',
+        status: 'Đang tải thực đơn',
+        errorTitle: 'Không thể mở trang gọi món',
+        errorBody: 'Đã xảy ra sự cố khi tải trang gọi món.',
+        errorStatus: 'Vui lòng kiểm tra kết nối',
+        errorHint:
+          'Hãy kiểm tra kết nối Internet và tải lại trang. Nếu sự cố vẫn tiếp diễn, vui lòng liên hệ nhân viên cửa hàng.',
+      },
+      staff: {
+        title: 'Đang chuẩn bị màn hình vận hành',
+        body: 'Vui lòng chờ trong khi hệ thống tải thông tin cửa hàng.',
+        status: 'Đang tải màn hình vận hành',
+        errorTitle: 'Không thể mở màn hình vận hành',
+        errorBody: 'Đã xảy ra sự cố khi tải màn hình vận hành cửa hàng.',
+        errorStatus: 'Vui lòng kiểm tra kết nối',
+        errorHint:
+          'Hãy kiểm tra kết nối Internet và tải lại trang. Nếu sự cố vẫn tiếp diễn, vui lòng liên hệ quản trị viên hệ thống.',
+      },
+    },
+    en: {
+      qr: {
+        title: 'Preparing your order screen',
+        body: 'Please wait while we load the menu.',
+        status: 'Loading menu',
+        errorTitle: 'Unable to open the order screen',
+        errorBody: 'There was a problem loading the order screen.',
+        errorStatus: 'Connection check required',
+        errorHint:
+          'Check your internet connection and refresh the page. If the problem continues, please ask a store team member for help.',
+      },
+      staff: {
+        title: 'Preparing the store workspace',
+        body: 'Please wait while we load the current store information.',
+        status: 'Loading store workspace',
+        errorTitle: 'Unable to open the store workspace',
+        errorBody: 'There was a problem loading the store workspace.',
+        errorStatus: 'Connection check required',
+        errorHint:
+          'Check your internet connection and refresh the page. If the problem continues, please contact your system administrator.',
+      },
+    },
+  };
+
+  const copy = shellCopy[language][isQrOrderRoute ? 'qr' : 'staff'];
 
   const requestedRenderer = searchParams.get('renderer');
   const useCpuOnlyCanvasKit =
@@ -213,45 +294,31 @@
 
   let bootCompleted = false;
   let bootFailed = false;
-  let lastBootstrapError = null;
 
-  const failShell = (message) => {
+  const failShell = () => {
     if (bootCompleted || bootFailed) {
       return;
     }
     bootFailed = true;
     renderShell({
-      title: 'Web renderer did not start',
-      bodyText:
-          'This browser session could not initialize the default Flutter web renderer for GLOBOS POS.',
-      statusText: 'Renderer startup failed',
-      hintText:
-          `${message ? `${message}<br><br>` : ''}If this machine keeps losing the WebGL context, run <code>flutter run -d chrome --web-port 3000 --wasm</code> for verification.`,
+      title: copy.errorTitle,
+      bodyText: copy.errorBody,
+      statusText: copy.errorStatus,
+      hintText: copy.errorHint,
       hintClassName: 'globos-web-shell__hint--error',
     });
   };
 
-  window.addEventListener('error', (event) => {
-    lastBootstrapError = event.error || event.message || 'Unknown web bootstrap error';
-  });
-  window.addEventListener('unhandledrejection', (event) => {
-    lastBootstrapError = event.reason || 'Unhandled promise rejection during Flutter bootstrap';
-  });
-  window.addEventListener('webglcontextlost', () => {
-    lastBootstrapError = 'WebGL context lost while initializing Flutter web.';
-  });
-
   renderShell({
-    title: 'Preparing operational workspace',
-    bodyText:
-        'Starting GLOBOS POS and loading the current store context for this browser session.',
-    statusText: 'Initializing Flutter web runtime',
-    hintText: 'If startup stalls on this machine, verify with <code>flutter run -d chrome --web-port 3000 --wasm</code>.',
+    title: copy.title,
+    bodyText: copy.body,
+    statusText: copy.status,
+    hintText: '',
   });
 
   const bootWatchdog = window.setTimeout(() => {
     if (!bootCompleted && !hasFlutterView()) {
-      failShell(lastBootstrapError ? String(lastBootstrapError) : '');
+      failShell();
     }
   }, 12000);
 
@@ -281,8 +348,7 @@
       hideShell();
       observer.disconnect();
     },
-  }).catch((error) => {
-    lastBootstrapError = error;
-    failShell(String(error));
+  }).catch(() => {
+    failShell();
   });
 })();
