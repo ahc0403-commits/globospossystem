@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast_primitives_extended.dart';
+import '../../core/utils/role_routes.dart';
+import '../../widgets/error_toast.dart';
 import '../../widgets/language_switcher.dart';
 import 'auth_provider.dart';
 
@@ -22,7 +25,9 @@ bool isStrongInitialPassword(String value) {
 }
 
 class InitialPasswordChangeScreen extends ConsumerStatefulWidget {
-  const InitialPasswordChangeScreen({super.key});
+  const InitialPasswordChangeScreen({super.key, this.selfService = false});
+
+  final bool selfService;
 
   @override
   ConsumerState<InitialPasswordChangeScreen> createState() =>
@@ -48,9 +53,17 @@ class _InitialPasswordChangeScreenState
     FocusScope.of(context).unfocus();
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    await ref
-        .read(authProvider.notifier)
-        .changeInitialPassword(_passwordController.text);
+    final changed = widget.selfService
+        ? await ref
+              .read(authProvider.notifier)
+              .changeOwnPassword(_passwordController.text)
+        : await ref
+              .read(authProvider.notifier)
+              .changeInitialPassword(_passwordController.text);
+    if (!mounted || !changed || !widget.selfService) return;
+
+    showSuccessToast(context, context.l10n.changePasswordSuccess);
+    context.go(homeRouteForRole(ref.read(authProvider).role));
   }
 
   @override
@@ -100,7 +113,9 @@ class _InitialPasswordChangeScreenState
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    l10n.initialPasswordTitle,
+                                    widget.selfService
+                                        ? l10n.changePasswordTitle
+                                        : l10n.initialPasswordTitle,
                                     style: AppFonts.system(
                                       fontSize: 24,
                                       fontWeight: FontWeight.w900,
@@ -109,7 +124,9 @@ class _InitialPasswordChangeScreenState
                                   ),
                                   const SizedBox(height: AppSpacing.xs),
                                   Text(
-                                    l10n.initialPasswordSubtitle,
+                                    widget.selfService
+                                        ? l10n.changePasswordSubtitle
+                                        : l10n.initialPasswordSubtitle,
                                     style: AppFonts.system(
                                       fontSize: 13.5,
                                       height: 1.45,
@@ -291,6 +308,8 @@ class _InitialPasswordChangeScreenState
                                 label: Text(
                                   auth.isPasswordChangeSubmitting
                                       ? l10n.initialPasswordSaving
+                                      : widget.selfService
+                                      ? l10n.changePasswordSubmit
                                       : l10n.initialPasswordSubmit,
                                 ),
                               ),
@@ -299,11 +318,26 @@ class _InitialPasswordChangeScreenState
                             TextButton.icon(
                               onPressed: auth.isPasswordChangeSubmitting
                                   ? null
+                                  : widget.selfService
+                                  ? () => context.go(
+                                      homeRouteForRole(
+                                        ref.read(authProvider).role,
+                                      ),
+                                    )
                                   : () => ref
                                         .read(authProvider.notifier)
                                         .logout(),
-                              icon: const Icon(Icons.logout, size: 18),
-                              label: Text(l10n.initialPasswordLogout),
+                              icon: Icon(
+                                widget.selfService
+                                    ? Icons.home_outlined
+                                    : Icons.logout,
+                                size: 18,
+                              ),
+                              label: Text(
+                                widget.selfService
+                                    ? l10n.changePasswordCancel
+                                    : l10n.initialPasswordLogout,
+                              ),
                             ),
                           ],
                         ),

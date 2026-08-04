@@ -43,6 +43,7 @@ bool canAccessRouteForRole(
   final path = Uri.parse(location).path;
 
   if (role == null) return path == '/login';
+  if (path == '/change-password') return true;
   if (path == '/login' || path == '/onboarding' || path == '/privacy-consent') {
     return true;
   }

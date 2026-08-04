@@ -125,6 +125,13 @@ void main() {
       }
     });
 
+    test('all signed-in roles can access /change-password', () {
+      for (final role in kKnownPosRoles) {
+        expect(canAccessRouteForRole(role, '/change-password'), isTrue);
+      }
+      expect(canAccessRouteForRole(null, '/change-password'), isFalse);
+    });
+
     test('store operating roles can access /attendance-kiosk', () {
       for (final role in [
         'super_admin',

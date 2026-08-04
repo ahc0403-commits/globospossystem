@@ -207,28 +207,46 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
   Future<bool> changeInitialPassword(String newPassword) async {
     if (state.user == null || !state.passwordChangeRequired) return false;
 
+    return _changeOwnPassword(newPassword, selfService: false);
+  }
+
+  Future<bool> changeOwnPassword(String newPassword) async {
+    if (state.user == null) return false;
+
+    return _changeOwnPassword(newPassword, selfService: true);
+  }
+
+  Future<bool> _changeOwnPassword(
+    String newPassword, {
+    required bool selfService,
+  }) async {
     state = state.copyWith(isPasswordChangeSubmitting: true, clearError: true);
 
     try {
       final response = await supabase.functions.invoke(
         'complete-initial-password-change',
-        body: {'new_password': newPassword},
+        body: {
+          'new_password': newPassword,
+          if (selfService) 'mode': 'self_service',
+        },
       );
       if (response.status < 200 || response.status >= 300) {
         throw StateError('password change function rejected the request');
       }
 
-      // The Edge Function authenticates the caller, replaces only that user's
-      // password, and clears the gate only for the generation it started.
-      // Re-read the server-owned profile before allowing POS navigation.
-      final profile = await supabase
-          .from('users')
-          .select('must_change_password, password_change_generation')
-          .eq('auth_id', state.user!.id)
-          .single();
-      final isStillRequired = profile['must_change_password'] as bool? ?? true;
-      if (isStillRequired) {
-        throw StateError('password change was not confirmed by the server');
+      if (!selfService || state.passwordChangeRequired) {
+        // A forced reset is cleared only for the generation that this request
+        // started. Re-read the server-owned gate before POS navigation.
+        final profile = await supabase
+            .from('users')
+            .select('must_change_password, password_change_generation')
+            .eq('auth_id', state.user!.id)
+            .single();
+        final isStillRequired =
+            profile['must_change_password'] as bool? ?? true;
+        if (isStillRequired) {
+          throw StateError('password change was not confirmed by the server');
+        }
       }
 
       state = state.copyWith(
@@ -240,14 +258,14 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
     } on AuthException catch (error) {
       state = state.copyWith(
         isPasswordChangeSubmitting: false,
-        passwordChangeRequired: true,
+        passwordChangeRequired: state.passwordChangeRequired,
         errorMessage: '$authErrorPasswordChangeFailedPrefix ${error.message}',
       );
       return false;
     } catch (_) {
       state = state.copyWith(
         isPasswordChangeSubmitting: false,
-        passwordChangeRequired: true,
+        passwordChangeRequired: state.passwordChangeRequired,
         errorMessage: authErrorPasswordChangeFailed,
       );
       return false;

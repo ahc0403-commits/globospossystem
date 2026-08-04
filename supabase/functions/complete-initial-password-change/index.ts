@@ -85,6 +85,7 @@ export function createPasswordChangeHandler(
     const newPassword = typeof body.new_password === "string"
       ? body.new_password
       : "";
+    const selfService = body.mode === "self_service";
     if (!isStrongPassword(newPassword)) {
       return response(request, 400, { error: "PASSWORD_POLICY_FAILED" });
     }
@@ -99,13 +100,17 @@ export function createPasswordChangeHandler(
       if (!profile || !profile.isActive) {
         return response(request, 403, { error: "ACTIVE_PROFILE_REQUIRED" });
       }
-      if (!profile.mustChangePassword) {
+      if (!profile.mustChangePassword && !selfService) {
         return response(request, 409, {
           error: "PASSWORD_CHANGE_NOT_REQUIRED",
         });
       }
 
       await dependencies.updatePassword(authId, newPassword);
+
+      if (!profile.mustChangePassword) {
+        return response(request, 200, { password_changed: true });
+      }
 
       const completed = profile.generationSupported
         ? await dependencies.completeGeneration(

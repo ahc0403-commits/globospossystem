@@ -101,6 +101,51 @@ Deno.test("keeps the gate armed when a concurrent reset advances generation", as
   );
 });
 
+Deno.test("allows an active signed-in user to change only their own password", async () => {
+  let updatedAuthId = "";
+  let completionAttempted = false;
+  const handler = createPasswordChangeHandler(dependencies({
+    loadProfile: () =>
+      Promise.resolve({
+        id: "profile-1",
+        isActive: true,
+        mustChangePassword: false,
+        generation: 8,
+        generationSupported: true,
+      }),
+    updatePassword: (authId) => {
+      updatedAuthId = authId;
+      return Promise.resolve();
+    },
+    completeGeneration: () => {
+      completionAttempted = true;
+      return Promise.resolve(true);
+    },
+  }));
+
+  const result = await handler(request("NewPrivateShift12!", {
+    mode: "self_service",
+    user_id: "attempted-other-user",
+  }));
+  assertEquals(result.status, 200, "self-service status");
+  assertEquals(updatedAuthId, "auth-user-1", "self-service password target");
+  assertEquals(completionAttempted, false, "forced completion not attempted");
+});
+
+Deno.test("keeps voluntary mode unavailable without an explicit request", async () => {
+  const handler = createPasswordChangeHandler(dependencies({
+    loadProfile: () =>
+      Promise.resolve({
+        id: "profile-1",
+        isActive: true,
+        mustChangePassword: false,
+        generation: 8,
+        generationSupported: true,
+      }),
+  }));
+  assertEquals((await handler(request())).status, 409, "forced-only status");
+});
+
 Deno.test("keeps the gate armed when Auth password update fails", async () => {
   let completionAttempted = false;
   const handler = createPasswordChangeHandler(dependencies({
