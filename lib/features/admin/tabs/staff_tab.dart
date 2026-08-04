@@ -597,6 +597,26 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                   label: context.l10n.staffRegisteredAt,
                   value: DateFormat('yyyy-MM-dd').format(member.createdAt),
                 ),
+                if (member.role == 'full_time')
+                  _DetailMetric(
+                    label: context.l10n.staffProbationStartDate,
+                    value: member.probationStartDate == null
+                        ? context.l10n.staffEmploymentDateNotSet
+                        : DateFormat(
+                            'yyyy-MM-dd',
+                          ).format(member.probationStartDate!),
+                  ),
+                if (member.role == 'part_timer' || member.role == 'full_time')
+                  _DetailMetric(
+                    label: member.role == 'part_timer'
+                        ? context.l10n.staffWorkStartDate
+                        : context.l10n.staffOfficialEmploymentStartDate,
+                    value: member.employmentStartDate == null
+                        ? context.l10n.staffEmploymentDateNotSet
+                        : DateFormat(
+                            'yyyy-MM-dd',
+                          ).format(member.employmentStartDate!),
+                  ),
               ],
             ),
             const SizedBox(height: 16),
@@ -663,6 +683,8 @@ class _StaffTabState extends ConsumerState<StaffTab> {
       text: '${hourlyRule?.lateReviewHourlyMultiplier ?? 2}',
     );
     var role = employee?.role ?? 'part_timer';
+    var probationStartDate = employee?.probationStartDate;
+    var employmentStartDate = employee?.employmentStartDate;
     String? validation;
 
     final duplicateToEdit = await showModalBottomSheet<StaffMember>(
@@ -721,10 +743,78 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                       ),
                   ],
                   onChanged: (value) {
-                    if (value != null) setModalState(() => role = value);
+                    if (value != null) {
+                      setModalState(() {
+                        role = value;
+                        if (role != 'full_time') probationStartDate = null;
+                        if (role == 'manager') employmentStartDate = null;
+                      });
+                    }
                   },
                 ),
                 const SizedBox(height: 10),
+                if (role == 'full_time') ...[
+                  OutlinedButton.icon(
+                    key: const Key('staff_probation_start_date_field'),
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: sheetContext,
+                        initialDate: probationStartDate ?? DateTime.now(),
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                      );
+                      if (picked != null) {
+                        setModalState(() => probationStartDate = picked);
+                      }
+                    },
+                    icon: const Icon(Icons.event_outlined),
+                    label: Text(
+                      probationStartDate == null
+                          ? context.l10n.staffProbationStartDate
+                          : context.l10n.staffEmploymentDateValue(
+                              context.l10n.staffProbationStartDate,
+                              DateFormat(
+                                'yyyy-MM-dd',
+                              ).format(probationStartDate!),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                if (role == 'part_timer' || role == 'full_time') ...[
+                  OutlinedButton.icon(
+                    key: const Key('staff_employment_start_date_field'),
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: sheetContext,
+                        initialDate: employmentStartDate ?? DateTime.now(),
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                      );
+                      if (picked != null) {
+                        setModalState(() => employmentStartDate = picked);
+                      }
+                    },
+                    icon: const Icon(Icons.event_available_outlined),
+                    label: Text(
+                      employmentStartDate == null
+                          ? role == 'part_timer'
+                                ? context.l10n.staffWorkStartDate
+                                : context.l10n.staffOfficialEmploymentStartDate
+                          : context.l10n.staffEmploymentDateValue(
+                              role == 'part_timer'
+                                  ? context.l10n.staffWorkStartDate
+                                  : context
+                                        .l10n
+                                        .staffOfficialEmploymentStartDate,
+                              DateFormat(
+                                'yyyy-MM-dd',
+                              ).format(employmentStartDate!),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 TextField(
                   controller: phone,
                   keyboardType: TextInputType.phone,
@@ -887,6 +977,24 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                       );
                       return;
                     }
+                    if ((role == 'part_timer' || role == 'full_time') &&
+                        (employmentStartDate == null ||
+                            (role == 'full_time' &&
+                                probationStartDate == null))) {
+                      setModalState(
+                        () => validation =
+                            context.l10n.staffEmploymentDatesRequired,
+                      );
+                      return;
+                    }
+                    if (role == 'full_time' &&
+                        employmentStartDate!.isBefore(probationStartDate!)) {
+                      setModalState(
+                        () => validation =
+                            context.l10n.staffEmploymentDateOrderInvalid,
+                      );
+                      return;
+                    }
                     final parsedHourlyRate = double.tryParse(
                       hourlyRate.text.trim().replaceAll(',', ''),
                     );
@@ -999,6 +1107,8 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                         holidayMultiplier: parsedHolidayMultiplier ?? 3,
                         lateThresholdMinutes: parsedLateThreshold ?? 60,
                         lateReviewHourlyMultiplier: parsedLateReview ?? 2,
+                        probationStartDate: probationStartDate,
+                        employmentStartDate: employmentStartDate,
                       );
                     } else {
                       await notifier.updateStaff(
@@ -1017,6 +1127,8 @@ class _StaffTabState extends ConsumerState<StaffTab> {
                         holidayMultiplier: parsedHolidayMultiplier ?? 3,
                         lateThresholdMinutes: parsedLateThreshold ?? 60,
                         lateReviewHourlyMultiplier: parsedLateReview ?? 2,
+                        probationStartDate: probationStartDate,
+                        employmentStartDate: employmentStartDate,
                       );
                     }
                     if (!sheetContext.mounted) return;

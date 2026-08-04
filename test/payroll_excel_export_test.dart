@@ -23,6 +23,8 @@ void main() {
             isUnpaired: false,
             nightHours: 0,
             holidayHours: 0,
+            mealAllowance: 25000,
+            parkingAllowance: 5000,
           ),
           DailyRecord(
             userId: 'part-timer-1',
@@ -48,13 +50,16 @@ void main() {
       final summary = workbook.tables['Summary']!;
       final details = workbook.tables['Daily Details']!;
       expect(summary.rows[2][0]!.value.toString(), 'Employee Name');
-      expect(summary.rows[2][10]!.value.toString(), 'Payable Amount (VND)');
+      expect(summary.rows[2][9]!.value.toString(), 'Meal Allowance (VND)');
+      expect(summary.rows[2][10]!.value.toString(), 'Parking Allowance (VND)');
+      expect(summary.rows[2][12]!.value.toString(), 'Payable Amount (VND)');
       expect(summary.rows[3][0]!.value.toString(), 'Part Timer A');
       expect(summary.rows[3][1]!.value.toString(), '1');
       expect(summary.rows[3][6]!.value.toString(), '1');
-      expect(details.rows[0][8]!.value.toString(), 'Status');
-      expect(details.rows[1][8]!.value.toString(), 'Complete');
-      expect(details.rows[2][8]!.value.toString(), 'Review required');
+      expect(details.rows[0][11]!.value.toString(), 'Status');
+      expect(details.rows[1][10]!.value.toString(), '150000');
+      expect(details.rows[1][11]!.value.toString(), 'Complete');
+      expect(details.rows[2][11]!.value.toString(), 'Review required');
     },
   );
 }

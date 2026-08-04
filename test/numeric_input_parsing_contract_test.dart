@@ -18,6 +18,14 @@ void main() {
     expect(parseIntInput('1.5'), isNull);
   });
 
+  test('localized physical quantities preserve decimal commas', () {
+    expect(parseLocalizedQuantityInput('0,5'), 0.5);
+    expect(parseLocalizedQuantityInput('1,5'), 1.5);
+    expect(parseLocalizedQuantityInput('1.5'), 1.5);
+    expect(parseLocalizedQuantityInput('1,2345'), isNull);
+    expect(parseLocalizedQuantityInput('1,2.3'), isNull);
+  });
+
   test('primary operator forms use comma-tolerant numeric parsing', () {
     final inventoryPurchase = readRepoFile(
       'lib/features/inventory_purchase/inventory_purchase_screen.dart',
@@ -38,6 +46,12 @@ void main() {
     final tables = readRepoFile('lib/features/admin/tabs/tables_tab.dart');
     final qcAdmin = readRepoFile('lib/features/admin/tabs/qc_tab.dart');
     final qcReview = readRepoFile('lib/features/qc/qc_review_screen.dart');
+    final photoInventory = readRepoFile(
+      'lib/features/photo_inventory/photo_inventory_screen.dart',
+    );
+    final photoOps = readRepoFile(
+      'lib/features/photo_ops/photo_ops_screen.dart',
+    );
 
     expect(
       inventoryPurchase,
@@ -76,5 +90,15 @@ void main() {
     expect(tables, contains('parseIntInput(seatController.text)'));
     expect(qcAdmin, contains('parseIntInput(sortController.text)'));
     expect(qcReview, contains('parseDecimalInput(scoreController.text)'));
+    expect(
+      photoInventory,
+      contains('parseLocalizedQuantityInput(stockController.text)'),
+    );
+    expect(
+      photoOps,
+      contains(
+        'parseLocalizedQuantityInput(\n                  quantity.text,',
+      ),
+    );
   });
 }

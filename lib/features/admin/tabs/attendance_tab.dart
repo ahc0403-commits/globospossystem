@@ -14,6 +14,7 @@ import '../../../core/services/pin_service.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
 import '../../../core/utils/time_utils.dart';
+import '../../../core/utils/number_input_utils.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
@@ -312,6 +313,228 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     }
 
     return fallback;
+  }
+
+  Future<void> _showDailyAllowanceDialog({
+    required String storeId,
+    required Map<String, dynamic> attendanceRow,
+  }) async {
+    final employeeId = attendanceRow['userId']?.toString() ?? '';
+    final role = attendanceRow['role']?.toString() ?? '';
+    if (employeeId.isEmpty || (role != 'part_timer' && role != 'full_time')) {
+      return;
+    }
+
+    final logs = attendanceRow['logs'] is List
+        ? List<Map<String, dynamic>>.from(attendanceRow['logs'] as List)
+        : const <Map<String, dynamic>>[];
+    final latestLogDate = logs
+        .map((log) => DateTime.tryParse(log['logged_at']?.toString() ?? ''))
+        .whereType<DateTime>()
+        .map(TimeUtils.toVietnam)
+        .fold<DateTime?>(null, (latest, value) {
+          if (latest == null || value.isAfter(latest)) return value;
+          return latest;
+        });
+    var workDate = latestLogDate == null
+        ? TimeUtils.nowVietnam()
+        : DateTime(latestLogDate.year, latestLogDate.month, latestLogDate.day);
+    final parking = TextEditingController();
+    final note = TextEditingController();
+    var isSplitShift = false;
+    var loading = true;
+    var saving = false;
+    String? validation;
+
+    Future<Map<String, dynamic>?> loadAllowance() =>
+        _attendanceService.fetchDailyAllowance(
+          storeId: storeId,
+          employeeId: employeeId,
+          workDate: workDate,
+        );
+
+    final initial = await loadAllowance();
+    isSplitShift = initial?['is_split_shift'] == true;
+    parking.text =
+        (double.tryParse('${initial?['parking_allowance_amount'] ?? 0}') ?? 0)
+            .toStringAsFixed(0);
+    note.text = initial?['note']?.toString() ?? '';
+    loading = false;
+    if (!mounted) return;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          key: const Key('attendance_daily_allowance_dialog'),
+          title: Text(context.l10n.attendanceDailyAllowanceTitle),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                OutlinedButton.icon(
+                  key: const Key('attendance_allowance_work_date'),
+                  onPressed: loading || saving
+                      ? null
+                      : () async {
+                          final picked = await showDatePicker(
+                            context: dialogContext,
+                            initialDate: workDate,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime.now(),
+                          );
+                          if (picked == null) return;
+                          setDialogState(() {
+                            workDate = picked;
+                            loading = true;
+                            validation = null;
+                          });
+                          try {
+                            final existing = await loadAllowance();
+                            if (!dialogContext.mounted) return;
+                            setDialogState(() {
+                              isSplitShift =
+                                  existing?['is_split_shift'] == true;
+                              parking.text =
+                                  (double.tryParse(
+                                            '${existing?['parking_allowance_amount'] ?? 0}',
+                                          ) ??
+                                          0)
+                                      .toStringAsFixed(0);
+                              note.text = existing?['note']?.toString() ?? '';
+                              loading = false;
+                            });
+                          } catch (_) {
+                            if (!dialogContext.mounted) return;
+                            setDialogState(() {
+                              loading = false;
+                              validation = context
+                                  .l10n
+                                  .attendanceDailyAllowanceLoadFailed;
+                            });
+                          }
+                        },
+                  icon: const Icon(Icons.event_outlined),
+                  label: Text(DateFormat('yyyy-MM-dd').format(workDate)),
+                ),
+                if (role == 'part_timer') ...[
+                  const SizedBox(height: 12),
+                  SwitchListTile.adaptive(
+                    key: const Key('attendance_allowance_split_shift'),
+                    contentPadding: EdgeInsets.zero,
+                    value: isSplitShift,
+                    onChanged: loading || saving
+                        ? null
+                        : (value) => setDialogState(() => isSplitShift = value),
+                    title: Text(context.l10n.attendanceSplitShift),
+                    subtitle: Text(
+                      context.l10n.attendanceSplitShiftMealAllowanceHint,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('attendance_allowance_parking'),
+                  controller: parking,
+                  enabled: !loading && !saving,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: context.l10n.attendanceParkingAllowance,
+                    suffixText: 'VND',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('attendance_allowance_note'),
+                  controller: note,
+                  enabled: !loading && !saving,
+                  maxLength: 200,
+                  decoration: InputDecoration(
+                    labelText: context.l10n.attendanceAllowanceNote,
+                  ),
+                ),
+                if (validation != null)
+                  Text(
+                    validation!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving
+                  ? null
+                  : () => Navigator.of(dialogContext).pop(false),
+              child: Text(context.l10n.cancel),
+            ),
+            FilledButton(
+              key: const Key('attendance_allowance_save'),
+              onPressed: loading || saving
+                  ? null
+                  : () async {
+                      final parkingAmount = parseDecimalInput(parking.text);
+                      if (parkingAmount == null || parkingAmount < 0) {
+                        setDialogState(
+                          () => validation =
+                              context.l10n.attendanceParkingAllowanceInvalid,
+                        );
+                        return;
+                      }
+                      setDialogState(() {
+                        saving = true;
+                        validation = null;
+                      });
+                      try {
+                        await _attendanceService.upsertDailyAllowance(
+                          storeId: storeId,
+                          employeeId: employeeId,
+                          workDate: workDate,
+                          isSplitShift: role == 'part_timer' && isSplitShift,
+                          parkingAllowanceAmount: parkingAmount,
+                          note: note.text.trim().isEmpty
+                              ? null
+                              : note.text.trim(),
+                        );
+                        if (dialogContext.mounted) {
+                          Navigator.of(dialogContext).pop(true);
+                        }
+                      } catch (error) {
+                        if (!dialogContext.mounted) return;
+                        final message = error.toString();
+                        setDialogState(() {
+                          saving = false;
+                          validation =
+                              message.contains(
+                                'SPLIT_SHIFT_ATTENDANCE_INCOMPLETE',
+                              )
+                              ? context
+                                    .l10n
+                                    .attendanceSplitShiftRequiresCompletedLogs
+                              : context.l10n.attendanceDailyAllowanceSaveFailed;
+                        });
+                      }
+                    },
+              child: Text(context.l10n.save),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    Future<void>.delayed(const Duration(milliseconds: 300), () {
+      parking.dispose();
+      note.dispose();
+    });
+    if (saved == true && mounted) {
+      showSuccessToast(context, context.l10n.attendanceDailyAllowanceSaved);
+      _clearPayrollPreview();
+      setState(() {});
+    }
   }
 
   List<Map<String, dynamic>> _buildAttendanceRows(
@@ -1177,6 +1400,30 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                         ),
                       ),
                       const SizedBox(height: 12),
+                      if (storeId != null &&
+                          (selectedAttendanceRow['role'] == 'part_timer' ||
+                              selectedAttendanceRow['role'] == 'full_time'))
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              key: const Key(
+                                'attendance_manage_daily_allowance',
+                              ),
+                              onPressed: () => _showDailyAllowanceDialog(
+                                storeId: storeId,
+                                attendanceRow: selectedAttendanceRow,
+                              ),
+                              icon: const Icon(
+                                Icons.account_balance_wallet_outlined,
+                              ),
+                              label: Text(
+                                context.l10n.attendanceManageDailyAllowance,
+                              ),
+                            ),
+                          ),
+                        ),
                       _buildAttendancePhotoEvidence(selectedLogs),
                       const SizedBox(height: 12),
                       Container(

@@ -7,6 +7,7 @@ import '../../core/services/inventory_service.dart';
 import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
+import '../../core/utils/number_input_utils.dart';
 import '../../features/auth/auth_provider.dart';
 import '../../features/inventory/inventory_provider.dart';
 
@@ -143,6 +144,7 @@ class _PhotoInventoryScreenState extends ConsumerState<PhotoInventoryScreen> {
     final stockController = TextEditingController(
       text: editing ? _formatQuantity(_number(initial['current_stock'])) : '',
     );
+    var unit = initial?['unit']?.toString() ?? 'ea';
     final noteController = TextEditingController();
     var countDate = DateTime.now();
     String? validationMessage;
@@ -155,9 +157,7 @@ class _PhotoInventoryScreenState extends ConsumerState<PhotoInventoryScreen> {
         builder: (context, setDialogState) {
           Future<void> save() async {
             final name = nameController.text.trim();
-            final stock = double.tryParse(
-              stockController.text.trim().replaceAll(',', ''),
-            );
+            final stock = parseLocalizedQuantityInput(stockController.text);
             if (name.isEmpty) {
               setDialogState(
                 () => validationMessage =
@@ -183,6 +183,7 @@ class _PhotoInventoryScreenState extends ConsumerState<PhotoInventoryScreen> {
                 itemId: initial?['id']?.toString(),
                 name: name,
                 currentStock: stock,
+                unit: unit,
                 countDate: countDate,
                 note: noteController.text,
               );
@@ -234,6 +235,27 @@ class _PhotoInventoryScreenState extends ConsumerState<PhotoInventoryScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      key: const Key('photo_inventory_unit'),
+                      initialValue: unit,
+                      decoration: InputDecoration(
+                        labelText: context.l10n.inventoryPurchaseBaseUnit,
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'ea', child: Text('ea')),
+                        DropdownMenuItem(value: 'box', child: Text('box')),
+                        DropdownMenuItem(value: 'g', child: Text('g')),
+                        DropdownMenuItem(value: 'ml', child: Text('ml')),
+                      ],
+                      onChanged: isSaving
+                          ? null
+                          : (value) {
+                              if (value != null) {
+                                setDialogState(() => unit = value);
+                              }
+                            },
+                    ),
+                    const SizedBox(height: 12),
                     TextField(
                       key: const Key('photo_inventory_current_stock'),
                       controller: stockController,
@@ -244,7 +266,9 @@ class _PhotoInventoryScreenState extends ConsumerState<PhotoInventoryScreen> {
                       textInputAction: TextInputAction.done,
                       onSubmitted: (_) => isSaving ? null : save(),
                       decoration: InputDecoration(
-                        labelText: context.l10n.inventoryCurrentStock,
+                        labelText: context.l10n.inventoryCurrentStockWithUnit(
+                          unit,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),

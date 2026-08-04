@@ -18,6 +18,8 @@ class DailyRecord {
     required this.isUnpaired,
     this.nightHours = 0,
     this.holidayHours = 0,
+    this.mealAllowance = 0,
+    this.parkingAllowance = 0,
   });
 
   final String userId;
@@ -30,6 +32,9 @@ class DailyRecord {
   final bool isUnpaired;
   final double nightHours;
   final double holidayHours;
+  final double mealAllowance;
+  final double parkingAllowance;
+  double get payableAmount => amount + mealAllowance + parkingAllowance;
 }
 
 class StaffPayroll {
@@ -49,7 +54,12 @@ class StaffPayroll {
 
   double get totalHours => dailyRecords.fold(0, (s, r) => s + r.hours);
   double get grossAmount => dailyRecords.fold(0, (s, r) => s + r.amount);
-  double get totalAmount => grossAmount;
+  double get totalMealAllowance =>
+      dailyRecords.fold(0, (s, r) => s + r.mealAllowance);
+  double get totalParkingAllowance =>
+      dailyRecords.fold(0, (s, r) => s + r.parkingAllowance);
+  double get totalAmount =>
+      grossAmount + totalMealAllowance + totalParkingAllowance;
 }
 
 class PayrollService {
@@ -82,20 +92,32 @@ class PayrollService {
       from: normalizedPeriodStart,
       to: periodEnd,
     );
+    final allowances = await _attendanceService.fetchDailyAllowances(
+      storeId: storeId,
+      from: normalizedPeriodStart,
+      to: periodEnd,
+    );
+    final allowanceByEmployeeDate = <String, Map<String, dynamic>>{
+      for (final allowance in allowances)
+        '${allowance['employee_id']}|${allowance['work_date']}': allowance,
+    };
 
     final groupedByUser = <String, List<Map<String, dynamic>>>{};
     final userNames = <String, String>{};
+    final userRoles = <String, String>{};
 
     for (final row in logs) {
       final userId = row['user_id']?.toString() ?? '';
       if (userId.isEmpty) continue;
       final user = row['users'];
-      if (user is! Map ||
-          user['role']?.toString().trim().toLowerCase() != 'part_timer') {
+      if (user is! Map) {
         continue;
       }
+      final role = user['role']?.toString().trim().toLowerCase() ?? '';
+      if (role != 'part_timer' && role != 'full_time') continue;
       groupedByUser.putIfAbsent(userId, () => []).add(row);
       userNames[userId] = user['full_name']?.toString() ?? 'Unknown';
+      userRoles[userId] = role;
     }
 
     final result = <StaffPayroll>[];
@@ -103,10 +125,13 @@ class PayrollService {
     for (final entry in groupedByUser.entries) {
       final userId = entry.key;
       final userLogs = entry.value;
-      final hourlyRule = await _attendanceService.fetchHourlyPayRule(
-        storeId: storeId,
-        employeeId: userId,
-      );
+      final role = userRoles[userId] ?? '';
+      final hourlyRule = role == 'part_timer'
+          ? await _attendanceService.fetchHourlyPayRule(
+              storeId: storeId,
+              employeeId: userId,
+            )
+          : null;
       final hourlyRate =
           double.tryParse('${hourlyRule?['hourly_rate'] ?? 0}') ?? 0;
 
@@ -140,6 +165,13 @@ class PayrollService {
         if (baseTime == null) continue;
 
         final date = DateTime(baseTime.year, baseTime.month, baseTime.day);
+        final dateKey = date.toIso8601String().substring(0, 10);
+        final allowance = allowanceByEmployeeDate['$userId|$dateKey'];
+        final mealAllowance =
+            double.tryParse('${allowance?['meal_allowance_amount'] ?? 0}') ?? 0;
+        final parkingAllowance =
+            double.tryParse('${allowance?['parking_allowance_amount'] ?? 0}') ??
+            0;
         final hours = (clockIn != null && clockOut != null)
             ? max(0, clockOut.difference(clockIn).inMinutes) / 60.0
             : 0.0;
@@ -184,11 +216,16 @@ class PayrollService {
             isUnpaired: clockIn == null || clockOut == null,
             nightHours: nightHours,
             holidayHours: holidayHours,
+            mealAllowance: mealAllowance,
+            parkingAllowance: parkingAllowance,
           ),
         );
       }
 
-      if (records.isNotEmpty) {
+      final hasPayableAllowance = records.any(
+        (record) => record.mealAllowance > 0 || record.parkingAllowance > 0,
+      );
+      if (records.isNotEmpty && (role == 'part_timer' || hasPayableAllowance)) {
         final lateReviewAmount =
             hourlyRule != null &&
                 lateMinutes >= lateThreshold &&
@@ -387,6 +424,8 @@ class PayrollService {
       TextCellValue('Unpaired Records'),
       TextCellValue('Late Minutes'),
       TextCellValue('Gross Amount (VND)'),
+      TextCellValue('Meal Allowance (VND)'),
+      TextCellValue('Parking Allowance (VND)'),
       TextCellValue('Review Reference (VND)'),
       TextCellValue('Payable Amount (VND)'),
     ]);
@@ -400,6 +439,9 @@ class PayrollService {
       TextCellValue('Night hours'),
       TextCellValue('Holiday hours'),
       TextCellValue('Amount (VND)'),
+      TextCellValue('Meal allowance (VND)'),
+      TextCellValue('Parking allowance (VND)'),
+      TextCellValue('Payable amount (VND)'),
       TextCellValue('Status'),
     ]);
 
@@ -443,13 +485,15 @@ class PayrollService {
         IntCellValue(unpairedCount),
         IntCellValue(payroll.lateMinutes),
         DoubleCellValue(payroll.grossAmount),
+        DoubleCellValue(payroll.totalMealAllowance),
+        DoubleCellValue(payroll.totalParkingAllowance),
         DoubleCellValue(payroll.lateReviewAmount),
         DoubleCellValue(payroll.totalAmount),
       ]);
 
       for (final r in payroll.dailyRecords) {
         totalHours += r.hours;
-        totalAmount += r.amount;
+        totalAmount += r.payableAmount;
         details.appendRow([
           TextCellValue(payroll.userName),
           TextCellValue(r.date.toIso8601String().substring(0, 10)),
@@ -459,6 +503,9 @@ class PayrollService {
           DoubleCellValue(r.nightHours),
           DoubleCellValue(r.holidayHours),
           DoubleCellValue(r.amount),
+          DoubleCellValue(r.mealAllowance),
+          DoubleCellValue(r.parkingAllowance),
+          DoubleCellValue(r.payableAmount),
           TextCellValue(r.isUnpaired ? 'Review required' : 'Complete'),
         ]);
       }
@@ -475,6 +522,9 @@ class PayrollService {
           TextCellValue(''),
           TextCellValue(''),
           TextCellValue(''),
+          DoubleCellValue(0),
+          DoubleCellValue(0),
+          DoubleCellValue(0),
           DoubleCellValue(0),
           TextCellValue('Review required'),
         ]);
@@ -509,6 +559,26 @@ class PayrollService {
       DoubleCellValue(
         double.parse(
           payrolls
+              .fold<double>(
+                0,
+                (sum, payroll) => sum + payroll.totalMealAllowance,
+              )
+              .toStringAsFixed(2),
+        ),
+      ),
+      DoubleCellValue(
+        double.parse(
+          payrolls
+              .fold<double>(
+                0,
+                (sum, payroll) => sum + payroll.totalParkingAllowance,
+              )
+              .toStringAsFixed(2),
+        ),
+      ),
+      DoubleCellValue(
+        double.parse(
+          payrolls
               .fold<double>(0, (sum, payroll) => sum + payroll.lateReviewAmount)
               .toStringAsFixed(2),
         ),
@@ -524,11 +594,14 @@ class PayrollService {
       DoubleCellValue(double.parse(totalHours.toStringAsFixed(2))),
       TextCellValue(''),
       TextCellValue(''),
+      TextCellValue(''),
+      TextCellValue(''),
+      TextCellValue(''),
       DoubleCellValue(double.parse(totalAmount.toStringAsFixed(2))),
       TextCellValue(''),
     ]);
 
-    for (var index = 0; index < 11; index++) {
+    for (var index = 0; index < 13; index++) {
       summary.setColumnWidth(index, index == 0 ? 28 : 18);
       summary
           .cell(CellIndex.indexByColumnRow(columnIndex: index, rowIndex: 2))
@@ -538,7 +611,7 @@ class PayrollService {
         textWrapping: TextWrapping.WrapText,
       );
     }
-    for (var index = 0; index < 9; index++) {
+    for (var index = 0; index < 12; index++) {
       details.setColumnWidth(index, index == 0 ? 28 : 18);
       details
           .cell(CellIndex.indexByColumnRow(columnIndex: index, rowIndex: 0))
@@ -579,6 +652,8 @@ class PayrollService {
             'gross_amount': payroll.grossAmount,
             'late_minutes': payroll.lateMinutes,
             'late_review_amount': payroll.lateReviewAmount,
+            'meal_allowance_amount': payroll.totalMealAllowance,
+            'parking_allowance_amount': payroll.totalParkingAllowance,
             'total_amount': payroll.totalAmount,
             'breakdown': payroll.dailyRecords
                 .map(
@@ -590,6 +665,9 @@ class PayrollService {
                     'night_hours': record.nightHours,
                     'holiday_hours': record.holidayHours,
                     'amount': record.amount,
+                    'meal_allowance': record.mealAllowance,
+                    'parking_allowance': record.parkingAllowance,
+                    'payable_amount': record.payableAmount,
                   },
                 )
                 .toList(),

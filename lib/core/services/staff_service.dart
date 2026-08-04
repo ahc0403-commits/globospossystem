@@ -25,9 +25,11 @@ class StaffService {
     String? bankName,
     String? bankAccountNumber,
     String? bankAccountHolder,
+    DateTime? probationStartDate,
+    DateTime? employmentStartDate,
   }) async {
     final response = await supabase.rpc(
-      'create_store_employee',
+      'create_store_employee_with_dates',
       params: {
         'p_store_id': storeId,
         'p_full_name': fullName,
@@ -36,6 +38,8 @@ class StaffService {
         'p_bank_name': bankName,
         'p_bank_account_number': bankAccountNumber,
         'p_bank_account_holder': bankAccountHolder,
+        'p_probation_start_date': _dateOnly(probationStartDate),
+        'p_employment_start_date': _dateOnly(employmentStartDate),
       },
     );
     return Map<String, dynamic>.from(response as Map);
@@ -50,9 +54,11 @@ class StaffService {
     String? bankName,
     String? bankAccountNumber,
     String? bankAccountHolder,
+    DateTime? probationStartDate,
+    DateTime? employmentStartDate,
   }) async {
     final response = await supabase.rpc(
-      'update_store_employee',
+      'update_store_employee_with_dates',
       params: {
         'p_store_id': storeId,
         'p_employee_id': employeeId,
@@ -62,6 +68,8 @@ class StaffService {
         'p_bank_name': bankName,
         'p_bank_account_number': bankAccountNumber,
         'p_bank_account_holder': bankAccountHolder,
+        'p_probation_start_date': _dateOnly(probationStartDate),
+        'p_employment_start_date': _dateOnly(employmentStartDate),
       },
     );
     return Map<String, dynamic>.from(response as Map);
@@ -77,13 +85,14 @@ class StaffService {
     required double holidayMultiplier,
     required int lateThresholdMinutes,
     required double lateReviewHourlyMultiplier,
+    required DateTime workStartDate,
     String? phone,
     String? bankName,
     String? bankAccountNumber,
     String? bankAccountHolder,
   }) async {
     final response = await supabase.rpc(
-      'create_store_part_timer_with_pay_rule',
+      'create_store_part_timer_with_pay_rule_and_dates',
       params: {
         'p_store_id': storeId,
         'p_full_name': fullName,
@@ -98,6 +107,7 @@ class StaffService {
         'p_holiday_multiplier': holidayMultiplier,
         'p_late_threshold_minutes': lateThresholdMinutes,
         'p_late_review_hourly_multiplier': lateReviewHourlyMultiplier,
+        'p_work_start_date': _dateOnly(workStartDate),
       },
     );
     return Map<String, dynamic>.from(response as Map);
@@ -142,6 +152,12 @@ class StaffService {
     );
     return Map<String, dynamic>.from(response as Map);
   }
+
+  String? _dateOnly(DateTime? value) => value == null
+      ? null
+      : '${value.year.toString().padLeft(4, '0')}-'
+            '${value.month.toString().padLeft(2, '0')}-'
+            '${value.day.toString().padLeft(2, '0')}';
 }
 
 final staffService = StaffService();

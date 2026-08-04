@@ -49,7 +49,10 @@ void main() {
       'lib/features/photo_inventory/photo_inventory_screen.dart',
     ).readAsStringSync();
 
-    expect(service, contains("'save_photo_objet_daily_inventory_item'"));
+    expect(
+      service,
+      contains("'save_photo_objet_daily_inventory_item_with_unit'"),
+    );
     expect(service, contains("'get_inventory_stock_adjustment_history'"));
     expect(service, contains("'p_count_date'"));
     expect(screen, contains("Key('photo_inventory_count_date')"));
