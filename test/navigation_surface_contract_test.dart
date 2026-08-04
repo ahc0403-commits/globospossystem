@@ -121,7 +121,7 @@ void main() {
       'const MenuTab()',
       'const StaffTab()',
       'ReportsTab(overrideStoreId: widget.overrideRestaurantId)',
-      'const AttendanceTab()',
+      'AttendanceTab(isPhotoObjetContext: isPhotoObjetContext)',
       'const InventoryPurchaseScreen()',
       'const QcTab()',
       'const SettingsTab()',

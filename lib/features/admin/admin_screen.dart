@@ -100,7 +100,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       if (!isPhotoObjetContext) ...[const TablesTab(), const MenuTab()],
       const StaffTab(),
       ReportsTab(overrideStoreId: widget.overrideRestaurantId),
-      const AttendanceTab(),
+      AttendanceTab(isPhotoObjetContext: isPhotoObjetContext),
       if (isPhotoObjetContext)
         const PhotoInventoryScreen()
       else

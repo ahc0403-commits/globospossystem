@@ -1289,6 +1289,40 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'Restaurant daily allowance hides Photo split-shift meal option',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final attendance = _AttendanceService(role: 'part_timer');
+      await _pump(
+        tester,
+        child: AttendanceTab(attendanceServiceOverride: attendance),
+        overrides: const [],
+      );
+      await tester.pumpAndSettle();
+
+      final manage = find.byKey(const Key('attendance_manage_daily_allowance'));
+      await tester.ensureVisible(manage);
+      await tester.tap(manage);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('attendance_daily_allowance_dialog')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('attendance_allowance_split_shift')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('attendance_allowance_parking')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('Attendance daily allowance dialog saves a working-day entry', (
     tester,
   ) async {
@@ -1297,7 +1331,10 @@ void main() {
     final attendance = _AttendanceService(role: 'part_timer');
     await _pump(
       tester,
-      child: AttendanceTab(attendanceServiceOverride: attendance),
+      child: AttendanceTab(
+        isPhotoObjetContext: true,
+        attendanceServiceOverride: attendance,
+      ),
       overrides: const [],
     );
     await tester.pumpAndSettle();

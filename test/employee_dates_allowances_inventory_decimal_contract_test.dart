@@ -23,6 +23,26 @@ void main() {
     expect(migration, contains("CHECK (unit IN ('g', 'ml', 'ea', 'box'))"));
   });
 
+  test('split-shift meal allowance is optional and Photo Objet only', () {
+    final migration = _read(
+      'supabase/migrations/20260804130000_photo_only_split_shift_meal_allowance.sql',
+    );
+    final attendance = _read('lib/features/admin/tabs/attendance_tab.dart');
+    final admin = _read('lib/features/admin/admin_screen.dart');
+
+    expect(migration, contains('SPLIT_SHIFT_MEAL_PHOTO_ONLY'));
+    expect(migration, contains("'77000000-0000-0000-0000-000000000001'::uuid"));
+    expect(migration, contains('meal_allowance_amount = 0'));
+    expect(
+      attendance,
+      contains("widget.isPhotoObjetContext && role == 'part_timer'"),
+    );
+    expect(
+      admin,
+      contains('AttendanceTab(isPhotoObjetContext: isPhotoObjetContext)'),
+    );
+  });
+
   test('employee, attendance, payroll, and inventory UI are connected', () {
     final staff = _read('lib/features/admin/tabs/staff_tab.dart');
     final attendance = _read('lib/features/admin/tabs/attendance_tab.dart');
@@ -61,6 +81,18 @@ void main() {
       );
       expect(deploy, contains('preflight_employee_dates_daily_allowances.sql'));
       expect(deploy, contains('verify_employee_dates_daily_allowances.sql'));
+      expect(
+        deploy,
+        contains('20260804130000_photo_only_split_shift_meal_allowance.sql'),
+      );
+      expect(
+        deploy,
+        contains('preflight_photo_only_split_shift_meal_allowance.sql'),
+      );
+      expect(
+        deploy,
+        contains('verify_photo_only_split_shift_meal_allowance.sql'),
+      );
     },
   );
 }
