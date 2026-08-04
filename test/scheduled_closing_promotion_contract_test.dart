@@ -6,6 +6,7 @@ void main() {
   final migration = File(
     'supabase/migrations/20260804010000_scheduled_closing_and_promotions.sql',
   );
+  final deploy = File('scripts/deploy_pos_production.sh');
 
   test('daily close is an idempotent 23:00 Ho Chi Minh snapshot', () {
     final sql = migration.readAsStringSync();
@@ -52,5 +53,22 @@ void main() {
     expect(sql, contains("'discount_percent'"));
     expect(sql, contains("'promotion_name', v_promotion.name"));
     expect(sql, contains("p.channel IN ('both', 'qr')"));
+  });
+
+  test('production deployment has explicit preflight and verification gates', () {
+    final script = deploy.readAsStringSync();
+
+    expect(
+      script,
+      contains('20260804010000_scheduled_closing_and_promotions.sql'),
+    );
+    expect(
+      script,
+      contains('preflight_scheduled_closing_and_promotions.sql'),
+    );
+    expect(
+      script,
+      contains('verify_scheduled_closing_and_promotions.sql'),
+    );
   });
 }
