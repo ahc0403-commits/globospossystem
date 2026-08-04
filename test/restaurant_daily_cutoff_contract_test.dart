@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 String readRepoFile(String path) => File(path).readAsStringSync();
 
 void main() {
@@ -10,7 +12,6 @@ void main() {
   const preflight = 'scripts/preflight_restaurant_daily_cutoff.sql';
   const verification = 'scripts/verify_restaurant_daily_cutoff.sql';
   const rollback = 'scripts/rollback_restaurant_daily_cutoff.sql';
-  const deploy = 'scripts/deploy_pos_production.sh';
   const service = 'lib/core/services/restaurant_cutoff_service.dart';
   const waiter = 'lib/features/waiter/waiter_screen.dart';
   const cashier = 'lib/features/cashier/cashier_screen.dart';
@@ -51,9 +52,7 @@ void main() {
     expect(sql, contains('SECURITY INVOKER'));
     expect(
       sql,
-      contains(
-        'GRANT EXECUTE ON FUNCTION public.restaurant_cutoff_state_at',
-      ),
+      contains('GRANT EXECUTE ON FUNCTION public.restaurant_cutoff_state_at'),
     );
   });
 
@@ -126,7 +125,7 @@ void main() {
   });
 
   test('production migration has explicit gates and reversible behavior', () {
-    final deployment = readRepoFile(deploy);
+    final deployment = readProductionGateContract();
 
     for (final path in [preflight, verification, rollback]) {
       expect(File(path).existsSync(), isTrue, reason: '$path must exist');

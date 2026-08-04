@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 const migrationPath =
     'supabase/migrations/20260718170000_vnd_currency_enforcement.sql';
 const preflightPath = 'scripts/preflight_vnd_currency_enforcement.sql';
@@ -69,7 +71,7 @@ void main() {
   });
 
   test('production gate has preflight verification and rollback artifacts', () {
-    final deploy = readRepoFile(deployPath);
+    final deploy = readProductionGateContract();
 
     for (final path in [
       migrationPath,

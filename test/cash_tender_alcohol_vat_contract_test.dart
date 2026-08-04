@@ -2,11 +2,13 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 void main() {
   final migration = File(
     'supabase/migrations/20260722120000_cash_tender_and_protected_alcohol_vat.sql',
   ).readAsStringSync();
-  final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
+  final deploy = readProductionGateContract();
   final paymentService = File(
     'lib/core/services/payment_service.dart',
   ).readAsStringSync();

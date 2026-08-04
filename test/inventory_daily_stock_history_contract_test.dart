@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 void main() {
   const migrationPath =
       'supabase/migrations/'
@@ -62,7 +64,7 @@ void main() {
   });
 
   test('daily inventory migration is production-gated', () {
-    final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
+    final deploy = readProductionGateContract();
     final preflight = File(
       'scripts/preflight_inventory_daily_stock_history.sql',
     ).readAsStringSync();

@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 String _read(String path) => File(path).readAsStringSync();
 
 void main() {
@@ -62,7 +64,7 @@ void main() {
   });
 
   test('production migration gate has preflight and verification', () {
-    final deploy = _read('scripts/deploy_pos_production.sh');
+    final deploy = readProductionGateContract();
     expect(
       deploy,
       contains(

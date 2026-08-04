@@ -47,24 +47,29 @@ scripts/deploy_pos_production.sh
 
 This default path runs:
 
-1. Clean Git worktree and freshly fetched `origin/main` ancestry preflight.
-2. Production target preflight.
-3. Required production Auth and test-data hygiene check with
+1. Clean Git worktree and exact freshly fetched `origin/main` SHA preflight.
+2. Successful required GitHub Actions check (`Photo Objet contract`) for that
+   exact SHA.
+3. Production target preflight.
+4. Required production Auth and test-data hygiene check with
    `scripts/check_pilot_auth_accounts.sh`.
-4. `dart analyze`.
-5. Focused Flutter test target, currently
+5. `dart analyze`.
+6. Focused Flutter test target, currently
    `test/pilot_feedback_closure_contract_test.dart`.
-6. Optional single Supabase migration apply with migration-history guards.
-7. `vercel build --prod`.
-8. `vercel deploy --prebuilt --prod --yes`.
-9. Live HTTP check for `https://globospossystem.vercel.app`.
-10. Fixed operational account login smoke.
+7. Optional single Supabase migration apply with migration-history guards.
+8. `vercel build --prod`.
+9. `vercel deploy --prebuilt --prod --yes`.
+10. Live HTTP check for `https://globospossystem.vercel.app`.
+11. Fixed operational account login smoke.
 
 Before any production database or Vercel mutation, the script fetches
 `origin/main` into `refs/remotes/origin/main` and requires that freshly fetched
-commit to be an ancestor of `HEAD`. A feature branch based on an older main
-commit is rejected even when its local `origin/main` reference was stale.
-There is no ancestry bypass environment variable.
+commit to equal `HEAD`. It then reads GitHub check runs for the same SHA and
+requires the branch-protection check `Photo Objet contract` from GitHub
+Actions to have completed successfully. A feature branch, a stale local
+`origin/main`, a pending check, and a failed or unavailable check all stop
+before DB, Edge Function, or Vercel mutation. There is no provenance or check
+bypass environment variable.
 
 The worktree must be clean by default (`REQUIRE_CLEAN_GIT=1`). The only
 exception is an explicitly non-mutating inspection run:
@@ -119,11 +124,27 @@ scripts/deploy_pos_production.sh \
   --migration supabase/migrations/20260711090000_legal_entity_brand_store_hierarchy.sql
 ```
 
-The script supports production apply only when that migration has an explicit
-verification phase. It confirms the version is absent from remote migration
-history before SQL, applies the file with the linked fail-fast `psql` runner,
-runs verification, repairs history, and then requires the version to be
-present:
+The script resolves production gates from the migration basename. For
+`supabase/migrations/<timestamp>_<name>.sql`, reviewed companion files use the
+following fixed convention:
+
+```text
+scripts/preflight_<name>.sql   # optional read-only precondition check
+scripts/apply_<name>.sql       # optional guarded replacement for raw apply
+scripts/verify_<name>.sql      # required postcondition check
+scripts/rollback_<name>.sql    # optional rollback-readiness evidence
+```
+
+If a migration performs its postcondition checks inside the same atomic SQL
+transaction, it may replace the separate verify file with the exact marker
+`-- production-gate: self-verifying`. An unmarked migration without the
+convention-named verify file fails closed. New migrations no longer require an
+edit to a central filename allowlist.
+
+The gate confirms the version is absent from remote migration history, runs
+the convention-named preflight when present, applies the guarded wrapper or
+the migration through the fail-fast `psql` runner, runs external verification
+when present, repairs history, and then requires the version to be present:
 
 ```bash
 supabase migration list
@@ -160,8 +181,9 @@ scripts/deploy_pos_production.sh \
 
 After the dry-run evidence is reviewed, remove only `--dry-run` and run the
 same command from a clean worktree whose `HEAD` exactly equals the freshly
-fetched `origin/main` SHA. Record the operator, Asia/Ho_Chi_Minh timestamp,
-exact SHA, pinned project ref, sanitized command, preflight output, apply
+fetched `origin/main` SHA and whose required GitHub Actions check succeeded on
+that SHA. Record the operator, Asia/Ho_Chi_Minh timestamp, exact SHA, check-run
+evidence, pinned project ref, sanitized command, preflight output, apply
 output, migration-history confirmation, and verification output.
 
 Before either command, link that clean exact-main worktree to production with

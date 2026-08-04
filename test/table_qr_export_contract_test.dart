@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'helpers/production_gate_test_support.dart';
 import 'package:globos_pos_system/core/services/table_qr_export_service.dart';
 import 'package:image/image.dart' as img;
 
@@ -463,7 +465,7 @@ void main() {
       expect(arb, contains('"tablesQrExportFailed"'));
     }
 
-    final deploy = readRepoFile('scripts/deploy_pos_production.sh');
+    final deploy = readProductionGateContract();
     expect(deploy, contains('20260717130000_table_qr_batch_export.sql'));
     expect(deploy, contains('preflight_table_qr_batch_export.sql'));
     expect(deploy, contains('verify_table_qr_batch_export.sql'));

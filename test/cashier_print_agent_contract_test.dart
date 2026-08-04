@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 String readRepoFile(String path) => File(path).readAsStringSync();
 
 void main() {
@@ -19,7 +21,7 @@ void main() {
     final migration = readRepoFile(
       'supabase/migrations/20260722080000_cashier_native_print_agent.sql',
     );
-    final deployGate = readRepoFile('scripts/deploy_pos_production.sh');
+    final deployGate = readProductionGateContract();
     final verification = readRepoFile(
       'scripts/verify_cashier_native_print_agent.sql',
     );

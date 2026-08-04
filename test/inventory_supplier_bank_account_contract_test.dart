@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 String _read(String path) => File(path).readAsStringSync();
 
 void main() {
@@ -17,7 +19,7 @@ void main() {
     final verification = _read(
       'scripts/verify_inventory_supplier_bank_account.sql',
     );
-    final deploy = _read('scripts/deploy_pos_production.sh');
+    final deploy = readProductionGateContract();
 
     expect(screen, contains("Key('inventory_supplier_bank_account_field')"));
     expect(screen, contains("supplier?['bank_account_number']"));

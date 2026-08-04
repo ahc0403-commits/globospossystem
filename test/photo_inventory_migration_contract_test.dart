@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 void main() {
   test('PHOTO simple inventory RPC enforces role, scope, and brand', () {
     final sql = File(
@@ -24,9 +26,7 @@ void main() {
   });
 
   test('PHOTO simple inventory migration has production deployment gates', () {
-    final deployScript = File(
-      'scripts/deploy_pos_production.sh',
-    ).readAsStringSync();
+    final deployScript = readProductionGateContract();
     final preflight = File(
       'scripts/preflight_photo_objet_simple_inventory_management.sql',
     ).readAsStringSync();

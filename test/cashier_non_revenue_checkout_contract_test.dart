@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 void main() {
   const migrationPath =
       'supabase/migrations/20260723030000_cashier_non_revenue_checkout.sql';
@@ -41,7 +43,7 @@ void main() {
   });
 
   test('production deploy gate has preflight and post-apply verification', () {
-    final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
+    final deploy = readProductionGateContract();
     final preflight = File(
       'scripts/preflight_cashier_non_revenue_checkout.sql',
     ).readAsStringSync();

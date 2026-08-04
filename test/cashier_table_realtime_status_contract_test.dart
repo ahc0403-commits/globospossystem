@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+
+import 'helpers/production_gate_test_support.dart';
 import 'package:globos_pos_system/core/models/pos_table.dart';
 
 void main() {
@@ -18,9 +20,7 @@ void main() {
     );
     expect(migration, contains('pg_publication_tables'));
 
-    final deployScript = File(
-      'scripts/deploy_pos_production.sh',
-    ).readAsStringSync();
+    final deployScript = readProductionGateContract();
     final verification = File(
       'scripts/verify_cashier_table_realtime_status.sql',
     ).readAsStringSync();

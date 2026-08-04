@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+
+import 'helpers/production_gate_test_support.dart';
 import 'package:globos_pos_system/features/admin/providers/staff_provider.dart';
 
 void main() {
@@ -119,7 +121,7 @@ void main() {
   });
 
   test('production deploy gate covers inactive employee recreation', () {
-    final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
+    final deploy = readProductionGateContract();
     const migration = '20260731103153_allow_recreate_inactive_employee.sql';
 
     expect(deploy, contains(migration));

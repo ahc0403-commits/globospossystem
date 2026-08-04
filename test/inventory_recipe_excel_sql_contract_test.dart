@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 void main() {
   test('recipe Excel import RPC is atomic and store-scoped', () {
     final sql = File(
@@ -23,7 +25,7 @@ void main() {
   });
 
   test('production deploy gate runs recipe migration preflight and verify', () {
-    final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
+    final deploy = readProductionGateContract();
 
     expect(
       deploy,

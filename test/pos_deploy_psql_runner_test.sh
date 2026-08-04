@@ -75,6 +75,13 @@ printf '%s\n' 'DRY RUN credential issuer' >&2
 EOF
 chmod +x "$FAKE_BIN/supabase"
 
+cat >"$FAKE_BIN/gh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'completed\tsuccess\thttps://github.com/example/checks/1\n'
+EOF
+chmod +x "$FAKE_BIN/gh"
+
 cat >"$FAKE_BIN/psql" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -245,9 +252,14 @@ WRONG_REPO="$TMP_DIR/wrong-repo"
 WRONG_REMOTE="$TMP_DIR/wrong-remote.git"
 mkdir -p "$WRONG_REPO/scripts" "$WRONG_REPO/supabase/.temp"
 cp "$DEPLOY_SCRIPT" "$WRONG_REPO/scripts/deploy_pos_production.sh"
+mkdir -p "$WRONG_REPO/scripts/lib"
+cp "$ROOT_DIR/scripts/lib/production_migration_gate.sh" "$WRONG_REPO/scripts/lib/"
 printf '%s\n' wrongprojectref >"$WRONG_REPO/supabase/.temp/project-ref"
 git -C "$WRONG_REPO" init -q
-git -C "$WRONG_REPO" add -- scripts/deploy_pos_production.sh supabase/.temp/project-ref
+git -C "$WRONG_REPO" add -- \
+  scripts/deploy_pos_production.sh \
+  scripts/lib/production_migration_gate.sh \
+  supabase/.temp/project-ref
 git -C "$WRONG_REPO" \
   -c user.name='POS contract test' \
   -c user.email='pos-contract@example.invalid' \

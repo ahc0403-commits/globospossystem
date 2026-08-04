@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 void main() {
   test('migration and production scripts fail closed and remain additive', () {
     final migration = File(
@@ -19,9 +21,7 @@ void main() {
     final apply = File(
       'scripts/apply_store_opening_setup_wizard.sql',
     ).readAsStringSync();
-    final productionDeploy = File(
-      'scripts/deploy_pos_production.sh',
-    ).readAsStringSync();
+    final productionDeploy = readProductionGateContract();
 
     expect(migration, contains('STORE_SETUP_DUPLICATE_ACTIVE_ROUTE_PREFLIGHT'));
     expect(migration, contains('printer_destinations_active_route_unique'));
@@ -45,14 +45,8 @@ void main() {
       productionDeploy,
       contains('preflight_store_opening_setup_wizard.sql'),
     );
-    expect(
-      productionDeploy,
-      contains('apply_store_opening_setup_wizard.sql'),
-    );
-    expect(
-      productionDeploy,
-      contains('verify_store_opening_setup_wizard.sql'),
-    );
+    expect(productionDeploy, contains('apply_store_opening_setup_wizard.sql'));
+    expect(productionDeploy, contains('verify_store_opening_setup_wizard.sql'));
     expect(
       productionDeploy,
       contains('rollback_store_opening_setup_wizard.sql'),

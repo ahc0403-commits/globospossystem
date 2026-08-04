@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 const migrationPath =
     'supabase/migrations/20260719013000_production_test_entity_guard.sql';
 const preflightPath = 'scripts/preflight_production_test_entity_guard.sql';
@@ -53,7 +55,7 @@ void main() {
     final verify = readRepoFile(verifyPath);
     final rollback = readRepoFile(rollbackPath);
     final runtime = readRepoFile(runtimePath);
-    final deploy = readRepoFile(deployPath);
+    final deploy = readProductionGateContract();
 
     expect(verify, contains('guard-probe@globos.test'));
     expect(verify, contains('office.super@globos.vn'));

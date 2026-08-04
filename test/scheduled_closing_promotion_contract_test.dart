@@ -2,11 +2,13 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 void main() {
   final migration = File(
     'supabase/migrations/20260804010000_scheduled_closing_and_promotions.sql',
   );
-  final deploy = File('scripts/deploy_pos_production.sh');
+  final deploy = readProductionGateContract();
 
   test('daily close is an idempotent 23:00 Ho Chi Minh snapshot', () {
     final sql = migration.readAsStringSync();
@@ -19,7 +21,10 @@ void main() {
     );
     expect(sql, contains("'scheduled'"));
     expect(sql, contains('inventory_snapshot jsonb'));
-    expect(sql, contains("'current_stock', COALESCE(i.current_stock, i.quantity, 0)"));
+    expect(
+      sql,
+      contains("'current_stock', COALESCE(i.current_stock, i.quantity, 0)"),
+    );
     expect(sql, contains("'daily-closing-2300-hcm'"));
     expect(sql, contains("'0 16 * * *'"));
     expect(sql, contains('Automatic 23:00 Asia/Ho_Chi_Minh close'));
@@ -55,24 +60,24 @@ void main() {
     expect(sql, contains("p.channel IN ('both', 'qr')"));
   });
 
-  test('production deployment has explicit preflight and verification gates', () {
-    final script = deploy.readAsStringSync();
-    final verification = File(
-      'scripts/verify_scheduled_closing_and_promotions.sql',
-    ).readAsStringSync();
+  test(
+    'production deployment has explicit preflight and verification gates',
+    () {
+      final script = deploy;
+      final verification = File(
+        'scripts/verify_scheduled_closing_and_promotions.sql',
+      ).readAsStringSync();
 
-    expect(
-      script,
-      contains('20260804010000_scheduled_closing_and_promotions.sql'),
-    );
-    expect(
-      script,
-      contains('preflight_scheduled_closing_and_promotions.sql'),
-    );
-    expect(
-      script,
-      contains('verify_scheduled_closing_and_promotions.sql'),
-    );
-    expect(verification, contains('END;\n\$verify\$;'));
-  });
+      expect(
+        script,
+        contains('20260804010000_scheduled_closing_and_promotions.sql'),
+      );
+      expect(
+        script,
+        contains('preflight_scheduled_closing_and_promotions.sql'),
+      );
+      expect(script, contains('verify_scheduled_closing_and_promotions.sql'));
+      expect(verification, contains('END;\n\$verify\$;'));
+    },
+  );
 }
