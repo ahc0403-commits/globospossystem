@@ -1,27 +1,25 @@
 \set ON_ERROR_STOP on
 
 DO $verify$
-DECLARE
-  v_close regprocedure := to_regprocedure(
-    'public.run_scheduled_daily_closings(date)'
-  );
-  v_upsert regprocedure := to_regprocedure(
-    'public.upsert_store_promotion(uuid,uuid,text,numeric,timestamp with time zone,timestamp with time zone,boolean)'
-  );
-  v_sync regprocedure := to_regprocedure(
-    'public.sync_active_order_promotion(uuid,uuid,timestamp with time zone)'
-  );
-  v_refresh regprocedure := to_regprocedure(
-    'public.refresh_store_order_promotions(uuid,timestamp with time zone)'
-  );
-  v_close_definition text;
-  v_qr_definition text;
 BEGIN
   IF to_regclass('public.store_promotions') IS NULL
-     OR v_close IS NULL OR v_upsert IS NULL OR v_sync IS NULL OR v_refresh IS NULL THEN
+     OR to_regprocedure('public.run_scheduled_daily_closings(date)') IS NULL
+     OR to_regprocedure(
+       'public.upsert_store_promotion(uuid,uuid,text,numeric,timestamp with time zone,timestamp with time zone,boolean)'
+     ) IS NULL
+     OR to_regprocedure(
+       'public.sync_active_order_promotion(uuid,uuid,timestamp with time zone)'
+     ) IS NULL
+     OR to_regprocedure(
+       'public.refresh_store_order_promotions(uuid,timestamp with time zone)'
+     ) IS NULL THEN
     RAISE EXCEPTION 'SCHEDULED_CLOSING_PROMOTION_OBJECT_MISSING';
   END IF;
+END;
+$verify$;
 
+DO $verify$
+BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'daily_closings'
@@ -34,25 +32,57 @@ BEGIN
     RAISE EXCEPTION 'DAILY_CLOSING_SNAPSHOT_COLUMNS_INVALID';
   END IF;
 
-  SELECT lower(pg_get_functiondef(v_close)) INTO v_close_definition;
-  SELECT lower(pg_get_functiondef(to_regprocedure('public.qr_get_menu(text)'))
-    INTO v_qr_definition;
-
-  IF v_close_definition NOT LIKE '%asia/ho_chi_minh%'
-     OR v_close_definition NOT LIKE '%inventory_snapshot%'
-     OR v_close_definition NOT LIKE '%on conflict (restaurant_id, closing_date) do nothing%'
-     OR v_qr_definition NOT LIKE '%promotion_discount_percent%'
-     OR v_qr_definition NOT LIKE '%original_price%' THEN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_proc
+    WHERE oid = to_regprocedure('public.run_scheduled_daily_closings(date)')
+      AND lower(pg_get_functiondef(oid)) LIKE '%asia/ho_chi_minh%'
+      AND lower(pg_get_functiondef(oid)) LIKE '%inventory_snapshot%'
+      AND lower(pg_get_functiondef(oid)) LIKE
+        '%on conflict (restaurant_id, closing_date) do nothing%'
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_proc
+    WHERE oid = to_regprocedure('public.qr_get_menu(text)')
+      AND lower(pg_get_functiondef(oid)) LIKE '%promotion_discount_percent%'
+      AND lower(pg_get_functiondef(oid)) LIKE '%original_price%'
+  ) THEN
     RAISE EXCEPTION 'SCHEDULED_CLOSING_PROMOTION_FUNCTION_INVALID';
   END IF;
+END;
+$verify$;
 
-  IF has_function_privilege('anon', v_close, 'EXECUTE')
-     OR has_function_privilege('authenticated', v_close, 'EXECUTE')
-     OR NOT has_function_privilege('service_role', v_close, 'EXECUTE')
-     OR has_function_privilege('anon', v_upsert, 'EXECUTE')
-     OR NOT has_function_privilege('authenticated', v_upsert, 'EXECUTE')
-     OR has_function_privilege('anon', v_refresh, 'EXECUTE')
-     OR NOT has_function_privilege('authenticated', v_refresh, 'EXECUTE') THEN
+DO $verify$
+BEGIN
+  IF has_function_privilege(
+       'anon', 'public.run_scheduled_daily_closings(date)', 'EXECUTE'
+     )
+     OR has_function_privilege(
+       'authenticated', 'public.run_scheduled_daily_closings(date)', 'EXECUTE'
+     )
+     OR NOT has_function_privilege(
+       'service_role', 'public.run_scheduled_daily_closings(date)', 'EXECUTE'
+     )
+     OR has_function_privilege(
+       'anon',
+       'public.upsert_store_promotion(uuid,uuid,text,numeric,timestamp with time zone,timestamp with time zone,boolean)',
+       'EXECUTE'
+     )
+     OR NOT has_function_privilege(
+       'authenticated',
+       'public.upsert_store_promotion(uuid,uuid,text,numeric,timestamp with time zone,timestamp with time zone,boolean)',
+       'EXECUTE'
+     )
+     OR has_function_privilege(
+       'anon',
+       'public.refresh_store_order_promotions(uuid,timestamp with time zone)',
+       'EXECUTE'
+     )
+     OR NOT has_function_privilege(
+       'authenticated',
+       'public.refresh_store_order_promotions(uuid,timestamp with time zone)',
+       'EXECUTE'
+     ) THEN
     RAISE EXCEPTION 'SCHEDULED_CLOSING_PROMOTION_PRIVILEGE_INVALID';
   END IF;
 
@@ -64,7 +94,11 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'SCHEDULED_PROMOTION_TRIGGER_MISSING';
   END IF;
+END;
+$verify$;
 
+DO $verify$
+BEGIN
   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron')
      AND NOT EXISTS (
        SELECT 1 FROM cron.job
