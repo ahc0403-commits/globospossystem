@@ -225,6 +225,63 @@ class AttendanceService {
         .toSet();
   }
 
+  Future<List<Map<String, dynamic>>> fetchDailyAllowances({
+    required String storeId,
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final result = await supabase
+        .from('employee_daily_allowances')
+        .select()
+        .eq('store_id', storeId)
+        .gte('work_date', _dateOnly(from))
+        .lte('work_date', _dateOnly(to))
+        .order('work_date');
+    return List<Map<String, dynamic>>.from(result);
+  }
+
+  Future<Map<String, dynamic>?> fetchDailyAllowance({
+    required String storeId,
+    required String employeeId,
+    required DateTime workDate,
+  }) async {
+    final result = await supabase
+        .from('employee_daily_allowances')
+        .select()
+        .eq('store_id', storeId)
+        .eq('employee_id', employeeId)
+        .eq('work_date', _dateOnly(workDate))
+        .maybeSingle();
+    return result == null ? null : Map<String, dynamic>.from(result);
+  }
+
+  Future<Map<String, dynamic>> upsertDailyAllowance({
+    required String storeId,
+    required String employeeId,
+    required DateTime workDate,
+    required bool isSplitShift,
+    required double parkingAllowanceAmount,
+    String? note,
+  }) async {
+    final result = await supabase.rpc(
+      'upsert_employee_daily_allowance',
+      params: {
+        'p_store_id': storeId,
+        'p_employee_id': employeeId,
+        'p_work_date': _dateOnly(workDate),
+        'p_is_split_shift': isSplitShift,
+        'p_parking_allowance_amount': parkingAllowanceAmount,
+        'p_note': note,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
+  String _dateOnly(DateTime value) =>
+      '${value.year.toString().padLeft(4, '0')}-'
+      '${value.month.toString().padLeft(2, '0')}-'
+      '${value.day.toString().padLeft(2, '0')}';
+
   Future<void> upsertWageConfig({
     required String storeId,
     required String userId,

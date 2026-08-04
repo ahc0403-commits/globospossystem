@@ -733,6 +733,7 @@ apply_migration() {
     20260801070557_photo_objet_zero_amount_raw_rows.sql|\
     20260804010000_scheduled_closing_and_promotions.sql|\
     20260804090000_combined_table_payment.sql|\
+    20260804120000_employee_dates_daily_allowances.sql|\
     20260715010000_photo_objet_backup_control_plane_security.sql)
       verification_complete=1
       ;;
@@ -997,6 +998,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/preflight_scheduled_closing_and_promotions.sql" \
       "scheduled closing and promotions migration preflight"
+  elif [[ "$migration_name" == "20260804120000_employee_dates_daily_allowances.sql" ]]; then
+    log "Employee dates, daily allowances, and decimal inventory preflight"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/preflight_employee_dates_daily_allowances.sql" \
+      "employee dates, daily allowances, and decimal inventory preflight"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security preflight"
     run_linked_psql_file \
@@ -1262,6 +1268,11 @@ apply_migration() {
     run_linked_psql_file \
       "$ROOT_DIR/scripts/verify_scheduled_closing_and_promotions.sql" \
       "scheduled closing and promotions migration verification"
+  elif [[ "$migration_name" == "20260804120000_employee_dates_daily_allowances.sql" ]]; then
+    log "Employee dates, daily allowances, and decimal inventory verification"
+    run_linked_psql_file \
+      "$ROOT_DIR/scripts/verify_employee_dates_daily_allowances.sql" \
+      "employee dates, daily allowances, and decimal inventory verification"
   elif [[ "$migration_name" == "20260715010000_photo_objet_backup_control_plane_security.sql" ]]; then
     log "Photo Objet backup control-plane security verification"
     run_linked_psql_file \

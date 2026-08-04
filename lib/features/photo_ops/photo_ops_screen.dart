@@ -16,6 +16,7 @@ import '../../core/ui/app_primitives.dart';
 import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
+import '../../core/utils/number_input_utils.dart';
 import '../../features/auth/auth_provider.dart';
 import '../../widgets/app_nav_bar.dart';
 import 'photo_ops_provider.dart';
@@ -710,7 +711,9 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
                   decimal: true,
                 ),
                 decoration: InputDecoration(
-                  labelText: context.l10n.photoOpsInventoryQuantity,
+                  labelText: context.l10n.photoOpsInventoryQuantityWithUnit(
+                    row.unit,
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
@@ -737,7 +740,9 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
             FilledButton(
               key: const Key('photo_ops_inventory_adjustment_save'),
               onPressed: () async {
-                final parsedQuantity = double.tryParse(quantity.text.trim());
+                final parsedQuantity = parseLocalizedQuantityInput(
+                  quantity.text,
+                );
                 if (employeeNumber.text.trim().isEmpty ||
                     parsedQuantity == null ||
                     parsedQuantity <= 0 ||

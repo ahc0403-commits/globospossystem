@@ -9,6 +9,7 @@ class _AttendanceServiceFake extends AttendanceService {
   DateTime? requestedFrom;
   DateTime? requestedTo;
   final List<String> requestedRuleEmployeeIds = [];
+  List<Map<String, dynamic>> allowances = const [];
 
   @override
   Future<List<Map<String, dynamic>>> fetchLogs({
@@ -45,6 +46,13 @@ class _AttendanceServiceFake extends AttendanceService {
     required DateTime from,
     required DateTime to,
   }) async => {};
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchDailyAllowances({
+    required String storeId,
+    required DateTime from,
+    required DateTime to,
+  }) async => allowances;
 
   @override
   Future<Map<String, dynamic>?> fetchWageConfig({
@@ -120,6 +128,93 @@ void main() {
       expect(payrolls.single.userName, 'Nguyen Quynh Mai');
       expect(payrolls.single.totalHours, 4.8);
       expect(payrolls.single.totalAmount, 144000);
+    },
+  );
+
+  test(
+    'split-shift meal and parking allowances are added once per day',
+    () async {
+      final attendance =
+          _AttendanceServiceFake([
+              _log(
+                employeeId: 'part-timer',
+                name: 'Mai',
+                role: 'part_timer',
+                type: 'clock_in',
+                loggedAt: '2026-07-27T02:00:00Z',
+              ),
+              _log(
+                employeeId: 'part-timer',
+                name: 'Mai',
+                role: 'part_timer',
+                type: 'clock_out',
+                loggedAt: '2026-07-27T06:00:00Z',
+              ),
+            ])
+            ..allowances = [
+              {
+                'employee_id': 'part-timer',
+                'work_date': '2026-07-27',
+                'meal_allowance_amount': 25000,
+                'parking_allowance_amount': 5000,
+              },
+            ];
+
+      final payroll =
+          (await PayrollService(attendanceSource: attendance).calculatePayroll(
+            storeId: 'store',
+            periodStart: DateTime(2026, 7, 27),
+            periodEnd: DateTime(2026, 7, 27),
+          )).single;
+
+      expect(payroll.grossAmount, 120000);
+      expect(payroll.totalMealAllowance, 25000);
+      expect(payroll.totalParkingAllowance, 5000);
+      expect(payroll.totalAmount, 150000);
+    },
+  );
+
+  test(
+    'full-time payroll includes parking only and no automatic wage',
+    () async {
+      final attendance =
+          _AttendanceServiceFake([
+              _log(
+                employeeId: 'full-time',
+                name: 'Nhu',
+                role: 'full_time',
+                type: 'clock_in',
+                loggedAt: '2026-07-27T02:00:00Z',
+              ),
+              _log(
+                employeeId: 'full-time',
+                name: 'Nhu',
+                role: 'full_time',
+                type: 'clock_out',
+                loggedAt: '2026-07-27T10:00:00Z',
+              ),
+            ])
+            ..allowances = [
+              {
+                'employee_id': 'full-time',
+                'work_date': '2026-07-27',
+                'meal_allowance_amount': 0,
+                'parking_allowance_amount': 10000,
+              },
+            ];
+
+      final payroll =
+          (await PayrollService(attendanceSource: attendance).calculatePayroll(
+            storeId: 'store',
+            periodStart: DateTime(2026, 7, 27),
+            periodEnd: DateTime(2026, 7, 27),
+          )).single;
+
+      expect(attendance.requestedRuleEmployeeIds, isEmpty);
+      expect(payroll.grossAmount, 0);
+      expect(payroll.totalMealAllowance, 0);
+      expect(payroll.totalParkingAllowance, 10000);
+      expect(payroll.totalAmount, 10000);
     },
   );
 

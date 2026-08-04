@@ -55,6 +55,8 @@ class StaffMember {
     this.bankAccountNumber,
     this.bankAccountHolder,
     this.hourlyPayRule,
+    this.probationStartDate,
+    this.employmentStartDate,
   });
 
   final String id;
@@ -68,6 +70,8 @@ class StaffMember {
   final String? bankAccountNumber;
   final String? bankAccountHolder;
   final HourlyPayRule? hourlyPayRule;
+  final DateTime? probationStartDate;
+  final DateTime? employmentStartDate;
 
   factory StaffMember.fromJson(Map<String, dynamic> json) {
     final createdAtRaw = json['created_at']?.toString();
@@ -91,6 +95,12 @@ class StaffMember {
       bankAccountNumber: json['bank_account_number']?.toString(),
       bankAccountHolder: json['bank_account_holder']?.toString(),
       hourlyPayRule: rule == null ? null : HourlyPayRule.fromJson(rule),
+      probationStartDate: DateTime.tryParse(
+        json['probation_start_date']?.toString() ?? '',
+      ),
+      employmentStartDate: DateTime.tryParse(
+        json['employment_start_date']?.toString() ?? '',
+      ),
     );
   }
 }
@@ -340,6 +350,8 @@ class StaffNotifier extends StateNotifier<StaffState> {
     double holidayMultiplier = 3,
     int lateThresholdMinutes = 60,
     double lateReviewHourlyMultiplier = 2,
+    DateTime? probationStartDate,
+    DateTime? employmentStartDate,
   }) async {
     state = state.copyWith(
       isCreating: true,
@@ -347,6 +359,9 @@ class StaffNotifier extends StateNotifier<StaffState> {
       clearLastCreated: true,
     );
     try {
+      if (role == 'part_timer' && employmentStartDate == null) {
+        throw StateError('EMPLOYMENT_DATES_REQUIRED');
+      }
       final created = role == 'part_timer' && hourlyRate != null
           ? await staffService.createStorePartTimerWithPayRule(
               fullName: fullName,
@@ -362,6 +377,9 @@ class StaffNotifier extends StateNotifier<StaffState> {
               holidayMultiplier: holidayMultiplier,
               lateThresholdMinutes: lateThresholdMinutes,
               lateReviewHourlyMultiplier: lateReviewHourlyMultiplier,
+              workStartDate:
+                  employmentStartDate ??
+                  (throw StateError('EMPLOYMENT_DATES_REQUIRED')),
             )
           : await staffService.createStoreEmployee(
               fullName: fullName,
@@ -371,6 +389,8 @@ class StaffNotifier extends StateNotifier<StaffState> {
               bankName: bankName,
               bankAccountNumber: bankAccountNumber,
               bankAccountHolder: bankAccountHolder,
+              probationStartDate: probationStartDate,
+              employmentStartDate: employmentStartDate,
             );
 
       state = state.copyWith(
@@ -410,6 +430,8 @@ class StaffNotifier extends StateNotifier<StaffState> {
     double holidayMultiplier = 3,
     int lateThresholdMinutes = 60,
     double lateReviewHourlyMultiplier = 2,
+    DateTime? probationStartDate,
+    DateTime? employmentStartDate,
   }) async {
     try {
       await staffService.updateStoreEmployee(
@@ -421,6 +443,8 @@ class StaffNotifier extends StateNotifier<StaffState> {
         bankName: bankName,
         bankAccountNumber: bankAccountNumber,
         bankAccountHolder: bankAccountHolder,
+        probationStartDate: probationStartDate,
+        employmentStartDate: employmentStartDate,
       );
       if (role == 'part_timer' && hourlyRate != null) {
         await staffService.upsertHourlyPayRule(

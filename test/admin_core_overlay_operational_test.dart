@@ -304,6 +304,8 @@ class _StaffNotifier extends StaffNotifier {
     double holidayMultiplier = 3,
     int lateThresholdMinutes = 60,
     double lateReviewHourlyMultiplier = 2,
+    DateTime? probationStartDate,
+    DateTime? employmentStartDate,
   }) async {
     createCalls += 1;
     state = state.copyWith(
@@ -512,13 +514,14 @@ class _PinService extends PinService {
 }
 
 class _AttendanceService extends AttendanceService {
+  _AttendanceService({this.role = 'waiter'});
+
+  final String role;
+  int allowanceUpserts = 0;
+
   @override
   Future<List<Map<String, dynamic>>> fetchStaffList(String storeId) async => [
-    {
-      'id': 'attendance-staff-1',
-      'full_name': 'Nguyễn Minh Anh',
-      'role': 'waiter',
-    },
+    {'id': 'attendance-staff-1', 'full_name': 'Nguyễn Minh Anh', 'role': role},
   ];
 
   @override
@@ -543,7 +546,7 @@ class _AttendanceService extends AttendanceService {
       'users': {
         'id': 'attendance-staff-1',
         'full_name': 'Nguyễn Minh Anh',
-        'role': 'waiter',
+        'role': role,
       },
     },
     {
@@ -555,10 +558,37 @@ class _AttendanceService extends AttendanceService {
       'users': {
         'id': 'attendance-staff-1',
         'full_name': 'Nguyễn Minh Anh',
-        'role': 'waiter',
+        'role': role,
       },
     },
   ];
+
+  @override
+  Future<Map<String, dynamic>?> fetchDailyAllowance({
+    required String storeId,
+    required String employeeId,
+    required DateTime workDate,
+  }) async => null;
+
+  @override
+  Future<Map<String, dynamic>> upsertDailyAllowance({
+    required String storeId,
+    required String employeeId,
+    required DateTime workDate,
+    required bool isSplitShift,
+    required double parkingAllowanceAmount,
+    String? note,
+  }) async {
+    allowanceUpserts += 1;
+    return {
+      'employee_id': employeeId,
+      'work_date': workDate.toIso8601String().substring(0, 10),
+      'is_split_shift': isSplitShift,
+      'meal_allowance_amount': isSplitShift ? 25000 : 0,
+      'parking_allowance_amount': parkingAllowanceAmount,
+      'note': note,
+    };
+  }
 }
 
 Future<void> _pump(
@@ -942,6 +972,12 @@ void main() {
       find.byKey(const Key('staff_employee_bank_name_field')),
       findsOneWidget,
     );
+    await tester.tap(
+      find.byKey(const Key('staff_employment_start_date_field')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
     final addButton = find.descendant(
       of: addSheet,
       matching: find.byType(FilledButton),
@@ -986,6 +1022,12 @@ void main() {
       matching: find.byType(TextField),
     );
     await tester.enterText(createFields.at(0), 'Trần Gia Huy');
+    await tester.tap(
+      find.byKey(const Key('staff_employment_start_date_field')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('staff_hourly_rate_field')),
       '30000',
@@ -1242,6 +1284,43 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.byKey(const Key('attendance_payroll_unlock_dialog')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Attendance daily allowance dialog saves a working-day entry', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final attendance = _AttendanceService(role: 'part_timer');
+    await _pump(
+      tester,
+      child: AttendanceTab(attendanceServiceOverride: attendance),
+      overrides: const [],
+    );
+    await tester.pumpAndSettle();
+
+    final manage = find.byKey(const Key('attendance_manage_daily_allowance'));
+    await tester.ensureVisible(manage);
+    await tester.tap(manage);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('attendance_daily_allowance_dialog')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('attendance_allowance_split_shift')));
+    await tester.enterText(
+      find.byKey(const Key('attendance_allowance_parking')),
+      '10000',
+    );
+    await tester.tap(find.byKey(const Key('attendance_allowance_save')));
+    await tester.pumpAndSettle();
+
+    expect(attendance.allowanceUpserts, 1);
+    expect(
+      find.byKey(const Key('attendance_daily_allowance_dialog')),
       findsNothing,
     );
     expect(tester.takeException(), isNull);

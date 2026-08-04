@@ -16,8 +16,12 @@ void main() {
     final screen = readRepoFile('lib/features/admin/tabs/staff_tab.dart');
 
     expect(service, contains(".from('store_employees')"));
-    expect(service, contains("'create_store_employee'"));
-    expect(service, contains("'update_store_employee'"));
+    expect(service, contains("'create_store_employee_with_dates'"));
+    expect(service, contains("'update_store_employee_with_dates'"));
+    expect(
+      service,
+      contains("'create_store_part_timer_with_pay_rule_and_dates'"),
+    );
     expect(service, contains("'deactivate_store_employee'"));
     expect(service, isNot(contains("'create_staff_user'")));
     expect(service, isNot(contains("'p_employee_number'")));

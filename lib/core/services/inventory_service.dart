@@ -36,17 +36,19 @@ class InventoryService {
     String? itemId,
     required String name,
     required double currentStock,
+    required String unit,
     required DateTime countDate,
     String? note,
   }) async {
     final trimmedNote = note?.trim();
     final response = await supabase.rpc(
-      'save_photo_objet_daily_inventory_item',
+      'save_photo_objet_daily_inventory_item_with_unit',
       params: {
         'p_store_id': storeId,
         'p_item_id': itemId,
         'p_name': name.trim(),
         'p_current_stock': currentStock,
+        'p_unit': unit,
         'p_count_date': _dateOnly(countDate),
         'p_note': trimmedNote == null || trimmedNote.isEmpty
             ? null
