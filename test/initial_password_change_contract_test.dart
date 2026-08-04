@@ -46,6 +46,42 @@ void main() {
     expect(router, contains("path: '/change-initial-password'"));
     expect(router, contains('InitialPasswordChangeScreen'));
     expect(router, contains("location == '/change-initial-password'"));
+    expect(router, contains("path: '/change-password'"));
+    expect(router, contains('selfService: true'));
+  });
+
+  test('signed-in users can change only their own password from app nav', () {
+    final nav = readRepoFile('lib/widgets/app_nav_bar.dart');
+    final provider = readRepoFile('lib/features/auth/auth_provider.dart');
+    final function = readRepoFile(
+      'supabase/functions/complete-initial-password-change/index.ts',
+    );
+
+    expect(nav, contains("Key('app_nav_change_password_button')"));
+    expect(nav, contains("context.go('/change-password')"));
+    expect(provider, contains('Future<bool> changeOwnPassword'));
+    expect(provider, contains("'mode': 'self_service'"));
+    expect(function, contains('body.mode === "self_service"'));
+    expect(function, contains('updatePassword(authId, newPassword)'));
+    expect(function, isNot(contains('body.user_id')));
+  });
+
+  test('BunsikClub reset scope contains only its five fixed accounts', () {
+    final accounts = File('docs/pos/bunsikclub_operational_auth_emails.txt')
+        .readAsLinesSync()
+        .where((line) {
+          final value = line.trim();
+          return value.isNotEmpty && !value.startsWith('#');
+        })
+        .toSet();
+
+    expect(accounts, {
+      'bt_kit1@globos.world',
+      'bt_pos1@globos.world',
+      'bt_tab1@globos.world',
+      'bunsik_bm1@globos.world',
+      'bunsik_sm1@globos.world',
+    });
   });
 
   test('database arms every Auth password write and advances its generation', () {

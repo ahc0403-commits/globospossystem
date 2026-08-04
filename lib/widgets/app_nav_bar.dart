@@ -53,6 +53,7 @@ class AppNavBar extends ConsumerWidget {
     }
     final l10n = context.l10n;
     final viewportWidth = MediaQuery.sizeOf(context).width;
+    final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.3;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -61,11 +62,12 @@ class AppNavBar extends ConsumerWidget {
             ? constraints.maxWidth
             : viewportWidth;
         final phoneChrome = viewportWidth < 560;
-        final veryCompact = availableWidth < 132 || viewportWidth < 420;
-        final showForward = !veryCompact && availableWidth >= 132;
-        final showStore = !veryCompact && !phoneChrome && availableWidth >= 290;
+        final veryCompact = availableWidth < 210 || viewportWidth < 420;
+        final showForward = !veryCompact && availableWidth >= 264;
+        final showStore =
+            !veryCompact && !phoneChrome && !largeText && availableWidth >= 444;
         final showLanguage =
-            !veryCompact && !phoneChrome && availableWidth >= 460;
+            !veryCompact && !phoneChrome && !largeText && availableWidth >= 570;
         final logoutOnly = showLogout && veryCompact;
         final compactLanguageSwitcher =
             availableWidth < 640 || viewportWidth < 1180;
@@ -136,6 +138,14 @@ class AppNavBar extends ConsumerWidget {
               LanguageSwitcher(compact: compactLanguageSwitcher),
             ],
             if (showLogout) ...[
+              const SizedBox(width: 6),
+              _NavButton(
+                key: const Key('app_nav_change_password_button'),
+                icon: Icons.password_rounded,
+                tooltip: l10n.changePasswordTooltip,
+                enabled: true,
+                onTap: () => context.go('/change-password'),
+              ),
               const SizedBox(width: 6),
               _NavButton(
                 key: const Key('app_nav_logout_button'),

@@ -249,8 +249,14 @@ void main() {
     expect(appNav, contains('LayoutBuilder('));
     expect(appNav, contains('final availableWidth'));
     expect(appNav, contains('final phoneChrome = viewportWidth < 560'));
+    expect(appNav, contains('final largeText'));
     expect(appNav, contains('final showStore'));
-    expect(appNav, contains('!phoneChrome && availableWidth >= 290'));
+    expect(
+      appNav,
+      contains(
+        '!veryCompact && !phoneChrome && !largeText && availableWidth >= 444',
+      ),
+    );
     expect(appNav, contains('final showLanguage'));
     expect(appNav, contains('width: 170'));
     expect(appNav, contains('maxWidth: 170'));

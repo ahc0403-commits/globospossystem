@@ -80,6 +80,11 @@ GoRouter buildAppRouter(ProviderContainer container) {
         return redirectTo;
       }
 
+      if (location == '/change-password') {
+        NavigationHistoryService.instance.push(fullLocation);
+        return null;
+      }
+
       // 2. super_admin + 레스토랑 없음 → 온보딩
       if (role == 'super_admin' && storeId == null) {
         redirectTo = location == '/onboarding' ? null : '/onboarding';
@@ -245,6 +250,11 @@ GoRouter buildAppRouter(ProviderContainer container) {
       GoRoute(
         path: '/change-initial-password',
         builder: (_, __) => const InitialPasswordChangeScreen(),
+      ),
+      GoRoute(
+        path: '/change-password',
+        builder: (_, __) =>
+            const InitialPasswordChangeScreen(selfService: true),
       ),
       GoRoute(
         path: '/privacy-consent',
