@@ -8,6 +8,18 @@ class PaymentSplitInput {
   final double amount;
 }
 
+class CombinedOrderPaymentInput {
+  const CombinedOrderPaymentInput({
+    required this.orderId,
+    required this.amount,
+  });
+
+  final String orderId;
+  final double amount;
+
+  Map<String, dynamic> toJson() => {'order_id': orderId, 'amount': amount};
+}
+
 String? validatePaymentSplits(List<PaymentSplitInput> splits, double total) {
   if (splits.isEmpty) return 'At least one payment split is required.';
   if (total <= 0) return 'Order total is invalid.';
@@ -61,6 +73,28 @@ class PaymentService {
         'p_order_id': orderId,
         'p_store_id': storeId,
         'p_amount': amount,
+        'p_method': normalizedMethod,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<Map<String, dynamic>> processCombinedTablePayment({
+    required String storeId,
+    required List<CombinedOrderPaymentInput> orders,
+    required String method,
+  }) async {
+    if (orders.length < 2) {
+      throw ArgumentError(
+        'At least two table orders are required for combined payment.',
+      );
+    }
+    final normalizedMethod = normalizePaymentMethodInput(method);
+    final result = await supabase.rpc(
+      'process_combined_table_payment',
+      params: {
+        'p_store_id': storeId,
+        'p_order_amounts': orders.map((order) => order.toJson()).toList(),
         'p_method': normalizedMethod,
       },
     );
