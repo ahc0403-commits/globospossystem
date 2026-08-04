@@ -74,7 +74,7 @@ BEGIN
      ) THEN
     RAISE EXCEPTION 'DAILY_CLOSING_CRON_INVALID';
   END IF;
-END
+END;
 $verify$;
 
 SELECT 'scheduled closing and promotions verification passed' AS result;
