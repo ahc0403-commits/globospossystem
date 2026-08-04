@@ -45,6 +45,28 @@ void main() {
     expect(source, isNot(contains('PosStatCard(')));
   });
 
+  test(
+    'einvoice screen exposes only the compact pending queue export flow',
+    () {
+      final source = readRepoFile('lib/features/admin/tabs/einvoice_tab.dart');
+      final buildStart = source.indexOf('Widget build(BuildContext context)');
+      final controlsStart = source.indexOf(
+        'Widget _buildEinvoiceQueueControls',
+        buildStart,
+      );
+      final visibleBuild = source.substring(buildStart, controlsStart);
+
+      expect(visibleBuild, contains("Key('einvoice_compact_header')"));
+      expect(visibleBuild, contains("Key('misa_pending_excel_download')"));
+      expect(visibleBuild, contains('_downloadMisaWorkbook(pendingJobs)'));
+      expect(visibleBuild, contains("job.groupStatus == 'pending'"));
+      expect(visibleBuild, isNot(contains('_buildOpsAlerts(')));
+      expect(visibleBuild, isNot(contains('_buildReadinessAlerts(')));
+      expect(visibleBuild, isNot(contains('_buildEinvoiceQueueControls(')));
+      expect(visibleBuild, isNot(contains('_buildDetailPane(')));
+    },
+  );
+
   test('einvoice MISA settings labels are localized', () {
     final en = readRepoFile('lib/l10n/app_en.arb');
     final ko = readRepoFile('lib/l10n/app_ko.arb');

@@ -1,3 +1,4 @@
+import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,7 @@ import '../../../core/ui/toast/toast.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
+import '../einvoice_misa_workbook.dart';
 
 class _EinvoiceOpsFlags {
   const _EinvoiceOpsFlags({required this.dispatchEnabled});
@@ -204,6 +206,7 @@ class _EinvoiceQueueItem {
     required this.supplyAmount,
     required this.vatAmount,
     required this.totalAmount,
+    required this.exportPayload,
   });
 
   factory _EinvoiceQueueItem.fromJson(Map<String, dynamic> json) {
@@ -289,6 +292,7 @@ class _EinvoiceQueueItem {
       supplyAmount: supplyAmount,
       vatAmount: vatAmount,
       totalAmount: totalAmount,
+      exportPayload: Map<String, dynamic>.from(json),
     );
   }
 
@@ -315,6 +319,7 @@ class _EinvoiceQueueItem {
   final double supplyAmount;
   final double vatAmount;
   final double totalAmount;
+  final Map<String, dynamic> exportPayload;
 
   bool get isResolved => status == 'resolved';
   bool get isFailed => status == 'failed' || status == 'manual_action_required';
@@ -472,6 +477,9 @@ final _einvoiceJobsProvider =
           .toList();
     });
 
+// Retained for the dormant recovery/configuration workflow, which is no longer
+// exposed on the simplified pending-export screen.
+// ignore: unused_element
 final _einvoiceOpsFlagsProvider =
     FutureProvider.autoDispose<_EinvoiceOpsFlags?>((ref) async {
       try {
@@ -581,6 +589,7 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
   String? _retryingJobId;
   String? _resolvingJobId;
   bool _releasingReadyJobs = false;
+  bool _isExporting = false;
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -592,46 +601,12 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
   @override
   Widget build(BuildContext context) {
     final jobsAsync = ref.watch(_einvoiceJobsProvider);
-    final flags = ref.watch(_einvoiceOpsFlagsProvider).valueOrNull;
-    final readiness =
-        ref.watch(_meinvoiceReadinessProvider).valueOrNull ??
-        const <_MeInvoiceReadiness>[];
     final allJobs = jobsAsync.valueOrNull ?? const <_EinvoiceQueueItem>[];
-    final filteredJobs = _filteredJobs(allJobs);
-    final selectedJob = _resolveSelectedJob(filteredJobs);
-
-    final pendingCount = allJobs
+    final pendingJobs = allJobs
         .where((job) => job.groupStatus == 'pending')
-        .length;
-    final completedCount = allJobs
-        .where((job) => job.groupStatus == 'completed')
-        .length;
-    final failedCount = allJobs
-        .where((job) => job.groupStatus == 'failed')
-        .length;
-    final monthTotal = allJobs
-        .where(
-          (job) =>
-              job.createdAt.year == DateTime.now().year &&
-              job.createdAt.month == DateTime.now().month,
-        )
-        .fold<double>(0, (sum, job) => sum + job.totalAmount);
-    final header = _buildEinvoiceExceptionHeader(
-      pendingCount: pendingCount,
-      completedCount: completedCount,
-      failedCount: failedCount,
-      monthTotal: monthTotal,
-    );
-    final alertWidgets = <Widget>[
-      if (flags != null) ..._buildOpsAlerts(flags, allJobs),
-      ..._buildReadinessAlerts(readiness),
-    ];
-    final opsAlerts = alertWidgets.isEmpty
-        ? const <Widget>[]
-        : <Widget>[...alertWidgets, const SizedBox(height: 12)];
-    final queueControls = _buildEinvoiceQueueControls(
-      filteredCount: filteredJobs.length,
-    );
+        .toList(growable: false);
+    final selectedJob = _resolveSelectedJob(pendingJobs);
+    final header = _buildEinvoiceExceptionHeader(pendingJobs: pendingJobs);
 
     return Scaffold(
       key: const Key('einvoice_root'),
@@ -644,10 +619,7 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
               padding: const EdgeInsets.all(16),
               children: [
                 header,
-                ...opsAlerts,
-                const SizedBox(height: 12),
-                queueControls,
-                const SizedBox(height: 16),
+                const SizedBox(height: 10),
                 jobsAsync.when(
                   loading: () => SizedBox(
                     height: 320,
@@ -657,21 +629,13 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
                   ),
                   error: (error, _) => _buildErrorState(error),
                   data: (_) {
-                    if (filteredJobs.isEmpty) {
+                    if (pendingJobs.isEmpty) {
                       return _buildEmptyState();
                     }
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _buildQueuePane(
-                          jobs: filteredJobs,
-                          selectedJob: selectedJob,
-                          scrollable: false,
-                        ),
-                        const SizedBox(height: 16),
-                        _buildDetailPane(selectedJob, scrollable: false),
-                      ],
+                    return _buildQueuePane(
+                      jobs: pendingJobs,
+                      selectedJob: selectedJob,
+                      scrollable: false,
                     );
                   },
                 ),
@@ -686,10 +650,7 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 header,
-                ...opsAlerts,
-                const SizedBox(height: 12),
-                queueControls,
-                const SizedBox(height: 16),
+                const SizedBox(height: 10),
                 Expanded(
                   child: jobsAsync.when(
                     loading: () => ToastOperationalLoadingState(
@@ -697,29 +658,13 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
                     ),
                     error: (error, _) => _buildErrorState(error),
                     data: (_) {
-                      if (filteredJobs.isEmpty) {
+                      if (pendingJobs.isEmpty) {
                         return _buildEmptyState();
                       }
-
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          SizedBox(
-                            width: 520,
-                            child: _buildQueuePane(
-                              jobs: filteredJobs,
-                              selectedJob: selectedJob,
-                              scrollable: true,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildDetailPane(
-                              selectedJob,
-                              scrollable: true,
-                            ),
-                          ),
-                        ],
+                      return _buildQueuePane(
+                        jobs: pendingJobs,
+                        selectedJob: selectedJob,
+                        scrollable: true,
                       );
                     },
                   ),
@@ -733,111 +678,81 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
   }
 
   Widget _buildEinvoiceExceptionHeader({
-    required int pendingCount,
-    required int completedCount,
-    required int failedCount,
-    required double monthTotal,
+    required List<_EinvoiceQueueItem> pendingJobs,
   }) {
     final l10n = context.l10n;
-    final needsReview = failedCount > 0;
 
     return ToastWorkSurface(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+      key: const Key('einvoice_compact_header'),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       backgroundColor: PosColors.surface,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.eInvoice,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.headlineLarge?.copyWith(letterSpacing: 0),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      l10n.einvoiceScreenSubtitle,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: PosColors.textSecondary,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.eInvoice,
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
-              ),
-              const SizedBox(width: 12),
-              ToastStatusBadge(
-                label: needsReview
-                    ? l10n.deliveryRetryRequired
-                    : l10n.staffOperationalHealthy,
-                color: needsReview ? PosColors.warning : PosColors.success,
-                compact: true,
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          ToastMetricStrip(
-            metrics: [
-              ToastMetric(
-                label: l10n.einvoicePendingIssue,
-                value: '$pendingCount',
-                tone: pendingCount > 0
-                    ? PosColors.accent
-                    : PosColors.textSecondary,
-              ),
-              ToastMetric(
-                label: l10n.einvoiceFailureRejected,
-                value: '$failedCount',
-                tone: needsReview ? PosColors.danger : PosColors.success,
-              ),
-              ToastMetric(
-                label: l10n.einvoiceIssued,
-                value: '$completedCount',
-                tone: PosColors.success,
-              ),
-              ToastMetric(
-                label: l10n.einvoiceMonthlyTotal,
-                value: _fmtVnd(monthTotal),
-                tone: PosColors.info,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              ToastStatusBadge(
-                label: needsReview
-                    ? l10n.einvoiceImmediateReview
-                    : l10n.einvoiceNoOpenItems,
-                color: needsReview ? PosColors.danger : PosColors.success,
-                compact: true,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  needsReview
-                      ? l10n.einvoiceCheckFailureReasonFirst
-                      : l10n.einvoiceAwaitingTaxCheck,
-                  overflow: TextOverflow.ellipsis,
+                Text(
+                  '${l10n.einvoicePendingIssue} ${pendingJobs.length}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: PosColors.textSecondary,
-                    fontSize: 12,
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          PosSecondaryButton(
+            key: const Key('misa_pending_excel_download'),
+            label: l10n.reportsDownload,
+            icon: Icons.download_outlined,
+            onPressed: pendingJobs.isEmpty || _isExporting
+                ? null
+                : () => _downloadMisaWorkbook(pendingJobs),
           ),
         ],
       ),
     );
   }
 
+  Future<void> _downloadMisaWorkbook(
+    List<_EinvoiceQueueItem> pendingJobs,
+  ) async {
+    setState(() => _isExporting = true);
+    try {
+      final bytes = buildMisaPendingInvoiceWorkbook(
+        pendingJobs.map((job) => job.exportPayload).toList(growable: false),
+      );
+      final stamp = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+      await FileSaver.instance.saveFile(
+        name: 'MISA_pending_invoices_$stamp',
+        bytes: Uint8List.fromList(bytes),
+        ext: 'xlsx',
+        mimeType: MimeType.microsoftExcel,
+      );
+      if (!mounted) return;
+      showSuccessToast(
+        context,
+        context.l10n.einvoiceDownloadPrepared(pendingJobs.length),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      showErrorToast(
+        context,
+        context.l10n.einvoiceDownloadFailedWithError('$error'),
+      );
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  // ignore: unused_element
   Widget _buildEinvoiceQueueControls({required int filteredCount}) {
     final l10n = context.l10n;
 
@@ -924,6 +839,7 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
     );
   }
 
+  // ignore: unused_element
   List<_EinvoiceQueueItem> _filteredJobs(List<_EinvoiceQueueItem> jobs) {
     final now = DateTime.now();
     return jobs.where((job) {
@@ -963,6 +879,7 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
     return jobs.first;
   }
 
+  // ignore: unused_element
   List<Widget> _buildOpsAlerts(
     _EinvoiceOpsFlags flags,
     List<_EinvoiceQueueItem> jobs,
@@ -993,6 +910,7 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
     return alerts;
   }
 
+  // ignore: unused_element
   List<Widget> _buildReadinessAlerts(List<_MeInvoiceReadiness> profiles) {
     final blocked = profiles
         .where((profile) => !profile.readyToDispatch)
@@ -1182,6 +1100,7 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
     );
   }
 
+  // ignore: unused_element
   Widget _buildDetailPane(_EinvoiceQueueItem? job, {required bool scrollable}) {
     if (job == null) {
       return _buildEmptyState(
