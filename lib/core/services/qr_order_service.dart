@@ -7,6 +7,8 @@ class QrOrderMenu {
     required this.floorLabel,
     required this.categories,
     required this.items,
+    this.promotionName,
+    this.promotionDiscountPercent = 0,
   });
 
   final String storeName;
@@ -14,6 +16,8 @@ class QrOrderMenu {
   final String floorLabel;
   final List<QrMenuCategory> categories;
   final List<QrMenuItem> items;
+  final String? promotionName;
+  final double promotionDiscountPercent;
 
   factory QrOrderMenu.fromJson(Map<String, dynamic> json) {
     final categoriesRaw = json['categories'];
@@ -22,6 +26,8 @@ class QrOrderMenu {
       storeName: json['store_name']?.toString() ?? '',
       tableNumber: json['table_number']?.toString() ?? '-',
       floorLabel: json['floor_label']?.toString() ?? '-',
+      promotionName: json['promotion_name']?.toString(),
+      promotionDiscountPercent: _jsonDouble(json['promotion_discount_percent']),
       categories: categoriesRaw is List
           ? categoriesRaw
                 .whereType<Map>()
@@ -86,6 +92,8 @@ class QrMenuItem {
     this.nameVi = '',
     this.nameEn = '',
     required this.price,
+    this.originalPrice,
+    this.discountPercent = 0,
     this.description,
     this.imageUrl,
   });
@@ -97,6 +105,8 @@ class QrMenuItem {
   final String nameVi;
   final String nameEn;
   final double price;
+  final double? originalPrice;
+  final double discountPercent;
   final String? description;
   final String? imageUrl;
 
@@ -118,14 +128,20 @@ class QrMenuItem {
       nameEn: json['name_en']?.toString() ?? fallback,
       description: json['description']?.toString(),
       imageUrl: json['image_url']?.toString(),
-      price: switch (priceRaw) {
-        num value => value.toDouble(),
-        String value => double.tryParse(value) ?? 0,
-        _ => 0,
-      },
+      price: _jsonDouble(priceRaw),
+      originalPrice: json['original_price'] == null
+          ? null
+          : _jsonDouble(json['original_price']),
+      discountPercent: _jsonDouble(json['discount_percent']),
     );
   }
 }
+
+double _jsonDouble(dynamic value) => switch (value) {
+  num number => number.toDouble(),
+  String text => double.tryParse(text) ?? 0,
+  _ => 0,
+};
 
 class QrOrderLine {
   const QrOrderLine({required this.menuItemId, required this.quantity});

@@ -204,6 +204,10 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     _restaurantId = storeId;
 
     try {
+      await supabase.rpc(
+        'refresh_store_order_promotions',
+        params: {'p_store_id': storeId},
+      );
       final storePricing = await _loadStorePricing(storeId);
       final response = await supabase
           .from('orders')

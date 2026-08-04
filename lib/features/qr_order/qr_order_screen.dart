@@ -313,6 +313,11 @@ class _QrOrderScreenState extends State<QrOrderScreen> {
                             languageCode: _languageCode,
                             quantity: _cart[item.id] ?? 0,
                             priceLabel: '${_currency.format(item.price)} VND',
+                            originalPriceLabel:
+                                item.discountPercent > 0 &&
+                                    item.originalPrice != null
+                                ? '${_currency.format(item.originalPrice)} VND'
+                                : null,
                             copy: _copy,
                             onChanged: (quantity) =>
                                 _setQuantity(item.id, quantity),
@@ -378,6 +383,30 @@ class _QrOrderScreenState extends State<QrOrderScreen> {
                   ),
                 ),
                 const SizedBox(height: ToastSpacingTokens.sm),
+                if (menu.promotionDiscountPercent > 0) ...[
+                  Container(
+                    key: const Key('qr_active_promotion'),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: ToastSpacingTokens.sm,
+                      vertical: ToastSpacingTokens.xs,
+                    ),
+                    decoration: BoxDecoration(
+                      color: ToastColorTokens.warningMuted,
+                      borderRadius: ToastRadiusTokens.sm,
+                    ),
+                    child: Text(
+                      _copy.promotionLabel(
+                        menu.promotionName ?? '',
+                        menu.promotionDiscountPercent,
+                      ),
+                      style: AppFonts.system(
+                        color: ToastColorTokens.textPrimary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: ToastSpacingTokens.sm),
+                ],
                 Text(
                   _copy.headerHint,
                   style: AppFonts.system(
@@ -435,6 +464,7 @@ class _QrMenuItemTile extends StatelessWidget {
     required this.languageCode,
     required this.quantity,
     required this.priceLabel,
+    this.originalPriceLabel,
     required this.copy,
     required this.onChanged,
   });
@@ -443,6 +473,7 @@ class _QrMenuItemTile extends StatelessWidget {
   final String languageCode;
   final int quantity;
   final String priceLabel;
+  final String? originalPriceLabel;
   final QrOrderCopy copy;
   final ValueChanged<int> onChanged;
 
@@ -493,6 +524,19 @@ class _QrMenuItemTile extends StatelessWidget {
           ),
         ],
         const SizedBox(height: ToastSpacingTokens.sm),
+        if (originalPriceLabel != null) ...[
+          Text(
+            originalPriceLabel!,
+            key: Key('qr_original_price_${item.id}'),
+            style: AppFonts.system(
+              color: ToastColorTokens.textSecondary,
+              fontSize: 13,
+              decoration: TextDecoration.lineThrough,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(height: ToastSpacingTokens.xs),
+        ],
         Text(
           priceLabel,
           style: AppFonts.system(
@@ -1198,6 +1242,18 @@ class QrOrderCopy {
     'vi' => 'Vui lòng kiểm tra đúng số bàn trước khi gọi món.',
     _ => 'Please confirm the table number before ordering.',
   };
+
+  String promotionLabel(String name, double percent) {
+    final percentLabel = percent == percent.roundToDouble()
+        ? percent.toInt().toString()
+        : percent.toStringAsFixed(1);
+    final prefix = name.trim().isEmpty ? '' : '${name.trim()} · ';
+    return switch (code) {
+      'ko' => '$prefix전 메뉴 $percentLabel% 할인',
+      'vi' => '${prefix}Giảm $percentLabel% toàn bộ thực đơn',
+      _ => '$prefix$percentLabel% off all menu items',
+    };
+  }
 
   String get confirmTitle => switch (code) {
     'ko' => '주문 확인',

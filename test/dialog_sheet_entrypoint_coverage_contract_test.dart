@@ -243,6 +243,12 @@ const _coverage = <_OperationalCoverage>[
     test: 'test/einvoice_overlay_operational_test.dart',
     markers: ['meinvoice_settings_dialog'],
   ),
+  _OperationalCoverage(
+    source: 'lib/features/settings/promotion_settings_card.dart',
+    directCalls: 1,
+    test: 'test/settings_admin_ui_contract_test.dart',
+    markers: ['promotion_settings_dialog'],
+  ),
 ];
 
 String _withoutLineComments(String source) => source
@@ -255,7 +261,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 85 dialog and sheet entrypoints map to operational tests', () {
+  test('all 86 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -267,10 +273,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 84);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 85);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      85,
+      86,
     );
 
     final settings = File(
