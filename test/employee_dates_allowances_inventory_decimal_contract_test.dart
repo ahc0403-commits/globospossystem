@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 String _read(String path) => File(path).readAsStringSync();
 
 void main() {
@@ -52,7 +54,7 @@ void main() {
   test(
     'production deploy gate includes migration preflight and verification',
     () {
-      final deploy = _read('scripts/deploy_pos_production.sh');
+      final deploy = readProductionGateContract();
       expect(
         deploy,
         contains('20260804120000_employee_dates_daily_allowances.sql'),

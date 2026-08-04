@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:excel/excel.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'helpers/production_gate_test_support.dart';
 import 'package:globos_pos_system/features/admin/menu_import/menu_excel_import.dart';
 import 'package:globos_pos_system/features/admin/menu_import/menu_excel_roundtrip.dart';
 
@@ -148,9 +150,7 @@ void main() {
       expect(migration, isNot(contains('image_url =')));
       expect(migration, isNot(contains('DELETE FROM public.menu_items')));
 
-      final deploy = File(
-        'scripts/deploy_pos_production.sh',
-      ).readAsStringSync();
+      final deploy = readProductionGateContract();
       expect(deploy, contains('20260722070000_menu_excel_roundtrip_i18n.sql'));
       expect(deploy, contains('preflight_menu_excel_roundtrip_i18n.sql'));
       expect(deploy, contains('verify_menu_excel_roundtrip_i18n.sql'));

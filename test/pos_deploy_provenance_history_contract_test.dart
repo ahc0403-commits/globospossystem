@@ -13,6 +13,8 @@ void main() {
     expect(deploy, contains('production_deploy_path_requested'));
     expect(deploy, contains('enforce_clean_git'));
     expect(deploy, contains('enforce_origin_main_ancestry'));
+    expect(deploy, contains('enforce_required_github_check'));
+    expect(deploy, contains('POS_REQUIRED_GITHUB_CHECK="Photo Objet contract"'));
     expect(
       deploy,
       contains('+refs/heads/main:refs/remotes/origin/main'),
@@ -32,27 +34,22 @@ void main() {
     expect(deploy, contains('--meta "githubCommitRepo=\$POS_GITHUB_REPO"'));
     expect(deploy, isNot(contains('ALLOW_GIT_ANCESTRY')));
     expect(deploy, isNot(contains('SKIP_GIT')));
-    expect(
-      deploy,
-      contains('20260713120000_photo_objet_expected_slot_ledger.sql'),
-    );
-    expect(
-      deploy,
-      contains('preflight_photo_objet_expected_slot_ledger.sql'),
-    );
-    expect(
-      deploy,
-      contains('verify_photo_objet_expected_slot_ledger.sql'),
-    );
-    expect(
-      deploy,
-      contains('apply_photo_objet_expected_slot_ledger.sql'),
-    );
+    expect(deploy, contains('apply_migration_by_convention'));
     expect(
       deploy,
       contains('PHOTO_OBJET_MONITORING_EFFECTIVE_FROM'),
     );
     expect(deploy, contains('PHOTO_POLICY_VALUES=<validated>'));
+
+    final migrationGate = File(
+      'scripts/lib/production_migration_gate.sh',
+    ).readAsStringSync();
+    expect(migrationGate, contains('preflight_\${migration_slug}.sql'));
+    expect(migrationGate, contains('apply_\${migration_slug}.sql'));
+    expect(migrationGate, contains('verify_\${migration_slug}.sql'));
+    expect(migrationGate, contains('rollback_\${migration_slug}.sql'));
+    expect(migrationGate, contains('-- production-gate: self-verifying'));
+    expect(deploy, isNot(contains('verification_complete=0')));
 
     final preflight = deploy.substring(
       deploy.indexOf('preflight() {'),
@@ -60,6 +57,10 @@ void main() {
     );
     expect(
       preflight.indexOf('enforce_origin_main_ancestry'),
+      lessThan(preflight.indexOf('enforce_required_github_check')),
+    );
+    expect(
+      preflight.indexOf('enforce_required_github_check'),
       lessThan(preflight.indexOf('need_cmd vercel')),
     );
 
@@ -89,13 +90,12 @@ void main() {
     expect(deploy, isNot(contains('--skip-repair')));
     expect(deploy, isNot(contains('Could not confirm migration history')));
 
-    final apply = deploy.substring(
-      deploy.indexOf('apply_migration() {'),
-      deploy.indexOf('rollback_hierarchy() {'),
-    );
+    final apply = File(
+      'scripts/lib/production_migration_gate.sh',
+    ).readAsStringSync();
     expect(
       apply.indexOf('require_migration_history_absent'),
-      lessThan(apply.indexOf(r'run_linked_psql_file "$migration_path"')),
+      lessThan(apply.indexOf('log "Apply Supabase migration"')),
     );
     expect(
       apply.indexOf('supabase migration repair'),

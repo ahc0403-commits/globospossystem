@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 void main() {
   const migrationPath =
       'supabase/migrations/20260723050000_payroll_pin_rpc_repair.sql';
@@ -22,7 +24,7 @@ void main() {
   });
 
   test('production deployment gates the payroll PIN repair', () {
-    final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
+    final deploy = readProductionGateContract();
     final preflight = File(
       'scripts/preflight_payroll_pin_rpc_repair.sql',
     ).readAsStringSync();

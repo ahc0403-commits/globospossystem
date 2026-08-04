@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 String readRepoFile(String path) => File(path).readAsStringSync();
 
 void main() {
@@ -12,7 +14,7 @@ void main() {
     final migration = readRepoFile(
       'supabase/migrations/20260722050000_kitchen_direct_completion.sql',
     );
-    final deploy = readRepoFile('scripts/deploy_pos_production.sh');
+    final deploy = readProductionGateContract();
 
     expect(screen, contains("'preparing' => 'served'"));
     expect(screen, contains('kitchenCompleteAllItems'));

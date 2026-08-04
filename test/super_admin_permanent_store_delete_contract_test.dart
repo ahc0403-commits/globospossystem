@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+
+import 'helpers/production_gate_test_support.dart';
 import 'package:globos_pos_system/features/super_admin/super_admin_provider.dart';
 
 SuperRestaurant _store(String id, {required bool isActive}) {
@@ -53,7 +55,7 @@ void main() {
       'supabase/migrations/20260719030000_admin_permanent_store_delete.sql',
     );
     final screen = _read('lib/features/super_admin/super_admin_screen.dart');
-    final deploy = _read('scripts/deploy_pos_production.sh');
+    final deploy = readProductionGateContract();
 
     expect(migration, contains('STORE_PURGE_REQUIRES_INACTIVE'));
     expect(migration, contains('STORE_PURGE_CONFIRMATION_MISMATCH'));

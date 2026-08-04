@@ -28,6 +28,8 @@ printf 'CHECK_REPO_STEP=deploy_clean_worktree_contract\n'
 bash test/pos_deploy_clean_worktree_checks_test.sh
 printf 'CHECK_REPO_STEP=deploy_git_history_contract\n'
 bash test/pos_deploy_git_history_guard_test.sh
+printf 'CHECK_REPO_STEP=production_migration_gate_contract\n'
+bash test/pos_production_migration_gate_test.sh
 printf 'CHECK_REPO_STEP=deploy_psql_runner_contract\n'
 bash test/pos_deploy_psql_runner_test.sh
 printf 'CHECK_REPO_STEP=production_sql_wrapper_contract\n'

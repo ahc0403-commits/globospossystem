@@ -2,11 +2,14 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 String readRepoFile(String path) => File(path).readAsStringSync();
 
 void main() {
   test('production deploy is gated by operational Auth and data hygiene', () {
     final deploy = readRepoFile('scripts/deploy_pos_production.sh');
+    final migrationGate = readProductionGateContract();
     final checker = readRepoFile('scripts/check_pilot_auth_accounts.sh');
     final legacyLoginMatrix = readRepoFile(
       'scripts/pilot_gate1_login_matrix.sh',
@@ -72,22 +75,22 @@ void main() {
     expect(deploy, contains('PGSSLMODE=require'));
     expect(deploy, contains('cli_login_'));
     expect(deploy, contains('PASS: %s'));
-    expect(deploy, contains('verification_complete=1'));
-    expect(deploy, contains('has no explicit verification phase'));
+    expect(deploy, contains('apply_migration_by_convention'));
+    expect(migrationGate, contains('-- production-gate: self-verifying'));
     expect(
-      deploy,
+      migrationGate,
       contains('20260719140000_password_change_lifecycle_fail_closed.sql'),
     );
     expect(
-      deploy,
+      migrationGate,
       contains('preflight_password_change_lifecycle_fail_closed.sql'),
     );
     expect(
-      deploy,
+      migrationGate,
       contains('verify_password_change_lifecycle_fail_closed.sql'),
     );
     expect(
-      deploy,
+      migrationGate,
       contains('rollback_password_change_lifecycle_fail_closed.sql'),
     );
     expect(
@@ -114,10 +117,13 @@ void main() {
       lessThan(psqlRunner.indexOf(r'--file "$file"')),
     );
     expect(
-      deploy,
+      migrationGate,
       contains('preflight_legal_entity_brand_store_hierarchy.sql'),
     );
-    expect(deploy, contains('verify_legal_entity_brand_store_hierarchy.sql'));
+    expect(
+      migrationGate,
+      contains('verify_legal_entity_brand_store_hierarchy.sql'),
+    );
     expect(
       deploy.indexOf('run_auth_check'),
       lessThan(deploy.indexOf('run_checks')),

@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 String _read(String path) => File(path).readAsStringSync();
 
 void main() {
@@ -46,7 +48,7 @@ void main() {
   );
 
   test('production deploy runs dedicated preflight and verification', () {
-    final deploy = _read('scripts/deploy_pos_production.sh');
+    final deploy = readProductionGateContract();
     final preflight = _read('scripts/preflight_vietnamese_printer_output.sql');
     final verification = _read('scripts/verify_vietnamese_printer_output.sql');
 

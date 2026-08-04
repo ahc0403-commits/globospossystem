@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 void main() {
   const migrationPath =
       'supabase/migrations/20260723040000_photo_ops_manager_inventory_access.sql';
@@ -17,7 +19,7 @@ void main() {
   });
 
   test('production deploy gate verifies the targeted recovery migration', () {
-    final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
+    final deploy = readProductionGateContract();
     final preflight = File(
       'scripts/preflight_photo_ops_manager_inventory_access.sql',
     ).readAsStringSync();

@@ -16,6 +16,8 @@ trap cleanup EXIT
 
 mkdir -p "$REHEARSAL_REPO/scripts" "$REHEARSAL_REPO/test" "$FAKE_BIN"
 cp "$DEPLOY_SCRIPT" "$REHEARSAL_REPO/scripts/deploy_pos_production.sh"
+mkdir -p "$REHEARSAL_REPO/scripts/lib"
+cp "$ROOT_DIR/scripts/lib/production_migration_gate.sh" "$REHEARSAL_REPO/scripts/lib/"
 mkdir -p "$REHEARSAL_REPO/supabase/migrations"
 cp "$ROOT_DIR/supabase/migrations/20260717090000_store_opening_setup_wizard.sql" \
   "$REHEARSAL_REPO/supabase/migrations/"
@@ -135,14 +137,14 @@ store_setup_output="$(bash -c '
   apply_migration
 ' rehearsal "$REHEARSAL_REPO")"
 
-[[ "$store_setup_output" == *'Store opening setup rollback readiness'* ]]
+[[ "$store_setup_output" == *'Migration rollback readiness'* ]]
 [[ "$store_setup_output" == *'Rollback ready (not executed):'*'rollback_store_opening_setup_wizard.sql'* ]]
 [[ "$store_setup_output" == *'Confirm migration history absence'* ]]
-[[ "$store_setup_output" == *'Store opening setup migration preflight'* ]]
+[[ "$store_setup_output" == *'Production migration preflight'* ]]
 [[ "$store_setup_output" == *'preflight_store_opening_setup_wizard.sql'* ]]
-[[ "$store_setup_output" == *'Apply Store opening setup migration atomically'* ]]
+[[ "$store_setup_output" == *'Apply Supabase migration'* ]]
 [[ "$store_setup_output" == *'apply_store_opening_setup_wizard.sql'* ]]
-[[ "$store_setup_output" == *'Store opening setup migration verification'* ]]
+[[ "$store_setup_output" == *'Production migration verification'* ]]
 [[ "$store_setup_output" == *'verify_store_opening_setup_wizard.sql'* ]]
 [[ "$store_setup_output" == *'supabase migration repair 20260717090000 --status applied --yes'* ]]
 [[ "$store_setup_output" == *'Confirm migration history presence'* ]]
@@ -156,13 +158,13 @@ table_qr_output="$(bash -c '
   apply_migration
 ' rehearsal "$REHEARSAL_REPO")"
 
-[[ "$table_qr_output" == *'Table QR batch export rollback readiness'* ]]
+[[ "$table_qr_output" == *'Migration rollback readiness'* ]]
 [[ "$table_qr_output" == *'Rollback ready (not executed):'*'rollback_table_qr_batch_export.sql'* ]]
 [[ "$table_qr_output" == *'Confirm migration history absence'* ]]
-[[ "$table_qr_output" == *'Table QR batch export migration preflight'* ]]
+[[ "$table_qr_output" == *'Production migration preflight'* ]]
 [[ "$table_qr_output" == *'preflight_table_qr_batch_export.sql'* ]]
 [[ "$table_qr_output" == *'20260717130000_table_qr_batch_export.sql'* ]]
-[[ "$table_qr_output" == *'Table QR batch export migration verification'* ]]
+[[ "$table_qr_output" == *'Production migration verification'* ]]
 [[ "$table_qr_output" == *'verify_table_qr_batch_export.sql'* ]]
 [[ "$table_qr_output" == *'supabase migration repair 20260717130000 --status applied --yes'* ]]
 [[ "$table_qr_output" == *'Confirm migration history presence'* ]]
@@ -176,13 +178,13 @@ workforce_output="$(bash -c '
   apply_migration
 ' rehearsal "$REHEARSAL_REPO")"
 
-[[ "$workforce_output" == *'Workforce fixed-accounts rollback readiness'* ]]
+[[ "$workforce_output" == *'Migration rollback readiness'* ]]
 [[ "$workforce_output" == *'Rollback ready (not executed):'*'rollback_workforce_fixed_accounts.sql'* ]]
 [[ "$workforce_output" == *'Confirm migration history absence'* ]]
-[[ "$workforce_output" == *'Workforce fixed-accounts migration preflight'* ]]
+[[ "$workforce_output" == *'Production migration preflight'* ]]
 [[ "$workforce_output" == *'preflight_workforce_fixed_accounts.sql'* ]]
 [[ "$workforce_output" == *'20260717170000_workforce_fixed_accounts.sql'* ]]
-[[ "$workforce_output" == *'Workforce fixed-accounts migration verification'* ]]
+[[ "$workforce_output" == *'Production migration verification'* ]]
 [[ "$workforce_output" == *'verify_workforce_fixed_accounts.sql'* ]]
 [[ "$workforce_output" == *'supabase migration repair 20260717170000 --status applied --yes'* ]]
 [[ "$workforce_output" == *'Confirm migration history presence'* ]]

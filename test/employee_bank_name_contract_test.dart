@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 void main() {
   test('employee bank name is wired from the form through persistence', () {
     final staffTab = File(
@@ -16,7 +18,7 @@ void main() {
     final migration = File(
       'supabase/migrations/20260722040000_employee_bank_name.sql',
     ).readAsStringSync();
-    final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
+    final deploy = readProductionGateContract();
 
     expect(staffTab, contains("Key('staff_employee_bank_name_field')"));
     expect(staffTab, contains('staffEmployeeBankName'));

@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+
+import 'helpers/production_gate_test_support.dart';
 import 'package:globos_pos_system/core/services/payroll_service.dart';
 
 String _read(String path) => File(path).readAsStringSync();
@@ -15,7 +17,7 @@ void main() {
       final qrScreen = _read('lib/features/qr_order/qr_order_screen.dart');
       final menuTab = _read('lib/features/admin/tabs/menu_tab.dart');
       final kitchen = _read('lib/features/kitchen/kitchen_screen.dart');
-      final deploy = _read('scripts/deploy_pos_production.sh');
+      final deploy = readProductionGateContract();
 
       expect(migration, contains("NEW.status := 'ready'"));
       expect(migration, contains("NEW.copy_type = 'floor'"));

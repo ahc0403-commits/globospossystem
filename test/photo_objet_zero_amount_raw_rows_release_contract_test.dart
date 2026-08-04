@@ -2,11 +2,13 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 void main() {
   const migrationName = '20260801070557_photo_objet_zero_amount_raw_rows.sql';
 
   test('zero-amount raw-row migration has explicit production gates', () {
-    final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
+    final deploy = readProductionGateContract();
     final migration = File(
       'supabase/migrations/$migrationName',
     ).readAsStringSync();

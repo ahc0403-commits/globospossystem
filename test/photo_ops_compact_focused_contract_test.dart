@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 void main() {
   test('Photo Ops uses a compact context and focused menu content', () {
     final screen = File(
@@ -45,7 +47,7 @@ void main() {
   });
 
   test('production deployment gates inventory cleanup and sales range', () {
-    final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
+    final deploy = readProductionGateContract();
 
     expect(
       deploy,

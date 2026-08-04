@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 void main() {
   test('attendance names use a scoped database function', () {
     final service = File(
@@ -10,9 +12,7 @@ void main() {
     final migration = File(
       'supabase/migrations/20260724025456_attendance_logs_with_names.sql',
     ).readAsStringSync();
-    final deployScript = File(
-      'scripts/deploy_pos_production.sh',
-    ).readAsStringSync();
+    final deployScript = readProductionGateContract();
     final verification = File(
       'scripts/verify_attendance_logs_with_names.sql',
     ).readAsStringSync();

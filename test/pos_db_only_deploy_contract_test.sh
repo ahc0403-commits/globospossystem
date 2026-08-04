@@ -23,6 +23,8 @@ mkdir -p \
   "$REHEARSAL_REPO/test" \
   "$FAKE_BIN"
 cp "$DEPLOY_SCRIPT" "$REHEARSAL_REPO/scripts/deploy_pos_production.sh"
+mkdir -p "$REHEARSAL_REPO/scripts/lib"
+cp "$ROOT_DIR/scripts/lib/production_migration_gate.sh" "$REHEARSAL_REPO/scripts/lib/"
 cp "$ROOT_DIR/supabase/migrations/20260717090000_store_opening_setup_wizard.sql" \
   "$REHEARSAL_REPO/supabase/migrations/"
 for store_setup_sql in \
@@ -77,6 +79,13 @@ fi
 [[ "${1:-}" == test ]] || exit 81
 [[ -f .dart_tool/package_config.json ]] || exit 82
 EOF
+
+cat >"$FAKE_BIN/gh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'completed\tsuccess\thttps://github.com/example/checks/1\n'
+EOF
+chmod +x "$FAKE_BIN/gh"
 
 cat >"$FAKE_BIN/dart" <<'EOF'
 #!/usr/bin/env bash

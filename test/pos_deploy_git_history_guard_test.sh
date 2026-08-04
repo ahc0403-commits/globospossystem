@@ -21,7 +21,9 @@ git -C "$SEED_REPO" config user.email deploy-test@globos.test
 git -C "$SEED_REPO" config user.name 'Deploy Test'
 mkdir -p "$SEED_REPO/scripts"
 cp "$DEPLOY_SCRIPT" "$SEED_REPO/scripts/deploy_pos_production.sh"
-git -C "$SEED_REPO" add scripts/deploy_pos_production.sh
+mkdir -p "$SEED_REPO/scripts/lib"
+cp "$ROOT_DIR/scripts/lib/production_migration_gate.sh" "$SEED_REPO/scripts/lib/"
+git -C "$SEED_REPO" add scripts/deploy_pos_production.sh scripts/lib/production_migration_gate.sh
 git -C "$SEED_REPO" commit -m 'fixture baseline' >/dev/null
 git -C "$SEED_REPO" remote add origin "$ORIGIN_REPO"
 git -C "$SEED_REPO" push --set-upstream origin main >/dev/null
@@ -118,6 +120,44 @@ bash -c '
 ' guard "$APPROVED_REPO" >/dev/null 2>&1
 
 mkdir -p "$FAKE_BIN"
+cat >"$FAKE_BIN/gh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${GITHUB_CHECK_MODE:?}" in
+  success)
+    printf 'completed\tsuccess\thttps://github.com/example/checks/1\n'
+    ;;
+  pending)
+    printf 'in_progress\t\thttps://github.com/example/checks/2\n'
+    ;;
+  api-failure)
+    exit 42
+    ;;
+esac
+EOF
+chmod +x "$FAKE_BIN/gh"
+
+PATH="$FAKE_BIN:$PATH" GITHUB_CHECK_MODE=success bash -c '
+  source "$1/scripts/deploy_pos_production.sh"
+  enforce_required_github_check
+' guard "$APPROVED_REPO" >/dev/null
+
+for check_mode in pending api-failure; do
+  set +e
+  check_output="$(PATH="$FAKE_BIN:$PATH" GITHUB_CHECK_MODE="$check_mode" bash -c '
+    source "$1/scripts/deploy_pos_production.sh"
+    enforce_required_github_check
+  ' guard "$APPROVED_REPO" 2>&1)"
+  check_status=$?
+  set -e
+  [[ "$check_status" -ne 0 ]]
+  if [[ "$check_mode" == pending ]]; then
+    [[ "$check_output" == *"Required GitHub Actions check 'Photo Objet contract' has not succeeded"* ]]
+  else
+    [[ "$check_output" == *'Could not read required GitHub Actions checks'* ]]
+  fi
+done
+
 cat >"$FAKE_BIN/supabase" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail

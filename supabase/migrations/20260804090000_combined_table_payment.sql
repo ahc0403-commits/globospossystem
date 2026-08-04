@@ -1,4 +1,5 @@
 -- Atomic combined-table checkout for cashier operations.
+-- production-gate: self-verifying
 -- Each source order keeps its own payment, inventory, discount, and invoice
 -- lifecycle while the customer-facing tender is grouped for auditability.
 

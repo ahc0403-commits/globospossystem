@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 String readRepoFile(String path) => File(path).readAsStringSync();
 
 void main() {
@@ -16,7 +18,7 @@ void main() {
     final verification = readRepoFile(
       'scripts/verify_employee_attendance_required_photo.sql',
     );
-    final deployment = readRepoFile('scripts/deploy_pos_production.sh');
+    final deployment = readProductionGateContract();
 
     expect(service, contains("'record_employee_attendance_with_photo'"));
     expect(service, contains("'p_employee_number'"));

@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 String readRepoFile(String path) => File(path).readAsStringSync();
 
 void main() {
@@ -13,7 +15,6 @@ void main() {
       'lib/features/red_invoice_intake/red_invoice_intake_screen.dart';
   const modal = 'lib/features/cashier/red_invoice_modal.dart';
   const router = 'lib/core/router/app_router.dart';
-  const deployment = 'scripts/deploy_pos_production.sh';
   const preflight = 'scripts/preflight_red_invoice_intake_export.sql';
   const verification = 'scripts/verify_red_invoice_intake_export.sql';
 
@@ -98,7 +99,7 @@ void main() {
   });
 
   test('production deployment has explicit database safety gates', () {
-    final deploySource = readRepoFile(deployment);
+    final deploySource = readProductionGateContract();
     final preflightSource = readRepoFile(preflight);
     final verificationSource = readRepoFile(verification);
 

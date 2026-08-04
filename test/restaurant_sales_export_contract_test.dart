@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'helpers/production_gate_test_support.dart';
+
 String readRepoFile(String path) => File(path).readAsStringSync();
 
 void main() {
@@ -10,7 +12,6 @@ void main() {
   const screen =
       'lib/features/restaurant_sales_export/restaurant_sales_export_screen.dart';
   const router = 'lib/core/router/app_router.dart';
-  const deploy = 'scripts/deploy_pos_production.sh';
 
   test('export RPC is finalized-only, read-only, and super-admin-only', () {
     final sql = readRepoFile(migration);
@@ -43,7 +44,7 @@ void main() {
   });
 
   test('production runner has explicit preflight and verification gates', () {
-    final deployment = readRepoFile(deploy);
+    final deployment = readProductionGateContract();
 
     expect(
       deployment,
