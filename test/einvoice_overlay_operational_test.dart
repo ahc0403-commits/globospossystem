@@ -18,7 +18,7 @@ void main() {
     );
   });
 
-  testWidgets('M-Invoice settings dialog executes from the Admin control', (
+  testWidgets('electronic invoice screen stays focused on pending export', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -70,14 +70,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final action = find.byKey(const Key('meinvoice_settings_action'));
-    await tester.ensureVisible(action);
-    await tester.tap(action);
-    await tester.pumpAndSettle();
-    final dialog = find.byKey(const Key('meinvoice_settings_dialog'));
-    expect(dialog, findsOneWidget);
-    Navigator.of(tester.element(dialog)).pop();
-    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('einvoice_compact_header')), findsOneWidget);
+    expect(
+      find.byKey(const Key('misa_pending_excel_download')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('meinvoice_settings_action')), findsNothing);
+    expect(find.byKey(const Key('meinvoice_settings_dialog')), findsNothing);
 
     expect(tester.takeException(), isNull);
   });

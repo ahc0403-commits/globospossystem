@@ -455,7 +455,7 @@ final _einvoiceJobsProvider =
       final result = await supabase
           .from('meinvoice_jobs')
           .select('''
-            id, status, buyer_kind, buyer_snapshot, payment_method_snapshot,
+            id, status, source_system, source_snapshot, buyer_kind, buyer_snapshot, payment_method_snapshot,
             line_items_snapshot, manual_action_type, manual_action_note,
             error_message, dispatch_attempts, last_dispatch_at, sent_at,
             created_at, updated_at, misa_ref_id, transaction_id,

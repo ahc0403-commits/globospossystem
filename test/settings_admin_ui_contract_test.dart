@@ -5,6 +5,19 @@ import 'package:flutter_test/flutter_test.dart';
 String readRepoFile(String path) => File(path).readAsStringSync();
 
 void main() {
+  test(
+    'scheduled promotion dialog remains an explicit settings entrypoint',
+    () {
+      final source = readRepoFile(
+        'lib/features/settings/promotion_settings_card.dart',
+      );
+
+      expect(source, contains('promotion_settings_dialog'));
+      expect(source, contains('settings_promotion_add_action'));
+      expect(source, contains('settingsPromotionPercent'));
+    },
+  );
+
   test('settings admin surface stays configuration-primary', () {
     final source = readRepoFile('lib/features/admin/tabs/settings_tab.dart');
 

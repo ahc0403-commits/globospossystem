@@ -1,199 +1,165 @@
 import 'package:excel/excel.dart';
 
-/// Builds the manual-import workbook using the same field names and order as
-/// the MISA meInvoice cash-register API payload.
+/// Builds the one-sheet MISA desktop import workbook used by POS operations.
+///
+/// Photo sales are VAT-inclusive, so their 8% VAT is derived from the gross
+/// amount. Restaurant snapshots already contain VAT-exclusive supply values.
 List<int> buildMisaPendingInvoiceWorkbook(List<Map<String, dynamic>> jobs) {
   if (jobs.isEmpty) {
     throw const FormatException('MISA_PENDING_EXPORT_EMPTY');
   }
 
+  final ordered = [...jobs]
+    ..sort((a, b) => _saleDate(a).compareTo(_saleDate(b)));
   final workbook = Excel.createExcel();
-  workbook.rename('Sheet1', 'InvoiceData');
-  workbook.setDefaultSheet('InvoiceData');
-  final invoices = workbook['InvoiceData'];
-  invoices.appendRow(_invoiceHeaders.map(TextCellValue.new).toList());
+  workbook.rename('Sheet1', 'Hóa đơn GTGT');
+  workbook.setDefaultSheet('Hóa đơn GTGT');
+  final sheet = workbook['Hóa đơn GTGT'];
 
-  final details = workbook['OriginalInvoiceDetail'];
-  details.appendRow(_detailHeaders.map(TextCellValue.new).toList());
+  for (final text in _instructions) {
+    sheet.appendRow([TextCellValue(text)]);
+  }
+  // Keep the template's seventh row physically present. An empty row without
+  // a cell is dropped by the Excel encoder and shifts the required headers.
+  sheet.appendRow([TextCellValue('')]);
+  sheet.appendRow(_headers.map(TextCellValue.new).toList());
 
-  for (final job in jobs) {
-    final refId = _text(job['misa_ref_id']).isNotEmpty
-        ? _text(job['misa_ref_id'])
-        : _text(job['id']);
+  for (var invoiceIndex = 0; invoiceIndex < ordered.length; invoiceIndex++) {
+    final job = ordered[invoiceIndex];
     final buyer = _map(job['buyer_snapshot']);
     final lines = _maps(job['line_items_snapshot']);
-    final totals = _totals(lines);
-    final buyerLegalName = _firstText([
+    final isPhoto = _text(job['source_system']) == 'photo_objet_moers';
+    final legalName = _firstText([
       buyer['unit_name'],
       buyer['customer_name'],
-      'Nguoi mua khong lay hoa don',
+      'Bán cho người tiêu dùng',
     ]);
-    final buyerFullName = _text(buyer['buyer_full_name']);
-    final email = _text(buyer['email']);
-
-    invoices.appendRow([
-      TextCellValue(refId),
-      TextCellValue(_text(job['invoice_series'])),
-      TextCellValue('Hóa đơn GTGT khởi tạo từ máy tính tiền'),
-      TextCellValue(_invoiceDate(job['created_at'])),
-      TextCellValue('VND'),
-      DoubleCellValue(1),
-      TextCellValue(
-        _text(job['payment_method_snapshot']).isEmpty
-            ? 'Tien mat'
-            : _text(job['payment_method_snapshot']),
-      ),
-      TextCellValue(_text(buyer['unit_code'])),
-      TextCellValue(
-        _firstText([buyer['tax_code'], buyer['tin_cic_household_head_id']]),
-      ),
-      TextCellValue(buyerLegalName),
-      TextCellValue(buyerFullName),
-      TextCellValue(_text(buyer['address'])),
-      TextCellValue(email),
-      TextCellValue(_text(buyer['phone'])),
-      TextCellValue(buyerFullName.isNotEmpty ? buyerFullName : buyerLegalName),
-      TextCellValue(_text(buyer['buyer_id'])),
-      BoolCellValue(true),
-      DoubleCellValue(0),
-      DoubleCellValue(totals.amountWithoutVat),
-      DoubleCellValue(totals.vatAmount),
-      DoubleCellValue(totals.totalAmount),
-      BoolCellValue(email.isNotEmpty),
-      TextCellValue(buyerFullName.isNotEmpty ? buyerFullName : buyerLegalName),
-      TextCellValue(email),
+    final buyerName = _firstText([
+      buyer['buyer_full_name'],
+      legalName,
+      'Bán cho người tiêu dùng',
     ]);
 
-    for (var index = 0; index < lines.length; index++) {
-      final line = lines[index];
-      final quantity = _number(
-        line['quantity'],
-        fallback: 1,
-      ).clamp(1, double.infinity);
-      final amountWithoutVat = _number(
-        line['total_amount_ex_tax'] ?? line['AmountWithoutVAT'],
-        fallback: _number(line['unit_price']) * quantity,
-      );
-      final vatAmount = _number(line['vat_amount'] ?? line['VATAmount']);
-      final totalAmount = _number(
-        line['paying_amount_inc_tax'] ?? line['AmountAfterTax'],
-        fallback: amountWithoutVat + vatAmount,
-      );
-      details.appendRow([
-        TextCellValue(refId),
-        IntCellValue(1),
-        IntCellValue(index + 1),
-        IntCellValue(index + 1),
+    for (final line in lines) {
+      final quantity = _number(line['quantity'], fallback: 1).clamp(1, 999999);
+      final amounts = isPhoto
+          ? _photoAmounts(line, quantity.toDouble())
+          : _restaurantAmounts(line, quantity.toDouble());
+      sheet.appendRow([
+        IntCellValue(invoiceIndex + 1),
+        TextCellValue(_invoiceDate(_saleDate(job))),
+        TextCellValue(legalName),
         TextCellValue(
-          _firstText([
-            line['order_item_id'],
-            line['ItemCode'],
-            'pos-line-${index + 1}',
-          ]),
+          _firstText([buyer['tax_code'], buyer['tin_cic_household_head_id']]),
         ),
+        TextCellValue(_text(buyer['address'])),
+        TextCellValue(buyerName),
+        TextCellValue(_text(buyer['email'])),
+        TextCellValue(_text(buyer['phone'])),
+        TextCellValue(_text(buyer['buyer_id'])),
+        TextCellValue(_paymentCode(job['payment_method_snapshot'])),
         TextCellValue(
           _firstText([
             line['display_name'],
             line['label'],
             line['ItemName'],
-            'POS sale',
+            isPhoto ? 'Dịch vụ chụp ảnh' : 'Món ăn',
           ]),
         ),
-        TextCellValue(
-          _firstText([line['unit_name'], line['UnitName'], 'item']),
-        ),
+        TextCellValue(isPhoto ? 'Lần' : 'Phần'),
         DoubleCellValue(quantity.toDouble()),
-        DoubleCellValue(amountWithoutVat / quantity),
-        DoubleCellValue(0),
-        DoubleCellValue(0),
-        DoubleCellValue(amountWithoutVat),
-        DoubleCellValue(amountWithoutVat),
-        TextCellValue(_vatRateName(line)),
-        DoubleCellValue(vatAmount),
-        DoubleCellValue(totalAmount),
+        DoubleCellValue(amounts.unitPrice),
+        DoubleCellValue(amounts.supplyAmount),
+        DoubleCellValue(amounts.vatRate),
+        DoubleCellValue(amounts.vatAmount),
       ]);
     }
   }
 
-  for (var index = 0; index < _invoiceHeaders.length; index++) {
-    invoices.setColumnWidth(index, index >= 8 && index <= 15 ? 28 : 20);
-  }
-  for (var index = 0; index < _detailHeaders.length; index++) {
-    details.setColumnWidth(index, index == 5 ? 32 : 20);
+  for (var index = 0; index < _headers.length; index++) {
+    sheet.setColumnWidth(index, switch (index) {
+      2 || 4 || 5 || 10 => 28,
+      _ => 18,
+    });
   }
   return workbook.encode()!;
 }
 
-const _invoiceHeaders = <String>[
-  'RefID',
-  'InvSeries',
-  'InvoiceName',
-  'InvDate',
-  'CurrencyCode',
-  'ExchangeRate',
-  'PaymentMethodName',
-  'BuyerCode',
-  'BuyerTaxCode',
-  'BuyerLegalName',
-  'BuyerFullName',
-  'BuyerAddress',
-  'BuyerEmail',
-  'BuyerPhoneNumber',
-  'ContactName',
-  'AccountObjectIdentificationNumber',
-  'IsInvoiceCalculatingMachine',
-  'DiscountRate',
-  'TotalAmountWithoutVAT',
-  'TotalVATAmount',
-  'TotalAmount',
-  'IsSendEmail',
-  'ReceiverName',
-  'ReceiverEmail',
+const _instructions = <String>[
+  'File mẫu danh sách hóa đơn để nhập vào phần mềm ',
+  'Hướng dẫn:',
+  '- Điền dữ liệu hóa đơn cần lập trên phần mềm vào các cột tương ứng trên file này',
+  '- Các cột có dấu (*) là những cột bắt buộc',
+  '- Nếu muốn nhập thêm thông tin khác, người dùng có thể tự thêm cột trên file này',
+  '- Các dòng dữ liệu phía dưới chỉ là ví dụ minh họa',
 ];
 
-const _detailHeaders = <String>[
-  'RefID',
-  'ItemType',
-  'LineNumber',
-  'SortOrder',
-  'ItemCode',
-  'ItemName',
-  'UnitName',
-  'Quantity',
-  'UnitPrice',
-  'DiscountRate',
-  'DiscountAmount',
-  'Amount',
-  'AmountWithoutVAT',
-  'VATRateName',
-  'VATAmount',
-  'AmountAfterTax',
+const _headers = <String>[
+  'Số thứ tự hóa đơn (*)',
+  'Ngày hóa đơn',
+  'Tên đơn vị mua hàng',
+  'Mã số thuế',
+  'Địa chỉ',
+  'Người mua hàng',
+  'Email',
+  'Số điện thoại',
+  'Căn cước công dân',
+  'Hình thức thanh toán (*)',
+  'Tên hàng hóa/dịch vụ (*)',
+  'ĐVT',
+  'Số lượng',
+  'Đơn giá',
+  'Thành tiền',
+  'Thuế suất GTGT (%)',
+  'Tiền thuế GTGT',
 ];
 
-({double amountWithoutVat, double vatAmount, double totalAmount}) _totals(
-  List<Map<String, dynamic>> lines,
-) {
-  var amountWithoutVat = 0.0;
-  var vatAmount = 0.0;
-  var totalAmount = 0.0;
-  for (final line in lines) {
-    final amount = _number(
-      line['total_amount_ex_tax'] ?? line['AmountWithoutVAT'],
-    );
-    final vat = _number(line['vat_amount'] ?? line['VATAmount']);
-    final total = _number(
-      line['paying_amount_inc_tax'] ?? line['AmountAfterTax'],
-      fallback: amount + vat,
-    );
-    amountWithoutVat += amount;
-    vatAmount += vat;
-    totalAmount += total;
-  }
-  return (
-    amountWithoutVat: amountWithoutVat,
-    vatAmount: vatAmount,
-    totalAmount: totalAmount,
+({double unitPrice, double supplyAmount, double vatRate, double vatAmount})
+_photoAmounts(Map<String, dynamic> line, double quantity) {
+  const rate = 8.0;
+  final gross = _number(
+    line['paying_amount_inc_tax'] ?? line['AmountAfterTax'],
+    fallback: _number(line['unit_price']) * quantity,
   );
+  final supply = (gross / 1.08).roundToDouble();
+  return (
+    unitPrice: (supply / quantity).roundToDouble(),
+    supplyAmount: supply,
+    vatRate: rate,
+    vatAmount: gross - supply,
+  );
+}
+
+({double unitPrice, double supplyAmount, double vatRate, double vatAmount})
+_restaurantAmounts(Map<String, dynamic> line, double quantity) {
+  final supply = _number(
+    line['total_amount_ex_tax'] ?? line['AmountWithoutVAT'],
+    fallback: _number(line['unit_price']) * quantity,
+  );
+  final vat = _number(line['vat_amount'] ?? line['VATAmount']);
+  return (
+    unitPrice: supply / quantity,
+    supplyAmount: supply,
+    vatRate: _number(
+      line['vat_rate'],
+      fallback: supply == 0 ? 0 : vat / supply * 100,
+    ),
+    vatAmount: vat,
+  );
+}
+
+String _paymentCode(Object? value) {
+  final normalized = _text(value).toLowerCase();
+  if (normalized.contains('cash') ||
+      normalized.contains('tiền mặt') ||
+      normalized.contains('tien mat')) {
+    return 'TM';
+  }
+  if (normalized.contains('card') || normalized.contains('thẻ')) return 'CK';
+  if (normalized.contains('transfer') || normalized.contains('chuyển khoản')) {
+    return 'CK';
+  }
+  return normalized.isEmpty ? 'TM' : _text(value);
 }
 
 Map<String, dynamic> _map(Object? value) =>
@@ -221,17 +187,20 @@ double _number(Object? value, {double fallback = 0}) {
   return double.tryParse(_text(value)) ?? fallback;
 }
 
-String _invoiceDate(Object? value) {
-  final date = DateTime.tryParse(
-    _text(value),
-  )?.toUtc().add(const Duration(hours: 7));
-  if (date == null) return '';
-  return '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+DateTime _date(Object? value) =>
+    DateTime.tryParse(_text(value)) ?? DateTime.fromMillisecondsSinceEpoch(0);
+
+DateTime _saleDate(Map<String, dynamic> job) {
+  if (_text(job['source_system']) == 'photo_objet_moers') {
+    final source = _map(job['source_snapshot']);
+    final rawSaleDate = _text(source['sale_date']);
+    if (rawSaleDate.isNotEmpty) return _date(rawSaleDate);
+  }
+  return _date(job['created_at']);
 }
 
-String _vatRateName(Map<String, dynamic> line) {
-  final existing = _text(line['VATRateName']);
-  if (existing.isNotEmpty) return existing;
-  final rate = _number(line['vat_rate']);
-  return '${rate.round()}%';
+String _invoiceDate(Object? value) {
+  final parsed = value is DateTime ? value : _date(value);
+  final date = parsed.toUtc().add(const Duration(hours: 7));
+  return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year.toString().padLeft(4, '0')}';
 }

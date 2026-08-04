@@ -3,64 +3,100 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/admin/einvoice_misa_workbook.dart';
 
 void main() {
-  test('exports pending jobs using MISA invoice and detail field order', () {
+  test('exports the exact 17-column MISA desktop upload layout', () {
     final bytes = buildMisaPendingInvoiceWorkbook([
       {
-        'id': 'job-1',
-        'misa_ref_id': 'ref-1',
-        'invoice_series': '1C26MAJ',
-        'created_at': '2026-08-04T02:00:00Z',
-        'payment_method_snapshot': 'Tiền mặt',
-        'buyer_snapshot': {
-          'tax_code': '0318453298',
-          'unit_name': 'CÔNG TY TNHH BUYER',
-          'buyer_full_name': 'Nguyen Van A',
-          'address': 'Ho Chi Minh City',
-          'email': 'buyer@example.com',
-          'phone': '0900000000',
-        },
+        'id': 'restaurant-job',
+        'source_system': 'globos_pos',
+        'created_at': '2026-08-04T03:00:00Z',
+        'payment_method_snapshot': 'bank_transfer',
+        'buyer_snapshot': {'unit_name': 'Restaurant customer'},
         'line_items_snapshot': [
           {
-            'order_item_id': 'line-1',
             'display_name': 'Tteokbokki',
             'quantity': 2,
             'total_amount_ex_tax': 100000,
             'vat_rate': 8,
             'vat_amount': 8000,
-            'paying_amount_inc_tax': 108000,
+          },
+        ],
+      },
+      {
+        'id': 'photo-job',
+        'source_system': 'photo_objet_moers',
+        'created_at': '2026-08-04T02:00:00Z',
+        'payment_method_snapshot': 'Tiền mặt',
+        'buyer_snapshot': {
+          'tax_code': '0318453298',
+          'unit_name': 'Photo customer',
+        },
+        'line_items_snapshot': [
+          {
+            'display_name': 'Photo booth',
+            'quantity': 1,
+            'paying_amount_inc_tax': 120000,
           },
         ],
       },
     ]);
 
     final workbook = Excel.decodeBytes(bytes);
-    expect(
-      workbook.tables.keys,
-      containsAll(['InvoiceData', 'OriginalInvoiceDetail']),
-    );
+    expect(workbook.tables.keys, ['Hóa đơn GTGT']);
+    final sheet = workbook.tables['Hóa đơn GTGT']!;
 
-    final invoices = workbook.tables['InvoiceData']!;
-    final headers = invoices.rows.first
-        .map((cell) => cell?.value.toString())
-        .toList();
-    expect(headers.take(7), [
-      'RefID',
-      'InvSeries',
-      'InvoiceName',
-      'InvDate',
-      'CurrencyCode',
-      'ExchangeRate',
-      'PaymentMethodName',
+    expect(sheet.rows[7].map(_text).toList(), const [
+      'Số thứ tự hóa đơn (*)',
+      'Ngày hóa đơn',
+      'Tên đơn vị mua hàng',
+      'Mã số thuế',
+      'Địa chỉ',
+      'Người mua hàng',
+      'Email',
+      'Số điện thoại',
+      'Căn cước công dân',
+      'Hình thức thanh toán (*)',
+      'Tên hàng hóa/dịch vụ (*)',
+      'ĐVT',
+      'Số lượng',
+      'Đơn giá',
+      'Thành tiền',
+      'Thuế suất GTGT (%)',
+      'Tiền thuế GTGT',
     ]);
-    expect(invoices.rows[1][0]?.value.toString(), 'ref-1');
-    expect(invoices.rows[1][1]?.value.toString(), '1C26MAJ');
-    expect(invoices.rows[1][8]?.value.toString(), '0318453298');
-    expect(invoices.rows[1][20]?.value.toString(), '108000');
 
-    final details = workbook.tables['OriginalInvoiceDetail']!;
-    expect(details.rows[1][0]?.value.toString(), 'ref-1');
-    expect(details.rows[1][5]?.value.toString(), 'Tteokbokki');
-    expect(details.rows[1][13]?.value.toString(), '8%');
+    final photo = sheet.rows[8];
+    expect(_number(photo[0]), 1);
+    expect(_text(photo[1]), '04/08/2026');
+    expect(_text(photo[9]), 'TM');
+    expect(_text(photo[10]), 'Photo booth');
+    expect(_text(photo[11]), 'Lần');
+    expect(_number(photo[14]), 111111);
+    expect(_number(photo[15]), 8);
+    expect(_number(photo[16]), 8889);
+
+    final restaurant = sheet.rows[9];
+    expect(_number(restaurant[0]), 2);
+    expect(_text(restaurant[9]), 'CK');
+    expect(_text(restaurant[11]), 'Phần');
+    expect(_number(restaurant[13]), 50000);
+    expect(_number(restaurant[14]), 100000);
+    expect(_number(restaurant[16]), 8000);
+  });
+
+  test('keeps all lines from one job under one invoice sequence', () {
+    final bytes = buildMisaPendingInvoiceWorkbook([
+      {
+        'source_system': 'globos_pos',
+        'created_at': '2026-08-04T02:00:00Z',
+        'line_items_snapshot': [
+          {'display_name': 'A', 'quantity': 1, 'total_amount_ex_tax': 100},
+          {'display_name': 'B', 'quantity': 1, 'total_amount_ex_tax': 200},
+        ],
+      },
+    ]);
+    final rows = Excel.decodeBytes(bytes).tables['Hóa đơn GTGT']!.rows;
+    expect(_number(rows[8][0]), 1);
+    expect(_number(rows[9][0]), 1);
   });
 
   test('refuses an empty pending queue export', () {
@@ -76,3 +112,7 @@ void main() {
     );
   });
 }
+
+String _text(Data? cell) => cell?.value.toString() ?? '';
+
+num _number(Data? cell) => num.parse(_text(cell));

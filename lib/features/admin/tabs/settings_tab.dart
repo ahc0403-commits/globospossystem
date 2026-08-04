@@ -18,6 +18,7 @@ import '../../../widgets/pin_dialog.dart';
 import '../../auth/auth_provider.dart';
 import '../../auth/auth_state.dart';
 import '../../settings/printer_provider.dart';
+import '../../settings/promotion_settings_card.dart';
 import '../providers/admin_audit_provider.dart';
 import '../providers/printer_destinations_provider.dart';
 import '../providers/settings_provider.dart';
@@ -1205,6 +1206,10 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
               ],
             ),
           ),
+          if (storeId != null) ...[
+            const SizedBox(height: 12),
+            PromotionSettingsCard(storeId: storeId),
+          ],
         ],
       ),
     );
