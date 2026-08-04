@@ -248,3 +248,50 @@ COMMENT ON TABLE public.combined_payment_groups IS
   'One customer tender covering two or more payable table orders.';
 COMMENT ON COLUMN public.payments.combined_payment_group_id IS
   'Optional audit link for payments completed in one combined-table tender.';
+
+-- Deployment verification: fail the migration transaction if any required
+-- relation, column, function, policy, or authenticated grant is absent.
+DO $$
+DECLARE
+  v_missing integer;
+BEGIN
+  IF to_regclass('public.combined_payment_groups') IS NULL THEN
+    RAISE EXCEPTION 'COMBINED_PAYMENT_GROUP_TABLE_VERIFY_FAILED';
+  END IF;
+
+  SELECT count(*) INTO v_missing
+  FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND table_name = 'payments'
+    AND column_name = 'combined_payment_group_id';
+  IF v_missing <> 1 THEN
+    RAISE EXCEPTION 'COMBINED_PAYMENT_LINK_COLUMN_VERIFY_FAILED: %', v_missing;
+  END IF;
+
+  SELECT count(*) INTO v_missing
+  FROM pg_proc p
+  JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = 'public'
+    AND p.proname = 'process_combined_table_payment'
+    AND pg_get_function_identity_arguments(p.oid) = 'p_store_id uuid, p_order_amounts jsonb, p_method text';
+  IF v_missing <> 1 THEN
+    RAISE EXCEPTION 'COMBINED_PAYMENT_RPC_VERIFY_FAILED: %', v_missing;
+  END IF;
+
+  SELECT count(*) INTO v_missing
+  FROM pg_policies
+  WHERE schemaname = 'public'
+    AND tablename = 'combined_payment_groups'
+    AND policyname = 'combined_payment_groups_store_select';
+  IF v_missing <> 1 THEN
+    RAISE EXCEPTION 'COMBINED_PAYMENT_RLS_POLICY_VERIFY_FAILED: %', v_missing;
+  END IF;
+
+  IF NOT has_function_privilege(
+    'authenticated',
+    'public.process_combined_table_payment(uuid,jsonb,text)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'COMBINED_PAYMENT_AUTH_GRANT_VERIFY_FAILED';
+  END IF;
+END $$;
