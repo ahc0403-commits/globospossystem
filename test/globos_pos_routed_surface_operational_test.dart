@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:globos_pos_system/core/services/bank_transfer_alert_service.dart';
 import 'package:globos_pos_system/core/services/connectivity_service.dart';
 import 'package:globos_pos_system/core/services/qr_order_service.dart';
 import 'package:globos_pos_system/core/services/restaurant_cutoff_service.dart';
@@ -45,6 +46,11 @@ class _FixtureAuthNotifier extends AuthNotifier {
 
   @override
   Future<void> setActiveStore(String storeId) async {}
+}
+
+class _NoopBankTransferAlertService extends BankTransferAlertService {
+  @override
+  Future<BankTransferAlert?> fetchLatest(String storeId) async => null;
 }
 
 class _FixtureSuperAdminNotifier extends SuperAdminNotifier {
@@ -225,7 +231,9 @@ final _routeSurfaces = <_RouteSurface>[
     location: '/cashier',
     pattern: '/cashier',
     widgetType: CashierScreen,
-    builder: () => const CashierScreen(),
+    builder: () => CashierScreen(
+      bankTransferAlertServiceOverride: _NoopBankTransferAlertService(),
+    ),
     label: (l10n, _) => l10n.cashierTitle,
   ),
   _RouteSurface(
