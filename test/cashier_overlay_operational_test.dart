@@ -651,6 +651,7 @@ void main() {
     await tester.pump();
 
     expect(soundService.playCount, 1);
+    expect(soundService.amounts, [42000]);
     expect(find.textContaining('42.000 VND'), findsOneWidget);
 
     await tester.pump(const Duration(milliseconds: 25));
@@ -816,12 +817,14 @@ class _MutableBankTransferAlertService extends BankTransferAlertService {
 class _RecordingBankTransferAlertSoundService
     extends BankTransferAlertSoundService {
   int playCount = 0;
+  final List<int> amounts = [];
 
   @override
   Future<void> prepare() async {}
 
   @override
-  Future<void> play() async {
+  Future<void> play({required int amount}) async {
     playCount += 1;
+    amounts.add(amount);
   }
 }

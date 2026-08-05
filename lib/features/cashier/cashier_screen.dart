@@ -234,7 +234,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
         return;
       }
       try {
-        await _bankTransferAlertSoundService.play();
+        await _bankTransferAlertSoundService.play(amount: alert.amount);
       } catch (_) {
         // The amount toast remains authoritative if audio is unavailable.
       }

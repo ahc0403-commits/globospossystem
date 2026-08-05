@@ -2,6 +2,8 @@ import 'dart:js_interop';
 
 import 'package:web/web.dart' as web;
 
+import 'bank_transfer_alert_message.dart';
+
 class BankTransferAlertSoundService {
   web.AudioContext? _context;
 
@@ -12,7 +14,23 @@ class BankTransferAlertSoundService {
     }
   }
 
-  Future<void> play() async {
+  Future<void> play({required int amount}) async {
+    try {
+      final speech = web.window.speechSynthesis;
+      final utterance =
+          web.SpeechSynthesisUtterance(vietnameseBankTransferMessage(amount))
+            ..lang = 'vi-VN'
+            ..rate = 0.92
+            ..pitch = 1
+            ..volume = 1;
+      speech
+        ..cancel()
+        ..speak(utterance);
+      return;
+    } catch (_) {
+      // Fall through to the audible two-tone alert if TTS is unavailable.
+    }
+
     await prepare();
     final context = _context;
     if (context == null || context.state != 'running') return;
