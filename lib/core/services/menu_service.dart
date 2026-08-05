@@ -18,12 +18,14 @@ class MenuImageUploadResult {
 
 class MenuImportResult {
   const MenuImportResult({
-    required this.createdCategoryCount,
-    required this.importedItemCount,
+    required this.categoryCount,
+    required this.itemCount,
+    required this.preservedImageCount,
   });
 
-  final int createdCategoryCount;
-  final int importedItemCount;
+  final int categoryCount;
+  final int itemCount;
+  final int preservedImageCount;
 
   factory MenuImportResult.fromJson(Map<String, dynamic> json) {
     int asInt(Object? value) => switch (value) {
@@ -34,8 +36,11 @@ class MenuImportResult {
     };
 
     return MenuImportResult(
-      createdCategoryCount: asInt(json['created_category_count']),
-      importedItemCount: asInt(json['imported_item_count']),
+      categoryCount: asInt(
+        json['category_count'] ?? json['created_category_count'],
+      ),
+      itemCount: asInt(json['item_count'] ?? json['imported_item_count']),
+      preservedImageCount: asInt(json['preserved_image_count']),
     );
   }
 }
@@ -44,10 +49,12 @@ class MenuWorkbookUpdateResult {
   const MenuWorkbookUpdateResult({
     required this.updatedCategoryCount,
     required this.updatedItemCount,
+    required this.preservedImageCount,
   });
 
   final int updatedCategoryCount;
   final int updatedItemCount;
+  final int preservedImageCount;
 
   factory MenuWorkbookUpdateResult.fromJson(Map<String, dynamic> json) {
     int asInt(Object? value) => switch (value) {
@@ -60,6 +67,7 @@ class MenuWorkbookUpdateResult {
     return MenuWorkbookUpdateResult(
       updatedCategoryCount: asInt(json['updated_category_count']),
       updatedItemCount: asInt(json['updated_item_count']),
+      preservedImageCount: asInt(json['preserved_image_count']),
     );
   }
 }
@@ -73,6 +81,7 @@ class MenuService {
         .from('menu_categories')
         .select()
         .eq('restaurant_id', storeId)
+        .eq('is_active', true)
         .order('sort_order', ascending: true);
     return response
         .map<Map<String, dynamic>>((c) => Map<String, dynamic>.from(c))
@@ -93,6 +102,7 @@ class MenuService {
           '))',
         )
         .eq('restaurant_id', storeId)
+        .eq('is_archived', false)
         .order('sort_order', ascending: true);
     return response
         .map<Map<String, dynamic>>((i) => Map<String, dynamic>.from(i))

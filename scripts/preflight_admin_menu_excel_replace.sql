@@ -10,6 +10,13 @@ BEGIN
       'Preflight failed: admin authorization helper is missing';
   END IF;
 
+  IF to_regprocedure(
+    'public.admin_update_menu_workbook_i18n(uuid,jsonb,jsonb)'
+  ) IS NULL THEN
+    RAISE EXCEPTION
+      'Preflight failed: multilingual menu workbook updater is missing';
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1
     FROM information_schema.columns

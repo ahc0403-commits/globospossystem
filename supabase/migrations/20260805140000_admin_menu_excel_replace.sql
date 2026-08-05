@@ -1,6 +1,13 @@
 -- Replace a store's complete menu catalog from Excel while preserving photos
 -- (and stable menu IDs) for rows that still represent the same menu.
 
+ALTER TABLE public.menu_items
+  ADD COLUMN IF NOT EXISTS is_archived boolean NOT NULL DEFAULT false;
+
+CREATE INDEX IF NOT EXISTS menu_items_active_store_category_idx
+  ON public.menu_items (restaurant_id, category_id, sort_order)
+  WHERE is_archived = false;
+
 CREATE OR REPLACE FUNCTION public.admin_import_menu_items(
   p_store_id UUID,
   p_rows JSONB
@@ -311,6 +318,7 @@ BEGIN
       is_available = s.is_available,
       is_visible_public = s.is_visible_public,
       sort_order = s.sort_order,
+      is_archived = false,
       updated_at = now()
   FROM pg_temp.menu_import_stage_items s
   JOIN pg_temp.menu_import_stage_categories c
@@ -318,8 +326,13 @@ BEGIN
   WHERE mi.id = s.matched_item_id;
   GET DIAGNOSTICS v_updated_item_count = ROW_COUNT;
 
-  DELETE FROM public.menu_items mi
+  UPDATE public.menu_items mi
+  SET is_archived = true,
+      is_available = false,
+      is_visible_public = false,
+      updated_at = now()
   WHERE mi.restaurant_id = p_store_id
+    AND mi.is_archived = false
     AND NOT EXISTS (
       SELECT 1
       FROM pg_temp.menu_import_stage_items s
@@ -356,8 +369,10 @@ BEGIN
   WHERE s.matched_item_id IS NULL;
   GET DIAGNOSTICS v_created_item_count = ROW_COUNT;
 
-  DELETE FROM public.menu_categories c
+  UPDATE public.menu_categories c
+  SET is_active = false
   WHERE c.restaurant_id = p_store_id
+    AND c.is_active = true
     AND NOT EXISTS (
       SELECT 1
       FROM pg_temp.menu_import_stage_categories s
@@ -416,3 +431,135 @@ SET search_path = public, auth, pg_temp;
 REVOKE ALL ON FUNCTION public.admin_import_menu_items(UUID, JSONB) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.admin_import_menu_items(UUID, JSONB) FROM anon;
 GRANT EXECUTE ON FUNCTION public.admin_import_menu_items(UUID, JSONB) TO authenticated;
+
+-- The exported multilingual workbook keeps stable IDs. Wrap the existing
+-- validator/updater so rows removed from that workbook disappear from the
+-- live catalog while their historical order references and photos survive.
+ALTER FUNCTION public.admin_update_menu_workbook_i18n(uuid, jsonb, jsonb)
+  RENAME TO admin_update_menu_workbook_i18n_apply;
+
+REVOKE ALL ON FUNCTION public.admin_update_menu_workbook_i18n_apply(
+  uuid, jsonb, jsonb
+) FROM PUBLIC, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.admin_update_menu_workbook_i18n(
+  p_store_id uuid,
+  p_categories jsonb,
+  p_items jsonb
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, pg_temp
+AS $$
+DECLARE
+  v_result jsonb;
+  v_archived_category_count integer := 0;
+  v_archived_item_count integer := 0;
+  v_preserved_image_count integer := 0;
+BEGIN
+  IF p_store_id IS NULL THEN
+    RAISE EXCEPTION 'MENU_WORKBOOK_STORE_REQUIRED';
+  END IF;
+
+  PERFORM public.require_admin_actor_for_restaurant(p_store_id);
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_store_id::text, 0));
+
+  v_result := public.admin_update_menu_workbook_i18n_apply(
+    p_store_id,
+    p_categories,
+    p_items
+  );
+
+  SELECT count(*)
+  INTO v_preserved_image_count
+  FROM public.menu_items mi
+  WHERE mi.restaurant_id = p_store_id
+    AND (mi.image_url IS NOT NULL OR mi.image_storage_path IS NOT NULL)
+    AND EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(p_items) entry
+      WHERE entry ->> 'item_id' = mi.id::text
+    );
+
+  UPDATE public.menu_items mi
+  SET is_archived = true,
+      is_available = false,
+      is_visible_public = false,
+      updated_at = now()
+  WHERE mi.restaurant_id = p_store_id
+    AND mi.is_archived = false
+    AND NOT EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(p_items) entry
+      WHERE entry ->> 'item_id' = mi.id::text
+    );
+  GET DIAGNOSTICS v_archived_item_count = ROW_COUNT;
+
+  UPDATE public.menu_items mi
+  SET is_archived = false
+  WHERE mi.restaurant_id = p_store_id
+    AND EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(p_items) entry
+      WHERE entry ->> 'item_id' = mi.id::text
+    );
+
+  UPDATE public.menu_categories c
+  SET is_active = false
+  WHERE c.restaurant_id = p_store_id
+    AND c.is_active = true
+    AND NOT EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(p_categories) entry
+      WHERE entry ->> 'category_id' = c.id::text
+    );
+  GET DIAGNOSTICS v_archived_category_count = ROW_COUNT;
+
+  UPDATE public.menu_categories c
+  SET is_active = true
+  WHERE c.restaurant_id = p_store_id
+    AND EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(p_categories) entry
+      WHERE entry ->> 'category_id' = c.id::text
+    );
+
+  INSERT INTO public.audit_logs (
+    actor_id,
+    action,
+    entity_type,
+    entity_id,
+    details
+  ) VALUES (
+    auth.uid(),
+    'admin_replace_menu_catalog',
+    'restaurants',
+    p_store_id,
+    jsonb_build_object(
+      'restaurant_id', p_store_id,
+      'source', 'excel_roundtrip',
+      'replaced_at_utc', now(),
+      'category_count', jsonb_array_length(p_categories),
+      'item_count', jsonb_array_length(p_items),
+      'archived_category_count', v_archived_category_count,
+      'archived_item_count', v_archived_item_count,
+      'preserved_image_count', v_preserved_image_count
+    )
+  );
+
+  RETURN v_result || jsonb_build_object(
+    'category_count', jsonb_array_length(p_categories),
+    'item_count', jsonb_array_length(p_items),
+    'archived_category_count', v_archived_category_count,
+    'archived_item_count', v_archived_item_count,
+    'preserved_image_count', v_preserved_image_count
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.admin_update_menu_workbook_i18n(
+  uuid, jsonb, jsonb
+) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_update_menu_workbook_i18n(
+  uuid, jsonb, jsonb
+) TO authenticated;
