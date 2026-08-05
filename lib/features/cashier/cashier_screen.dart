@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
@@ -13,6 +12,7 @@ import '../../core/models/pos_table.dart';
 import '../../core/payments/cash_tender.dart';
 import '../../core/payments/payment_method_contract.dart';
 import '../../core/services/bank_transfer_alert_service.dart';
+import '../../core/services/bank_transfer_alert_sound.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/services/live_refresh_service.dart';
 import '../../core/layout/platform_info.dart';
@@ -45,12 +45,18 @@ class CashierScreen extends ConsumerStatefulWidget {
     this.paymentServiceOverride,
     this.restaurantCutoffServiceOverride,
     this.printJobAgentOverride,
+    this.bankTransferAlertServiceOverride,
+    this.bankTransferAlertSoundServiceOverride,
+    this.bankTransferAlertPollInterval = const Duration(seconds: 2),
   });
 
   final PaymentProofService? paymentProofServiceOverride;
   final PaymentService? paymentServiceOverride;
   final RestaurantCutoffService? restaurantCutoffServiceOverride;
   final PrintJobAgentService? printJobAgentOverride;
+  final BankTransferAlertService? bankTransferAlertServiceOverride;
+  final BankTransferAlertSoundService? bankTransferAlertSoundServiceOverride;
+  final Duration bankTransferAlertPollInterval;
 
   @override
   ConsumerState<CashierScreen> createState() => _CashierScreenState();
@@ -77,7 +83,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   String? _orderSearchFeedback;
   late final ProviderSubscription<PaymentState> _paymentSub;
   late final PrintJobAgentService _printJobAgent;
-  String? _lastBankTransferAlertId;
+  Timer? _bankTransferAlertPollTimer;
+  String? _bankTransferAlertStoreId;
+  BankTransferAlertCursor? _bankTransferAlertCursor;
   bool _bankTransferAlertInFlight = false;
 
   PaymentProofService get _paymentProofService =>
@@ -86,6 +94,11 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       widget.paymentServiceOverride ?? paymentService;
   RestaurantCutoffService get _restaurantCutoffService =>
       widget.restaurantCutoffServiceOverride ?? restaurantCutoffService;
+  BankTransferAlertService get _bankTransferAlertService =>
+      widget.bankTransferAlertServiceOverride ?? bankTransferAlertService;
+  BankTransferAlertSoundService get _bankTransferAlertSoundService =>
+      widget.bankTransferAlertSoundServiceOverride ??
+      bankTransferAlertSoundService;
 
   void _prepareWetTissueForOrder(CashierOrder order) {
     _wetTissueDraftQuantity = order.wetTissueQuantity;
@@ -163,6 +176,24 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     }
   }
 
+  void _ensureBankTransferAlerts(String? storeId) {
+    if (storeId == _bankTransferAlertStoreId) return;
+
+    _bankTransferAlertPollTimer?.cancel();
+    _bankTransferAlertPollTimer = null;
+    _bankTransferAlertStoreId = storeId;
+    _bankTransferAlertCursor = storeId == null
+        ? null
+        : BankTransferAlertCursor(startedAt: DateTime.now().toUtc());
+    if (storeId == null) return;
+
+    unawaited(_showLatestBankTransferAlert(storeId));
+    _bankTransferAlertPollTimer = Timer.periodic(
+      widget.bankTransferAlertPollInterval,
+      (_) => unawaited(_showLatestBankTransferAlert(storeId)),
+    );
+  }
+
   void _refreshFromLiveEvent(String storeId, PosLiveEvent event) {
     if (!event.isFallback &&
         event.domain == 'bank_transfer' &&
@@ -193,17 +224,19 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     if (_bankTransferAlertInFlight) return;
     _bankTransferAlertInFlight = true;
     try {
-      final alert = await bankTransferAlertService.fetchLatest(storeId);
+      final alert = await _bankTransferAlertService.fetchLatest(storeId);
+      final cursor = _bankTransferAlertCursor;
       if (!mounted ||
+          _bankTransferAlertStoreId != storeId ||
           alert == null ||
-          alert.transactionId == _lastBankTransferAlertId) {
+          cursor == null ||
+          !cursor.shouldNotify(alert)) {
         return;
       }
-      _lastBankTransferAlertId = alert.transactionId;
       try {
-        await SystemSound.play(SystemSoundType.alert);
+        await _bankTransferAlertSoundService.play();
       } catch (_) {
-        // Some web/mobile runtimes require a prior user gesture for sound.
+        // The amount toast remains authoritative if audio is unavailable.
       }
       if (!mounted) return;
       final amount = NumberFormat('#,###', 'vi_VN').format(alert.amount);
@@ -214,6 +247,8 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
           alert.paymentCode ?? '-',
         ),
       );
+    } catch (_) {
+      // Realtime remains primary; the next poll retries transient RPC errors.
     } finally {
       _bankTransferAlertInFlight = false;
     }
@@ -222,6 +257,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   @override
   void dispose() {
     _successTimer?.cancel();
+    _bankTransferAlertPollTimer?.cancel();
     _printJobAgent.stop();
     _orderSearchController.dispose();
     _paymentSub.close();
@@ -910,6 +946,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     );
     final canManageServiceItems = isAdmin || canApplyDiscount;
     _ensureLoaded(storeId);
+    _ensureBankTransferAlerts(storeId);
     final cutoffState = storeId == null
         ? const RestaurantCutoffState.unrestricted()
         : ref.watch(restaurantCutoffStateProvider(storeId)).valueOrNull ??
@@ -1666,88 +1703,95 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       ],
     );
 
-    return Scaffold(
-      key: const Key('cashier_root'),
-      backgroundColor: PosColors.canvas,
-      body: Column(
-        children: [
-          const OfflineBanner(),
-          Expanded(
-            child: ToastResponsiveBody(
-              maxWidth: 1480,
-              fitToViewportWhenNarrow: true,
-              minHeight:
-                  MediaQuery.sizeOf(context).width >
-                      MediaQuery.sizeOf(context).height
-                  ? 820
-                  : 720,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final viewport = MediaQuery.sizeOf(context);
-                  final forceScrollableCompact =
-                      (viewport.width > viewport.height &&
-                          viewport.height < 720) ||
-                      MediaQuery.textScalerOf(context).scale(1) > 1.5;
-                  final useWideLayout =
-                      constraints.maxWidth >= 1180 && !forceScrollableCompact;
-                  final useCompactChrome = !useWideLayout;
-                  final showCompactQueue =
-                      selectedOrder == null || _showPaymentQueueOnCompact;
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => unawaited(_bankTransferAlertSoundService.prepare()),
+      child: Scaffold(
+        key: const Key('cashier_root'),
+        backgroundColor: PosColors.canvas,
+        body: Column(
+          children: [
+            const OfflineBanner(),
+            Expanded(
+              child: ToastResponsiveBody(
+                maxWidth: 1480,
+                fitToViewportWhenNarrow: true,
+                minHeight:
+                    MediaQuery.sizeOf(context).width >
+                        MediaQuery.sizeOf(context).height
+                    ? 820
+                    : 720,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final viewport = MediaQuery.sizeOf(context);
+                    final forceScrollableCompact =
+                        (viewport.width > viewport.height &&
+                            viewport.height < 720) ||
+                        MediaQuery.textScalerOf(context).scale(1) > 1.5;
+                    final useWideLayout =
+                        constraints.maxWidth >= 1180 && !forceScrollableCompact;
+                    final useCompactChrome = !useWideLayout;
+                    final showCompactQueue =
+                        selectedOrder == null || _showPaymentQueueOnCompact;
 
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildCashierCommandHeader(
-                        orderCount: paymentState.orders.length,
-                        queueTotalAmount: queueTotalAmount,
-                        selectedOrder: selectedOrder,
-                        currency: currency,
-                        isOnline: isOnline,
-                        compact: useCompactChrome,
-                      ),
-                      SizedBox(height: useCompactChrome ? 8 : 12),
-                      Expanded(
-                        child: useWideLayout
-                            ? Row(
-                                children: [
-                                  SizedBox(width: 348, child: queueWithHistory),
-                                  const SizedBox(width: 16),
-                                  Expanded(child: detailPane),
-                                ],
-                              )
-                            : Column(
-                                children: [
-                                  _CashierCompactPaymentSwitch(
-                                    showQueue: showCompactQueue,
-                                    orderCount: paymentState.orders.length,
-                                    selectedOrder: selectedOrder,
-                                    currency: currency,
-                                    onShowQueue: () => setState(
-                                      () => _showPaymentQueueOnCompact = true,
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildCashierCommandHeader(
+                          orderCount: paymentState.orders.length,
+                          queueTotalAmount: queueTotalAmount,
+                          selectedOrder: selectedOrder,
+                          currency: currency,
+                          isOnline: isOnline,
+                          compact: useCompactChrome,
+                        ),
+                        SizedBox(height: useCompactChrome ? 8 : 12),
+                        Expanded(
+                          child: useWideLayout
+                              ? Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 348,
+                                      child: queueWithHistory,
                                     ),
-                                    onShowSelected: selectedOrder == null
-                                        ? null
-                                        : () => setState(
-                                            () => _showPaymentQueueOnCompact =
-                                                false,
-                                          ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Expanded(
-                                    child: showCompactQueue
-                                        ? queueWithHistory
-                                        : detailPane,
-                                  ),
-                                ],
-                              ),
-                      ),
-                    ],
-                  );
-                },
+                                    const SizedBox(width: 16),
+                                    Expanded(child: detailPane),
+                                  ],
+                                )
+                              : Column(
+                                  children: [
+                                    _CashierCompactPaymentSwitch(
+                                      showQueue: showCompactQueue,
+                                      orderCount: paymentState.orders.length,
+                                      selectedOrder: selectedOrder,
+                                      currency: currency,
+                                      onShowQueue: () => setState(
+                                        () => _showPaymentQueueOnCompact = true,
+                                      ),
+                                      onShowSelected: selectedOrder == null
+                                          ? null
+                                          : () => setState(
+                                              () => _showPaymentQueueOnCompact =
+                                                  false,
+                                            ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Expanded(
+                                      child: showCompactQueue
+                                          ? queueWithHistory
+                                          : detailPane,
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -56,4 +56,21 @@ class BankTransferAlertService {
   }
 }
 
+class BankTransferAlertCursor {
+  BankTransferAlertCursor({required this.startedAt});
+
+  final DateTime startedAt;
+  String? _lastTransactionId;
+
+  String? get lastTransactionId => _lastTransactionId;
+
+  bool shouldNotify(BankTransferAlert alert) {
+    if (alert.transactionId == _lastTransactionId) return false;
+
+    final hasBaseline = _lastTransactionId != null;
+    _lastTransactionId = alert.transactionId;
+    return hasBaseline || !alert.receivedAt.isBefore(startedAt);
+  }
+}
+
 final bankTransferAlertService = BankTransferAlertService();

@@ -20,6 +20,57 @@ void main() {
     expect(alert.paymentCode, 'GBA1B2C3D4');
   });
 
+  test('alert cursor ignores history and accepts new transactions once', () {
+    final startedAt = DateTime.parse('2026-08-05T10:00:00Z');
+    final cursor = BankTransferAlertCursor(startedAt: startedAt);
+    final historical = _alert(
+      id: 'historical',
+      receivedAt: startedAt.subtract(const Duration(seconds: 1)),
+    );
+    final current = _alert(
+      id: 'current',
+      receivedAt: startedAt.add(const Duration(seconds: 1)),
+    );
+
+    expect(cursor.shouldNotify(historical), isFalse);
+    expect(cursor.shouldNotify(current), isTrue);
+    expect(cursor.shouldNotify(current), isFalse);
+  });
+
+  test('first transaction received after cashier mount is not swallowed', () {
+    final startedAt = DateTime.parse('2026-08-05T10:00:00Z');
+    final cursor = BankTransferAlertCursor(startedAt: startedAt);
+
+    expect(
+      cursor.shouldNotify(
+        _alert(
+          id: 'first-live',
+          receivedAt: startedAt.add(const Duration(milliseconds: 1)),
+        ),
+      ),
+      isTrue,
+    );
+  });
+
+  test(
+    'cashier keeps realtime primary with polling and web sound fallback',
+    () {
+      final cashier = File(
+        'lib/features/cashier/cashier_screen.dart',
+      ).readAsStringSync();
+      final webSound = File(
+        'lib/core/services/bank_transfer_alert_sound_web.dart',
+      ).readAsStringSync();
+
+      expect(cashier, contains('Timer.periodic('));
+      expect(cashier, contains('_showLatestBankTransferAlert(storeId)'));
+      expect(cashier, contains('cursor.shouldNotify(alert)'));
+      expect(cashier, contains('_bankTransferAlertSoundService.play()'));
+      expect(webSound, contains('web.AudioContext()'));
+      expect(webSound, contains('_scheduleTone'));
+    },
+  );
+
   test('SePay SQL keeps raw payload private and emits store-scoped events', () {
     final sql = File(
       'supabase/migrations/20260805120000_sepay_bank_transfer_alerts.sql',
@@ -82,4 +133,14 @@ void main() {
     expect(verification, contains('account.is_active = true'));
     expect(verification, contains('SEPAY_TEST_STORE_MAPPING_VERIFY_FAILED'));
   });
+}
+
+BankTransferAlert _alert({required String id, required DateTime receivedAt}) {
+  return BankTransferAlert(
+    transactionId: id,
+    providerTransactionId: 1,
+    amount: 1000,
+    gateway: 'Vietcombank',
+    receivedAt: receivedAt,
+  );
 }

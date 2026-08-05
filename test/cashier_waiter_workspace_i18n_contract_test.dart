@@ -219,12 +219,8 @@ void main() {
         cashier,
         contains('constraints.maxWidth >= 1180 && !forceScrollableCompact'),
       );
-      expect(
-        cashier,
-        contains(
-          'minHeight:\n                  MediaQuery.sizeOf(context).width >',
-        ),
-      );
+      expect(cashier, contains('MediaQuery.sizeOf(context).width >'));
+      expect(cashier, contains('minHeight:'));
       expect(cashier, contains('? 820'));
       expect(
         cashier,

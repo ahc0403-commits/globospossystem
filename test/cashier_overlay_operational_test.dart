@@ -3,6 +3,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/payments/payment_method_contract.dart';
+import 'package:globos_pos_system/core/services/bank_transfer_alert_service.dart';
+import 'package:globos_pos_system/core/services/bank_transfer_alert_sound.dart';
 import 'package:globos_pos_system/core/services/connectivity_service.dart';
 import 'package:globos_pos_system/core/services/payment_proof_service.dart';
 import 'package:globos_pos_system/core/services/payment_service.dart';
@@ -612,6 +614,48 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('polling fallback shows one bank transfer toast and sound', (
+    tester,
+  ) async {
+    final startedAt = DateTime.now().toUtc();
+    final alertService = _MutableBankTransferAlertService(
+      BankTransferAlert(
+        transactionId: 'historical',
+        providerTransactionId: 1,
+        amount: 1000,
+        gateway: 'Vietcombank',
+        receivedAt: startedAt.subtract(const Duration(minutes: 1)),
+      ),
+    );
+    final soundService = _RecordingBankTransferAlertSoundService();
+    await _pumpCashier(
+      tester,
+      bankTransferAlertService: alertService,
+      bankTransferAlertSoundService: soundService,
+      bankTransferAlertPollInterval: const Duration(milliseconds: 20),
+    );
+
+    expect(soundService.playCount, 0);
+    expect(find.textContaining('1.000 VND'), findsNothing);
+
+    alertService.latest = BankTransferAlert(
+      transactionId: 'new-transfer',
+      providerTransactionId: 2,
+      amount: 42000,
+      paymentCode: 'GBTEST42',
+      gateway: 'Vietcombank',
+      receivedAt: DateTime.now().toUtc(),
+    );
+    await tester.pump(const Duration(milliseconds: 25));
+    await tester.pump();
+
+    expect(soundService.playCount, 1);
+    expect(find.textContaining('42.000 VND'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 25));
+    expect(soundService.playCount, 1);
+  });
 }
 
 class _CashierHarness {
@@ -630,6 +674,9 @@ Future<_CashierHarness> _pumpCashier(
   WidgetTester tester, {
   bool includeSecondOrder = false,
   Size physicalSize = const Size(1440, 1000),
+  BankTransferAlertService? bankTransferAlertService,
+  BankTransferAlertSoundService? bankTransferAlertSoundService,
+  Duration bankTransferAlertPollInterval = const Duration(seconds: 2),
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = physicalSize;
@@ -648,6 +695,10 @@ Future<_CashierHarness> _pumpCashier(
           paymentProofServiceOverride: proofService,
           paymentServiceOverride: paymentService,
           restaurantCutoffServiceOverride: _CutoffService(),
+          bankTransferAlertServiceOverride:
+              bankTransferAlertService ?? _NoopBankTransferAlertService(),
+          bankTransferAlertSoundServiceOverride: bankTransferAlertSoundService,
+          bankTransferAlertPollInterval: bankTransferAlertPollInterval,
         ),
       ),
       GoRoute(
@@ -746,4 +797,31 @@ Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
     await tester.pump(const Duration(milliseconds: 100));
   }
   expect(finder, findsOneWidget);
+}
+
+class _NoopBankTransferAlertService extends BankTransferAlertService {
+  @override
+  Future<BankTransferAlert?> fetchLatest(String storeId) async => null;
+}
+
+class _MutableBankTransferAlertService extends BankTransferAlertService {
+  _MutableBankTransferAlertService(this.latest);
+
+  BankTransferAlert? latest;
+
+  @override
+  Future<BankTransferAlert?> fetchLatest(String storeId) async => latest;
+}
+
+class _RecordingBankTransferAlertSoundService
+    extends BankTransferAlertSoundService {
+  int playCount = 0;
+
+  @override
+  Future<void> prepare() async {}
+
+  @override
+  Future<void> play() async {
+    playCount += 1;
+  }
 }
