@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../core/utils/number_input_utils.dart';
@@ -80,6 +81,34 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
     final state = ref.watch(superAdminProvider);
     final notifier = ref.read(superAdminProvider.notifier);
     final l10n = context.l10n;
+    ref.listen<AsyncValue<PosLiveEvent>>(posLiveEventsProvider('*'), (_, next) {
+      next.whenData((event) {
+        if (!event.affects({
+          'settings',
+          'staff',
+          'reports',
+          'orders',
+          'payments',
+          'inventory',
+          'qc',
+          'delivery',
+          'einvoice',
+        })) {
+          return;
+        }
+        Future.microtask(() async {
+          await notifier.loadBrands();
+          await notifier.loadLegalEntityStructure();
+          await notifier.loadAllRestaurants();
+          await notifier.loadAllReports(
+            selectedRestaurantId: ref
+                .read(superAdminProvider)
+                .selectedRestaurant
+                ?.id,
+          );
+        });
+      });
+    });
 
     if (!_initialized) {
       _initialized = true;

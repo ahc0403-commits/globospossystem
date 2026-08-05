@@ -2,6 +2,7 @@ import '../../main.dart';
 
 class QrOrderMenu {
   const QrOrderMenu({
+    this.storeId,
     required this.storeName,
     required this.tableNumber,
     required this.floorLabel,
@@ -11,6 +12,7 @@ class QrOrderMenu {
     this.promotionDiscountPercent = 0,
   });
 
+  final String? storeId;
   final String storeName;
   final String tableNumber;
   final String floorLabel;
@@ -23,6 +25,7 @@ class QrOrderMenu {
     final categoriesRaw = json['categories'];
     final itemsRaw = json['items'];
     return QrOrderMenu(
+      storeId: json['store_id']?.toString(),
       storeName: json['store_name']?.toString() ?? '',
       tableNumber: json['table_number']?.toString() ?? '-',
       floorLabel: json['floor_label']?.toString() ?? '-',

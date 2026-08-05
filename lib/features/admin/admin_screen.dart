@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/layout/adaptive_layout.dart';
+import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../widgets/app_nav_bar.dart';
@@ -23,6 +24,8 @@ import '../delivery/screens/delivery_settlement_tab.dart';
 import 'tabs/einvoice_tab.dart';
 import '../inventory_purchase/inventory_purchase_screen.dart';
 import '../photo_inventory/photo_inventory_screen.dart';
+import 'providers/admin_audit_provider.dart';
+import 'providers/menu_provider.dart';
 
 final _adminStoreBrandIdProvider = FutureProvider.family<String?, String>((
   ref,
@@ -53,6 +56,8 @@ class AdminScreen extends ConsumerStatefulWidget {
 
 class _AdminScreenState extends ConsumerState<AdminScreen> {
   int _currentIndex = 0;
+  int _allLiveRevision = 0;
+  final Map<String, int> _domainLiveRevisions = <String, int>{};
 
   @override
   void initState() {
@@ -63,7 +68,27 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   @override
   Widget build(BuildContext context) {
     final isSuperAdminView = widget.overrideRestaurantId != null;
-    final role = ref.watch(authProvider).role;
+    final auth = ref.watch(authProvider);
+    final role = auth.role;
+    final liveStoreId = widget.overrideRestaurantId ?? auth.storeId;
+    if (liveStoreId != null) {
+      ref.listen<AsyncValue<PosLiveEvent>>(
+        posLiveEventsProvider(liveStoreId),
+        (_, next) => next.whenData((event) {
+          if (!mounted) return;
+          if (event.affects({'menu'})) {
+            ref.invalidate(menuProvider(liveStoreId));
+          }
+          ref.invalidate(adminAuditTraceProvider(liveStoreId));
+          setState(() {
+            _allLiveRevision++;
+            final domain = event.isFallback ? '*' : event.domain;
+            _domainLiveRevisions[domain] =
+                (_domainLiveRevisions[domain] ?? 0) + 1;
+          });
+        }),
+      );
+    }
     final overrideStoreId = widget.overrideRestaurantId;
     final overrideBrandId = overrideStoreId == null
         ? null
@@ -93,6 +118,38 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       role,
       isPhotoObjetContext,
     );
+  }
+
+  int _revisionForDomains(Set<String> domains) {
+    var revision = _domainLiveRevisions['*'] ?? 0;
+    for (final domain in domains) {
+      revision += _domainLiveRevisions[domain] ?? 0;
+    }
+    return revision;
+  }
+
+  List<Widget> _liveKeyedTabs(List<Widget> tabs) {
+    return [
+      for (final tab in tabs)
+        KeyedSubtree(
+          key: ValueKey(
+            '${tab.runtimeType}:${switch (tab) {
+              ReportsTab() => _allLiveRevision,
+              TablesTab() => _revisionForDomains({'tables', 'orders', 'payments'}),
+              MenuTab() => _revisionForDomains({'menu', 'inventory'}),
+              StaffTab() => _revisionForDomains({'staff', 'attendance'}),
+              AttendanceTab() => _revisionForDomains({'attendance', 'staff'}),
+              InventoryPurchaseScreen() || PhotoInventoryScreen() => _revisionForDomains({'inventory', 'menu', 'photo_ops'}),
+              QcTab() => _revisionForDomains({'qc'}),
+              SettingsTab() => _revisionForDomains({'settings', 'print', 'staff'}),
+              DeliverySettlementTab() => _revisionForDomains({'delivery'}),
+              EinvoiceTab() => _revisionForDomains({'einvoice', 'settings'}),
+              _ => _allLiveRevision,
+            }}',
+          ),
+          child: tab,
+        ),
+    ];
   }
 
   List<Widget> _tabsForRole(String? role, bool isPhotoObjetContext) {
@@ -283,7 +340,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         children: [
           const OfflineBanner(),
           Expanded(
-            child: IndexedStack(index: safeIndex, children: tabs),
+            child: IndexedStack(
+              index: safeIndex,
+              children: _liveKeyedTabs(tabs),
+            ),
           ),
         ],
       ),
@@ -347,7 +407,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         children: [
           const OfflineBanner(),
           Expanded(
-            child: IndexedStack(index: safeIndex, children: tabs),
+            child: IndexedStack(
+              index: safeIndex,
+              children: _liveKeyedTabs(tabs),
+            ),
           ),
         ],
       ),

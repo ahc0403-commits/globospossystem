@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/qc_service.dart';
+import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast_primitives_extended.dart';
 import '../../core/utils/number_input_utils.dart';
@@ -47,6 +48,11 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
         .loadWeek(storeId: storeId, weekStart: _weekStart);
   }
 
+  void _refreshFromLiveEvent(String storeId, PosLiveEvent event) {
+    if (!event.affects({'qc', 'staff', 'settings'})) return;
+    Future.microtask(() => _initialize(storeId));
+  }
+
   Future<void> _loadWeek(String storeId, DateTime start) async {
     setState(() => _weekStart = start);
     await ref
@@ -58,6 +64,14 @@ class _QcReviewScreenState extends ConsumerState<QcReviewScreen> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final storeId = auth.storeId;
+    if (storeId != null) {
+      ref.listen<AsyncValue<PosLiveEvent>>(posLiveEventsProvider(storeId), (
+        _,
+        next,
+      ) {
+        next.whenData((event) => _refreshFromLiveEvent(storeId, event));
+      });
+    }
     final canReview = PermissionUtils.canDoQcVisitReview(
       auth.role,
       auth.extraPermissions,

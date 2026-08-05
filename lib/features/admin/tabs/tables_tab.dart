@@ -191,6 +191,60 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     showSuccessToast(context, context.l10n.tablesLayoutSaved);
   }
 
+  Future<void> _confirmAndDeleteTable(
+    TablesNotifier tablesNotifier,
+    PosTable table,
+  ) async {
+    final l10n = context.l10n;
+    if (table.isOccupied || table.isReserved) {
+      showErrorToast(context, l10n.tablesDeleteActiveBlocked);
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        key: const Key('admin_table_delete_confirm_dialog'),
+        backgroundColor: AppColors.surface1,
+        title: Text(l10n.tablesDeleteTable),
+        content: Text(l10n.tablesDeleteConfirm(table.tableNumber)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton.icon(
+            key: const Key('admin_table_delete_confirm_action'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.statusCancelled,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            icon: const Icon(Icons.delete_outline, size: 18),
+            label: Text(l10n.tablesDeleteTable),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    final success = await tablesNotifier.deleteTable(table.id);
+    if (!mounted || !success) {
+      return;
+    }
+
+    ref.read(orderProvider.notifier).clearSession();
+    setState(() {
+      _draftLayoutByTableId.remove(table.id);
+      _draftRotationByTableId.remove(table.id);
+      _selectedTable = null;
+      _showOrderPanel = false;
+    });
+    showSuccessToast(context, l10n.tablesDeleted(table.tableNumber));
+  }
+
   Rect _clampLayoutRect(Rect rect) {
     final width = rect.width.clamp(0.08, 0.4);
     final height = rect.height.clamp(0.08, 0.32);
@@ -777,6 +831,18 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                   icon: const Icon(Icons.qr_code_2_rounded, size: 18),
                   label: Text(l10n.tablesQrCurrentAction),
                 ),
+              if (!_layoutEditMode && selectedTable != null)
+                OutlinedButton.icon(
+                  key: const Key('admin_tables_delete_action'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.statusCancelled,
+                    side: const BorderSide(color: AppColors.statusCancelled),
+                  ),
+                  onPressed: () =>
+                      _confirmAndDeleteTable(tablesNotifier, selectedTable),
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  label: Text(l10n.tablesDeleteTable),
+                ),
               if (!_layoutEditMode &&
                   selectedTable != null &&
                   !selectedTable.isOccupied)
@@ -862,25 +928,13 @@ class _TablesTabState extends ConsumerState<TablesTab> {
                 ),
               if (_layoutEditMode && selectedTable != null)
                 OutlinedButton.icon(
-                  onPressed: () async {
-                    final selectedId = selectedTable.id;
-                    final selectedNumber = selectedTable.tableNumber;
-                    final success = await tablesNotifier.deleteTable(
-                      selectedId,
-                    );
-                    if (!mounted || !success) {
-                      return;
-                    }
-                    setState(() {
-                      _draftLayoutByTableId.remove(selectedId);
-                      _draftRotationByTableId.remove(selectedId);
-                      _selectedTable = null;
-                    });
-                    showSuccessToast(
-                      context,
-                      l10n.tablesDeleted(selectedNumber),
-                    );
-                  },
+                  key: const Key('admin_tables_layout_delete_action'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.statusCancelled,
+                    side: const BorderSide(color: AppColors.statusCancelled),
+                  ),
+                  onPressed: () =>
+                      _confirmAndDeleteTable(tablesNotifier, selectedTable),
                   icon: const Icon(Icons.delete_outline, size: 18),
                   label: Text(l10n.tablesDeleteSelected),
                 ),

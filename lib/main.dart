@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -9,7 +11,9 @@ import 'core/constants/app_constants.dart';
 import 'core/hardware/print_agent_coordinator_provider.dart';
 import 'core/i18n/locale_controller.dart';
 import 'core/router/app_router.dart';
+import 'core/services/live_refresh_service.dart';
 import 'core/ui/app_theme.dart';
+import 'features/auth/auth_provider.dart';
 import 'l10n/app_localizations.dart';
 
 export 'core/ui/app_theme.dart';
@@ -55,16 +59,47 @@ Future<void> main() async {
 /// Supabase client 전역 접근용
 final supabase = Supabase.instance.client;
 
-class GlobosPosApp extends ConsumerWidget {
+class GlobosPosApp extends ConsumerStatefulWidget {
   const GlobosPosApp({super.key, required this.router});
   final dynamic router;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<GlobosPosApp> createState() => _GlobosPosAppState();
+}
+
+class _GlobosPosAppState extends ConsumerState<GlobosPosApp> {
+  bool _profileRefreshInFlight = false;
+
+  Future<void> _refreshProfile() async {
+    if (_profileRefreshInFlight) return;
+    _profileRefreshInFlight = true;
+    try {
+      await ref.read(authProvider.notifier).refreshProfile();
+    } finally {
+      _profileRefreshInFlight = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     // App-root ownership keeps the designated device's print agent alive while
     // operators navigate between cashier, admin, and monitoring screens.
     ref.watch(printAgentCoordinatorProvider);
     final localeState = ref.watch(localeControllerProvider);
+    final auth = ref.watch(authProvider);
+    final storeId = auth.storeId;
+    if (auth.user != null && storeId != null) {
+      ref.listen<AsyncValue<PosLiveEvent>>(posLiveEventsProvider(storeId), (
+        _,
+        next,
+      ) {
+        next.whenData((event) {
+          if (event.isFallback || event.affects({'staff', 'settings'})) {
+            unawaited(_refreshProfile());
+          }
+        });
+      });
+    }
 
     return MaterialApp.router(
       title: 'GLOBOS POS',
@@ -79,7 +114,7 @@ class GlobosPosApp extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      routerConfig: router,
+      routerConfig: widget.router,
     );
   }
 }

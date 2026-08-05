@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/layout/platform_info.dart';
+import '../../core/services/live_refresh_service.dart';
 import '../../core/utils/time_utils.dart';
 
 import '../../core/ui/app_primitives.dart';
@@ -328,6 +329,22 @@ class _KitchenOperationalScreenState
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final storeId = authState.storeId;
+    if (storeId != null) {
+      ref.listen<AsyncValue<PosLiveEvent>>(posLiveEventsProvider(storeId), (
+        _,
+        next,
+      ) {
+        next.whenData((event) {
+          if (event.affects({'orders', 'print', 'settings'})) {
+            Future.microtask(
+              () => ref
+                  .read(kitchenProvider.notifier)
+                  .loadOrders(storeId, showLoading: false),
+            );
+          }
+        });
+      });
+    }
     _ensureLoaded(storeId);
 
     final kitchenState = ref.watch(kitchenProvider);

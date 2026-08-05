@@ -86,6 +86,7 @@ class _TablesNotifier extends TablesNotifier {
 
   int addCalls = 0;
   int editCalls = 0;
+  int deleteCalls = 0;
 
   @override
   Future<void> fetchTables({bool showLoading = true}) async {}
@@ -108,6 +109,12 @@ class _TablesNotifier extends TablesNotifier {
     required String floorLabel,
   }) async {
     editCalls += 1;
+    return true;
+  }
+
+  @override
+  Future<bool> deleteTable(String id) async {
+    deleteCalls += 1;
     return true;
   }
 }
@@ -669,7 +676,7 @@ void main() {
     FocusManager.instance.primaryFocus?.unfocus();
   });
 
-  testWidgets('all five table dialog entrypoints execute real workflows', (
+  testWidgets('all six table dialog entrypoints execute real workflows', (
     tester,
   ) async {
     addTearDown(tester.view.resetPhysicalSize);
@@ -757,6 +764,18 @@ void main() {
     );
     await tester.tap(_dialogAction(batchFormatDialog, TextButton));
     await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('admin_tables_delete_action')));
+    await tester.pumpAndSettle();
+    const deleteDialog = Key('admin_table_delete_confirm_dialog');
+    expect(find.byKey(deleteDialog), findsOneWidget);
+    _expectDialogButtonsAreTouchSized(tester, deleteDialog);
+    await tester.tap(
+      find.byKey(const Key('admin_table_delete_confirm_action')),
+    );
+    await tester.pumpAndSettle();
+    expect(notifier.deleteCalls, 1);
+
     expect(tester.takeException(), isNull);
   });
 
