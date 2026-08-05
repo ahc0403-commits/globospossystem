@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/layout/platform_info.dart';
+import '../../core/services/live_refresh_service.dart';
 import '../../core/utils/permission_utils.dart';
 import '../../core/utils/role_routes.dart';
 import '../../core/utils/time_utils.dart';
@@ -59,6 +60,11 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
     await ref
         .read(qcCheckProvider.notifier)
         .loadWeek(storeId: storeId, weekStart: _startOfWeek(_todayVn));
+  }
+
+  void _refreshFromLiveEvent(String storeId, PosLiveEvent event) {
+    if (!event.affects({'qc', 'staff', 'settings'})) return;
+    Future.microtask(() => _initialize(storeId));
   }
 
   void _prepopulateFromExistingChecks(List<Map<String, dynamic>> checks) {
@@ -212,6 +218,14 @@ class _QcCheckScreenState extends ConsumerState<QcCheckScreen> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final storeId = auth.storeId;
+    if (storeId != null) {
+      ref.listen<AsyncValue<PosLiveEvent>>(posLiveEventsProvider(storeId), (
+        _,
+        next,
+      ) {
+        next.whenData((event) => _refreshFromLiveEvent(storeId, event));
+      });
+    }
     final canAccess = PermissionUtils.canDoQcCheck(
       auth.role,
       auth.extraPermissions,

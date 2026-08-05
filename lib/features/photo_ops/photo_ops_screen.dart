@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/attendance_service.dart';
 import '../../core/services/inventory_service.dart';
+import '../../core/services/live_refresh_service.dart';
 import '../../core/services/payroll_service.dart';
 import '../../core/ui/app_primitives.dart';
 import '../../core/ui/app_theme.dart';
@@ -56,6 +57,20 @@ class _PhotoOpsScreenState extends ConsumerState<PhotoOpsScreen> {
     final auth = ref.watch(authProvider);
     final state = ref.watch(photoOpsProvider);
     final notifier = ref.read(photoOpsProvider.notifier);
+    ref.listen<AsyncValue<PosLiveEvent>>(posLiveEventsProvider('*'), (_, next) {
+      next.whenData((event) {
+        if (event.affects({
+          'photo_ops',
+          'orders',
+          'payments',
+          'attendance',
+          'inventory',
+          'staff',
+        })) {
+          Future.microtask(notifier.load);
+        }
+      });
+    });
     final activeStoreId = auth.storeId;
     final surfaceAccess = PhotoOpsSurfaceAccess.forRole(auth.role);
     final canManageWorkforce = auth.role == 'photo_objet_master';

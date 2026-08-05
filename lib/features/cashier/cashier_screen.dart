@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
@@ -11,7 +12,9 @@ import '../../core/i18n/restaurant_cutoff_localization.dart';
 import '../../core/models/pos_table.dart';
 import '../../core/payments/cash_tender.dart';
 import '../../core/payments/payment_method_contract.dart';
+import '../../core/services/bank_transfer_alert_service.dart';
 import '../../core/services/connectivity_service.dart';
+import '../../core/services/live_refresh_service.dart';
 import '../../core/layout/platform_info.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
@@ -23,6 +26,7 @@ import '../auth/auth_provider.dart';
 import '../order/order_model.dart';
 import '../payment/payment_provider.dart';
 import '../payment/einvoice_status_badge.dart';
+import '../payment/einvoice_provider.dart';
 import '../table/floor_layout.dart';
 import '../table/table_provider.dart';
 import '../../core/services/payment_service.dart';
@@ -73,6 +77,8 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   String? _orderSearchFeedback;
   late final ProviderSubscription<PaymentState> _paymentSub;
   late final PrintJobAgentService _printJobAgent;
+  String? _lastBankTransferAlertId;
+  bool _bankTransferAlertInFlight = false;
 
   PaymentProofService get _paymentProofService =>
       widget.paymentProofServiceOverride ?? paymentProofService;
@@ -154,6 +160,62 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       _printJobAgent.stop();
       _printJobAgent.startPolling(storeId);
       _printAgentStoreId = storeId;
+    }
+  }
+
+  void _refreshFromLiveEvent(String storeId, PosLiveEvent event) {
+    if (!event.isFallback &&
+        event.domain == 'bank_transfer' &&
+        event.sourceTable == 'sepay_transactions' &&
+        event.eventType == 'INSERT') {
+      unawaited(_showLatestBankTransferAlert(storeId));
+    }
+    if (!event.affects({
+      'orders',
+      'payments',
+      'tables',
+      'settings',
+      'einvoice',
+      'print',
+    })) {
+      return;
+    }
+    Future.microtask(() {
+      ref.read(paymentProvider.notifier).loadOrders(storeId);
+      ref
+          .read(waiterTableProvider.notifier)
+          .loadTables(storeId, showLoading: false);
+      ref.invalidate(einvoiceJobStatusProvider);
+    });
+  }
+
+  Future<void> _showLatestBankTransferAlert(String storeId) async {
+    if (_bankTransferAlertInFlight) return;
+    _bankTransferAlertInFlight = true;
+    try {
+      final alert = await bankTransferAlertService.fetchLatest(storeId);
+      if (!mounted ||
+          alert == null ||
+          alert.transactionId == _lastBankTransferAlertId) {
+        return;
+      }
+      _lastBankTransferAlertId = alert.transactionId;
+      try {
+        await SystemSound.play(SystemSoundType.alert);
+      } catch (_) {
+        // Some web/mobile runtimes require a prior user gesture for sound.
+      }
+      if (!mounted) return;
+      final amount = NumberFormat('#,###', 'vi_VN').format(alert.amount);
+      showSuccessToast(
+        context,
+        context.l10n.cashierBankTransferReceived(
+          amount,
+          alert.paymentCode ?? '-',
+        ),
+      );
+    } finally {
+      _bankTransferAlertInFlight = false;
     }
   }
 
@@ -830,6 +892,14 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     final l10n = context.l10n;
     final authState = ref.watch(authProvider);
     final storeId = authState.storeId;
+    if (storeId != null) {
+      ref.listen<AsyncValue<PosLiveEvent>>(posLiveEventsProvider(storeId), (
+        _,
+        next,
+      ) {
+        next.whenData((event) => _refreshFromLiveEvent(storeId, event));
+      });
+    }
     final role = authState.role ?? '';
     final isAdmin = PermissionUtils.isAdminLike(role);
     final canProcessNonRevenue = role == 'cashier' || isAdmin;

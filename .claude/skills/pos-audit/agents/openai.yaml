@@ -1,0 +1,4 @@
+interface:
+  display_name: "POS Architecture Audit"
+  short_description: "Audit POS code and rank verified findings"
+  default_prompt: "Use $pos-audit to audit the POS system against current architecture and contracts."

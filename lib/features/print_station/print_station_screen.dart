@@ -9,6 +9,7 @@ import '../../core/hardware/print_agent_coordinator_provider.dart';
 import '../../core/hardware/printer_service.dart';
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/printer_destination_service.dart';
+import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/app_fonts.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
@@ -101,6 +102,19 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final storeId = ref.watch(authProvider).storeId;
+    if (storeId != null) {
+      ref.listen<AsyncValue<PosLiveEvent>>(posLiveEventsProvider(storeId), (
+        _,
+        next,
+      ) {
+        next.whenData((event) {
+          if (!event.affects({'print', 'settings', 'orders'})) return;
+          ref.invalidate(printerDestinationsProvider(storeId));
+          ref.invalidate(printStationJobsProvider(storeId));
+          ref.invalidate(failedPrintJobsProvider(storeId));
+        });
+      });
+    }
     final agentState = ref.watch(printAgentCoordinatorProvider);
     final isRunning = agentState.status == PrintAgentStatus.running;
 
