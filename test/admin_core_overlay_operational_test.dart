@@ -247,8 +247,9 @@ class _MenuNotifier extends MenuNotifier {
   ) async {
     importCalls += 1;
     return MenuImportResult(
-      importedItemCount: rows.length,
-      createdCategoryCount: 1,
+      itemCount: rows.length,
+      categoryCount: 1,
+      preservedImageCount: 0,
     );
   }
 
@@ -261,6 +262,7 @@ class _MenuNotifier extends MenuNotifier {
     return MenuWorkbookUpdateResult(
       updatedCategoryCount: categories.length,
       updatedItemCount: items.length,
+      preservedImageCount: 0,
     );
   }
 }
@@ -798,6 +800,10 @@ void main() {
         overrides: [menuProvider.overrideWith((ref, storeId) => notifier)],
       );
 
+      expect(
+        find.byKey(const Key('admin_menu_import_drop_zone')),
+        findsOneWidget,
+      );
       await tester.tap(find.byKey(const Key('admin_menu_export_excel_action')));
       await tester.pumpAndSettle();
       expect(exportedName, startsWith('menu_multilingual_'));

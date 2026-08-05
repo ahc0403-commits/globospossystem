@@ -1,9 +1,10 @@
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:file_saver/file_saver.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -37,6 +38,7 @@ class MenuTab extends ConsumerStatefulWidget {
 
 class _MenuTabState extends ConsumerState<MenuTab> {
   String? _lastError;
+  bool _isImportFlowActive = false;
   bool _isImporting = false;
   bool _isExporting = false;
   final ImagePicker _imagePicker = ImagePicker();
@@ -133,12 +135,15 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       availableItems: availableItems,
       selectedItemCount: selectedItems.length,
       selectedCategoryName: _categoryNameForId(categories, selectedCategoryId),
-      onExportExcel: _isImporting || _isExporting
+      onExportExcel: _isImportFlowActive || _isExporting
           ? null
           : () => _exportMenuWorkbook(storeId, categories, allItems),
-      onImportExcel: _isImporting || _isExporting
+      onImportExcel: _isImportFlowActive || _isExporting
           ? null
           : () => _importMenuWorkbook(storeId, menuNotifier),
+      onImportFilesDropped: _isImportFlowActive || _isExporting
+          ? null
+          : (files) => _importDroppedMenuWorkbook(files, storeId, menuNotifier),
       onAddCategory: () => _showAddCategoryDialog(context, menuNotifier),
       onAddItem: selectedCategoryId == null
           ? null
@@ -240,6 +245,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     required String? selectedCategoryName,
     required VoidCallback? onExportExcel,
     required VoidCallback? onImportExcel,
+    required ValueChanged<List<XFile>>? onImportFilesDropped,
     required VoidCallback onAddCategory,
     required VoidCallback? onAddItem,
   }) {
@@ -325,6 +331,12 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                 ],
               ),
             ],
+          ),
+          const SizedBox(height: 14),
+          _MenuImportDropZone(
+            enabled: !_isImportFlowActive && !_isExporting,
+            onBrowse: onImportExcel,
+            onFilesDropped: onImportFilesDropped,
           ),
           const SizedBox(height: 14),
           ToastMetricStrip(
@@ -449,14 +461,45 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       extensions: <String>['xlsx'],
     );
 
-    try {
-      final file =
-          await (widget.pickImportFile?.call() ??
-              openFile(acceptedTypeGroups: const <XTypeGroup>[typeGroup]));
-      if (file == null || !mounted) {
-        return;
-      }
+    final file =
+        await (widget.pickImportFile?.call() ??
+            openFile(acceptedTypeGroups: const <XTypeGroup>[typeGroup]));
+    if (file != null && mounted) {
+      await _processMenuWorkbook(file, storeId, menuNotifier);
+    }
+  }
 
+  Future<void> _importDroppedMenuWorkbook(
+    List<XFile> files,
+    String storeId,
+    MenuNotifier menuNotifier,
+  ) async {
+    if (files.length != 1) {
+      await _showMenuImportValidationErrors(context, [
+        context.l10n.menuImportDropSingleFile,
+      ]);
+      return;
+    }
+    final file = files.single;
+    if (!file.name.toLowerCase().endsWith('.xlsx') &&
+        !file.path.toLowerCase().endsWith('.xlsx')) {
+      await _showMenuImportValidationErrors(context, [
+        context.l10n.menuImportDropXlsxOnly,
+      ]);
+      return;
+    }
+    await _processMenuWorkbook(file, storeId, menuNotifier);
+  }
+
+  Future<void> _processMenuWorkbook(
+    XFile file,
+    String storeId,
+    MenuNotifier menuNotifier,
+  ) async {
+    if (_isImportFlowActive) return;
+    setState(() => _isImportFlowActive = true);
+
+    try {
       final bytes = await file.readAsBytes();
       final roundTripWorkbook = tryParseMenuRoundTripWorkbook(bytes);
       if (!mounted) {
@@ -490,7 +533,6 @@ class _MenuTabState extends ConsumerState<MenuTab> {
         );
         if (!mounted) return;
 
-        setState(() => _isImporting = false);
         if (result != null) {
           ref.invalidate(adminAuditTraceProvider(storeId));
           showSuccessToast(
@@ -524,14 +566,13 @@ class _MenuTabState extends ConsumerState<MenuTab> {
         return;
       }
 
-      setState(() => _isImporting = false);
       if (result != null) {
         ref.invalidate(adminAuditTraceProvider(storeId));
         showSuccessToast(
           context,
           context.l10n.menuImportSuccess(
-            result.createdCategoryCount,
-            result.importedItemCount,
+            result.categoryCount,
+            result.itemCount,
           ),
         );
       }
@@ -541,8 +582,14 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _isImporting = false);
         showErrorToast(context, context.l10n.menuImportUnknownError);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isImportFlowActive = false;
+          _isImporting = false;
+        });
       }
     }
   }
@@ -1478,6 +1525,101 @@ class _ComboCandidateRow extends StatelessWidget {
               ],
             )
           : null,
+    );
+  }
+}
+
+class _MenuImportDropZone extends StatefulWidget {
+  const _MenuImportDropZone({
+    required this.enabled,
+    required this.onBrowse,
+    required this.onFilesDropped,
+  });
+
+  final bool enabled;
+  final VoidCallback? onBrowse;
+  final ValueChanged<List<XFile>>? onFilesDropped;
+
+  @override
+  State<_MenuImportDropZone> createState() => _MenuImportDropZoneState();
+}
+
+class _MenuImportDropZoneState extends State<_MenuImportDropZone> {
+  bool _isDragging = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = widget.enabled && widget.onFilesDropped != null;
+    final borderColor = _isDragging ? AppColors.amber500 : AppColors.surface3;
+
+    return DropTarget(
+      enable: active,
+      onDragEntered: (_) => setState(() => _isDragging = true),
+      onDragExited: (_) => setState(() => _isDragging = false),
+      onDragDone: (details) {
+        setState(() => _isDragging = false);
+        widget.onFilesDropped?.call(
+          details.files.map<XFile>((file) => file).toList(growable: false),
+        );
+      },
+      child: Material(
+        key: const Key('admin_menu_import_drop_zone'),
+        color: _isDragging
+            ? AppColors.amber500.withValues(alpha: 0.08)
+            : AppColors.surface0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: borderColor, width: _isDragging ? 2 : 1),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: widget.onBrowse,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Icon(
+                  _isDragging
+                      ? Icons.file_download_done_outlined
+                      : Icons.file_download_outlined,
+                  color: active ? AppColors.amber500 : AppColors.textSecondary,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _isDragging
+                            ? context.l10n.menuImportDropRelease
+                            : context.l10n.menuImportDropTitle,
+                        style: AppFonts.system(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        context.l10n.menuImportDropHint,
+                        style: AppFonts.system(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                TextButton(
+                  key: const Key('admin_menu_import_browse_action'),
+                  onPressed: widget.onBrowse,
+                  child: Text(context.l10n.menuImportBrowse),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
