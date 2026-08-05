@@ -57,5 +57,17 @@ void main() {
     expect(sql, contains('SBSEPAYOA465N89VHYK'));
     expect(sql, contains('SEPAY_TEST_STORE_MISMATCH'));
     expect(sql, contains('ON CONFLICT DO NOTHING'));
+
+    final verification = File(
+      'scripts/verify_sepay_bunsikclub_binh_thanh_mapping.sql',
+    ).readAsStringSync();
+    expect(verification, contains('BunsikClub Binh Thanh'));
+    expect(verification, contains('9358674202'));
+    expect(verification, contains('SBSEPAYOA465N89VHYK'));
+    expect(verification, contains('account.is_active = true'));
+    expect(
+      verification,
+      contains('SEPAY_TEST_STORE_MAPPING_VERIFY_FAILED'),
+    );
   });
 }
