@@ -70,7 +70,8 @@ void main() {
     expect(kitchenProvider, contains('firstItemCreatedAt'));
     expect(kitchen, contains('const int _kitchenStaleDisplayHours = 24;'));
     expect(kitchen, contains('Duration _kitchenDisplayElapsed'));
-    expect(kitchen, contains("return context.l10n.kitchenReadyHandoff;"));
+    expect(kitchen, contains("return context.l10n.kitchenComplete;"));
+    expect(kitchen, contains('ToastResponsiveScrollBody('));
     expect(waiter, contains('refreshOrderPreviews(storeId)'));
 
     expect(staffTab, contains("Key('staff_create_validation_message')"));

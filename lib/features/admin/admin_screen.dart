@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/layout/adaptive_layout.dart';
+import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../widgets/app_nav_bar.dart';
@@ -21,6 +22,8 @@ import 'tabs/tables_tab.dart';
 import '../delivery/screens/delivery_settlement_tab.dart';
 import 'tabs/einvoice_tab.dart';
 import '../inventory_purchase/inventory_purchase_screen.dart';
+import 'providers/admin_audit_provider.dart';
+import 'providers/menu_provider.dart';
 
 class AdminScreen extends ConsumerStatefulWidget {
   const AdminScreen({
@@ -39,6 +42,7 @@ class AdminScreen extends ConsumerStatefulWidget {
 
 class _AdminScreenState extends ConsumerState<AdminScreen> {
   int _currentIndex = 0;
+  final List<int> _liveRevisions = List<int>.filled(10, 0);
 
   @override
   void initState() {
@@ -49,7 +53,28 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   @override
   Widget build(BuildContext context) {
     final isSuperAdminView = widget.overrideRestaurantId != null;
-    final role = ref.watch(authProvider).role;
+    final auth = ref.watch(authProvider);
+    final role = auth.role;
+    final liveStoreId = widget.overrideRestaurantId ?? auth.storeId;
+    if (liveStoreId != null) {
+      ref.listen<AsyncValue<PosLiveEvent>>(
+        posLiveEventsProvider(liveStoreId),
+        (_, next) => next.whenData((event) {
+          final affectedTabs = _tabsAffectedByEvent(event, role);
+          if (affectedTabs.isNotEmpty && mounted) {
+            if (event.affects({'menu'})) {
+              ref.invalidate(menuProvider(liveStoreId));
+            }
+            ref.invalidate(adminAuditTraceProvider(liveStoreId));
+            setState(() {
+              for (final index in affectedTabs) {
+                _liveRevisions[index]++;
+              }
+            });
+          }
+        }),
+      );
+    }
     final viewport = MediaQuery.sizeOf(context);
     final useDesktopShell =
         PlatformInfo.isWebOrDesktop &&
@@ -63,12 +88,48 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     return _buildMobileLayout(context, isSuperAdminView, role);
   }
 
+  Set<int> _tabsAffectedByEvent(PosLiveEvent event, String? role) {
+    final hasDelivery = PermissionUtils.canAccessDeliverySettlement(role);
+    final tabCount = hasDelivery ? 10 : 9;
+    if (event.isFallback) return {for (var i = 0; i < tabCount; i++) i};
+
+    final affected = <int>{3}; // Reports aggregate every operational domain.
+    void add(int index, Set<String> domains) {
+      if (event.affects(domains)) affected.add(index);
+    }
+
+    add(0, {'tables', 'orders', 'payments'});
+    add(1, {'menu', 'inventory'});
+    add(2, {'staff'});
+    add(4, {'attendance', 'staff'});
+    add(5, {'inventory', 'menu'});
+    add(6, {'qc'});
+    add(7, {'settings', 'print', 'staff'});
+    if (hasDelivery) {
+      add(8, {'delivery'});
+      add(9, {'einvoice', 'settings'});
+    } else {
+      add(8, {'einvoice', 'settings'});
+    }
+    return affected;
+  }
+
+  List<Widget> _liveKeyedTabs(List<Widget> tabs) {
+    return [
+      for (var index = 0; index < tabs.length; index++)
+        KeyedSubtree(
+          key: ValueKey('admin_tab_${index}_${_liveRevisions[index]}'),
+          child: tabs[index],
+        ),
+    ];
+  }
+
   List<Widget> _tabsForRole(String? role) {
     final tabs = <Widget>[
       const TablesTab(),
       const MenuTab(),
       const StaffTab(),
-      const ReportsTab(),
+      ReportsTab(overrideStoreId: widget.overrideRestaurantId),
       const AttendanceTab(),
       const InventoryPurchaseScreen(),
       const QcTab(),
@@ -212,11 +273,11 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       topBarTrailing: isSuperAdminView
           ? MediaQuery.sizeOf(context).width < 600 ||
                     MediaQuery.textScalerOf(context).scale(1) > 1.5
-                ? const AppNavBar()
+                ? AppNavBar(showLogout: isSuperAdminView)
                 : Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const AppNavBar(),
+                      AppNavBar(showLogout: isSuperAdminView),
                       const SizedBox(width: 10),
                       ToastStatusBadge(
                         label: context.l10n.superAdminMode,
@@ -225,7 +286,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                       ),
                     ],
                   )
-          : const AppNavBar(),
+          : const AppNavBar(showLogout: false),
       bottomItems: isSuperAdminView
           ? null
           : [
@@ -241,7 +302,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         children: [
           const OfflineBanner(),
           Expanded(
-            child: IndexedStack(index: safeIndex, children: tabs),
+            child: IndexedStack(
+              index: safeIndex,
+              children: _liveKeyedTabs(tabs),
+            ),
           ),
         ],
       ),
@@ -275,11 +339,11 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       topBarTrailing: isSuperAdminView
           ? MediaQuery.sizeOf(context).width < 600 ||
                     MediaQuery.textScalerOf(context).scale(1) > 1.5
-                ? const AppNavBar()
+                ? AppNavBar(showLogout: isSuperAdminView)
                 : Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const AppNavBar(),
+                      AppNavBar(showLogout: isSuperAdminView),
                       const SizedBox(width: 8),
                       ToastStatusBadge(
                         label: context.l10n.superAdminMode,
@@ -288,7 +352,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                       ),
                     ],
                   )
-          : const AppNavBar(),
+          : const AppNavBar(showLogout: false),
       bottomItems: isSuperAdminView
           ? null
           : [
@@ -304,7 +368,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         children: [
           const OfflineBanner(),
           Expanded(
-            child: IndexedStack(index: safeIndex, children: tabs),
+            child: IndexedStack(
+              index: safeIndex,
+              children: _liveKeyedTabs(tabs),
+            ),
           ),
         ],
       ),

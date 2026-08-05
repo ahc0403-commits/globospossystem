@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/services/live_refresh_service.dart';
 import '../../core/services/qr_order_service.dart';
 import '../../core/ui/app_fonts.dart';
 import '../../core/ui/pos_design_tokens.dart';
@@ -21,7 +25,8 @@ class QrOrderScreen extends StatefulWidget {
   State<QrOrderScreen> createState() => _QrOrderScreenState();
 }
 
-class _QrOrderScreenState extends State<QrOrderScreen> {
+class _QrOrderScreenState extends State<QrOrderScreen>
+    with WidgetsBindingObserver {
   final _uuid = const Uuid();
   final _currency = NumberFormat('#,###', 'vi_VN');
   QrOrderMenu? _menu;
@@ -32,32 +37,106 @@ class _QrOrderScreenState extends State<QrOrderScreen> {
   bool _isLoading = true;
   bool _isSubmitting = false;
   final Map<String, int> _cart = <String, int>{};
+  Timer? _menuRefreshTimer;
+  Timer? _liveMenuDebounceTimer;
+  RealtimeChannel? _menuChannel;
+  String? _subscribedStoreId;
 
   QrOrderService get _service => widget.service ?? qrOrderService;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadMenu();
+    _menuRefreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      unawaited(_loadMenu(showLoading: false));
+    });
   }
 
-  Future<void> _loadMenu() async {
-    setState(() {
-      _isLoading = true;
-      _failure = null;
-    });
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_loadMenu(showLoading: false));
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _menuRefreshTimer?.cancel();
+    _liveMenuDebounceTimer?.cancel();
+    _menuChannel?.unsubscribe();
+    super.dispose();
+  }
+
+  Future<void> _subscribeMenuEvents(String? storeId) async {
+    if (widget.service != null ||
+        storeId == null ||
+        storeId.isEmpty ||
+        _subscribedStoreId == storeId) {
+      return;
+    }
+
+    final previous = _menuChannel;
+    _menuChannel = null;
+    if (previous != null) await previous.unsubscribe();
+    if (!mounted) return;
+
+    _subscribedStoreId = storeId;
+    _menuChannel = Supabase.instance.client
+        .channel('public:qr_menu_events:$storeId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'pos_live_events',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'restaurant_id',
+            value: storeId,
+          ),
+          callback: (payload) {
+            final event = PosLiveEvent.fromRecord(payload.newRecord);
+            if (event.affects({'menu', 'tables', 'settings'})) {
+              _liveMenuDebounceTimer?.cancel();
+              _liveMenuDebounceTimer = Timer(
+                const Duration(milliseconds: 350),
+                () => unawaited(_loadMenu(showLoading: false)),
+              );
+            }
+          },
+        )
+        .subscribe();
+  }
+
+  Future<void> _loadMenu({bool showLoading = true}) async {
+    if (showLoading) {
+      setState(() {
+        _isLoading = true;
+        _failure = null;
+      });
+    }
     try {
       final menu = await _service.fetchMenu(widget.token);
       if (!mounted) return;
+      unawaited(_subscribeMenuEvents(menu.storeId));
       setState(() {
         _menu = menu;
-        _selectedCategoryId = menu.categories.isEmpty
-            ? null
-            : menu.categories.first.id;
+        final categoryStillExists = menu.categories.any(
+          (category) => category.id == _selectedCategoryId,
+        );
+        if (!categoryStillExists) {
+          _selectedCategoryId = menu.categories.isEmpty
+              ? null
+              : menu.categories.first.id;
+        }
+        final availableIds = menu.items.map((item) => item.id).toSet();
+        _cart.removeWhere((itemId, _) => !availableIds.contains(itemId));
         _isLoading = false;
       });
     } catch (error) {
       if (!mounted) return;
+      if (!showLoading && _menu != null) return;
       setState(() {
         _failure = _copy.failureFor(error);
         _isLoading = false;
@@ -403,6 +482,24 @@ class _QrMenuItemTile extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            if ((item.imageUrl ?? '').trim().isNotEmpty) ...[
+              ClipRRect(
+                borderRadius: ToastRadiusTokens.md,
+                child: SizedBox(
+                  width: 96,
+                  height: 96,
+                  child: Image.network(
+                    item.imageUrl!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => ColoredBox(
+                      color: ToastColorTokens.mutedSurface,
+                      child: const Icon(Icons.broken_image_outlined),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: ToastSpacingTokens.md),
+            ],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

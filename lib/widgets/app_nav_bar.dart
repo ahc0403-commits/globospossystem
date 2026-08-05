@@ -17,12 +17,14 @@ class AppNavBar extends ConsumerWidget {
     super.key,
     this.forceBackEnabled = false,
     this.forceHomeEnabled = false,
+    this.showLogout = true,
     this.onBackPressed,
     this.onHomePressed,
   });
 
   final bool forceBackEnabled;
   final bool forceHomeEnabled;
+  final bool showLogout;
   final VoidCallback? onBackPressed;
   final VoidCallback? onHomePressed;
 
@@ -129,6 +131,18 @@ class AppNavBar extends ConsumerWidget {
               const SizedBox(width: 10),
               LanguageSwitcher(compact: compactLanguageSwitcher),
             ],
+            if (showLogout) ...[
+              const SizedBox(width: 6),
+              _NavButton(
+                key: const Key('app_nav_logout_button'),
+                icon: Icons.logout_rounded,
+                tooltip: l10n.logout,
+                enabled: true,
+                onTap: () async {
+                  await ref.read(authProvider.notifier).logout();
+                },
+              ),
+            ],
           ],
         );
       },
@@ -138,6 +152,7 @@ class AppNavBar extends ConsumerWidget {
 
 class _NavButton extends StatelessWidget {
   const _NavButton({
+    super.key,
     required this.icon,
     required this.tooltip,
     required this.enabled,

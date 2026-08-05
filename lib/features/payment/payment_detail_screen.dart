@@ -12,6 +12,7 @@ import '../../core/hardware/receipt_builder.dart';
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/layout/platform_info.dart';
 import '../../core/services/payment_service.dart';
+import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/app_primitives.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../core/utils/live_sync_scope.dart';
@@ -254,6 +255,19 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final storeId = ref.watch(authProvider).storeId;
+    if (storeId != null) {
+      ref.listen<AsyncValue<PosLiveEvent>>(posLiveEventsProvider(storeId), (
+        _,
+        next,
+      ) {
+        next.whenData((event) {
+          if (event.affects({'orders', 'payments', 'einvoice'})) {
+            _refreshDetailFromRealtime();
+          }
+        });
+      });
+    }
     return Scaffold(
       key: const Key('payment_detail_root'),
       backgroundColor: AppColors.surface0,

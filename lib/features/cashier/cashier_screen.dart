@@ -2,13 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/hardware/print_job_agent_service.dart';
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/i18n/restaurant_cutoff_localization.dart';
+import '../../core/models/pos_table.dart';
 import '../../core/payments/payment_method_contract.dart';
 import '../../core/services/connectivity_service.dart';
+import '../../core/services/live_refresh_service.dart';
 import '../../core/layout/platform_info.dart';
 import '../../core/hardware/printer_service.dart';
 import '../../core/hardware/receipt_builder.dart';
@@ -22,12 +24,16 @@ import '../auth/auth_provider.dart';
 import '../order/order_model.dart';
 import '../payment/payment_provider.dart';
 import '../payment/einvoice_status_badge.dart';
+import '../payment/einvoice_provider.dart';
 import '../settings/printer_provider.dart';
+import '../table/floor_layout.dart';
+import '../table/table_provider.dart';
 import '../../core/services/payment_service.dart';
 import '../../core/services/payment_proof_service.dart';
 import '../../core/services/restaurant_cutoff_service.dart';
 import 'discount_modal.dart';
 import 'payment_proof_modal.dart';
+import 'payment_completion_dialog.dart';
 import 'red_invoice_modal.dart';
 
 class CashierScreen extends ConsumerStatefulWidget {
@@ -36,11 +42,13 @@ class CashierScreen extends ConsumerStatefulWidget {
     this.paymentProofServiceOverride,
     this.paymentServiceOverride,
     this.restaurantCutoffServiceOverride,
+    this.printJobAgentOverride,
   });
 
   final PaymentProofService? paymentProofServiceOverride;
   final PaymentService? paymentServiceOverride;
   final RestaurantCutoffService? restaurantCutoffServiceOverride;
+  final PrintJobAgentService? printJobAgentOverride;
 
   @override
   ConsumerState<CashierScreen> createState() => _CashierScreenState();
@@ -49,6 +57,8 @@ class CashierScreen extends ConsumerStatefulWidget {
 class _CashierScreenState extends ConsumerState<CashierScreen> {
   String? _selectedMethod;
   String? _initializedRestaurantId;
+  String? _printAgentStoreId;
+  String? _selectedTableId;
   Timer? _successTimer;
   String? _lastError;
   String? _lastCompletedOrderId; // for einvoice badge
@@ -60,6 +70,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   CashierOrderSearchResult? _orderSearchResult;
   String? _orderSearchFeedback;
   late final ProviderSubscription<PaymentState> _paymentSub;
+  late final PrintJobAgentService _printJobAgent;
 
   PaymentProofService get _paymentProofService =>
       widget.paymentProofServiceOverride ?? paymentProofService;
@@ -71,6 +82,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   @override
   void initState() {
     super.initState();
+    _printJobAgent = widget.printJobAgentOverride ?? PrintJobAgentService();
     _orderSearchController.addListener(() {
       if (!mounted) {
         return;
@@ -129,12 +141,39 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     _initializedRestaurantId = storeId;
     Future.microtask(() {
       ref.read(paymentProvider.notifier).loadOrders(storeId);
+      ref.read(waiterTableProvider.notifier).loadTables(storeId);
+    });
+    if (PlatformInfo.isWindows && _printAgentStoreId != storeId) {
+      _printJobAgent.stop();
+      _printJobAgent.startPolling(storeId);
+      _printAgentStoreId = storeId;
+    }
+  }
+
+  void _refreshFromLiveEvent(String storeId, PosLiveEvent event) {
+    if (!event.affects({
+      'orders',
+      'payments',
+      'tables',
+      'settings',
+      'einvoice',
+      'print',
+    })) {
+      return;
+    }
+    Future.microtask(() {
+      ref.read(paymentProvider.notifier).loadOrders(storeId);
+      ref
+          .read(waiterTableProvider.notifier)
+          .loadTables(storeId, showLoading: false);
+      ref.invalidate(einvoiceJobStatusProvider);
     });
   }
 
   @override
   void dispose() {
     _successTimer?.cancel();
+    _printJobAgent.stop();
     _orderSearchController.dispose();
     _paymentSub.close();
     super.dispose();
@@ -179,15 +218,156 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     return result ?? false;
   }
 
-  Future<bool> _showServiceConfirmDialog() async {
+  Future<Map<String, String>?> _showNonRevenueDialog() async {
     final l10n = context.l10n;
-    final result = await ToastConfirmDialog.show(
-      context: context,
-      title: l10n.cashierServiceProvisionTitle,
-      description: l10n.cashierServiceProvisionMessage,
-      confirmLabel: l10n.cashierServiceAction,
-    );
-    return result ?? false;
+    final reasonController = TextEditingController();
+    final staffNameController = TextEditingController();
+    final pinController = TextEditingController();
+    var type = 'staff_meal';
+    String? validationMessage;
+
+    try {
+      return await showDialog<Map<String, String>?>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setModalState) {
+            final requiresStaffName = type == 'staff_meal';
+            return AlertDialog(
+              key: const Key('cashier_non_revenue_dialog'),
+              title: Text(l10n.cashierServiceProvisionTitle),
+              content: SizedBox(
+                width: 480,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        l10n.cashierServiceProvisionMessage,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: PosColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        key: const Key('cashier_non_revenue_type_input'),
+                        initialValue: type,
+                        decoration: InputDecoration(
+                          labelText: l10n.cashierNonRevenueType,
+                        ),
+                        items: [
+                          DropdownMenuItem(
+                            value: 'staff_meal',
+                            child: Text(l10n.cashierNonRevenueStaffMeal),
+                          ),
+                          DropdownMenuItem(
+                            value: 'influencer_invite',
+                            child: Text(l10n.cashierNonRevenueInfluencer),
+                          ),
+                          DropdownMenuItem(
+                            value: 'customer_recovery',
+                            child: Text(l10n.cashierNonRevenueRecovery),
+                          ),
+                          DropdownMenuItem(
+                            value: 'tasting',
+                            child: Text(l10n.cashierNonRevenueTasting),
+                          ),
+                          DropdownMenuItem(
+                            value: 'other',
+                            child: Text(l10n.cashierNonRevenueOther),
+                          ),
+                        ],
+                        onChanged: (value) => setModalState(() {
+                          type = value ?? 'staff_meal';
+                          validationMessage = null;
+                        }),
+                      ),
+                      if (requiresStaffName) ...[
+                        const SizedBox(height: 12),
+                        TextField(
+                          key: const Key('cashier_non_revenue_staff_input'),
+                          controller: staffNameController,
+                          decoration: InputDecoration(
+                            labelText: l10n.cashierNonRevenueStaffName,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      TextField(
+                        key: const Key('cashier_non_revenue_reason_input'),
+                        controller: reasonController,
+                        minLines: 2,
+                        maxLines: 3,
+                        decoration: InputDecoration(
+                          labelText: l10n.cashierNonRevenueReason,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        key: const Key('cashier_non_revenue_pin_input'),
+                        controller: pinController,
+                        keyboardType: TextInputType.number,
+                        obscureText: true,
+                        decoration: InputDecoration(
+                          labelText: l10n.cashierDiscountManagerPin,
+                        ),
+                      ),
+                      if (validationMessage != null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          validationMessage!,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: PosColors.danger,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(l10n.cancel),
+                ),
+                FilledButton.icon(
+                  key: const Key('cashier_non_revenue_submit'),
+                  onPressed: () {
+                    final reason = reasonController.text.trim();
+                    final staffName = staffNameController.text.trim();
+                    final managerPin = pinController.text.trim();
+                    if (reason.isEmpty ||
+                        managerPin.isEmpty ||
+                        (requiresStaffName && staffName.isEmpty)) {
+                      setModalState(() {
+                        validationMessage = l10n.cashierNonRevenueRequired;
+                      });
+                      return;
+                    }
+                    Navigator.of(dialogContext).pop({
+                      'type': type,
+                      'reason': reason,
+                      'staffName': staffName,
+                      'managerPin': managerPin,
+                    });
+                  },
+                  icon: const Icon(Icons.volunteer_activism_rounded, size: 18),
+                  label: Text(l10n.cashierNonRevenueComplete),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    } finally {
+      await Future<void>.delayed(kThemeAnimationDuration);
+      reasonController.dispose();
+      staffNameController.dispose();
+      pinController.dispose();
+    }
   }
 
   Future<Map<String, String>?> _showServiceItemDialog({
@@ -271,6 +451,22 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       builder: (_) => _SplitPaymentDialog(
         key: const Key('cashier_split_payment_dialog'),
         totalAmount: totalAmount,
+      ),
+    );
+  }
+
+  Future<void> _showPaymentCompletion({
+    required CashierOrder order,
+    required String paymentMethod,
+  }) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PaymentCompletionDialog(
+        order: order,
+        paymentMethod: paymentMethod,
+        onReprint: () =>
+            _printReceipt(order: order, method: paymentMethod, reprint: true),
       ),
     );
   }
@@ -444,13 +640,45 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     }
   }
 
+  void _selectCashierTable({
+    required PosTable table,
+    required PaymentState paymentState,
+    required PaymentNotifier notifier,
+  }) {
+    CashierOrder? payableOrder;
+    for (final order in paymentState.orders) {
+      if (order.tableId == table.id) {
+        payableOrder = order;
+        break;
+      }
+    }
+
+    setState(() {
+      _selectedTableId = table.id;
+      if (payableOrder != null) {
+        _selectedMethod = null;
+        _showPaymentQueueOnCompact = false;
+      }
+    });
+    if (payableOrder != null) notifier.selectOrder(payableOrder);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final authState = ref.watch(authProvider);
     final storeId = authState.storeId;
+    if (storeId != null) {
+      ref.listen<AsyncValue<PosLiveEvent>>(posLiveEventsProvider(storeId), (
+        _,
+        next,
+      ) {
+        next.whenData((event) => _refreshFromLiveEvent(storeId, event));
+      });
+    }
     final role = authState.role ?? '';
     final isAdmin = PermissionUtils.isAdminLike(role);
+    final canProcessNonRevenue = role == 'cashier' || isAdmin;
     final canApplyDiscount = PermissionUtils.hasPermission(
       role,
       authState.extraPermissions,
@@ -464,6 +692,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
               const RestaurantCutoffState.unrestricted();
 
     final paymentState = ref.watch(paymentProvider);
+    final tableState = ref.watch(waiterTableProvider);
     final notifier = ref.read(paymentProvider.notifier);
     final currency = NumberFormat('#,###', 'vi_VN');
     // 오프라인 상태 감지 - RULES.md: 결제는 온라인 필수
@@ -655,11 +884,25 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
         Padding(
           padding: const EdgeInsets.all(16),
           child: selectedOrder == null
-              ? const _CashierSelectionPlaceholder()
+              ? _CashierTableOverview(
+                  state: tableState,
+                  selectedTableId: _selectedTableId,
+                  onRetry: storeId == null
+                      ? null
+                      : () => ref
+                            .read(waiterTableProvider.notifier)
+                            .loadTables(storeId),
+                  onTapTable: (table) => _selectCashierTable(
+                    table: table,
+                    paymentState: paymentState,
+                    notifier: notifier,
+                  ),
+                )
               : _SelectedOrderView(
                   order: selectedOrder,
                   selectedMethod: _selectedMethod,
                   isAdmin: isAdmin,
+                  canProcessNonRevenue: canProcessNonRevenue,
                   canApplyDiscount: canApplyDiscount,
                   canManageServiceItems: canManageServiceItems,
                   isProcessing: paymentState.isProcessing,
@@ -747,19 +990,30 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                     if (!await _canCompleteRestaurantPayment(storeId)) {
                       return;
                     }
+                    Map<String, String>? nonRevenueInput;
                     if (isServicePaymentMethod(method)) {
-                      final proceed = await _showServiceConfirmDialog();
-                      if (!proceed) {
+                      nonRevenueInput = await _showNonRevenueDialog();
+                      if (nonRevenueInput == null) {
                         return;
                       }
                     }
 
-                    final payment = await notifier.processPayment(
-                      storeId,
-                      selectedOrder.orderId,
-                      selectedOrder.remainingDue,
-                      method,
-                    );
+                    final payment = nonRevenueInput == null
+                        ? await notifier.processPayment(
+                            storeId,
+                            selectedOrder.orderId,
+                            selectedOrder.remainingDue,
+                            method,
+                          )
+                        : await notifier.processNonRevenuePayment(
+                            storeId: storeId,
+                            orderId: selectedOrder.orderId,
+                            amount: selectedOrder.remainingDue,
+                            type: nonRevenueInput['type'] ?? '',
+                            reason: nonRevenueInput['reason'] ?? '',
+                            staffName: nonRevenueInput['staffName'],
+                            managerPin: nonRevenueInput['managerPin'] ?? '',
+                          );
                     if (mounted && ref.read(paymentProvider).paymentSuccess) {
                       await _printReceipt(order: selectedOrder, method: method);
                       setState(() {
@@ -836,8 +1090,18 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                         );
                       }
 
-                      if (paymentId != null && context.mounted) {
-                        context.go('/payments/$paymentId');
+                      if (context.mounted) {
+                        await _showPaymentCompletion(
+                          order: selectedOrder,
+                          paymentMethod: method,
+                        );
+                        if (context.mounted) {
+                          unawaited(
+                            ref
+                                .read(waiterTableProvider.notifier)
+                                .loadTables(storeId, showLoading: false),
+                          );
+                        }
                       }
                     }
                   },
@@ -924,11 +1188,18 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                         );
                       }
 
-                      final lastPaymentId = payments?.isNotEmpty == true
-                          ? payments!.last['id']?.toString()
-                          : null;
-                      if (lastPaymentId != null && context.mounted) {
-                        context.go('/payments/$lastPaymentId');
+                      if (context.mounted) {
+                        await _showPaymentCompletion(
+                          order: selectedOrder,
+                          paymentMethod: 'SPLIT',
+                        );
+                        if (context.mounted) {
+                          unawaited(
+                            ref
+                                .read(waiterTableProvider.notifier)
+                                .loadTables(storeId, showLoading: false),
+                          );
+                        }
                       }
                     }
                   },
@@ -961,6 +1232,13 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       method: method,
                       reprint: true,
                     );
+                  },
+                  onBackToTables: () {
+                    setState(() {
+                      _selectedMethod = null;
+                      _showPaymentQueueOnCompact = true;
+                    });
+                    notifier.clearSelection();
                   },
                 ),
         ),
@@ -1121,7 +1399,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       ],
     );
     final actions = <Widget>[
-      const AppNavBar(),
+      const AppNavBar(showLogout: false),
       ToastStatusBadge(
         label: l10n.cashierPendingStatus,
         color: PosColors.accent,
@@ -1225,7 +1503,7 @@ class _CashierCompactCommandBar extends ConsumerWidget {
       backgroundColor: PosColors.surface,
       child: Row(
         children: [
-          const AppNavBar(),
+          const AppNavBar(showLogout: false),
           const SizedBox(width: 8),
           Expanded(
             child: SingleChildScrollView(
@@ -1594,6 +1872,7 @@ class _SelectedOrderView extends StatelessWidget {
     required this.order,
     required this.selectedMethod,
     required this.isAdmin,
+    required this.canProcessNonRevenue,
     required this.canApplyDiscount,
     required this.canManageServiceItems,
     required this.isProcessing,
@@ -1606,11 +1885,13 @@ class _SelectedOrderView extends StatelessWidget {
     required this.onProcessSplit,
     required this.onCancelOrder,
     required this.onReprint,
+    required this.onBackToTables,
   });
 
   final CashierOrder order;
   final String? selectedMethod;
   final bool isAdmin;
+  final bool canProcessNonRevenue;
   final bool canApplyDiscount;
   final bool canManageServiceItems;
   final bool isProcessing;
@@ -1623,6 +1904,7 @@ class _SelectedOrderView extends StatelessWidget {
   final Future<void> Function() onProcessSplit;
   final Future<void> Function() onCancelOrder;
   final Future<void> Function() onReprint;
+  final VoidCallback onBackToTables;
 
   @override
   Widget build(BuildContext context) {
@@ -1667,7 +1949,7 @@ class _SelectedOrderView extends StatelessWidget {
           order: order,
           selectedMethod: effectiveSelectedMethod,
           regularMethods: regularMethods,
-          isAdmin: isAdmin,
+          canProcessNonRevenue: canProcessNonRevenue,
           canApplyDiscount: canApplyDiscount,
           isServiceSelected: isServiceSelected,
           isProcessing: isProcessing,
@@ -1682,54 +1964,70 @@ class _SelectedOrderView extends StatelessWidget {
           onReprint: onReprint,
         );
 
-        if (constraints.maxWidth < 1080) {
-          return SingleChildScrollView(
-            key: const Key('cashier_selected_order_scroll'),
-            physics: const AlwaysScrollableScrollPhysics(
-              parent: ClampingScrollPhysics(),
-            ),
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.only(bottom: 16),
-            child: Column(
-              children: [
-                _CashierOrderSummarySurface(
-                  order: order,
-                  compact: true,
-                  canManageServiceItems: canManageServiceItems,
-                  isProcessing: isProcessing,
-                  isOnline: isOnline,
-                  onToggleServiceItem: onToggleServiceItem,
+        final content = constraints.maxWidth < 1080
+            ? SingleChildScrollView(
+                key: const Key('cashier_selected_order_scroll'),
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: ClampingScrollPhysics(),
                 ),
-                const SizedBox(height: 12),
-                _CashierPaymentRail(
-                  order: order,
-                  selectedMethod: effectiveSelectedMethod,
-                  regularMethods: regularMethods,
-                  isAdmin: isAdmin,
-                  canApplyDiscount: canApplyDiscount,
-                  isServiceSelected: isServiceSelected,
-                  isProcessing: isProcessing,
-                  isOnline: isOnline,
-                  canCompletePayment: canCompletePayment,
-                  canCancelOrder: canCancelOrder,
-                  expandMethodSection: false,
-                  onSelectMethod: onSelectMethod,
-                  onApplyDiscount: onApplyDiscount,
-                  onProcess: onProcess,
-                  onProcessSplit: onProcessSplit,
-                  onCancelOrder: onCancelOrder,
-                  onReprint: onReprint,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Column(
+                  children: [
+                    _CashierOrderSummarySurface(
+                      order: order,
+                      compact: true,
+                      canManageServiceItems: canManageServiceItems,
+                      isProcessing: isProcessing,
+                      isOnline: isOnline,
+                      onToggleServiceItem: onToggleServiceItem,
+                    ),
+                    const SizedBox(height: 12),
+                    _CashierPaymentRail(
+                      order: order,
+                      selectedMethod: effectiveSelectedMethod,
+                      regularMethods: regularMethods,
+                      canProcessNonRevenue: canProcessNonRevenue,
+                      canApplyDiscount: canApplyDiscount,
+                      isServiceSelected: isServiceSelected,
+                      isProcessing: isProcessing,
+                      isOnline: isOnline,
+                      canCompletePayment: canCompletePayment,
+                      canCancelOrder: canCancelOrder,
+                      expandMethodSection: false,
+                      onSelectMethod: onSelectMethod,
+                      onApplyDiscount: onApplyDiscount,
+                      onProcess: onProcess,
+                      onProcessSplit: onProcessSplit,
+                      onCancelOrder: onCancelOrder,
+                      onReprint: onReprint,
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          );
-        }
+              )
+            : Row(
+                children: [
+                  Expanded(flex: 6, child: orderSummary),
+                  const SizedBox(width: 16),
+                  SizedBox(width: 356, child: paymentRail),
+                ],
+              );
 
-        return Row(
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(flex: 6, child: orderSummary),
-            const SizedBox(width: 16),
-            SizedBox(width: 356, child: paymentRail),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                key: const Key('cashier_back_to_all_tables'),
+                onPressed: isProcessing ? null : onBackToTables,
+                icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                label: Text(l10n.cashierSelectTableTitle),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Expanded(child: content),
           ],
         );
       },
@@ -2082,7 +2380,7 @@ class _CashierPaymentRail extends StatelessWidget {
     required this.order,
     required this.selectedMethod,
     required this.regularMethods,
-    required this.isAdmin,
+    required this.canProcessNonRevenue,
     required this.canApplyDiscount,
     required this.isServiceSelected,
     required this.isProcessing,
@@ -2101,7 +2399,7 @@ class _CashierPaymentRail extends StatelessWidget {
   final CashierOrder order;
   final String? selectedMethod;
   final List<_PaymentMethod> regularMethods;
-  final bool isAdmin;
+  final bool canProcessNonRevenue;
   final bool canApplyDiscount;
   final bool isServiceSelected;
   final bool isProcessing;
@@ -2128,7 +2426,10 @@ class _CashierPaymentRail extends StatelessWidget {
     );
     final paymentOptions = order.isStaffMeal
         ? [serviceMethod]
-        : [...regularMethods, if (isAdmin) serviceMethod];
+        : [
+            ...regularMethods,
+            if (canProcessNonRevenue && order.paymentCount == 0) serviceMethod,
+          ];
     final selectedMethodData = selectedMethod == null
         ? null
         : paymentOptions.firstWhere((method) => method.value == selectedMethod);
@@ -2905,20 +3206,136 @@ class _CashierOrderSearchFeedback extends StatelessWidget {
   }
 }
 
-class _CashierSelectionPlaceholder extends StatelessWidget {
-  const _CashierSelectionPlaceholder();
+class _CashierTableOverview extends StatelessWidget {
+  const _CashierTableOverview({
+    required this.state,
+    required this.selectedTableId,
+    required this.onRetry,
+    required this.onTapTable,
+  });
+
+  final WaiterTableState state;
+  final String? selectedTableId;
+  final VoidCallback? onRetry;
+  final ValueChanged<PosTable> onTapTable;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return ToastWorkSurface(
-      child: Center(
-        child: ToastOperationalEmptyState(
-          headline: l10n.cashierSelectTableTitle,
-          helper: l10n.cashierSelectTableMessage,
-          icon: Icons.table_bar_outlined,
+    if (state.isLoading && state.tables.isEmpty) {
+      return const ToastWorkSurface(
+        key: Key('cashier_all_tables_loading'),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (state.error != null && state.tables.isEmpty) {
+      return ToastWorkSurface(
+        key: const Key('cashier_all_tables_error'),
+        child: Center(
+          child: _CashierTableStatusMessage(
+            title: l10n.cashierSelectTableTitle,
+            helper: state.error!,
+            icon: Icons.sync_problem_rounded,
+            onRetry: onRetry,
+          ),
         ),
+      );
+    }
+
+    if (state.tables.isEmpty) {
+      return ToastWorkSurface(
+        key: const Key('cashier_all_tables_empty'),
+        child: Center(
+          child: _CashierTableStatusMessage(
+            title: l10n.waiterNoTablesTitle,
+            helper: l10n.waiterNoTablesSubtitle,
+            icon: Icons.table_restaurant_outlined,
+            onRetry: onRetry,
+          ),
+        ),
+      );
+    }
+
+    final occupiedCount = state.tables
+        .where((table) => table.isOccupied)
+        .length;
+    return PosDataPanel(
+      key: const Key('cashier_all_tables_overview'),
+      title: l10n.cashierSelectTableTitle,
+      subtitle: l10n.waiterTapTableToStart,
+      trailing: Wrap(
+        spacing: 6,
+        children: [
+          ToastStatusBadge(
+            label: '${state.tables.length}',
+            color: PosColors.info,
+            compact: true,
+          ),
+          ToastStatusBadge(
+            label: '$occupiedCount',
+            color: PosColors.warning,
+            compact: true,
+          ),
+        ],
       ),
+      child: FloorLayoutView(
+        tables: state.tables,
+        selectedTableId: selectedTableId,
+        orderPreviewByTableId: state.orderPreviewByTableId,
+        onTapTable: onTapTable,
+        editable: false,
+        padding: const EdgeInsets.fromLTRB(0, 4, 0, 0),
+      ),
+    );
+  }
+}
+
+class _CashierTableStatusMessage extends StatelessWidget {
+  const _CashierTableStatusMessage({
+    required this.title,
+    required this.helper,
+    required this.icon,
+    required this.onRetry,
+  });
+
+  final String title;
+  final String helper;
+  final IconData icon;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 36, color: PosColors.textMuted),
+        const SizedBox(height: 12),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            color: PosColors.textPrimary,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          helper,
+          textAlign: TextAlign.center,
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: PosColors.textSecondary),
+        ),
+        if (onRetry != null) ...[
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded),
+            label: Text(context.l10n.retry),
+          ),
+        ],
+      ],
     );
   }
 }

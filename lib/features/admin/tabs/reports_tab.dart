@@ -20,7 +20,9 @@ import '../providers/daily_closing_provider.dart';
 import '../widgets/admin_audit_trace_panel.dart';
 
 class ReportsTab extends ConsumerStatefulWidget {
-  const ReportsTab({super.key});
+  const ReportsTab({super.key, this.overrideStoreId});
+
+  final String? overrideStoreId;
 
   @override
   ConsumerState<ReportsTab> createState() => _ReportsTabState();
@@ -38,7 +40,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final storeId = ref.watch(authProvider).storeId;
+    final storeId = widget.overrideStoreId ?? ref.watch(authProvider).storeId;
     final reportState = ref.watch(reportProvider);
     final reportNotifier = ref.read(reportProvider.notifier);
     final currency = NumberFormat('#,###', 'vi_VN');

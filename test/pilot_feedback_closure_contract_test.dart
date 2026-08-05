@@ -57,7 +57,7 @@ void main() {
     expect(workspace, contains('initiallyExpanded: true'));
   });
 
-  test('kitchen keeps completed handoff history separate from active lanes', () {
+  test('kitchen completes tickets without a separate handoff lane', () {
     final provider = readRepoFile('lib/features/kitchen/kitchen_provider.dart');
     final screen = readRepoFile('lib/features/kitchen/kitchen_screen.dart');
 
@@ -73,7 +73,8 @@ void main() {
     expect(screen, contains("Key('kitchen_completed_history_panel')"));
     expect(screen, contains('l10n.kitchenStartCooking'));
     expect(screen, contains('l10n.kitchenMarkComplete'));
-    expect(screen, contains('l10n.kitchenHandoffComplete'));
+    expect(screen, contains('l10n.kitchenCompleteAllItems'));
+    expect(screen, isNot(contains('l10n.kitchenHandoffComplete')));
     expect(screen, contains('_orderPriorityColor'));
     expect(screen, contains('_elapsedLabel'));
   });

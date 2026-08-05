@@ -1274,6 +1274,7 @@ class _WaiterTopBar extends ConsumerWidget {
       child: Row(
         children: [
           AppNavBar(
+            showLogout: false,
             forceBackEnabled: showOrderWorkspace,
             forceHomeEnabled: showOrderWorkspace,
             onBackPressed: showOrderWorkspace ? onReturnToFloor : null,

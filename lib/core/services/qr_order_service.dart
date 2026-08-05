@@ -2,6 +2,7 @@ import '../../main.dart';
 
 class QrOrderMenu {
   const QrOrderMenu({
+    this.storeId,
     required this.storeName,
     required this.tableNumber,
     required this.floorLabel,
@@ -9,6 +10,7 @@ class QrOrderMenu {
     required this.items,
   });
 
+  final String? storeId;
   final String storeName;
   final String tableNumber;
   final String floorLabel;
@@ -19,6 +21,7 @@ class QrOrderMenu {
     final categoriesRaw = json['categories'];
     final itemsRaw = json['items'];
     return QrOrderMenu(
+      storeId: json['store_id']?.toString(),
       storeName: json['store_name']?.toString() ?? '',
       tableNumber: json['table_number']?.toString() ?? '-',
       floorLabel: json['floor_label']?.toString() ?? '-',
@@ -65,6 +68,7 @@ class QrMenuItem {
     required this.name,
     required this.price,
     this.description,
+    this.imageUrl,
   });
 
   final String id;
@@ -72,6 +76,7 @@ class QrMenuItem {
   final String name;
   final double price;
   final String? description;
+  final String? imageUrl;
 
   factory QrMenuItem.fromJson(Map<String, dynamic> json) {
     final priceRaw = json['price'];
@@ -80,6 +85,7 @@ class QrMenuItem {
       categoryId: json['category_id']?.toString(),
       name: json['name']?.toString() ?? '',
       description: json['description']?.toString(),
+      imageUrl: json['image_url']?.toString(),
       price: switch (priceRaw) {
         num value => value.toDouble(),
         String value => double.tryParse(value) ?? 0,

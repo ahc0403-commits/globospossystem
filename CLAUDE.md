@@ -1,17 +1,8 @@
 # CLAUDE.md — GLOBOSVN POS System
 
-> Inherits global behavioral guidelines from `~/.claude/CLAUDE.md`.
-> Project-specific rules below override or supplement those.
+Global working agreements come from `~/.claude/CLAUDE.md`. This file contains only project facts, invariants, and common commands.
 
-## 1. Behavioral guidelines
-
-See `~/.claude/CLAUDE.md`. Four principles:
-1. Think before coding — surface assumptions, ask when uncertain
-2. Simplicity first — minimum code, no speculative features
-3. Surgical changes — touch only what's needed, don't improve adjacent code
-4. Goal-driven execution — verifiable success criteria, loop until verified
-
-## 2. Project context
+## 1. Project context
 
 GLOBOSVN POS is a multi-tenant F&B point-of-sale product for Vietnam.
 Stack: Flutter + Supabase (Postgres + RLS + Edge Functions + Storage + pg_cron).
@@ -23,7 +14,7 @@ Stack: Flutter + Supabase (Postgres + RLS + Edge Functions + Storage + pg_cron).
 - **Historical vendor docs**: `docs/vendor/` (WeTax API, reference only)
 - **Sample API responses**: `docs/vendor/samples/`
 
-## 3. Authority and scope rules
+## 2. Authority and scope rules
 
 - **Scope v1.4 is authoritative.** v1.0/v1.1/v1.2/v1.3 are superseded but
   preserved for history. Do not re-litigate decisions already in v1.4.
@@ -39,15 +30,10 @@ Stack: Flutter + Supabase (Postgres + RLS + Edge Functions + Storage + pg_cron).
   `decodeByteaToString()` helper in edge functions, not `atob()`.
   See ADR-014 in vault.
 
-## 4. Hard constraints (binding)
+## 3. Hard constraints (binding)
 
 - **Claude Code prompts must be English only.** Chat with Hyochang can
   be Korean, but prompts to Claude Code are strictly English.
-- **All Claude Code commands follow the harness skill format**
-  (`/mnt/skills/user/harness/SKILL.md`):
-  Load Design Documents → Load Code Structure → Run Checks by Category
-  → Generate Harness Report with severity classification (CRITICAL /
-  HIGH / MEDIUM / LOW / CONFIRMED) and Priority Fix List.
 - **Do not rebuild what the vendor already provides.** The MISA portal
   handles red invoice history, corrections, cancellations, PDF
   downloads. POS opens `lookup_url` — does not duplicate.
@@ -58,7 +44,7 @@ Stack: Flutter + Supabase (Postgres + RLS + Edge Functions + Storage + pg_cron).
   `generate-settlement` (dine-in) and `generate_delivery_settlement`
   (Deliberry) serve distinct business domains. Do not flag as duplicates.
 
-## 5. Office app coupling (do not break)
+## 4. Office app coupling (do not break)
 
 The Office Supabase project (`raghsbaxcwrxlsacaoau`,
 `~/Documents/restaurant_office_app`) connects to POS Supabase
@@ -79,7 +65,7 @@ This means:
 - Office app must NOT be modified to follow POS renames unless
   explicitly instructed.
 
-## 6. Database state (as of 2026-04-12)
+## 5. Database state (as of 2026-04-12)
 
 - `restaurants` (table), `stores` (view) — both work, dual naming
 - `restaurant_settings` (table), `store_settings` (view) — both work
@@ -88,7 +74,7 @@ This means:
 - 33 RLS policies, 29 reference `get_user_store_id`, 0 reference legacy
 - `v_store_daily_sales`, `v_store_attendance_summary` etc. expose `store_id`
 
-## 7. Critical invariants
+## 6. Critical invariants
 
 - `einvoice_jobs.ref_id` must be UUIDv7 (version nibble 7, proper variant bits)
 - `process_payment` RPC at
@@ -97,15 +83,14 @@ This means:
 - Daily close is fixed 00:00 Asia/Ho_Chi_Minh, not per-store
 - MISA portal handles red invoice lifecycle. POS does not duplicate.
 
-## 8. Workflow
+## 7. Common commands
 
-Hyochang runs Claude Code, Claude (the assistant) designs and reviews.
-The assistant writes English Claude Code commands in harness format,
-Hyochang executes them in his environment, shares results, the
-assistant reviews and responds.
+- Static analysis: `flutter analyze`
+- Full Flutter tests: `flutter test`
+- Format changed Dart files: `dart format <files>`
+- Production release: use `scripts/deploy_pos_production.sh`; do not bypass it.
 
-For release work, local validation and an independent Judge are preflight
-evidence only. Do not report the release gate as PASS until the required
-GitHub Actions checks succeed on the exact pushed head SHA. Cross-platform
-shell fixtures must explicitly create every required Git state and must not
-depend on Bash-version-specific `errexit` behavior.
+## 8. On-demand workflows
+
+- Use `/pos-audit` for architecture, security, database, integration, or implementation audits.
+- Claude Code prompts for this project must be English; user-facing discussion may be Korean.

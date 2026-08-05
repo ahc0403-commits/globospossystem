@@ -45,6 +45,69 @@ class PaymentMethodBreakdown {
   final double proofCompletePct;
 }
 
+class PhotoObjetReportTotals {
+  const PhotoObjetReportTotals({
+    required this.totalRevenue,
+    required this.serviceTotal,
+    required this.transactionCount,
+    required this.dailyBreakdown,
+  });
+
+  final double totalRevenue;
+  final double serviceTotal;
+  final int transactionCount;
+  final List<DailyRevenue> dailyBreakdown;
+}
+
+PhotoObjetReportTotals aggregatePhotoObjetReportRows(
+  Iterable<Map<String, dynamic>> rows,
+) {
+  final dailyMap = <String, _PhotoObjetDailyAccumulator>{};
+  var totalRevenue = 0.0;
+  var serviceTotal = 0.0;
+  var transactionCount = 0;
+
+  for (final row in rows) {
+    final saleDate = _parseDateTime(row['sale_date']);
+    if (saleDate == null) continue;
+
+    final grossSales = _toDouble(row['total_gross_sales']);
+    final serviceAmount = _toDouble(row['total_service_amount']);
+    final transactions = _toInt(row['total_transactions']);
+    final date = DateTime(saleDate.year, saleDate.month, saleDate.day);
+    final dateKey = DateFormat('yyyy-MM-dd').format(date);
+    final accumulator = dailyMap.putIfAbsent(
+      dateKey,
+      () => _PhotoObjetDailyAccumulator(date: date),
+    );
+
+    accumulator.revenue += grossSales;
+    totalRevenue += grossSales;
+    serviceTotal += serviceAmount;
+    transactionCount += transactions;
+  }
+
+  final dailyBreakdown =
+      dailyMap.values
+          .map(
+            (day) => DailyRevenue(
+              date: day.date,
+              dineIn: day.revenue,
+              delivery: 0,
+              total: day.revenue,
+            ),
+          )
+          .toList()
+        ..sort((a, b) => a.date.compareTo(b.date));
+
+  return PhotoObjetReportTotals(
+    totalRevenue: totalRevenue,
+    serviceTotal: serviceTotal,
+    transactionCount: transactionCount,
+    dailyBreakdown: dailyBreakdown,
+  );
+}
+
 class ReportSummary {
   const ReportSummary({
     required this.dineInRevenue,
@@ -169,6 +232,8 @@ class ReportNotifier extends StateNotifier<ReportState> {
       final endIso = state.endDate.toIso8601String();
       final startClosingDate = DateFormat('yyyyMMdd').format(state.startDate);
       final endClosingDate = DateFormat('yyyyMMdd').format(state.endDate);
+      final startSaleDate = DateFormat('yyyy-MM-dd').format(state.startDate);
+      final endSaleDate = DateFormat('yyyy-MM-dd').format(state.endDate);
 
       final paymentsRevenueResponse = await supabase
           .from('payments')
@@ -188,6 +253,15 @@ class ReportNotifier extends StateNotifier<ReportState> {
           .eq('order_status', 'completed')
           .gte('completed_at', startIso)
           .lte('completed_at', endIso);
+
+      final photoObjetSalesResponse = await supabase
+          .from('v_photo_objet_daily_summary')
+          .select(
+            'sale_date, total_gross_sales, total_transactions, total_service_amount',
+          )
+          .eq('store_id', storeId)
+          .gte('sale_date', startSaleDate)
+          .lte('sale_date', endSaleDate);
 
       final servicePaymentsResponse = await supabase
           .from('payments')
@@ -336,18 +410,36 @@ class ReportNotifier extends StateNotifier<ReportState> {
         deliveryRevenue += amount;
       }
 
+      final photoObjetTotals = aggregatePhotoObjetReportRows(
+        List<Map<String, dynamic>>.from(photoObjetSalesResponse),
+      );
+      dineInRevenue += photoObjetTotals.totalRevenue;
+      for (final day in photoObjetTotals.dailyBreakdown) {
+        final dateKey = DateFormat('yyyy-MM-dd').format(day.date);
+        final accumulator = dailyMap.putIfAbsent(
+          dateKey,
+          () => _DailyAccumulator(date: day.date),
+        );
+        accumulator.dineIn += day.total;
+      }
+
       double serviceTotal = 0;
       for (final row in servicePaymentsResponse) {
         final payment = Map<String, dynamic>.from(row);
         serviceTotal += _toDouble(payment['amount']);
       }
+      serviceTotal += photoObjetTotals.serviceTotal;
 
-      final totalOrders = ordersResponse.length;
-      final completedOrders = ordersResponse
-          .where(
-            (order) => order['status']?.toString().toLowerCase() == 'completed',
-          )
-          .length;
+      final totalOrders =
+          ordersResponse.length + photoObjetTotals.transactionCount;
+      final completedOrders =
+          ordersResponse
+              .where(
+                (order) =>
+                    order['status']?.toString().toLowerCase() == 'completed',
+              )
+              .length +
+          photoObjetTotals.transactionCount;
       final cancelledOrders = ordersResponse
           .where(
             (order) => order['status']?.toString().toLowerCase() == 'cancelled',
@@ -613,6 +705,14 @@ double _toDouble(dynamic value) {
   };
 }
 
+int _toInt(dynamic value) {
+  return switch (value) {
+    num v => v.toInt(),
+    String v => int.tryParse(v) ?? 0,
+    _ => 0,
+  };
+}
+
 DateTime? _parseDateTime(dynamic value) {
   if (value == null) {
     return null;
@@ -629,6 +729,13 @@ class _DailyAccumulator {
   double cash = 0;
   double card = 0;
   double pay = 0;
+}
+
+class _PhotoObjetDailyAccumulator {
+  _PhotoObjetDailyAccumulator({required this.date});
+
+  final DateTime date;
+  double revenue = 0;
 }
 
 class _PaymentMethodAccumulator {

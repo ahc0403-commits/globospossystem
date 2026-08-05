@@ -22,19 +22,19 @@ void main() {
         "Key('dashboard_root')",
       ],
       'lib/features/kitchen/kitchen_screen.dart': [
-        'const AppNavBar()',
+        'AppNavBar(',
         "Key('kitchen_root')",
       ],
       'lib/features/cashier/cashier_screen.dart': [
-        'const AppNavBar()',
+        'AppNavBar(',
         "Key('cashier_root')",
       ],
       'lib/features/admin/admin_screen.dart': [
-        'const AppNavBar()',
+        'AppNavBar(',
         "Key('admin_root')",
       ],
       'lib/features/super_admin/super_admin_screen.dart': [
-        'AppNavBar()',
+        'AppNavBar(',
         "Key('admin_root')",
       ],
       'lib/features/photo_ops/photo_ops_screen.dart': [
@@ -67,6 +67,15 @@ void main() {
     }
   });
 
+  test('shared authenticated navigation exposes a working logout control', () {
+    final nav = readRepoFile('lib/widgets/app_nav_bar.dart');
+
+    expect(nav, contains('this.showLogout = true'));
+    expect(nav, contains("Key('app_nav_logout_button')"));
+    expect(nav, contains('tooltip: l10n.logout'));
+    expect(nav, contains('authProvider.notifier).logout()'));
+  });
+
   test('admin nav order stays aligned with tab body order and roots', () {
     final admin = readRepoFile('lib/features/admin/admin_screen.dart');
     final tables = readRepoFile('lib/features/admin/tabs/tables_tab.dart');
@@ -94,7 +103,7 @@ void main() {
       'const TablesTab()',
       'const MenuTab()',
       'const StaffTab()',
-      'const ReportsTab()',
+      'ReportsTab(overrideStoreId: widget.overrideRestaurantId)',
       'const AttendanceTab()',
       'const InventoryPurchaseScreen()',
       'const QcTab()',

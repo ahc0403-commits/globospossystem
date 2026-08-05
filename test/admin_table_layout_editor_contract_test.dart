@@ -32,6 +32,9 @@ void main() {
       expect(adminTables, contains('class _AdminFloorOverviewInspector'));
       expect(adminTables, contains('class _AdminOccupiedTableShortcut'));
       expect(adminTables, contains("Key('admin_tables_save_layout_action')"));
+      expect(adminTables, contains("Key('admin_tables_delete_action')"));
+      expect(adminTables, contains("Key('admin_table_delete_confirm_dialog')"));
+      expect(adminTables, contains('tablesDeleteActiveBlocked'));
       expect(
         adminTables,
         contains("Key('admin_table_layout_adjust_controls')"),

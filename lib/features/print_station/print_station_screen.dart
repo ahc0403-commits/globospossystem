@@ -8,6 +8,7 @@ import '../../core/hardware/print_job_agent_service.dart';
 import '../../core/hardware/printer_service.dart';
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/printer_destination_service.dart';
+import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/app_fonts.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
@@ -21,11 +22,16 @@ import '../auth/auth_provider.dart';
 import '../kitchen/kitchen_provider.dart';
 
 class PrintStationScreen extends ConsumerStatefulWidget {
-  const PrintStationScreen({super.key, this.isSupportedOverride});
+  const PrintStationScreen({
+    super.key,
+    this.isSupportedOverride,
+    this.autoStart = false,
+  });
 
   /// Allows widget tests to exercise the supported operational states on
   /// non-printer hosts. Production always uses the hardware capability probe.
   final bool? isSupportedOverride;
+  final bool autoStart;
 
   @override
   ConsumerState<PrintStationScreen> createState() => _PrintStationScreenState();
@@ -36,6 +42,8 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
   final Set<String> _testingDestinationIds = <String>{};
   bool _isRunning = false;
   bool _isProcessingOnce = false;
+  bool _manuallyStopped = false;
+  String? _autoStartScheduledStoreId;
   String? _lastRunLabel;
 
   @override
@@ -47,12 +55,39 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
   void _togglePolling(String storeId) {
     if (_isRunning) {
       _agent.stop();
-      setState(() => _isRunning = false);
+      setState(() {
+        _isRunning = false;
+        _manuallyStopped = true;
+      });
       return;
     }
 
     _agent.startPolling(storeId);
-    setState(() => _isRunning = true);
+    setState(() {
+      _isRunning = true;
+      _manuallyStopped = false;
+    });
+  }
+
+  void _ensureAutoStarted(String? storeId) {
+    if (!widget.autoStart ||
+        widget.isSupportedOverride != null ||
+        storeId == null ||
+        !_agent.isSupported ||
+        _isRunning ||
+        _manuallyStopped ||
+        _autoStartScheduledStoreId == storeId) {
+      return;
+    }
+
+    _autoStartScheduledStoreId = storeId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _isRunning || _manuallyStopped) {
+        return;
+      }
+      _agent.startPolling(storeId);
+      setState(() => _isRunning = true);
+    });
   }
 
   Future<void> _processOnce(String storeId) async {
@@ -120,6 +155,20 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final storeId = ref.watch(authProvider).storeId;
+    if (storeId != null) {
+      ref.listen<AsyncValue<PosLiveEvent>>(posLiveEventsProvider(storeId), (
+        _,
+        next,
+      ) {
+        next.whenData((event) {
+          if (!event.affects({'print', 'settings', 'orders'})) return;
+          ref.invalidate(printerDestinationsProvider(storeId));
+          ref.invalidate(printStationJobsProvider(storeId));
+          ref.invalidate(failedPrintJobsProvider(storeId));
+        });
+      });
+    }
+    _ensureAutoStarted(storeId);
 
     return Scaffold(
       key: const Key('print_station_root'),

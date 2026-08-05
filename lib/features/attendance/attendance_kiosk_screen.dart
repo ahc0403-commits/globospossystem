@@ -9,6 +9,7 @@ import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/layout/platform_info.dart';
 import '../../core/services/connectivity_service.dart';
+import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/app_primitives.dart';
 import '../../core/ui/toast/toast_primitives_extended.dart';
 import '../../core/utils/time_utils.dart';
@@ -77,6 +78,13 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
     if (_initializedRestaurantId == storeId) return;
     _initializedRestaurantId = storeId;
     await ref.read(attendanceKioskProvider.notifier).loadStaff(storeId);
+  }
+
+  void _refreshFromLiveEvent(String storeId, PosLiveEvent event) {
+    if (!event.affects({'staff', 'attendance', 'settings'})) return;
+    Future.microtask(
+      () => ref.read(attendanceKioskProvider.notifier).loadStaff(storeId),
+    );
   }
 
   void _backToIdle() {
@@ -221,6 +229,14 @@ class _AttendanceKioskScreenState extends ConsumerState<AttendanceKioskScreen> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final storeId = auth.storeId;
+    if (storeId != null) {
+      ref.listen<AsyncValue<PosLiveEvent>>(posLiveEventsProvider(storeId), (
+        _,
+        next,
+      ) {
+        next.whenData((event) => _refreshFromLiveEvent(storeId, event));
+      });
+    }
     final kioskState = ref.watch(attendanceKioskProvider);
     final isOnline = ref.watch(connectivityProvider).asData?.value ?? true;
     final l10n = context.l10n;

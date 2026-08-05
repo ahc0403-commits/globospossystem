@@ -67,7 +67,9 @@ assets/fonts/GlobosCharm-Regular.ttf
 assets/fonts/SourceHanSerif-VF.otf.ttc
 
 # Local tooling state (Claude Code session, Vercel CLI project link)
-.claude/
+.claude/*
+!.claude/skills/
+!.claude/skills/**
 .flare/
 .vercel/
 

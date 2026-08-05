@@ -221,10 +221,13 @@ GoRouter buildAppRouter(ProviderContainer container) {
         builder: (_, __) => const OnboardingScreen(),
       ),
       GoRoute(path: '/waiter', builder: (_, __) => const WaiterScreen()),
-      GoRoute(path: '/kitchen', builder: (_, __) => const KitchenScreen()),
+      GoRoute(
+        path: '/kitchen',
+        builder: (_, __) => const KitchenScreen(autoStartPrinting: true),
+      ),
       GoRoute(
         path: '/print-station',
-        builder: (_, __) => const PrintStationScreen(),
+        builder: (_, __) => const PrintStationScreen(autoStart: true),
       ),
       GoRoute(path: '/cashier', builder: (_, __) => const CashierScreen()),
       GoRoute(

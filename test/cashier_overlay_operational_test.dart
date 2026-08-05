@@ -7,12 +7,14 @@ import 'package:globos_pos_system/core/services/connectivity_service.dart';
 import 'package:globos_pos_system/core/services/payment_proof_service.dart';
 import 'package:globos_pos_system/core/services/payment_service.dart';
 import 'package:globos_pos_system/core/services/restaurant_cutoff_service.dart';
+import 'package:globos_pos_system/core/models/pos_table.dart';
 import 'package:globos_pos_system/core/ui/app_theme.dart';
 import 'package:globos_pos_system/features/auth/auth_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_state.dart';
 import 'package:globos_pos_system/features/cashier/cashier_screen.dart';
 import 'package:globos_pos_system/features/order/order_model.dart';
 import 'package:globos_pos_system/features/payment/payment_provider.dart';
+import 'package:globos_pos_system/features/table/table_provider.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -129,6 +131,25 @@ class _PaymentNotifier extends PaymentNotifier {
   }
 }
 
+class _TableNotifier extends WaiterTableNotifier {
+  _TableNotifier() {
+    state = const WaiterTableState(
+      tables: [
+        PosTable(
+          id: 'table-a1',
+          storeId: _storeId,
+          tableNumber: 'A1',
+          seatCount: 4,
+          status: 'occupied',
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<void> loadTables(String storeId, {bool showLoading = true}) async {}
+}
+
 class _PaymentProofService extends PaymentProofService {
   int markRequiredCalls = 0;
 
@@ -212,6 +233,18 @@ void main() {
       action: find.byKey(const Key('cashier_split_payment_button')),
       surface: find.byKey(const Key('cashier_split_payment_dialog')),
     );
+    await tester.ensureVisible(
+      find.byKey(const Key('cashier_method_tile_$paymentMethodService')),
+    );
+    await tester.tap(
+      find.byKey(const Key('cashier_method_tile_$paymentMethodService')),
+    );
+    await tester.pump();
+    await _openAndDismiss(
+      tester,
+      action: find.byKey(const Key('payment_submit_button')),
+      surface: find.byKey(const Key('cashier_non_revenue_dialog')),
+    );
     await _openAndDismiss(
       tester,
       action: find.byKey(const Key('cashier_cancel_order_action')),
@@ -247,10 +280,18 @@ void main() {
       find.byKey(const Key('cashier_single_red_invoice_dialog')),
     );
     _dismiss(tester, const Key('cashier_single_red_invoice_dialog'));
-    await tester.pumpAndSettle();
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('cashier_payment_completion_dialog')),
+    );
 
     expect(harness.proofService.markRequiredCalls, 1);
-    expect(find.byKey(const Key('payment-result-route')), findsOneWidget);
+    expect(
+      find.byKey(const Key('cashier_payment_completion_dialog')),
+      findsOneWidget,
+    );
+    _dismiss(tester, const Key('cashier_payment_completion_dialog'));
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
 
@@ -279,10 +320,18 @@ void main() {
       find.byKey(const Key('cashier_split_red_invoice_dialog')),
     );
     _dismiss(tester, const Key('cashier_split_red_invoice_dialog'));
-    await tester.pumpAndSettle();
+    await _pumpUntilFound(
+      tester,
+      find.byKey(const Key('cashier_payment_completion_dialog')),
+    );
 
     expect(harness.proofService.markRequiredCalls, 1);
-    expect(find.byKey(const Key('payment-result-route')), findsOneWidget);
+    expect(
+      find.byKey(const Key('cashier_payment_completion_dialog')),
+      findsOneWidget,
+    );
+    _dismiss(tester, const Key('cashier_payment_completion_dialog'));
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
 }
@@ -330,6 +379,7 @@ Future<_CashierHarness> _pumpCashier(WidgetTester tester) async {
         authProvider.overrideWith((ref) => _AuthNotifier()),
         connectivityProvider.overrideWith((ref) => Stream.value(true)),
         paymentProvider.overrideWith((ref) => notifier),
+        waiterTableProvider.overrideWith((ref) => _TableNotifier()),
         restaurantCutoffStateProvider.overrideWith(
           (ref, storeId) => Stream.value(
             const RestaurantCutoffState(
