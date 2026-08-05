@@ -3306,5 +3306,7 @@
   "photoOpsAction": "Hành động",
   "rolePhotoObjetStoreAdminMenu": "Quản trị cửa hàng Photo Objet",
   "rolePhotoObjetStoreAdminDisplay": "Quản trị cửa hàng Photo Objet",
-  "staffRolePhotoStoreAdmin": "Photo quản trị cửa hàng"
+  "staffRolePhotoStoreAdmin": "Photo quản trị cửa hàng",
+  "cashierBankTransferReceived": "Đã nhận chuyển khoản: {amount} VND · Mã {code}",
+  "@cashierBankTransferReceived": {"placeholders":{"amount":{"type":"String"},"code":{"type":"String"}}}
 }

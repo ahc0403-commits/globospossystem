@@ -394,6 +394,8 @@ preflight() {
       fail "Missing provision-fixed-pos-account Edge function."
     [[ -f "$ROOT_DIR/supabase/functions/complete-initial-password-change/index.ts" ]] ||
       fail "Missing complete-initial-password-change Edge function."
+    [[ -f "$ROOT_DIR/supabase/functions/sepay-webhook/index.ts" ]] ||
+      fail "Missing sepay-webhook Edge function."
   fi
   if [[ "$DB_ONLY" != "1" && "$SKIP_AUTH_CHECK" != "1" ]]; then
     [[ -f "$ROOT_DIR/scripts/check_pilot_auth_accounts.sh" ]] ||
@@ -450,6 +452,10 @@ run_checks() {
   log "Password lifecycle Edge tests"
   run deno test --allow-env=ALLOWED_ORIGINS \
     "$ROOT_DIR/supabase/functions/complete-initial-password-change/index_test.ts"
+
+  log "SePay webhook Edge tests"
+  run deno test \
+    "$ROOT_DIR/supabase/functions/sepay-webhook/index_test.ts"
 
   if [[ -z "$TEST_TARGETS" ]]; then
     log "Flutter tests skipped"
@@ -797,6 +803,8 @@ deploy_pos_edge_functions() {
   run supabase functions deploy provision-fixed-pos-account \
     --project-ref "$POS_PROJECT_REF"
   run supabase functions deploy complete-initial-password-change \
+    --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy sepay-webhook --no-verify-jwt \
     --project-ref "$POS_PROJECT_REF"
 }
 

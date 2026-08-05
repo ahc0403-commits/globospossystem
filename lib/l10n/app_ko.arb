@@ -3306,5 +3306,7 @@
   "photoOpsAction": "조치",
   "rolePhotoObjetStoreAdminMenu": "포토오브제 매장 관리자",
   "rolePhotoObjetStoreAdminDisplay": "포토오브제 매장 관리자",
-  "staffRolePhotoStoreAdmin": "포토 매장 관리자"
+  "staffRolePhotoStoreAdmin": "포토 매장 관리자",
+  "cashierBankTransferReceived": "계좌이체 입금: {amount} VND · 코드 {code}",
+  "@cashierBankTransferReceived": {"placeholders":{"amount":{"type":"String"},"code":{"type":"String"}}}
 }

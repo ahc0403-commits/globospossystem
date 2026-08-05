@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
@@ -11,6 +12,7 @@ import '../../core/i18n/restaurant_cutoff_localization.dart';
 import '../../core/models/pos_table.dart';
 import '../../core/payments/cash_tender.dart';
 import '../../core/payments/payment_method_contract.dart';
+import '../../core/services/bank_transfer_alert_service.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/services/live_refresh_service.dart';
 import '../../core/layout/platform_info.dart';
@@ -75,6 +77,8 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   String? _orderSearchFeedback;
   late final ProviderSubscription<PaymentState> _paymentSub;
   late final PrintJobAgentService _printJobAgent;
+  String? _lastBankTransferAlertId;
+  bool _bankTransferAlertInFlight = false;
 
   PaymentProofService get _paymentProofService =>
       widget.paymentProofServiceOverride ?? paymentProofService;
@@ -160,6 +164,12 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   }
 
   void _refreshFromLiveEvent(String storeId, PosLiveEvent event) {
+    if (!event.isFallback &&
+        event.domain == 'bank_transfer' &&
+        event.sourceTable == 'sepay_transactions' &&
+        event.eventType == 'INSERT') {
+      unawaited(_showLatestBankTransferAlert(storeId));
+    }
     if (!event.affects({
       'orders',
       'payments',
@@ -177,6 +187,36 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
           .loadTables(storeId, showLoading: false);
       ref.invalidate(einvoiceJobStatusProvider);
     });
+  }
+
+  Future<void> _showLatestBankTransferAlert(String storeId) async {
+    if (_bankTransferAlertInFlight) return;
+    _bankTransferAlertInFlight = true;
+    try {
+      final alert = await bankTransferAlertService.fetchLatest(storeId);
+      if (!mounted ||
+          alert == null ||
+          alert.transactionId == _lastBankTransferAlertId) {
+        return;
+      }
+      _lastBankTransferAlertId = alert.transactionId;
+      try {
+        await SystemSound.play(SystemSoundType.alert);
+      } catch (_) {
+        // Some web/mobile runtimes require a prior user gesture for sound.
+      }
+      if (!mounted) return;
+      final amount = NumberFormat('#,###', 'vi_VN').format(alert.amount);
+      showSuccessToast(
+        context,
+        context.l10n.cashierBankTransferReceived(
+          amount,
+          alert.paymentCode ?? '-',
+        ),
+      );
+    } finally {
+      _bankTransferAlertInFlight = false;
+    }
   }
 
   @override
