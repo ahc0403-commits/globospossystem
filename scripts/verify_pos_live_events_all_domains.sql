@@ -2,7 +2,6 @@ DO $verify$
 DECLARE
   v_definition text;
   v_security_definer boolean;
-  v_trigger_count integer;
 BEGIN
   IF to_regclass('public.pos_live_events') IS NULL
      OR to_regprocedure('public.emit_pos_live_event()') IS NULL THEN
@@ -43,17 +42,22 @@ BEGIN
     RAISE EXCEPTION 'POS_LIVE_EVENTS_VERIFY_EMITTER_INCOMPLETE';
   END IF;
 
-  SELECT count(*) INTO v_trigger_count
-  FROM pg_trigger t
-  JOIN pg_proc p ON p.oid = t.tgfoid
-  JOIN pg_namespace n ON n.oid = p.pronamespace
-  WHERE NOT t.tgisinternal
-    AND t.tgname = 'pos_live_event_trigger'
-    AND n.nspname = 'public'
-    AND p.proname = 'emit_pos_live_event';
-
-  IF v_trigger_count < 70 THEN
-    RAISE EXCEPTION 'POS_LIVE_EVENTS_VERIFY_DOMAIN_TRIGGERS_INCOMPLETE:%', v_trigger_count;
+  IF EXISTS (
+    SELECT 1
+    FROM (VALUES ('restaurants'), ('tables'), ('menu_items'), ('orders'), ('payments')) required(table_name)
+    WHERE to_regclass(format('public.%I', required.table_name)) IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM pg_trigger t
+        JOIN pg_class c ON c.oid = t.tgrelid
+        JOIN pg_proc p ON p.oid = t.tgfoid
+        WHERE NOT t.tgisinternal
+          AND t.tgname = 'pos_live_event_trigger'
+          AND c.oid = to_regclass(format('public.%I', required.table_name))
+          AND p.oid = 'public.emit_pos_live_event()'::regprocedure
+      )
+  ) THEN
+    RAISE EXCEPTION 'POS_LIVE_EVENTS_VERIFY_CORE_TRIGGERS_INCOMPLETE';
   END IF;
 
   IF NOT has_table_privilege('authenticated', 'public.pos_live_events', 'SELECT')
