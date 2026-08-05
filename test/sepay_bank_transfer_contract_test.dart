@@ -44,4 +44,30 @@ void main() {
     expect(edge, contains('SEPAY_SIGNATURE_INVALID'));
     expect(edge, contains('return json({ success: true })'));
   });
+
+  test('SePay test VA maps only to BunsikClub Binh Thanh', () {
+    final sql = File(
+      'supabase/migrations/'
+      '20260805160000_sepay_bunsikclub_binh_thanh_mapping.sql',
+    ).readAsStringSync();
+
+    expect(sql, contains('8bc9eef5-dcd5-46b1-b931-23f77132322c'));
+    expect(sql, contains('BunsikClub Binh Thanh'));
+    expect(sql, contains('9358674202'));
+    expect(sql, contains('SBSEPAYOA465N89VHYK'));
+    expect(sql, contains('SEPAY_TEST_STORE_MISMATCH'));
+    expect(sql, contains('ON CONFLICT DO NOTHING'));
+
+    final verification = File(
+      'scripts/verify_sepay_bunsikclub_binh_thanh_mapping.sql',
+    ).readAsStringSync();
+    expect(verification, contains('BunsikClub Binh Thanh'));
+    expect(verification, contains('9358674202'));
+    expect(verification, contains('SBSEPAYOA465N89VHYK'));
+    expect(verification, contains('account.is_active = true'));
+    expect(
+      verification,
+      contains('SEPAY_TEST_STORE_MAPPING_VERIFY_FAILED'),
+    );
+  });
 }
