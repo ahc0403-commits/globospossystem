@@ -2,6 +2,9 @@ import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import '../utils/time_utils.dart';
 
 class ReceiptBuilder {
+  static const _bankTransferQrPayload =
+      '00020101021138550010A000000727012500069704260111800020142980208QRIBFTTA53037045802VN63044E6F';
+
   static Future<List<int>> buildPaymentReceipt({
     required String restaurantName,
     required String tableNumber,
@@ -223,6 +226,35 @@ class ReceiptBuilder {
         generator.text(
           '* Mon phuc vu: $serviceItemCount',
           styles: const PosStyles(align: PosAlign.center),
+        ),
+      );
+    }
+
+    if (!isService) {
+      bytes.addAll(generator.hr());
+      bytes.addAll(
+        generator.text(
+          'BANK TRANSFER / CHUYEN KHOAN',
+          styles: const PosStyles(bold: true, align: PosAlign.center),
+        ),
+      );
+      bytes.addAll(
+        generator.text(
+          'MSB - 80002014298',
+          styles: const PosStyles(bold: true, align: PosAlign.center),
+        ),
+      );
+      bytes.addAll(
+        generator.text(
+          'AKJ INTERNATIONAL CO., LTD',
+          styles: const PosStyles(align: PosAlign.center),
+        ),
+      );
+      bytes.addAll(
+        generator.qrcode(
+          _bankTransferQrPayload,
+          size: QRSize.size6,
+          cor: QRCorrection.M,
         ),
       );
     }
@@ -472,6 +504,8 @@ class ReceiptBuilder {
         return 'Card / The';
       case 'pay':
         return 'E-wallet / Vi dien tu';
+      case 'bank_transfer':
+        return 'Bank transfer / Chuyen khoan';
       case 'service':
         return 'Service / Dich vu';
       default:

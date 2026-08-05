@@ -71,6 +71,7 @@ class PrinterDestinationService {
         .from('printer_destinations')
         .select()
         .eq('restaurant_id', storeId)
+        .eq('is_active', true)
         .order('purpose')
         .order('floor_label')
         .order('name');

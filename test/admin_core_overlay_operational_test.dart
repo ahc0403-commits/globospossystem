@@ -483,6 +483,7 @@ class _PrinterDestinationsNotifier extends PrinterDestinationsNotifier {
   }
 
   int saveCalls = 0;
+  int deleteCalls = 0;
 
   @override
   Future<void> fetchDestinations({bool showLoading = true}) async {}
@@ -490,6 +491,12 @@ class _PrinterDestinationsNotifier extends PrinterDestinationsNotifier {
   @override
   Future<bool> upsertDestination(PrinterDestinationDraft draft) async {
     saveCalls += 1;
+    return true;
+  }
+
+  @override
+  Future<bool> deleteDestination(String destinationId) async {
+    deleteCalls += 1;
     return true;
   }
 }
@@ -1231,6 +1238,23 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(destinationsNotifier.saveCalls, 1);
+
+    await tester.ensureVisible(
+      find.byKey(const Key('settings_printer_destination_remove')),
+    );
+    await tester.tap(
+      find.byKey(const Key('settings_printer_destination_remove')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('settings_printer_destination_delete_dialog')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const Key('settings_printer_destination_delete_confirm')),
+    );
+    await tester.pumpAndSettle();
+    expect(destinationsNotifier.deleteCalls, 1);
     expect(tester.takeException(), isNull);
   });
 

@@ -31,6 +31,15 @@ void main() {
     expect(text, contains('BC-20260721-000123'));
     expect(text, contains('Ca phe sua da'));
     expect(text, contains('VND'));
+    expect(text, contains('BANK TRANSFER / CHUYEN KHOAN'));
+    expect(text, contains('MSB - 80002014298'));
+    expect(text, contains('AKJ INTERNATIONAL CO., LTD'));
+    expect(
+      text,
+      contains(
+        '00020101021138550010A000000727012500069704260111800020142980208QRIBFTTA53037045802VN63044E6F',
+      ),
+    );
     expect(bytes, contains(0x1d));
     expect(bytes, contains(0x56));
   });
@@ -51,6 +60,24 @@ void main() {
     final text = String.fromCharCodes(bytes);
     expect(text, contains('Service Provision'));
     expect(text, contains('not counted in revenue'));
+    expect(text, isNot(contains('BANK TRANSFER / CHUYEN KHOAN')));
+    expect(text, isNot(contains('80002014298')));
+  });
+
+  test('bank transfer receipts use the bank transfer method label', () async {
+    final bytes = await ReceiptBuilder.buildPaymentReceipt(
+      restaurantName: 'GLOBOS POS',
+      tableNumber: 'A1',
+      items: const [ReceiptItem(name: 'Kimbap', quantity: 1, unitPrice: 30000)],
+      totalAmount: 30000,
+      paymentMethod: 'bank_transfer',
+      paidAt: DateTime.utc(2026, 8, 5, 10, 30),
+    );
+
+    expect(
+      String.fromCharCodes(bytes),
+      contains('Payment Method : Bank transfer / Chuyen khoan'),
+    );
   });
 
   test('service item lines are excluded from customer receipt body', () async {
