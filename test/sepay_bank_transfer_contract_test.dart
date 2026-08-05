@@ -28,6 +28,21 @@ void main() {
     expect(sql, contains('REVOKE ALL ON public.sepay_transactions'));
     expect(sql, contains('p_raw_payload jsonb'));
     expect(sql, contains("emit_pos_live_event('bank_transfer')"));
+    expect(
+      sql,
+      contains('CREATE TABLE IF NOT EXISTS public.sepay_bank_accounts'),
+    );
+    expect(
+      sql,
+      contains('CREATE TABLE IF NOT EXISTS public.sepay_transactions'),
+    );
+    expect(
+      sql,
+      contains(
+        'CREATE UNIQUE INDEX IF NOT EXISTS '
+        'sepay_bank_accounts_provider_identity_idx',
+      ),
+    );
     expect(sql, contains('WHEN (NEW.restaurant_id IS NOT NULL'));
     expect(sql, contains('ON CONFLICT (sepay_transaction_id) DO NOTHING'));
   });
@@ -65,9 +80,6 @@ void main() {
     expect(verification, contains('9358674202'));
     expect(verification, contains('SBSEPAYOA465N89VHYK'));
     expect(verification, contains('account.is_active = true'));
-    expect(
-      verification,
-      contains('SEPAY_TEST_STORE_MAPPING_VERIFY_FAILED'),
-    );
+    expect(verification, contains('SEPAY_TEST_STORE_MAPPING_VERIFY_FAILED'));
   });
 }

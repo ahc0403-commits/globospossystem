@@ -1,6 +1,6 @@
 BEGIN;
 
-CREATE TABLE public.sepay_bank_accounts (
+CREATE TABLE IF NOT EXISTS public.sepay_bank_accounts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   restaurant_id uuid NOT NULL REFERENCES public.restaurants(id) ON DELETE CASCADE,
   gateway text NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE public.sepay_bank_accounts (
     CHECK (btrim(account_number) <> '')
 );
 
-CREATE UNIQUE INDEX sepay_bank_accounts_provider_identity_idx
+CREATE UNIQUE INDEX IF NOT EXISTS sepay_bank_accounts_provider_identity_idx
   ON public.sepay_bank_accounts (
     lower(btrim(gateway)),
     regexp_replace(account_number, '[^a-zA-Z0-9]', '', 'g'),
@@ -26,11 +26,11 @@ CREATE UNIQUE INDEX sepay_bank_accounts_provider_identity_idx
     )
   );
 
-CREATE INDEX sepay_bank_accounts_store_idx
+CREATE INDEX IF NOT EXISTS sepay_bank_accounts_store_idx
   ON public.sepay_bank_accounts (restaurant_id)
   WHERE is_active = true;
 
-CREATE TABLE public.sepay_transactions (
+CREATE TABLE IF NOT EXISTS public.sepay_transactions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   sepay_transaction_id bigint NOT NULL UNIQUE,
   restaurant_id uuid REFERENCES public.restaurants(id) ON DELETE SET NULL,
@@ -54,7 +54,7 @@ CREATE TABLE public.sepay_transactions (
     CHECK (resolution_status IN ('matched', 'unmatched', 'ambiguous'))
 );
 
-CREATE INDEX sepay_transactions_store_received_idx
+CREATE INDEX IF NOT EXISTS sepay_transactions_store_received_idx
   ON public.sepay_transactions (restaurant_id, received_at DESC)
   WHERE restaurant_id IS NOT NULL;
 
