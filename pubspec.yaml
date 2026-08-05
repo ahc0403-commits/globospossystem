@@ -78,6 +78,7 @@ flutter:
   assets:
     - assets/images/
     - assets/fonts/
+    - assets/audio/bank_transfer_vi/
   fonts:
     - family: Pretendard
       fonts:
