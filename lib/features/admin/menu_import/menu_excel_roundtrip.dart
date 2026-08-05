@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:excel/excel.dart';
 
+import '../../../core/utils/excel_workbook_decoder.dart';
 import 'menu_excel_import.dart';
 
 const menuRoundTripHeaders = <String>[
@@ -232,7 +233,7 @@ List<int> buildMenuRoundTripWorkbook({
 MenuRoundTripWorkbook? tryParseMenuRoundTripWorkbook(Uint8List bytes) {
   Excel excel;
   try {
-    excel = Excel.decodeBytes(bytes);
+    excel = decodeExcelWorkbook(bytes);
   } catch (_) {
     return null;
   }

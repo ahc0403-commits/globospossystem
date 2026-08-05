@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:excel/excel.dart';
 
+import '../../../core/utils/excel_workbook_decoder.dart';
+
 const menuImportSheetName = '메뉴등록';
 const menuImportMaxRows = 500;
 
@@ -88,7 +90,7 @@ MenuImportWorkbook parseMenuImportWorkbook(Uint8List bytes) {
 
   late final Excel workbook;
   try {
-    workbook = Excel.decodeBytes(bytes);
+    workbook = decodeExcelWorkbook(bytes);
   } catch (_) {
     throw const MenuImportValidationException([
       'Excel 파일을 읽을 수 없습니다. .xlsx 형식인지 확인하세요.',

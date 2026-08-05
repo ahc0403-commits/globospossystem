@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:excel/excel.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -135,6 +136,23 @@ void main() {
     expect(parseMenuImportWorkbook(bytes).itemCount, 1);
   });
 
+  test('imports workbooks with absolute worksheet relationship targets', () {
+    final original = Uint8List.fromList(
+      buildMenuRoundTripWorkbook(
+        storeId: storeId,
+        categories: _categories,
+        items: _items,
+      ),
+    );
+    final bytes = _withAbsoluteWorksheetTarget(original);
+
+    final parsed = tryParseMenuRoundTripWorkbook(bytes)!;
+
+    expect(parsed.categoryCount, 2);
+    expect(parsed.itemCount, 2);
+    expect(parsed.storeIds, {storeId});
+  });
+
   test(
     'database update is atomic, tenant-scoped, and preserves item identity',
     () {
@@ -156,6 +174,29 @@ void main() {
       expect(deploy, contains('verify_menu_excel_roundtrip_i18n.sql'));
     },
   );
+}
+
+Uint8List _withAbsoluteWorksheetTarget(Uint8List bytes) {
+  final archive = ZipDecoder().decodeBytes(bytes, verify: true);
+  final relationship = archive.findFile('xl/_rels/workbook.xml.rels')!;
+  relationship.decompress();
+  final xml = String.fromCharCodes(relationship.content as List<int>);
+  final absoluteXml = xml.replaceAll(
+    'Target="worksheets/',
+    'Target="/xl/worksheets/',
+  );
+  expect(absoluteXml, isNot(xml));
+
+  final updated = Archive();
+  for (final file in archive.files) {
+    if (!file.isFile) continue;
+    file.decompress();
+    final content = file.name == relationship.name
+        ? Uint8List.fromList(absoluteXml.codeUnits)
+        : Uint8List.fromList(file.content as List<int>);
+    updated.addFile(ArchiveFile(file.name, content.length, content));
+  }
+  return Uint8List.fromList(ZipEncoder().encode(updated)!);
 }
 
 final _categories = <Map<String, dynamic>>[
