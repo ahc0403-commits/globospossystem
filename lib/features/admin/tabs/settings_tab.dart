@@ -1420,9 +1420,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     final canOpenPrintStation =
         PlatformInfo.isPrinterSupported &&
         canAccessRouteForRole(ref.watch(authProvider).role, '/print-station');
-    final activeCount = destinationState.destinations
-        .where((destination) => destination.isActive)
-        .length;
+    final activeCount = destinationState.destinations.length;
 
     return Container(
       key: const Key('settings_printer_destinations_section'),
@@ -1603,15 +1601,6 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                       color: PosColors.info,
                       compact: true,
                     ),
-                    ToastStatusBadge(
-                      label: destination.isActive
-                          ? context.l10n.settingsPrintDestinationActiveStatus
-                          : context.l10n.settingsPrintDestinationInactiveStatus,
-                      color: destination.isActive
-                          ? PosColors.success
-                          : PosColors.textSecondary,
-                      compact: true,
-                    ),
                   ],
                 ),
               ],
@@ -1650,6 +1639,54 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
             onPressed: saving
                 ? null
                 : () async {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (dialogContext) => AlertDialog(
+                        key: const Key(
+                          'settings_printer_destination_delete_dialog',
+                        ),
+                        backgroundColor: AppColors.surface1,
+                        title: Text(
+                          context.l10n.settingsPrintDestinationDeleteTitle,
+                          style: AppFonts.system(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        content: Text(
+                          context.l10n.settingsPrintDestinationDeleteMessage(
+                            destination.name,
+                          ),
+                          style: AppFonts.system(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () =>
+                                Navigator.of(dialogContext).pop(false),
+                            child: Text(context.l10n.cancel),
+                          ),
+                          FilledButton(
+                            key: const Key(
+                              'settings_printer_destination_delete_confirm',
+                            ),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: PosColors.danger,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () =>
+                                Navigator.of(dialogContext).pop(true),
+                            child: Text(
+                              context.l10n.settingsPrintDestinationDeleteAction,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmed != true || !mounted) {
+                      return;
+                    }
                     final success = await notifier.deleteDestination(
                       destination.id,
                     );
@@ -1658,11 +1695,11 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                     }
                     showSuccessToast(
                       context,
-                      context.l10n.settingsPrintDestinationDisabledToast,
+                      context.l10n.settingsPrintDestinationDeletedToast,
                     );
                   },
             icon: const Icon(Icons.delete_outline, size: 18),
-            tooltip: context.l10n.settingsPrintDestinationDisableTooltip,
+            tooltip: context.l10n.settingsPrintDestinationDeleteTooltip,
           ),
         ],
       ),
@@ -1684,7 +1721,6 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
       text: destination?.floorLabel ?? '1F',
     );
     var purpose = destination?.purpose ?? 'kitchen';
-    var isActive = destination?.isActive ?? true;
 
     await showDialog<void>(
       context: context,
@@ -1777,18 +1813,6 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                         ),
                       ),
                     ],
-                    const SizedBox(height: 8),
-                    CheckboxListTile(
-                      value: isActive,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        l10n.settingsPrintDestinationActive,
-                        style: AppFonts.system(color: AppColors.textPrimary),
-                      ),
-                      onChanged: (value) {
-                        setDialogState(() => isActive = value ?? true);
-                      },
-                    ),
                   ],
                 ),
               ),
@@ -1829,7 +1853,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                             port: port,
                             purpose: purpose,
                             floorLabel: purpose == 'floor' ? floorLabel : null,
-                            isActive: isActive,
+                            isActive: true,
                           ),
                         );
                     if (!dialogContext.mounted || !success) {

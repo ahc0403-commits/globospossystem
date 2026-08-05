@@ -63,6 +63,8 @@ void main() {
     expect(source, contains("Key('settings_printer_destination_add')"));
     expect(source, contains("Key('settings_printer_destination_edit')"));
     expect(source, contains("Key('settings_printer_destination_remove')"));
+    expect(source, contains("'settings_printer_destination_delete_dialog'"));
+    expect(source, contains("'settings_printer_destination_delete_confirm'"));
     expect(source, contains("Key('settings_printer_destination_test')"));
     expect(source, contains("Key('settings_print_station_open')"));
     expect(source, contains('settings_printer_destination_floor_label'));
@@ -91,6 +93,8 @@ void main() {
     expect(provider, contains('Future<bool> enqueueTestPrintJob'));
     expect(service, contains("'admin_upsert_printer_destination'"));
     expect(service, contains("'admin_delete_printer_destination'"));
+    expect(service, contains(".eq('is_active', true)"));
+    expect(source, isNot(contains('CheckboxListTile(')));
     expect(service, contains("'admin_enqueue_printer_test_job'"));
     expect(service, isNot(contains(".update({")));
     expect(service, isNot(contains(".insert({")));
