@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/services/bank_transfer_alert_service.dart';
+import 'package:globos_pos_system/core/services/bank_transfer_alert_sound.dart';
 
 void main() {
   test('SePay alert model parses PostgREST number representations', () {
@@ -52,6 +53,13 @@ void main() {
     );
   });
 
+  test('bank transfer amount is announced in Vietnamese only', () {
+    expect(
+      vietnameseBankTransferMessage(93456),
+      'Chuyển khoản, 93456 đồng đã được nhận.',
+    );
+  });
+
   test(
     'cashier keeps realtime primary with polling and web sound fallback',
     () {
@@ -65,7 +73,13 @@ void main() {
       expect(cashier, contains('Timer.periodic('));
       expect(cashier, contains('_showLatestBankTransferAlert(storeId)'));
       expect(cashier, contains('cursor.shouldNotify(alert)'));
-      expect(cashier, contains('_bankTransferAlertSoundService.play()'));
+      expect(
+        cashier,
+        contains('_bankTransferAlertSoundService.play(amount: alert.amount)'),
+      );
+      expect(webSound, contains('web.SpeechSynthesisUtterance('));
+      expect(webSound, contains("..lang = 'vi-VN'"));
+      expect(webSound, contains('..speak(utterance)'));
       expect(webSound, contains('web.AudioContext()'));
       expect(webSound, contains('_scheduleTone'));
     },
