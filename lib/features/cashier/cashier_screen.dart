@@ -16,6 +16,7 @@ import '../../core/services/bank_transfer_alert_sound.dart';
 import '../../core/services/bank_transfer_alert_coordinator.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/services/live_refresh_service.dart';
+import '../../core/services/menu_service.dart';
 import '../../core/layout/platform_info.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
@@ -35,6 +36,7 @@ import '../../core/services/payment_proof_service.dart';
 import '../../core/services/restaurant_cutoff_service.dart';
 import 'discount_modal.dart';
 import 'cash_tender_dialog.dart';
+import 'cashier_sold_out_dialog.dart';
 import 'payment_proof_modal.dart';
 import 'payment_completion_dialog.dart';
 import 'red_invoice_modal.dart';
@@ -48,6 +50,7 @@ class CashierScreen extends ConsumerStatefulWidget {
     this.printJobAgentOverride,
     this.bankTransferAlertServiceOverride,
     this.bankTransferAlertSoundServiceOverride,
+    this.menuServiceOverride,
     this.bankTransferAlertPollInterval = const Duration(seconds: 2),
   });
 
@@ -57,6 +60,7 @@ class CashierScreen extends ConsumerStatefulWidget {
   final PrintJobAgentService? printJobAgentOverride;
   final BankTransferAlertService? bankTransferAlertServiceOverride;
   final BankTransferAlertSoundService? bankTransferAlertSoundServiceOverride;
+  final MenuService? menuServiceOverride;
   final Duration bankTransferAlertPollInterval;
 
   @override
@@ -91,6 +95,17 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       widget.paymentServiceOverride ?? paymentService;
   RestaurantCutoffService get _restaurantCutoffService =>
       widget.restaurantCutoffServiceOverride ?? restaurantCutoffService;
+
+  Future<void> _showSoldOutMenuDialog(String storeId) async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => CashierSoldOutDialog(
+        storeId: storeId,
+        menuServiceOverride: widget.menuServiceOverride,
+      ),
+    );
+  }
+
   void _prepareWetTissueForOrder(CashierOrder order) {
     _wetTissueDraftQuantity = order.wetTissueQuantity;
     _wetTissueConfirmedOrderId = order.paymentCount > 0 ? order.orderId : null;
@@ -1672,6 +1687,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                         currency: currency,
                         isOnline: isOnline,
                         compact: useCompactChrome,
+                        onManageSoldOut: storeId == null || !isOnline
+                            ? null
+                            : () => _showSoldOutMenuDialog(storeId),
                       ),
                       SizedBox(height: useCompactChrome ? 8 : 12),
                       Expanded(
@@ -1738,10 +1756,14 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     required NumberFormat currency,
     required bool isOnline,
     required bool compact,
+    required VoidCallback? onManageSoldOut,
   }) {
     final l10n = context.l10n;
     if (compact) {
-      return _CashierCompactCommandBar(isOnline: isOnline);
+      return _CashierCompactCommandBar(
+        isOnline: isOnline,
+        onManageSoldOut: onManageSoldOut,
+      );
     }
 
     final selectedAmount = selectedOrder == null
@@ -1770,6 +1792,12 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     );
     final actions = <Widget>[
       const AppNavBar(showLogout: false),
+      OutlinedButton.icon(
+        key: const Key('cashier_sold_out_menu_action'),
+        onPressed: onManageSoldOut,
+        icon: const Icon(Icons.remove_shopping_cart_outlined, size: 20),
+        label: Text(l10n.menuSoldOut),
+      ),
       if (PlatformInfo.isKioskSupported)
         FilledButton.icon(
           key: const Key('cashier_attendance_kiosk_entry'),
@@ -1872,9 +1900,13 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
 }
 
 class _CashierCompactCommandBar extends ConsumerWidget {
-  const _CashierCompactCommandBar({required this.isOnline});
+  const _CashierCompactCommandBar({
+    required this.isOnline,
+    required this.onManageSoldOut,
+  });
 
   final bool isOnline;
+  final VoidCallback? onManageSoldOut;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1927,6 +1959,12 @@ class _CashierCompactCommandBar extends ConsumerWidget {
               ),
             ),
           ],
+          IconButton(
+            key: const Key('cashier_sold_out_menu_action'),
+            onPressed: onManageSoldOut,
+            icon: const Icon(Icons.remove_shopping_cart_outlined),
+            tooltip: l10n.menuSoldOut,
+          ),
           IconButton(
             key: const Key('logout_button'),
             icon: const Icon(Icons.logout, color: PosColors.textSecondary),
