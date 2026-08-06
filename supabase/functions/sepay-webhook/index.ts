@@ -60,7 +60,7 @@ serve(async (req) => {
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
-  const { error } = await supabase.rpc("ingest_sepay_transaction", {
+  const { data, error } = await supabase.rpc("ingest_sepay_transaction", {
     p_sepay_transaction_id: transaction.id,
     p_gateway: transaction.gateway,
     p_account_number: transaction.accountNumber,
@@ -79,6 +79,26 @@ serve(async (req) => {
       error: "SEPAY_INGEST_FAILED",
       code: error.code,
     }, 500);
+  }
+
+  const ingest = data as Record<string, unknown> | null;
+  if (ingest?.status === "accepted" && ingest.resolution_status === "matched") {
+    const dispatch = fetch(
+      `${supabaseUrl}/functions/v1/sepay-alert-dispatcher`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${serviceRoleKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ source: "sepay-webhook" }),
+      },
+    ).catch(() => null);
+    const runtime = (globalThis as unknown as {
+      EdgeRuntime?: { waitUntil(promise: Promise<unknown>): void };
+    }).EdgeRuntime;
+    if (runtime) runtime.waitUntil(dispatch);
+    else await dispatch;
   }
 
   // SePay requires this exact success contract for delivery acknowledgement.

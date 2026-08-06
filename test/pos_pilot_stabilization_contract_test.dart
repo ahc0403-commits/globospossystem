@@ -89,11 +89,11 @@ void main() {
     expect(reportProvider, contains('required this.openOrders'));
     expect(reportProvider, contains('final int openOrders;'));
     expect(reports, contains('summary.openOrders'));
-    expect(en, contains("String get reportsTotalSales => 'Paid sales';"));
-    expect(ko, contains("String get reportsTotalSales => '결제완료 매출';"));
+    expect(en, contains("String get reportsTotalSales => 'Sales revenue';"));
+    expect(ko, contains("String get reportsTotalSales => '판매 매출';"));
     expect(
       vi,
-      contains("String get reportsTotalSales => 'Doanh thu đã thanh toán';"),
+      contains("String get reportsTotalSales => 'Doanh thu bán hàng';"),
     );
     expect(en, contains('Guest count cannot exceed'));
     expect(vi, contains('Số khách không được vượt quá'));

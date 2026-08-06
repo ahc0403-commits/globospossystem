@@ -3309,5 +3309,6 @@
   "rolePhotoObjetStoreAdminDisplay": "Photo Objet Store Admin",
   "staffRolePhotoStoreAdmin": "Photo store admin",
   "cashierBankTransferReceived": "Bank transfer received: {amount} VND · Code {code}",
-  "@cashierBankTransferReceived": {"placeholders":{"amount":{"type":"String"},"code":{"type":"String"}}}
+  "@cashierBankTransferReceived": {"placeholders":{"amount":{"type":"String"},"code":{"type":"String"}}},
+  "cashierBankTransferBackgroundSetupRequired": "Locked-device bank transfer announcements need notification setup or permission."
 }

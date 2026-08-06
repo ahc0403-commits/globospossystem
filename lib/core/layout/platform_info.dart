@@ -22,6 +22,16 @@ class PlatformInfo {
     }
   }
 
+  /// iOS native environment (excluding web).
+  static bool get isIOS {
+    if (kIsWeb) return false;
+    try {
+      return Platform.isIOS;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// macOS 네이티브 환경 여부
   static bool get isMacOS {
     if (kIsWeb) return false;
@@ -40,6 +50,16 @@ class PlatformInfo {
     } catch (_) {
       return false;
     }
+  }
+
+  /// Stable server-side identifier for the current runtime family.
+  static String get alertPlatform {
+    if (isWeb) return 'web';
+    if (isAndroid) return 'android';
+    if (isIOS) return 'ios';
+    if (isMacOS) return 'macos';
+    if (isWindows) return 'windows';
+    return 'web';
   }
 
   /// Web 또는 데스크탑 (admin/super_admin 대상 플랫폼)

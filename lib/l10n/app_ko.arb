@@ -3308,5 +3308,6 @@
   "rolePhotoObjetStoreAdminDisplay": "포토오브제 매장 관리자",
   "staffRolePhotoStoreAdmin": "포토 매장 관리자",
   "cashierBankTransferReceived": "계좌이체 입금: {amount} VND · 코드 {code}",
-  "@cashierBankTransferReceived": {"placeholders":{"amount":{"type":"String"},"code":{"type":"String"}}}
+  "@cashierBankTransferReceived": {"placeholders":{"amount":{"type":"String"},"code":{"type":"String"}}},
+  "cashierBankTransferBackgroundSetupRequired": "잠금 상태 계좌이체 음성 알림을 위해 알림 설정 또는 권한 확인이 필요합니다."
 }

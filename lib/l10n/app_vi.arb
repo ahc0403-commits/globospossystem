@@ -3308,5 +3308,6 @@
   "rolePhotoObjetStoreAdminDisplay": "Quản trị cửa hàng Photo Objet",
   "staffRolePhotoStoreAdmin": "Photo quản trị cửa hàng",
   "cashierBankTransferReceived": "Đã nhận chuyển khoản: {amount} VND · Mã {code}",
-  "@cashierBankTransferReceived": {"placeholders":{"amount":{"type":"String"},"code":{"type":"String"}}}
+  "@cashierBankTransferReceived": {"placeholders":{"amount":{"type":"String"},"code":{"type":"String"}}},
+  "cashierBankTransferBackgroundSetupRequired": "Cần cấu hình hoặc cấp quyền thông báo để đọc tiền chuyển khoản khi thiết bị bị khóa."
 }

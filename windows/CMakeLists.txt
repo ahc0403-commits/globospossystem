@@ -10,6 +10,12 @@ set(BINARY_NAME "globos_print_station")
 # versions of CMake.
 cmake_policy(VERSION 3.15...3.25)
 
+# Firebase's bundled Windows C++ SDK still declares compatibility below 3.5.
+# CMake 4 removes that implicit compatibility unless the parent explicitly
+# supplies a policy floor before generated plugin subdirectories are added.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING
+  "Minimum policy version for bundled plugin subprojects" FORCE)
+
 # Define build configuration option.
 get_property(IS_MULTICONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if(IS_MULTICONFIG)

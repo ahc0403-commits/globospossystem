@@ -60,6 +60,11 @@ dependencies:
   archive: ^3.6.1
   web: ^1.1.1
   audioplayers: 6.7.1
+  firebase_core: ^3.15.2
+  firebase_messaging: ^15.2.10
+  flutter_local_notifications: ^22.2.0
+  sepay_android_audio:
+    path: packages/sepay_android_audio
 
 dev_dependencies:
   flutter_test:

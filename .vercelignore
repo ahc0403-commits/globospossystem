@@ -21,6 +21,8 @@ ios
 linux
 macos
 windows
+!packages/sepay_android_audio/android/
+!packages/sepay_android_audio/android/**
 ios/Flutter/.last_build_id
 android/app/debug
 android/app/profile

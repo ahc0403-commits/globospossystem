@@ -13,6 +13,7 @@ void main() {
     ).readAsStringSync();
 
     expect(cmake, contains('set(BINARY_NAME "globos_print_station")'));
+    expect(cmake, contains('set(CMAKE_POLICY_VERSION_MINIMUM 3.5'));
     expect(script, contains('function Invoke-NativeCommand'));
     expect(script, contains(r'$exitCode = $LASTEXITCODE'));
     expect(script, contains(r'if ($exitCode -ne 0)'));
