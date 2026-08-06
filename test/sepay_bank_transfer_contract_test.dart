@@ -1,10 +1,26 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:globos_pos_system/core/layout/platform_info.dart';
 import 'package:globos_pos_system/core/services/bank_transfer_alert_service.dart';
 import 'package:globos_pos_system/core/services/bank_transfer_alert_sound.dart';
 
 void main() {
+  test('bank transfer alerts are enabled only on Windows hosts', () {
+    final previous = debugDefaultTargetPlatformOverride;
+    addTearDown(() => debugDefaultTargetPlatformOverride = previous);
+
+    for (final platform in TargetPlatform.values) {
+      debugDefaultTargetPlatformOverride = platform;
+      expect(
+        PlatformInfo.supportsBankTransferAlerts,
+        platform == TargetPlatform.windows,
+        reason: '$platform must not receive a bank-transfer alert',
+      );
+    }
+  });
+
   test('SePay alert model parses PostgREST number representations', () {
     final alert = BankTransferAlert.fromJson({
       'transaction_id': '3431af72-2e82-46f0-abcd-499613b874bb',
@@ -155,9 +171,10 @@ void main() {
       ).readAsStringSync();
 
       expect(main, contains('BankTransferAlertCoordinator('));
-      expect(main, contains("auth.role == 'cashier' ? storeId : null"));
-      expect(main, contains('storeId: pollingStoreId'));
-      expect(main, contains('syncStore(pushStoreId)'));
+      expect(main, contains('PlatformInfo.supportsBankTransferAlerts'));
+      expect(main, contains("auth.role == 'cashier'"));
+      expect(main, contains('storeId: alertStoreId'));
+      expect(main, isNot(contains('syncStore(')));
       expect(coordinator, contains('Timer.periodic('));
       expect(coordinator, contains('posLiveEventsProvider(storeId)'));
       expect(coordinator, contains('_drain(storeId)'));
@@ -249,16 +266,9 @@ void main() {
   test('production deploy exposes only the HMAC-protected SePay endpoint', () {
     final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
     expect(deploy, contains('functions deploy sepay-webhook --no-verify-jwt'));
-    expect(deploy, contains('functions deploy sepay-alert-dispatcher'));
-    expect(
-      deploy,
-      isNot(
-        contains('functions deploy sepay-alert-dispatcher --no-verify-jwt'),
-      ),
-    );
-    expect(deploy, contains('FIREBASE_SERVICE_ACCOUNT_JSON'));
+    expect(deploy, isNot(contains('functions deploy sepay-alert-dispatcher')));
+    expect(deploy, isNot(contains('FIREBASE_SERVICE_ACCOUNT_JSON')));
     expect(deploy, contains('SEPAY_WEBHOOK_SECRET'));
-    expect(deploy, contains('CRON_SECRET'));
 
     final edge = File(
       'supabase/functions/sepay-webhook/index.ts',
@@ -310,6 +320,27 @@ void main() {
     expect(verification, contains('sepay-alert-dispatcher-every-minute'));
   });
 
+  test('server accepts and enqueues alerts only for Windows polling', () {
+    final sql = File(
+      'supabase/migrations/20260806120000_sepay_windows_only_alerts.sql',
+    ).readAsStringSync();
+    final verification = File(
+      'scripts/verify_sepay_windows_only_alerts.sql',
+    ).readAsStringSync();
+
+    expect(sql, contains("p_platform <> 'windows'"));
+    expect(sql, contains("p_push_provider <> 'polling'"));
+    expect(sql, contains("device.platform = 'windows'"));
+    expect(sql, contains("device.push_provider = 'polling'"));
+    expect(
+      sql,
+      contains("WHERE jobname = 'sepay-alert-dispatcher-every-minute'"),
+    );
+    expect(verification, contains('SEPAY_WINDOWS_ONLY_ALERTS_VERIFY_FAILED'));
+    expect(verification, contains("platform <> 'windows'"));
+    expect(verification, contains("push_provider <> 'polling'"));
+  });
+
   test('SePay test VA maps only to BunsikClub Binh Thanh', () {
     final sql = File(
       'supabase/migrations/'
@@ -333,69 +364,19 @@ void main() {
     expect(verification, contains('SEPAY_TEST_STORE_MAPPING_VERIFY_FAILED'));
   });
 
-  test('native runtimes keep locked-device SePay receipt hooks wired', () {
+  test('mobile push is disabled for Windows-only bank transfer alerts', () {
     final push = File(
       'lib/core/services/sepay_push_notification_service.dart',
     ).readAsStringSync();
-    expect(push, contains('@pragma(\'vm:entry-point\')'));
-    expect(push, contains('FirebaseMessaging.onBackgroundMessage'));
-    expect(push, contains('FirebaseMessaging.onMessage.listen'));
-    expect(push, contains('deleteToken()'));
-    expect(push, contains('bankTransferAlertSoundService.play'));
-    expect(push, contains('SePayAndroidAudio.announce'));
-    expect(push, contains("String.fromEnvironment('FIREBASE_PROJECT_ID')"));
-
-    final androidManifest = File(
-      'android/app/src/main/AndroidManifest.xml',
+    final main = File('lib/main.dart').readAsStringSync();
+    final cashier = File(
+      'lib/features/cashier/cashier_screen.dart',
     ).readAsStringSync();
-    expect(androidManifest, contains('android.permission.POST_NOTIFICATIONS'));
-    expect(androidManifest, contains('android.permission.WAKE_LOCK'));
 
-    final androidAudioManifest = File(
-      'packages/sepay_android_audio/android/src/main/AndroidManifest.xml',
-    ).readAsStringSync();
-    expect(
-      androidAudioManifest,
-      contains('android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK'),
-    );
-    expect(
-      androidAudioManifest,
-      contains('foregroundServiceType="mediaPlayback"'),
-    );
-
-    final androidAudioService = File(
-      'packages/sepay_android_audio/android/src/main/kotlin/com/globosvn/'
-      'sepay_android_audio/SePayAudioService.kt',
-    ).readAsStringSync();
-    expect(androidAudioService, contains('startForeground('));
-    expect(
-      androidAudioService,
-      contains('ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK'),
-    );
-    expect(androidAudioService, contains('PowerManager.PARTIAL_WAKE_LOCK'));
-    expect(androidAudioService, contains('SEPAY_AUDIO_COMPLETE'));
-
-    final vercelIgnore = File('.vercelignore').readAsStringSync();
-    expect(
-      vercelIgnore,
-      contains('!packages/sepay_android_audio/android/**'),
-    );
-
-    final iosExtension = File(
-      'ios/BankTransferNotificationService/NotificationService.swift',
-    ).readAsStringSync();
-    expect(iosExtension, contains('UNNotificationServiceExtension'));
-    expect(iosExtension, contains('forSecurityApplicationGroupIdentifier'));
-    expect(iosExtension, contains('group.com.globosvn.globosPosSystem'));
-    expect(iosExtension, contains('UNNotificationSound'));
-
-    final iosInfo = File('ios/Runner/Info.plist').readAsStringSync();
-    expect(iosInfo, contains('remote-notification'));
-    final entitlements = File(
-      'ios/Runner/Runner.entitlements',
-    ).readAsStringSync();
-    expect(entitlements, contains('aps-environment'));
-    expect(entitlements, contains('com.apple.security.application-groups'));
+    expect(push, contains('static bool get isNativePushPlatform => false'));
+    expect(main, isNot(contains('SePayPushNotificationService')));
+    expect(cashier, isNot(contains('SePayPushNotificationService')));
+    expect(cashier, isNot(contains('sepay_push_readiness_banner')));
   });
 }
 

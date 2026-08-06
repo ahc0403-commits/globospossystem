@@ -33,7 +33,6 @@ import '../table/table_provider.dart';
 import '../../core/services/payment_service.dart';
 import '../../core/services/payment_proof_service.dart';
 import '../../core/services/restaurant_cutoff_service.dart';
-import '../../core/services/sepay_push_notification_service.dart';
 import 'discount_modal.dart';
 import 'cash_tender_dialog.dart';
 import 'payment_proof_modal.dart';
@@ -1641,47 +1640,6 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       body: Column(
         children: [
           const OfflineBanner(),
-          if (SePayPushNotificationService.isNativePushPlatform)
-            ValueListenableBuilder<SePayPushReadiness>(
-              valueListenable: SePayPushNotificationService.readiness,
-              builder: (context, readiness, _) {
-                if (readiness == SePayPushReadiness.ready ||
-                    readiness == SePayPushReadiness.unsupported) {
-                  return const SizedBox.shrink();
-                }
-                return Material(
-                  key: const Key('sepay_push_readiness_banner'),
-                  color: PosColors.warning.withValues(alpha: 0.16),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.notifications_paused_outlined,
-                          color: PosColors.warning,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            context
-                                .l10n
-                                .cashierBankTransferBackgroundSetupRequired,
-                            style: const TextStyle(
-                              color: PosColors.textPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
           Expanded(
             child: ToastResponsiveBody(
               maxWidth: 1480,

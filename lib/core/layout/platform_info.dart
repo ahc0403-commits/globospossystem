@@ -52,6 +52,13 @@ class PlatformInfo {
     }
   }
 
+  /// Bank-transfer announcements are intentionally limited to Windows hosts.
+  ///
+  /// [defaultTargetPlatform] also reflects the host OS on Flutter web, so this
+  /// covers both the Windows desktop build and browsers running on Windows.
+  static bool get supportsBankTransferAlerts =>
+      defaultTargetPlatform == TargetPlatform.windows;
+
   /// Stable server-side identifier for the current runtime family.
   static String get alertPlatform {
     if (isWeb) return 'web';

@@ -10,10 +10,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/constants/app_constants.dart';
 import 'core/hardware/print_agent_coordinator_provider.dart';
 import 'core/i18n/locale_controller.dart';
+import 'core/layout/platform_info.dart';
 import 'core/router/app_router.dart';
 import 'core/services/live_refresh_service.dart';
 import 'core/services/bank_transfer_alert_coordinator.dart';
-import 'core/services/sepay_push_notification_service.dart';
 import 'core/ui/app_theme.dart';
 import 'features/auth/auth_provider.dart';
 import 'l10n/app_localizations.dart';
@@ -46,8 +46,6 @@ Future<void> main() async {
     url: AppConstants.supabaseUrl,
     anonKey: AppConstants.supabaseAnonKey,
   );
-  await SePayPushNotificationService.initialize();
-
   final container = ProviderContainer();
   final router = buildAppRouter(container);
 
@@ -72,8 +70,6 @@ class GlobosPosApp extends ConsumerStatefulWidget {
 
 class _GlobosPosAppState extends ConsumerState<GlobosPosApp> {
   bool _profileRefreshInFlight = false;
-  bool _pushStoreSynced = false;
-  String? _pushStoreId;
 
   Future<void> _refreshProfile() async {
     if (_profileRefreshInFlight) return;
@@ -93,25 +89,10 @@ class _GlobosPosAppState extends ConsumerState<GlobosPosApp> {
     final localeState = ref.watch(localeControllerProvider);
     final auth = ref.watch(authProvider);
     final storeId = auth.storeId;
-    final alertStoreId = auth.role == 'cashier' ? storeId : null;
-    final pushStoreId = SePayPushNotificationService.isNativePushPlatform
-        ? alertStoreId
+    final alertStoreId =
+        PlatformInfo.supportsBankTransferAlerts && auth.role == 'cashier'
+        ? storeId
         : null;
-    final pollingStoreId = SePayPushNotificationService.isNativePushPlatform
-        ? null
-        : alertStoreId;
-    if (!_pushStoreSynced || _pushStoreId != pushStoreId) {
-      _pushStoreSynced = true;
-      _pushStoreId = pushStoreId;
-      unawaited(
-        SePayPushNotificationService.instance.syncStore(pushStoreId).catchError(
-          (_) {
-            SePayPushNotificationService.readiness.value =
-                SePayPushReadiness.error;
-          },
-        ),
-      );
-    }
     if (auth.user != null && storeId != null) {
       ref.listen<AsyncValue<PosLiveEvent>>(posLiveEventsProvider(storeId), (
         _,
@@ -139,7 +120,7 @@ class _GlobosPosAppState extends ConsumerState<GlobosPosApp> {
         GlobalCupertinoLocalizations.delegate,
       ],
       builder: (context, child) => BankTransferAlertCoordinator(
-        storeId: pollingStoreId,
+        storeId: alertStoreId,
         child: child ?? const SizedBox.shrink(),
       ),
       routerConfig: widget.router,
