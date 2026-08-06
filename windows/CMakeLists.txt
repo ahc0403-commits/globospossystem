@@ -57,6 +57,14 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# audioplayers_windows 4.3.x still includes MSVC's deprecated experimental
+# coroutine header. Flutter 3.41 cannot use the 4.4.x plugin that removes it,
+# so scope Microsoft's compatibility define to this plugin target only.
+if(TARGET audioplayers_windows_plugin)
+  target_compile_definitions(audioplayers_windows_plugin PRIVATE
+    _SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+endif()
+
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can

@@ -169,6 +169,13 @@ void main() {
       expect(nativeSound, contains('AssetSource('));
       expect(nativeSound, contains('player.onPlayerComplete.first'));
       expect(nativeSound, contains('SystemSoundType.alert'));
+
+      final windowsCmake = File('windows/CMakeLists.txt').readAsStringSync();
+      expect(windowsCmake, contains('if(TARGET audioplayers_windows_plugin)'));
+      expect(
+        windowsCmake,
+        contains('_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS'),
+      );
     },
   );
 
