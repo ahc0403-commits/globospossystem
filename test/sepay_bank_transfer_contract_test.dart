@@ -142,6 +142,9 @@ void main() {
       final webSound = File(
         'lib/core/services/bank_transfer_alert_sound_web.dart',
       ).readAsStringSync();
+      final nativeSound = File(
+        'lib/core/services/bank_transfer_alert_sound_io.dart',
+      ).readAsStringSync();
 
       expect(cashier, contains('Timer.periodic('));
       expect(cashier, contains('_showLatestBankTransferAlert(storeId)'));
@@ -158,6 +161,14 @@ void main() {
       expect(webSound, contains('speech.speak(utterance)'));
       expect(webSound, contains('web.AudioContext()'));
       expect(webSound, contains('_scheduleTone'));
+      expect(nativeSound, contains('AudioPlayer()'));
+      expect(
+        nativeSound,
+        contains('vietnameseBankTransferAudioTokens(amount)'),
+      );
+      expect(nativeSound, contains('AssetSource('));
+      expect(nativeSound, contains('player.onPlayerComplete.first'));
+      expect(nativeSound, contains('SystemSoundType.alert'));
     },
   );
 
