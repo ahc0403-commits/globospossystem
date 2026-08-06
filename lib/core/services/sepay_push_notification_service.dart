@@ -70,8 +70,9 @@ class SePayPushNotificationService {
     SePayPushReadiness.unsupported,
   );
 
-  static bool get isNativePushPlatform =>
-      PlatformInfo.isAndroid || PlatformInfo.isIOS || PlatformInfo.isMacOS;
+  // Bank-transfer alerts are Windows-only. Firebase push registration remains
+  // disabled so Android, iOS, and macOS devices cannot receive or announce one.
+  static bool get isNativePushPlatform => false;
 
   StreamSubscription<String>? _tokenRefreshSubscription;
   StreamSubscription<RemoteMessage>? _foregroundMessageSubscription;

@@ -396,8 +396,6 @@ preflight() {
       fail "Missing complete-initial-password-change Edge function."
     [[ -f "$ROOT_DIR/supabase/functions/sepay-webhook/index.ts" ]] ||
       fail "Missing sepay-webhook Edge function."
-    [[ -f "$ROOT_DIR/supabase/functions/sepay-alert-dispatcher/index.ts" ]] ||
-      fail "Missing sepay-alert-dispatcher Edge function."
   fi
   if [[ "$DB_ONLY" != "1" && "$SKIP_AUTH_CHECK" != "1" ]]; then
     [[ -f "$ROOT_DIR/scripts/check_pilot_auth_accounts.sh" ]] ||
@@ -459,10 +457,6 @@ run_checks() {
   run deno test \
     "$ROOT_DIR/supabase/functions/sepay-webhook/index_test.ts"
 
-  log "SePay alert dispatcher Edge tests"
-  run deno test \
-    "$ROOT_DIR/supabase/functions/sepay-alert-dispatcher/index_test.ts"
-
   if [[ -z "$TEST_TARGETS" ]]; then
     log "Flutter tests skipped"
     return 0
@@ -484,7 +478,7 @@ run_checks() {
 }
 
 verify_sepay_alert_secrets() {
-  log "SePay alert secret readiness"
+  log "SePay webhook secret readiness"
   if [[ "$DRY_RUN" == "1" ]]; then
     printf '+ supabase secrets list --project-ref %q; require secret names only\n' \
       "$POS_PROJECT_REF"
@@ -495,10 +489,7 @@ verify_sepay_alert_secrets() {
   secret_names="$(supabase secrets list --project-ref "$POS_PROJECT_REF" 2>/dev/null | awk -F '|' 'NF >= 2 {gsub(/[[:space:]]/, "", $1); print $1}')" ||
     fail "Could not inspect Supabase Edge secret names."
   local required_secret
-  for required_secret in \
-    SEPAY_WEBHOOK_SECRET \
-    FIREBASE_SERVICE_ACCOUNT_JSON \
-    CRON_SECRET; do
+  for required_secret in SEPAY_WEBHOOK_SECRET; do
     grep -Fxq "$required_secret" <<<"$secret_names" ||
       fail "Missing required Supabase Edge secret: $required_secret"
   done
@@ -830,8 +821,6 @@ deploy_pos_edge_functions() {
   run supabase functions deploy provision-fixed-pos-account \
     --project-ref "$POS_PROJECT_REF"
   run supabase functions deploy complete-initial-password-change \
-    --project-ref "$POS_PROJECT_REF"
-  run supabase functions deploy sepay-alert-dispatcher \
     --project-ref "$POS_PROJECT_REF"
   run supabase functions deploy sepay-webhook --no-verify-jwt \
     --project-ref "$POS_PROJECT_REF"
