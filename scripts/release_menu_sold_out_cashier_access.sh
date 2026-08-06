@@ -16,6 +16,6 @@ done
 
 exec "$SCRIPT_DIR/deploy_pos_production.sh" \
   --migration \
-  "$ROOT_DIR/supabase/migrations/20260806120000_menu_sold_out_cashier_access.sql" \
-  --test "$ROOT_DIR/test/menu_sold_out_access_contract_test.dart" \
+  "$ROOT_DIR/supabase/migrations/20260806122400_menu_sold_out_cashier_access.sql" \
+  --test test/menu_sold_out_access_contract_test.dart \
   "$@"
