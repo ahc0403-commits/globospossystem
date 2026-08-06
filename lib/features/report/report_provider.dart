@@ -73,6 +73,7 @@ PhotoObjetReportTotals aggregatePhotoObjetReportRows(
 
     final grossSales = _toDouble(row['total_gross_sales']);
     final serviceAmount = _toDouble(row['total_service_amount']);
+    final salesRevenue = (grossSales - serviceAmount).clamp(0, double.infinity);
     final transactions = _toInt(row['total_transactions']);
     final date = DateTime(saleDate.year, saleDate.month, saleDate.day);
     final dateKey = DateFormat('yyyy-MM-dd').format(date);
@@ -81,8 +82,8 @@ PhotoObjetReportTotals aggregatePhotoObjetReportRows(
       () => _PhotoObjetDailyAccumulator(date: date),
     );
 
-    accumulator.revenue += grossSales;
-    totalRevenue += grossSales;
+    accumulator.revenue += salesRevenue;
+    totalRevenue += salesRevenue;
     serviceTotal += serviceAmount;
     transactionCount += transactions;
   }
@@ -586,19 +587,19 @@ class ReportNotifier extends StateNotifier<ReportState> {
     // Summary section
     sheet.appendRow([TextCellValue('Summary')]);
     sheet.appendRow([
-      TextCellValue('Store Revenue'),
+      TextCellValue('Store Sales Revenue'),
       DoubleCellValue(summary.dineInRevenue),
     ]);
     sheet.appendRow([
-      TextCellValue('Delivery Revenue'),
+      TextCellValue('Delivery Sales Revenue'),
       DoubleCellValue(summary.deliveryRevenue),
     ]);
     sheet.appendRow([
-      TextCellValue('Total Revenue'),
+      TextCellValue('Sales Revenue'),
       DoubleCellValue(summary.totalRevenue),
     ]);
     sheet.appendRow([
-      TextCellValue('Service Expenses'),
+      TextCellValue('Service Revenue (Coin Payments)'),
       DoubleCellValue(summary.serviceTotal),
     ]);
     sheet.appendRow([
@@ -663,7 +664,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
       TextCellValue('Date'),
       TextCellValue('Store'),
       TextCellValue('Delivery'),
-      TextCellValue('Total'),
+      TextCellValue('Sales Total'),
       TextCellValue('Cash'),
       TextCellValue('Card'),
       TextCellValue('Pay'),

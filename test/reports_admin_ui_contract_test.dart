@@ -10,6 +10,7 @@ void main() {
 
     expect(source, contains('_buildReportsCommandHeader'));
     expect(source, contains('ToastMetricStrip('));
+    expect(source, contains('label: l10n.reportsServiceExpenses'));
     expect(source, contains("Key('reports_operational_signals_detail')"));
     expect(source, contains('initiallyExpanded: false'));
     expect(source, isNot(contains('PosPageHeader(')));
@@ -25,7 +26,7 @@ void main() {
 
       expect(source, contains("Key('reports_compact_scroll')"));
       expect(source, contains('compactReportHeight'));
-      expect(source, contains('maxColumns: 5'));
+      expect(source, contains('maxColumns: 6'));
       expect(source, contains('520.0 + 12.0 + 240.0'));
       expect(source, contains('height: 240'));
       expect(source, contains('reportConstraints.maxWidth < 1080'));
