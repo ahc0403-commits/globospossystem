@@ -6,7 +6,7 @@ String readRepoFile(String path) => File(path).readAsStringSync();
 
 void main() {
   const migrationPath =
-      'supabase/migrations/20260806120000_menu_sold_out_cashier_access.sql';
+      'supabase/migrations/20260806122400_menu_sold_out_cashier_access.sql';
 
   test('sold-out mutation is narrow, store-scoped, and audited', () {
     final sql = readRepoFile(migrationPath);
@@ -27,6 +27,17 @@ void main() {
     expect(sql, contains('REVOKE ALL ON FUNCTION'));
     expect(sql, isNot(contains('is_visible_public =')));
     expect(sql, isNot(contains('price =')));
+  });
+
+  test('sold-out migration version is unique in the repository', () {
+    final version = File(migrationPath).uri.pathSegments.last.split('_').first;
+    final matchingMigrations = Directory('supabase/migrations')
+        .listSync()
+        .whereType<File>()
+        .where((file) => file.uri.pathSegments.last.startsWith('${version}_'))
+        .toList();
+
+    expect(matchingMigrations, hasLength(1));
   });
 
   test(
