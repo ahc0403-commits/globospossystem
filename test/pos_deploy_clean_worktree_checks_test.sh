@@ -107,6 +107,8 @@ printf 'deno test --allow-env=ALLOWED_ORIGINS %s/supabase/functions/complete-ini
   "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
 printf 'deno test %s/supabase/functions/sepay-webhook/index_test.ts\n' \
   "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
+printf 'deno test %s/supabase/functions/sepay-alert-dispatcher/index_test.ts\n' \
+  "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
 printf 'flutter test test/focused_test.dart\n' >>"$TMP_DIR/expected.log"
 cmp "$TMP_DIR/expected.log" "$CALL_LOG"
 [[ -z "$(git -C "$REHEARSAL_REPO" status --porcelain)" ]]

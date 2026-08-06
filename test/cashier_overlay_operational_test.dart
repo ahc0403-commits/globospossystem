@@ -619,7 +619,7 @@ void main() {
     tester,
   ) async {
     final startedAt = DateTime.now().toUtc();
-    final alertService = _MutableBankTransferAlertService(
+    final alertService = _MutableBankTransferAlertService([
       BankTransferAlert(
         transactionId: 'historical',
         providerTransactionId: 1,
@@ -627,7 +627,7 @@ void main() {
         gateway: 'Vietcombank',
         receivedAt: startedAt.subtract(const Duration(minutes: 1)),
       ),
-    );
+    ]);
     final soundService = _RecordingBankTransferAlertSoundService();
     await _pumpCashier(
       tester,
@@ -639,23 +639,50 @@ void main() {
     expect(soundService.playCount, 0);
     expect(find.textContaining('1.000 VND'), findsNothing);
 
-    alertService.latest = BankTransferAlert(
-      transactionId: 'new-transfer',
-      providerTransactionId: 2,
-      amount: 42000,
-      paymentCode: 'GBTEST42',
-      gateway: 'Vietcombank',
-      receivedAt: DateTime.now().toUtc(),
-    );
+    final receivedAt = DateTime.now().toUtc();
+    alertService.alerts.addAll([
+      BankTransferAlert(
+        transactionId: 'new-transfer-1',
+        providerTransactionId: 2,
+        amount: 42000,
+        paymentCode: 'GBTEST42',
+        gateway: 'Vietcombank',
+        receivedAt: receivedAt,
+      ),
+      BankTransferAlert(
+        transactionId: 'new-transfer-2',
+        providerTransactionId: 3,
+        amount: 43000,
+        paymentCode: 'GBTEST43',
+        gateway: 'Vietcombank',
+        receivedAt: receivedAt.add(const Duration(milliseconds: 1)),
+      ),
+      BankTransferAlert(
+        transactionId: 'new-transfer-3',
+        providerTransactionId: 4,
+        amount: 44000,
+        paymentCode: 'GBTEST44',
+        gateway: 'Vietcombank',
+        receivedAt: receivedAt.add(const Duration(milliseconds: 2)),
+      ),
+    ]);
     await tester.pump(const Duration(milliseconds: 25));
     await tester.pump();
 
-    expect(soundService.playCount, 1);
-    expect(soundService.amounts, [42000]);
-    expect(find.textContaining('42.000 VND'), findsOneWidget);
+    expect(soundService.playCount, 3);
+    expect(soundService.amounts, [42000, 43000, 44000]);
+    expect(alertService.acknowledgements, [
+      (transactionId: 'new-transfer-1', spoken: false),
+      (transactionId: 'new-transfer-1', spoken: true),
+      (transactionId: 'new-transfer-2', spoken: false),
+      (transactionId: 'new-transfer-2', spoken: true),
+      (transactionId: 'new-transfer-3', spoken: false),
+      (transactionId: 'new-transfer-3', spoken: true),
+    ]);
+    expect(find.textContaining('44.000 VND'), findsOneWidget);
 
     await tester.pump(const Duration(milliseconds: 25));
-    expect(soundService.playCount, 1);
+    expect(soundService.playCount, 3);
   });
 }
 
@@ -802,16 +829,61 @@ Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
 
 class _NoopBankTransferAlertService extends BankTransferAlertService {
   @override
-  Future<BankTransferAlert?> fetchLatest(String storeId) async => null;
+  Future<void> registerPollingDevice(String storeId) async {}
+
+  @override
+  Future<bool> acknowledge(
+    String transactionId, {
+    required bool spoken,
+  }) async => true;
+
+  @override
+  Future<List<BankTransferAlert>> fetchAfter(
+    String storeId,
+    BankTransferAlertCursor cursor, {
+    int limit = 100,
+  }) async => const [];
+
+  @override
+  Future<BankTransferAlertCursor?> loadCursor(String storeId) async => null;
+
+  @override
+  Future<void> saveCursor(
+    String storeId,
+    BankTransferAlertCursor cursor,
+  ) async {}
 }
 
 class _MutableBankTransferAlertService extends BankTransferAlertService {
-  _MutableBankTransferAlertService(this.latest);
+  _MutableBankTransferAlertService(this.alerts);
 
-  BankTransferAlert? latest;
+  final List<BankTransferAlert> alerts;
+  final List<({String transactionId, bool spoken})> acknowledgements = [];
 
   @override
-  Future<BankTransferAlert?> fetchLatest(String storeId) async => latest;
+  Future<void> registerPollingDevice(String storeId) async {}
+
+  @override
+  Future<bool> acknowledge(String transactionId, {required bool spoken}) async {
+    acknowledgements.add((transactionId: transactionId, spoken: spoken));
+    return true;
+  }
+
+  @override
+  Future<List<BankTransferAlert>> fetchAfter(
+    String storeId,
+    BankTransferAlertCursor cursor, {
+    int limit = 100,
+  }) async => alerts.where(cursor.isBefore).take(limit).toList();
+
+  @override
+  Future<BankTransferAlertCursor?> loadCursor(String storeId) async => null;
+
+  @override
+  Future<void> saveCursor(
+    String storeId,
+    BankTransferAlertCursor cursor,
+  ) async {}
 }
 
 class _RecordingBankTransferAlertSoundService

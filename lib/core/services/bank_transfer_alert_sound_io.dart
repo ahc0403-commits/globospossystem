@@ -20,6 +20,7 @@ class BankTransferAlertSoundService {
     _playbackQueue = _playbackQueue
         .then((_) => _announce(amount))
         .catchError((_) {});
+    await _playbackQueue;
   }
 
   Future<bool> _preparePlayer() async {

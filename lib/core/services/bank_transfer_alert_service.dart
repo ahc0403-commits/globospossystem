@@ -1,4 +1,7 @@
 import '../../main.dart';
+import '../layout/platform_info.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 class BankTransferAlert {
   const BankTransferAlert({
@@ -44,32 +47,138 @@ class BankTransferAlert {
 }
 
 class BankTransferAlertService {
-  Future<BankTransferAlert?> fetchLatest(String storeId) async {
-    final result = await supabase.rpc(
-      'get_latest_sepay_payment_alert',
-      params: {'p_store_id': storeId},
+  static const _cursorReceivedAtPrefix = 'sepay_alert_received_at_';
+  static const _cursorProviderIdPrefix = 'sepay_alert_provider_id_';
+  static const _installationIdKey = 'sepay_alert_installation_id';
+
+  Future<String> installationId() async {
+    final preferences = await SharedPreferences.getInstance();
+    final existing = preferences.getString(_installationIdKey)?.trim();
+    if (existing != null && existing.length >= 8) return existing;
+
+    final created = const Uuid().v4();
+    await preferences.setString(_installationIdKey, created);
+    return created;
+  }
+
+  Future<void> registerPollingDevice(String storeId) async {
+    final id = await installationId();
+    await supabase.rpc(
+      'upsert_sepay_alert_device',
+      params: {
+        'p_store_id': storeId,
+        'p_installation_id': id,
+        'p_platform': PlatformInfo.alertPlatform,
+        'p_push_provider': 'polling',
+      },
     );
-    if (result is! List || result.isEmpty) return null;
-    return BankTransferAlert.fromJson(
-      Map<String, dynamic>.from(result.first as Map),
+  }
+
+  Future<void> registerPushDevice(String storeId, String pushToken) async {
+    final id = await installationId();
+    await supabase.rpc(
+      'upsert_sepay_alert_device',
+      params: {
+        'p_store_id': storeId,
+        'p_installation_id': id,
+        'p_platform': PlatformInfo.alertPlatform,
+        'p_push_provider': 'fcm',
+        'p_push_token': pushToken,
+      },
+    );
+  }
+
+  Future<bool> acknowledge(String transactionId, {required bool spoken}) async {
+    final result = await supabase.rpc(
+      'ack_sepay_alert_delivery',
+      params: {
+        'p_transaction_id': transactionId,
+        'p_installation_id': await installationId(),
+        'p_status': spoken ? 'spoken' : 'seen',
+      },
+    );
+    return result == true;
+  }
+
+  Future<List<BankTransferAlert>> fetchAfter(
+    String storeId,
+    BankTransferAlertCursor cursor, {
+    int limit = 100,
+  }) async {
+    final result = await supabase.rpc(
+      'get_sepay_payment_alerts_after',
+      params: {
+        'p_store_id': storeId,
+        'p_after_received_at': cursor.receivedAt.toIso8601String(),
+        'p_after_provider_transaction_id': cursor.providerTransactionId,
+        'p_limit': limit,
+      },
+    );
+    if (result is! List) return const [];
+    return result
+        .map(
+          (row) =>
+              BankTransferAlert.fromJson(Map<String, dynamic>.from(row as Map)),
+        )
+        .toList(growable: false);
+  }
+
+  Future<BankTransferAlertCursor?> loadCursor(String storeId) async {
+    final preferences = await SharedPreferences.getInstance();
+    final receivedAt = DateTime.tryParse(
+      preferences.getString('$_cursorReceivedAtPrefix$storeId') ?? '',
+    );
+    final providerTransactionId = int.tryParse(
+      preferences.getString('$_cursorProviderIdPrefix$storeId') ?? '',
+    );
+    if (receivedAt == null || providerTransactionId == null) return null;
+    return BankTransferAlertCursor(
+      receivedAt: receivedAt.toUtc(),
+      providerTransactionId: providerTransactionId,
+    );
+  }
+
+  Future<void> saveCursor(
+    String storeId,
+    BankTransferAlertCursor cursor,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(
+      '$_cursorReceivedAtPrefix$storeId',
+      cursor.receivedAt.toIso8601String(),
+    );
+    await preferences.setString(
+      '$_cursorProviderIdPrefix$storeId',
+      cursor.providerTransactionId.toString(),
     );
   }
 }
 
 class BankTransferAlertCursor {
-  BankTransferAlertCursor({required this.startedAt});
+  BankTransferAlertCursor({
+    required DateTime receivedAt,
+    required this.providerTransactionId,
+  }) : receivedAt = receivedAt.toUtc();
 
-  final DateTime startedAt;
-  String? _lastTransactionId;
+  factory BankTransferAlertCursor.startedNow() => BankTransferAlertCursor(
+    receivedAt: DateTime.now().toUtc(),
+    providerTransactionId: 0,
+  );
 
-  String? get lastTransactionId => _lastTransactionId;
+  DateTime receivedAt;
+  int providerTransactionId;
 
-  bool shouldNotify(BankTransferAlert alert) {
-    if (alert.transactionId == _lastTransactionId) return false;
+  bool isBefore(BankTransferAlert alert) {
+    final receivedComparison = receivedAt.compareTo(alert.receivedAt.toUtc());
+    return receivedComparison < 0 ||
+        (receivedComparison == 0 &&
+            providerTransactionId < alert.providerTransactionId);
+  }
 
-    final hasBaseline = _lastTransactionId != null;
-    _lastTransactionId = alert.transactionId;
-    return hasBaseline || !alert.receivedAt.isBefore(startedAt);
+  void advance(BankTransferAlert alert) {
+    if (!isBefore(alert)) return;
+    receivedAt = alert.receivedAt.toUtc();
+    providerTransactionId = alert.providerTransactionId;
   }
 }
 

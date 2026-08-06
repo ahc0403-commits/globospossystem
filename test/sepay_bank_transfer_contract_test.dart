@@ -23,7 +23,10 @@ void main() {
 
   test('alert cursor ignores history and accepts new transactions once', () {
     final startedAt = DateTime.parse('2026-08-05T10:00:00Z');
-    final cursor = BankTransferAlertCursor(startedAt: startedAt);
+    final cursor = BankTransferAlertCursor(
+      receivedAt: startedAt,
+      providerTransactionId: 0,
+    );
     final historical = _alert(
       id: 'historical',
       receivedAt: startedAt.subtract(const Duration(seconds: 1)),
@@ -33,17 +36,21 @@ void main() {
       receivedAt: startedAt.add(const Duration(seconds: 1)),
     );
 
-    expect(cursor.shouldNotify(historical), isFalse);
-    expect(cursor.shouldNotify(current), isTrue);
-    expect(cursor.shouldNotify(current), isFalse);
+    expect(cursor.isBefore(historical), isFalse);
+    expect(cursor.isBefore(current), isTrue);
+    cursor.advance(current);
+    expect(cursor.isBefore(current), isFalse);
   });
 
   test('first transaction received after cashier mount is not swallowed', () {
     final startedAt = DateTime.parse('2026-08-05T10:00:00Z');
-    final cursor = BankTransferAlertCursor(startedAt: startedAt);
+    final cursor = BankTransferAlertCursor(
+      receivedAt: startedAt,
+      providerTransactionId: 0,
+    );
 
     expect(
-      cursor.shouldNotify(
+      cursor.isBefore(
         _alert(
           id: 'first-live',
           receivedAt: startedAt.add(const Duration(milliseconds: 1)),
@@ -136,9 +143,10 @@ void main() {
   test(
     'cashier keeps realtime primary with polling and web sound fallback',
     () {
-      final cashier = File(
-        'lib/features/cashier/cashier_screen.dart',
+      final coordinator = File(
+        'lib/core/services/bank_transfer_alert_coordinator.dart',
       ).readAsStringSync();
+      final main = File('lib/main.dart').readAsStringSync();
       final webSound = File(
         'lib/core/services/bank_transfer_alert_sound_web.dart',
       ).readAsStringSync();
@@ -146,13 +154,17 @@ void main() {
         'lib/core/services/bank_transfer_alert_sound_io.dart',
       ).readAsStringSync();
 
-      expect(cashier, contains('Timer.periodic('));
-      expect(cashier, contains('_showLatestBankTransferAlert(storeId)'));
-      expect(cashier, contains('cursor.shouldNotify(alert)'));
-      expect(
-        cashier,
-        contains('_bankTransferAlertSoundService.play(amount: alert.amount)'),
-      );
+      expect(main, contains('BankTransferAlertCoordinator('));
+      expect(main, contains("auth.role == 'cashier' ? storeId : null"));
+      expect(main, contains('storeId: pollingStoreId'));
+      expect(main, contains('syncStore(pushStoreId)'));
+      expect(coordinator, contains('Timer.periodic('));
+      expect(coordinator, contains('posLiveEventsProvider(storeId)'));
+      expect(coordinator, contains('_drain(storeId)'));
+      expect(coordinator, contains('cursor.isBefore(alert)'));
+      expect(coordinator, contains('fetchAfter('));
+      expect(coordinator, contains('cursor.advance(alert)'));
+      expect(coordinator, contains('_soundService.play(amount: alert.amount)'));
       expect(webSound, contains("_assetBasePath = 'assets/assets/audio/"));
       expect(webSound, contains('context.decodeAudioData(bytes)'));
       expect(webSound, contains('context.createBufferSource()'));
@@ -206,9 +218,47 @@ void main() {
     expect(sql, contains('ON CONFLICT (sepay_transaction_id) DO NOTHING'));
   });
 
+  test('ordered SePay alert RPC drains every cursor successor', () {
+    final sql = File(
+      'supabase/migrations/20260806100000_sepay_ordered_payment_alerts.sql',
+    ).readAsStringSync();
+
+    expect(sql, contains('get_sepay_payment_alerts_after'));
+    expect(sql, contains('txn.received_at > p_after_received_at'));
+    expect(sql, contains('txn.sepay_transaction_id > COALESCE('));
+    expect(
+      sql,
+      contains('ORDER BY txn.received_at ASC, txn.sepay_transaction_id ASC'),
+    );
+    expect(sql, contains('user_accessible_stores(auth.uid())'));
+    expect(sql, contains('LEAST(GREATEST(COALESCE(p_limit, 100), 1), 500)'));
+
+    final verification = File(
+      'scripts/verify_sepay_ordered_payment_alerts.sql',
+    ).readAsStringSync();
+    expect(verification, contains('SEPAY_ORDERED_ALERTS_VERIFY_FAILED'));
+    expect(verification, contains('user_accessible_stores(auth.uid())'));
+    expect(
+      verification,
+      contains('ORDER BY txn.received_at ASC, txn.sepay_transaction_id ASC'),
+    );
+    expect(verification, contains("has_function_privilege('authenticated'"));
+    expect(verification, contains("has_function_privilege('anon'"));
+  });
+
   test('production deploy exposes only the HMAC-protected SePay endpoint', () {
     final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
     expect(deploy, contains('functions deploy sepay-webhook --no-verify-jwt'));
+    expect(deploy, contains('functions deploy sepay-alert-dispatcher'));
+    expect(
+      deploy,
+      isNot(
+        contains('functions deploy sepay-alert-dispatcher --no-verify-jwt'),
+      ),
+    );
+    expect(deploy, contains('FIREBASE_SERVICE_ACCOUNT_JSON'));
+    expect(deploy, contains('SEPAY_WEBHOOK_SECRET'));
+    expect(deploy, contains('CRON_SECRET'));
 
     final edge = File(
       'supabase/functions/sepay-webhook/index.ts',
@@ -217,6 +267,47 @@ void main() {
     expect(edge, contains('x-sepay-timestamp'));
     expect(edge, contains('SEPAY_SIGNATURE_INVALID'));
     expect(edge, contains('return json({ success: true })'));
+  });
+
+  test('SePay delivery ledger isolates devices and retries stale claims', () {
+    final sql = File(
+      'supabase/migrations/'
+      '20260806110000_sepay_alert_device_delivery_ledger.sql',
+    ).readAsStringSync();
+
+    expect(
+      sql,
+      contains('CREATE TABLE IF NOT EXISTS public.sepay_alert_devices'),
+    );
+    expect(
+      sql,
+      contains('CREATE TABLE IF NOT EXISTS public.sepay_alert_deliveries'),
+    );
+    expect(sql, contains('REVOKE ALL ON public.sepay_alert_devices'));
+    expect(sql, contains('REVOKE ALL ON public.sepay_alert_deliveries'));
+    expect(sql, contains('user_accessible_stores(auth.uid())'));
+    expect(sql, contains("device.user_id = auth.uid()"));
+    expect(sql, contains("sepay_alert_devices.push_provider = 'fcm'"));
+    expect(sql, contains("EXCLUDED.push_provider = 'polling'"));
+    expect(sql, contains("delivery.status = 'processing'"));
+    expect(sql, contains("now() - interval '5 minutes'"));
+    expect(sql, contains('FOR UPDATE OF delivery SKIP LOCKED'));
+    expect(sql, contains('UNIQUE (transaction_id, device_id)'));
+    expect(sql, contains('sepay-alert-dispatcher-every-minute'));
+    expect(sql, contains('vault.decrypted_secrets'));
+    expect(sql, contains("WHERE name = 'cron_secret'"));
+
+    final verification = File(
+      'scripts/verify_sepay_alert_device_delivery_ledger.sql',
+    ).readAsStringSync();
+    expect(verification, contains('SEPAY_ALERT_LEDGER_VERIFY_FAILED'));
+    expect(verification, contains('table_row.relrowsecurity'));
+    expect(verification, contains('UNIQUE (transaction_id, device_id)'));
+    expect(verification, contains('device.user_id = auth.uid()'));
+    expect(verification, contains('FOR UPDATE OF delivery SKIP LOCKED'));
+    expect(verification, contains("device.push_provider = ''fcm''"));
+    expect(verification, contains('sepay_alert_delivery_enqueue_trigger'));
+    expect(verification, contains('sepay-alert-dispatcher-every-minute'));
   });
 
   test('SePay test VA maps only to BunsikClub Binh Thanh', () {
@@ -240,6 +331,71 @@ void main() {
     expect(verification, contains('SBSEPAYOA465N89VHYK'));
     expect(verification, contains('account.is_active = true'));
     expect(verification, contains('SEPAY_TEST_STORE_MAPPING_VERIFY_FAILED'));
+  });
+
+  test('native runtimes keep locked-device SePay receipt hooks wired', () {
+    final push = File(
+      'lib/core/services/sepay_push_notification_service.dart',
+    ).readAsStringSync();
+    expect(push, contains('@pragma(\'vm:entry-point\')'));
+    expect(push, contains('FirebaseMessaging.onBackgroundMessage'));
+    expect(push, contains('FirebaseMessaging.onMessage.listen'));
+    expect(push, contains('deleteToken()'));
+    expect(push, contains('bankTransferAlertSoundService.play'));
+    expect(push, contains('SePayAndroidAudio.announce'));
+    expect(push, contains("String.fromEnvironment('FIREBASE_PROJECT_ID')"));
+
+    final androidManifest = File(
+      'android/app/src/main/AndroidManifest.xml',
+    ).readAsStringSync();
+    expect(androidManifest, contains('android.permission.POST_NOTIFICATIONS'));
+    expect(androidManifest, contains('android.permission.WAKE_LOCK'));
+
+    final androidAudioManifest = File(
+      'packages/sepay_android_audio/android/src/main/AndroidManifest.xml',
+    ).readAsStringSync();
+    expect(
+      androidAudioManifest,
+      contains('android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK'),
+    );
+    expect(
+      androidAudioManifest,
+      contains('foregroundServiceType="mediaPlayback"'),
+    );
+
+    final androidAudioService = File(
+      'packages/sepay_android_audio/android/src/main/kotlin/com/globosvn/'
+      'sepay_android_audio/SePayAudioService.kt',
+    ).readAsStringSync();
+    expect(androidAudioService, contains('startForeground('));
+    expect(
+      androidAudioService,
+      contains('ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK'),
+    );
+    expect(androidAudioService, contains('PowerManager.PARTIAL_WAKE_LOCK'));
+    expect(androidAudioService, contains('SEPAY_AUDIO_COMPLETE'));
+
+    final vercelIgnore = File('.vercelignore').readAsStringSync();
+    expect(
+      vercelIgnore,
+      contains('!packages/sepay_android_audio/android/**'),
+    );
+
+    final iosExtension = File(
+      'ios/BankTransferNotificationService/NotificationService.swift',
+    ).readAsStringSync();
+    expect(iosExtension, contains('UNNotificationServiceExtension'));
+    expect(iosExtension, contains('forSecurityApplicationGroupIdentifier'));
+    expect(iosExtension, contains('group.com.globosvn.globosPosSystem'));
+    expect(iosExtension, contains('UNNotificationSound'));
+
+    final iosInfo = File('ios/Runner/Info.plist').readAsStringSync();
+    expect(iosInfo, contains('remote-notification'));
+    final entitlements = File(
+      'ios/Runner/Runner.entitlements',
+    ).readAsStringSync();
+    expect(entitlements, contains('aps-environment'));
+    expect(entitlements, contains('com.apple.security.application-groups'));
   });
 }
 

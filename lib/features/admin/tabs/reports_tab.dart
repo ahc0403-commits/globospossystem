@@ -586,6 +586,9 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     final totalRevenue = summary == null
         ? '—'
         : _formatVnd(currency, summary.totalRevenue);
+    final serviceRevenue = summary == null
+        ? '—'
+        : _formatVnd(currency, summary.serviceTotal);
     final averageOrder = summary == null || summary.totalOrders == 0
         ? '—'
         : _formatVnd(currency, summary.totalRevenue / summary.totalOrders);
@@ -598,6 +601,11 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
         (summary?.cancelledOrders ?? 0) > 0;
     final reportMetrics = [
       ToastMetric(label: l10n.reportsTotalSales, value: totalRevenue),
+      ToastMetric(
+        label: l10n.reportsServiceExpenses,
+        value: serviceRevenue,
+        tone: PosColors.textSecondary,
+      ),
       ToastMetric(
         label: l10n.reportsTotalOrders,
         value: summary == null ? '—' : '${summary.totalOrders}',
@@ -647,7 +655,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                   key: const Key('reports_order_accuracy_metrics'),
                   child: ToastMetricStrip(
                     dense: true,
-                    maxColumns: 5,
+                    maxColumns: 6,
                     metrics: reportMetrics,
                   ),
                 ),

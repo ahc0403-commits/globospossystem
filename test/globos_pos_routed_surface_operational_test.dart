@@ -50,7 +50,29 @@ class _FixtureAuthNotifier extends AuthNotifier {
 
 class _NoopBankTransferAlertService extends BankTransferAlertService {
   @override
-  Future<BankTransferAlert?> fetchLatest(String storeId) async => null;
+  Future<void> registerPollingDevice(String storeId) async {}
+
+  @override
+  Future<bool> acknowledge(
+    String transactionId, {
+    required bool spoken,
+  }) async => true;
+
+  @override
+  Future<List<BankTransferAlert>> fetchAfter(
+    String storeId,
+    BankTransferAlertCursor cursor, {
+    int limit = 100,
+  }) async => const [];
+
+  @override
+  Future<BankTransferAlertCursor?> loadCursor(String storeId) async => null;
+
+  @override
+  Future<void> saveCursor(
+    String storeId,
+    BankTransferAlertCursor cursor,
+  ) async {}
 }
 
 class _FixtureSuperAdminNotifier extends SuperAdminNotifier {

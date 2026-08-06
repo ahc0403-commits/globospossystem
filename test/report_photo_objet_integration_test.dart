@@ -6,33 +6,56 @@ import 'package:globos_pos_system/features/report/report_provider.dart';
 String readRepoFile(String path) => File(path).readAsStringSync();
 
 void main() {
-  test(
-    'Photo Objet daily rows contribute revenue and completed transactions',
-    () {
-      final totals = aggregatePhotoObjetReportRows([
-        {
-          'sale_date': '2026-07-19',
-          'total_gross_sales': '5160000',
-          'total_transactions': 59,
-          'total_service_amount': '100000',
-        },
-        {
-          'sale_date': '2026-07-18',
-          'total_gross_sales': 3130000,
-          'total_transactions': '36',
-          'total_service_amount': 0,
-        },
-      ]);
+  test('Photo Objet daily rows separate sales and service revenue', () {
+    final totals = aggregatePhotoObjetReportRows([
+      {
+        'sale_date': '2026-07-19',
+        'total_gross_sales': '5160000',
+        'total_transactions': 59,
+        'total_service_amount': '100000',
+      },
+      {
+        'sale_date': '2026-07-18',
+        'total_gross_sales': 3130000,
+        'total_transactions': '36',
+        'total_service_amount': 0,
+      },
+    ]);
 
-      expect(totals.totalRevenue, 8290000);
-      expect(totals.serviceTotal, 100000);
-      expect(totals.transactionCount, 95);
-      expect(totals.dailyBreakdown, hasLength(2));
-      expect(totals.dailyBreakdown.first.date, DateTime(2026, 7, 18));
-      expect(totals.dailyBreakdown.first.total, 3130000);
-      expect(totals.dailyBreakdown.last.total, 5160000);
-    },
-  );
+    expect(totals.totalRevenue, 8190000);
+    expect(totals.serviceTotal, 100000);
+    expect(totals.transactionCount, 95);
+    expect(totals.dailyBreakdown, hasLength(2));
+    expect(totals.dailyBreakdown.first.date, DateTime(2026, 7, 18));
+    expect(totals.dailyBreakdown.first.total, 3130000);
+    expect(totals.dailyBreakdown.last.total, 5060000);
+  });
+
+  test('Photo Objet service revenue cannot make sales revenue negative', () {
+    final totals = aggregatePhotoObjetReportRows([
+      {
+        'sale_date': '2026-08-03',
+        'total_gross_sales': 70000,
+        'total_transactions': 1,
+        'total_service_amount': 100000,
+      },
+    ]);
+
+    expect(totals.totalRevenue, 0);
+    expect(totals.serviceTotal, 100000);
+    expect(totals.dailyBreakdown.single.total, 0);
+  });
+
+  test('report export keeps sales and service revenue separate', () {
+    final provider = readRepoFile('lib/features/report/report_provider.dart');
+
+    expect(provider, contains("TextCellValue('Sales Revenue')"));
+    expect(
+      provider,
+      contains("TextCellValue('Service Revenue (Coin Payments)')"),
+    );
+    expect(provider, isNot(contains("TextCellValue('Total Revenue')")));
+  });
 
   test('invalid Photo Objet rows do not create report activity', () {
     final totals = aggregatePhotoObjetReportRows([
