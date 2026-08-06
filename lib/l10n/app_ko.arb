@@ -339,7 +339,7 @@
   "menuItemsSelectCategorySubtitle": "카테고리를 선택하면 메뉴 목록이 표시됩니다.",
   "menuItemsReadySubtitle": "메뉴명, 가격, 판매 상태를 한 줄에서 확인합니다.",
   "menuAvailable": "사용",
-  "menuSoldOut": "중지",
+  "menuSoldOut": "품절",
   "menuRecentChangesHint": "필요할 때만 메뉴 변경 이력을 확인합니다.",
   "menuMarkedAvailable": "메뉴 \"{name}\"을 판매 가능으로 표시했습니다.",
   "@menuMarkedAvailable": {

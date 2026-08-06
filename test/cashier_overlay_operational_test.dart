@@ -6,6 +6,7 @@ import 'package:globos_pos_system/core/payments/payment_method_contract.dart';
 import 'package:globos_pos_system/core/services/bank_transfer_alert_service.dart';
 import 'package:globos_pos_system/core/services/bank_transfer_alert_sound.dart';
 import 'package:globos_pos_system/core/services/connectivity_service.dart';
+import 'package:globos_pos_system/core/services/menu_service.dart';
 import 'package:globos_pos_system/core/services/payment_proof_service.dart';
 import 'package:globos_pos_system/core/services/payment_service.dart';
 import 'package:globos_pos_system/core/services/restaurant_cutoff_service.dart';
@@ -273,6 +274,24 @@ class _CutoffService extends RestaurantCutoffService {
       );
 }
 
+class _MenuService extends MenuService {
+  final List<Map<String, dynamic>> items = [
+    {'id': 'menu-pho', 'name': 'Phở bò đặc biệt', 'is_available': true},
+    {'id': 'menu-coffee', 'name': 'Cà phê sữa đá', 'is_available': false},
+  ];
+  final List<(String, bool)> availabilityChanges = [];
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchItems(String storeId) async => [
+    for (final item in items) Map<String, dynamic>.from(item),
+  ];
+
+  @override
+  Future<void> toggleAvailability(String itemId, bool isAvailable) async {
+    availabilityChanges.add((itemId, isAvailable));
+  }
+}
+
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -328,6 +347,21 @@ void main() {
   ) async {
     final harness = await _pumpCashier(tester);
     await _selectOrder(tester);
+
+    await tester.ensureVisible(
+      find.byKey(const Key('cashier_sold_out_menu_action')),
+    );
+    await tester.tap(find.byKey(const Key('cashier_sold_out_menu_action')));
+    await tester.pumpAndSettle();
+    final soldOutDialog = find.byKey(const Key('cashier_sold_out_dialog'));
+    expect(soldOutDialog, findsOneWidget);
+    await tester.tap(
+      find.byKey(const Key('cashier_menu_availability_menu-pho')),
+    );
+    await tester.pumpAndSettle();
+    expect(harness.menuService.availabilityChanges, [('menu-pho', false)]);
+    Navigator.of(tester.element(soldOutDialog)).pop();
+    await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.byKey(const Key('payment_submit_button')));
     await tester.tap(find.byKey(const Key('payment_submit_button')));
@@ -691,11 +725,13 @@ class _CashierHarness {
     required this.notifier,
     required this.proofService,
     required this.paymentService,
+    required this.menuService,
   });
 
   final _PaymentNotifier notifier;
   final _PaymentProofService proofService;
   final _PaymentService paymentService;
+  final _MenuService menuService;
 }
 
 Future<_CashierHarness> _pumpCashier(
@@ -714,6 +750,7 @@ Future<_CashierHarness> _pumpCashier(
   final notifier = _PaymentNotifier(includeSecondOrder: includeSecondOrder);
   final proofService = _PaymentProofService();
   final paymentService = _PaymentService();
+  final menuService = _MenuService();
   final router = GoRouter(
     initialLocation: '/cashier',
     routes: [
@@ -723,6 +760,7 @@ Future<_CashierHarness> _pumpCashier(
           paymentProofServiceOverride: proofService,
           paymentServiceOverride: paymentService,
           restaurantCutoffServiceOverride: _CutoffService(),
+          menuServiceOverride: menuService,
           bankTransferAlertServiceOverride:
               bankTransferAlertService ?? _NoopBankTransferAlertService(),
           bankTransferAlertSoundServiceOverride: bankTransferAlertSoundService,
@@ -780,6 +818,7 @@ Future<_CashierHarness> _pumpCashier(
     notifier: notifier,
     proofService: proofService,
     paymentService: paymentService,
+    menuService: menuService,
   );
 }
 

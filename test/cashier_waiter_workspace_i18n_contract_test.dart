@@ -157,10 +157,8 @@ void main() {
         contains("key: const Key('cashier_compact_command_bar')"),
       );
       expect(cashier, contains('if (compact)'));
-      expect(
-        cashier,
-        contains('_CashierCompactCommandBar(isOnline: isOnline)'),
-      );
+      expect(cashier, contains('_CashierCompactCommandBar('));
+      expect(cashier, contains('onManageSoldOut: onManageSoldOut'));
       expect(cashier, contains('SizedBox(height: useCompactChrome ? 8 : 12)'));
       expect(cashier, contains('_CashierOrderSummarySurface('));
       expect(cashier, contains('compact: true'));

@@ -204,7 +204,7 @@ class MenuService {
 
   Future<void> toggleAvailability(String itemId, bool isAvailable) async {
     await supabase.rpc(
-      'admin_update_menu_item',
+      'set_menu_item_availability',
       params: {'p_item_id': itemId, 'p_is_available': isAvailable},
     );
   }
