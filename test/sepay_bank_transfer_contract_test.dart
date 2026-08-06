@@ -60,6 +60,79 @@ void main() {
     );
   });
 
+  test('Vietnamese audio tokens pronounce contextual amount digits', () {
+    expect(vietnameseBankTransferAudioTokens(1000), [
+      'prefix',
+      'mot',
+      'nghin',
+      'suffix',
+    ]);
+    expect(vietnameseBankTransferAudioTokens(1005), [
+      'prefix',
+      'mot',
+      'nghin',
+      'khong',
+      'tram',
+      'le',
+      'nam',
+      'suffix',
+    ]);
+    expect(vietnameseBankTransferAudioTokens(10015), [
+      'prefix',
+      'muoi',
+      'nghin',
+      'khong',
+      'tram',
+      'muoi',
+      'lam',
+      'suffix',
+    ]);
+    expect(vietnameseBankTransferAudioTokens(93456), [
+      'prefix',
+      'chin',
+      'muoi_hang_chuc',
+      'ba',
+      'nghin',
+      'bon',
+      'tram',
+      'nam',
+      'muoi_hang_chuc',
+      'sau',
+      'suffix',
+    ]);
+    expect(vietnameseBankTransferAudioTokens(100001), [
+      'prefix',
+      'mot',
+      'tram',
+      'nghin',
+      'khong',
+      'tram',
+      'le',
+      'mot',
+      'suffix',
+    ]);
+    expect(vietnameseBankTransferAudioTokens(499000000), [
+      'prefix',
+      'bon',
+      'tram',
+      'chin',
+      'muoi_hang_chuc',
+      'chin',
+      'trieu',
+      'suffix',
+    ]);
+  });
+
+  test('every Vietnamese speech token has a bundled MP3 asset', () {
+    for (final token in vietnameseBankTransferAudioAssetTokens) {
+      expect(
+        File('assets/audio/bank_transfer_vi/$token.mp3').existsSync(),
+        isTrue,
+        reason: 'Missing bundled audio token: $token',
+      );
+    }
+  });
+
   test(
     'cashier keeps realtime primary with polling and web sound fallback',
     () {
@@ -69,6 +142,9 @@ void main() {
       final webSound = File(
         'lib/core/services/bank_transfer_alert_sound_web.dart',
       ).readAsStringSync();
+      final nativeSound = File(
+        'lib/core/services/bank_transfer_alert_sound_io.dart',
+      ).readAsStringSync();
 
       expect(cashier, contains('Timer.periodic('));
       expect(cashier, contains('_showLatestBankTransferAlert(storeId)'));
@@ -77,11 +153,29 @@ void main() {
         cashier,
         contains('_bankTransferAlertSoundService.play(amount: alert.amount)'),
       );
+      expect(webSound, contains("_assetBasePath = 'assets/assets/audio/"));
+      expect(webSound, contains('context.decodeAudioData(bytes)'));
+      expect(webSound, contains('context.createBufferSource()'));
       expect(webSound, contains('web.SpeechSynthesisUtterance('));
       expect(webSound, contains("..lang = 'vi-VN'"));
-      expect(webSound, contains('..speak(utterance)'));
+      expect(webSound, contains('speech.speak(utterance)'));
       expect(webSound, contains('web.AudioContext()'));
       expect(webSound, contains('_scheduleTone'));
+      expect(nativeSound, contains('AudioPlayer()'));
+      expect(
+        nativeSound,
+        contains('vietnameseBankTransferAudioTokens(amount)'),
+      );
+      expect(nativeSound, contains('AssetSource('));
+      expect(nativeSound, contains('player.onPlayerComplete.first'));
+      expect(nativeSound, contains('SystemSoundType.alert'));
+
+      final windowsCmake = File('windows/CMakeLists.txt').readAsStringSync();
+      expect(windowsCmake, contains('if(TARGET audioplayers_windows_plugin)'));
+      expect(
+        windowsCmake,
+        contains('_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS'),
+      );
     },
   );
 

@@ -1,5 +1,5 @@
 # Project-level configuration.
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.15)
 project(globos_pos_system LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
@@ -8,7 +8,7 @@ set(BINARY_NAME "globos_print_station")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
-cmake_policy(VERSION 3.14...3.25)
+cmake_policy(VERSION 3.15...3.25)
 
 # Define build configuration option.
 get_property(IS_MULTICONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
@@ -56,6 +56,14 @@ add_subdirectory("runner")
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)
+
+# audioplayers_windows 4.3.x still includes MSVC's deprecated experimental
+# coroutine header. Flutter 3.41 cannot use the 4.4.x plugin that removes it,
+# so scope Microsoft's compatibility define to this plugin target only.
+if(TARGET audioplayers_windows_plugin)
+  target_compile_definitions(audioplayers_windows_plugin PRIVATE
+    _SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+endif()
 
 
 # === Installation ===
