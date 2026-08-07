@@ -183,11 +183,16 @@ class PrintJobAgentService implements PrintAgentDriver {
   Future<List<int>> _buildBytes(PrintAgentJob job) {
     return switch (job.ticket.ticket) {
       'receipt' => _buildPaymentReceipt(job.payload),
-      'floor' => ReceiptBuilder.buildFloorTicket(job.ticket),
+      'floor' => _buildFloorTicketCopies(job.ticket),
       'tray' => ReceiptBuilder.buildTrayLabel(job.ticket),
       'confirmation' => ReceiptBuilder.buildConfirmationSlip(job.ticket),
       _ => ReceiptBuilder.buildKitchenTicket(job.ticket),
     };
+  }
+
+  Future<List<int>> _buildFloorTicketCopies(PrintTicket ticket) async {
+    final bytes = await ReceiptBuilder.buildFloorTicket(ticket);
+    return <int>[...bytes, ...bytes];
   }
 
   Future<List<int>> _buildPaymentReceipt(Map<String, dynamic> payload) {
