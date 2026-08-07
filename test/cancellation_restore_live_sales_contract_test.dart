@@ -8,6 +8,12 @@ void main() {
 
   test('cancellation undo stays append-only and supports repeat cycles', () {
     final migration = File(migrationPath).readAsStringSync();
+    final preflight = File(
+      'scripts/preflight_cancellation_restore_and_live_sales.sql',
+    ).readAsStringSync();
+    final verification = File(
+      'scripts/verify_cancellation_restore_and_live_sales.sql',
+    ).readAsStringSync();
 
     expect(migration, contains('order_cancellation_reversals'));
     expect(migration, contains('BEFORE UPDATE OR DELETE'));
@@ -21,6 +27,9 @@ void main() {
     );
     expect(migration, contains("'brand_admin'"));
     expect(migration, contains('TABLE_ALREADY_OCCUPIED'));
+    expect(preflight, contains('CANCELLATION_RESTORE_REQUIRED_OBJECT_MISSING'));
+    expect(verification, contains('CANCELLATION_RESTORE_RLS_DISABLED'));
+    expect(verification, contains('CANCELLATION_RESTORE_PRIVILEGE_INVALID'));
   });
 
   test('manager report exposes gross, cancellation, net, and payment mix', () {
