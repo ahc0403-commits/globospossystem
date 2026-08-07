@@ -238,6 +238,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
             child: Text(l10n.waiterBack),
           ),
           FilledButton.icon(
+            key: const Key('cashier_cancel_order_confirm_button'),
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(
               backgroundColor: PosColors.danger,
@@ -250,6 +251,32 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       ),
     );
     return result ?? false;
+  }
+
+  void _showCancellationUndoSnackBar({
+    required String message,
+    required String restoredMessage,
+    required Future<bool> Function() onUndo,
+  }) {
+    final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 6),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: l10n.cancellationUndoAction,
+          onPressed: () async {
+            final restored = await onUndo();
+            if (restored && mounted) {
+              showSuccessToast(context, restoredMessage);
+            }
+          },
+        ),
+      ),
+    );
   }
 
   Future<Map<String, String>?> _showNonRevenueDialog() async {
@@ -1090,122 +1117,139 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                               const SizedBox(width: 4),
                             ],
                             Expanded(
-                              child: PosDataGridRow(
-                                key: index == 0
-                                    ? const Key('payment_first_candidate')
-                                    : null,
-                                selected: _isCombinedPaymentMode
-                                    ? combinedSelected
-                                    : selected,
-                                statusColor:
-                                    (_isCombinedPaymentMode
-                                        ? combinedSelected
-                                        : selected)
-                                    ? PosColors.accent
-                                    : null,
-                                onTap: handleOrderTap,
-                                cells: [
-                                  Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(
-                                        '#${_shortCashierOrderId(order.orderId)}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: PosNumericText.orderId.copyWith(
-                                          color: PosColors.textPrimary,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        _formatCashierOrderAge(
-                                          context,
-                                          order.createdAt,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(
-                                              color: PosColors.textSecondary,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                      ),
-                                    ],
-                                  ),
-                                  Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(
-                                        l10n.cashierTableLabel(
-                                          order.tableNumber,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyMedium
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Wrap(
-                                        spacing: 6,
-                                        runSpacing: 4,
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final rowSelected = _isCombinedPaymentMode
+                                      ? combinedSelected
+                                      : selected;
+                                  final rowKey = index == 0
+                                      ? const Key('payment_first_candidate')
+                                      : null;
+                                  if (constraints.maxWidth < 320) {
+                                    return _CashierCompactOrderRow(
+                                      key: rowKey,
+                                      order: order,
+                                      currency: currency,
+                                      selected: rowSelected,
+                                      onTap: handleOrderTap,
+                                    );
+                                  }
+                                  return PosDataGridRow(
+                                    key: rowKey,
+                                    selected: rowSelected,
+                                    statusColor: rowSelected
+                                        ? PosColors.accent
+                                        : null,
+                                    onTap: handleOrderTap,
+                                    cells: [
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
                                         children: [
-                                          _OrderStatusBadge(
-                                            status: order.status,
+                                          Text(
+                                            '#${_shortCashierOrderId(order.orderId)}',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: PosNumericText.orderId
+                                                .copyWith(
+                                                  color: PosColors.textPrimary,
+                                                ),
                                           ),
-                                          if (order.isQrOrder)
-                                            ToastStatusBadge(
-                                              key: Key(
-                                                'cashier_qr_order_badge_${order.orderId}',
-                                              ),
-                                              label: 'QR',
-                                              color: PosColors.accent,
-                                              compact: true,
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            _formatCashierOrderAge(
+                                              context,
+                                              order.createdAt,
                                             ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall
+                                                ?.copyWith(
+                                                  color:
+                                                      PosColors.textSecondary,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                          ),
                                         ],
                                       ),
-                                    ],
-                                  ),
-                                  Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(
-                                      l10n.cashierItemsCount(
-                                        order.items.length,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            color: PosColors.textSecondary,
-                                            fontWeight: FontWeight.w800,
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            l10n.cashierTableLabel(
+                                              order.tableNumber,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium
+                                                ?.copyWith(
+                                                  fontWeight: FontWeight.w800,
+                                                ),
                                           ),
-                                    ),
-                                  ),
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: Text(
-                                      '₫${currency.format(order.remainingDue)}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      textAlign: TextAlign.right,
-                                      style: PosNumericText.amountLine.copyWith(
-                                        color: PosColors.accent,
+                                          const SizedBox(height: 2),
+                                          Wrap(
+                                            spacing: 6,
+                                            runSpacing: 4,
+                                            children: [
+                                              _OrderStatusBadge(
+                                                status: order.status,
+                                              ),
+                                              if (order.isQrOrder)
+                                                ToastStatusBadge(
+                                                  key: Key(
+                                                    'cashier_qr_order_badge_${order.orderId}',
+                                                  ),
+                                                  label: 'QR',
+                                                  color: PosColors.accent,
+                                                  compact: true,
+                                                ),
+                                            ],
+                                          ),
+                                        ],
                                       ),
-                                    ),
-                                  ),
-                                ],
+                                      Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          l10n.cashierItemsCount(
+                                            order.items.length,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                color: PosColors.textSecondary,
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                        ),
+                                      ),
+                                      Align(
+                                        alignment: Alignment.centerRight,
+                                        child: Text(
+                                          '₫${currency.format(order.remainingDue)}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          textAlign: TextAlign.right,
+                                          style: PosNumericText.amountLine
+                                              .copyWith(
+                                                color: PosColors.accent,
+                                              ),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
                               ),
                             ),
                           ],
@@ -1355,7 +1399,20 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                     if (storeId == null || !canCancelOrders || !isOnline) {
                       return;
                     }
-                    await notifier.cancelOrderItem(item.id, storeId);
+                    final cancelled = await notifier.cancelOrderItem(
+                      item.id,
+                      storeId,
+                    );
+                    if (cancelled && context.mounted) {
+                      _showCancellationUndoSnackBar(
+                        message: l10n.orderWorkspaceCancelItemAction,
+                        restoredMessage: l10n.cancelledItemRestored,
+                        onUndo: () => notifier.restoreCancelledOrderItem(
+                          item.id,
+                          storeId,
+                        ),
+                      );
+                    }
                   },
                   onProcess: (method, cashTender) async {
                     final selectedOrder = paymentState.selectedOrder;
@@ -1614,7 +1671,14 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                     if (context.mounted &&
                         ref.read(paymentProvider).error == null) {
                       setState(() => _selectedMethod = null);
-                      showSuccessToast(context, l10n.cashierOrderCancelled);
+                      _showCancellationUndoSnackBar(
+                        message: l10n.cashierOrderCancelled,
+                        restoredMessage: l10n.cancelledOrderRestored,
+                        onUndo: () => notifier.restoreCancelledOrder(
+                          selectedOrder.orderId,
+                          storeId,
+                        ),
+                      );
                     }
                   },
                   onReprint: () async {
@@ -1695,6 +1759,13 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       MediaQuery.textScalerOf(context).scale(1) > 1.5;
                   final useWideLayout =
                       constraints.maxWidth >= 1180 && !forceScrollableCompact;
+                  final useTabletSplit =
+                      !useWideLayout &&
+                      ((constraints.maxWidth >= 900 &&
+                              constraints.maxHeight >= 720) ||
+                          (constraints.maxWidth >= 760 &&
+                              constraints.maxHeight >= 900)) &&
+                      MediaQuery.textScalerOf(context).scale(1) <= 1.3;
                   final useCompactChrome = !useWideLayout;
                   final useDenseWideLayout =
                       useWideLayout && viewport.height < 900;
@@ -1729,6 +1800,20 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                                 children: [
                                   SizedBox(width: 348, child: queueWithHistory),
                                   const SizedBox(width: 16),
+                                  Expanded(child: detailPane),
+                                ],
+                              )
+                            : useTabletSplit
+                            ? Row(
+                                key: const Key('cashier_tablet_split_view'),
+                                children: [
+                                  SizedBox(
+                                    width: constraints.maxWidth >= 900
+                                        ? 300
+                                        : 276,
+                                    child: queueWithHistory,
+                                  ),
+                                  const SizedBox(width: 8),
                                   Expanded(child: detailPane),
                                 ],
                               )
@@ -2002,6 +2087,99 @@ class _CashierCompactCommandBar extends ConsumerWidget {
             },
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CashierCompactOrderRow extends StatelessWidget {
+  const _CashierCompactOrderRow({
+    super.key,
+    required this.order,
+    required this.currency,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final CashierOrder order;
+  final NumberFormat currency;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          decoration: BoxDecoration(
+            color: selected ? PosColors.accentMuted : PosColors.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected ? PosColors.accent : PosColors.border,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      l10n.cashierTableLabel(order.tableNumber),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '₫${currency.format(order.remainingDue)}',
+                    maxLines: 1,
+                    style: PosNumericText.amountLine.copyWith(
+                      color: selected
+                          ? PosColors.accent
+                          : PosColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 5),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '#${_shortCashierOrderId(order.orderId)} · '
+                      '${_formatCashierOrderAge(context, order.createdAt)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.textSecondary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    l10n.cashierItemsCount(order.items.length),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: PosColors.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2672,21 +2850,32 @@ class _AmountLine extends StatelessWidget {
       padding: const EdgeInsets.only(top: 6),
       child: Row(
         children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: PosColors.textSecondary,
-              fontWeight: FontWeight.w700,
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: PosColors.textSecondary,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
-          const Spacer(),
-          Text(
-            value,
-            style:
-                (prominent
-                        ? PosNumericText.amountLarge
-                        : PosNumericText.amountLine)
-                    .copyWith(color: valueColor ?? PosColors.textPrimary),
+          const SizedBox(width: 12),
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                value,
+                maxLines: 1,
+                style:
+                    (prominent
+                            ? PosNumericText.amountLarge
+                            : PosNumericText.amountLine)
+                        .copyWith(color: valueColor ?? PosColors.textPrimary),
+              ),
+            ),
           ),
         ],
       ),
@@ -2799,137 +2988,168 @@ class _CashierOrderItemsPanel extends StatelessWidget {
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: PosColors.border),
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Container(
-                        width: 34,
-                        height: 34,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: PosColors.accentMuted,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '${item.quantity}',
-                          style: PosNumericText.qtyUnit.copyWith(
-                            color: PosColors.accent,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              itemName,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodyLarge
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                    color: PosColors.textPrimary,
-                                  ),
+                      Row(
+                        children: [
+                          Container(
+                            width: 34,
+                            height: 34,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: PosColors.accentMuted,
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            for (final translatedName in translatedNames) ...[
-                              const SizedBox(height: 2),
+                            child: Text(
+                              '${item.quantity}',
+                              style: PosNumericText.qtyUnit.copyWith(
+                                color: PosColors.accent,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  itemName,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodyLarge
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                        color: PosColors.textPrimary,
+                                      ),
+                                ),
+                                for (final translatedName
+                                    in translatedNames) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    translatedName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: PosColors.textSecondary,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                  ),
+                                ],
+                                if (item.isServiceItem) ...[
+                                  const SizedBox(height: 6),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: ToastStatusBadge(
+                                      key: const Key(
+                                        'cashier_service_item_badge',
+                                      ),
+                                      label: l10n.cashierServiceItemBadge,
+                                      color: PosColors.warning,
+                                      compact: true,
+                                    ),
+                                  ),
+                                  if ((item.serviceReason ?? '')
+                                      .isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      item.serviceReason!,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: PosColors.textSecondary,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
+                                  ],
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
                               Text(
-                                translatedName,
+                                item.isServiceItem
+                                    ? l10n.cashierServiceItemExcluded
+                                    : '₫${currency.format(lineTotal)}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color: PosColors.textSecondary,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                            ],
-                            if (item.isServiceItem) ...[
-                              const SizedBox(height: 6),
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: ToastStatusBadge(
-                                  key: const Key('cashier_service_item_badge'),
-                                  label: l10n.cashierServiceItemBadge,
-                                  color: PosColors.warning,
-                                  compact: true,
+                                style: PosNumericText.lineAmount.copyWith(
+                                  color: item.isServiceItem
+                                      ? PosColors.warning
+                                      : PosColors.textPrimary,
                                 ),
                               ),
-                              if ((item.serviceReason ?? '').isNotEmpty) ...[
-                                const SizedBox(height: 4),
+                              if (item.isServiceItem)
                                 Text(
-                                  item.serviceReason!,
+                                  '₫${currency.format(lineTotal)}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: Theme.of(context).textTheme.bodySmall
                                       ?.copyWith(
-                                        color: PosColors.textSecondary,
-                                        fontWeight: FontWeight.w600,
+                                        color: PosColors.textMuted,
+                                        fontWeight: FontWeight.w700,
                                       ),
                                 ),
-                              ],
                             ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            item.isServiceItem
-                                ? l10n.cashierServiceItemExcluded
-                                : '₫${currency.format(lineTotal)}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: PosNumericText.lineAmount.copyWith(
-                              color: item.isServiceItem
-                                  ? PosColors.warning
-                                  : PosColors.textPrimary,
-                            ),
                           ),
-                          if (item.isServiceItem)
-                            Text(
-                              '₫${currency.format(lineTotal)}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: PosColors.textMuted,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                            ),
                         ],
                       ),
                       if (isMenuItem) ...[
-                        const SizedBox(width: 6),
-                        IconButton(
-                          key: ValueKey('cashier_cancel_order_item_${item.id}'),
-                          tooltip: l10n.orderWorkspaceCancelItemAction,
-                          onPressed: canCancelItem
-                              ? () => onCancelOrderItem!(item)
-                              : null,
-                          icon: const Icon(Icons.cancel_outlined),
-                          color: PosColors.danger,
-                        ),
-                        IconButton(
-                          key: ValueKey(
-                            'cashier_service_item_action_${item.id}',
-                          ),
-                          tooltip: item.isServiceItem
-                              ? l10n.cashierServiceItemUnmarkAction
-                              : l10n.cashierServiceItemMarkAction,
-                          onPressed: canToggleServiceItem
-                              ? () => onToggleServiceItem!(item)
-                              : null,
-                          icon: Icon(
-                            item.isServiceItem
-                                ? Icons.undo_rounded
-                                : Icons.volunteer_activism_rounded,
-                          ),
-                          color: item.isServiceItem
-                              ? PosColors.warning
-                              : PosColors.accent,
+                        const SizedBox(height: 8),
+                        const Divider(height: 1),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          alignment: WrapAlignment.end,
+                          children: [
+                            OutlinedButton.icon(
+                              key: ValueKey(
+                                'cashier_cancel_order_item_${item.id}',
+                              ),
+                              onPressed: canCancelItem
+                                  ? () => onCancelOrderItem!(item)
+                                  : null,
+                              icon: const Icon(Icons.cancel_outlined, size: 18),
+                              label: Text(l10n.orderWorkspaceCancelItemAction),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: PosColors.danger,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
+                            OutlinedButton.icon(
+                              key: ValueKey(
+                                'cashier_service_item_action_${item.id}',
+                              ),
+                              onPressed: canToggleServiceItem
+                                  ? () => onToggleServiceItem!(item)
+                                  : null,
+                              icon: Icon(
+                                item.isServiceItem
+                                    ? Icons.undo_rounded
+                                    : Icons.volunteer_activism_rounded,
+                                size: 18,
+                              ),
+                              label: Text(
+                                item.isServiceItem
+                                    ? l10n.cashierServiceItemUnmarkAction
+                                    : l10n.cashierServiceItemMarkAction,
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: item.isServiceItem
+                                    ? PosColors.warning
+                                    : PosColors.accent,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ],

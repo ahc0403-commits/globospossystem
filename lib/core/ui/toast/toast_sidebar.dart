@@ -89,7 +89,8 @@ class ToastSidebar extends StatelessWidget {
         : selectedIndex.clamp(0, entries.length - 1).toInt();
     final selected = entries.isEmpty ? null : entries[safeIndex];
     final viewport = MediaQuery.sizeOf(context);
-    final useCompactShell = viewport.width < 900 || viewport.shortestSide < 600;
+    final useCompactShell = viewport.width < 600 || viewport.shortestSide < 600;
+    final useCompactRail = viewport.width < 1280;
 
     if (useCompactShell) {
       return Scaffold(
@@ -115,6 +116,46 @@ class ToastSidebar extends StatelessWidget {
                   borderColor: Colors.transparent,
                   clip: false,
                   child: body,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (useCompactRail) {
+      return Scaffold(
+        backgroundColor: PosColors.canvas,
+        body: SafeArea(
+          child: Row(
+            children: [
+              _ToastSidebarCompactRail(
+                title: title,
+                leading: topBarLeading,
+                entries: entries,
+                selectedIndex: safeIndex,
+                onItemSelected: onItemSelected,
+                bottomItems: bottomItems ?? const <ToastSidebarItem>[],
+              ),
+              Expanded(
+                child: Column(
+                  children: [
+                    ToastTopbar(
+                      title: selected?.item.label ?? title,
+                      trailing: topBarTrailing,
+                      height: 52,
+                    ),
+                    Expanded(
+                      child: ToastWorkSurface(
+                        padding: EdgeInsets.zero,
+                        backgroundColor: PosColors.canvas,
+                        borderColor: Colors.transparent,
+                        clip: false,
+                        child: body,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -460,6 +501,144 @@ class _ToastSidebarEntry {
   final ToastSidebarItem item;
   final int flatIndex;
   final String? sectionTitle;
+}
+
+class _ToastSidebarCompactRail extends StatelessWidget {
+  const _ToastSidebarCompactRail({
+    required this.title,
+    required this.leading,
+    required this.entries,
+    required this.selectedIndex,
+    required this.onItemSelected,
+    required this.bottomItems,
+  });
+
+  final String title;
+  final Widget? leading;
+  final List<_ToastSidebarEntry> entries;
+  final int selectedIndex;
+  final ValueChanged<int> onItemSelected;
+  final List<ToastSidebarItem> bottomItems;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: ToastShellTokens.sidebarCompactWidth,
+      decoration: const BoxDecoration(
+        color: PosColors.sidebarSurface,
+        border: Border(right: BorderSide(color: PosColors.border)),
+      ),
+      child: Column(
+        children: [
+          SizedBox(
+            height: 52,
+            child: Center(
+              child:
+                  leading ??
+                  Tooltip(
+                    message: title,
+                    child: const Icon(
+                      Icons.point_of_sale_rounded,
+                      color: PosColors.accent,
+                      size: 24,
+                    ),
+                  ),
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: ListView.builder(
+              key: const Key('toast_sidebar_rail_list'),
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: entries.length,
+              itemBuilder: (context, index) {
+                final entry = entries[index];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  child: _ToastSidebarIconNavItem(
+                    key: entry.item.itemKey,
+                    item: entry.item,
+                    selected: index == selectedIndex,
+                    onTap:
+                        entry.item.onTap ??
+                        () => onItemSelected(entry.flatIndex),
+                  ),
+                );
+              },
+            ),
+          ),
+          if (bottomItems.isNotEmpty) ...[
+            const Divider(height: 1),
+            for (final item in bottomItems)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                child: _ToastSidebarIconNavItem(
+                  key: item.itemKey,
+                  item: item,
+                  selected: false,
+                  onTap: item.onTap ?? () {},
+                ),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ToastSidebarIconNavItem extends StatelessWidget {
+  const _ToastSidebarIconNavItem({
+    super.key,
+    required this.item,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final ToastSidebarItem item;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      enabled: true,
+      selected: selected,
+      label: item.label,
+      child: Tooltip(
+        message: item.label,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: AppRadius.md,
+            child: Ink(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: selected ? PosColors.accentMuted : Colors.transparent,
+                borderRadius: AppRadius.md,
+                border: selected
+                    ? Border.all(
+                        color: PosColors.accent.withValues(alpha: 0.45),
+                      )
+                    : null,
+              ),
+              child: Icon(
+                item.icon,
+                size: 22,
+                color: selected ? PosColors.accent : PosColors.textSecondary,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _ToastSidebarRail extends StatelessWidget {

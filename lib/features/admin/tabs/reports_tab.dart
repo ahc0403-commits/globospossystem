@@ -583,6 +583,9 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     required DateFormat dateFormat,
   }) {
     final l10n = context.l10n;
+    final grossOrderAmount = summary == null
+        ? '—'
+        : _formatVnd(currency, summary.grossOrderAmount);
     final totalRevenue = summary == null
         ? '—'
         : _formatVnd(currency, summary.totalRevenue);
@@ -592,7 +595,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     final averageOrder = summary == null || summary.totalOrders == 0
         ? '—'
         : _formatVnd(currency, summary.totalRevenue / summary.totalOrders);
-    final cancellationTone = summary == null || summary.cancelledOrders == 0
+    final cancellationTone = summary == null || summary.cancelledAmount == 0
         ? PosColors.textSecondary
         : PosColors.warning;
     final hasException =
@@ -600,7 +603,12 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
         (summary?.missingProofPhotosCount ?? 0) > 0 ||
         (summary?.cancelledOrders ?? 0) > 0;
     final reportMetrics = [
-      ToastMetric(label: l10n.reportsTotalSales, value: totalRevenue),
+      ToastMetric(label: l10n.reportsGrossOrderAmount, value: grossOrderAmount),
+      ToastMetric(
+        label: l10n.reportsNetSales,
+        value: totalRevenue,
+        tone: PosColors.success,
+      ),
       ToastMetric(
         label: l10n.reportsServiceExpenses,
         value: serviceRevenue,
@@ -625,7 +633,9 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       ),
       ToastMetric(
         label: l10n.reportsCanceledAmount,
-        value: summary == null ? '—' : l10n.countCases(summary.cancelledOrders),
+        value: summary == null
+            ? '—'
+            : _formatVnd(currency, summary.cancelledAmount),
         tone: cancellationTone,
       ),
     ];
@@ -1444,7 +1454,7 @@ class _SummaryGrid extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth < 1100 ? 2 : 4;
+        final crossAxisCount = constraints.maxWidth < 1100 ? 2 : 3;
         return GridView.count(
           physics: const NeverScrollableScrollPhysics(),
           shrinkWrap: true,
@@ -1453,6 +1463,24 @@ class _SummaryGrid extends StatelessWidget {
           crossAxisSpacing: 10,
           childAspectRatio: constraints.maxWidth < 700 ? 1.35 : 1.85,
           children: [
+            _summaryCard(
+              title: l10n.reportsGrossOrderAmount,
+              value: _formatVnd(currency, data.grossOrderAmount),
+              valueColor: AppColors.amber500,
+              valueFontSize: 30,
+            ),
+            _summaryCard(
+              title: l10n.reportsCanceledAmount,
+              value: _formatVnd(currency, data.cancelledAmount),
+              valueColor: AppColors.statusCancelled,
+              valueFontSize: 30,
+            ),
+            _summaryCard(
+              title: l10n.reportsNetSales,
+              value: _formatVnd(currency, data.totalRevenue),
+              valueColor: AppColors.statusAvailable,
+              valueFontSize: 32,
+            ),
             _summaryCard(
               title: l10n.dineIn,
               value: _formatVnd(currency, data.dineInRevenue),
@@ -1470,12 +1498,6 @@ class _SummaryGrid extends StatelessWidget {
               value: _formatVnd(currency, data.serviceTotal),
               valueColor: AppColors.textSecondary,
               valueFontSize: 28,
-            ),
-            _summaryCard(
-              title: l10n.reportsTotalSales,
-              value: _formatVnd(currency, data.totalRevenue),
-              valueColor: AppColors.amber500,
-              valueFontSize: 32,
             ),
           ],
         );

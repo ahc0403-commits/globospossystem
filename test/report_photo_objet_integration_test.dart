@@ -49,7 +49,7 @@ void main() {
   test('report export keeps sales and service revenue separate', () {
     final provider = readRepoFile('lib/features/report/report_provider.dart');
 
-    expect(provider, contains("TextCellValue('Sales Revenue')"));
+    expect(provider, contains("TextCellValue('Net Sales Revenue')"));
     expect(
       provider,
       contains("TextCellValue('Service Revenue (Coin Payments)')"),

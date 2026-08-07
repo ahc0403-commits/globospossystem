@@ -371,7 +371,7 @@ void main() {
     expect(workspace, contains('final orderRailWidth'));
     expect(workspace, contains('PosDensity.orderRailWidth'));
     expect(workspace, contains('SizedBox(width: orderRailWidth'));
-    expect(workspace, contains('flex: 8'));
+    expect(workspace, contains('flex: 3'));
     expect(workspace, contains('flex: 2'));
     expect(workspace, contains('useCompactPanel'));
     expect(workspace, contains('class _CompactCurrentOrderPanel'));

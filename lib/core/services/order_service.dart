@@ -187,6 +187,27 @@ class OrderService {
     );
   }
 
+  Future<Map<String, dynamic>> restoreCancelledOrder({
+    required String orderId,
+    required String storeId,
+  }) async {
+    final result = await supabase.rpc(
+      'restore_cancelled_order',
+      params: {'p_order_id': orderId, 'p_store_id': storeId},
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
+  Future<void> restoreCancelledOrderItem({
+    required String itemId,
+    required String storeId,
+  }) async {
+    await supabase.rpc(
+      'restore_cancelled_order_item',
+      params: {'p_item_id': itemId, 'p_store_id': storeId},
+    );
+  }
+
   Future<void> editOrderItemQuantity({
     required String itemId,
     required String storeId,

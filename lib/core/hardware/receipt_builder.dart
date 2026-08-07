@@ -1,9 +1,10 @@
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:flutter/services.dart';
+import 'package:image/image.dart' as img;
 import '../utils/time_utils.dart';
 
 class ReceiptBuilder {
-  static const _bankTransferQrPayload =
-      '00020101021138540010A00000072701240006970422011053371599990208QRIBFTTA53037045802VN630472C0';
+  static const bankTransferQrAsset = 'assets/images/woori_bank_account_qr.jpg';
 
   static Future<List<int>> buildPaymentReceipt({
     required String restaurantName,
@@ -220,23 +221,17 @@ class ReceiptBuilder {
       );
       bytes.addAll(
         generator.text(
-          'MB - 5337159999',
+          'WOORI BANK - 100202042976',
           styles: const PosStyles(bold: true, align: PosAlign.center),
         ),
       );
       bytes.addAll(
         generator.text(
-          'AKJ INTERNATIONAL CO., LTD',
+          'AHN HYOCHANG',
           styles: const PosStyles(align: PosAlign.center),
         ),
       );
-      bytes.addAll(
-        generator.qrcode(
-          _bankTransferQrPayload,
-          size: QRSize.size6,
-          cor: QRCorrection.M,
-        ),
-      );
+      bytes.addAll(generator.imageRaster(await _loadBankTransferQr()));
     }
 
     bytes.addAll(generator.hr());
@@ -250,6 +245,19 @@ class ReceiptBuilder {
     bytes.addAll(generator.cut());
 
     return bytes;
+  }
+
+  static Future<img.Image> _loadBankTransferQr() async {
+    final data = await rootBundle.load(bankTransferQrAsset);
+    final decoded = img.decodeImage(data.buffer.asUint8List());
+    if (decoded == null) {
+      throw StateError('BANK_TRANSFER_QR_ASSET_INVALID');
+    }
+    return img.copyResize(
+      decoded,
+      width: 512,
+      interpolation: img.Interpolation.average,
+    );
   }
 
   static List<int> _amountRow(

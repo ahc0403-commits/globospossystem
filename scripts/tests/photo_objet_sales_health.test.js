@@ -12,11 +12,15 @@ const {
   assertAggregateComplete,
   assertImmutableSourceRows,
   buildStores,
+  buildRecoveryWorkItems,
   classifyError,
   claimScheduledExpectation,
   completeScheduledExpectation,
   createRunIdentity,
+  createRecoveryRunIdentity,
   inclusiveDateRange,
+  isAutomaticRecoverySchedule,
+  mapWithConcurrency,
   isZeroSalesInterval,
   parseArgs,
   parseSoldAt,
@@ -25,6 +29,9 @@ const {
   operationalFailureClass,
   runWithTransientRetry,
   runPreflight,
+  preparedSlotFromCron,
+  scheduledExecutionOwner,
+  scheduledParallelism,
   selectRowsForInterval,
   validateStaticPreflight,
   validateStoreMappings,
@@ -321,14 +328,56 @@ test('slot audit infrastructure cannot overwrite collection execution success', 
   assert.equal(operationalFailureClass(new Error('login failed')), 'COLLECTION_FAILED');
 });
 
+test('recovery completion uses the exact-interval recovery RPC', async () => {
+  const calls = [];
+  const supabase = {
+    async rpc(name, args) {
+      calls.push({ name, args });
+      return { data: 'recovered', error: null };
+    },
+  };
+  const store = { storeId: ids[0] };
+  const identity = createRecoveryRunIdentity({
+    store_id: ids[0], slot_date_hcm: '2026-08-06', slot_time_hcm: '22:00:00',
+  }, { GITHUB_RUN_ID: '300' });
+  assert.equal(
+    await completeScheduledExpectation(supabase, store, identity, 'run-300', false),
+    true,
+  );
+  assert.equal(calls[0].name, 'photo_objet_complete_recovery_slot');
+  assert.equal(calls[0].args.p_slot_date_hcm, '2026-08-06');
+  assert.equal(calls[0].args.p_slot_time_hcm, '22:00');
+});
+
+test('recovery ledger failure fails closed so a successful scrape cannot stay missing', async () => {
+  const supabase = {
+    async rpc() {
+      return { data: null, error: { message: 'ledger unavailable' } };
+    },
+  };
+  const identity = createRecoveryRunIdentity({
+    store_id: ids[0], slot_date_hcm: '2026-08-06', slot_time_hcm: '22:00:00',
+  }, { GITHUB_RUN_ID: '301' });
+  await assert.rejects(
+    completeScheduledExpectation(
+      supabase,
+      { storeId: ids[0] },
+      identity,
+      'run-301',
+      false,
+    ),
+    /Required recovery ledger RPC photo_objet_complete_recovery_slot failed/,
+  );
+});
+
 test('slot identities distinguish scheduled, manual, and bounded backfill', () => {
   const scheduled = createRunIdentity(
     { backfill: false },
     '2026-07-11',
     {
-      GITHUB_EVENT_NAME: 'schedule',
-      PHOTO_OBJET_SCHEDULE_CRON: '20 15 * * *',
-      PHOTO_OBJET_RUN_STARTED_AT: '2026-07-11T15:25:00Z',
+      PHOTO_OBJET_SCHEDULED: 'true',
+      PHOTO_OBJET_SCHEDULE_CRON: '40 14 * * *',
+      PHOTO_OBJET_RUN_STARTED_AT: '2026-07-11T14:45:00Z',
     },
   );
   const manual = createRunIdentity(
@@ -353,20 +402,20 @@ test('slot identities distinguish scheduled, manual, and bounded backfill', () =
 
   assert.deepEqual(scheduled, {
     source: 'scheduled',
-    slotId: 'scheduled:2026-07-11T22:20+07:00',
+    slotId: 'scheduled:2026-07-11T22:00+07:00',
     slotDateHcm: '2026-07-11',
-    slotTimeHcm: '22:20',
+    slotTimeHcm: '22:00',
     intervalStartAt: '2026-07-10T17:00:00.000Z',
-    intervalEndAt: '2026-07-11T15:20:00.000Z',
+    intervalEndAt: '2026-07-11T15:00:00.000Z',
   });
   assert.equal(new Set([scheduled.slotId, manual.slotId, backfill.slotId]).size, 3);
   assert.deepEqual([manual.source, backfill.source], ['manual', 'backfill']);
 });
 
-test('delayed 22:20 schedule crossing HCM midnight retains the previous target date and slot', () => {
+test('delayed 22:00 schedule crossing HCM midnight retains the previous target date and slot', () => {
   const env = {
-    GITHUB_EVENT_NAME: 'schedule',
-    PHOTO_OBJET_SCHEDULE_CRON: '20 15 * * *',
+    PHOTO_OBJET_SCHEDULED: 'true',
+    PHOTO_OBJET_SCHEDULE_CRON: '40 14 * * *',
     PHOTO_OBJET_RUN_STARTED_AT: '2026-07-11T17:10:00Z',
   };
   const options = parseArgs([], env);
@@ -374,31 +423,31 @@ test('delayed 22:20 schedule crossing HCM midnight retains the previous target d
 
   assert.deepEqual(options.targetDates, ['2026-07-11']);
   assert.equal(identity.slotDateHcm, options.targetDates[0]);
-  assert.equal(identity.slotTimeHcm, '22:20');
-  assert.equal(identity.slotId, 'scheduled:2026-07-11T22:20+07:00');
+  assert.equal(identity.slotTimeHcm, '22:00');
+  assert.equal(identity.slotId, 'scheduled:2026-07-11T22:00+07:00');
   assert.equal(identity.intervalStartAt, '2026-07-10T17:00:00.000Z');
-  assert.equal(identity.intervalEndAt, '2026-07-11T15:20:00.000Z');
+  assert.equal(identity.intervalEndAt, '2026-07-11T15:00:00.000Z');
   assert.throws(
     () => createRunIdentity(options, '2026-07-12', env),
     /does not match intended HCM slot date 2026-07-11/,
   );
 });
 
-test('22:20 scheduled collection accepts the full HCM day through 22:19:59', () => {
+test('22:00 scheduled collection accepts the full HCM day through 21:59:59', () => {
   const identity = createRunIdentity(
     { backfill: false },
     '2026-07-12',
     {
-      GITHUB_EVENT_NAME: 'schedule',
-      PHOTO_OBJET_SCHEDULE_CRON: '20 15 * * *',
-      PHOTO_OBJET_RUN_STARTED_AT: '2026-07-12T15:25:00Z',
+      PHOTO_OBJET_SCHEDULED: 'true',
+      PHOTO_OBJET_SCHEDULE_CRON: '40 14 * * *',
+      PHOTO_OBJET_RUN_STARTED_AT: '2026-07-12T14:45:00Z',
     },
   );
   const rows = [
     { 'Device Name': 'M1', Time: '2026-07-12 00:00:00', Amount: '100000' },
     { 'Device Name': 'M1', Time: '2026-07-12 10:00:00', Amount: '110000' },
-    { 'Device Name': 'M1', Time: '2026-07-12 22:19:59', Amount: '120000' },
-    { 'Device Name': 'M1', Time: '2026-07-12 22:20:00', Amount: '130000' },
+    { 'Device Name': 'M1', Time: '2026-07-12 21:59:59', Amount: '120000' },
+    { 'Device Name': 'M1', Time: '2026-07-12 22:00:00', Amount: '130000' },
   ];
 
   assert.deepEqual(
@@ -406,38 +455,171 @@ test('22:20 scheduled collection accepts the full HCM day through 22:19:59', () 
     ['100000', '110000', '120000'],
   );
   assert.equal(identity.intervalStartAt, '2026-07-11T17:00:00.000Z');
-  assert.equal(identity.intervalEndAt, '2026-07-12T15:20:00.000Z');
+  assert.equal(identity.intervalEndAt, '2026-07-12T15:00:00.000Z');
 });
 
-test('scheduled collection has exactly one 22:20 HCM slot', () => {
-  const crons = ['20 15 * * *'];
+test('scheduled collection has exactly one authoritative 22:00 HCM slot', () => {
+  const crons = ['40 14 * * *', '50 14 * * *'];
   const identities = crons.map(cron => createRunIdentity(
     { backfill: false },
     '2026-07-12',
     {
-      GITHUB_EVENT_NAME: 'schedule',
+      PHOTO_OBJET_SCHEDULED: 'true',
       PHOTO_OBJET_SCHEDULE_CRON: cron,
       PHOTO_OBJET_RUN_STARTED_AT: '2026-07-12T15:25:00Z',
     },
   ));
 
-  assert.deepEqual(identities.map(identity => identity.slotTimeHcm), ['22:20']);
+  assert.deepEqual(identities.map(identity => identity.slotTimeHcm), ['22:00', '22:00']);
   assert.equal(identities[0].intervalStartAt, '2026-07-11T17:00:00.000Z');
-  assert.equal(identities[0].intervalEndAt, '2026-07-12T15:20:00.000Z');
+  assert.equal(identities[0].intervalEndAt, '2026-07-12T15:00:00.000Z');
   for (const unsupported of ['0 2 * * *', '0 16 * * *']) {
     assert.throws(
       () => createRunIdentity(
         { backfill: false },
         '2026-07-12',
         {
-          GITHUB_EVENT_NAME: 'schedule',
+          PHOTO_OBJET_SCHEDULED: 'true',
           PHOTO_OBJET_SCHEDULE_CRON: unsupported,
           PHOTO_OBJET_RUN_STARTED_AT: '2026-07-12T16:05:00Z',
         },
       ),
-      /Unsupported Photo Objet schedule slot/,
+      /Unsupported Photo Objet prepare schedule/,
     );
   }
+});
+
+test('21:40 primary and 21:50 backup prepare the same exact 22:00 slot', () => {
+  const primary = {
+    PHOTO_OBJET_SCHEDULED: 'true',
+    PHOTO_OBJET_EXECUTOR_ROLE: 'primary',
+    PHOTO_OBJET_SCHEDULE_CRON: '40 14 * * *',
+    PHOTO_OBJET_RUN_STARTED_AT: '2026-08-07T14:45:00Z',
+  };
+  const backup = {
+    ...primary,
+    PHOTO_OBJET_EXECUTOR_ROLE: 'backup',
+    PHOTO_OBJET_SCHEDULE_CRON: '50 14 * * *',
+    PHOTO_OBJET_RUN_STARTED_AT: '2026-08-07T14:55:00Z',
+  };
+  assert.equal(isAutomaticRecoverySchedule(primary), false);
+  assert.equal(isAutomaticRecoverySchedule(backup), true);
+  assert.deepEqual(parseArgs([], backup), {
+    preflightOnly: false,
+    backfill: false,
+    execute: false,
+    recoveryOnly: true,
+    targetDates: ['2026-08-07'],
+  });
+  assert.deepEqual(preparedSlotFromCron(
+    primary.PHOTO_OBJET_SCHEDULE_CRON,
+    primary.PHOTO_OBJET_RUN_STARTED_AT,
+  ), preparedSlotFromCron(
+    backup.PHOTO_OBJET_SCHEDULE_CRON,
+    backup.PHOTO_OBJET_RUN_STARTED_AT,
+  ));
+  assert.deepEqual(scheduledExecutionOwner({
+    PHOTO_OBJET_EXECUTOR_ROLE: 'backup', GITHUB_RUN_ID: '12', GITHUB_RUN_ATTEMPT: '2',
+  }), { role: 'backup', token: 'backup:12:2' });
+});
+
+test('automatic recovery preserves exact scheduled interval and rotates retry identity', () => {
+  const slot = {
+    store_id: ids[0],
+    slot_date_hcm: '2026-08-06',
+    slot_time_hcm: '22:00:00',
+  };
+  const first = createRecoveryRunIdentity(slot, {
+    GITHUB_RUN_ID: '100', GITHUB_RUN_ATTEMPT: '1',
+  });
+  const retry = createRecoveryRunIdentity(slot, {
+    GITHUB_RUN_ID: '101', GITHUB_RUN_ATTEMPT: '2',
+  });
+
+  assert.equal(first.source, 'scheduled');
+  assert.equal(first.recovery, true);
+  assert.equal(first.slotDateHcm, '2026-08-06');
+  assert.equal(first.slotTimeHcm, '22:00');
+  assert.equal(first.intervalStartAt, '2026-08-05T17:00:00.000Z');
+  assert.equal(first.intervalEndAt, '2026-08-06T15:00:00.000Z');
+  assert.notEqual(first.slotId, retry.slotId);
+});
+
+test('automatic recovery targets only enabled mapped stores and excludes current slot', () => {
+  const stores = buildStores(validEnv());
+  const rows = [
+    { store_id: ids[0], slot_date_hcm: '2026-08-05', slot_time_hcm: '22:00:00' },
+    { store_id: ids[1], slot_date_hcm: '2026-08-06', slot_time_hcm: '22:00:00' },
+  ];
+  const excluded = new Set([`${ids[1]}/2026-08-06/22:00`]);
+  const work = buildRecoveryWorkItems(rows, stores, excluded, {
+    GITHUB_RUN_ID: '200', GITHUB_RUN_ATTEMPT: '1',
+  });
+  assert.equal(work.length, 1);
+  assert.equal(work[0].store.storeId, ids[0]);
+  assert.equal(work[0].targetDate, '2026-08-05');
+
+  assert.throws(
+    () => buildRecoveryWorkItems([
+      { store_id: '77000000-0000-4000-8000-000000000199', slot_date_hcm: '2026-08-05', slot_time_hcm: '22:00:00' },
+    ], stores),
+    /does not map to an enabled Photo Objet collector store/,
+  );
+});
+
+test('collector has independently prepared primary and backup workflows', () => {
+  const primary = fs.readFileSync(
+    path.join(__dirname, '../../.github/workflows/photo_objet_sales_collect.yml'),
+    'utf8',
+  );
+  const backup = fs.readFileSync(
+    path.join(__dirname, '../../.github/workflows/photo_objet_sales_collect_backup.yml'),
+    'utf8',
+  );
+  const runner = fs.readFileSync(
+    path.join(__dirname, '../../.github/workflows/photo_objet_sales_collect_runner.yml'),
+    'utf8',
+  );
+  assert.match(primary, /cron: '40 14 \* \* \*'/);
+  assert.match(primary, /executor_role: primary/);
+  assert.match(backup, /cron: '50 14 \* \* \*'/);
+  assert.match(backup, /executor_role: backup/);
+  assert.match(runner, /timeout-minutes: 50/);
+  assert.match(runner, /PHOTO_OBJET_PARALLELISM: '3'/);
+  assert.doesNotMatch(primary + backup, /concurrency:/);
+});
+
+test('database recovery queue is current-day only and exact runs recover a slot', () => {
+  const migration = fs.readFileSync(
+    path.join(
+      __dirname,
+      '../../supabase/migrations/20260807230000_photo_objet_automatic_slot_recovery.sql',
+    ),
+    'utf8',
+  );
+  assert.match(migration, /slot\.slot_date_hcm = p_slot_date_hcm/);
+  assert.match(migration, /ORDER BY slot\.store_id/);
+  assert.doesNotMatch(migration, /policy\.schedule_version = 'hcm-eod-2220-v3'/);
+  assert.match(migration, /slot\.status IN \('missing', 'failed'\)/);
+  assert.match(migration, /run\.run_source = 'scheduled'/);
+  assert.match(migration, /run\.interval_start_at = v_interval_start/);
+  assert.match(migration, /run\.interval_end_at = v_interval_end/);
+  assert.doesNotMatch(migration, /run\.run_source = 'backfill'/);
+});
+
+test('bounded parallel map preserves result order and validates concurrency', async () => {
+  const active = { value: 0, max: 0 };
+  const output = await mapWithConcurrency([1, 2, 3, 4], 2, async value => {
+    active.value += 1;
+    active.max = Math.max(active.max, active.value);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    active.value -= 1;
+    return value * 10;
+  });
+  assert.deepEqual(output, [10, 20, 30, 40]);
+  assert.equal(active.max, 2);
+  assert.equal(scheduledParallelism({ PHOTO_OBJET_PARALLELISM: '6' }), 6);
+  assert.throws(() => scheduledParallelism({ PHOTO_OBJET_PARALLELISM: '7' }));
 });
 
 test('immutable Moers rows reject negative and invalid amounts', () => {
@@ -592,12 +774,15 @@ test('partial aggregate snapshots never overwrite fuller totals', () => {
 });
 
 test('collection workflow stays green independently from slot health', () => {
-  const workflow = fs.readFileSync(
+  const caller = fs.readFileSync(
     path.join(__dirname, '../../.github/workflows/photo_objet_sales_collect.yml'), 'utf8',
   );
-  assert.match(workflow, /on:\n  schedule:/);
-  assert.deepEqual([...workflow.matchAll(/cron: '([^']+)'/g)].map(match => match[1]), [
-    '20 15 * * *',
+  const workflow = fs.readFileSync(
+    path.join(__dirname, '../../.github/workflows/photo_objet_sales_collect_runner.yml'), 'utf8',
+  );
+  assert.match(caller, /on:\n  schedule:/);
+  assert.deepEqual([...caller.matchAll(/cron: '([^']+)'/g)].map(match => match[1]), [
+    '40 14 * * *',
   ]);
   assert.match(workflow, /node-version: '22'/);
   assert.match(workflow, /npm ci/);
@@ -610,10 +795,10 @@ test('collection workflow stays green independently from slot health', () => {
   assert.doesNotMatch(workflow, /\$\{\{\s*runner\.temp\s*\}\}/);
   assert.match(
     workflow,
-    /echo "PUPPETEER_CACHE_DIR=\$\{RUNNER_TEMP\}\/puppeteer" >> "\$\{GITHUB_ENV\}"/,
+    /echo "PUPPETEER_CACHE_DIR=\/home\/runner\/\.cache\/puppeteer" >> "\$\{GITHUB_ENV\}"/,
   );
   assert.ok(
-    workflow.indexOf('PUPPETEER_CACHE_DIR=${RUNNER_TEMP}/puppeteer') <
+    workflow.indexOf('PUPPETEER_CACHE_DIR=/home/runner/.cache/puppeteer') <
       workflow.indexOf('uses: actions/setup-node@'),
     'runtime cache setup must run before Node and Chromium installation',
   );
@@ -638,7 +823,7 @@ test('health, backfill, contract, and release proof are independent workflows', 
   );
 
   assert.deepEqual([...health.matchAll(/cron: '([^']+)'/g)].map(match => match[1]), [
-    '40 17 * * *',
+    '30 15 * * *',
   ]);
   assert.match(health, /photo_objet_slot_health\.js --refresh/);
   assert.match(health, /--ack-file health-evidence\.json/);
@@ -737,7 +922,7 @@ test('all external GitHub Actions are pinned to full commits with release labels
     }
   }
 
-  assert.equal(externalActionCount, 18, 'all expected external Actions must be checked');
+  assert.equal(externalActionCount, 19, 'all expected external Actions must be checked');
 });
 
 test('Flutter SDK archives are official, versioned, and checksum verified', () => {

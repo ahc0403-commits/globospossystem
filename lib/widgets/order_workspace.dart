@@ -176,7 +176,7 @@ class OrderWorkspace extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Expanded(
-              flex: 8,
+              flex: 3,
               child: _MenuBrowser(
                 menuLoading: menuLoading,
                 menuError: menuError,
@@ -193,6 +193,7 @@ class OrderWorkspace extends StatelessWidget {
                 onDecrementCartItem: onDecrementCartItem,
               ),
             ),
+            const SizedBox(height: 8),
             Expanded(flex: 2, child: orderPanel),
           ],
         );

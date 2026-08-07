@@ -115,6 +115,7 @@ class ReportSummary {
     required this.deliveryRevenue,
     required this.serviceTotal,
     required this.totalRevenue,
+    this.cancelledAmount = 0,
     required this.totalOrders,
     required this.completedOrders,
     required this.openOrders,
@@ -137,6 +138,8 @@ class ReportSummary {
   final double deliveryRevenue;
   final double serviceTotal;
   final double totalRevenue;
+  final double cancelledAmount;
+  double get grossOrderAmount => totalRevenue + cancelledAmount;
   final int totalOrders;
   final int completedOrders;
   final int openOrders;
@@ -278,6 +281,15 @@ class ReportNotifier extends StateNotifier<ReportState> {
           .eq('restaurant_id', storeId)
           .gte('created_at', startIso)
           .lte('created_at', endIso);
+
+      final cancelledAmountResponse = await supabase.rpc(
+        'get_store_sales_cancellation_total',
+        params: {
+          'p_store_id': storeId,
+          'p_start_at': startIso,
+          'p_end_at': endIso,
+        },
+      );
 
       // Cancelled items count
       final cancelledItemsResponse = await supabase
@@ -537,6 +549,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
         deliveryRevenue: deliveryRevenue,
         serviceTotal: serviceTotal,
         totalRevenue: dineInRevenue + deliveryRevenue,
+        cancelledAmount: _toDouble(cancelledAmountResponse),
         totalOrders: totalOrders,
         completedOrders: completedOrders,
         openOrders: openOrders,
@@ -595,7 +608,15 @@ class ReportNotifier extends StateNotifier<ReportState> {
       DoubleCellValue(summary.deliveryRevenue),
     ]);
     sheet.appendRow([
-      TextCellValue('Sales Revenue'),
+      TextCellValue('Gross Order Amount'),
+      DoubleCellValue(summary.grossOrderAmount),
+    ]);
+    sheet.appendRow([
+      TextCellValue('Cancellation Amount'),
+      DoubleCellValue(summary.cancelledAmount),
+    ]);
+    sheet.appendRow([
+      TextCellValue('Net Sales Revenue'),
       DoubleCellValue(summary.totalRevenue),
     ]);
     sheet.appendRow([

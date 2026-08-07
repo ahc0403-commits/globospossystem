@@ -498,7 +498,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
     }
   }
 
-  Future<void> cancelOrderItem(String itemId, String storeId) async {
+  Future<bool> cancelOrderItem(String itemId, String storeId) async {
     final tableId = state.activeOrder?.tableId;
     state = state.copyWith(isSubmitting: true, clearError: true);
     try {
@@ -506,10 +506,59 @@ class OrderNotifier extends StateNotifier<OrderState> {
       if (tableId != null) {
         await loadActiveOrder(tableId, storeId);
       }
+      return true;
     } catch (error) {
       state = state.copyWith(
         error: _mapOrderError(error, 'Failed to cancel item'),
       );
+      return false;
+    } finally {
+      state = state.copyWith(isSubmitting: false);
+    }
+  }
+
+  Future<bool> restoreCancelledOrder(
+    String orderId,
+    String storeId, {
+    String? tableId,
+  }) async {
+    state = state.copyWith(isSubmitting: true, clearError: true);
+    try {
+      await orderService.restoreCancelledOrder(
+        orderId: orderId,
+        storeId: storeId,
+      );
+      if (tableId != null) {
+        await loadActiveOrder(tableId, storeId);
+      }
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        error: _mapOrderError(error, 'Failed to restore order'),
+      );
+      return false;
+    } finally {
+      state = state.copyWith(isSubmitting: false);
+    }
+  }
+
+  Future<bool> restoreCancelledOrderItem(String itemId, String storeId) async {
+    final tableId = state.activeOrder?.tableId;
+    state = state.copyWith(isSubmitting: true, clearError: true);
+    try {
+      await orderService.restoreCancelledOrderItem(
+        itemId: itemId,
+        storeId: storeId,
+      );
+      if (tableId != null) {
+        await loadActiveOrder(tableId, storeId);
+      }
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        error: _mapOrderError(error, 'Failed to restore item'),
+      );
+      return false;
     } finally {
       state = state.copyWith(isSubmitting: false);
     }
@@ -712,6 +761,9 @@ String _mapOrderError(Object error, String fallbackPrefix) {
       'ITEM_NOT_EDITABLE' =>
         'Only pending items can have their quantity edited.',
       'ITEM_IS_CANCELLED' => 'This item has been cancelled.',
+      'ORDER_NOT_CANCELLED' => 'This order is no longer cancelled.',
+      'ITEM_NOT_CANCELLED' => 'This item is no longer cancelled.',
+      'CANCELLATION_NOT_FOUND' => 'The cancellation can no longer be restored.',
       'INVALID_QUANTITY' => 'Quantity must be at least 1.',
       'TRANSFER_SAME_TABLE' => 'Cannot transfer to the same table.',
       _ => '$fallbackPrefix: ${error.message}',

@@ -302,7 +302,7 @@ class PhotoOpsService {
         .from('photo_objet_monitoring_policies')
         .select('store_id')
         .inFilter('store_id', accessibleStoreIds)
-        .eq('schedule_version', 'hcm-eod-2220-v3')
+        .inFilter('schedule_version', ['hcm-eod-2220-v3', 'hcm-eod-2200-v4'])
         .eq('is_enabled', true)
         .isFilter('effective_to', null);
     final configuredStoreIds = List<Map<String, dynamic>>.from(
@@ -323,17 +323,31 @@ class PhotoOpsService {
     }
     final exportStoreIds = stores.map((row) => row['id'].toString()).toList();
 
-    final completedRunResponse = await supabase
-        .from('photo_objet_sales_pull_runs')
-        .select('store_id')
+    final expectedSlotResponse = await supabase
+        .from('photo_objet_expected_slots')
+        .select('store_id, slot_time_hcm')
         .inFilter('store_id', exportStoreIds)
-        .eq('slot_date_hcm', saleDate)
-        .eq('slot_time_hcm', '22:20:00')
-        .eq('run_source', 'scheduled')
-        .eq('status', 'success');
+        .eq('slot_date_hcm', saleDate);
+    final exportSlotTime = resolvePhotoOpsSalesExportSlot(
+      stores: stores,
+      expectedSlots: List<Map<String, dynamic>>.from(expectedSlotResponse),
+    );
+
+    final completedRunResponse = await supabase.rpc(
+      'photo_objet_sales_export_runs',
+      params: {'p_sale_date': saleDate},
+    );
+    final exactCompletedRuns =
+        List<Map<String, dynamic>>.from(completedRunResponse).where((run) {
+          final storeId = run['store_id']?.toString();
+          final slotTime = run['slot_time_hcm']?.toString();
+          return exportStoreIds.contains(storeId) &&
+              slotTime != null &&
+              slotTime.startsWith(exportSlotTime.substring(0, 5));
+        }).toList();
     validatePhotoOpsSalesExportReady(
       stores: stores,
-      completedRuns: List<Map<String, dynamic>>.from(completedRunResponse),
+      completedRuns: exactCompletedRuns,
     );
 
     final rawSales = <Map<String, dynamic>>[];
@@ -347,7 +361,7 @@ class PhotoOpsService {
           .inFilter('store_id', exportStoreIds)
           .eq('sale_date', saleDate)
           .gte('sold_at', '${saleDate}T00:00:00+07:00')
-          .lt('sold_at', '${saleDate}T22:20:00+07:00')
+          .lt('sold_at', '${saleDate}T$exportSlotTime+07:00')
           .order('sold_at')
           .order('id')
           .range(offset, offset + _photoSalesExportPageSize - 1);

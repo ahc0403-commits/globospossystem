@@ -85,7 +85,9 @@ CREATE TABLE public.photo_objet_sales_pull_runs (
 CREATE TABLE public.photo_objet_sales_raw (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   store_id uuid NOT NULL REFERENCES public.restaurants(id),
-  source_hash text NOT NULL UNIQUE
+  source_hash text NOT NULL UNIQUE,
+  sold_at timestamptz,
+  amount integer
 );
 CREATE TABLE public.photo_objet_sales (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -933,6 +935,153 @@ psql_test -Atqc "
   ), ''))
   FROM public.photo_objet_sales_raw
 ")" = "$raw_before_2220" ]]
+
+# Validate the 22:00 transition and automatic recovery in an isolated database
+# so the historical rollback fixtures below remain unchanged.
+RECOVERY_DB="photo_recovery_fixture_$$"
+create_fixture_db "$RECOVERY_DB"
+psql_db "$RECOVERY_DB" \
+  --file "$ROOT_DIR/scripts/preflight_photo_objet_collection_2200.sql" \
+  | grep -q 'Photo Objet 22:00 collection preflight passed'
+psql_db "$RECOVERY_DB" --single-transaction \
+  --file "$ROOT_DIR/supabase/migrations/20260807220000_photo_objet_collection_2200.sql" \
+  >/dev/null
+psql_db "$RECOVERY_DB" \
+  --file "$ROOT_DIR/scripts/verify_photo_objet_collection_2200.sql" \
+  | grep -q 'Photo Objet 22:00 collection verification passed'
+psql_db "$RECOVERY_DB" \
+  --file "$ROOT_DIR/scripts/preflight_photo_objet_automatic_slot_recovery.sql" \
+  | grep -q 'Photo Objet automatic slot recovery preflight passed'
+psql_db "$RECOVERY_DB" --single-transaction \
+  --file "$ROOT_DIR/supabase/migrations/20260807230000_photo_objet_automatic_slot_recovery.sql" \
+  >/dev/null
+psql_db "$RECOVERY_DB" \
+  --file "$ROOT_DIR/scripts/verify_photo_objet_automatic_slot_recovery.sql" \
+  | grep -q 'Photo Objet automatic slot recovery verification passed'
+psql_db "$RECOVERY_DB" \
+  --file "$ROOT_DIR/scripts/preflight_photo_objet_precise_start_report_ready.sql" \
+  | grep -q 'Photo Objet precise start/report ready preflight passed'
+psql_db "$RECOVERY_DB" --single-transaction \
+  --file "$ROOT_DIR/supabase/migrations/20260807233000_photo_objet_precise_start_report_ready.sql" \
+  >/dev/null
+psql_db "$RECOVERY_DB" \
+  --file "$ROOT_DIR/scripts/verify_photo_objet_precise_start_report_ready.sql" \
+  | grep -q 'Photo Objet precise start/report ready verification passed'
+
+v4_date="$(psql_db "$RECOVERY_DB" -Atqc "
+  SELECT min(slot.slot_date_hcm)
+  FROM public.photo_objet_expected_slots slot
+  JOIN public.photo_objet_monitoring_policies policy
+    ON policy.id = slot.monitoring_policy_id
+  WHERE policy.schedule_version = 'hcm-eod-2200-v4'
+")"
+psql_db "$RECOVERY_DB" -Atqc "
+  SELECT public.photo_objet_daily_report_is_ready('$v4_date')
+" | grep -qx f
+psql_db "$RECOVERY_DB" -Atqc "
+  SELECT count(*) FROM public.photo_objet_sales_export_runs('$v4_date')
+" | grep -qx 0
+psql_db "$RECOVERY_DB" -Atqc "
+  SELECT count(*)
+  FROM public.photo_objet_due_recovery_slots(
+    ('$v4_date'::date + TIME '22:00') AT TIME ZONE 'Asia/Ho_Chi_Minh',
+    '$v4_date', 6
+  )
+  WHERE slot_date_hcm = '$v4_date'
+" | grep -qx 0
+psql_db "$RECOVERY_DB" -Atqc "
+  SELECT count(*)
+  FROM public.photo_objet_due_recovery_slots(
+    ('$v4_date'::date + TIME '22:01') AT TIME ZONE 'Asia/Ho_Chi_Minh',
+    '$v4_date', 6
+  )
+  WHERE slot_date_hcm = '$v4_date' AND slot_time_hcm = TIME '22:00'
+" | grep -qx 6
+psql_db "$RECOVERY_DB" -c "
+  UPDATE public.photo_objet_expected_slots slot
+  SET status = 'expected', last_failure_class = NULL, attempt_count = 0
+  FROM public.photo_objet_monitoring_policies policy
+  WHERE policy.id = slot.monitoring_policy_id
+    AND policy.schedule_version = 'hcm-eod-2200-v4'
+    AND slot.slot_date_hcm = '$v4_date';
+" >/dev/null
+
+invalid_recovery_run_id="$(psql_db "$RECOVERY_DB" -Atqc "
+  INSERT INTO public.photo_objet_sales_pull_runs (
+    store_id, target_date, run_source, slot_id, slot_date_hcm, slot_time_hcm,
+    interval_start_at, interval_end_at, interval_rows, status, finished_at
+  ) VALUES (
+    '$PHOTO_OBJET_BIENHOA_STORE_ID', '$v4_date', 'backfill',
+    'recovery-invalid-backfill', '$v4_date', TIME '22:00',
+    ('$v4_date'::date + TIME '00:00') AT TIME ZONE 'Asia/Ho_Chi_Minh',
+    ('$v4_date'::date + TIME '22:00') AT TIME ZONE 'Asia/Ho_Chi_Minh', 1,
+    'success', now()
+  ) RETURNING id
+")"
+set +e
+invalid_recovery_output="$(psql_db "$RECOVERY_DB" -Atqc "
+  SELECT public.photo_objet_complete_recovery_slot(
+    '$PHOTO_OBJET_BIENHOA_STORE_ID', '$v4_date', TIME '22:00',
+    '$invalid_recovery_run_id', false
+  )
+" 2>&1)"
+invalid_recovery_status=$?
+set -e
+[[ "$invalid_recovery_status" -ne 0 ]]
+[[ "$invalid_recovery_output" == *'PHOTO_RECOVERY_SUCCESS_RUN_MISMATCH'* ]]
+
+recovery_run_id="$(psql_db "$RECOVERY_DB" -Atqc "
+  INSERT INTO public.photo_objet_sales_pull_runs (
+    store_id, target_date, run_source, slot_id, slot_date_hcm, slot_time_hcm,
+    interval_start_at, interval_end_at, interval_rows, status, finished_at
+  ) VALUES (
+    '$PHOTO_OBJET_BIENHOA_STORE_ID', '$v4_date', 'scheduled',
+    'scheduled-recovery-fixture', '$v4_date', TIME '22:00',
+    ('$v4_date'::date + TIME '00:00') AT TIME ZONE 'Asia/Ho_Chi_Minh',
+    ('$v4_date'::date + TIME '22:00') AT TIME ZONE 'Asia/Ho_Chi_Minh', 1,
+    'success', now()
+  ) RETURNING id
+")"
+psql_db "$RECOVERY_DB" -Atqc "
+  SELECT public.photo_objet_complete_recovery_slot(
+    '$PHOTO_OBJET_BIENHOA_STORE_ID', '$v4_date', TIME '22:00',
+    '$recovery_run_id', false
+  )
+" | grep -qx recovered
+psql_db "$RECOVERY_DB" -Atqc "
+  SELECT status || '|' || successful_run_id
+  FROM public.photo_objet_expected_slots
+  WHERE store_id = '$PHOTO_OBJET_BIENHOA_STORE_ID'
+    AND slot_date_hcm = '$v4_date'
+    AND slot_time_hcm = TIME '22:00'
+" | grep -qx "recovered|$recovery_run_id"
+
+# Restore the synthetic slot so the existing rollback-safety fixtures remain
+# independent from this recovery contract.
+psql_db "$RECOVERY_DB" -c "
+  UPDATE public.photo_objet_expected_slots
+  SET status = 'expected', successful_run_id = NULL, attempt_count = 0,
+      last_failure_class = NULL
+  WHERE slot_date_hcm = '$v4_date'
+    AND slot_time_hcm = TIME '22:00';
+  DELETE FROM public.photo_objet_sales_pull_runs
+  WHERE id IN ('$invalid_recovery_run_id', '$recovery_run_id');
+" >/dev/null
+
+psql_db "$RECOVERY_DB" \
+  --file "$ROOT_DIR/scripts/rollback_photo_objet_precise_start_report_ready.sql" \
+  | grep -q 'Photo Objet precise start/report ready rollback passed'
+psql_db "$RECOVERY_DB" \
+  --file "$ROOT_DIR/scripts/rollback_photo_objet_automatic_slot_recovery.sql" \
+  | grep -q 'Photo Objet automatic slot recovery rollback passed'
+psql_db "$RECOVERY_DB" \
+  --file "$ROOT_DIR/scripts/rollback_photo_objet_collection_2200.sql" \
+  | grep -q 'Photo Objet 22:00 collection rollback passed'
+psql_db "$RECOVERY_DB" -Atqc "
+  SELECT count(*)
+  FROM public.photo_objet_monitoring_policies
+  WHERE effective_to IS NULL AND schedule_version = 'hcm-eod-2220-v3'
+" | grep -qx 6
 
 psql_test --file "$ROOT_DIR/scripts/rollback_photo_objet_single_slot_2220.sql" \
   | grep -q 'PHOTO_2220_ROLLBACK_OK'
