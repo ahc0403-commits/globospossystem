@@ -238,6 +238,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
             child: Text(l10n.waiterBack),
           ),
           FilledButton.icon(
+            key: const Key('cashier_cancel_order_confirm_button'),
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(
               backgroundColor: PosColors.danger,
@@ -250,6 +251,32 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       ),
     );
     return result ?? false;
+  }
+
+  void _showCancellationUndoSnackBar({
+    required String message,
+    required String restoredMessage,
+    required Future<bool> Function() onUndo,
+  }) {
+    final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 6),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: l10n.cancellationUndoAction,
+          onPressed: () async {
+            final restored = await onUndo();
+            if (restored && mounted) {
+              showSuccessToast(context, restoredMessage);
+            }
+          },
+        ),
+      ),
+    );
   }
 
   Future<Map<String, String>?> _showNonRevenueDialog() async {
@@ -1355,7 +1382,20 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                     if (storeId == null || !canCancelOrders || !isOnline) {
                       return;
                     }
-                    await notifier.cancelOrderItem(item.id, storeId);
+                    final cancelled = await notifier.cancelOrderItem(
+                      item.id,
+                      storeId,
+                    );
+                    if (cancelled && context.mounted) {
+                      _showCancellationUndoSnackBar(
+                        message: l10n.orderWorkspaceCancelItemAction,
+                        restoredMessage: l10n.cancelledItemRestored,
+                        onUndo: () => notifier.restoreCancelledOrderItem(
+                          item.id,
+                          storeId,
+                        ),
+                      );
+                    }
                   },
                   onProcess: (method, cashTender) async {
                     final selectedOrder = paymentState.selectedOrder;
@@ -1614,7 +1654,14 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                     if (context.mounted &&
                         ref.read(paymentProvider).error == null) {
                       setState(() => _selectedMethod = null);
-                      showSuccessToast(context, l10n.cashierOrderCancelled);
+                      _showCancellationUndoSnackBar(
+                        message: l10n.cashierOrderCancelled,
+                        restoredMessage: l10n.cancelledOrderRestored,
+                        onUndo: () => notifier.restoreCancelledOrder(
+                          selectedOrder.orderId,
+                          storeId,
+                        ),
+                      );
                     }
                   },
                   onReprint: () async {

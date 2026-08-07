@@ -393,19 +393,35 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
     );
   }
 
-  void _showOrderCancelledSnackBar() {
+  void _showCancellationUndoSnackBar({
+    required String message,
+    required String restoredMessage,
+    required Future<bool> Function() onUndo,
+  }) {
+    final messenger = ScaffoldMessenger.of(context);
     final l10n = context.l10n;
+    messenger.hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          l10n.waiterOrderCancelled,
+          message,
           style: AppFonts.system(color: Colors.white, fontSize: 14),
+        ),
+        action: SnackBarAction(
+          label: l10n.cancellationUndoAction,
+          textColor: AppColors.amber500,
+          onPressed: () async {
+            final restored = await onUndo();
+            if (restored && mounted) {
+              showSuccessToast(context, restoredMessage);
+            }
+          },
         ),
         backgroundColor: AppColors.statusOccupied,
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 6),
       ),
     );
   }
@@ -468,11 +484,35 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
       onCancelOrderItem: storeId == null
           ? null
           : (itemId) async {
-              await orderNotifier.cancelOrderItem(itemId, storeId);
+              final cancelled = await orderNotifier.cancelOrderItem(
+                itemId,
+                storeId,
+              );
               if (!mounted) {
                 return;
               }
               await ref.read(waiterTableProvider.notifier).loadTables(storeId);
+              if (!mounted || !cancelled) {
+                return;
+              }
+              _showCancellationUndoSnackBar(
+                message: l10n.orderWorkspaceCancelItemAction,
+                restoredMessage: l10n.cancelledItemRestored,
+                onUndo: () async {
+                  final restored = await orderNotifier
+                      .restoreCancelledOrderItem(itemId, storeId);
+                  if (restored) {
+                    await orderNotifier.loadActiveOrder(
+                      selectedTable.id,
+                      storeId,
+                    );
+                    await ref
+                        .read(waiterTableProvider.notifier)
+                        .loadTables(storeId, showLoading: false);
+                  }
+                  return restored;
+                },
+              );
             },
       onEditOrderItemQuantity: storeId == null
           ? null
@@ -528,7 +568,23 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
           }
           ref.read(orderProvider.notifier).clearSession();
           _onCancelOrderPanel();
-          _showOrderCancelledSnackBar();
+          _showCancellationUndoSnackBar(
+            message: l10n.waiterOrderCancelled,
+            restoredMessage: l10n.cancelledOrderRestored,
+            onUndo: () async {
+              final restored = await orderNotifier.restoreCancelledOrder(
+                activeOrder.id,
+                storeId,
+                tableId: selectedTable.id,
+              );
+              if (restored) {
+                final tableNotifier = ref.read(waiterTableProvider.notifier);
+                await tableNotifier.loadTables(storeId, showLoading: false);
+                await tableNotifier.refreshOrderPreviews(storeId);
+              }
+              return restored;
+            },
+          );
         }
       },
       onSendOrder: () async {

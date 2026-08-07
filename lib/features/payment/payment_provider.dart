@@ -819,6 +819,44 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     }
   }
 
+  Future<bool> restoreCancelledOrder(String orderId, String storeId) async {
+    state = state.copyWith(isProcessing: true, clearError: true);
+    try {
+      await orderService.restoreCancelledOrder(
+        orderId: orderId,
+        storeId: storeId,
+      );
+      await loadOrders(storeId);
+      state = state.copyWith(isProcessing: false, clearError: true);
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        isProcessing: false,
+        error: _mapPaymentError(error, 'Failed to restore order'),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> restoreCancelledOrderItem(String itemId, String storeId) async {
+    state = state.copyWith(isProcessing: true, clearError: true);
+    try {
+      await orderService.restoreCancelledOrderItem(
+        itemId: itemId,
+        storeId: storeId,
+      );
+      await loadOrders(storeId);
+      state = state.copyWith(isProcessing: false, clearError: true);
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        isProcessing: false,
+        error: _mapPaymentError(error, 'Failed to restore order item'),
+      );
+      return false;
+    }
+  }
+
   void resetPaymentSuccess() {
     if (!state.paymentSuccess) {
       return;

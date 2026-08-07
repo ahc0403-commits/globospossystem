@@ -32,14 +32,9 @@ void main() {
     expect(text, contains('Ca phe sua da'));
     expect(text, contains('VND'));
     expect(text, contains('CHUYEN KHOAN'));
-    expect(text, contains('MB - 5337159999'));
-    expect(text, contains('AKJ INTERNATIONAL CO., LTD'));
-    expect(
-      text,
-      contains(
-        '00020101021138540010A00000072701240006970422011053371599990208QRIBFTTA53037045802VN630472C0',
-      ),
-    );
+    expect(text, contains('WOORI BANK - 100202042976'));
+    expect(text, contains('AHN HYOCHANG'));
+    expect(bytes, contains(0x76));
     expect(bytes, contains(0x1d));
     expect(bytes, contains(0x56));
   });
@@ -61,7 +56,7 @@ void main() {
     expect(text, contains('Phuc vu noi bo'));
     expect(text, contains('Khong tinh doanh thu'));
     expect(text, isNot(contains('CHUYEN KHOAN')));
-    expect(text, isNot(contains('5337159999')));
+    expect(text, isNot(contains('100202042976')));
   });
 
   test('bank transfer receipts use the bank transfer method label', () async {
