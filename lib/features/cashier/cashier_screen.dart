@@ -1222,7 +1222,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     final detailPane = Stack(
       children: [
         Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(8),
           child: selectedOrder == null
               ? _CashierTableOverview(
                   state: tableState,
@@ -1673,7 +1673,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
               minHeight:
                   MediaQuery.sizeOf(context).width >
                       MediaQuery.sizeOf(context).height
-                  ? 820
+                  ? 760
                   : 720,
               child: LayoutBuilder(
                 builder: (context, constraints) {
@@ -1685,6 +1685,8 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                   final useWideLayout =
                       constraints.maxWidth >= 1180 && !forceScrollableCompact;
                   final useCompactChrome = !useWideLayout;
+                  final useDenseWideLayout =
+                      useWideLayout && viewport.height < 900;
                   final showCompactQueue =
                       selectedOrder == null || _showPaymentQueueOnCompact;
 
@@ -1698,11 +1700,18 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                         currency: currency,
                         isOnline: isOnline,
                         compact: useCompactChrome,
+                        dense: useDenseWideLayout,
                         onManageSoldOut: storeId == null || !isOnline
                             ? null
                             : () => _showSoldOutMenuDialog(storeId),
                       ),
-                      SizedBox(height: useCompactChrome ? 8 : 12),
+                      SizedBox(
+                        height: useCompactChrome
+                            ? 8
+                            : useDenseWideLayout
+                            ? 6
+                            : 12,
+                      ),
                       Expanded(
                         child: useWideLayout
                             ? Row(
@@ -1767,6 +1776,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     required NumberFormat currency,
     required bool isOnline,
     required bool compact,
+    required bool dense,
     required VoidCallback? onManageSoldOut,
   }) {
     final l10n = context.l10n;
@@ -1847,7 +1857,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     ];
 
     return ToastWorkSurface(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      padding: EdgeInsets.fromLTRB(14, dense ? 6 : 10, 14, dense ? 6 : 10),
       backgroundColor: PosColors.surface,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -1878,8 +1888,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                     ),
                   ],
                 ),
-              const SizedBox(height: 8),
+              SizedBox(height: dense ? 4 : 8),
               ToastMetricStrip(
+                dense: dense,
                 metrics: [
                   ToastMetric(
                     label: l10n.cashierPendingStatus,
@@ -2394,8 +2405,11 @@ class _SelectedOrderView extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        final dense =
+            constraints.maxWidth >= 1080 && constraints.maxHeight < 1100;
         final orderSummary = _CashierOrderSummarySurface(
           order: order,
+          dense: dense,
           canManageServiceItems: canManageServiceItems,
           isProcessing: isProcessing,
           isOnline: isOnline,
@@ -2422,6 +2436,7 @@ class _SelectedOrderView extends StatelessWidget {
           onProcessSplit: onProcessSplit,
           onCancelOrder: onCancelOrder,
           onReprint: onReprint,
+          dense: dense,
         );
 
         final content = constraints.maxWidth < 1080
@@ -2473,7 +2488,7 @@ class _SelectedOrderView extends StatelessWidget {
             : Row(
                 children: [
                   Expanded(flex: 6, child: orderSummary),
-                  const SizedBox(width: 16),
+                  SizedBox(width: dense ? 10 : 16),
                   SizedBox(width: 420, child: paymentRail),
                 ],
               );
@@ -2488,9 +2503,17 @@ class _SelectedOrderView extends StatelessWidget {
                 onPressed: isProcessing ? null : onBackToTables,
                 icon: const Icon(Icons.arrow_back_rounded, size: 18),
                 label: Text(l10n.cashierSelectTableTitle),
+                style: dense
+                    ? OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 36),
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      )
+                    : null,
               ),
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: dense ? 5 : 10),
             Expanded(child: content),
           ],
         );
@@ -2503,6 +2526,7 @@ class _CashierOrderSummarySurface extends StatelessWidget {
   const _CashierOrderSummarySurface({
     required this.order,
     this.compact = false,
+    this.dense = false,
     this.canManageServiceItems = false,
     this.isProcessing = false,
     this.isOnline = true,
@@ -2511,6 +2535,7 @@ class _CashierOrderSummarySurface extends StatelessWidget {
 
   final CashierOrder order;
   final bool compact;
+  final bool dense;
   final bool canManageServiceItems;
   final bool isProcessing;
   final bool isOnline;
@@ -2523,6 +2548,7 @@ class _CashierOrderSummarySurface extends StatelessWidget {
     final itemsPanel = _CashierOrderItemsPanel(
       order: order,
       scrollable: !compact,
+      dense: dense,
       canManageServiceItems: canManageServiceItems,
       isProcessing: isProcessing,
       isOnline: isOnline,
@@ -2531,7 +2557,7 @@ class _CashierOrderSummarySurface extends StatelessWidget {
 
     return ToastWorkSurface(
       key: const Key('cashier_payment_surface'),
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(dense ? 10 : 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2560,9 +2586,9 @@ class _CashierOrderSummarySurface extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: dense ? 6 : 12),
           if (compact) itemsPanel else Expanded(child: itemsPanel),
-          const SizedBox(height: 12),
+          SizedBox(height: dense ? 6 : 12),
           _AmountLine(
             label: l10n.cashierSubtotal,
             value: '₫${currency.format(order.menuSubtotal)}',
@@ -2646,6 +2672,7 @@ class _CashierOrderItemsPanel extends StatelessWidget {
   const _CashierOrderItemsPanel({
     required this.order,
     this.scrollable = true,
+    this.dense = false,
     this.canManageServiceItems = false,
     this.isProcessing = false,
     this.isOnline = true,
@@ -2654,6 +2681,7 @@ class _CashierOrderItemsPanel extends StatelessWidget {
 
   final CashierOrder order;
   final bool scrollable;
+  final bool dense;
   final bool canManageServiceItems;
   final bool isProcessing;
   final bool isOnline;
@@ -2694,9 +2722,9 @@ class _CashierOrderItemsPanel extends StatelessWidget {
               key: const Key('cashier_selected_order_items_list'),
               shrinkWrap: !scrollable,
               physics: scrollable ? null : const NeverScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(dense ? 8 : 16),
               itemCount: order.items.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 12),
+              separatorBuilder: (_, _) => SizedBox(height: dense ? 6 : 12),
               itemBuilder: (context, index) {
                 final item = order.items[index];
                 final itemName = item.label ?? l10n.cashierItemFallback;
@@ -2719,9 +2747,9 @@ class _CashierOrderItemsPanel extends StatelessWidget {
                     onToggleServiceItem != null &&
                     (item.isServiceItem || billableMenuItemCount > 1);
                 return Container(
-                  padding: const EdgeInsets.symmetric(
+                  padding: EdgeInsets.symmetric(
                     horizontal: 14,
-                    vertical: 12,
+                    vertical: dense ? 6 : 12,
                   ),
                   decoration: BoxDecoration(
                     color: PosColors.surface,
@@ -2898,6 +2926,7 @@ class _CashierPaymentRail extends StatelessWidget {
     required this.onProcessSplit,
     required this.onCancelOrder,
     required this.onReprint,
+    this.dense = false,
   });
 
   final CashierOrder order;
@@ -2921,6 +2950,7 @@ class _CashierPaymentRail extends StatelessWidget {
   final Future<void> Function() onProcessSplit;
   final Future<void> Function() onCancelOrder;
   final Future<void> Function() onReprint;
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
@@ -2959,6 +2989,7 @@ class _CashierPaymentRail extends StatelessWidget {
       canApplyDiscount: canApplyDiscount && !order.isStaffMeal,
       canProcessSplit: !order.isStaffMeal && order.remainingDue > 0,
       scrollable: expandMethodSection,
+      dense: dense,
       onSelectMethod: onSelectMethod,
       onApplyDiscount: onApplyDiscount,
       onProcessSplit: onProcessSplit,
@@ -3025,13 +3056,16 @@ class _CashierPaymentRail extends StatelessWidget {
         : selectedLabel;
 
     return ToastWorkSurface(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(dense ? 8 : 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: EdgeInsets.symmetric(
+              horizontal: dense ? 8 : 12,
+              vertical: dense ? 5 : 10,
+            ),
             decoration: BoxDecoration(
               color: PosColors.mutedSurface,
               borderRadius: BorderRadius.circular(16),
@@ -3040,8 +3074,8 @@ class _CashierPaymentRail extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  width: 36,
-                  height: 36,
+                  width: dense ? 28 : 36,
+                  height: dense ? 28 : 36,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: PosColors.surface,
@@ -3090,9 +3124,10 @@ class _CashierPaymentRail extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: dense ? 6 : 12),
           if (!order.isStaffMeal) ...[
             _WetTissueQuantityControl(
+              dense: dense,
               quantity: wetTissueQuantity,
               confirmed: wetTissueConfirmed,
               isProcessing: isProcessing,
@@ -3100,7 +3135,7 @@ class _CashierPaymentRail extends StatelessWidget {
               onQuantityChanged: onWetTissueQuantityChanged,
               onConfirm: onConfirmWetTissue,
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: dense ? 6 : 12),
           ],
           Material(
             color: Colors.transparent,
@@ -3112,13 +3147,84 @@ class _CashierPaymentRail extends StatelessWidget {
                 child: Row(
                   children: [
                     Expanded(
-                      child: PosAmountAnchor(
-                        label: l10n.cashierPaymentDue,
-                        amount: amountText,
-                        helper: amountHelper,
-                        role: PosSurfaceRole.selected,
-                        amountStyle: PosNumericText.amountHero,
-                      ),
+                      child: dense
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: PosSurfaceRole.selected.fill,
+                                borderRadius: ToastRadiusTokens.md,
+                                border: Border.all(
+                                  color: PosSurfaceRole.selected.stroke,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          l10n.cashierPaymentDue,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                color: PosSurfaceRole
+                                                    .selected
+                                                    .helper,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                        ),
+                                        Text(
+                                          amountHelper,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                color: PosSurfaceRole
+                                                    .selected
+                                                    .helper,
+                                                fontSize: 10,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerRight,
+                                      child: Text(
+                                        amountText,
+                                        maxLines: 1,
+                                        style: PosNumericText.amountLarge
+                                            .copyWith(
+                                              color:
+                                                  PosSurfaceRole.selected.text,
+                                            ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : PosAmountAnchor(
+                              label: l10n.cashierPaymentDue,
+                              amount: amountText,
+                              helper: amountHelper,
+                              role: PosSurfaceRole.selected,
+                              amountStyle: PosNumericText.amountHero,
+                            ),
                     ),
                     if (selectedLabel != null) ...[
                       const SizedBox(width: 12),
@@ -3151,8 +3257,8 @@ class _CashierPaymentRail extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 14),
-          if (selectedMethod == null) ...[
+          SizedBox(height: dense ? 6 : 14),
+          if (selectedMethod == null && !dense) ...[
             Text(
               key: const Key('cashier_payment_method_required_hint'),
               l10n.cashierPaymentMethod,
@@ -3162,19 +3268,19 @@ class _CashierPaymentRail extends StatelessWidget {
                 fontWeight: FontWeight.w800,
               ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: dense ? 4 : 8),
           ],
           if (expandMethodSection)
             Expanded(child: methodActions)
           else
             methodActions,
-          const SizedBox(height: 12),
+          SizedBox(height: dense ? 6 : 12),
           SizedBox(
             width: double.infinity,
             child: PosActionTile(
               key: const Key('payment_submit_button'),
               label: submitLabel,
-              helper: submitHelper,
+              helper: dense ? null : submitHelper,
               icon: PosActionIcons.processPayment,
               state: submitState,
               onTap:
@@ -3194,6 +3300,7 @@ class _CashierPaymentRail extends StatelessWidget {
 
 class _WetTissueQuantityControl extends StatelessWidget {
   const _WetTissueQuantityControl({
+    this.dense = false,
     required this.quantity,
     required this.confirmed,
     required this.isProcessing,
@@ -3203,6 +3310,7 @@ class _WetTissueQuantityControl extends StatelessWidget {
   });
 
   final int quantity;
+  final bool dense;
   final bool confirmed;
   final bool isProcessing;
   final bool isOnline;
@@ -3219,7 +3327,7 @@ class _WetTissueQuantityControl extends StatelessWidget {
     return Container(
       key: const Key('cashier_wet_tissue_control'),
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(dense ? 6 : 12),
       decoration: BoxDecoration(
         color: confirmed ? PosColors.successMuted : PosColors.warningMuted,
         borderRadius: BorderRadius.circular(16),
@@ -3229,105 +3337,226 @@ class _WetTissueQuantityControl extends StatelessWidget {
           ),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      child: dense
+          ? Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              l10n.cashierWetTissueTitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(
+                                    color: PosColors.textPrimary,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '₫${currency.format(total)}',
+                            key: const Key('cashier_wet_tissue_total'),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: PosColors.textPrimary,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        confirmed
+                            ? l10n.cashierWetTissueUnitPrice
+                            : l10n.cashierWetTissueRequired,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        key: confirmed
+                            ? null
+                            : const Key('cashier_wet_tissue_required_hint'),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: confirmed
+                              ? PosColors.textSecondary
+                              : PosColors.warning,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                IconButton.outlined(
+                  key: const Key('cashier_wet_tissue_decrement'),
+                  tooltip: '-',
+                  onPressed: enabled && quantity > 0
+                      ? () => onQuantityChanged(quantity - 1)
+                      : null,
+                  icon: const Icon(Icons.remove_rounded, size: 18),
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size.square(36),
+                    maximumSize: const Size.square(36),
+                    padding: EdgeInsets.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+                SizedBox(
+                  width: 34,
+                  child: Text(
+                    '$quantity',
+                    key: const Key('cashier_wet_tissue_quantity'),
+                    textAlign: TextAlign.center,
+                    style: PosNumericText.amountLine.copyWith(
+                      color: PosColors.textPrimary,
+                    ),
+                  ),
+                ),
+                IconButton.filledTonal(
+                  key: const Key('cashier_wet_tissue_increment'),
+                  tooltip: '+',
+                  onPressed: enabled && quantity < 100
+                      ? () => onQuantityChanged(quantity + 1)
+                      : null,
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size.square(36),
+                    maximumSize: const Size.square(36),
+                    padding: EdgeInsets.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                SizedBox(
+                  width: 110,
+                  child: FilledButton(
+                    key: const Key('cashier_wet_tissue_confirm'),
+                    onPressed: enabled && !confirmed
+                        ? () => unawaited(onConfirm(quantity))
+                        : null,
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, 36),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      visualDensity: VisualDensity.compact,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      confirmed
+                          ? l10n.cashierWetTissueConfirmed
+                          : l10n.cashierWetTissueConfirm,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Text(
-                      l10n.cashierWetTissueTitle,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: PosColors.textPrimary,
-                        fontWeight: FontWeight.w900,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            l10n.cashierWetTissueTitle,
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  color: PosColors.textPrimary,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            l10n.cashierWetTissueUnitPrice,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: PosColors.textSecondary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 2),
                     Text(
-                      l10n.cashierWetTissueUnitPrice,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: PosColors.textSecondary,
-                        fontWeight: FontWeight.w700,
+                      '₫${currency.format(total)}',
+                      key: const Key('cashier_wet_tissue_total'),
+                      style: PosNumericText.amountLine.copyWith(
+                        color: PosColors.textPrimary,
                       ),
                     ),
                   ],
                 ),
-              ),
-              Text(
-                '₫${currency.format(total)}',
-                key: const Key('cashier_wet_tissue_total'),
-                style: PosNumericText.amountLine.copyWith(
-                  color: PosColors.textPrimary,
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    IconButton.outlined(
+                      key: const Key('cashier_wet_tissue_decrement'),
+                      tooltip: '-',
+                      onPressed: enabled && quantity > 0
+                          ? () => onQuantityChanged(quantity - 1)
+                          : null,
+                      icon: const Icon(Icons.remove_rounded),
+                    ),
+                    SizedBox(
+                      width: 56,
+                      child: Text(
+                        '$quantity',
+                        key: const Key('cashier_wet_tissue_quantity'),
+                        textAlign: TextAlign.center,
+                        style: PosNumericText.amountLine.copyWith(
+                          color: PosColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    IconButton.filledTonal(
+                      key: const Key('cashier_wet_tissue_increment'),
+                      tooltip: '+',
+                      onPressed: enabled && quantity < 100
+                          ? () => onQuantityChanged(quantity + 1)
+                          : null,
+                      icon: const Icon(Icons.add_rounded),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.icon(
+                        key: const Key('cashier_wet_tissue_confirm'),
+                        onPressed: enabled && !confirmed
+                            ? () => unawaited(onConfirm(quantity))
+                            : null,
+                        icon: Icon(
+                          confirmed
+                              ? Icons.check_circle_rounded
+                              : Icons.done_rounded,
+                          size: 18,
+                        ),
+                        label: Text(
+                          confirmed
+                              ? l10n.cashierWetTissueConfirmed
+                              : l10n.cashierWetTissueConfirm,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              IconButton.outlined(
-                key: const Key('cashier_wet_tissue_decrement'),
-                tooltip: '-',
-                onPressed: enabled && quantity > 0
-                    ? () => onQuantityChanged(quantity - 1)
-                    : null,
-                icon: const Icon(Icons.remove_rounded),
-              ),
-              SizedBox(
-                width: 56,
-                child: Text(
-                  '$quantity',
-                  key: const Key('cashier_wet_tissue_quantity'),
-                  textAlign: TextAlign.center,
-                  style: PosNumericText.amountLine.copyWith(
-                    color: PosColors.textPrimary,
+                if (!confirmed) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    l10n.cashierWetTissueRequired,
+                    key: const Key('cashier_wet_tissue_required_hint'),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: PosColors.warning,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                ),
-              ),
-              IconButton.filledTonal(
-                key: const Key('cashier_wet_tissue_increment'),
-                tooltip: '+',
-                onPressed: enabled && quantity < 100
-                    ? () => onQuantityChanged(quantity + 1)
-                    : null,
-                icon: const Icon(Icons.add_rounded),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton.icon(
-                  key: const Key('cashier_wet_tissue_confirm'),
-                  onPressed: enabled && !confirmed
-                      ? () => unawaited(onConfirm(quantity))
-                      : null,
-                  icon: Icon(
-                    confirmed ? Icons.check_circle_rounded : Icons.done_rounded,
-                    size: 18,
-                  ),
-                  label: Text(
-                    confirmed
-                        ? l10n.cashierWetTissueConfirmed
-                        : l10n.cashierWetTissueConfirm,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (!confirmed) ...[
-            const SizedBox(height: 8),
-            Text(
-              l10n.cashierWetTissueRequired,
-              key: const Key('cashier_wet_tissue_required_hint'),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: PosColors.warning,
-                fontWeight: FontWeight.w800,
-              ),
+                ],
+              ],
             ),
-          ],
-        ],
-      ),
     );
   }
 }
@@ -3345,6 +3574,7 @@ class _CashierPaymentActions extends StatelessWidget {
     required this.canApplyDiscount,
     required this.canProcessSplit,
     required this.scrollable,
+    this.dense = false,
     required this.onSelectMethod,
     required this.onApplyDiscount,
     required this.onProcessSplit,
@@ -3363,6 +3593,7 @@ class _CashierPaymentActions extends StatelessWidget {
   final bool canApplyDiscount;
   final bool canProcessSplit;
   final bool scrollable;
+  final bool dense;
   final ValueChanged<String> onSelectMethod;
   final Future<void> Function() onApplyDiscount;
   final Future<void> Function() onProcessSplit;
@@ -3381,15 +3612,18 @@ class _CashierPaymentActions extends StatelessWidget {
             context,
           ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: dense ? 4 : 10),
         LayoutBuilder(
           builder: (context, constraints) {
-            final tileWidth = constraints.maxWidth < 390
+            final spacing = dense ? 6.0 : 10.0;
+            final tileWidth = dense
+                ? (constraints.maxWidth - (spacing * 2)) / 3
+                : constraints.maxWidth < 390
                 ? constraints.maxWidth
-                : (constraints.maxWidth - 10) / 2;
+                : (constraints.maxWidth - spacing) / 2;
             return Wrap(
-              spacing: 10,
-              runSpacing: 10,
+              spacing: spacing,
+              runSpacing: spacing,
               children: [
                 for (final method in paymentOptions)
                   SizedBox(
@@ -3398,6 +3632,7 @@ class _CashierPaymentActions extends StatelessWidget {
                       key: Key('cashier_method_tile_${method.value}'),
                       method: method,
                       selected: selectedMethod == method.value,
+                      dense: dense,
                       onTap: paymentMethodsEnabled
                           ? () => onSelectMethod(method.value)
                           : null,
@@ -3408,7 +3643,7 @@ class _CashierPaymentActions extends StatelessWidget {
           },
         ),
         if (isServiceSelected) ...[
-          const SizedBox(height: 10),
+          SizedBox(height: dense ? 6 : 10),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -3428,7 +3663,7 @@ class _CashierPaymentActions extends StatelessWidget {
             ),
           ),
         ],
-        const SizedBox(height: 10),
+        SizedBox(height: dense ? 6 : 10),
         if (canApplyDiscount) ...[
           SizedBox(
             width: double.infinity,
@@ -3446,10 +3681,14 @@ class _CashierPaymentActions extends StatelessWidget {
                 textStyle: Theme.of(
                   context,
                 ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
+                minimumSize: Size(0, dense ? 40 : 48),
+                tapTargetSize: dense
+                    ? MaterialTapTargetSize.shrinkWrap
+                    : MaterialTapTargetSize.padded,
               ),
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: dense ? 6 : 10),
         ],
         if (canProcessSplit) ...[
           SizedBox(
@@ -3474,10 +3713,14 @@ class _CashierPaymentActions extends StatelessWidget {
                 textStyle: Theme.of(
                   context,
                 ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
+                minimumSize: Size(0, dense ? 40 : 48),
+                tapTargetSize: dense
+                    ? MaterialTapTargetSize.shrinkWrap
+                    : MaterialTapTargetSize.padded,
               ),
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: dense ? 6 : 10),
         ],
         Row(
           children: [
@@ -3494,6 +3737,10 @@ class _CashierPaymentActions extends StatelessWidget {
                     textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
+                    minimumSize: Size(0, dense ? 40 : 48),
+                    tapTargetSize: dense
+                        ? MaterialTapTargetSize.shrinkWrap
+                        : MaterialTapTargetSize.padded,
                   ),
                 ),
               ),
@@ -3514,6 +3761,10 @@ class _CashierPaymentActions extends StatelessWidget {
                     textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
+                    minimumSize: Size(0, dense ? 40 : 48),
+                    tapTargetSize: dense
+                        ? MaterialTapTargetSize.shrinkWrap
+                        : MaterialTapTargetSize.padded,
                   ),
                 ),
               ),
@@ -3686,11 +3937,13 @@ class _CashierMethodTile extends StatelessWidget {
     super.key,
     required this.method,
     required this.selected,
+    this.dense = false,
     this.onTap,
   });
 
   final _PaymentMethod method;
   final bool selected;
+  final bool dense;
   final VoidCallback? onTap;
 
   @override
@@ -3701,8 +3954,11 @@ class _CashierMethodTile extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         width: double.infinity,
-        constraints: const BoxConstraints(minHeight: 76),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        constraints: BoxConstraints(minHeight: dense ? 46 : 76),
+        padding: EdgeInsets.symmetric(
+          horizontal: dense ? 8 : 14,
+          vertical: dense ? 5 : 14,
+        ),
         decoration: BoxDecoration(
           color: selected ? PosColors.accentMuted : PosColors.surface,
           borderRadius: BorderRadius.circular(16),
@@ -3723,19 +3979,19 @@ class _CashierMethodTile extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 44,
-              height: 44,
+              width: dense ? 30 : 44,
+              height: dense ? 30 : 44,
               decoration: BoxDecoration(
                 color: selected ? Colors.white : PosColors.mutedSurface,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(
                 method.icon,
-                size: 22,
+                size: dense ? 18 : 22,
                 color: selected ? method.color : PosColors.textSecondary,
               ),
             ),
-            const SizedBox(width: 10),
+            SizedBox(width: dense ? 6 : 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -3743,6 +3999,8 @@ class _CashierMethodTile extends StatelessWidget {
                 children: [
                   Text(
                     method.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       color: selected
                           ? PosColors.accent
@@ -3750,15 +4008,17 @@ class _CashierMethodTile extends StatelessWidget {
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    selected
-                        ? context.l10n.selected
-                        : context.l10n.cashierPaymentMethod,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: PosColors.textSecondary,
+                  if (!dense) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      selected
+                          ? context.l10n.selected
+                          : context.l10n.cashierPaymentMethod,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.textSecondary,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),

@@ -159,7 +159,9 @@ void main() {
       expect(cashier, contains('if (compact)'));
       expect(cashier, contains('_CashierCompactCommandBar('));
       expect(cashier, contains('onManageSoldOut: onManageSoldOut'));
-      expect(cashier, contains('SizedBox(height: useCompactChrome ? 8 : 12)'));
+      expect(cashier, contains('height: useCompactChrome'));
+      expect(cashier, contains(': useDenseWideLayout'));
+      expect(cashier, contains('? 6'));
       expect(cashier, contains('_CashierOrderSummarySurface('));
       expect(cashier, contains('compact: true'));
       expect(cashier, contains('_CashierOrderItemsPanel('));
@@ -219,7 +221,7 @@ void main() {
       );
       expect(cashier, contains('MediaQuery.sizeOf(context).width >'));
       expect(cashier, contains('minHeight:'));
-      expect(cashier, contains('? 820'));
+      expect(cashier, contains('? 760'));
       expect(
         cashier,
         contains(
