@@ -19,11 +19,13 @@ void main() {
     ).readAsStringSync();
 
     expect(source, contains("Key('cashier_combined_payment_mode')"));
+    expect(source, contains('OutlinedButton.icon('));
     expect(source, contains('cashier_combined_order_'));
     expect(source, contains("Key('cashier_combined_payment_start')"));
     expect(source, contains('prepareCombinedTablePayment('));
     expect(source, contains('processCombinedTablePayment('));
     expect(source, contains('amountDue: combinedTotal'));
+    expect(source, contains('fitAllTables: true'));
   });
 
   test('database checkout is atomic and keeps source payments auditable', () {

@@ -939,11 +939,20 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton.outlined(
+          if (!_isCombinedPaymentMode && selectedOrder != null) ...[
+            ToastStatusBadge(
+              label: l10n.selected,
+              color: PosColors.accent,
+              compact: true,
+            ),
+          ],
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          OutlinedButton.icon(
             key: const Key('cashier_combined_payment_mode'),
-            tooltip: _isCombinedPaymentMode
-                ? l10n.cancel
-                : l10n.cashierCombinedPayment,
             onPressed: paymentState.isProcessing
                 ? null
                 : () {
@@ -959,22 +968,24 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
               _isCombinedPaymentMode
                   ? Icons.close_rounded
                   : Icons.call_merge_rounded,
-              size: 17,
+              size: 18,
+            ),
+            label: Text(
+              _isCombinedPaymentMode
+                  ? l10n.cancel
+                  : l10n.cashierCombinedPayment,
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _isCombinedPaymentMode
+                  ? PosColors.danger
+                  : PosColors.accent,
+              minimumSize: const Size.fromHeight(44),
+              textStyle: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w900),
             ),
           ),
-          if (!_isCombinedPaymentMode && selectedOrder != null) ...[
-            const SizedBox(width: 8),
-            ToastStatusBadge(
-              label: l10n.selected,
-              color: PosColors.accent,
-              compact: true,
-            ),
-          ],
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+          const SizedBox(height: 10),
           _CashierOrderSearchToolbar(
             controller: _orderSearchController,
             isSearching: _isOrderSearchLoading,
@@ -1780,11 +1791,13 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
             letterSpacing: 0,
           ),
         ),
-        const SizedBox(height: 4),
         Text(
           selectedOrder == null ? l10n.cashierSubtitle : l10n.cashierPaymentDue,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
             color: PosColors.textSecondary,
+            fontSize: 11,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1834,7 +1847,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     ];
 
     return ToastWorkSurface(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
       backgroundColor: PosColors.surface,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -1865,7 +1878,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                     ),
                   ],
                 ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               ToastMetricStrip(
                 metrics: [
                   ToastMetric(
@@ -1881,13 +1894,6 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                     label: l10n.cashierSelectedAmount,
                     value: selectedAmount,
                     tone: selectedOrder == null ? null : PosColors.success,
-                  ),
-                  ToastMetric(
-                    label: l10n.cashierNetwork,
-                    value: isOnline
-                        ? l10n.cashierTerminalOnline
-                        : l10n.cashierTerminalOffline,
-                    tone: isOnline ? PosColors.success : PosColors.warning,
                   ),
                 ],
               ),
@@ -2468,7 +2474,7 @@ class _SelectedOrderView extends StatelessWidget {
                 children: [
                   Expanded(flex: 6, child: orderSummary),
                   const SizedBox(width: 16),
-                  SizedBox(width: 356, child: paymentRail),
+                  SizedBox(width: 420, child: paymentRail),
                 ],
               );
 
@@ -2694,6 +2700,10 @@ class _CashierOrderItemsPanel extends StatelessWidget {
               itemBuilder: (context, index) {
                 final item = order.items[index];
                 final itemName = item.label ?? l10n.cashierItemFallback;
+                final translatedNames = _cashierTranslatedItemNames(
+                  item,
+                  itemName,
+                );
                 final lineTotal = item.unitPrice * item.quantity;
                 final itemType = item.itemType.toLowerCase();
                 final isCancelled = item.status.toLowerCase() == 'cancelled';
@@ -2750,6 +2760,19 @@ class _CashierOrderItemsPanel extends StatelessWidget {
                                     color: PosColors.textPrimary,
                                   ),
                             ),
+                            for (final translatedName in translatedNames) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                translatedName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: PosColors.textSecondary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                              ),
+                            ],
                             if (item.isServiceItem) ...[
                               const SizedBox(height: 6),
                               Align(
@@ -2836,6 +2859,20 @@ class _CashierOrderItemsPanel extends StatelessWidget {
             ),
     );
   }
+}
+
+List<String> _cashierTranslatedItemNames(OrderItem item, String primaryName) {
+  final names = <String>[];
+  final normalizedPrimary = primaryName.trim().toLowerCase();
+  for (final candidate in [item.nameVi, item.nameEn]) {
+    final name = candidate?.trim() ?? '';
+    if (name.isEmpty || name.toLowerCase() == normalizedPrimary) continue;
+    if (names.any((existing) => existing.toLowerCase() == name.toLowerCase())) {
+      continue;
+    }
+    names.add(name);
+  }
+  return names;
 }
 
 class _CashierPaymentRail extends StatelessWidget {
@@ -3127,6 +3164,11 @@ class _CashierPaymentRail extends StatelessWidget {
             ),
             const SizedBox(height: 8),
           ],
+          if (expandMethodSection)
+            Expanded(child: methodActions)
+          else
+            methodActions,
+          const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: PosActionTile(
@@ -3144,11 +3186,6 @@ class _CashierPaymentRail extends StatelessWidget {
                   : () => unawaited(handlePayPressed()),
             ),
           ),
-          const SizedBox(height: 12),
-          if (expandMethodSection)
-            Expanded(child: methodActions)
-          else
-            methodActions,
         ],
       ),
     );
@@ -3664,7 +3701,8 @@ class _CashierMethodTile extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        constraints: const BoxConstraints(minHeight: 76),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         decoration: BoxDecoration(
           color: selected ? PosColors.accentMuted : PosColors.surface,
           borderRadius: BorderRadius.circular(16),
@@ -3685,15 +3723,15 @@ class _CashierMethodTile extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 38,
-              height: 38,
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
                 color: selected ? Colors.white : PosColors.mutedSurface,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(
                 method.icon,
-                size: 18,
+                size: 22,
                 color: selected ? method.color : PosColors.textSecondary,
               ),
             ),
@@ -3705,7 +3743,7 @@ class _CashierMethodTile extends StatelessWidget {
                 children: [
                   Text(
                     method.label,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       color: selected
                           ? PosColors.accent
                           : PosColors.textPrimary,
@@ -3934,6 +3972,7 @@ class _CashierTableOverview extends StatelessWidget {
         orderPreviewByTableId: state.orderPreviewByTableId,
         onTapTable: onTapTable,
         editable: false,
+        fitAllTables: true,
         padding: const EdgeInsets.fromLTRB(0, 4, 0, 0),
       ),
     );
