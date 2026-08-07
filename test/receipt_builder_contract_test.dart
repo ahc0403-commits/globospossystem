@@ -27,11 +27,11 @@ void main() {
     expect(text, contains('GLOBOS POS'));
     expect(text, contains('AKJ INTERNATIONAL'));
     expect(text, contains('0318453298'));
-    expect(text, contains('PAYMENT RECEIPT'));
+    expect(text, contains('PHIEU THANH TOAN'));
     expect(text, contains('BC-20260721-000123'));
     expect(text, contains('Ca phe sua da'));
     expect(text, contains('VND'));
-    expect(text, contains('BANK TRANSFER / CHUYEN KHOAN'));
+    expect(text, contains('CHUYEN KHOAN'));
     expect(text, contains('MB - 5337159999'));
     expect(text, contains('AKJ INTERNATIONAL CO., LTD'));
     expect(
@@ -58,9 +58,9 @@ void main() {
     );
 
     final text = String.fromCharCodes(bytes);
-    expect(text, contains('Service Provision'));
-    expect(text, contains('not counted in revenue'));
-    expect(text, isNot(contains('BANK TRANSFER / CHUYEN KHOAN')));
+    expect(text, contains('Phuc vu noi bo'));
+    expect(text, contains('Khong tinh doanh thu'));
+    expect(text, isNot(contains('CHUYEN KHOAN')));
     expect(text, isNot(contains('5337159999')));
   });
 
@@ -74,10 +74,7 @@ void main() {
       paidAt: DateTime.utc(2026, 8, 5, 10, 30),
     );
 
-    expect(
-      String.fromCharCodes(bytes),
-      contains('Payment Method : Bank transfer / Chuyen khoan'),
-    );
+    expect(String.fromCharCodes(bytes), contains('Phuong thuc : Chuyen khoan'));
   });
 
   test('service item lines are excluded from customer receipt body', () async {
@@ -101,7 +98,6 @@ void main() {
     final text = String.fromCharCodes(bytes);
     expect(text, contains('Pho bo'));
     expect(text, isNot(contains('Service dessert')));
-    expect(text, contains('Service provided: 2 item(s)'));
     expect(text, contains('Mon phuc vu: 2'));
   });
 
@@ -130,12 +126,15 @@ void main() {
     final floorText = String.fromCharCodes(floorBytes);
     final trayText = String.fromCharCodes(trayBytes);
 
-    expect(floorText.indexOf('2F / T07'), lessThan(floorText.indexOf('FLOOR')));
-    expect(trayText.indexOf('2F / T07'), lessThan(trayText.indexOf('TRAY')));
-    expect(floorText, contains('*** ADDED ITEMS (batch 2) ***'));
+    expect(
+      floorText.indexOf('2F / T07'),
+      lessThan(floorText.indexOf('PHIEU TANG')),
+    );
+    expect(trayText.indexOf('2F / T07'), lessThan(trayText.indexOf('KHAY')));
+    expect(floorText, contains('*** MON THEM (DOT 2) ***'));
     expect(floorText, contains('Pho bo'));
     expect(floorText, contains('No onion'));
-    expect(trayText, contains('DUMBWAITER'));
+    expect(trayText, contains('THANG MAY DO AN'));
     expect(floorBytes, contains(0x1d));
     expect(floorBytes, contains(0x56));
   });
@@ -174,25 +173,72 @@ void main() {
       'at': '2026-07-27T08:00:00+07:00',
       'items': [
         {
-          'label': 'Lunch Combo',
+          'label': 'Combo bua trua',
           'qty': 2,
           'components': [
-            {'label': 'Kimbap', 'quantity': 1},
-            {'label': 'Ramen', 'quantity': 2},
+            {'label': 'Com cuon', 'quantity': 1},
+            {'label': 'Mi ramen', 'quantity': 2},
           ],
         },
       ],
     });
 
     expect(ticket.items.single.components, hasLength(2));
-    expect(ticket.items.single.components.last.label, 'Ramen');
+    expect(ticket.items.single.components.last.label, 'Mi ramen');
     expect(ticket.items.single.components.last.quantity, 2);
 
     final bytes = await ReceiptBuilder.buildKitchenTicket(ticket);
     final text = String.fromCharCodes(bytes);
-    expect(text, contains('Lunch Combo'));
-    expect(text, contains('Kimbap'));
-    expect(text, contains('Ramen'));
+    expect(text, contains('Combo bua trua'));
+    expect(text, contains('Com cuon'));
+    expect(text, contains('Mi ramen'));
     expect(text, contains('x4'));
+  });
+
+  test('all fixed printer copy is Vietnamese only', () async {
+    const ticket = PrintTicket(
+      ticket: 'confirmation',
+      floorLabel: '1F',
+      tableNumber: 'T01',
+      ticketCode: 'vi123',
+      batchNo: 1,
+      printedReason: 'initial',
+      printedAt: '2026-08-07T12:00:00+07:00',
+      items: [PrintTicketItem(label: 'Pho bo', quantity: 1)],
+    );
+
+    final receipt = String.fromCharCodes(
+      await ReceiptBuilder.buildPaymentReceipt(
+        restaurantName: 'GLOBOS POS',
+        tableNumber: 'T01',
+        items: const [
+          ReceiptItem(name: 'Pho bo', quantity: 1, unitPrice: 50000),
+        ],
+        totalAmount: 50000,
+        paymentMethod: 'cash',
+        paidAt: DateTime.utc(2026, 8, 7, 12),
+        receiptNumber: '001',
+        orderNumber: '002',
+        cashierCode: 'NV01',
+      ),
+    );
+    final confirmation = String.fromCharCodes(
+      await ReceiptBuilder.buildConfirmationSlip(ticket),
+    );
+
+    expect(receipt, contains('Phuong thuc : Tien mat'));
+    expect(receipt, contains('Cam on quy khach!'));
+    expect(
+      receipt,
+      isNot(
+        contains(RegExp(r'Payment|Receipt|Cashier|Subtotal|Discount|Thank')),
+      ),
+    );
+    expect(confirmation, contains('XAC NHAN DON'));
+    expect(confirmation, contains('Chi thanh toan tai quay thu ngan'));
+    expect(
+      confirmation,
+      isNot(contains(RegExp(r'ORDER|Payment|Please|receipt'))),
+    );
   });
 }

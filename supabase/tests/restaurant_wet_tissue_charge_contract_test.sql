@@ -49,7 +49,7 @@ BEGIN
   PERFORM set_config('request.jwt.claim.sub', v_auth::text, true);
 
   v_result := public.set_order_wet_tissue_quantity(v_order, v_store, 2);
-  IF (v_result->>'total_amount')::numeric <> 6000 THEN
+  IF (v_result->>'total_amount')::numeric <> 4000 THEN
     RAISE EXCEPTION 'WET_TISSUE_INITIAL_TOTAL_INVALID:%', v_result;
   END IF;
   IF NOT EXISTS (
@@ -58,8 +58,8 @@ BEGIN
     WHERE item.order_id = v_order
       AND item.item_type = 'wet_tissue_charge'
       AND item.quantity = 2
-      AND item.unit_price = 3000
-      AND item.paying_amount_inc_tax = 6000
+      AND item.unit_price = 2000
+      AND item.paying_amount_inc_tax = 4000
       AND item.status = 'ready'
   ) THEN
     RAISE EXCEPTION 'WET_TISSUE_INITIAL_LINE_INVALID';
@@ -76,7 +76,7 @@ BEGIN
     FROM public.order_items item
     WHERE item.order_id = v_order
       AND item.item_type = 'wet_tissue_charge'
-  ) <> 9000 THEN
+  ) <> 6000 THEN
     RAISE EXCEPTION 'WET_TISSUE_UPSERT_NOT_IDEMPOTENT';
   END IF;
 
@@ -93,7 +93,7 @@ BEGIN
     SELECT COALESCE(sum(paying_amount_inc_tax), 0)
     FROM public.order_items
     WHERE order_id = v_order AND status <> 'cancelled'
-  ) <> 12000 THEN
+  ) <> 8000 THEN
     RAISE EXCEPTION 'WET_TISSUE_PAYMENT_TOTAL_INVALID';
   END IF;
 

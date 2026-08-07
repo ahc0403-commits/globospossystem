@@ -145,11 +145,14 @@ void main() {
       ),
     );
     expect(receiptBuilder, contains('buildConfirmationSlip'));
-    expect(receiptBuilder, contains('ORDER CONFIRMATION'));
-    expect(receiptBuilder, contains('Please bring this slip to cashier.'));
+    expect(receiptBuilder, contains('XAC NHAN DON'));
     expect(
       receiptBuilder,
-      contains('This is not a receipt. Payment at cashier only.'),
+      contains('Vui long mang phieu nay den quay thu ngan.'),
+    );
+    expect(
+      receiptBuilder,
+      contains('Day khong phai hoa don. Chi thanh toan tai quay.'),
     );
     expect(
       printAgent,

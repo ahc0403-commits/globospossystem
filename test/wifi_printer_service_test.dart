@@ -125,7 +125,7 @@ void main() {
       expect(printer.prints.single.port, 9100);
       expect(
         String.fromCharCodes(printer.prints.single.bytes),
-        contains('TRAY'),
+        contains('KHAY'),
       );
     });
 
@@ -187,7 +187,7 @@ void main() {
       final half = bytes.length ~/ 2;
       expect(bytes.sublist(0, half), bytes.sublist(half));
       expect(
-        'FLOOR COPY'.allMatches(String.fromCharCodes(bytes)),
+        'PHIEU TANG'.allMatches(String.fromCharCodes(bytes)),
         hasLength(2),
       );
     });
@@ -236,9 +236,9 @@ void main() {
       expect(results.single.result, PrintResult.success);
       final output = String.fromCharCodes(printer.prints.single.bytes);
       expect(output, contains('GLOBOS PILOT'));
-      expect(output, contains('PAYMENT RECEIPT'));
-      expect(output, contains('TOTAL'));
-      expect(output, isNot(contains('KITCHEN TICKET')));
+      expect(output, contains('PHIEU THANH TOAN'));
+      expect(output, contains('TONG CONG'));
+      expect(output, isNot(contains('PHIEU BEP')));
     });
 
     test(

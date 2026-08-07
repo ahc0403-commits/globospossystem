@@ -50,6 +50,34 @@ void main() {
     },
   );
 
+  test('DB print queue forces combo component labels to Vietnamese', () {
+    final migration = _read(
+      'supabase/migrations/20260807160000_vietnamese_only_combo_printer_output.sql',
+    );
+    final verification = _read(
+      'scripts/verify_vietnamese_only_combo_printer_output.sql',
+    );
+
+    expect(
+      migration,
+      contains('CREATE TRIGGER force_print_job_combo_labels_vi'),
+    );
+    expect(migration, contains("item.raw -> 'components'"));
+    expect(migration, contains("component.raw ->> 'menu_item_id'"));
+    expect(migration, contains("btrim(menu.name_vi) !~ '[가-힣]'"));
+    expect(migration, contains("ELSE 'Món'"));
+    expect(migration, contains("status IN ('pending', 'failed')"));
+    expect(migration, isNot(contains('THEN btrim(menu.name)')));
+    expect(
+      verification,
+      contains('VIETNAMESE_COMBO_PRINTER_VERIFY_TRIGGER_MISSING'),
+    );
+    expect(
+      verification,
+      contains('VIETNAMESE_COMBO_PRINTER_VERIFY_LABEL_MISMATCH'),
+    );
+  });
+
   test('production deploy runs dedicated preflight and verification', () {
     final deploy = readProductionGateContract();
     final preflight = _read('scripts/preflight_vietnamese_printer_output.sql');

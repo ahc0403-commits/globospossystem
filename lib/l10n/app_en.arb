@@ -963,7 +963,7 @@
   "cashierCheckItems": "Check Items",
   "cashierPaymentMethod": "Payment Method",
   "cashierWetTissueTitle": "Wet tissues",
-  "cashierWetTissueUnitPrice": "3,000 VND each",
+  "cashierWetTissueUnitPrice": "2,000 VND each",
   "cashierWetTissueRequired": "Confirm the number of wet tissues before selecting a payment method.",
   "cashierWetTissueConfirmed": "Wet-tissue quantity confirmed",
   "cashierWetTissueConfirm": "Confirm quantity",

@@ -41,6 +41,8 @@ import 'payment_proof_modal.dart';
 import 'payment_completion_dialog.dart';
 import 'red_invoice_modal.dart';
 
+const _wetTissueUnitPrice = 2000;
+
 class CashierScreen extends ConsumerStatefulWidget {
   const CashierScreen({
     super.key,
@@ -885,6 +887,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     }
     final role = authState.role ?? '';
     final isAdmin = PermissionUtils.isAdminLike(role);
+    final canCancelOrders = role == 'cashier' || isAdmin;
     final canProcessNonRevenue = role == 'cashier' || isAdmin;
     final canApplyDiscount = PermissionUtils.hasPermission(
       role,
@@ -1241,7 +1244,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
               : _SelectedOrderView(
                   order: selectedOrder,
                   selectedMethod: _selectedMethod,
-                  isAdmin: isAdmin,
+                  canCancelOrders: canCancelOrders,
                   canProcessNonRevenue: canProcessNonRevenue,
                   canApplyDiscount: canApplyDiscount,
                   canManageServiceItems: canManageServiceItems,
@@ -1347,6 +1350,12 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                             : context.l10n.cashierServiceItemMarked,
                       );
                     }
+                  },
+                  onCancelOrderItem: (item) async {
+                    if (storeId == null || !canCancelOrders || !isOnline) {
+                      return;
+                    }
+                    await notifier.cancelOrderItem(item.id, storeId);
                   },
                   onProcess: (method, cashTender) async {
                     final selectedOrder = paymentState.selectedOrder;
@@ -1590,7 +1599,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                   },
                   onCancelOrder: () async {
                     final selectedOrder = paymentState.selectedOrder;
-                    if (storeId == null || selectedOrder == null || !isAdmin) {
+                    if (storeId == null ||
+                        selectedOrder == null ||
+                        !canCancelOrders) {
                       return;
                     }
                     final confirmed = await _showCancelOrderDialog(
@@ -2324,7 +2335,7 @@ class _SelectedOrderView extends StatelessWidget {
   const _SelectedOrderView({
     required this.order,
     required this.selectedMethod,
-    required this.isAdmin,
+    required this.canCancelOrders,
     required this.canProcessNonRevenue,
     required this.canApplyDiscount,
     required this.canManageServiceItems,
@@ -2338,6 +2349,7 @@ class _SelectedOrderView extends StatelessWidget {
     required this.onSelectMethod,
     required this.onApplyDiscount,
     required this.onToggleServiceItem,
+    required this.onCancelOrderItem,
     required this.onProcess,
     required this.onProcessSplit,
     required this.onCancelOrder,
@@ -2347,7 +2359,7 @@ class _SelectedOrderView extends StatelessWidget {
 
   final CashierOrder order;
   final String? selectedMethod;
-  final bool isAdmin;
+  final bool canCancelOrders;
   final bool canProcessNonRevenue;
   final bool canApplyDiscount;
   final bool canManageServiceItems;
@@ -2361,6 +2373,7 @@ class _SelectedOrderView extends StatelessWidget {
   final ValueChanged<String> onSelectMethod;
   final Future<void> Function() onApplyDiscount;
   final Future<void> Function(OrderItem item) onToggleServiceItem;
+  final Future<void> Function(OrderItem item) onCancelOrderItem;
   final Future<void> Function(String method, CashTender? cashTender) onProcess;
   final Future<void> Function() onProcessSplit;
   final Future<void> Function() onCancelOrder;
@@ -2396,7 +2409,10 @@ class _SelectedOrderView extends StatelessWidget {
         Icons.account_balance_rounded,
       ),
     ];
-    final canCancelOrder = isAdmin && order.status.toLowerCase() != 'completed';
+    final canCancelOrder =
+        canCancelOrders &&
+        order.status.toLowerCase() != 'completed' &&
+        order.paymentCount == 0;
     final effectiveSelectedMethod =
         selectedMethod ?? (order.isStaffMeal ? paymentMethodService : null);
     final isServiceSelected = isServicePaymentMethod(
@@ -2411,9 +2427,11 @@ class _SelectedOrderView extends StatelessWidget {
           order: order,
           dense: dense,
           canManageServiceItems: canManageServiceItems,
+          canCancelItems: canCancelOrders,
           isProcessing: isProcessing,
           isOnline: isOnline,
           onToggleServiceItem: onToggleServiceItem,
+          onCancelOrderItem: onCancelOrderItem,
         );
         final paymentRail = _CashierPaymentRail(
           order: order,
@@ -2454,9 +2472,11 @@ class _SelectedOrderView extends StatelessWidget {
                       order: order,
                       compact: true,
                       canManageServiceItems: canManageServiceItems,
+                      canCancelItems: canCancelOrders,
                       isProcessing: isProcessing,
                       isOnline: isOnline,
                       onToggleServiceItem: onToggleServiceItem,
+                      onCancelOrderItem: onCancelOrderItem,
                     ),
                     const SizedBox(height: 12),
                     _CashierPaymentRail(
@@ -2528,18 +2548,22 @@ class _CashierOrderSummarySurface extends StatelessWidget {
     this.compact = false,
     this.dense = false,
     this.canManageServiceItems = false,
+    this.canCancelItems = false,
     this.isProcessing = false,
     this.isOnline = true,
     this.onToggleServiceItem,
+    this.onCancelOrderItem,
   });
 
   final CashierOrder order;
   final bool compact;
   final bool dense;
   final bool canManageServiceItems;
+  final bool canCancelItems;
   final bool isProcessing;
   final bool isOnline;
   final Future<void> Function(OrderItem item)? onToggleServiceItem;
+  final Future<void> Function(OrderItem item)? onCancelOrderItem;
 
   @override
   Widget build(BuildContext context) {
@@ -2550,9 +2574,11 @@ class _CashierOrderSummarySurface extends StatelessWidget {
       scrollable: !compact,
       dense: dense,
       canManageServiceItems: canManageServiceItems,
+      canCancelItems: canCancelItems,
       isProcessing: isProcessing,
       isOnline: isOnline,
       onToggleServiceItem: onToggleServiceItem,
+      onCancelOrderItem: onCancelOrderItem,
     );
 
     return ToastWorkSurface(
@@ -2674,18 +2700,22 @@ class _CashierOrderItemsPanel extends StatelessWidget {
     this.scrollable = true,
     this.dense = false,
     this.canManageServiceItems = false,
+    this.canCancelItems = false,
     this.isProcessing = false,
     this.isOnline = true,
     this.onToggleServiceItem,
+    this.onCancelOrderItem,
   });
 
   final CashierOrder order;
   final bool scrollable;
   final bool dense;
   final bool canManageServiceItems;
+  final bool canCancelItems;
   final bool isProcessing;
   final bool isOnline;
   final Future<void> Function(OrderItem item)? onToggleServiceItem;
+  final Future<void> Function(OrderItem item)? onCancelOrderItem;
 
   @override
   Widget build(BuildContext context) {
@@ -2736,6 +2766,19 @@ class _CashierOrderItemsPanel extends StatelessWidget {
                 final itemType = item.itemType.toLowerCase();
                 final isCancelled = item.status.toLowerCase() == 'cancelled';
                 final isMenuItem = itemType == 'menu_item';
+                final canCancelItem =
+                    canCancelItems &&
+                    !isProcessing &&
+                    isOnline &&
+                    order.paymentCount == 0 &&
+                    isMenuItem &&
+                    !isCancelled &&
+                    const {
+                      'pending',
+                      'preparing',
+                      'ready',
+                    }.contains(item.status.toLowerCase()) &&
+                    onCancelOrderItem != null;
                 final canToggleServiceItem =
                     canManageServiceItems &&
                     !isProcessing &&
@@ -2860,6 +2903,15 @@ class _CashierOrderItemsPanel extends StatelessWidget {
                       ),
                       if (isMenuItem) ...[
                         const SizedBox(width: 6),
+                        IconButton(
+                          key: ValueKey('cashier_cancel_order_item_${item.id}'),
+                          tooltip: l10n.orderWorkspaceCancelItemAction,
+                          onPressed: canCancelItem
+                              ? () => onCancelOrderItem!(item)
+                              : null,
+                          icon: const Icon(Icons.cancel_outlined),
+                          color: PosColors.danger,
+                        ),
                         IconButton(
                           key: ValueKey(
                             'cashier_service_item_action_${item.id}',
@@ -3322,7 +3374,7 @@ class _WetTissueQuantityControl extends StatelessWidget {
     final l10n = context.l10n;
     final currency = NumberFormat('#,###', 'vi_VN');
     final enabled = !isProcessing && isOnline;
-    final total = quantity * 3000;
+    final total = quantity * _wetTissueUnitPrice;
 
     return Container(
       key: const Key('cashier_wet_tissue_control'),
@@ -4479,7 +4531,9 @@ class _CombinedTablePaymentDialogState
   double get _adjustedTotal => widget.orders.fold<double>(0, (sum, order) {
     final quantity = _wetTissueQuantities[order.orderId] ?? 0;
     final wetTissueDifference = quantity - order.wetTissueQuantity;
-    return sum + order.remainingDue + (wetTissueDifference * 3000);
+    return sum +
+        order.remainingDue +
+        (wetTissueDifference * _wetTissueUnitPrice);
   });
 
   @override

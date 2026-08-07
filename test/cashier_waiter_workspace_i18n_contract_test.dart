@@ -162,6 +162,8 @@ void main() {
       expect(cashier, contains('height: useCompactChrome'));
       expect(cashier, contains(': useDenseWideLayout'));
       expect(cashier, contains('? 6'));
+      expect(cashier, contains('? 8'));
+      expect(cashier, contains('useDenseWideLayout'));
       expect(cashier, contains('_CashierOrderSummarySurface('));
       expect(cashier, contains('compact: true'));
       expect(cashier, contains('_CashierOrderItemsPanel('));

@@ -797,6 +797,28 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     }
   }
 
+  Future<bool> cancelOrderItem(String itemId, String storeId) async {
+    state = state.copyWith(isProcessing: true, clearError: true);
+    try {
+      await orderService.cancelOrderItem(itemId: itemId, storeId: storeId);
+      await loadOrders(storeId);
+      state = state.copyWith(isProcessing: false, clearError: true);
+      return true;
+    } on PostgrestException catch (error) {
+      state = state.copyWith(
+        isProcessing: false,
+        error: _mapPaymentError(error, 'Failed to cancel order item'),
+      );
+      return false;
+    } catch (error) {
+      state = state.copyWith(
+        isProcessing: false,
+        error: _mapPaymentError(error, 'Failed to cancel order item'),
+      );
+      return false;
+    }
+  }
+
   void resetPaymentSuccess() {
     if (!state.paymentSuccess) {
       return;

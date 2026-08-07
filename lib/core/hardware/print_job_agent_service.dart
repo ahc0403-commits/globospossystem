@@ -160,16 +160,14 @@ class PrintJobAgentService implements PrintAgentDriver {
     final bytes = await ReceiptBuilder.buildKitchenTicket(
       PrintTicket(
         ticket: 'kitchen',
-        floorLabel: 'TEST',
-        tableNumber: destination.name.isEmpty ? 'PRINTER' : destination.name,
+        floorLabel: 'THU',
+        tableNumber: 'MAY IN',
         ticketCode: 'TEST',
         batchNo: 1,
         printedReason: 'initial',
         printedAt: DateTime.now().toIso8601String(),
-        items: const [
-          PrintTicketItem(label: 'Printer route test', quantity: 1),
-        ],
-        orderNotes: 'Print station test',
+        items: const [PrintTicketItem(label: 'Thu duong in', quantity: 1)],
+        orderNotes: 'Thu tram in',
       ),
     );
 

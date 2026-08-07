@@ -962,7 +962,7 @@
   "cashierCheckItems": "Món trong phiếu",
   "cashierPaymentMethod": "Phương thức thanh toán",
   "cashierWetTissueTitle": "Số lượng khăn ướt",
-  "cashierWetTissueUnitPrice": "3.000 VND / khăn",
+  "cashierWetTissueUnitPrice": "2.000 VND / khăn",
   "cashierWetTissueRequired": "Xác nhận số lượng khăn ướt trước khi chọn phương thức thanh toán.",
   "cashierWetTissueConfirmed": "Đã xác nhận số lượng khăn ướt",
   "cashierWetTissueConfirm": "Xác nhận số lượng",
