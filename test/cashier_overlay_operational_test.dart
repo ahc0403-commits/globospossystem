@@ -115,13 +115,20 @@ class _AuthNotifier extends AuthNotifier {
 }
 
 class _PaymentNotifier extends PaymentNotifier {
-  _PaymentNotifier({bool includeSecondOrder = false}) {
+  _PaymentNotifier({
+    bool includeSecondOrder = false,
+    this.completeOrdersOnPayment = false,
+  }) {
     state = PaymentState(
       orders: [_cashierOrder, if (includeSecondOrder) _cashierOrderB],
     );
   }
 
+  final bool completeOrdersOnPayment;
   int cancelledOrders = 0;
+  int cancelledItems = 0;
+  int restoredOrders = 0;
+  int restoredItems = 0;
   int serviceItemMutations = 0;
   int? confirmedWetTissueQuantity;
   String? processedMethod;
@@ -148,7 +155,22 @@ class _PaymentNotifier extends PaymentNotifier {
     String method,
   ) async {
     processedMethod = method;
-    state = state.copyWith(paymentSuccess: true, isProcessing: false);
+    if (completeOrdersOnPayment) {
+      final completedOrder = state.orders.firstWhere(
+        (order) => order.orderId == orderId,
+      );
+      state = state.copyWith(
+        orders: state.orders
+            .where((order) => order.orderId != orderId)
+            .toList(growable: false),
+        completedOrders: [...state.completedOrders, completedOrder],
+        paymentSuccess: true,
+        isProcessing: false,
+        clearSelectedOrder: true,
+      );
+    } else {
+      state = state.copyWith(paymentSuccess: true, isProcessing: false);
+    }
     return {'id': 'payment-single'};
   }
 
@@ -206,6 +228,24 @@ class _PaymentNotifier extends PaymentNotifier {
   @override
   Future<void> cancelOrder(String orderId, String storeId) async {
     cancelledOrders += 1;
+  }
+
+  @override
+  Future<bool> cancelOrderItem(String itemId, String storeId) async {
+    cancelledItems += 1;
+    return true;
+  }
+
+  @override
+  Future<bool> restoreCancelledOrder(String orderId, String storeId) async {
+    restoredOrders += 1;
+    return true;
+  }
+
+  @override
+  Future<bool> restoreCancelledOrderItem(String itemId, String storeId) async {
+    restoredItems += 1;
+    return true;
   }
 }
 
@@ -364,6 +404,130 @@ void main() {
       tester.getBottomRight(find.byKey(const Key('payment_submit_button'))).dy,
       lessThanOrEqualTo(820),
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Galaxy Tab keeps item cancellation visible and undoable', (
+    tester,
+  ) async {
+    final harness = await _pumpCashier(
+      tester,
+      physicalSize: const Size(800, 1280),
+    );
+    await _selectOrder(tester);
+
+    expect(find.byKey(const Key('cashier_tablet_split_view')), findsOneWidget);
+    expect(
+      find.byKey(const Key('cashier_pending_payment_list')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('cashier_completed_order_history')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('cashier_payment_surface')), findsOneWidget);
+
+    final cancelItem = find.byKey(
+      const Key('cashier_cancel_order_item_cashier-item-pho'),
+    );
+    await tester.ensureVisible(cancelItem);
+    expect(cancelItem.hitTestable(), findsOneWidget);
+    expect(tester.getBottomRight(cancelItem).dx, lessThanOrEqualTo(800));
+
+    await tester.tap(cancelItem);
+    await tester.pumpAndSettle();
+    expect(harness.notifier.cancelledItems, 1);
+    expect(find.text('Hoàn tác'), findsOneWidget);
+
+    await tester.tap(find.text('Hoàn tác'));
+    await tester.pumpAndSettle();
+    expect(harness.notifier.restoredItems, 1);
+    expect(find.text('Đã khôi phục món bị hủy'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'Galaxy Tab completes cancel undo payment and completed-history flow',
+    (tester) async {
+      final harness = await _pumpCashier(
+        tester,
+        physicalSize: const Size(800, 1280),
+        completeOrdersOnPayment: true,
+      );
+      await _selectOrder(tester);
+
+      final cancelItem = find.byKey(
+        const Key('cashier_cancel_order_item_cashier-item-pho'),
+      );
+      await tester.ensureVisible(cancelItem);
+      await tester.tap(cancelItem);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Hoàn tác'));
+      await tester.pumpAndSettle();
+
+      final cashMethod = find.byKey(
+        const Key('cashier_method_tile_$paymentMethodCash'),
+      );
+      await tester.ensureVisible(cashMethod);
+      await tester.tap(cashMethod);
+      await tester.pump();
+      final submit = find.byKey(const Key('payment_submit_button'));
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('cashier_cash_received_input')),
+        '200000',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('cashier_cash_tender_confirm')));
+      await _pumpUntilFound(
+        tester,
+        find.byKey(const Key('cashier_single_red_invoice_dialog')),
+      );
+      _dismiss(tester, const Key('cashier_single_red_invoice_dialog'));
+      await _pumpUntilFound(
+        tester,
+        find.byKey(const Key('cashier_payment_completion_dialog')),
+      );
+      _dismiss(tester, const Key('cashier_payment_completion_dialog'));
+      await tester.pumpAndSettle();
+
+      final completedHistory = find.byKey(
+        const Key('cashier_completed_order_history'),
+      );
+      expect(harness.notifier.cancelledItems, 1);
+      expect(harness.notifier.restoredItems, 1);
+      expect(harness.notifier.processedMethod, paymentMethodCash);
+      expect(completedHistory, findsOneWidget);
+      expect(
+        find.descendant(of: completedHistory, matching: find.text('Bàn A1')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('cancelled order exposes the same undo path', (tester) async {
+    final harness = await _pumpCashier(tester);
+    await _selectOrder(tester);
+
+    final cancelOrder = find.byKey(const Key('cashier_cancel_order_action'));
+    await tester.ensureVisible(cancelOrder);
+    await tester.tap(cancelOrder);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('cashier_cancel_order_confirm_button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(harness.notifier.cancelledOrders, 1);
+    expect(find.text('Hoàn tác'), findsOneWidget);
+    await tester.tap(find.text('Hoàn tác'));
+    await tester.pumpAndSettle();
+    expect(harness.notifier.restoredOrders, 1);
+    expect(find.text('Đã khôi phục đơn bị hủy'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -802,6 +966,7 @@ class _CashierHarness {
 Future<_CashierHarness> _pumpCashier(
   WidgetTester tester, {
   bool includeSecondOrder = false,
+  bool completeOrdersOnPayment = false,
   int? tableCount,
   Size physicalSize = const Size(1440, 1000),
   BankTransferAlertService? bankTransferAlertService,
@@ -813,7 +978,10 @@ Future<_CashierHarness> _pumpCashier(
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
-  final notifier = _PaymentNotifier(includeSecondOrder: includeSecondOrder);
+  final notifier = _PaymentNotifier(
+    includeSecondOrder: includeSecondOrder,
+    completeOrdersOnPayment: completeOrdersOnPayment,
+  );
   final proofService = _PaymentProofService();
   final paymentService = _PaymentService();
   final menuService = _MenuService();

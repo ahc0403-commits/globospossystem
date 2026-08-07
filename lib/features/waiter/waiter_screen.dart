@@ -1234,15 +1234,17 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            _buildWaiterCommandHeader(
-                              tableCount: tableState.tables.length,
-                              occupiedCount: occupiedCount,
-                              emptyCount: emptyCount,
-                              selectedTable: selectedTable,
-                              isBuffetMode: isBuffetMode,
-                              showOrderWorkspace: showOrderWorkspace,
-                            ),
-                            SizedBox(height: showOrderWorkspace ? 10 : 16),
+                            if (!showOrderWorkspace) ...[
+                              _buildWaiterCommandHeader(
+                                tableCount: tableState.tables.length,
+                                occupiedCount: occupiedCount,
+                                emptyCount: emptyCount,
+                                selectedTable: selectedTable,
+                                isBuffetMode: isBuffetMode,
+                                showOrderWorkspace: false,
+                              ),
+                              const SizedBox(height: 16),
+                            ],
                             Expanded(
                               child: constraints.maxWidth >= 1120
                                   ? Row(
