@@ -154,6 +154,44 @@ void main() {
       ]);
     });
 
+    test('processOnce prints two complete copies for floor jobs', () async {
+      final backend = _FakePrintJobBackend(
+        jobs: [
+          _job(
+            id: 'job-floor-copies',
+            destinationId: 'dest-floor',
+            ticketType: 'floor',
+          ),
+        ],
+        destinations: const {
+          'dest-floor': PrintDestination(
+            id: 'dest-floor',
+            name: '2F',
+            ip: '192.168.1.53',
+            port: 9100,
+          ),
+        },
+      );
+      final printer = _FakePrinterService(PrintResult.success);
+      final agent = PrintJobAgentService(
+        backend: backend,
+        printerService: printer,
+      );
+
+      final results = await agent.processOnce('store-1');
+
+      expect(results.single.result, PrintResult.success);
+      expect(printer.prints, hasLength(1));
+      final bytes = printer.prints.single.bytes;
+      expect(bytes.length.isEven, isTrue);
+      final half = bytes.length ~/ 2;
+      expect(bytes.sublist(0, half), bytes.sublist(half));
+      expect(
+        'FLOOR COPY'.allMatches(String.fromCharCodes(bytes)),
+        hasLength(2),
+      );
+    });
+
     test('processOnce renders receipt jobs as payment receipts', () async {
       final backend = _FakePrintJobBackend(
         jobs: [
