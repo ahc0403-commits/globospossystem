@@ -962,7 +962,7 @@
   "cashierCheckItems": "주문 항목",
   "cashierPaymentMethod": "결제 수단",
   "cashierWetTissueTitle": "물티슈 사용 수량",
-  "cashierWetTissueUnitPrice": "1개당 3,000동",
+  "cashierWetTissueUnitPrice": "1개당 2,000동",
   "cashierWetTissueRequired": "결제 수단을 선택하기 전에 물티슈 수량을 확인하세요.",
   "cashierWetTissueConfirmed": "물티슈 수량 확인 완료",
   "cashierWetTissueConfirm": "수량 확인",

@@ -1319,18 +1319,16 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                                             .l10n
                                             .settingsPrinterFallbackStore
                                       : settingsState.restaurantName,
-                                  tableNumber:
-                                      context.l10n.settingsPrinterTestTable,
-                                  items: [
+                                  tableNumber: 'BAN THU',
+                                  items: const [
                                     ReceiptItem(
-                                      name:
-                                          context.l10n.settingsPrinterTestItem,
+                                      name: 'Mon an thu',
                                       quantity: 1,
                                       unitPrice: 10000,
                                     ),
                                   ],
                                   totalAmount: 10000,
-                                  paymentMethod: context.l10n.cash,
+                                  paymentMethod: 'cash',
                                   paidAt: DateTime.now(),
                                 );
                             final result = await printerNotifier.print(bytes);

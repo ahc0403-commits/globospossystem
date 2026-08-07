@@ -83,43 +83,37 @@ class ReceiptBuilder {
         ),
       ),
     );
-    bytes.addAll(
-      generator.text(
-        '(PAYMENT RECEIPT)',
-        styles: const PosStyles(bold: true, align: PosAlign.center),
-      ),
-    );
     bytes.addAll(generator.hr());
 
     if (receiptNumber != null) {
-      bytes.addAll(generator.text('Receipt No.: ${_escText(receiptNumber)}'));
+      bytes.addAll(generator.text('So phieu : ${_escText(receiptNumber)}'));
     }
     bytes.addAll(
       generator.text(
-        'Date/Time : ${TimeUtils.formatDate(paidAt)} ${TimeUtils.formatTime(paidAt)}',
+        'Ngay/Gio  : ${TimeUtils.formatDate(paidAt)} ${TimeUtils.formatTime(paidAt)}',
       ),
     );
     if (orderNumber != null) {
-      bytes.addAll(generator.text('Order No. : ${_escText(orderNumber)}'));
+      bytes.addAll(generator.text('So don    : ${_escText(orderNumber)}'));
     }
     if (cashierCode != null) {
-      bytes.addAll(generator.text('Cashier   : ${_escText(cashierCode)}'));
+      bytes.addAll(generator.text('Thu ngan  : ${_escText(cashierCode)}'));
     }
     bytes.addAll(generator.hr());
 
-    bytes.addAll(generator.text(_escText('Table / Ban: $tableNumber')));
+    bytes.addAll(generator.text(_escText('Ban: $tableNumber')));
     bytes.addAll(generator.hr());
 
     bytes.addAll(
       generator.row([
-        PosColumn(text: 'Item', width: 5, styles: const PosStyles(bold: true)),
+        PosColumn(text: 'Mon', width: 5, styles: const PosStyles(bold: true)),
         PosColumn(
           text: 'SL',
           width: 1,
           styles: const PosStyles(bold: true, align: PosAlign.center),
         ),
         PosColumn(
-          text: 'Price  Amount',
+          text: 'Don gia  Thanh tien',
           width: 6,
           styles: const PosStyles(bold: true, align: PosAlign.right),
         ),
@@ -160,11 +154,11 @@ class ReceiptBuilder {
           0,
           (sum, item) => sum + item.unitPrice * item.quantity,
         );
-    bytes.addAll(_amountRow(generator, 'Subtotal', subtotal));
-    bytes.addAll(_amountRow(generator, 'Discount', discountAmount));
+    bytes.addAll(_amountRow(generator, 'Tam tinh', subtotal));
+    bytes.addAll(_amountRow(generator, 'Giam gia', discountAmount));
     bytes.addAll(
       generator.row([
-        PosColumn(text: 'VAT (included)', width: 7),
+        PosColumn(text: 'VAT (da gom)', width: 7),
         PosColumn(
           text: '***',
           width: 5,
@@ -175,7 +169,7 @@ class ReceiptBuilder {
     bytes.addAll(
       generator.row([
         PosColumn(
-          text: isService ? 'SERVICE' : 'TOTAL',
+          text: isService ? 'DICH VU' : 'TONG CONG',
           width: 6,
           styles: const PosStyles(bold: true),
         ),
@@ -188,24 +182,16 @@ class ReceiptBuilder {
     );
 
     final methodLabel = _methodLabel(paymentMethod);
-    bytes.addAll(generator.text('Payment Method : $methodLabel'));
+    bytes.addAll(generator.text('Phuong thuc : $methodLabel'));
     bytes.addAll(
       generator.text(
-        'Received       : ${_formatVnd(receivedAmount ?? totalAmount)}',
+        'Khach tra   : ${_formatVnd(receivedAmount ?? totalAmount)}',
       ),
     );
-    bytes.addAll(
-      generator.text('Change         : ${_formatVnd(changeAmount)}'),
-    );
+    bytes.addAll(generator.text('Tien thua   : ${_formatVnd(changeAmount)}'));
 
     if (isService) {
       bytes.addAll(generator.hr());
-      bytes.addAll(
-        generator.text(
-          '* Service Provision - not counted in revenue',
-          styles: const PosStyles(align: PosAlign.center),
-        ),
-      );
       bytes.addAll(
         generator.text(
           '* Phuc vu noi bo - Khong tinh doanh thu',
@@ -218,12 +204,6 @@ class ReceiptBuilder {
       bytes.addAll(generator.hr());
       bytes.addAll(
         generator.text(
-          '* Service provided: $serviceItemCount item(s)',
-          styles: const PosStyles(align: PosAlign.center),
-        ),
-      );
-      bytes.addAll(
-        generator.text(
           '* Mon phuc vu: $serviceItemCount',
           styles: const PosStyles(align: PosAlign.center),
         ),
@@ -234,7 +214,7 @@ class ReceiptBuilder {
       bytes.addAll(generator.hr());
       bytes.addAll(
         generator.text(
-          'BANK TRANSFER / CHUYEN KHOAN',
+          'CHUYEN KHOAN',
           styles: const PosStyles(bold: true, align: PosAlign.center),
         ),
       );
@@ -262,7 +242,7 @@ class ReceiptBuilder {
     bytes.addAll(generator.hr());
     bytes.addAll(
       generator.text(
-        'Thank you for your visit!',
+        'Cam on quy khach!',
         styles: const PosStyles(align: PosAlign.center),
       ),
     );
@@ -292,7 +272,7 @@ class ReceiptBuilder {
 
     bytes.addAll(
       generator.text(
-        _escText('KITCHEN TICKET'),
+        _escText('PHIEU BEP'),
         styles: const PosStyles(
           bold: true,
           align: PosAlign.center,
@@ -320,7 +300,7 @@ class ReceiptBuilder {
     bytes.addAll(_buildLargeTableHeader(generator, ticket));
     bytes.addAll(
       generator.text(
-        _escText('FLOOR COPY #${ticket.ticketCode}'),
+        _escText('PHIEU TANG #${ticket.ticketCode}'),
         styles: const PosStyles(align: PosAlign.center),
       ),
     );
@@ -336,7 +316,7 @@ class ReceiptBuilder {
     bytes.addAll(_buildLargeTableHeader(generator, ticket));
     bytes.addAll(
       generator.text(
-        _escText('ORDER CONFIRMATION #${ticket.ticketCode}'),
+        _escText('XAC NHAN DON #${ticket.ticketCode}'),
         styles: const PosStyles(
           bold: true,
           align: PosAlign.center,
@@ -347,20 +327,20 @@ class ReceiptBuilder {
     );
     bytes.addAll(
       generator.text(
-        _escText('Payment at cashier only'),
+        _escText('Chi thanh toan tai quay thu ngan'),
         styles: const PosStyles(align: PosAlign.center),
       ),
     );
     bytes.addAll(_buildTicketBody(generator, ticket, finish: false));
     bytes.addAll(
       generator.text(
-        _escText('Please bring this slip to cashier.'),
+        _escText('Vui long mang phieu nay den quay thu ngan.'),
         styles: const PosStyles(align: PosAlign.center),
       ),
     );
     bytes.addAll(
       generator.text(
-        _escText('This is not a receipt. Payment at cashier only.'),
+        _escText('Day khong phai hoa don. Chi thanh toan tai quay.'),
         styles: const PosStyles(bold: true, align: PosAlign.center),
       ),
     );
@@ -377,7 +357,7 @@ class ReceiptBuilder {
     bytes.addAll(_buildLargeTableHeader(generator, ticket));
     bytes.addAll(
       generator.text(
-        _escText('TRAY / DUMBWAITER'),
+        _escText('KHAY / THANG MAY DO AN'),
         styles: const PosStyles(bold: true, align: PosAlign.center),
       ),
     );
@@ -415,14 +395,16 @@ class ReceiptBuilder {
     if (ticket.printedReason == 'added_items') {
       bytes.addAll(
         generator.text(
-          _escText('*** ADDED ITEMS (batch ${ticket.batchNo}) ***'),
+          _escText('*** MON THEM (DOT ${ticket.batchNo}) ***'),
           styles: const PosStyles(bold: true, align: PosAlign.center),
         ),
       );
     } else {
       bytes.addAll(
         generator.text(
-          _escText('Batch ${ticket.batchNo} / ${ticket.printedReason}'),
+          _escText(
+            'Dot ${ticket.batchNo} / ${_printedReasonLabel(ticket.printedReason)}',
+          ),
           styles: const PosStyles(align: PosAlign.center),
         ),
       );
@@ -469,7 +451,7 @@ class ReceiptBuilder {
     final orderNotes = ticket.orderNotes?.trim();
     if (orderNotes != null && orderNotes.isNotEmpty) {
       bytes.addAll(generator.hr());
-      bytes.addAll(generator.text(_escText('Note: $orderNotes')));
+      bytes.addAll(generator.text(_escText('Ghi chu: $orderNotes')));
     }
 
     bytes.addAll(generator.hr());
@@ -497,20 +479,32 @@ class ReceiptBuilder {
   }
 
   static String _methodLabel(String method) {
-    switch (method) {
+    switch (method.trim().toLowerCase()) {
       case 'cash':
-        return 'Cash / Tien mat';
+        return 'Tien mat';
       case 'card':
-        return 'Card / The';
+        return 'The';
       case 'pay':
-        return 'E-wallet / Vi dien tu';
+        return 'Vi dien tu';
       case 'bank_transfer':
-        return 'Bank transfer / Chuyen khoan';
+        return 'Chuyen khoan';
       case 'service':
-        return 'Service / Dich vu';
+        return 'Dich vu';
+      case 'split':
+        return 'Thanh toan tach';
       default:
-        return _escText(method);
+        return 'Khac';
     }
+  }
+
+  static String _printedReasonLabel(String reason) {
+    return switch (reason.trim().toLowerCase()) {
+      'initial' => 'Lan dau',
+      'serving' => 'Phuc vu',
+      'reprint' => 'In lai',
+      'added_items' => 'Mon them',
+      _ => 'Cap nhat',
+    };
   }
 
   static String _escText(String value) {
@@ -736,7 +730,7 @@ class PrintTicketItem {
 
   factory PrintTicketItem.fromPayload(Map<String, dynamic> payload) {
     return PrintTicketItem(
-      label: payload['label']?.toString() ?? 'Item',
+      label: payload['label']?.toString() ?? 'Mon',
       quantity: switch (payload['qty'] ?? payload['quantity']) {
         int value => value,
         num value => value.toInt(),
@@ -776,7 +770,7 @@ class PrintTicketComboComponent {
 
   factory PrintTicketComboComponent.fromPayload(Map<String, dynamic> payload) {
     return PrintTicketComboComponent(
-      label: payload['label']?.toString() ?? 'Item',
+      label: payload['label']?.toString() ?? 'Mon',
       quantity: switch (payload['quantity']) {
         int value => value,
         num value => value.toInt(),
@@ -829,14 +823,14 @@ class QueuedPaymentReceipt {
   factory QueuedPaymentReceipt.fromPayload(Map<String, dynamic> payload) {
     final rawItems = payload['items'];
     final itemRows = rawItems is List ? rawItems : const <Object?>[];
-    final method = payload['payment_method']?.toString() ?? 'OTHER';
+    final method = payload['payment_method']?.toString() ?? 'other';
     return QueuedPaymentReceipt(
       restaurantName: payload['restaurant_name']?.toString() ?? 'GLOBOS POS',
       tableNumber: payload['table_number']?.toString() ?? '-',
       items: itemRows.whereType<Map>().map((item) {
         final row = Map<String, dynamic>.from(item);
         return ReceiptItem(
-          name: row['label']?.toString() ?? 'Item',
+          name: row['label']?.toString() ?? 'Mon',
           quantity: switch (row['quantity'] ?? row['qty']) {
             int value => value,
             num value => value.toInt(),
