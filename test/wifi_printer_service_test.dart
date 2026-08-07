@@ -181,14 +181,11 @@ void main() {
       final results = await agent.processOnce('store-1');
 
       expect(results.single.result, PrintResult.success);
-      expect(printer.prints, hasLength(1));
-      final bytes = printer.prints.single.bytes;
-      expect(bytes.length.isEven, isTrue);
-      final half = bytes.length ~/ 2;
-      expect(bytes.sublist(0, half), bytes.sublist(half));
+      expect(printer.prints, hasLength(2));
+      expect(printer.prints[0].bytes, printer.prints[1].bytes);
       expect(
-        'PHIEU TANG'.allMatches(String.fromCharCodes(bytes)),
-        hasLength(2),
+        String.fromCharCodes(printer.prints[0].bytes),
+        contains('PHIEU TANG'),
       );
     });
 

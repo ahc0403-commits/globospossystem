@@ -132,11 +132,16 @@ class PrintJobAgentService implements PrintAgentDriver {
     }
 
     final bytes = await _buildBytes(job);
-    final result = await _printerService.printReceipt(
-      destination.ip,
-      bytes,
-      port: destination.port,
-    );
+    var result = PrintResult.success;
+    final copyCount = job.ticket.ticket == 'floor' ? 2 : 1;
+    for (var copy = 0; copy < copyCount; copy++) {
+      result = await _printerService.printReceipt(
+        destination.ip,
+        bytes,
+        port: destination.port,
+      );
+      if (result != PrintResult.success) break;
+    }
     final ok = result == PrintResult.success;
     await _backend.completeJob(job.id, ok: ok, error: ok ? null : result.name);
     return PrintJobAgentResult(
@@ -181,16 +186,11 @@ class PrintJobAgentService implements PrintAgentDriver {
   Future<List<int>> _buildBytes(PrintAgentJob job) {
     return switch (job.ticket.ticket) {
       'receipt' => _buildPaymentReceipt(job.payload),
-      'floor' => _buildFloorTicketCopies(job.ticket),
+      'floor' => ReceiptBuilder.buildFloorTicket(job.ticket),
       'tray' => ReceiptBuilder.buildTrayLabel(job.ticket),
       'confirmation' => ReceiptBuilder.buildConfirmationSlip(job.ticket),
       _ => ReceiptBuilder.buildKitchenTicket(job.ticket),
     };
-  }
-
-  Future<List<int>> _buildFloorTicketCopies(PrintTicket ticket) async {
-    final bytes = await ReceiptBuilder.buildFloorTicket(ticket);
-    return <int>[...bytes, ...bytes];
   }
 
   Future<List<int>> _buildPaymentReceipt(Map<String, dynamic> payload) {
