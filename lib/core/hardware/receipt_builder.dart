@@ -3,7 +3,7 @@ import '../utils/time_utils.dart';
 
 class ReceiptBuilder {
   static const _bankTransferQrPayload =
-      '00020101021138550010A000000727012500069704260111800020142980208QRIBFTTA53037045802VN63044E6F';
+      '00020101021138540010A00000072701240006970422011053371599990208QRIBFTTA53037045802VN630472C0';
 
   static Future<List<int>> buildPaymentReceipt({
     required String restaurantName,
@@ -240,7 +240,7 @@ class ReceiptBuilder {
       );
       bytes.addAll(
         generator.text(
-          'MSB - 80002014298',
+          'MB - 5337159999',
           styles: const PosStyles(bold: true, align: PosAlign.center),
         ),
       );

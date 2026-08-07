@@ -337,6 +337,36 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('dense desktop checkout keeps payment controls in one viewport', (
+    tester,
+  ) async {
+    await _pumpCashier(tester, physicalSize: const Size(1600, 820));
+    await tester.tap(find.byKey(const Key('cashier_order_$_orderId')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('cashier_wet_tissue_confirm')).hitTestable(),
+      findsOneWidget,
+    );
+    expect(
+      find
+          .byKey(const Key('cashier_method_tile_$paymentMethodService'))
+          .hitTestable(),
+      findsOneWidget,
+    );
+    final splitButton = find.byKey(const Key('cashier_split_payment_button'));
+    expect(splitButton.hitTestable(), findsOneWidget);
+    expect(
+      find.byKey(const Key('payment_submit_button')).hitTestable(),
+      findsOneWidget,
+    );
+    expect(
+      tester.getBottomRight(find.byKey(const Key('payment_submit_button'))).dy,
+      lessThanOrEqualTo(820),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'wet-tissue quantity is confirmed before cashier payment methods unlock',
     (tester) async {
