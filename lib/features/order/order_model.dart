@@ -35,6 +35,8 @@ class OrderItem {
     required this.quantity,
     required this.status,
     required this.itemType,
+    this.nameVi,
+    this.nameEn,
     this.isServiceItem = false,
     this.serviceReason,
     this.vatCategory,
@@ -48,6 +50,8 @@ class OrderItem {
   final int quantity;
   final String status;
   final String itemType;
+  final String? nameVi;
+  final String? nameEn;
   final bool isServiceItem;
   final String? serviceReason;
   final String? vatCategory;
@@ -61,6 +65,8 @@ class OrderItem {
     int? quantity,
     String? status,
     String? itemType,
+    String? nameVi,
+    String? nameEn,
     bool? isServiceItem,
     String? serviceReason,
     String? vatCategory,
@@ -74,6 +80,8 @@ class OrderItem {
       quantity: quantity ?? this.quantity,
       status: status ?? this.status,
       itemType: itemType ?? this.itemType,
+      nameVi: nameVi ?? this.nameVi,
+      nameEn: nameEn ?? this.nameEn,
       isServiceItem: isServiceItem ?? this.isServiceItem,
       serviceReason: serviceReason ?? this.serviceReason,
       vatCategory: vatCategory ?? this.vatCategory,
@@ -87,9 +95,13 @@ class OrderItem {
     final payingAmountRaw = json['paying_amount_inc_tax'];
     final menuItemRaw = json['menu_items'];
     String? menuItemName;
+    String? menuItemNameVi;
+    String? menuItemNameEn;
     String? vatCategory;
     if (menuItemRaw is Map) {
       menuItemName = menuItemRaw['name']?.toString();
+      menuItemNameVi = menuItemRaw['name_vi']?.toString();
+      menuItemNameEn = menuItemRaw['name_en']?.toString();
       vatCategory = menuItemRaw['vat_category']?.toString();
     }
 
@@ -111,6 +123,8 @@ class OrderItem {
       },
       status: json['status']?.toString() ?? 'pending',
       itemType: json['item_type']?.toString() ?? 'menu_item',
+      nameVi: menuItemNameVi,
+      nameEn: menuItemNameEn,
       isServiceItem: switch (json['is_service_item']) {
         bool value => value,
         String value => value.toLowerCase() == 'true',

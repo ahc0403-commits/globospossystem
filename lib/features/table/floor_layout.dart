@@ -28,6 +28,7 @@ class FloorLayoutView extends StatefulWidget {
     this.padding = const EdgeInsets.all(20),
     this.draftLayoutByTableId,
     this.orderPreviewByTableId = const {},
+    this.fitAllTables = false,
   });
 
   final List<PosTable> tables;
@@ -38,6 +39,7 @@ class FloorLayoutView extends StatefulWidget {
   final EdgeInsets padding;
   final Map<String, Rect>? draftLayoutByTableId;
   final Map<String, TableOrderPreview> orderPreviewByTableId;
+  final bool fitAllTables;
 
   @override
   State<FloorLayoutView> createState() => _FloorLayoutViewState();
@@ -127,7 +129,15 @@ class _FloorLayoutViewState extends State<FloorLayoutView> {
 
             return ClipRRect(
               borderRadius: BorderRadius.circular(24),
-              child: useCompactGrid
+              child: widget.fitAllTables && !widget.editable
+                  ? _ResponsiveFloorTableGrid(
+                      tables: sortedTables,
+                      firstActionableTableIndex: firstActionableTableIndex,
+                      selectedTableId: widget.selectedTableId,
+                      orderPreviewByTableId: widget.orderPreviewByTableId,
+                      onTapTable: widget.onTapTable,
+                    )
+                  : useCompactGrid
                   ? _CompactFloorTableGrid(
                       tables: sortedTables,
                       firstActionableTableIndex: firstActionableTableIndex,
@@ -168,6 +178,79 @@ class _FloorLayoutViewState extends State<FloorLayoutView> {
           },
         ),
       ),
+    );
+  }
+}
+
+class _ResponsiveFloorTableGrid extends StatelessWidget {
+  const _ResponsiveFloorTableGrid({
+    required this.tables,
+    required this.firstActionableTableIndex,
+    required this.selectedTableId,
+    required this.orderPreviewByTableId,
+    required this.onTapTable,
+  });
+
+  final List<PosTable> tables;
+  final int firstActionableTableIndex;
+  final String? selectedTableId;
+  final Map<String, TableOrderPreview> orderPreviewByTableId;
+  final TableTapCallback onTapTable;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 8.0;
+        const gridPadding = 8.0;
+        final availableWidth = math.max(
+          1.0,
+          constraints.maxWidth - (gridPadding * 2),
+        );
+        final availableHeight = math.max(
+          1.0,
+          constraints.maxHeight - (gridPadding * 2),
+        );
+        final tableCount = math.max(1, tables.length);
+        final estimatedColumns = math.sqrt(
+          (tableCount * availableWidth) / (availableHeight * 1.55),
+        );
+        final crossAxisCount = estimatedColumns.ceil().clamp(1, tableCount);
+        final rowCount = (tableCount / crossAxisCount).ceil();
+        final tileWidth =
+            (availableWidth - (spacing * (crossAxisCount - 1))) /
+            crossAxisCount;
+        final tileHeight =
+            (availableHeight - (spacing * (rowCount - 1))) / rowCount;
+
+        return GridView.builder(
+          key: const Key('floor_responsive_table_grid'),
+          padding: const EdgeInsets.all(gridPadding),
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: tables.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            mainAxisSpacing: spacing,
+            crossAxisSpacing: spacing,
+            childAspectRatio: tileWidth / math.max(1.0, tileHeight),
+          ),
+          itemBuilder: (context, index) {
+            final table = tables[index];
+            return GestureDetector(
+              key: index == firstActionableTableIndex
+                  ? const Key('table_first_card')
+                  : ValueKey<String>('responsive_table_${table.id}'),
+              onTap: () => onTapTable(table),
+              child: _FloorTableTile(
+                table: table,
+                orderPreview: orderPreviewByTableId[table.id],
+                selected: selectedTableId == table.id,
+                editable: false,
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

@@ -36,7 +36,10 @@ void main() {
         r'List<ReceiptItem> _receiptItems\([\s\S]*?\n  \}',
       ).firstMatch(screen)?.group(0);
 
-      expect(provider, contains('menu_items(name, name_vi, vat_category)'));
+      expect(
+        provider,
+        contains('menu_items(name, name_vi, name_en, vat_category)'),
+      );
       expect(service, contains('menu_items(name, name_vi)'));
       expect(receiptItemsBody, isNotNull);
       expect(receiptItemsBody, contains("menuItem['name_vi']"));

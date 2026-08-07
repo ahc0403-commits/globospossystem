@@ -4,6 +4,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/order/order_model.dart';
 
 void main() {
+  test('order item keeps Vietnamese and English menu names', () {
+    final item = OrderItem.fromJson({
+      'id': 'item-1',
+      'menu_item_id': 'menu-1',
+      'label': '김밥',
+      'unit_price': 39000,
+      'quantity': 1,
+      'status': 'ready',
+      'item_type': 'menu_item',
+      'menu_items': {
+        'name': '김밥',
+        'name_vi': 'Cơm cuộn Hàn Quốc',
+        'name_en': 'Korean rice roll',
+      },
+    });
+
+    expect(item.label, '김밥');
+    expect(item.nameVi, 'Cơm cuộn Hàn Quốc');
+    expect(item.nameEn, 'Korean rice roll');
+  });
+
   test('order items are displayed in oldest-to-newest creation order', () {
     final order = Order.fromJson({
       'id': 'order-1',

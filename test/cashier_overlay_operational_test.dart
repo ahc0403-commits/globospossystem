@@ -45,7 +45,9 @@ final _cashierOrder = CashierOrder(
     OrderItem(
       id: 'cashier-item-pho',
       menuItemId: 'menu-pho',
-      label: 'Phở bò đặc biệt',
+      label: '소고기 쌀국수',
+      nameVi: 'Phở bò đặc biệt',
+      nameEn: 'Special beef pho',
       unitPrice: 100000,
       quantity: 1,
       status: 'ready',
@@ -208,23 +210,25 @@ class _PaymentNotifier extends PaymentNotifier {
 }
 
 class _TableNotifier extends WaiterTableNotifier {
-  _TableNotifier({bool includeSecondOrder = false}) {
+  _TableNotifier({bool includeSecondOrder = false, int? tableCount}) {
+    final effectiveTableCount = tableCount ?? (includeSecondOrder ? 2 : 1);
     state = WaiterTableState(
       tables: [
-        const PosTable(
-          id: 'table-a1',
-          storeId: _storeId,
-          tableNumber: 'A1',
-          seatCount: 4,
-          status: 'occupied',
-        ),
-        if (includeSecondOrder)
-          const PosTable(
-            id: 'table-b2',
+        for (var index = 0; index < effectiveTableCount; index++)
+          PosTable(
+            id: index == 0
+                ? 'table-a1'
+                : index == 1
+                ? 'table-b2'
+                : 'table-${index + 1}',
             storeId: _storeId,
-            tableNumber: 'B2',
+            tableNumber: index == 0
+                ? 'A1'
+                : index == 1
+                ? 'B2'
+                : '${2101 + index}',
             seatCount: 4,
-            status: 'occupied',
+            status: index < 2 ? 'occupied' : 'available',
           ),
       ],
     );
@@ -300,6 +304,37 @@ void main() {
       url: 'http://localhost:54321',
       anonKey: 'test-anon-key',
     );
+  });
+
+  testWidgets('cashier item rows show Vietnamese and English menu names', (
+    tester,
+  ) async {
+    await _pumpCashier(tester);
+    await _selectOrder(tester);
+
+    expect(find.text('소고기 쌀국수'), findsOneWidget);
+    expect(find.text('Phở bò đặc biệt'), findsOneWidget);
+    expect(find.text('Special beef pho'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('cashier fits all 44 tables inside the responsive overview', (
+    tester,
+  ) async {
+    await _pumpCashier(
+      tester,
+      tableCount: 44,
+      physicalSize: const Size(1440, 900),
+    );
+
+    expect(
+      find.byKey(const Key('floor_responsive_table_grid')),
+      findsOneWidget,
+    );
+    final lastTable = find.byKey(const ValueKey('responsive_table_table-44'));
+    expect(lastTable, findsOneWidget);
+    expect(tester.getBottomRight(lastTable).dy, lessThanOrEqualTo(900));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(
@@ -737,6 +772,7 @@ class _CashierHarness {
 Future<_CashierHarness> _pumpCashier(
   WidgetTester tester, {
   bool includeSecondOrder = false,
+  int? tableCount,
   Size physicalSize = const Size(1440, 1000),
   BankTransferAlertService? bankTransferAlertService,
   BankTransferAlertSoundService? bankTransferAlertSoundService,
@@ -785,7 +821,10 @@ Future<_CashierHarness> _pumpCashier(
         connectivityProvider.overrideWith((ref) => Stream.value(true)),
         paymentProvider.overrideWith((ref) => notifier),
         waiterTableProvider.overrideWith(
-          (ref) => _TableNotifier(includeSecondOrder: includeSecondOrder),
+          (ref) => _TableNotifier(
+            includeSecondOrder: includeSecondOrder,
+            tableCount: tableCount,
+          ),
         ),
         restaurantCutoffStateProvider.overrideWith(
           (ref, storeId) => Stream.value(
