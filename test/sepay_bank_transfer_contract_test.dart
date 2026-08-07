@@ -364,6 +364,28 @@ void main() {
     expect(verification, contains('SEPAY_TEST_STORE_MAPPING_VERIFY_FAILED'));
   });
 
+  test('live MBBank account maps only to BunsikClub Binh Thanh', () {
+    final sql = File(
+      'supabase/migrations/'
+      '20260807150000_sepay_mb_bunsikclub_binh_thanh_mapping.sql',
+    ).readAsStringSync();
+
+    expect(sql, contains('8bc9eef5-dcd5-46b1-b931-23f77132322c'));
+    expect(sql, contains('BunsikClub Binh Thanh'));
+    expect(sql, contains("'MBBank'"));
+    expect(sql, contains('SEPAY_MB_STORE_MISMATCH'));
+    expect(sql, contains('SEPAY_MB_ACCOUNT_ALREADY_MAPPED'));
+    expect(sql, contains('ON CONFLICT DO NOTHING'));
+
+    final verification = File(
+      'scripts/verify_sepay_mb_bunsikclub_binh_thanh_mapping.sql',
+    ).readAsStringSync();
+    expect(verification, contains('BunsikClub Binh Thanh'));
+    expect(verification, contains("'mbbank'"));
+    expect(verification, contains('account.is_active = true'));
+    expect(verification, contains('SEPAY_MB_MAPPING_VERIFY_FAILED'));
+  });
+
   test('mobile push is disabled for Windows-only bank transfer alerts', () {
     final push = File(
       'lib/core/services/sepay_push_notification_service.dart',
