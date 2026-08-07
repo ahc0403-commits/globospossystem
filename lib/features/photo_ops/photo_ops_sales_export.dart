@@ -59,6 +59,45 @@ class PhotoOpsSalesExport {
   int get totalAmount => receipts.fold(0, (sum, row) => sum + row.amount);
 }
 
+String resolvePhotoOpsSalesExportSlot({
+  required List<Map<String, dynamic>> stores,
+  required List<Map<String, dynamic>> expectedSlots,
+}) {
+  final requiredStoreIds = stores
+      .map(
+        (store) => _requiredText(store['id'], 'PHOTO_EXPORT_INVALID_STORE_ID'),
+      )
+      .toSet();
+  final finalSlotByStore = <String, String>{};
+  for (final slot in expectedSlots) {
+    final storeId = _requiredText(
+      slot['store_id'],
+      'PHOTO_EXPORT_INVALID_EXPECTED_SLOT_STORE',
+    );
+    if (!requiredStoreIds.contains(storeId)) continue;
+    final rawSlotTime = _requiredText(
+      slot['slot_time_hcm'],
+      'PHOTO_EXPORT_INVALID_EXPECTED_SLOT_TIME',
+    );
+    if (!RegExp(r'^\d{2}:\d{2}(:\d{2})?$').hasMatch(rawSlotTime)) {
+      throw const FormatException('PHOTO_EXPORT_INVALID_EXPECTED_SLOT_TIME');
+    }
+    final slotTime = rawSlotTime.substring(0, 5);
+    final previous = finalSlotByStore[storeId];
+    if (previous == null || slotTime.compareTo(previous) > 0) {
+      finalSlotByStore[storeId] = slotTime;
+    }
+  }
+  if (finalSlotByStore.length != requiredStoreIds.length) {
+    throw const FormatException('PHOTO_EXPORT_EXPECTED_SLOT_MISSING');
+  }
+  final finalTimes = finalSlotByStore.values.toSet();
+  if (finalTimes.length != 1) {
+    throw const FormatException('PHOTO_EXPORT_EXPECTED_SLOT_MISMATCH');
+  }
+  return '${finalTimes.single}:00';
+}
+
 void validatePhotoOpsSalesExportReady({
   required List<Map<String, dynamic>> stores,
   required List<Map<String, dynamic>> completedRuns,

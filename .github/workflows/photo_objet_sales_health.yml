@@ -2,8 +2,8 @@ name: Photo Objet Sales Health
 
 on:
   schedule:
-    # Check after the 22:20 HCM collection and its 90-minute grace period.
-    - cron: '40 17 * * *'
+    # Verify the 22:25 REPORT_READY deadline at 22:30 HCM.
+    - cron: '30 15 * * *'
   workflow_dispatch:
 
 permissions:

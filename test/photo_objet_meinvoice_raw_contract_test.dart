@@ -17,6 +17,12 @@ void main() {
       'supabase/migrations/20260714113000_photo_objet_final_slot_2230.sql';
   const singleSlotMigration =
       'supabase/migrations/20260716160000_photo_objet_single_slot_2220.sql';
+  const collection2200Migration =
+      'supabase/migrations/20260807220000_photo_objet_collection_2200.sql';
+  const recoveryMigration =
+      'supabase/migrations/20260807230000_photo_objet_automatic_slot_recovery.sql';
+  const preciseStartMigration =
+      'supabase/migrations/20260807233000_photo_objet_precise_start_report_ready.sql';
   const slotApply = 'scripts/apply_photo_objet_expected_slot_ledger.sql';
   const slotConfiguration =
       'scripts/configure_photo_objet_monitoring_policies.sql';
@@ -169,6 +175,40 @@ void main() {
     },
   );
 
+  test('new Photo schedule moves only future collection to 22:00', () {
+    final sql = readRepoFile(collection2200Migration);
+
+    expect(sql, contains("'hcm-eod-2200-v4'"));
+    expect(sql, contains("WHEN 'hcm-eod-2200-v4' THEN ARRAY[TIME '22:00']"));
+    expect(sql, contains("WHEN 'hcm-eod-2220-v3' THEN ARRAY[TIME '22:20']"));
+    expect(sql, contains('PHOTO_2200_FUTURE_SLOT_ALREADY_ATTEMPTED'));
+    expect(sql, contains('photo_objet_policy_slot_times'));
+    expect(sql, isNot(contains('DELETE FROM public.photo_objet_sales_raw')));
+    expect(sql, isNot(contains('UPDATE public.photo_objet_sales_raw')));
+  });
+
+  test('prepared runners use a DB lease and fail-closed report readiness', () {
+    final recovery = readRepoFile(recoveryMigration);
+    final precise = readRepoFile(preciseStartMigration);
+    final source = readRepoFile(collector);
+
+    expect(recovery, contains('p_slot_date_hcm'));
+    expect(recovery, contains("schedule_version = 'hcm-eod-2200-v4'"));
+    expect(recovery, isNot(contains("schedule_version = 'hcm-eod-2220-v3'")));
+    expect(precise, contains('photo_objet_claim_daily_execution'));
+    expect(precise, contains("interval '20 minutes'"));
+    expect(precise, contains("interval '25 minutes'"));
+    expect(precise, contains('PHOTO_REPORT_REQUIRED_STORE_COUNT_INVALID'));
+    expect(precise, contains('run.interval_rows IS NOT NULL'));
+    expect(precise, contains('photo_objet_daily_report_is_ready'));
+    expect(precise, contains("execution.status = 'report_ready'"));
+    expect(precise, contains('execution.lease_expires_at > v_now'));
+    expect(precise, contains('photo_objet_sales_export_runs'));
+    expect(source, contains('awaitScheduledExecutionLease'));
+    expect(source, contains('mapWithConcurrency'));
+    expect(source, contains('finalizeScheduledReport'));
+  });
+
   test(
     'interval migration retains backup and immutable identity contracts',
     () {
@@ -205,6 +245,12 @@ void main() {
     final collect = readRepoFile(
       '.github/workflows/photo_objet_sales_collect.yml',
     );
+    final collectBackup = readRepoFile(
+      '.github/workflows/photo_objet_sales_collect_backup.yml',
+    );
+    final collectRunner = readRepoFile(
+      '.github/workflows/photo_objet_sales_collect_runner.yml',
+    );
     final slotHealth = readRepoFile(
       '.github/workflows/photo_objet_sales_health.yml',
     );
@@ -221,15 +267,18 @@ void main() {
     final collectionCrons = RegExp(
       r"cron: '([^']+)'",
     ).allMatches(collect).map((match) => match.group(1)).toList();
-    expect(collectionCrons, ['20 15 * * *']);
-    expect(collect, contains("node-version: '22'"));
-    expect(collect, contains('npm ci'));
-    expect(collect, contains('npx puppeteer browsers install'));
-    expect(collect, isNot(contains('--install-deps')));
-    expect(collect, isNot(contains('audit-missing-runs')));
-    expect(collect, isNot(contains('backfill')));
+    expect(collectionCrons, ['40 14 * * *']);
+    expect(collectBackup, contains("cron: '50 14 * * *'"));
+    expect(collect, contains('executor_role: primary'));
+    expect(collectBackup, contains('executor_role: backup'));
+    expect(collectRunner, contains("node-version: '22'"));
+    expect(collectRunner, contains('npm ci'));
+    expect(collectRunner, contains('npx puppeteer browsers install'));
+    expect(collectRunner, isNot(contains('--install-deps')));
+    expect(collectRunner, isNot(contains('audit-missing-runs')));
+    expect(collectRunner, isNot(contains('backfill')));
 
-    expect(slotHealth, contains("cron: '40 17 * * *'"));
+    expect(slotHealth, contains("cron: '30 15 * * *'"));
     expect(RegExp(r"cron: '[^']+'\n").allMatches(slotHealth), hasLength(1));
     expect(slotHealth, contains('--refresh --output health-evidence.json'));
     expect(slotHealth, contains('--ack-file health-evidence.json'));
@@ -283,7 +332,7 @@ void main() {
 
       expect(text, contains('immutable source'));
       expect(text, contains('collected_zero'));
-      expect(text, contains('90-minute grace'));
+      expect(text, contains("slot's 25-minute grace"));
       expect(
         text,
         contains(

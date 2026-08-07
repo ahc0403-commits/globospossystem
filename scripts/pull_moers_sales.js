@@ -9,9 +9,18 @@ const HCM_TIME_ZONE = 'Asia/Ho_Chi_Minh';
 const EXPECTED_POS_PROJECT_REF = 'ynriuoomotxuwhuxxmhj';
 const PHOTO_OBJET_BRAND_ID = '77000000-0000-0000-0000-000000000001';
 const MAX_BACKFILL_DAYS = 7;
+const MAX_AUTOMATIC_RECOVERY_STORE_DAYS = 6;
+const DEFAULT_SCHEDULED_PARALLELISM = 3;
+const PRIMARY_TRIGGER_CRON = '40 14 * * *';
+const BACKUP_TRIGGER_CRON = '50 14 * * *';
+const TARGET_SLOT_TIME_HCM = '22:00';
+const BACKUP_NOT_BEFORE_HCM = '22:01';
+const COLLECTION_HARD_DEADLINE_HCM = '22:20';
 const SOURCE_IDENTITY_VERSION = 2;
 const COLLECTOR_STARTED_AT = new Date();
+const PREPARE_SCHEDULE_CRONS = new Set([PRIMARY_TRIGGER_CRON, BACKUP_TRIGGER_CRON]);
 const SCHEDULED_INTERVAL_MINUTES = Object.freeze({
+  '22:00': 22 * 60,
   '22:20': 22 * 60 + 20,
 });
 const FAILURE = Object.freeze({
@@ -284,10 +293,14 @@ function envFlagFrom(env, name, fallback) {
   );
 }
 
+function isScheduledInvocation(env = process.env) {
+  return env.PHOTO_OBJET_SCHEDULED === 'true' || env.GITHUB_EVENT_NAME === 'schedule';
+}
+
 function getTargetDates(env = process.env, now = COLLECTOR_STARTED_AT) {
   if (env.TARGET_DATE) return [env.TARGET_DATE];
-  if (env.GITHUB_EVENT_NAME === 'schedule') {
-    return [scheduledSlotFromCron(
+  if (isScheduledInvocation(env)) {
+    return [preparedSlotFromCron(
       env.PHOTO_OBJET_SCHEDULE_CRON,
       resolveRunTimestamp(env, now),
     ).slotDateHcm];
@@ -297,6 +310,11 @@ function getTargetDates(env = process.env, now = COLLECTOR_STARTED_AT) {
     dates.push(hcmDateString(-1, now));
   }
   return [...new Set(dates)];
+}
+
+function isAutomaticRecoverySchedule(env = process.env) {
+  return isScheduledInvocation(env) &&
+    env.PHOTO_OBJET_EXECUTOR_ROLE === 'backup';
 }
 
 function validateDate(value, label) {
@@ -366,6 +384,7 @@ function parseArgs(argv, env = process.env) {
     preflightOnly: args.has('--preflight-only'),
     backfill: Boolean(backfillFrom),
     execute: args.has('--execute'),
+    recoveryOnly: !backfillFrom && isAutomaticRecoverySchedule(env),
     targetDates: backfillFrom
       ? inclusiveDateRange(backfillFrom, backfillTo)
       : getTargetDates(env),
@@ -710,6 +729,30 @@ function scheduledSlotFromCron(cron, runTimestamp) {
   };
 }
 
+function preparedSlotFromCron(cron, runTimestamp, targetSlotTime = TARGET_SLOT_TIME_HCM) {
+  const normalizedCron = String(cron || '').trim();
+  if (!PREPARE_SCHEDULE_CRONS.has(normalizedCron)) {
+    throw deterministic(`Unsupported Photo Objet prepare schedule: ${cron}`);
+  }
+  if (!Object.prototype.hasOwnProperty.call(SCHEDULED_INTERVAL_MINUTES, targetSlotTime)) {
+    throw deterministic(`Unsupported Photo Objet target slot: ${targetSlotTime}`);
+  }
+  const match = /^(\d{1,2}) (\d{1,2}) \* \* \*$/.exec(normalizedCron);
+  const minute = Number(match[1]);
+  const utcHour = Number(match[2]);
+  const anchor = new Date(runTimestamp);
+  if (Number.isNaN(anchor.getTime())) {
+    throw deterministic('Prepared runs require a valid event or run timestamp');
+  }
+  const occurrence = new Date(anchor);
+  occurrence.setUTCHours(utcHour, minute, 0, 0);
+  if (occurrence > anchor) occurrence.setUTCDate(occurrence.getUTCDate() - 1);
+  return {
+    slotDateHcm: hcmDateString(0, occurrence),
+    slotTimeHcm: targetSlotTime,
+  };
+}
+
 function fullDayInterval(targetDate) {
   const start = new Date(`${targetDate}T00:00:00+07:00`);
   const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
@@ -752,10 +795,11 @@ function createRunIdentity(options, targetDate, env = process.env) {
       ...fullDayInterval(targetDate),
     };
   }
-  if (env.GITHUB_EVENT_NAME === 'schedule') {
-    const slot = scheduledSlotFromCron(
+  if (isScheduledInvocation(env)) {
+    const slot = preparedSlotFromCron(
       env.PHOTO_OBJET_SCHEDULE_CRON,
       resolveRunTimestamp(env),
+      env.PHOTO_OBJET_TARGET_SLOT_TIME_HCM || TARGET_SLOT_TIME_HCM,
     );
     if (targetDate !== slot.slotDateHcm) {
       throw deterministic(
@@ -780,6 +824,135 @@ function createRunIdentity(options, targetDate, env = process.env) {
   };
 }
 
+function createRecoveryRunIdentity(slot, env = process.env) {
+  const slotDateHcm = String(slot.slot_date_hcm || '').slice(0, 10);
+  const slotTimeHcm = String(slot.slot_time_hcm || '').slice(0, 5);
+  validateDate(slotDateHcm, 'recovery slot date');
+  if (!Object.prototype.hasOwnProperty.call(SCHEDULED_INTERVAL_MINUTES, slotTimeHcm)) {
+    throw deterministic(`Unsupported Photo Objet recovery slot: ${slotTimeHcm}`);
+  }
+  const invocation = env.GITHUB_RUN_ID || env.PHOTO_OBJET_INVOCATION_ID || 'local';
+  const attempt = env.GITHUB_RUN_ATTEMPT || '1';
+  return {
+    source: 'scheduled',
+    recovery: true,
+    slotId: `scheduled-recovery:${slotDateHcm}T${slotTimeHcm}+07:00:${invocation}:${attempt}`,
+    slotDateHcm,
+    slotTimeHcm,
+    ...scheduledInterval({ slotDateHcm, slotTimeHcm }),
+  };
+}
+
+function scheduledExecutionOwner(env = process.env) {
+  const role = env.PHOTO_OBJET_EXECUTOR_ROLE || 'primary';
+  if (!['primary', 'backup'].includes(role)) {
+    throw deterministic(`Unsupported Photo Objet executor role: ${role}`);
+  }
+  const runId = env.GITHUB_RUN_ID || env.PHOTO_OBJET_INVOCATION_ID || 'local';
+  const attempt = env.GITHUB_RUN_ATTEMPT || '1';
+  return { role, token: `${role}:${runId}:${attempt}` };
+}
+
+function sleep(milliseconds) {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
+async function awaitScheduledExecutionLease(supabase, identity, env = process.env) {
+  const owner = scheduledExecutionOwner(env);
+  while (true) {
+    const { data, error } = await supabase.rpc('photo_objet_claim_daily_execution', {
+      p_slot_date_hcm: identity.slotDateHcm,
+      p_slot_time_hcm: identity.slotTimeHcm,
+      p_owner_token: owner.token,
+      p_executor_role: owner.role,
+    });
+    if (error) throw asCollectorError(error, 'Scheduled execution lease failed');
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) throw deterministic('Scheduled execution lease returned no state');
+    if (row.execution_status === 'report_ready') {
+      return { acquired: false, reportReady: true, owner };
+    }
+    if (row.lease_acquired === true) {
+      return { acquired: true, reportReady: false, owner };
+    }
+    if (row.execution_status === 'deadline_exceeded') {
+      throw transient('PHOTO_COLLECTION_START_DEADLINE_EXCEEDED');
+    }
+    const serverNow = Date.parse(row.server_now);
+    const slotAt = Date.parse(
+      `${identity.slotDateHcm}T${identity.slotTimeHcm}:00+07:00`,
+    ) + (owner.role === 'backup' ? 60000 : 0);
+    const remaining = Number.isFinite(serverNow) ? slotAt - serverNow : 0;
+    const waitMilliseconds = remaining > 5000
+      ? Math.min(60000, remaining - 5000)
+      : 250;
+    await sleep(Math.max(250, waitMilliseconds));
+  }
+}
+
+async function heartbeatScheduledExecution(supabase, identity, owner) {
+  const { error } = await supabase.rpc('photo_objet_heartbeat_daily_execution', {
+    p_slot_date_hcm: identity.slotDateHcm,
+    p_slot_time_hcm: identity.slotTimeHcm,
+    p_owner_token: owner.token,
+  });
+  if (error) throw asCollectorError(error, 'Scheduled execution heartbeat failed');
+}
+
+async function failScheduledExecution(supabase, identity, owner, message) {
+  const { error } = await supabase.rpc('photo_objet_fail_daily_execution', {
+    p_slot_date_hcm: identity.slotDateHcm,
+    p_slot_time_hcm: identity.slotTimeHcm,
+    p_owner_token: owner.token,
+    p_failure_message: String(message || 'PHOTO_COLLECTION_FAILED').slice(0, 500),
+  });
+  if (error) throw asCollectorError(error, 'Scheduled execution failure recording failed');
+}
+
+async function finalizeScheduledReport(supabase, identity, owner) {
+  const { data, error } = await supabase.rpc('photo_objet_finalize_daily_report', {
+    p_slot_date_hcm: identity.slotDateHcm,
+    p_slot_time_hcm: identity.slotTimeHcm,
+    p_owner_token: owner.token,
+  });
+  if (error) throw asCollectorError(error, 'Daily report readiness validation failed');
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || row.report_status !== 'report_ready') {
+    throw transient('PHOTO_REPORT_NOT_READY');
+  }
+  return row;
+}
+
+async function loadAutomaticRecoveryTargets(supabase, slotDateHcm) {
+  const { data, error } = await supabase.rpc('photo_objet_due_recovery_slots', {
+    p_observed_at: new Date().toISOString(),
+    p_slot_date_hcm: slotDateHcm,
+    p_limit: MAX_AUTOMATIC_RECOVERY_STORE_DAYS,
+  });
+  if (error) {
+    throw asCollectorError(error, 'Automatic recovery target query failed');
+  }
+  return data || [];
+}
+
+function buildRecoveryWorkItems(rows, stores, excludedKeys = new Set(), env = process.env) {
+  const enabledById = new Map(
+    stores.filter(store => store.enabled).map(store => [store.storeId, store]),
+  );
+  return (rows || []).map(row => {
+    const identity = createRecoveryRunIdentity(row, env);
+    const key = `${row.store_id}/${identity.slotDateHcm}/${identity.slotTimeHcm}`;
+    if (excludedKeys.has(key)) return null;
+    const store = enabledById.get(row.store_id);
+    if (!store) {
+      throw deterministic(
+        `Recovery slot ${key} does not map to an enabled Photo Objet collector store`,
+      );
+    }
+    return { store, targetDate: identity.slotDateHcm, runIdentity: identity };
+  }).filter(Boolean);
+}
+
 function expectedSlotRpcArgs(store, identity) {
   return {
     p_store_id: store.storeId,
@@ -800,9 +973,18 @@ async function bestEffortSlotRpc(supabase, name, args) {
   return true;
 }
 
+async function requiredSlotRpc(supabase, name, args) {
+  const { error } = await supabase.rpc(name, args);
+  if (error) {
+    throw asCollectorError(error, `Required recovery ledger RPC ${name} failed`);
+  }
+  return true;
+}
+
 async function claimScheduledExpectation(supabase, store, identity, runId) {
   if (identity.source !== 'scheduled') return true;
-  return bestEffortSlotRpc(supabase, 'photo_objet_claim_expected_slot', {
+  const rpc = identity.recovery ? requiredSlotRpc : bestEffortSlotRpc;
+  return rpc(supabase, 'photo_objet_claim_expected_slot', {
     ...expectedSlotRpcArgs(store, identity),
     p_run_id: runId,
   });
@@ -816,7 +998,11 @@ async function completeScheduledExpectation(
   zeroSales,
 ) {
   if (identity.source !== 'scheduled') return true;
-  return bestEffortSlotRpc(supabase, 'photo_objet_complete_expected_slot', {
+  const rpcName = identity.recovery
+    ? 'photo_objet_complete_recovery_slot'
+    : 'photo_objet_complete_expected_slot';
+  const rpc = identity.recovery ? requiredSlotRpc : bestEffortSlotRpc;
+  return rpc(supabase, rpcName, {
     ...expectedSlotRpcArgs(store, identity),
     p_run_id: runId,
     p_zero_sales: zeroSales,
@@ -1190,6 +1376,9 @@ function validateStaticPreflight(stores, env = process.env, runtime = {}) {
   if (stores.filter(store => store.enabled).length === 0) {
     throw deterministic('At least one Photo Objet store must be enabled');
   }
+  if (isScheduledInvocation(env) && stores.filter(store => store.enabled).length !== 6) {
+    throw deterministic('Scheduled Photo Objet collection requires exactly six enabled stores');
+  }
 
   const nodeVersion = runtime.nodeVersion || process.versions.node;
   if (Number(nodeVersion.split('.')[0]) !== 22) {
@@ -1326,6 +1515,34 @@ async function runWithTransientRetry(task, onRetry = () => {}) {
   throw new Error('unreachable');
 }
 
+async function mapWithConcurrency(items, concurrency, task) {
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw deterministic('Photo Objet parallelism must be a positive integer');
+  }
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  async function worker() {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= items.length) return;
+      results[index] = await task(items[index], index);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
+  );
+  return results;
+}
+
+function scheduledParallelism(env = process.env) {
+  const value = Number(env.PHOTO_OBJET_PARALLELISM || DEFAULT_SCHEDULED_PARALLELISM);
+  if (!Number.isInteger(value) || value < 1 || value > 6) {
+    throw deterministic('PHOTO_OBJET_PARALLELISM must be an integer between 1 and 6');
+  }
+  return value;
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   options.targetDates.forEach(date => validateDate(date, 'target date'));
@@ -1346,7 +1563,7 @@ async function main() {
 
   const targetDates = options.targetDates;
   console.log('\n=== Photo Objet Sales Pull ===');
-  console.log(`Target dates: ${targetDates.join(', ')}`);
+  console.log(`Target dates: ${targetDates.join(', ') || '(automatic recovery only)'}`);
   console.log(`Enabled stores: ${enabledStores.map(s => s.storeName).join(', ')}`);
   if (skippedStores.length > 0) {
     console.log(`Skipped stores: ${skippedStores.map(s => s.storeName).join(', ')}`);
@@ -1357,29 +1574,127 @@ async function main() {
   fs.mkdirSync(downloadDir, { recursive: true });
 
   const results = [];
+  let scheduledLease = null;
+  let heartbeatTimer = null;
+  let heartbeatFailure = null;
+  const scheduled = !options.backfill && isScheduledInvocation();
+  const scheduledIdentity = scheduled
+    ? createRunIdentity(options, targetDates[0])
+    : null;
 
   try {
+    if (scheduledIdentity) {
+      console.log(
+        `PREPARED executor=${scheduledExecutionOwner().role} ` +
+        `slot=${scheduledIdentity.slotDateHcm} ${scheduledIdentity.slotTimeHcm} HCM`,
+      );
+      scheduledLease = await awaitScheduledExecutionLease(supabase, scheduledIdentity);
+      if (scheduledLease.reportReady) {
+        console.log('REPORT_READY already recorded by the other prepared executor');
+        return;
+      }
+      console.log(
+        `LEASE_ACQUIRED executor=${scheduledLease.owner.role} ` +
+        `slot=${scheduledIdentity.slotDateHcm} ${scheduledIdentity.slotTimeHcm} HCM`,
+      );
+      let heartbeatBusy = false;
+      heartbeatTimer = setInterval(async () => {
+        if (heartbeatBusy || heartbeatFailure) return;
+        heartbeatBusy = true;
+        try {
+          await heartbeatScheduledExecution(supabase, scheduledIdentity, scheduledLease.owner);
+        } catch (error) {
+          heartbeatFailure = error;
+        } finally {
+          heartbeatBusy = false;
+        }
+      }, 10000);
+    }
+
+    const parallelism = scheduled ? scheduledParallelism() : 1;
     for (const targetDate of targetDates) {
       const runIdentity = createRunIdentity(options, targetDate);
       console.log(`RUN_IDENTITY slot=${runIdentity.slotId} source=${runIdentity.source}`);
-      for (const store of enabledStores) {
-        console.log(`\nProcessing: ${store.storeName} (${targetDate})`);
-        const result = await runWithTransientRetry(
-          () => processStore(
-            supabase,
-            store,
-            targetDate,
-            downloadDir,
-            runIdentity,
-          ),
-          failure => console.warn(
-            `  RETRY transient failure for ${store.storeName}: ${failure.error}`,
-          ),
+      let workItems = enabledStores.map(store => ({ store, targetDate, runIdentity }));
+      if (scheduled && scheduledLease.owner.role === 'backup') {
+        const recoveryRows = await loadAutomaticRecoveryTargets(
+          supabase,
+          runIdentity.slotDateHcm,
         );
-        results.push({ ...result, targetDate });
+        workItems = buildRecoveryWorkItems(recoveryRows, enabledStores);
+        console.log(`Backup takeover selected ${workItems.length} incomplete stores`);
+      }
+
+      const batchResults = await mapWithConcurrency(
+        workItems,
+        parallelism,
+        async item => {
+          if (heartbeatFailure) throw heartbeatFailure;
+          const storeDownloadDir = path.join(
+            downloadDir,
+            item.store.key,
+            item.targetDate,
+          );
+          console.log(`\nProcessing: ${item.store.storeName} (${item.targetDate})`);
+          const result = await runWithTransientRetry(
+            () => processStore(
+              supabase,
+              item.store,
+              item.targetDate,
+              storeDownloadDir,
+              item.runIdentity,
+            ),
+            failure => console.warn(
+              `  RETRY transient failure for ${item.store.storeName}: ${failure.error}`,
+            ),
+          );
+          return {
+            ...result,
+            targetDate: item.targetDate,
+            recovery: item.runIdentity.recovery === true,
+          };
+        },
+      );
+      results.push(...batchResults);
+    }
+
+    if (scheduledIdentity && scheduledLease) {
+      if (heartbeatFailure) throw heartbeatFailure;
+      const failed = results.filter(result => !result.success);
+      if (failed.length > 0) {
+        throw new CollectorError(
+          `${failed.length} of ${results.length} scheduled store pulls failed`,
+          failed.some(result => result.failureClass === FAILURE.DETERMINISTIC)
+            ? FAILURE.DETERMINISTIC
+            : FAILURE.TRANSIENT,
+        );
+      }
+      const readiness = await finalizeScheduledReport(
+        supabase,
+        scheduledIdentity,
+        scheduledLease.owner,
+      );
+      console.log(
+        `REPORT_READY date=${scheduledIdentity.slotDateHcm} ` +
+        `stores=${readiness.store_count} receipts=${readiness.receipt_count}`,
+      );
+    }
+  } catch (error) {
+    if (scheduledIdentity && scheduledLease?.acquired) {
+      try {
+        await failScheduledExecution(
+          supabase,
+          scheduledIdentity,
+          scheduledLease.owner,
+          error.message || error,
+        );
+      } catch (recordError) {
+        console.error(`Failed to record scheduled execution failure: ${recordError.message}`);
       }
     }
+    throw error;
   } finally {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
     try {
       fs.rmSync(downloadDir, { recursive: true, force: true });
     } catch {}
@@ -1420,7 +1735,9 @@ module.exports = {
   CollectorError,
   FAILURE,
   OPERATIONAL_FAILURE,
+  MAX_AUTOMATIC_RECOVERY_STORE_DAYS,
   MAX_BACKFILL_DAYS,
+  DEFAULT_SCHEDULED_PARALLELISM,
   SOURCE_IDENTITY_VERSION,
   aggregateDailyRawRows,
   assertAggregateComplete,
@@ -1428,16 +1745,25 @@ module.exports = {
   buildStores,
   classifyError,
   claimScheduledExpectation,
+  buildRecoveryWorkItems,
   createRunIdentity,
+  createRecoveryRunIdentity,
+  preparedSlotFromCron,
+  scheduledExecutionOwner,
   completeScheduledExpectation,
   failScheduledExpectation,
   inclusiveDateRange,
+  isAutomaticRecoverySchedule,
+  isScheduledInvocation,
   isZeroSalesInterval,
   parseArgs,
   parseSoldAt,
   parseSpreadsheetFile,
+  loadAutomaticRecoveryTargets,
   runPreflight,
   runWithTransientRetry,
+  mapWithConcurrency,
+  scheduledParallelism,
   scheduledSlotFromCron,
   selectRowsForInterval,
   normalizeRawSalesRows,

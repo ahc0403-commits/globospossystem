@@ -3,36 +3,67 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/photo_ops/photo_ops_sales_export.dart';
 
 void main() {
-  test('requires every legal-entity store to finish the 22:20 collection', () {
+  test(
+    'requires every legal-entity store to finish the expected final slot',
+    () {
+      const stores = [
+        {'id': 'store-a'},
+        {'id': 'store-b'},
+      ];
+
+      expect(
+        () => validatePhotoOpsSalesExportReady(
+          stores: stores,
+          completedRuns: const [
+            {'store_id': 'store-a'},
+          ],
+        ),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            'PHOTO_EXPORT_NOT_READY:1',
+          ),
+        ),
+      );
+      expect(
+        () => validatePhotoOpsSalesExportReady(
+          stores: stores,
+          completedRuns: const [
+            {'store_id': 'store-a'},
+            {'store_id': 'store-b'},
+          ],
+        ),
+        returnsNormally,
+      );
+    },
+  );
+
+  test('resolves historical and current export cutoffs from typed slots', () {
     const stores = [
       {'id': 'store-a'},
       {'id': 'store-b'},
     ];
-
     expect(
-      () => validatePhotoOpsSalesExportReady(
+      resolvePhotoOpsSalesExportSlot(
         stores: stores,
-        completedRuns: const [
-          {'store_id': 'store-a'},
+        expectedSlots: const [
+          {'store_id': 'store-a', 'slot_time_hcm': '20:00:00'},
+          {'store_id': 'store-a', 'slot_time_hcm': '22:20:00'},
+          {'store_id': 'store-b', 'slot_time_hcm': '22:20:00'},
         ],
       ),
-      throwsA(
-        isA<FormatException>().having(
-          (error) => error.message,
-          'message',
-          'PHOTO_EXPORT_NOT_READY:1',
-        ),
-      ),
+      '22:20:00',
     );
     expect(
-      () => validatePhotoOpsSalesExportReady(
+      resolvePhotoOpsSalesExportSlot(
         stores: stores,
-        completedRuns: const [
-          {'store_id': 'store-a'},
-          {'store_id': 'store-b'},
+        expectedSlots: const [
+          {'store_id': 'store-a', 'slot_time_hcm': '22:00:00'},
+          {'store_id': 'store-b', 'slot_time_hcm': '22:00:00'},
         ],
       ),
-      returnsNormally,
+      '22:00:00',
     );
   });
 
