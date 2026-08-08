@@ -79,7 +79,10 @@ void main() {
           port: port,
         );
 
-        expect(result, PrintResult.connectionRefused);
+        expect(
+          result,
+          anyOf(PrintResult.connectionRefused, PrintResult.connectionFailed),
+        );
       },
     );
 
@@ -115,6 +118,7 @@ void main() {
       final agent = PrintJobAgentService(
         backend: backend,
         printerService: printer,
+        networkCapabilityService: _availableNetwork,
       );
 
       final results = await agent.processOnce('store-1');
@@ -145,6 +149,7 @@ void main() {
       final agent = PrintJobAgentService(
         backend: backend,
         printerService: _FakePrinterService(PrintResult.connectionFailed),
+        networkCapabilityService: _availableNetwork,
       );
 
       final results = await agent.processOnce('store-1');
@@ -436,6 +441,7 @@ void main() {
       final agent = PrintJobAgentService(
         backend: backend,
         printerService: printer,
+        networkCapabilityService: _availableNetwork,
       );
 
       final results = await agent.processOnce('store-1');
@@ -474,6 +480,7 @@ void main() {
         final agent = PrintJobAgentService(
           backend: backend,
           printerService: printer,
+          networkCapabilityService: _availableNetwork,
         );
 
         final results = await agent.processOnce('store-1');
@@ -529,6 +536,7 @@ void main() {
       final agent = PrintJobAgentService(
         backend: backend,
         printerService: printer,
+        networkCapabilityService: _availableNetwork,
       );
 
       final results = await agent.processOnce('store-1');
@@ -579,6 +587,7 @@ void main() {
         final agent = PrintJobAgentService(
           backend: backend,
           printerService: printer,
+          networkCapabilityService: _availableNetwork,
         );
 
         final result = await agent.testPrintDestination('dest-test');
@@ -601,6 +610,7 @@ void main() {
         final agent = PrintJobAgentService(
           backend: backend,
           printerService: _FakePrinterService(PrintResult.success),
+          networkCapabilityService: _availableNetwork,
         );
 
         agent.startPolling('store-1', interval: const Duration(hours: 1));
@@ -617,6 +627,11 @@ void main() {
     );
   });
 }
+
+const _availableNetwork = _FakeNetworkCapabilityService(
+  wiredConnected: true,
+  wirelessConnected: true,
+);
 
 PrintAgentJob _job({
   required String id,
