@@ -464,10 +464,10 @@ void main() {
     expect(provider, contains('deleteDestination'));
     expect(provider, contains('enqueueTestPrintJob'));
     expect(provider, contains('PRINTER_FLOOR_LABEL_REQUIRED'));
-    expect(settingsScreen, contains('enqueueTestPrintJob(destination.id)'));
+    expect(settingsScreen, contains('testDestination(destination.id)'));
     expect(
       settingsScreen,
-      isNot(contains('testPrintDestination(destination.id)')),
+      isNot(contains('enqueueTestPrintJob(destination.id)')),
     );
   });
 

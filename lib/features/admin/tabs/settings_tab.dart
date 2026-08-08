@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/hardware/print_agent_coordinator_provider.dart';
 import '../../../core/hardware/printer_service.dart';
 import '../../../core/hardware/receipt_builder.dart';
 import '../../../core/i18n/locale_extensions.dart';
@@ -1372,18 +1373,22 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     if (_testingDestinationIds.contains(destination.id)) {
       return;
     }
+    if (!PlatformInfo.isPrinterSupported) {
+      showErrorToast(context, context.l10n.settingsPrinterAppOnly);
+      return;
+    }
     setState(() {
       _testingDestinationIds.add(destination.id);
     });
     try {
-      final queued = await ref
-          .read(printerDestinationsProvider(destination.storeId).notifier)
-          .enqueueTestPrintJob(destination.id);
+      final result = await ref
+          .read(printAgentCoordinatorProvider.notifier)
+          .testDestination(destination.id);
       if (!mounted) {
         return;
       }
-      if (queued) {
-        showSuccessToast(context, context.l10n.kitchenReprintQueued);
+      if (result == PrintResult.success) {
+        showSuccessToast(context, context.l10n.settingsTestPrintComplete);
       } else {
         showErrorToast(
           context,
