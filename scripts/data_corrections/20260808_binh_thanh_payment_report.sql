@@ -34,10 +34,11 @@ begin
       or (id = '6f4a5231-9229-4a24-ad0d-aae6755bd3cb' and order_id = '0efe1fcd-38d9-423f-9919-1389e402f7d6' and amount = 373464 and method = 'BANKTRANSFER')
       or (id = 'f4ec50f8-de0f-4fcb-a66b-b3264b752a11' and order_id = 'd0dcd472-0eaa-41b1-857c-b824f865a020' and amount = 59724 and method = 'BANKTRANSFER')
       or (id = '86d1f2e7-8c46-4c24-bbf4-71f8e56fcfd3' and order_id = 'ecfeedbb-6aa6-428b-a2ef-71c01b6c2cdd' and amount = 586292 and method = 'BANKTRANSFER')
+      or (id = 'b710a111-ae84-4af2-963a-0a0a33f571f1' and order_id = 'b7166161-9bc2-471c-b202-85c276c27bc3' and amount = 101304 and amount_portion = 101304 and method = 'OTHER')
     );
 
-  if matched_payments <> 10 then
-    raise exception 'Payment correction precondition failed: expected 10 exact payment rows, found %', matched_payments;
+  if matched_payments <> 11 then
+    raise exception 'Payment correction precondition failed: expected 11 exact payment rows, found %', matched_payments;
   end if;
 
   select count(*), sum(total_amount_ex_tax), sum(vat_amount), sum(paying_amount_inc_tax)
@@ -74,6 +75,13 @@ where id in (
   '03dec45e-d74b-4f3a-89cf-a8459b33ba36',
   '6e2ed749-ee0b-4a31-abe7-bc472e311d3a'
 );
+
+update public.payments
+set method = 'BANKTRANSFER',
+    amount = 103284,
+    proof_required = true,
+    notes = concat_ws(E'\n', nullif(notes, ''), '[2026-08-08 correction] Bank transfer received 103,284 VND; amount_portion preserves the 101,304 VND order sale amount.')
+where id = 'b710a111-ae84-4af2-963a-0a0a33f571f1';
 
 update public.payments
 set method = 'CASH',
@@ -144,16 +152,17 @@ begin
     '6bd2a767-7b10-42a6-bd25-3d76218c9b8a',
     '6f4a5231-9229-4a24-ad0d-aae6755bd3cb',
     'f4ec50f8-de0f-4fcb-a66b-b3264b752a11',
-    '86d1f2e7-8c46-4c24-bbf4-71f8e56fcfd3'
+    '86d1f2e7-8c46-4c24-bbf4-71f8e56fcfd3',
+    'b710a111-ae84-4af2-963a-0a0a33f571f1'
   );
 
-  if corrected_bank_received <> 1579992
-     or corrected_bank_portion <> 1579156
+  if corrected_bank_received <> 1683276
+     or corrected_bank_portion <> 1680460
      or corrected_cash_received <> 574512
      or corrected_cash_portion <> 574512
      or corrected_other_received <> 0
-     or corrected_received_total <> 2154504
-     or corrected_portion_total <> 2153668 then
+     or corrected_received_total <> 2257788
+     or corrected_portion_total <> 2254972 then
     raise exception 'Payment correction verification failed: bank received %, bank sales %, cash received %, cash sales %, other %, received total %, sales total %', corrected_bank_received, corrected_bank_portion, corrected_cash_received, corrected_cash_portion, corrected_other_received, corrected_received_total, corrected_portion_total;
   end if;
 
@@ -173,10 +182,12 @@ begin
       '017c5fa8-04c2-4022-a7bc-b5afaf3137f4',
       '2decac20-9781-4623-845b-55c4cf7e6bfe',
       '6f4a5231-9229-4a24-ad0d-aae6755bd3cb',
-      'f4ec50f8-de0f-4fcb-a66b-b3264b752a11'
+      'f4ec50f8-de0f-4fcb-a66b-b3264b752a11',
+      'b710a111-ae84-4af2-963a-0a0a33f571f1',
+      'f22d004b-1d26-413b-bc52-4d787c6431c1'
     );
 
-  if bank_statement_total <> 2476024 or bank_sales_total <> 2475188 then
+  if bank_statement_total <> 2821448 or bank_sales_total <> 2818632 then
     raise exception 'Bank settlement verification failed: received %, sales %', bank_statement_total, bank_sales_total;
   end if;
 
