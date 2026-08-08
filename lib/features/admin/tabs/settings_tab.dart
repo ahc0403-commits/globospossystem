@@ -39,6 +39,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
   final _perPersonController = TextEditingController();
   final _fullNameController = TextEditingController();
   final _printerIpController = TextEditingController();
+  final _printerPortController = TextEditingController();
   final Set<String> _testingDestinationIds = <String>{};
   String _operationMode = 'standard';
   String? _initializedRestaurantId;
@@ -59,6 +60,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     _perPersonController.dispose();
     _fullNameController.dispose();
     _printerIpController.dispose();
+    _printerPortController.dispose();
     super.dispose();
   }
 
@@ -453,6 +455,12 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
       _printerIpController.text = printerState.printerIp;
       _printerIpController.selection = TextSelection.fromPosition(
         TextPosition(offset: _printerIpController.text.length),
+      );
+    }
+    if (_printerPortController.text != printerState.printerPort) {
+      _printerPortController.text = printerState.printerPort;
+      _printerPortController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _printerPortController.text.length),
       );
     }
 
@@ -1249,13 +1257,38 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
             ),
             const SizedBox(height: 12),
             Text(
-              context.l10n.settingsPrinterWifiHint,
+              context.l10n.settingsPrinterNetworkHint,
               style: Theme.of(
                 context,
               ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
             ),
             const SizedBox(height: 10),
+            Text(
+              context.l10n.settingsPrinterConnectionType,
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<PrinterConnectionType>(
+              key: const Key('settings_printer_connection_type'),
+              segments: [
+                ButtonSegment(
+                  value: PrinterConnectionType.lan,
+                  icon: const Icon(Icons.lan_outlined),
+                  label: Text(context.l10n.settingsPrinterWiredLan),
+                ),
+                ButtonSegment(
+                  value: PrinterConnectionType.wifi,
+                  icon: const Icon(Icons.wifi_outlined),
+                  label: Text(context.l10n.settingsPrinterWifi),
+                ),
+              ],
+              selected: {printerState.connectionType},
+              onSelectionChanged: (selection) =>
+                  printerNotifier.setConnectionType(selection.single),
+            ),
+            const SizedBox(height: 10),
             TextField(
+              key: const Key('settings_printer_ip'),
               controller: _printerIpController,
               keyboardType: TextInputType.number,
               onChanged: (value) => printerNotifier.setIp(value),
@@ -1263,6 +1296,18 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
               decoration: InputDecoration(
                 labelText: context.l10n.settingsPrinterIpAddress,
                 hintText: context.l10n.settingsPrinterIpExample,
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              key: const Key('settings_printer_port'),
+              controller: _printerPortController,
+              keyboardType: TextInputType.number,
+              onChanged: (value) => printerNotifier.setPort(value),
+              style: AppFonts.system(color: AppColors.textPrimary),
+              decoration: InputDecoration(
+                labelText: context.l10n.settingsPrinterPort,
+                hintText: '9100',
               ),
             ),
             const SizedBox(height: 14),
@@ -1288,7 +1333,12 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : Text(context.l10n.settingsConnectionTest),
+                        : Text(
+                            printerState.connectionType ==
+                                    PrinterConnectionType.lan
+                                ? context.l10n.settingsLanConnectionTest
+                                : context.l10n.settingsWifiConnectionTest,
+                          ),
                   ),
                 ),
                 const SizedBox(width: 10),

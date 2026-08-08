@@ -101,4 +101,23 @@ void main() {
     expect(provider, isNot(contains('Enter a printer name.')));
     expect(provider, isNot(contains('Failed to save printer routing.')));
   });
+
+  test('receipt printer test supports wired LAN and Wi-Fi with a port', () {
+    final source = readRepoFile('lib/features/admin/tabs/settings_tab.dart');
+    final provider = readRepoFile(
+      'lib/features/settings/printer_provider.dart',
+    );
+
+    expect(source, contains('SegmentedButton<PrinterConnectionType>'));
+    expect(source, contains("Key('settings_printer_connection_type')"));
+    expect(source, contains("Key('settings_printer_port')"));
+    expect(source, contains('settingsLanConnectionTest'));
+    expect(source, contains('settingsWifiConnectionTest'));
+    expect(provider, contains("_portKey = 'printer_port'"));
+    expect(
+      provider,
+      contains("_connectionTypeKey = 'printer_connection_type'"),
+    );
+    expect(provider, contains('port: port'));
+  });
 }
