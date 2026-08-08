@@ -189,6 +189,49 @@ void main() {
       );
     });
 
+    test(
+      'processOnce prints two complete copies for floor confirmation jobs',
+      () async {
+        final backend = _FakePrintJobBackend(
+          jobs: [
+            _job(
+              id: 'job-confirmation-copies',
+              destinationId: 'dest-floor-confirmation',
+              ticketType: 'confirmation',
+              unitPrice: 12000,
+            ),
+          ],
+          destinations: const {
+            'dest-floor-confirmation': PrintDestination(
+              id: 'dest-floor-confirmation',
+              name: '3F',
+              ip: '192.168.1.54',
+              port: 9100,
+            ),
+          },
+        );
+        final printer = _FakePrinterService(PrintResult.success);
+        final agent = PrintJobAgentService(
+          backend: backend,
+          printerService: printer,
+        );
+
+        final results = await agent.processOnce('store-1');
+
+        expect(results.single.result, PrintResult.success);
+        expect(printer.prints, hasLength(2));
+        expect(printer.prints[0].bytes, printer.prints[1].bytes);
+        expect(
+          String.fromCharCodes(printer.prints[0].bytes),
+          allOf(
+            contains('XAC NHAN DON'),
+            contains('1 x 12,000 VND = 12,000 VND'),
+            contains('Tong cong'),
+          ),
+        );
+      },
+    );
+
     test('processOnce renders receipt jobs as payment receipts', () async {
       final backend = _FakePrintJobBackend(
         jobs: [
@@ -319,6 +362,7 @@ PrintAgentJob _job({
   required String id,
   required String destinationId,
   required String ticketType,
+  double? unitPrice,
 }) {
   return PrintAgentJob(
     id: id,
@@ -331,7 +375,9 @@ PrintAgentJob _job({
       batchNo: 1,
       printedReason: 'initial',
       printedAt: '2026-07-06T12:00:00+07:00',
-      items: const [PrintTicketItem(label: 'Pho Bo', quantity: 1)],
+      items: [
+        PrintTicketItem(label: 'Pho Bo', quantity: 1, unitPrice: unitPrice),
+      ],
     ),
   );
 }
