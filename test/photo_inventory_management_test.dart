@@ -186,7 +186,7 @@ void main() {
     expect(find.byKey(const Key('photo_inventory_history_dialog')), findsOne);
     expect(find.byKey(const Key('photo_inventory_history_list')), findsOne);
     expect(find.text('Photo paper'), findsWidgets);
-    expect(find.textContaining('10'), findsOne);
+    expect(find.textContaining('10 → 8'), findsOne);
     expect(find.textContaining('Manager'), findsOne);
   });
 

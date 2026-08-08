@@ -24,6 +24,10 @@ void main() {
       'supabase/migrations/20260706018000_print_routing_v1_test_jobs.sql';
   const receiptQueueMigrationPath =
       'supabase/migrations/20260710002000_receipt_print_queue.sql';
+  const additionalOrderDeltaMigrationPath =
+      'supabase/migrations/20260808090000_additional_order_print_delta.sql';
+  const additionalOrderDeltaVerifyPath =
+      'scripts/verify_additional_order_print_delta.sql';
   const discountMigrationPath =
       'supabase/migrations/20260706010000_discount_staff_meal_v1_schema.sql';
   const destinationServicePath =
@@ -190,6 +194,40 @@ void main() {
       contains(
         "WHERE order_id = p_order_id\n    AND status IN ('pending', 'failed')",
       ),
+    );
+  });
+
+  test('additional-order print payload is built only from inserted rows', () {
+    final sql = readRepoFile(additionalOrderDeltaMigrationPath);
+    final verification = readRepoFile(additionalOrderDeltaVerifyPath);
+
+    expect(
+      sql,
+      contains('CREATE OR REPLACE FUNCTION public.add_items_to_order'),
+    );
+    expect(sql, contains('RETURNING * INTO v_item'));
+    expect(sql, contains("'item_id', v_item.id::text"));
+    expect(sql, contains("'menu_item_id', v_item.menu_item_id::text"));
+    expect(sql, contains("'supplemental', true"));
+    expect(
+      sql,
+      contains(
+        "ARRAY['kitchen', 'floor'],\n    v_print_items,\n    'added_items'",
+      ),
+    );
+    expect(
+      sql,
+      isNot(
+        contains("ARRAY['kitchen', 'floor'],\n    p_items,\n    'added_items'"),
+      ),
+    );
+    expect(
+      verification,
+      contains('ADDITIONAL_ORDER_PRINT_VERIFY_FUNCTION_MISSING'),
+    );
+    expect(
+      verification,
+      contains('ADDITIONAL_ORDER_PRINT_VERIFY_DELTA_CONTRACT_MISSING'),
     );
   });
 
