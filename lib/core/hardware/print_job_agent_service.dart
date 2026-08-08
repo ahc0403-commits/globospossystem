@@ -133,7 +133,10 @@ class PrintJobAgentService implements PrintAgentDriver {
 
     final bytes = await _buildBytes(job);
     var result = PrintResult.success;
-    final copyCount = job.ticket.ticket == 'floor' ? 2 : 1;
+    final copyCount = switch (job.ticket.ticket) {
+      'floor' || 'confirmation' => 2,
+      _ => 1,
+    };
     for (var copy = 0; copy < copyCount; copy++) {
       result = await _printerService.printReceipt(
         destination.ip,
