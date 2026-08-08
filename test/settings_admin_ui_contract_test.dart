@@ -70,9 +70,9 @@ void main() {
     expect(source, contains('settings_printer_destination_floor_label'));
     expect(source, contains('printerDestinationsProvider(storeId)'));
     expect(source, contains('PrinterDestinationDraft('));
-    expect(source, contains('enqueueTestPrintJob(destination.id)'));
+    expect(source, contains('testDestination(destination.id)'));
     expect(source, isNot(contains('PrintJobAgentService')));
-    expect(source, isNot(contains('testPrintDestination(destination.id)')));
+    expect(source, isNot(contains('enqueueTestPrintJob(destination.id)')));
     expect(source, contains('context.go(\'/print-station\')'));
     expect(
       source,
@@ -85,7 +85,7 @@ void main() {
       source,
       contains('context.l10n.settingsPrintRoutingDestinationsTitle'),
     );
-    expect(source, contains('context.l10n.kitchenReprintQueued'));
+    expect(source, contains('context.l10n.settingsTestPrintComplete'));
     expect(provider, contains('PrinterDestinationsNotifier'));
     expect(provider, contains('PrinterDestinationErrorCodes'));
     expect(provider, contains('Future<bool> upsertDestination'));
