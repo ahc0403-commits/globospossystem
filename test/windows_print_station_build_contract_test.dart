@@ -23,6 +23,8 @@ void main() {
     expect(runner, contains('GetIfEntry2'));
     expect(runner, contains('HardwareInterface'));
     expect(runnerCmake, contains('iphlpapi.lib'));
+    expect(runnerCmake, contains('"_WIN32_WINNT=0x0A00"'));
+    expect(runnerCmake, contains('"NTDDI_VERSION=0x0A000000"'));
     expect(script, contains('function Invoke-NativeCommand'));
     expect(script, contains(r'$exitCode = $LASTEXITCODE'));
     expect(script, contains(r'if ($exitCode -ne 0)'));
