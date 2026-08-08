@@ -19,6 +19,8 @@ void main() {
     expect(cmake, contains('set(BINARY_NAME "globos_print_station")'));
     expect(cmake, contains('set(CMAKE_POLICY_VERSION_MINIMUM 3.5'));
     expect(runner, contains('globos/network_capabilities'));
+    expect(runner, contains('#define _WIN32_WINNT 0x0A00'));
+    expect(runner, contains('#define NTDDI_VERSION 0x0A000000'));
     expect(runner, contains('#include <netioapi.h>'));
     expect(runner, contains('GetIfEntry2'));
     expect(runner, contains('HardwareInterface'));

@@ -1,6 +1,19 @@
+#if !defined(WINVER) || WINVER < 0x0A00
+#undef WINVER
+#define WINVER 0x0A00
+#endif
+#if !defined(_WIN32_WINNT) || _WIN32_WINNT < 0x0A00
+#undef _WIN32_WINNT
+#define _WIN32_WINNT 0x0A00
+#endif
+#if !defined(NTDDI_VERSION) || NTDDI_VERSION < 0x0A000000
+#undef NTDDI_VERSION
+#define NTDDI_VERSION 0x0A000000
+#endif
+
 #include <winsock2.h>
-#include <iphlpapi.h>
 #include <netioapi.h>
+#include <iphlpapi.h>
 
 #include "flutter_window.h"
 
