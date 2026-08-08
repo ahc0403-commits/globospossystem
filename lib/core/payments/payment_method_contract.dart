@@ -11,6 +11,8 @@ const String paymentMethodCreditSale = 'CREDITSALE';
 const String paymentMethodOther = 'OTHER';
 const String paymentMethodService = 'SERVICE';
 
+enum PaymentReportBucket { cash, card, bankTransfer, ePay }
+
 const Set<String> revenuePaymentMethods = <String>{
   paymentMethodCash,
   paymentMethodCreditCard,
@@ -79,6 +81,15 @@ String normalizePaymentMethodInput(String method) {
     default:
       return trimmed.toUpperCase();
   }
+}
+
+PaymentReportBucket paymentReportBucket(String method) {
+  return switch (normalizePaymentMethodInput(method)) {
+    paymentMethodCash => PaymentReportBucket.cash,
+    paymentMethodCreditCard || paymentMethodAtm => PaymentReportBucket.card,
+    paymentMethodBankTransfer => PaymentReportBucket.bankTransfer,
+    _ => PaymentReportBucket.ePay,
+  };
 }
 
 String paymentMethodDisplayLabel(String method) {

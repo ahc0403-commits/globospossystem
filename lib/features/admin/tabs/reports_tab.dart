@@ -9,6 +9,7 @@ import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
+import '../../../core/payments/payment_method_contract.dart';
 import '../../../core/services/daily_closing_service.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
@@ -30,6 +31,17 @@ class ReportsTab extends ConsumerStatefulWidget {
 
 String _formatVnd(NumberFormat currency, num amount) {
   return '${currency.format(amount)} VND';
+}
+
+String _reportPaymentMethodLabel(BuildContext context, String method) {
+  final normalized = normalizePaymentMethodInput(method);
+  return switch (normalized) {
+    paymentMethodCash => context.l10n.cash,
+    paymentMethodCreditCard => context.l10n.cashierCardMethod,
+    paymentMethodBankTransfer => context.l10n.cashierBankTransferMethod,
+    paymentMethodOther => context.l10n.cashierQrPaymentMethod,
+    _ => paymentMethodDisplayLabel(normalized),
+  };
 }
 
 class _ReportsTabState extends ConsumerState<ReportsTab> {
@@ -258,10 +270,6 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
           padding: const EdgeInsets.all(12),
           children: [
             compactHeader,
-            if (summary != null) ...[
-              const SizedBox(height: 8),
-              _ReportsInsightRow(summary: summary),
-            ],
             const SizedBox(height: 8),
             compactReportBody(),
             if (storeId != null) ...[
@@ -291,11 +299,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
               dateFormat: dateFormat,
             ),
             const SizedBox(height: 8),
-            if (summary != null) ...[
-              _ReportsInsightRow(summary: summary),
-              const SizedBox(height: 8),
-            ],
-            if (storeId != null) ...[
+            if (!hasOperationalData && storeId != null) ...[
               _DailyClosingSection(storeId: storeId),
               const SizedBox(height: 8),
             ],
@@ -336,8 +340,8 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                             builder: (context, reportConstraints) {
                               final compactReportHeight =
                                   reportConstraints.maxWidth < 1080
-                                  ? 520.0 + 12.0 + 520.0 + 12.0 + 240.0
-                                  : 520.0 + 12.0 + 240.0;
+                                  ? 520.0 + 12.0 + 520.0 + 12.0 + 240.0 + 260.0
+                                  : 520.0 + 12.0 + 240.0 + 260.0;
                               final content = Column(
                                 children: [
                                   Expanded(
@@ -524,6 +528,10 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                       ),
                                     ),
                                   ),
+                                  if (storeId != null) ...[
+                                    const SizedBox(height: 12),
+                                    _DailyClosingSection(storeId: storeId),
+                                  ],
                                 ],
                               );
 
@@ -583,18 +591,12 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     required DateFormat dateFormat,
   }) {
     final l10n = context.l10n;
-    final grossOrderAmount = summary == null
-        ? '—'
-        : _formatVnd(currency, summary.grossOrderAmount);
     final totalRevenue = summary == null
         ? '—'
         : _formatVnd(currency, summary.totalRevenue);
-    final serviceRevenue = summary == null
+    final averageOrder = summary == null || summary.paidOrders == 0
         ? '—'
-        : _formatVnd(currency, summary.serviceTotal);
-    final averageOrder = summary == null || summary.totalOrders == 0
-        ? '—'
-        : _formatVnd(currency, summary.totalRevenue / summary.totalOrders);
+        : _formatVnd(currency, summary.totalRevenue / summary.paidOrders);
     final cancellationTone = summary == null || summary.cancelledAmount == 0
         ? PosColors.textSecondary
         : PosColors.warning;
@@ -603,28 +605,15 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
         (summary?.missingProofPhotosCount ?? 0) > 0 ||
         (summary?.cancelledOrders ?? 0) > 0;
     final reportMetrics = [
-      ToastMetric(label: l10n.reportsGrossOrderAmount, value: grossOrderAmount),
       ToastMetric(
         label: l10n.reportsNetSales,
         value: totalRevenue,
         tone: PosColors.success,
       ),
       ToastMetric(
-        label: l10n.reportsServiceExpenses,
-        value: serviceRevenue,
-        tone: PosColors.textSecondary,
-      ),
-      ToastMetric(
-        label: l10n.reportsTotalOrders,
-        value: summary == null ? '—' : '${summary.totalOrders}',
+        label: l10n.reportsPaidOrders,
+        value: summary == null ? '—' : '${summary.paidOrders}',
         tone: PosColors.info,
-      ),
-      ToastMetric(
-        label: l10n.pending,
-        value: summary == null ? '—' : '${summary.openOrders}',
-        tone: (summary?.openOrders ?? 0) > 0
-            ? PosColors.warning
-            : PosColors.textSecondary,
       ),
       ToastMetric(
         label: l10n.reportsAverageOrderAmount,
@@ -665,7 +654,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                   key: const Key('reports_order_accuracy_metrics'),
                   child: ToastMetricStrip(
                     dense: true,
-                    maxColumns: 6,
+                    maxColumns: 4,
                     metrics: reportMetrics,
                   ),
                 ),
@@ -1241,7 +1230,8 @@ class _ReportsBreakdownPanel extends StatelessWidget {
         _ReportsSectionTitle(
           title: context.l10n.reportsChannelMix,
           action: Text(
-            context.l10n.reportsOrderCount(summary.totalOrders),
+            '${context.l10n.reportsTotalOrders} ${summary.totalOrders} · '
+            '${context.l10n.pending} ${summary.openOrders}',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: PosColors.textSecondary,
               fontWeight: FontWeight.w700,
@@ -1269,7 +1259,19 @@ class _ReportsBreakdownPanel extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        _ReportsSectionTitle(title: context.l10n.cashierPaymentMethod),
+        _ReportsSectionTitle(
+          title: context.l10n.cashierPaymentMethod,
+          action: Text(
+            '${context.l10n.reportsPaymentVariance} '
+            '${_formatVnd(currency, summary.paymentVariance)}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: summary.paymentVariance.abs() < 0.005
+                  ? PosColors.success
+                  : PosColors.warning,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
         const SizedBox(height: 10),
         if (summary.paymentMethodBreakdown.isEmpty)
           PosEmptyState(
@@ -1295,7 +1297,7 @@ class _ReportsBreakdownPanel extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        method.method,
+                        _reportPaymentMethodLabel(context, method.method),
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -1595,7 +1597,8 @@ class _DailyTable extends StatelessWidget {
         ToastDenseColumn(label: l10n.total),
         ToastDenseColumn(label: l10n.cash),
         ToastDenseColumn(label: l10n.cashierCardMethod),
-        ToastDenseColumn(label: l10n.pay),
+        ToastDenseColumn(label: l10n.cashierBankTransferMethod),
+        ToastDenseColumn(label: l10n.cashierQrPaymentMethod),
       ],
       rows: [
         for (final row in data.dailyBreakdown)
@@ -1607,6 +1610,7 @@ class _DailyTable extends StatelessWidget {
               vnd(row.total),
               vnd(row.cashAmount),
               vnd(row.cardAmount),
+              vnd(row.bankTransferAmount),
               vnd(row.payAmount),
             ],
           ),
@@ -1620,6 +1624,7 @@ class _DailyTable extends StatelessWidget {
           vnd(data.totalRevenue),
           vnd(data.cashTotal),
           vnd(data.cardTotal),
+          vnd(data.bankTransferTotal),
           vnd(data.payTotal),
         ],
       ),
@@ -1739,10 +1744,19 @@ class _PaymentMethodRow extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
+          const SizedBox(width: 12),
+          Text(
+            '${l10n.cashierBankTransferMethod} ${_formatVnd(currency, summary.bankTransferTotal)}',
+            style: AppFonts.system(
+              color: AppColors.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           if (summary.payTotal > 0) ...[
             const SizedBox(width: 12),
             Text(
-              '${l10n.pay} ${_formatVnd(currency, summary.payTotal)}',
+              '${l10n.cashierQrPaymentMethod} ${_formatVnd(currency, summary.payTotal)}',
               style: AppFonts.system(
                 color: AppColors.textPrimary,
                 fontSize: 13,
@@ -1750,6 +1764,17 @@ class _PaymentMethodRow extends StatelessWidget {
               ),
             ),
           ],
+          const SizedBox(width: 12),
+          Text(
+            '${l10n.reportsPaymentVariance} ${_formatVnd(currency, summary.paymentVariance)}',
+            style: AppFonts.system(
+              color: summary.paymentVariance.abs() < 0.005
+                  ? AppColors.statusAvailable
+                  : AppColors.amber500,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );

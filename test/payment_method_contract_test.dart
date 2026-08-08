@@ -32,4 +32,17 @@ void main() {
       'Bank Transfer',
     );
   });
+
+  test('report buckets preserve cashier bank transfer as its own category', () {
+    expect(paymentReportBucket(paymentMethodCash), PaymentReportBucket.cash);
+    expect(
+      paymentReportBucket(paymentMethodCreditCard),
+      PaymentReportBucket.card,
+    );
+    expect(
+      paymentReportBucket(paymentMethodBankTransfer),
+      PaymentReportBucket.bankTransfer,
+    );
+    expect(paymentReportBucket(paymentMethodOther), PaymentReportBucket.ePay);
+  });
 }
