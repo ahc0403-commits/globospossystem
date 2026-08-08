@@ -101,4 +101,24 @@ void main() {
     expect(provider, isNot(contains('Enter a printer name.')));
     expect(provider, isNot(contains('Failed to save printer routing.')));
   });
+
+  test('LAN printer test uses the current IP and TCP port fields', () {
+    final source = readRepoFile('lib/features/admin/tabs/settings_tab.dart');
+    final provider = readRepoFile(
+      'lib/features/settings/printer_provider.dart',
+    );
+
+    expect(source, contains("Key('settings_printer_ip')"));
+    expect(source, contains("Key('settings_printer_port')"));
+    expect(source, contains('ip: _printerIpController.text'));
+    expect(source, contains('port: _printerPortController.text'));
+    expect(source, isNot(contains('settingsPrinterWifiHint')));
+    expect(provider, contains("_portKey = 'printer_port'"));
+    expect(provider, contains('port: targetPort'));
+    expect(provider, contains('port: port'));
+    expect(
+      provider.indexOf('state = state.copyWith(\n      printerIp: normalized'),
+      lessThan(provider.indexOf('await prefs.setString(_ipKey, normalized)')),
+    );
+  });
 }
