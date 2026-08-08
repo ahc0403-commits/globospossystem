@@ -1830,9 +1830,10 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                     final port = parseIntInput(portController.text);
                     final floorLabel = floorController.text.trim();
                     if (name.isEmpty ||
-                        ip.isEmpty ||
+                        !isValidPrinterIpv4Address(ip) ||
                         port == null ||
                         port <= 0 ||
+                        port > 65535 ||
                         (purpose == 'floor' && floorLabel.isEmpty)) {
                       showErrorToast(
                         dialogContext,
