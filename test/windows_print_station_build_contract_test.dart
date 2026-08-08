@@ -19,6 +19,7 @@ void main() {
     expect(cmake, contains('set(BINARY_NAME "globos_print_station")'));
     expect(cmake, contains('set(CMAKE_POLICY_VERSION_MINIMUM 3.5'));
     expect(runner, contains('globos/network_capabilities'));
+    expect(runner, contains('#include <netioapi.h>'));
     expect(runner, contains('GetIfEntry2'));
     expect(runner, contains('HardwareInterface'));
     expect(runnerCmake, contains('iphlpapi.lib'));

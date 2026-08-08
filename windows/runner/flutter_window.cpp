@@ -1,5 +1,6 @@
 #include <winsock2.h>
 #include <iphlpapi.h>
+#include <netioapi.h>
 
 #include "flutter_window.h"
 
