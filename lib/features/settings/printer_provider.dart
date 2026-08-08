@@ -78,51 +78,59 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
 
   Future<void> setIp(String ip) async {
     final normalized = ip.trim();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_ipKey, normalized);
     state = state.copyWith(
       printerIp: normalized,
       clearTestResult: true,
       clearError: true,
     );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_ipKey, normalized);
   }
 
   Future<void> setPort(String port) async {
     final normalized = port.trim();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_portKey, normalized);
     state = state.copyWith(
       printerPort: normalized,
       clearTestResult: true,
       clearError: true,
     );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_portKey, normalized);
   }
 
   Future<void> setConnectionType(PrinterConnectionType connectionType) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_connectionTypeKey, connectionType.name);
     state = state.copyWith(
       connectionType: connectionType,
       clearTestResult: true,
       clearError: true,
     );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_connectionTypeKey, connectionType.name);
   }
 
-  int? _validatedPort() {
-    final port = int.tryParse(state.printerPort);
+  int? _validatedPort(String value) {
+    final port = int.tryParse(value);
     if (port == null || port < 1 || port > 65535) {
       return null;
     }
     return port;
   }
 
-  Future<void> testConnection() async {
-    if (state.printerIp.isEmpty) {
+  Future<void> testConnection({String? ip, String? port}) async {
+    final targetIp = (ip ?? state.printerIp).trim();
+    final targetPortText = (port ?? state.printerPort).trim();
+    state = state.copyWith(
+      printerIp: targetIp,
+      printerPort: targetPortText,
+      clearError: true,
+      clearTestResult: true,
+    );
+    if (targetIp.isEmpty) {
       state = state.copyWith(error: 'Enter the IP address first.');
       return;
     }
-    final port = _validatedPort();
-    if (port == null) {
+    final targetPort = _validatedPort(targetPortText);
+    if (targetPort == null) {
       state = state.copyWith(error: 'Enter a valid printer port (1-65535).');
       return;
     }
@@ -132,7 +140,7 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
       clearError: true,
       clearTestResult: true,
     );
-    final ok = await _service.testConnection(state.printerIp, port: port);
+    final ok = await _service.testConnection(targetIp, port: targetPort);
     state = state.copyWith(isTesting: false, lastTestResult: ok);
   }
 
@@ -140,7 +148,7 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
     if (state.printerIp.isEmpty) {
       return PrintResult.connectionFailed;
     }
-    final port = _validatedPort();
+    final port = _validatedPort(state.printerPort);
     if (port == null) {
       state = state.copyWith(error: 'Enter a valid printer port (1-65535).');
       return PrintResult.connectionFailed;

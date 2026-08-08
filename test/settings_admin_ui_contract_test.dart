@@ -113,11 +113,21 @@ void main() {
     expect(source, contains("Key('settings_printer_port')"));
     expect(source, contains('settingsLanConnectionTest'));
     expect(source, contains('settingsWifiConnectionTest'));
+    expect(source, contains('ip: _printerIpController.text'));
+    expect(source, contains('port: _printerPortController.text'));
     expect(provider, contains("_portKey = 'printer_port'"));
     expect(
       provider,
       contains("_connectionTypeKey = 'printer_connection_type'"),
     );
     expect(provider, contains('port: port'));
+    expect(
+      provider,
+      contains('final targetIp = (ip ?? state.printerIp).trim()'),
+    );
+    expect(
+      provider.indexOf('state = state.copyWith(\n      printerIp: normalized'),
+      lessThan(provider.indexOf('await prefs.setString(_ipKey, normalized)')),
+    );
   });
 }
