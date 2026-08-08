@@ -2,6 +2,7 @@ import 'package:excel/excel.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/payments/payment_method_contract.dart';
 import '../../main.dart';
 
 class DailyRevenue {
@@ -12,7 +13,9 @@ class DailyRevenue {
     required this.total,
     this.cashAmount = 0,
     this.cardAmount = 0,
+    this.bankTransferAmount = 0,
     this.payAmount = 0,
+    this.paymentVariance = 0,
   });
 
   final DateTime date;
@@ -21,7 +24,9 @@ class DailyRevenue {
   final double total;
   final double cashAmount;
   final double cardAmount;
+  final double bankTransferAmount;
   final double payAmount;
+  final double paymentVariance;
 }
 
 class HourlyRevenue {
@@ -43,6 +48,82 @@ class PaymentMethodBreakdown {
   final int count;
   final double totalAmount;
   final double proofCompletePct;
+}
+
+class PaymentMethodTotals {
+  const PaymentMethodTotals({
+    required this.cash,
+    required this.card,
+    required this.bankTransfer,
+    required this.ePay,
+  });
+
+  final double cash;
+  final double card;
+  final double bankTransfer;
+  final double ePay;
+
+  double get total => cash + card + bankTransfer + ePay;
+}
+
+PaymentMethodTotals aggregatePaymentMethodTotals(
+  Iterable<Map<String, dynamic>> payments,
+) {
+  var cash = 0.0;
+  var card = 0.0;
+  var bankTransfer = 0.0;
+  var ePay = 0.0;
+
+  for (final payment in payments) {
+    final amount = _toDouble(payment['amount']);
+    switch (paymentReportBucket(payment['method']?.toString() ?? '')) {
+      case PaymentReportBucket.cash:
+        cash += amount;
+      case PaymentReportBucket.card:
+        card += amount;
+      case PaymentReportBucket.bankTransfer:
+        bankTransfer += amount;
+      case PaymentReportBucket.ePay:
+        ePay += amount;
+    }
+  }
+
+  return PaymentMethodTotals(
+    cash: cash,
+    card: card,
+    bankTransfer: bankTransfer,
+    ePay: ePay,
+  );
+}
+
+String revenuePaymentTransactionKey(
+  Map<String, dynamic> payment, {
+  required int fallbackIndex,
+}) {
+  final orderId = payment['order_id']?.toString().trim() ?? '';
+  if (orderId.isNotEmpty) return 'order:$orderId';
+
+  final paymentId = payment['id']?.toString().trim() ?? '';
+  if (paymentId.isNotEmpty) return 'payment:$paymentId';
+
+  return 'anonymous:$fallbackIndex';
+}
+
+int countPaidRevenueOrders(Iterable<Map<String, dynamic>> payments) {
+  final keys = <String>{};
+  var index = 0;
+  for (final payment in payments) {
+    keys.add(revenuePaymentTransactionKey(payment, fallbackIndex: index));
+    index += 1;
+  }
+  return keys.length;
+}
+
+double aggregateRevenueSalesTotal(Iterable<Map<String, dynamic>> payments) {
+  return payments.fold<double>(
+    0,
+    (sum, payment) => sum + _paymentSalesAmount(payment),
+  );
 }
 
 class PhotoObjetReportTotals {
@@ -118,11 +199,15 @@ class ReportSummary {
     this.cancelledAmount = 0,
     required this.totalOrders,
     required this.completedOrders,
+    required this.paidOrders,
     required this.openOrders,
     required this.dailyBreakdown,
     this.cashTotal = 0,
     this.cardTotal = 0,
+    this.bankTransferTotal = 0,
     this.payTotal = 0,
+    this.paymentReceivedTotal = 0,
+    this.paymentVariance = 0,
     this.cancelledOrders = 0,
     this.cancelledItems = 0,
     this.hourlyBreakdown = const [],
@@ -142,11 +227,15 @@ class ReportSummary {
   double get grossOrderAmount => totalRevenue + cancelledAmount;
   final int totalOrders;
   final int completedOrders;
+  final int paidOrders;
   final int openOrders;
   final List<DailyRevenue> dailyBreakdown;
   final double cashTotal;
   final double cardTotal;
+  final double bankTransferTotal;
   final double payTotal;
+  final double paymentReceivedTotal;
+  final double paymentVariance;
   final int cancelledOrders;
   final int cancelledItems;
   final List<HourlyRevenue> hourlyBreakdown;
@@ -232,8 +321,12 @@ class ReportNotifier extends StateNotifier<ReportState> {
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
-      final startIso = state.startDate.toIso8601String();
-      final endIso = state.endDate.toIso8601String();
+      final reportRange = reportUtcRange(state.startDate, state.endDate);
+      final startIso = reportRange.startUtc.toIso8601String();
+      final endExclusiveIso = reportRange.endExclusiveUtc.toIso8601String();
+      final endInclusiveIso = reportRange.endExclusiveUtc
+          .subtract(const Duration(microseconds: 1))
+          .toIso8601String();
       final startClosingDate = DateFormat('yyyyMMdd').format(state.startDate);
       final endClosingDate = DateFormat('yyyyMMdd').format(state.endDate);
       final startSaleDate = DateFormat('yyyy-MM-dd').format(state.startDate);
@@ -242,12 +335,12 @@ class ReportNotifier extends StateNotifier<ReportState> {
       final paymentsRevenueResponse = await supabase
           .from('payments')
           .select(
-            'amount, method, created_at, proof_required, proof_photo_url, orders(sales_channel)',
+            'id, order_id, amount, amount_portion, method, created_at, proof_required, proof_photo_url, orders(sales_channel)',
           )
           .eq('restaurant_id', storeId)
           .eq('is_revenue', true)
           .gte('created_at', startIso)
-          .lte('created_at', endIso);
+          .lt('created_at', endExclusiveIso);
 
       final externalSalesResponse = await supabase
           .from('external_sales')
@@ -256,7 +349,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
           .eq('is_revenue', true)
           .eq('order_status', 'completed')
           .gte('completed_at', startIso)
-          .lte('completed_at', endIso);
+          .lt('completed_at', endExclusiveIso);
 
       final photoObjetSalesResponse = await supabase
           .from('v_photo_objet_daily_summary')
@@ -273,21 +366,21 @@ class ReportNotifier extends StateNotifier<ReportState> {
           .eq('restaurant_id', storeId)
           .eq('is_revenue', false)
           .gte('created_at', startIso)
-          .lte('created_at', endIso);
+          .lt('created_at', endExclusiveIso);
 
       final ordersResponse = await supabase
           .from('orders')
           .select('id, status, created_at')
           .eq('restaurant_id', storeId)
           .gte('created_at', startIso)
-          .lte('created_at', endIso);
+          .lt('created_at', endExclusiveIso);
 
       final cancelledAmountResponse = await supabase.rpc(
         'get_store_sales_cancellation_total',
         params: {
           'p_store_id': storeId,
           'p_start_at': startIso,
-          'p_end_at': endIso,
+          'p_end_at': endInclusiveIso,
         },
       );
 
@@ -298,7 +391,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
           .eq('status', 'cancelled')
           .eq('orders.restaurant_id', storeId)
           .gte('orders.created_at', startIso)
-          .lte('orders.created_at', endIso);
+          .lt('orders.created_at', endExclusiveIso);
 
       final einvoiceJobsResponse = await supabase
           .from('einvoice_jobs')
@@ -307,7 +400,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
           )
           .eq('orders.restaurant_id', storeId)
           .gte('created_at', startIso)
-          .lte('created_at', endIso);
+          .lt('created_at', endExclusiveIso);
 
       final wt08AuditResponse = await supabase
           .from('audit_logs')
@@ -318,21 +411,29 @@ class ReportNotifier extends StateNotifier<ReportState> {
           .order('created_at', ascending: false);
 
       double dineInRevenue = 0;
-      double cashTotal = 0;
-      double cardTotal = 0;
-      double payTotal = 0;
+      final revenuePayments = List<Map<String, dynamic>>.from(
+        paymentsRevenueResponse,
+      );
+      final paymentTotals = aggregatePaymentMethodTotals(revenuePayments);
+      final paymentSalesTotal = aggregateRevenueSalesTotal(revenuePayments);
       final dailyMap = <String, _DailyAccumulator>{};
       final hourlyMap = <int, double>{};
       final methodMap = <String, _PaymentMethodAccumulator>{};
       var proofRequiredCount = 0;
       var missingProofPhotosCount = 0;
+      var paymentIndex = 0;
 
-      for (final row in paymentsRevenueResponse) {
-        final payment = Map<String, dynamic>.from(row);
-        final amount = _toDouble(payment['amount']);
-        final method = (payment['method']?.toString() ?? '').toLowerCase();
-        final createdAt =
-            _parseDateTime(payment['created_at']) ?? state.startDate;
+      for (final payment in revenuePayments) {
+        final receivedAmount = _toDouble(payment['amount']);
+        final salesAmount = _paymentSalesAmount(payment);
+        final normalizedMethod = normalizePaymentMethodInput(
+          payment['method']?.toString() ?? '',
+        );
+        final method = normalizedMethod.isEmpty ? 'UNKNOWN' : normalizedMethod;
+        final parsedCreatedAt = _parseDateTime(payment['created_at']);
+        final createdAt = parsedCreatedAt == null
+            ? state.startDate
+            : toHoChiMinhBusinessTime(parsedCreatedAt);
         final dateKey = DateFormat('yyyy-MM-dd').format(createdAt);
         final accumulator = dailyMap.putIfAbsent(
           dateKey,
@@ -342,7 +443,8 @@ class ReportNotifier extends StateNotifier<ReportState> {
         );
 
         // Hourly aggregation
-        hourlyMap[createdAt.hour] = (hourlyMap[createdAt.hour] ?? 0) + amount;
+        hourlyMap[createdAt.hour] =
+            (hourlyMap[createdAt.hour] ?? 0) + salesAmount;
 
         if (payment['proof_required'] == true) {
           proofRequiredCount += 1;
@@ -352,13 +454,18 @@ class ReportNotifier extends StateNotifier<ReportState> {
           }
         }
 
-        final methodLabel = _paymentMethodLabel(method);
+        final methodLabel = method;
         final methodAccumulator = methodMap.putIfAbsent(
           methodLabel,
           () => _PaymentMethodAccumulator(method: methodLabel),
         );
-        methodAccumulator.count += 1;
-        methodAccumulator.totalAmount += amount;
+        final transactionKey = revenuePaymentTransactionKey(
+          payment,
+          fallbackIndex: paymentIndex,
+        );
+        paymentIndex += 1;
+        methodAccumulator.transactionKeys.add(transactionKey);
+        methodAccumulator.totalAmount += receivedAmount;
         if (payment['proof_required'] == true) {
           methodAccumulator.proofRequired += 1;
           final proofUrl = payment['proof_photo_url']?.toString() ?? '';
@@ -368,25 +475,18 @@ class ReportNotifier extends StateNotifier<ReportState> {
         }
 
         // Payment method aggregation
-        switch (method) {
-          case 'cash':
-            cashTotal += amount;
-            accumulator.cash += amount;
-          case 'creditcard':
-          case 'atm':
-          case 'banktransfer':
-            cardTotal += amount;
-            accumulator.card += amount;
-          case 'momo':
-          case 'zalopay':
-          case 'vnpay':
-          case 'shopeepay':
-          case 'voucher':
-          case 'creditsale':
-          case 'other':
-            payTotal += amount;
-            accumulator.pay += amount;
+        switch (paymentReportBucket(method)) {
+          case PaymentReportBucket.cash:
+            accumulator.cash += receivedAmount;
+          case PaymentReportBucket.card:
+            accumulator.card += receivedAmount;
+          case PaymentReportBucket.bankTransfer:
+            accumulator.bankTransfer += receivedAmount;
+          case PaymentReportBucket.ePay:
+            accumulator.pay += receivedAmount;
         }
+        accumulator.paymentSales += salesAmount;
+        accumulator.paymentReceived += receivedAmount;
 
         String channel = '';
         final orderRaw = payment['orders'];
@@ -395,10 +495,10 @@ class ReportNotifier extends StateNotifier<ReportState> {
         }
         final normalized = channel.toLowerCase();
         if (normalized == 'delivery') {
-          accumulator.delivery += amount;
+          accumulator.delivery += salesAmount;
         } else {
-          accumulator.dineIn += amount;
-          dineInRevenue += amount;
+          accumulator.dineIn += salesAmount;
+          dineInRevenue += salesAmount;
         }
       }
 
@@ -406,8 +506,10 @@ class ReportNotifier extends StateNotifier<ReportState> {
       for (final row in externalSalesResponse) {
         final external = Map<String, dynamic>.from(row);
         final amount = _toDouble(external['net_amount']);
-        final completedAt =
-            _parseDateTime(external['completed_at']) ?? state.startDate;
+        final parsedCompletedAt = _parseDateTime(external['completed_at']);
+        final completedAt = parsedCompletedAt == null
+            ? state.startDate
+            : toHoChiMinhBusinessTime(parsedCompletedAt);
         final dateKey = DateFormat('yyyy-MM-dd').format(completedAt);
         final accumulator = dailyMap.putIfAbsent(
           dateKey,
@@ -419,6 +521,8 @@ class ReportNotifier extends StateNotifier<ReportState> {
             ),
           ),
         );
+        hourlyMap[completedAt.hour] =
+            (hourlyMap[completedAt.hour] ?? 0) + amount;
         accumulator.delivery += amount;
         deliveryRevenue += amount;
       }
@@ -444,7 +548,9 @@ class ReportNotifier extends StateNotifier<ReportState> {
       serviceTotal += photoObjetTotals.serviceTotal;
 
       final totalOrders =
-          ordersResponse.length + photoObjetTotals.transactionCount;
+          ordersResponse.length +
+          externalSalesResponse.length +
+          photoObjetTotals.transactionCount;
       final completedOrders =
           ordersResponse
               .where(
@@ -452,6 +558,11 @@ class ReportNotifier extends StateNotifier<ReportState> {
                     order['status']?.toString().toLowerCase() == 'completed',
               )
               .length +
+          externalSalesResponse.length +
+          photoObjetTotals.transactionCount;
+      final paidOrders =
+          countPaidRevenueOrders(revenuePayments) +
+          externalSalesResponse.length +
           photoObjetTotals.transactionCount;
       final cancelledOrders = ordersResponse
           .where(
@@ -510,7 +621,9 @@ class ReportNotifier extends StateNotifier<ReportState> {
         }
         final createdAt = _parseDateTime(order['created_at']);
         if (createdAt == null) return false;
-        final orderDate = DateFormat('yyyyMMdd').format(createdAt.toLocal());
+        final orderDate = DateFormat(
+          'yyyyMMdd',
+        ).format(toHoChiMinhBusinessTime(createdAt));
         return successfulClosingDates.contains(orderDate);
       }).length;
       final proofCompletePercent = proofRequiredCount == 0
@@ -538,7 +651,9 @@ class ReportNotifier extends StateNotifier<ReportState> {
                   total: day.dineIn + day.delivery,
                   cashAmount: day.cash,
                   cardAmount: day.card,
+                  bankTransferAmount: day.bankTransfer,
                   payAmount: day.pay,
+                  paymentVariance: day.paymentReceived - day.paymentSales,
                 ),
               )
               .toList()
@@ -552,11 +667,15 @@ class ReportNotifier extends StateNotifier<ReportState> {
         cancelledAmount: _toDouble(cancelledAmountResponse),
         totalOrders: totalOrders,
         completedOrders: completedOrders,
+        paidOrders: paidOrders,
         openOrders: openOrders,
         dailyBreakdown: breakdown,
-        cashTotal: cashTotal,
-        cardTotal: cardTotal,
-        payTotal: payTotal,
+        cashTotal: paymentTotals.cash,
+        cardTotal: paymentTotals.card,
+        bankTransferTotal: paymentTotals.bankTransfer,
+        payTotal: paymentTotals.ePay,
+        paymentReceivedTotal: paymentTotals.total,
+        paymentVariance: paymentTotals.total - paymentSalesTotal,
         cancelledOrders: cancelledOrders,
         cancelledItems: cancelledItems,
         hourlyBreakdown: hourlyBreakdown,
@@ -620,6 +739,14 @@ class ReportNotifier extends StateNotifier<ReportState> {
       DoubleCellValue(summary.totalRevenue),
     ]);
     sheet.appendRow([
+      TextCellValue('Payment Received Total'),
+      DoubleCellValue(summary.paymentReceivedTotal),
+    ]);
+    sheet.appendRow([
+      TextCellValue('Payment Variance'),
+      DoubleCellValue(summary.paymentVariance),
+    ]);
+    sheet.appendRow([
       TextCellValue('Service Revenue (Coin Payments)'),
       DoubleCellValue(summary.serviceTotal),
     ]);
@@ -670,6 +797,10 @@ class ReportNotifier extends StateNotifier<ReportState> {
       IntCellValue(summary.completedOrders),
     ]);
     sheet.appendRow([
+      TextCellValue('Paid Sales Orders'),
+      IntCellValue(summary.paidOrders),
+    ]);
+    sheet.appendRow([
       TextCellValue('Cancelled Orders'),
       IntCellValue(summary.cancelledOrders),
     ]);
@@ -688,7 +819,9 @@ class ReportNotifier extends StateNotifier<ReportState> {
       TextCellValue('Sales Total'),
       TextCellValue('Cash'),
       TextCellValue('Card'),
+      TextCellValue('Bank Transfer'),
       TextCellValue('Pay'),
+      TextCellValue('Payment Variance'),
     ]);
 
     for (final day in summary.dailyBreakdown) {
@@ -699,7 +832,9 @@ class ReportNotifier extends StateNotifier<ReportState> {
         DoubleCellValue(day.total),
         DoubleCellValue(day.cashAmount),
         DoubleCellValue(day.cardAmount),
+        DoubleCellValue(day.bankTransferAmount),
         DoubleCellValue(day.payAmount),
+        DoubleCellValue(day.paymentVariance),
       ]);
     }
 
@@ -711,7 +846,9 @@ class ReportNotifier extends StateNotifier<ReportState> {
       DoubleCellValue(summary.totalRevenue),
       DoubleCellValue(summary.cashTotal),
       DoubleCellValue(summary.cardTotal),
+      DoubleCellValue(summary.bankTransferTotal),
       DoubleCellValue(summary.payTotal),
+      DoubleCellValue(summary.paymentVariance),
     ]);
 
     final bytes = excel.encode();
@@ -725,6 +862,13 @@ double _toDouble(dynamic value) {
     String v => double.tryParse(v) ?? 0,
     _ => 0,
   };
+}
+
+double _paymentSalesAmount(Map<String, dynamic> payment) {
+  final amountPortion = payment['amount_portion'];
+  return amountPortion == null
+      ? _toDouble(payment['amount'])
+      : _toDouble(amountPortion);
 }
 
 int _toInt(dynamic value) {
@@ -742,6 +886,28 @@ DateTime? _parseDateTime(dynamic value) {
   return DateTime.tryParse(value.toString());
 }
 
+DateTime toHoChiMinhBusinessTime(DateTime timestamp) {
+  return timestamp.toUtc().add(const Duration(hours: 7));
+}
+
+({DateTime startUtc, DateTime endExclusiveUtc}) reportUtcRange(
+  DateTime start,
+  DateTime end,
+) {
+  const offset = Duration(hours: 7);
+  final startUtc = DateTime.utc(
+    start.year,
+    start.month,
+    start.day,
+  ).subtract(offset);
+  final endExclusiveUtc = DateTime.utc(
+    end.year,
+    end.month,
+    end.day + 1,
+  ).subtract(offset);
+  return (startUtc: startUtc, endExclusiveUtc: endExclusiveUtc);
+}
+
 class _DailyAccumulator {
   _DailyAccumulator({required this.date});
 
@@ -750,7 +916,10 @@ class _DailyAccumulator {
   double delivery = 0;
   double cash = 0;
   double card = 0;
+  double bankTransfer = 0;
   double pay = 0;
+  double paymentSales = 0;
+  double paymentReceived = 0;
 }
 
 class _PhotoObjetDailyAccumulator {
@@ -764,7 +933,7 @@ class _PaymentMethodAccumulator {
   _PaymentMethodAccumulator({required this.method});
 
   final String method;
-  int count = 0;
+  final Set<String> transactionKeys = <String>{};
   double totalAmount = 0;
   int proofRequired = 0;
   int proofCompleted = 0;
@@ -775,26 +944,11 @@ class _PaymentMethodAccumulator {
         : (proofCompleted / proofRequired) * 100;
     return PaymentMethodBreakdown(
       method: method,
-      count: count,
+      count: transactionKeys.length,
       totalAmount: totalAmount,
       proofCompletePct: proofCompletePct,
     );
   }
-}
-
-String _paymentMethodLabel(String method) {
-  return switch (method) {
-    'cash' => 'CASH',
-    'creditcard' || 'atm' || 'banktransfer' => 'CARD',
-    'momo' ||
-    'zalopay' ||
-    'vnpay' ||
-    'shopeepay' ||
-    'voucher' ||
-    'creditsale' ||
-    'other' => 'PAY',
-    _ => method.toUpperCase(),
-  };
 }
 
 final reportProvider = StateNotifierProvider<ReportNotifier, ReportState>(
