@@ -17,6 +17,10 @@ class DailyClosingRecord {
     required this.paymentsCash,
     required this.paymentsCard,
     required this.paymentsPay,
+    required this.openingCashAmount,
+    required this.expectedCashAmount,
+    required this.countedCashAmount,
+    required this.cashVariance,
     required this.serviceCount,
     required this.serviceTotal,
     required this.lowStockCount,
@@ -36,6 +40,10 @@ class DailyClosingRecord {
   final double paymentsCash;
   final double paymentsCard;
   final double paymentsPay;
+  final double openingCashAmount;
+  final double expectedCashAmount;
+  final double countedCashAmount;
+  final double cashVariance;
   final int serviceCount;
   final double serviceTotal;
   final int lowStockCount;
@@ -56,11 +64,16 @@ class DailyClosingRecord {
       paymentsCash: _toDouble(json['payments_cash']),
       paymentsCard: _toDouble(json['payments_card']),
       paymentsPay: _toDouble(json['payments_pay']),
+      openingCashAmount: _toDouble(json['opening_cash_amount']),
+      expectedCashAmount: _toDouble(json['expected_cash_amount']),
+      countedCashAmount: _toDouble(json['counted_cash_amount']),
+      cashVariance: _toDouble(json['cash_variance']),
       serviceCount: _toInt(json['service_count']),
       serviceTotal: _toDouble(json['service_total']),
       lowStockCount: _toInt(json['low_stock_count']),
       notes: json['notes']?.toString(),
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+      createdAt:
+          DateTime.tryParse(json['created_at']?.toString() ?? '') ??
           DateTime.now(),
     );
   }

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../utils/live_sync_scope.dart';
+import 'network_capability_service.dart';
 import 'printer_service.dart';
 import 'receipt_builder.dart';
 import 'wifi_printer_service.dart';
@@ -20,11 +21,15 @@ class PrintJobAgentService implements PrintAgentDriver {
   PrintJobAgentService({
     PrintJobBackend? backend,
     PrinterService? printerService,
+    NetworkCapabilityService? networkCapabilityService,
   }) : _backend = backend ?? SupabasePrintJobBackend(Supabase.instance.client),
-       _printerService = printerService ?? createPrinterService();
+       _printerService = printerService ?? createPrinterService(),
+       _networkCapabilityService =
+           networkCapabilityService ?? const NativeNetworkCapabilityService();
 
   final PrintJobBackend _backend;
   final PrinterService _printerService;
+  final NetworkCapabilityService _networkCapabilityService;
   Timer? _pollTimer;
   bool _isProcessing = false;
   int _lifecycleGeneration = 0;
@@ -132,25 +137,25 @@ class PrintJobAgentService implements PrintAgentDriver {
     }
 
     final bytes = await _buildBytes(job);
-    var result = PrintResult.success;
     final copyCount = switch (job.ticket.ticket) {
       'floor' || 'confirmation' => 2,
       _ => 1,
     };
-    for (var copy = 0; copy < copyCount; copy++) {
-      result = await _printerService.printReceipt(
-        destination.ip,
-        bytes,
-        port: destination.port,
-      );
-      if (result != PrintResult.success) break;
-    }
-    final ok = result == PrintResult.success;
-    await _backend.completeJob(job.id, ok: ok, error: ok ? null : result.name);
+    final outcome = await _printToDestination(
+      destination,
+      bytes,
+      copyCount: copyCount,
+    );
+    final ok = outcome.result == PrintResult.success;
+    await _backend.completeJob(
+      job.id,
+      ok: ok,
+      error: ok ? null : outcome.error,
+    );
     return PrintJobAgentResult(
       jobId: job.id,
-      result: result,
-      error: ok ? null : result.name,
+      result: outcome.result,
+      error: ok ? null : outcome.error,
     );
   }
 
@@ -179,10 +184,97 @@ class PrintJobAgentService implements PrintAgentDriver {
       ),
     );
 
-    return _printerService.printReceipt(
-      destination.ip,
-      bytes,
-      port: destination.port,
+    final outcome = await _printToDestination(destination, bytes);
+    return outcome.result;
+  }
+
+  Future<_EndpointPrintOutcome> _printToDestination(
+    PrintDestination destination,
+    List<int> bytes, {
+    int copyCount = 1,
+  }) async {
+    NetworkCapabilities capabilities;
+    try {
+      capabilities = await _networkCapabilityService.loadCapabilities();
+    } catch (_) {
+      return const _EndpointPrintOutcome(
+        result: PrintResult.networkUnavailable,
+        error: 'NETWORK_CAPABILITIES_UNAVAILABLE',
+      );
+    }
+
+    if (!capabilities.hasNetwork) {
+      return const _EndpointPrintOutcome(
+        result: PrintResult.networkUnavailable,
+        error: 'NETWORK_UNAVAILABLE',
+      );
+    }
+
+    final configuredEndpoints = destination.endpoints.isEmpty
+        ? <PrinterEndpoint>[
+            PrinterEndpoint(
+              id: 'legacy-${destination.id}',
+              type: PrinterEndpointType.wireless,
+              ip: destination.ip,
+              port: destination.port,
+              priority: 100,
+              isActive: true,
+            ),
+          ]
+        : destination.endpoints;
+    final candidates =
+        configuredEndpoints
+            .where(
+              (endpoint) =>
+                  endpoint.isActive &&
+                  (capabilities.wiredConnected ||
+                      endpoint.type == PrinterEndpointType.wireless),
+            )
+            .toList()
+          ..sort((a, b) => a.priority.compareTo(b.priority));
+    if (candidates.isEmpty) {
+      return const _EndpointPrintOutcome(
+        result: PrintResult.noAllowedEndpoint,
+        error: 'NO_ALLOWED_PRINTER_ENDPOINT',
+      );
+    }
+
+    final failures = <String>[];
+    for (final endpoint in candidates) {
+      var printedCopies = 0;
+      var result = PrintResult.success;
+      while (printedCopies < copyCount) {
+        result = await _printerService.printReceipt(
+          endpoint.ip,
+          bytes,
+          port: endpoint.port,
+        );
+        if (result != PrintResult.success) break;
+        printedCopies++;
+      }
+      if (printedCopies == copyCount) {
+        return _EndpointPrintOutcome(
+          result: PrintResult.success,
+          endpoint: endpoint,
+        );
+      }
+      failures.add(
+        '${endpoint.type.name}@${endpoint.ip}:${endpoint.port}=${result.name}',
+      );
+      // Do not switch endpoints after a partial multi-copy print; doing so can
+      // create an extra first copy at a different physical interface.
+      if (printedCopies > 0) {
+        return _EndpointPrintOutcome(
+          result: result,
+          endpoint: endpoint,
+          error: 'PARTIAL_PRINT:${failures.join(',')}',
+        );
+      }
+    }
+
+    return _EndpointPrintOutcome(
+      result: PrintResult.connectionFailed,
+      error: 'ALL_ENDPOINTS_FAILED:${failures.join(',')}',
     );
   }
 
@@ -210,7 +302,6 @@ class PrintJobAgentService implements PrintAgentDriver {
       taxCode: receipt.taxCode,
       addressLines: receipt.addressLines,
       receiptNumber: receipt.receiptNumber,
-      orderNumber: receipt.orderNumber,
       cashierCode: receipt.cashierCode,
       subtotalAmount: receipt.subtotalAmount,
       discountAmount: receipt.discountAmount,
@@ -260,13 +351,24 @@ class SupabasePrintJobBackend implements PrintJobBackend {
   Future<PrintDestination?> loadDestination(String destinationId) async {
     final response = await _client
         .from('printer_destinations')
-        .select('id, name, ip, port')
+        .select('id, name, ip, port, physical_printer_id')
         .eq('id', destinationId)
         .maybeSingle();
     if (response == null) {
       return null;
     }
-    return PrintDestination.fromJson(Map<String, dynamic>.from(response));
+    final destination = Map<String, dynamic>.from(response);
+    final physicalPrinterId = destination['physical_printer_id']?.toString();
+    if (physicalPrinterId != null && physicalPrinterId.isNotEmpty) {
+      final endpointRows = await _client
+          .from('printer_endpoints')
+          .select('id, endpoint_type, ip, port, priority, is_active')
+          .eq('physical_printer_id', physicalPrinterId)
+          .eq('is_active', true)
+          .order('priority');
+      destination['endpoints'] = endpointRows;
+    }
+    return PrintDestination.fromJson(destination);
   }
 
   @override
@@ -353,14 +455,23 @@ class PrintDestination {
     required this.name,
     required this.ip,
     required this.port,
+    this.endpoints = const <PrinterEndpoint>[],
   });
 
   final String id;
   final String name;
   final String ip;
   final int port;
+  final List<PrinterEndpoint> endpoints;
 
   factory PrintDestination.fromJson(Map<String, dynamic> json) {
+    final parsedEndpoints = (json['endpoints'] as List? ?? const <Object?>[])
+        .whereType<Map>()
+        .map(
+          (endpoint) =>
+              PrinterEndpoint.fromJson(Map<String, dynamic>.from(endpoint)),
+        )
+        .toList();
     return PrintDestination(
       id: json['id'].toString(),
       name: json['name']?.toString() ?? '',
@@ -371,8 +482,79 @@ class PrintDestination {
         String value => int.tryParse(value) ?? 9100,
         _ => 9100,
       },
+      endpoints: parsedEndpoints.isEmpty
+          ? [
+              PrinterEndpoint(
+                id: 'legacy-${json['id']}',
+                type: PrinterEndpointType.wireless,
+                ip: json['ip']?.toString() ?? '',
+                port: switch (json['port']) {
+                  int value => value,
+                  num value => value.toInt(),
+                  String value => int.tryParse(value) ?? 9100,
+                  _ => 9100,
+                },
+                priority: 100,
+                isActive: true,
+              ),
+            ]
+          : parsedEndpoints,
     );
   }
+}
+
+enum PrinterEndpointType { wired, wireless }
+
+class PrinterEndpoint {
+  const PrinterEndpoint({
+    required this.id,
+    required this.type,
+    required this.ip,
+    required this.port,
+    required this.priority,
+    required this.isActive,
+  });
+
+  final String id;
+  final PrinterEndpointType type;
+  final String ip;
+  final int port;
+  final int priority;
+  final bool isActive;
+
+  factory PrinterEndpoint.fromJson(Map<String, dynamic> json) {
+    return PrinterEndpoint(
+      id: json['id']?.toString() ?? '',
+      type: json['endpoint_type']?.toString() == 'wired'
+          ? PrinterEndpointType.wired
+          : PrinterEndpointType.wireless,
+      ip: json['ip']?.toString() ?? '',
+      port: switch (json['port']) {
+        int value => value,
+        num value => value.toInt(),
+        String value => int.tryParse(value) ?? 9100,
+        _ => 9100,
+      },
+      priority: switch (json['priority']) {
+        int value => value,
+        num value => value.toInt(),
+        _ => 100,
+      },
+      isActive: json['is_active'] != false,
+    );
+  }
+}
+
+class _EndpointPrintOutcome {
+  const _EndpointPrintOutcome({
+    required this.result,
+    this.endpoint,
+    this.error,
+  });
+
+  final PrintResult result;
+  final PrinterEndpoint? endpoint;
+  final String? error;
 }
 
 class PrintJobAgentResult {

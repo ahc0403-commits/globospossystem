@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/hardware/print_job_agent_service.dart';
+import 'package:globos_pos_system/core/hardware/network_capability_service.dart';
 import 'package:globos_pos_system/core/hardware/printer_service.dart';
 import 'package:globos_pos_system/core/hardware/receipt_builder.dart';
 import 'package:globos_pos_system/core/hardware/wifi_printer_service.dart';
@@ -78,7 +79,7 @@ void main() {
           port: port,
         );
 
-        expect(result, PrintResult.connectionFailed);
+        expect(result, PrintResult.connectionRefused);
       },
     );
 
@@ -150,8 +151,267 @@ void main() {
 
       expect(results.single.result, PrintResult.connectionFailed);
       expect(backend.completed, [
-        const _Completion(jobId: 'job-2', ok: false, error: 'connectionFailed'),
+        const _Completion(
+          jobId: 'job-2',
+          ok: false,
+          error:
+              'ALL_ENDPOINTS_FAILED:wireless@192.168.1.51:9101=connectionFailed',
+        ),
       ]);
+    });
+
+    test(
+      'wired PC can fall back from wired to wireless printer endpoint',
+      () async {
+        final backend = _FakePrintJobBackend(
+          jobs: [
+            _job(id: 'job-wired', destinationId: 'dest', ticketType: 'kitchen'),
+          ],
+          destinations: const {
+            'dest': PrintDestination(
+              id: 'dest',
+              name: 'Kitchen',
+              ip: '192.168.1.252',
+              port: 9100,
+              endpoints: [
+                PrinterEndpoint(
+                  id: 'wired',
+                  type: PrinterEndpointType.wired,
+                  ip: '192.168.1.120',
+                  port: 9100,
+                  priority: 10,
+                  isActive: true,
+                ),
+                PrinterEndpoint(
+                  id: 'wireless',
+                  type: PrinterEndpointType.wireless,
+                  ip: '192.168.1.252',
+                  port: 9100,
+                  priority: 20,
+                  isActive: true,
+                ),
+              ],
+            ),
+          },
+        );
+        final printer = _EndpointAwareFakePrinterService({
+          '192.168.1.120': PrintResult.connectionRefused,
+          '192.168.1.252': PrintResult.success,
+        });
+        final agent = PrintJobAgentService(
+          backend: backend,
+          printerService: printer,
+          networkCapabilityService: const _FakeNetworkCapabilityService(
+            wiredConnected: true,
+            wirelessConnected: false,
+          ),
+        );
+
+        final results = await agent.processOnce('store-1');
+
+        expect(results.single.result, PrintResult.success);
+        expect(printer.prints.map((call) => call.ip), [
+          '192.168.1.120',
+          '192.168.1.252',
+        ]);
+      },
+    );
+
+    test(
+      'wireless-only PC uses wireless endpoint and never tries wired',
+      () async {
+        final backend = _FakePrintJobBackend(
+          jobs: [
+            _job(
+              id: 'job-wireless',
+              destinationId: 'dest',
+              ticketType: 'kitchen',
+            ),
+          ],
+          destinations: const {
+            'dest': PrintDestination(
+              id: 'dest',
+              name: 'Kitchen',
+              ip: '192.168.1.252',
+              port: 9100,
+              endpoints: [
+                PrinterEndpoint(
+                  id: 'wired',
+                  type: PrinterEndpointType.wired,
+                  ip: '192.168.1.120',
+                  port: 9100,
+                  priority: 10,
+                  isActive: true,
+                ),
+                PrinterEndpoint(
+                  id: 'wireless',
+                  type: PrinterEndpointType.wireless,
+                  ip: '192.168.1.252',
+                  port: 9100,
+                  priority: 20,
+                  isActive: true,
+                ),
+              ],
+            ),
+          },
+        );
+        final printer = _EndpointAwareFakePrinterService({
+          '192.168.1.120': PrintResult.success,
+          '192.168.1.252': PrintResult.success,
+        });
+        final agent = PrintJobAgentService(
+          backend: backend,
+          printerService: printer,
+          networkCapabilityService: const _FakeNetworkCapabilityService(
+            wiredConnected: false,
+            wirelessConnected: true,
+          ),
+        );
+
+        final results = await agent.processOnce('store-1');
+
+        expect(results.single.result, PrintResult.success);
+        expect(printer.prints.single.ip, '192.168.1.252');
+      },
+    );
+
+    test('wireless-only PC rejects a wired-only printer', () async {
+      final backend = _FakePrintJobBackend(
+        jobs: [
+          _job(id: 'job-blocked', destinationId: 'dest', ticketType: 'kitchen'),
+        ],
+        destinations: const {
+          'dest': PrintDestination(
+            id: 'dest',
+            name: 'Kitchen',
+            ip: '192.168.1.120',
+            port: 9100,
+            endpoints: [
+              PrinterEndpoint(
+                id: 'wired',
+                type: PrinterEndpointType.wired,
+                ip: '192.168.1.120',
+                port: 9100,
+                priority: 10,
+                isActive: true,
+              ),
+            ],
+          ),
+        },
+      );
+      final printer = _EndpointAwareFakePrinterService({});
+      final agent = PrintJobAgentService(
+        backend: backend,
+        printerService: printer,
+        networkCapabilityService: const _FakeNetworkCapabilityService(
+          wiredConnected: false,
+          wirelessConnected: true,
+        ),
+      );
+
+      final results = await agent.processOnce('store-1');
+
+      expect(results.single.result, PrintResult.noAllowedEndpoint);
+      expect(printer.prints, isEmpty);
+      expect(backend.completed.single.error, 'NO_ALLOWED_PRINTER_ENDPOINT');
+    });
+
+    test(
+      'PC with no active network does not try any printer endpoint',
+      () async {
+        final backend = _FakePrintJobBackend(
+          jobs: [
+            _job(
+              id: 'job-offline',
+              destinationId: 'dest',
+              ticketType: 'kitchen',
+            ),
+          ],
+          destinations: const {
+            'dest': PrintDestination(
+              id: 'dest',
+              name: 'Kitchen',
+              ip: '192.168.1.252',
+              port: 9100,
+            ),
+          },
+        );
+        final printer = _EndpointAwareFakePrinterService({
+          '192.168.1.252': PrintResult.success,
+        });
+        final agent = PrintJobAgentService(
+          backend: backend,
+          printerService: printer,
+          networkCapabilityService: const _FakeNetworkCapabilityService(
+            wiredConnected: false,
+            wirelessConnected: false,
+          ),
+        );
+
+        final results = await agent.processOnce('store-1');
+
+        expect(results.single.result, PrintResult.networkUnavailable);
+        expect(printer.prints, isEmpty);
+        expect(backend.completed.single.error, 'NETWORK_UNAVAILABLE');
+      },
+    );
+
+    test('partial multi-copy print never switches printer endpoints', () async {
+      final backend = _FakePrintJobBackend(
+        jobs: [
+          _job(id: 'job-partial', destinationId: 'dest', ticketType: 'floor'),
+        ],
+        destinations: const {
+          'dest': PrintDestination(
+            id: 'dest',
+            name: 'Floor',
+            ip: '192.168.1.252',
+            port: 9100,
+            endpoints: [
+              PrinterEndpoint(
+                id: 'wired',
+                type: PrinterEndpointType.wired,
+                ip: '192.168.1.120',
+                port: 9100,
+                priority: 10,
+                isActive: true,
+              ),
+              PrinterEndpoint(
+                id: 'wireless',
+                type: PrinterEndpointType.wireless,
+                ip: '192.168.1.252',
+                port: 9100,
+                priority: 20,
+                isActive: true,
+              ),
+            ],
+          ),
+        },
+      );
+      final printer = _SequencedFakePrinterService({
+        '192.168.1.120': [PrintResult.success, PrintResult.connectionFailed],
+        '192.168.1.252': [PrintResult.success],
+      });
+      final agent = PrintJobAgentService(
+        backend: backend,
+        printerService: printer,
+        networkCapabilityService: const _FakeNetworkCapabilityService(
+          wiredConnected: true,
+          wirelessConnected: false,
+        ),
+      );
+
+      final results = await agent.processOnce('store-1');
+
+      expect(results.single.result, PrintResult.connectionFailed);
+      expect(printer.prints.map((call) => call.ip), [
+        '192.168.1.120',
+        '192.168.1.120',
+      ]);
+      expect(
+        backend.completed.single.error,
+        'PARTIAL_PRINT:wired@192.168.1.120:9100=connectionFailed',
+      );
     });
 
     test('processOnce prints two complete copies for floor jobs', () async {
@@ -463,6 +723,76 @@ class _FakePrinterService implements PrinterService {
   Future<bool> testConnection(String ip, {int port = 9100}) async {
     return true;
   }
+}
+
+class _EndpointAwareFakePrinterService implements PrinterService {
+  _EndpointAwareFakePrinterService(this.resultsByIp);
+
+  final Map<String, PrintResult> resultsByIp;
+  final prints = <_PrintCall>[];
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  Future<PrintResult> printReceipt(
+    String ip,
+    List<int> bytes, {
+    int port = 9100,
+  }) async {
+    prints.add(_PrintCall(ip: ip, port: port, bytes: bytes));
+    return resultsByIp[ip] ?? PrintResult.connectionFailed;
+  }
+
+  @override
+  Future<bool> testConnection(String ip, {int port = 9100}) async =>
+      resultsByIp[ip] == PrintResult.success;
+}
+
+class _SequencedFakePrinterService implements PrinterService {
+  _SequencedFakePrinterService(Map<String, List<PrintResult>> resultsByIp)
+    : resultsByIp = resultsByIp.map(
+        (ip, results) => MapEntry(ip, List<PrintResult>.of(results)),
+      );
+
+  final Map<String, List<PrintResult>> resultsByIp;
+  final prints = <_PrintCall>[];
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  Future<PrintResult> printReceipt(
+    String ip,
+    List<int> bytes, {
+    int port = 9100,
+  }) async {
+    prints.add(_PrintCall(ip: ip, port: port, bytes: bytes));
+    final results = resultsByIp[ip];
+    if (results == null || results.isEmpty) {
+      return PrintResult.connectionFailed;
+    }
+    return results.removeAt(0);
+  }
+
+  @override
+  Future<bool> testConnection(String ip, {int port = 9100}) async => false;
+}
+
+class _FakeNetworkCapabilityService implements NetworkCapabilityService {
+  const _FakeNetworkCapabilityService({
+    required this.wiredConnected,
+    required this.wirelessConnected,
+  });
+
+  final bool wiredConnected;
+  final bool wirelessConnected;
+
+  @override
+  Future<NetworkCapabilities> loadCapabilities() async => NetworkCapabilities(
+    wiredConnected: wiredConnected,
+    wirelessConnected: wirelessConnected,
+  );
 }
 
 class _UnsupportedPrinterService implements PrinterService {

@@ -124,6 +124,13 @@ class _OrderNotifier extends OrderNotifier {
         quantity: 1,
         status: 'pending',
         itemType: 'menu',
+        comboComponents: [
+          OrderComboComponent(
+            label: 'Coca-Cola',
+            quantity: 1,
+            isTotalQuantity: true,
+          ),
+        ],
       ),
     ],
   );
@@ -313,6 +320,19 @@ void main() {
     await tester.pumpAndSettle();
     final ticketSheet = find.byKey(const Key('order_current_ticket_sheet'));
     expect(ticketSheet, findsOneWidget);
+    expect(
+      find.byKey(
+        const ValueKey('order_current_ticket_combo_components_order-item-pho'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: ticketSheet,
+        matching: find.textContaining('Coca-Cola'),
+      ),
+      findsOneWidget,
+    );
     await tester.tap(
       find.byKey(const Key('order_current_ticket_edit_qty_order-item-pho')),
     );

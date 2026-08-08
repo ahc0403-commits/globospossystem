@@ -59,4 +59,23 @@ void main() {
     expect(item.comboComponents.first.label, 'Kimbap');
     expect(item.comboComponents.last.quantity * item.quantity, 4);
   });
+
+  test('selected QR drink quantities stay absolute for multi-combo lines', () {
+    final item = KitchenItem.fromJson({
+      'id': 'order-item-2',
+      'label': 'Combo 3',
+      'quantity': 2,
+      'status': 'pending',
+      'created_at': '2026-08-08T08:00:00Z',
+      'combo_components': [
+        {'label': 'Kimbap', 'quantity': 1},
+        {'label': 'Cola', 'quantity': 1, 'is_total_quantity': true},
+        {'label': 'Water', 'quantity': 1, 'is_total_quantity': true},
+      ],
+    });
+
+    expect(item.comboComponents.first.displayQuantity(item.quantity), 2);
+    expect(item.comboComponents[1].displayQuantity(item.quantity), 1);
+    expect(item.comboComponents[2].displayQuantity(item.quantity), 1);
+  });
 }

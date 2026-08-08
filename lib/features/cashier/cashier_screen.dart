@@ -1297,6 +1297,12 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                   canCompletePayment: cutoffState.canCompletePayment,
                   wetTissueQuantity: _wetTissueDraftQuantity,
                   wetTissueConfirmed: wetTissueConfirmed,
+                  onOpenOrderLedger: () => _showCashierQrOrderLedger(
+                    context: context,
+                    order: selectedOrder,
+                    loadBatches: () =>
+                        notifier.fetchQrOrderLedger(selectedOrder.orderId),
+                  ),
                   onWetTissueQuantityChanged: (quantity) {
                     setState(() {
                       _wetTissueDraftQuantity = quantity;
@@ -2522,6 +2528,7 @@ class _SelectedOrderView extends StatelessWidget {
     required this.canCompletePayment,
     required this.wetTissueQuantity,
     required this.wetTissueConfirmed,
+    required this.onOpenOrderLedger,
     required this.onWetTissueQuantityChanged,
     required this.onConfirmWetTissue,
     required this.onSelectMethod,
@@ -2546,6 +2553,7 @@ class _SelectedOrderView extends StatelessWidget {
   final bool canCompletePayment;
   final int wetTissueQuantity;
   final bool wetTissueConfirmed;
+  final Future<void> Function() onOpenOrderLedger;
   final ValueChanged<int> onWetTissueQuantityChanged;
   final Future<bool> Function(int quantity) onConfirmWetTissue;
   final ValueChanged<String> onSelectMethod;
@@ -2608,6 +2616,7 @@ class _SelectedOrderView extends StatelessWidget {
           canCancelItems: canCancelOrders,
           isProcessing: isProcessing,
           isOnline: isOnline,
+          onOpenOrderLedger: onOpenOrderLedger,
           onToggleServiceItem: onToggleServiceItem,
           onCancelOrderItem: onCancelOrderItem,
         );
@@ -2653,6 +2662,7 @@ class _SelectedOrderView extends StatelessWidget {
                       canCancelItems: canCancelOrders,
                       isProcessing: isProcessing,
                       isOnline: isOnline,
+                      onOpenOrderLedger: onOpenOrderLedger,
                       onToggleServiceItem: onToggleServiceItem,
                       onCancelOrderItem: onCancelOrderItem,
                     ),
@@ -2729,6 +2739,7 @@ class _CashierOrderSummarySurface extends StatelessWidget {
     this.canCancelItems = false,
     this.isProcessing = false,
     this.isOnline = true,
+    required this.onOpenOrderLedger,
     this.onToggleServiceItem,
     this.onCancelOrderItem,
   });
@@ -2740,6 +2751,7 @@ class _CashierOrderSummarySurface extends StatelessWidget {
   final bool canCancelItems;
   final bool isProcessing;
   final bool isOnline;
+  final Future<void> Function() onOpenOrderLedger;
   final Future<void> Function(OrderItem item)? onToggleServiceItem;
   final Future<void> Function(OrderItem item)? onCancelOrderItem;
 
@@ -2767,9 +2779,18 @@ class _CashierOrderSummarySurface extends StatelessWidget {
         children: [
           Row(
             children: [
+              Expanded(
+                child: Text(
+                  l10n.cashierCheckItems,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
               Text(
-                l10n.cashierCheckItems,
-                style: Theme.of(context).textTheme.titleLarge,
+                l10n.cashierItemsCount(order.items.length),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: PosColors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               if (order.isStaffMeal) ...[
                 const SizedBox(width: 8),
@@ -2780,15 +2801,23 @@ class _CashierOrderSummarySurface extends StatelessWidget {
                   compact: true,
                 ),
               ],
-              const Spacer(),
-              Text(
-                l10n.cashierItemsCount(order.items.length),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: PosColors.textSecondary,
-                  fontWeight: FontWeight.w700,
+            ],
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Tooltip(
+              message: l10n.cashierQrLedgerAction,
+              child: TextButton.icon(
+                key: Key('cashier_order_ledger_action_${order.orderId}'),
+                onPressed: onOpenOrderLedger,
+                icon: const Icon(Icons.menu_book_rounded, size: 16),
+                label: Text('#${_shortCashierOrderId(order.orderId)}'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                 ),
               ),
-            ],
+            ),
           ),
           SizedBox(height: dense ? 6 : 12),
           if (compact) itemsPanel else Expanded(child: itemsPanel),
@@ -4071,6 +4100,227 @@ class _CashierPaymentActions extends StatelessWidget {
   }
 }
 
+Future<void> _showCashierQrOrderLedger({
+  required BuildContext context,
+  required CashierOrder order,
+  required Future<List<QrOrderLedgerBatch>> Function() loadBatches,
+}) {
+  return showDialog<void>(
+    context: context,
+    builder: (_) =>
+        _CashierQrOrderLedgerDialog(order: order, loadBatches: loadBatches),
+  );
+}
+
+class _CashierQrOrderLedgerDialog extends StatefulWidget {
+  const _CashierQrOrderLedgerDialog({
+    required this.order,
+    required this.loadBatches,
+  });
+
+  final CashierOrder order;
+  final Future<List<QrOrderLedgerBatch>> Function() loadBatches;
+
+  @override
+  State<_CashierQrOrderLedgerDialog> createState() =>
+      _CashierQrOrderLedgerDialogState();
+}
+
+class _CashierQrOrderLedgerDialogState
+    extends State<_CashierQrOrderLedgerDialog> {
+  late Future<List<QrOrderLedgerBatch>> _batches;
+
+  @override
+  void initState() {
+    super.initState();
+    _batches = widget.loadBatches();
+  }
+
+  void _retry() {
+    setState(() => _batches = widget.loadBatches());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final currency = NumberFormat('#,###', 'vi_VN');
+    final submittedAt = DateFormat('dd/MM/yyyy HH:mm');
+
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640, maxHeight: 720),
+        child: Padding(
+          key: const Key('cashier_qr_order_ledger_dialog'),
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l10n.cashierQrLedgerTitle,
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '#${_shortCashierOrderId(widget.order.orderId)} · '
+                          '${l10n.cashierTableLabel(widget.order.tableNumber)}',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: PosColors.textSecondary,
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    tooltip: MaterialLocalizations.of(
+                      context,
+                    ).closeButtonTooltip,
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                l10n.cashierQrLedgerSubtitle,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: PosColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: FutureBuilder<List<QrOrderLedgerBatch>>(
+                  future: _batches,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState != ConnectionState.done) {
+                      return Center(
+                        child: ToastOperationalLoadingState(
+                          label: l10n.loading,
+                        ),
+                      );
+                    }
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.error_outline_rounded,
+                              color: PosColors.warning,
+                              size: 36,
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              l10n.cashierQrLedgerLoadFailed,
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              key: const Key('cashier_qr_order_ledger_retry'),
+                              onPressed: _retry,
+                              icon: const Icon(Icons.refresh_rounded),
+                              label: Text(l10n.retry),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    final batches = snapshot.data ?? const [];
+                    if (batches.isEmpty) {
+                      return ToastOperationalEmptyState(
+                        headline: l10n.cashierQrLedgerNoRecords,
+                        helper: l10n.cashierQrLedgerSubtitle,
+                        icon: Icons.menu_book_outlined,
+                      );
+                    }
+
+                    return ListView.separated(
+                      key: const Key('cashier_qr_order_ledger_batches'),
+                      itemCount: batches.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final batch = batches[index];
+                        return Container(
+                          key: Key(
+                            'cashier_qr_order_ledger_batch_${batch.batchNo}',
+                          ),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: PosColors.panelMuted,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: PosColors.border),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                l10n.cashierQrLedgerBatch(batch.batchNo),
+                                style: Theme.of(context).textTheme.titleSmall
+                                    ?.copyWith(fontWeight: FontWeight.w900),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                l10n.cashierQrLedgerSubmittedAt(
+                                  submittedAt.format(batch.createdAt.toLocal()),
+                                ),
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: PosColors.textSecondary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                              ),
+                              const Divider(height: 18),
+                              for (final item in batch.items)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 7),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          '${item.name} × ${item.quantity}',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        '₫${currency.format(item.lineTotal)}',
+                                        style: PosNumericText.amountLine,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 Future<void> _showCashierOrderItemsSheet(
   BuildContext context,
   CashierOrder order,
@@ -4760,8 +5010,8 @@ class _CombinedTablePaymentDialogState
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final currency = NumberFormat('#,###', 'vi_VN');
-    final dialogHeight = (230 + (widget.orders.length * 88))
-        .clamp(360, 520)
+    final dialogHeight = (280 + (widget.orders.length * 150))
+        .clamp(440, MediaQuery.sizeOf(context).height * 0.82)
         .toDouble();
     return AlertDialog(
       title: Text(l10n.cashierCombinedPayment),
@@ -4796,60 +5046,106 @@ class _CombinedTablePaymentDialogState
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: PosColors.border),
                     ),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                l10n.cashierTableLabel(order.tableNumber),
-                                style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(fontWeight: FontWeight.w900),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    l10n.cashierTableLabel(order.tableNumber),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(fontWeight: FontWeight.w900),
+                                  ),
+                                  Text(
+                                    '₫${currency.format(order.remainingDue)}',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: PosColors.textSecondary,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                  ),
+                                ],
                               ),
-                              Text(
-                                '₫${currency.format(order.remainingDue)}',
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color: PosColors.textSecondary,
-                                      fontWeight: FontWeight.w700,
-                                    ),
+                            ),
+                            IconButton.outlined(
+                              key: Key(
+                                'cashier_combined_wet_tissue_minus_${order.orderId}',
                               ),
-                            ],
-                          ),
+                              onPressed: canChange && quantity > 0
+                                  ? () => setState(() {
+                                      _wetTissueQuantities[order.orderId] =
+                                          quantity - 1;
+                                    })
+                                  : null,
+                              icon: const Icon(Icons.remove_rounded, size: 18),
+                            ),
+                            SizedBox(
+                              width: 44,
+                              child: Text(
+                                '$quantity',
+                                textAlign: TextAlign.center,
+                                style: PosNumericText.amountLine,
+                              ),
+                            ),
+                            IconButton.filled(
+                              key: Key(
+                                'cashier_combined_wet_tissue_plus_${order.orderId}',
+                              ),
+                              onPressed: canChange
+                                  ? () => setState(() {
+                                      _wetTissueQuantities[order.orderId] =
+                                          quantity + 1;
+                                    })
+                                  : null,
+                              icon: const Icon(Icons.add_rounded, size: 18),
+                            ),
+                          ],
                         ),
-                        IconButton.outlined(
-                          key: Key(
-                            'cashier_combined_wet_tissue_minus_${order.orderId}',
-                          ),
-                          onPressed: canChange && quantity > 0
-                              ? () => setState(() {
-                                  _wetTissueQuantities[order.orderId] =
-                                      quantity - 1;
-                                })
-                              : null,
-                          icon: const Icon(Icons.remove_rounded, size: 18),
+                        const Divider(height: 18),
+                        Text(
+                          l10n.cashierCheckItems,
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: PosColors.textSecondary,
+                                fontWeight: FontWeight.w800,
+                              ),
                         ),
-                        SizedBox(
-                          width: 44,
-                          child: Text(
-                            '$quantity',
-                            textAlign: TextAlign.center,
-                            style: PosNumericText.amountLine,
+                        const SizedBox(height: 6),
+                        for (final item in order.items.where(
+                          (item) => item.status.toLowerCase() != 'cancelled',
+                        ))
+                          Padding(
+                            key: Key(
+                              'cashier_combined_item_${order.orderId}_${item.id}',
+                            ),
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '${item.label ?? l10n.cashierItemFallback} × ${item.quantity}',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  '₫${currency.format(item.unitPrice * item.quantity)}',
+                                  style: PosNumericText.amountLine.copyWith(
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        IconButton.filled(
-                          key: Key(
-                            'cashier_combined_wet_tissue_plus_${order.orderId}',
-                          ),
-                          onPressed: canChange
-                              ? () => setState(() {
-                                  _wetTissueQuantities[order.orderId] =
-                                      quantity + 1;
-                                })
-                              : null,
-                          icon: const Icon(Icons.add_rounded, size: 18),
-                        ),
                       ],
                     ),
                   );

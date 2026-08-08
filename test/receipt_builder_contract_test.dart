@@ -18,7 +18,6 @@ void main() {
       taxCode: '0318453298',
       addressLines: const ['69/1A2 Nguyễn Gia Trí'],
       receiptNumber: 'BC-20260721-000123',
-      orderNumber: '12345',
       cashierCode: 'EMP001',
     );
 
@@ -29,6 +28,7 @@ void main() {
     expect(text, contains('0318453298'));
     expect(text, contains('PHIEU THANH TOAN'));
     expect(text, contains('BC-20260721-000123'));
+    expect(text, isNot(contains('So don')));
     expect(text, contains('Ca phe sua da'));
     expect(text, contains('VND'));
     expect(text, contains('CHUYEN KHOAN'));
@@ -250,20 +250,28 @@ void main() {
           'components': [
             {'label': 'Com cuon', 'quantity': 1},
             {'label': 'Mi ramen', 'quantity': 2},
+            {'label': 'Coca-Cola', 'quantity': 1, 'is_total_quantity': true},
           ],
         },
       ],
     });
 
-    expect(ticket.items.single.components, hasLength(2));
-    expect(ticket.items.single.components.last.label, 'Mi ramen');
-    expect(ticket.items.single.components.last.quantity, 2);
+    expect(ticket.items.single.components, hasLength(3));
+    expect(ticket.items.single.components[1].label, 'Mi ramen');
+    expect(ticket.items.single.components[1].quantity, 2);
+    expect(
+      ticket.items.single.components.last.displayQuantity(
+        ticket.items.single.quantity,
+      ),
+      1,
+    );
 
     final bytes = await ReceiptBuilder.buildKitchenTicket(ticket);
     final text = String.fromCharCodes(bytes);
     expect(text, contains('Combo bua trua'));
     expect(text, contains('Com cuon'));
     expect(text, contains('Mi ramen'));
+    expect(text, contains('Coca-Cola'));
     expect(text, contains('x4'));
   });
 
@@ -290,7 +298,6 @@ void main() {
         paymentMethod: 'cash',
         paidAt: DateTime.utc(2026, 8, 7, 12),
         receiptNumber: '001',
-        orderNumber: '002',
         cashierCode: 'NV01',
       ),
     );

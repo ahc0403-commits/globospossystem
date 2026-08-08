@@ -41,6 +41,7 @@ class OrderItem {
     this.serviceReason,
     this.vatCategory,
     this.payingAmountIncTax,
+    this.comboComponents = const [],
   });
 
   final String id;
@@ -56,6 +57,7 @@ class OrderItem {
   final String? serviceReason;
   final String? vatCategory;
   final double? payingAmountIncTax;
+  final List<OrderComboComponent> comboComponents;
 
   OrderItem copyWith({
     String? id,
@@ -71,6 +73,7 @@ class OrderItem {
     String? serviceReason,
     String? vatCategory,
     double? payingAmountIncTax,
+    List<OrderComboComponent>? comboComponents,
   }) {
     return OrderItem(
       id: id ?? this.id,
@@ -86,6 +89,7 @@ class OrderItem {
       serviceReason: serviceReason ?? this.serviceReason,
       vatCategory: vatCategory ?? this.vatCategory,
       payingAmountIncTax: payingAmountIncTax ?? this.payingAmountIncTax,
+      comboComponents: comboComponents ?? this.comboComponents,
     );
   }
 
@@ -94,6 +98,7 @@ class OrderItem {
     final quantityRaw = json['quantity'];
     final payingAmountRaw = json['paying_amount_inc_tax'];
     final menuItemRaw = json['menu_items'];
+    final comboRaw = json['combo_components'];
     String? menuItemName;
     String? menuItemNameVi;
     String? menuItemNameEn;
@@ -136,6 +141,48 @@ class OrderItem {
         num value => value.toDouble(),
         String value => double.tryParse(value),
         _ => null,
+      },
+      comboComponents: comboRaw is List
+          ? comboRaw
+                .whereType<Map>()
+                .map(
+                  (component) => OrderComboComponent.fromJson(
+                    Map<String, dynamic>.from(component),
+                  ),
+                )
+                .toList(growable: false)
+          : const [],
+    );
+  }
+}
+
+class OrderComboComponent {
+  const OrderComboComponent({
+    required this.label,
+    required this.quantity,
+    this.isTotalQuantity = false,
+  });
+
+  final String label;
+  final int quantity;
+  final bool isTotalQuantity;
+
+  int displayQuantity(int orderItemQuantity) =>
+      isTotalQuantity ? quantity : quantity * orderItemQuantity;
+
+  factory OrderComboComponent.fromJson(Map<String, dynamic> json) {
+    return OrderComboComponent(
+      label: json['label']?.toString() ?? 'Item',
+      quantity: switch (json['quantity']) {
+        int value => value,
+        num value => value.toInt(),
+        String value => int.tryParse(value) ?? 1,
+        _ => 1,
+      },
+      isTotalQuantity: switch (json['is_total_quantity']) {
+        bool value => value,
+        String value => value.toLowerCase() == 'true',
+        _ => false,
       },
     );
   }

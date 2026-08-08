@@ -1585,15 +1585,28 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                   ),
                 ),
                 const SizedBox(height: 3),
-                Text(
-                  '${destination.ip}:${destination.port}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppFonts.system(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
+                for (final endpoint in destination.endpoints)
+                  Text(
+                    '${endpoint.type == 'wired' ? context.l10n.settingsPrinterWired : context.l10n.settingsPrinterWireless}: '
+                    '${endpoint.ip}:${endpoint.port}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppFonts.system(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
-                ),
+                if (destination.endpoints.isEmpty)
+                  Text(
+                    '${context.l10n.settingsPrinterWireless}: '
+                    '${destination.ip}:${destination.port}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppFonts.system(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
                 const SizedBox(height: 6),
                 Wrap(
                   spacing: 6,
@@ -1716,9 +1729,36 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     final pageContext = context;
     final l10n = context.l10n;
     final nameController = TextEditingController(text: destination?.name ?? '');
-    final ipController = TextEditingController(text: destination?.ip ?? '');
-    final portController = TextEditingController(
-      text: (destination?.port ?? 9100).toString(),
+    PrinterEndpointConfig? endpointOf(String type) {
+      for (final endpoint
+          in destination?.endpoints ?? const <PrinterEndpointConfig>[]) {
+        if (endpoint.type == type) return endpoint;
+      }
+      return null;
+    }
+
+    final wiredEndpoint = endpointOf('wired');
+    final wirelessEndpoint = endpointOf('wireless');
+    final wiredIpController = TextEditingController(
+      text: wiredEndpoint?.ip ?? '',
+    );
+    final wiredPortController = TextEditingController(
+      text: (wiredEndpoint?.port ?? 9100).toString(),
+    );
+    final wirelessIpController = TextEditingController(
+      text:
+          wirelessEndpoint?.ip ??
+          (destination?.endpoints.isEmpty == true ? destination?.ip : null) ??
+          '',
+    );
+    final wirelessPortController = TextEditingController(
+      text:
+          (wirelessEndpoint?.port ??
+                  (destination?.endpoints.isEmpty == true
+                      ? destination?.port
+                      : null) ??
+                  9100)
+              .toString(),
     );
     final floorController = TextEditingController(
       text: destination?.floorLabel ?? '1F',
@@ -1753,21 +1793,44 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                     ),
                     const SizedBox(height: 12),
                     TextField(
-                      key: const Key('settings_printer_destination_ip'),
-                      controller: ipController,
+                      key: const Key('settings_printer_destination_wired_ip'),
+                      controller: wiredIpController,
                       style: AppFonts.system(color: AppColors.textPrimary),
                       decoration: InputDecoration(
-                        labelText: l10n.settingsPrintDestinationIp,
+                        labelText: l10n.settingsPrinterWiredIp,
                       ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
-                      key: const Key('settings_printer_destination_port'),
-                      controller: portController,
+                      key: const Key('settings_printer_destination_wired_port'),
+                      controller: wiredPortController,
                       keyboardType: TextInputType.number,
                       style: AppFonts.system(color: AppColors.textPrimary),
                       decoration: InputDecoration(
-                        labelText: l10n.settingsPrintDestinationPort,
+                        labelText: l10n.settingsPrinterWiredPort,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      key: const Key(
+                        'settings_printer_destination_wireless_ip',
+                      ),
+                      controller: wirelessIpController,
+                      style: AppFonts.system(color: AppColors.textPrimary),
+                      decoration: InputDecoration(
+                        labelText: l10n.settingsPrinterWirelessIp,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      key: const Key(
+                        'settings_printer_destination_wireless_port',
+                      ),
+                      controller: wirelessPortController,
+                      keyboardType: TextInputType.number,
+                      style: AppFonts.system(color: AppColors.textPrimary),
+                      decoration: InputDecoration(
+                        labelText: l10n.settingsPrinterWirelessPort,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -1831,14 +1894,25 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                   ),
                   onPressed: () async {
                     final name = nameController.text.trim();
-                    final ip = ipController.text.trim();
-                    final port = parseIntInput(portController.text);
+                    final wiredIp = wiredIpController.text.trim();
+                    final wiredPort = parseIntInput(wiredPortController.text);
+                    final wirelessIp = wirelessIpController.text.trim();
+                    final wirelessPort = parseIntInput(
+                      wirelessPortController.text,
+                    );
                     final floorLabel = floorController.text.trim();
                     if (name.isEmpty ||
-                        !isValidPrinterIpv4Address(ip) ||
-                        port == null ||
-                        port <= 0 ||
-                        port > 65535 ||
+                        (wiredIp.isEmpty && wirelessIp.isEmpty) ||
+                        (wiredIp.isNotEmpty &&
+                            (!isValidPrinterIpv4Address(wiredIp) ||
+                                wiredPort == null ||
+                                wiredPort <= 0 ||
+                                wiredPort > 65535)) ||
+                        (wirelessIp.isNotEmpty &&
+                            (!isValidPrinterIpv4Address(wirelessIp) ||
+                                wirelessPort == null ||
+                                wirelessPort <= 0 ||
+                                wirelessPort > 65535)) ||
                         (purpose == 'floor' && floorLabel.isEmpty)) {
                       showErrorToast(
                         dialogContext,
@@ -1853,8 +1927,10 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                           PrinterDestinationDraft(
                             id: destination?.id,
                             name: name,
-                            ip: ip,
-                            port: port,
+                            wiredIp: wiredIp,
+                            wiredPort: wiredPort ?? 9100,
+                            wirelessIp: wirelessIp,
+                            wirelessPort: wirelessPort ?? 9100,
                             purpose: purpose,
                             floorLabel: purpose == 'floor' ? floorLabel : null,
                             isActive: true,
@@ -1882,8 +1958,10 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
 
     await Future<void>.delayed(kThemeAnimationDuration);
     nameController.dispose();
-    ipController.dispose();
-    portController.dispose();
+    wiredIpController.dispose();
+    wiredPortController.dispose();
+    wirelessIpController.dispose();
+    wirelessPortController.dispose();
     floorController.dispose();
   }
 

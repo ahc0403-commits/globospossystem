@@ -8,10 +8,18 @@ import '../../core/utils/live_sync_scope.dart';
 import '../../main.dart';
 
 class KitchenComboComponent {
-  const KitchenComboComponent({required this.label, required this.quantity});
+  const KitchenComboComponent({
+    required this.label,
+    required this.quantity,
+    this.isTotalQuantity = false,
+  });
 
   final String label;
   final int quantity;
+  final bool isTotalQuantity;
+
+  int displayQuantity(int orderItemQuantity) =>
+      isTotalQuantity ? quantity : quantity * orderItemQuantity;
 
   factory KitchenComboComponent.fromJson(Map<String, dynamic> json) {
     return KitchenComboComponent(
@@ -21,6 +29,11 @@ class KitchenComboComponent {
         num value => value.toInt(),
         String value => int.tryParse(value) ?? 1,
         _ => 1,
+      },
+      isTotalQuantity: switch (json['is_total_quantity']) {
+        bool value => value,
+        String value => value.toLowerCase() == 'true',
+        _ => false,
       },
     );
   }

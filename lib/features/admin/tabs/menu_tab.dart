@@ -935,6 +935,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     Uint8List? selectedPreviewBytes;
     var isCombo = false;
     final comboQuantities = <String, int>{};
+    var comboDrinkChoiceCount = 0;
     final comboCandidates = allItems
         .where((candidate) => candidate['is_combo'] != true)
         .toList(growable: false);
@@ -990,9 +991,13 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     isCombo: isCombo,
                     candidates: comboCandidates,
                     quantities: comboQuantities,
+                    drinkChoiceCount: comboDrinkChoiceCount,
                     onComboChanged: (value) => setDialogState(() {
                       isCombo = value;
-                      if (!value) comboQuantities.clear();
+                      if (!value) {
+                        comboQuantities.clear();
+                        comboDrinkChoiceCount = 0;
+                      }
                     }),
                     onQuantityChanged: (itemId, quantity) => setDialogState(() {
                       if (quantity == null) {
@@ -1001,6 +1006,8 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                         comboQuantities[itemId] = quantity;
                       }
                     }),
+                    onDrinkChoiceCountChanged: (value) =>
+                        setDialogState(() => comboDrinkChoiceCount = value),
                   ),
                   const SizedBox(height: 16),
                   _MenuPhotoPicker(
@@ -1054,7 +1061,6 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     showErrorToast(context, l10n.menuComboComponentRequired);
                     return;
                   }
-
                   final photo = selectedPhoto;
                   final comboComponents = _comboPayload(comboQuantities);
                   final success = photo == null
@@ -1066,6 +1072,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                           price: price,
                           isCombo: isCombo,
                           comboComponents: comboComponents,
+                          comboDrinkChoiceCount: comboDrinkChoiceCount,
                         )
                       : await menuNotifier.addMenuItemWithPhoto(
                           categoryId: categoryId,
@@ -1076,6 +1083,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                           photo: photo,
                           isCombo: isCombo,
                           comboComponents: comboComponents,
+                          comboDrinkChoiceCount: comboDrinkChoiceCount,
                         );
                   if (context.mounted && success) {
                     Navigator.of(context).pop();
@@ -1134,6 +1142,14 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     var isCombo = originalIsCombo;
     final originalComboQuantities = _comboQuantitiesFromItem(item);
     final comboQuantities = Map<String, int>.from(originalComboQuantities);
+    final originalComboDrinkChoiceCount =
+        switch (item['combo_drink_choice_count']) {
+          int value => value,
+          num value => value.toInt(),
+          String value => int.tryParse(value) ?? 0,
+          _ => 0,
+        };
+    var comboDrinkChoiceCount = originalComboDrinkChoiceCount;
     final comboCandidates = allItems
         .where(
           (candidate) =>
@@ -1192,9 +1208,13 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     isCombo: isCombo,
                     candidates: comboCandidates,
                     quantities: comboQuantities,
+                    drinkChoiceCount: comboDrinkChoiceCount,
                     onComboChanged: (value) => setDialogState(() {
                       isCombo = value;
-                      if (!value) comboQuantities.clear();
+                      if (!value) {
+                        comboQuantities.clear();
+                        comboDrinkChoiceCount = 0;
+                      }
                     }),
                     onQuantityChanged: (componentId, quantity) =>
                         setDialogState(() {
@@ -1204,6 +1224,8 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                             comboQuantities[componentId] = quantity;
                           }
                         }),
+                    onDrinkChoiceCountChanged: (value) =>
+                        setDialogState(() => comboDrinkChoiceCount = value),
                   ),
                   const SizedBox(height: 16),
                   _MenuPhotoPicker(
@@ -1265,7 +1287,6 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     showErrorToast(context, l10n.menuComboComponentRequired);
                     return;
                   }
-
                   final detailsChanged =
                       nameKo != originalNameKo ||
                       nameVi != originalNameVi ||
@@ -1275,6 +1296,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                       selectedPhoto != null || removeExistingPhoto;
                   final comboChanged =
                       isCombo != originalIsCombo ||
+                      comboDrinkChoiceCount != originalComboDrinkChoiceCount ||
                       !_sameComboQuantities(
                         comboQuantities,
                         originalComboQuantities,
@@ -1300,6 +1322,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                       itemId: itemId,
                       isCombo: isCombo,
                       components: _comboPayload(comboQuantities),
+                      drinkChoiceCount: comboDrinkChoiceCount,
                     );
                     if (!comboSaved) return;
                   }
@@ -1377,15 +1400,19 @@ class _ComboMenuEditor extends StatelessWidget {
     required this.isCombo,
     required this.candidates,
     required this.quantities,
+    required this.drinkChoiceCount,
     required this.onComboChanged,
     required this.onQuantityChanged,
+    required this.onDrinkChoiceCountChanged,
   });
 
   final bool isCombo;
   final List<Map<String, dynamic>> candidates;
   final Map<String, int> quantities;
+  final int drinkChoiceCount;
   final ValueChanged<bool> onComboChanged;
   final void Function(String itemId, int? quantity) onQuantityChanged;
+  final ValueChanged<int> onDrinkChoiceCountChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1453,6 +1480,23 @@ class _ComboMenuEditor extends StatelessWidget {
                   ),
                 ),
               ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: DropdownButtonFormField<int>(
+                key: const Key('admin_menu_combo_drink_count'),
+                initialValue: drinkChoiceCount,
+                decoration: InputDecoration(
+                  labelText: l10n.menuComboDrinkChoiceSlot,
+                  helperText: l10n.menuComboDrinkChoiceSlotHelp,
+                ),
+                items: [
+                  for (var count = 0; count <= 10; count++)
+                    DropdownMenuItem<int>(value: count, child: Text('$count')),
+                ],
+                onChanged: (value) => onDrinkChoiceCountChanged(value ?? 0),
+              ),
+            ),
           ],
         ],
       ),
@@ -2031,6 +2075,21 @@ class _ItemsPanel extends StatelessWidget {
                                     fontSize: 11,
                                   ),
                                 ),
+                                if ((item['combo_drink_choice_count'] as num?)
+                                        ?.toInt() !=
+                                    0) ...[
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    '${l10n.menuComboDrinkChoiceSlot}: ${item['combo_drink_choice_count']}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppFonts.system(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
                               ],
                             ],
                           ),

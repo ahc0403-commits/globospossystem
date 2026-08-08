@@ -45,6 +45,24 @@ One agent covers all printers (they're all LAN-reachable); a second agent
 device is a warm spare, safe because claiming is `SKIP LOCKED`.
 Wired LAN + fixed IP printers (draft's ops recommendation kept).
 
+### 1.1 POS/print-station network contract (2026-08-08 correction)
+
+The POS and print agent run in the same Windows process on the same PC. The
+server creates `print_jobs`; that local agent claims and executes them.
+
+Printer eligibility is asymmetric and depends on the PC's active link:
+
+| PC link state | Allowed printer endpoints |
+|---|---|
+| wired link active | wired and wireless |
+| wireless only | wireless only |
+| no active link | none |
+
+A physical printer may expose both endpoint types. Logical routes reference a
+physical printer, not an IP address. The agent orders allowed endpoints by
+configured priority and retries the next allowed endpoint only when no copy
+was printed. It never tries a wired endpoint from a wireless-only PC.
+
 Failure semantics: order/payment flows NEVER block on printing. Enqueue is
 wrapped `BEGIN…EXCEPTION → audit_logs('print_enqueue_failed')` so even a
 print_jobs bug cannot abort an order. Failed jobs stay visible for reprint.

@@ -176,6 +176,7 @@ class _MenuNotifier extends MenuNotifier {
   int updateWorkbookCalls = 0;
   bool lastAddedItemWasCombo = false;
   List<Map<String, dynamic>> lastComboComponents = const [];
+  int lastComboDrinkChoiceCount = 0;
 
   @override
   Future<void> fetchAll() async {}
@@ -229,10 +230,12 @@ class _MenuNotifier extends MenuNotifier {
     required double price,
     bool isCombo = false,
     List<Map<String, dynamic>> comboComponents = const [],
+    int comboDrinkChoiceCount = 0,
   }) async {
     addItemCalls += 1;
     lastAddedItemWasCombo = isCombo;
     lastComboComponents = comboComponents;
+    lastComboDrinkChoiceCount = comboDrinkChoiceCount;
     return true;
   }
 
@@ -895,6 +898,10 @@ void main() {
         find.byKey(const Key('admin_menu_combo_component_$_menuItemId')),
       );
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('admin_menu_combo_drink_count')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('1').last);
+      await tester.pumpAndSettle();
       await tester.tap(_dialogAction(addItemDialog, FilledButton));
       await tester.pumpAndSettle();
       expect(notifier.addItemCalls, 1);
@@ -902,6 +909,7 @@ void main() {
       expect(notifier.lastComboComponents, [
         {'menu_item_id': _menuItemId, 'quantity': 1},
       ]);
+      expect(notifier.lastComboDrinkChoiceCount, 1);
 
       await tester.tap(
         find.byKey(const Key('admin_menu_edit_item_$_menuItemId')),
@@ -1255,7 +1263,7 @@ void main() {
       'Bếp phụ',
     );
     await tester.enterText(
-      find.byKey(const Key('settings_printer_destination_ip')),
+      find.byKey(const Key('settings_printer_destination_wired_ip')),
       '192.168.10.52',
     );
     await tester.tap(

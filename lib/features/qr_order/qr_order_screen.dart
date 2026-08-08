@@ -38,6 +38,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
   bool _isSubmitting = false;
   String _languageCode = 'vi';
   final Map<String, int> _cart = <String, int>{};
+  final Map<String, List<String>> _comboDrinkChoices = <String, List<String>>{};
   Timer? _menuRefreshTimer;
   Timer? _liveMenuDebounceTimer;
   RealtimeChannel? _menuChannel;
@@ -133,6 +134,24 @@ class _QrOrderScreenState extends State<QrOrderScreen>
         }
         final availableIds = menu.items.map((item) => item.id).toSet();
         _cart.removeWhere((itemId, _) => !availableIds.contains(itemId));
+        _comboDrinkChoices.removeWhere(
+          (itemId, _) => !availableIds.contains(itemId),
+        );
+        for (final item in menu.items) {
+          final quantity = _cart[item.id] ?? 0;
+          if (quantity == 0 || item.comboDrinkChoiceCount == 0) continue;
+          final choices = _comboDrinkChoices[item.id] ?? const <String>[];
+          final validOptionIds = item.comboDrinkOptions
+              .map((option) => option.id)
+              .toSet();
+          final choicesStillValid =
+              choices.length == quantity * item.comboDrinkChoiceCount &&
+              choices.every(validOptionIds.contains);
+          if (!choicesStillValid) {
+            _cart.remove(item.id);
+            _comboDrinkChoices.remove(item.id);
+          }
+        }
         _isLoading = false;
       });
     } catch (error) {
@@ -176,12 +195,52 @@ class _QrOrderScreenState extends State<QrOrderScreen>
 
   int get _cartCount => _cart.values.fold(0, (sum, qty) => sum + qty);
 
-  void _setQuantity(String itemId, int quantity) {
+  String _localizedDrinkName(QrMenuItem item, String choiceId) {
+    for (final option in item.comboDrinkOptions) {
+      if (option.id == choiceId) {
+        return option.localizedName(_languageCode);
+      }
+    }
+    return choiceId;
+  }
+
+  Future<void> _setQuantity(QrMenuItem item, int quantity) async {
+    final currentQuantity = _cart[item.id] ?? 0;
+    final choiceCount = item.comboDrinkChoiceCount;
+    var choices = List<String>.from(_comboDrinkChoices[item.id] ?? const []);
+
+    if (quantity > currentQuantity && choiceCount > 0) {
+      for (var unit = currentQuantity; unit < quantity; unit++) {
+        final selected = await showDialog<List<String>>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => _QrComboDrinkDialog(
+            copy: _copy,
+            languageCode: _languageCode,
+            item: item,
+          ),
+        );
+        if (selected == null || !mounted) return;
+        choices.addAll(selected);
+      }
+    } else if (quantity < currentQuantity && choiceCount > 0) {
+      final keep = (quantity.clamp(0, 20) * choiceCount).clamp(
+        0,
+        choices.length,
+      );
+      choices = choices.take(keep).toList(growable: true);
+    }
+
+    if (!mounted) return;
     setState(() {
       if (quantity <= 0) {
-        _cart.remove(itemId);
+        _cart.remove(item.id);
+        _comboDrinkChoices.remove(item.id);
       } else {
-        _cart[itemId] = quantity.clamp(1, 20);
+        _cart[item.id] = quantity.clamp(1, 20);
+        if (choiceCount > 0) {
+          _comboDrinkChoices[item.id] = choices;
+        }
       }
       _clientOrderId = null;
       _failure = null;
@@ -199,6 +258,14 @@ class _QrOrderScreenState extends State<QrOrderScreen>
         languageCode: _languageCode,
         lines: _cartItems,
         totalLabel: '${_currency.format(_cartTotal)} VND',
+        comboDrinkNames: {
+          for (final line in _cartItems)
+            line.item.id: [
+              for (final choiceId
+                  in _comboDrinkChoices[line.item.id] ?? const <String>[])
+                _localizedDrinkName(line.item, choiceId),
+            ],
+        },
       ),
     );
 
@@ -217,8 +284,12 @@ class _QrOrderScreenState extends State<QrOrderScreen>
         clientOrderId: _clientOrderId!,
         items: _cart.entries
             .map(
-              (entry) =>
-                  QrOrderLine(menuItemId: entry.key, quantity: entry.value),
+              (entry) => QrOrderLine(
+                menuItemId: entry.key,
+                quantity: entry.value,
+                comboDrinkChoices:
+                    _comboDrinkChoices[entry.key] ?? const <String>[],
+              ),
             )
             .toList(),
       );
@@ -238,6 +309,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
           ],
         );
         _cart.clear();
+        _comboDrinkChoices.clear();
         _clientOrderId = null;
         _isSubmitting = false;
       });
@@ -399,7 +471,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
                                 : null,
                             copy: _copy,
                             onChanged: (quantity) =>
-                                _setQuantity(item.id, quantity),
+                                unawaited(_setQuantity(item, quantity)),
                           );
                         },
                       ),
@@ -599,6 +671,18 @@ class _QrMenuItemTile extends StatelessWidget {
               color: ToastColorTokens.textSecondary,
               fontSize: 14,
               height: 1.4,
+            ),
+          ),
+        ],
+        if (item.comboDrinkChoiceCount > 0) ...[
+          const SizedBox(height: ToastSpacingTokens.xs),
+          Text(
+            copy.comboDrinkIncluded(item.comboDrinkChoiceCount),
+            key: Key('qr_combo_drink_count_${item.id}'),
+            style: AppFonts.system(
+              color: ToastColorTokens.accentStrong,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -849,18 +933,164 @@ class _QrCartBar extends StatelessWidget {
   }
 }
 
+class _QrComboDrinkDialog extends StatefulWidget {
+  const _QrComboDrinkDialog({
+    required this.copy,
+    required this.languageCode,
+    required this.item,
+  });
+
+  final QrOrderCopy copy;
+  final String languageCode;
+  final QrMenuItem item;
+
+  @override
+  State<_QrComboDrinkDialog> createState() => _QrComboDrinkDialogState();
+}
+
+class _QrComboDrinkDialogState extends State<_QrComboDrinkDialog> {
+  final Map<String, int> _quantities = {};
+
+  int get _selectedCount =>
+      _quantities.values.fold(0, (sum, quantity) => sum + quantity);
+
+  @override
+  Widget build(BuildContext context) {
+    final requiredCount = widget.item.comboDrinkChoiceCount;
+    return AlertDialog(
+      key: Key('qr_combo_drink_dialog_${widget.item.id}'),
+      title: Text(widget.copy.chooseComboDrinksTitle),
+      content: SizedBox(
+        width: 480,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              widget.copy.chooseComboDrinksBody(requiredCount),
+              style: AppFonts.system(
+                color: ToastColorTokens.textSecondary,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: ToastSpacingTokens.md),
+            Container(
+              padding: const EdgeInsets.all(ToastSpacingTokens.sm),
+              decoration: BoxDecoration(
+                color: ToastColorTokens.mutedSurface,
+                borderRadius: ToastRadiusTokens.sm,
+              ),
+              child: Text(
+                widget.copy.comboDrinkSelectionProgress(
+                  _selectedCount,
+                  requiredCount,
+                ),
+                key: const Key('qr_combo_drink_progress'),
+                style: AppFonts.system(
+                  color: _selectedCount == requiredCount
+                      ? ToastColorTokens.success
+                      : ToastColorTokens.textPrimary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(height: ToastSpacingTokens.sm),
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: widget.item.comboDrinkOptions.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final option = widget.item.comboDrinkOptions[index];
+                  final quantity = _quantities[option.id] ?? 0;
+                  return ListTile(
+                    key: Key('qr_combo_drink_option_${option.id}'),
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(option.localizedName(widget.languageCode)),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton.outlined(
+                          key: Key('qr_combo_drink_minus_${option.id}'),
+                          onPressed: quantity == 0
+                              ? null
+                              : () => setState(() {
+                                  if (quantity == 1) {
+                                    _quantities.remove(option.id);
+                                  } else {
+                                    _quantities[option.id] = quantity - 1;
+                                  }
+                                }),
+                          icon: const Icon(Icons.remove, size: 18),
+                        ),
+                        SizedBox(
+                          width: 36,
+                          child: Text(
+                            '$quantity',
+                            textAlign: TextAlign.center,
+                            style: AppFonts.system(
+                              color: ToastColorTokens.textPrimary,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        IconButton.filled(
+                          key: Key('qr_combo_drink_plus_${option.id}'),
+                          onPressed: _selectedCount >= requiredCount
+                              ? null
+                              : () => setState(() {
+                                  _quantities[option.id] = quantity + 1;
+                                }),
+                          icon: const Icon(Icons.add, size: 18),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(widget.copy.cancel),
+        ),
+        FilledButton(
+          key: const Key('qr_combo_drink_confirm'),
+          onPressed: _selectedCount != requiredCount
+              ? null
+              : () => Navigator.of(context).pop([
+                  for (final option in widget.item.comboDrinkOptions)
+                    for (
+                      var count = 0;
+                      count < (_quantities[option.id] ?? 0);
+                      count++
+                    )
+                      option.id,
+                ]),
+          child: Text(widget.copy.confirmDrinkChoice),
+        ),
+      ],
+    );
+  }
+}
+
 class _QrReviewDialog extends StatelessWidget {
   const _QrReviewDialog({
     required this.copy,
     required this.languageCode,
     required this.lines,
     required this.totalLabel,
+    required this.comboDrinkNames,
   });
 
   final QrOrderCopy copy;
   final String languageCode;
   final List<({QrMenuItem item, int quantity})> lines;
   final String totalLabel;
+  final Map<String, List<String>> comboDrinkNames;
 
   @override
   Widget build(BuildContext context) {
@@ -907,18 +1137,38 @@ class _QrReviewDialog extends StatelessWidget {
                       const Divider(height: ToastSpacingTokens.lg),
                   itemBuilder: (context, index) {
                     final line = lines[index];
+                    final drinks = comboDrinkNames[line.item.id] ?? const [];
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          child: Text(
-                            line.item.localizedName(languageCode),
-                            style: AppFonts.system(
-                              color: ToastColorTokens.textPrimary,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              height: 1.4,
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                line.item.localizedName(languageCode),
+                                style: AppFonts.system(
+                                  color: ToastColorTokens.textPrimary,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.4,
+                                ),
+                              ),
+                              if (drinks.isNotEmpty) ...[
+                                const SizedBox(height: ToastSpacingTokens.xs),
+                                Text(
+                                  drinks.join(', '),
+                                  key: Key(
+                                    'qr_review_combo_drinks_${line.item.id}',
+                                  ),
+                                  style: AppFonts.system(
+                                    color: ToastColorTokens.textSecondary,
+                                    fontSize: 13,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
                         const SizedBox(width: ToastSpacingTokens.sm),
@@ -1346,6 +1596,37 @@ class QrOrderCopy {
       'Khi hoàn tất, phiếu xác nhận sẽ được in tại bếp và tầng hiện tại, đồng thời đơn sẽ được chuyển đến thu ngân.',
     _ =>
       'When completed, confirmation slips print in the kitchen and on this floor, and the order goes straight to the cashier.',
+  };
+
+  String get chooseComboDrinksTitle => switch (code) {
+    'ko' => '콤보 음료 선택',
+    'vi' => 'Chọn đồ uống cho combo',
+    _ => 'Choose combo drinks',
+  };
+
+  String chooseComboDrinksBody(int count) => switch (code) {
+    'ko' => '이 콤보에 포함된 음료 $count개를 선택해 주세요.',
+    'vi' => 'Vui lòng chọn $count đồ uống đi kèm combo này.',
+    _ => 'Choose $count drink(s) included with this combo.',
+  };
+
+  String comboDrinkSelectionProgress(int selected, int required) =>
+      switch (code) {
+        'ko' => '$required개 중 $selected개 선택',
+        'vi' => 'Đã chọn $selected / $required',
+        _ => '$selected of $required selected',
+      };
+
+  String comboDrinkIncluded(int count) => switch (code) {
+    'ko' => '음료 $count개 선택 포함',
+    'vi' => 'Bao gồm lựa chọn $count đồ uống',
+    _ => 'Includes $count drink choice(s)',
+  };
+
+  String get confirmDrinkChoice => switch (code) {
+    'ko' => '음료 선택 완료',
+    'vi' => 'Xác nhận đồ uống',
+    _ => 'Confirm drinks',
   };
 
   String get review => switch (code) {

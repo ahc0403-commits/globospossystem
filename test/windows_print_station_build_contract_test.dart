@@ -11,9 +11,17 @@ void main() {
     final workflow = File(
       '.github/workflows/windows_print_station_build.yml',
     ).readAsStringSync();
+    final runner = File('windows/runner/flutter_window.cpp').readAsStringSync();
+    final runnerCmake = File(
+      'windows/runner/CMakeLists.txt',
+    ).readAsStringSync();
 
     expect(cmake, contains('set(BINARY_NAME "globos_print_station")'));
     expect(cmake, contains('set(CMAKE_POLICY_VERSION_MINIMUM 3.5'));
+    expect(runner, contains('globos/network_capabilities'));
+    expect(runner, contains('GetIfEntry2'));
+    expect(runner, contains('HardwareInterface'));
+    expect(runnerCmake, contains('iphlpapi.lib'));
     expect(script, contains('function Invoke-NativeCommand'));
     expect(script, contains(r'$exitCode = $LASTEXITCODE'));
     expect(script, contains(r'if ($exitCode -ne 0)'));

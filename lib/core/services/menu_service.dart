@@ -191,6 +191,7 @@ class MenuService {
     required String itemId,
     required bool isCombo,
     required List<Map<String, dynamic>> components,
+    int drinkChoiceCount = 0,
   }) async {
     await supabase.rpc(
       'admin_set_menu_combo',
@@ -198,6 +199,7 @@ class MenuService {
         'p_item_id': itemId,
         'p_is_combo': isCombo,
         'p_components': components,
+        'p_drink_choice_count': drinkChoiceCount,
       },
     );
   }

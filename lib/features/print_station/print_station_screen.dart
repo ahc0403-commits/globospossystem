@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/hardware/print_agent_coordinator.dart';
 import '../../core/hardware/print_agent_coordinator_provider.dart';
+import '../../core/hardware/network_capability_service.dart';
 import '../../core/hardware/printer_service.dart';
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/printer_destination_service.dart';
@@ -87,7 +88,10 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
       if (result == PrintResult.success) {
         showSuccessToast(context, context.l10n.printStationTestComplete);
       } else {
-        showErrorToast(context, context.l10n.printStationTestFailed);
+        showErrorToast(
+          context,
+          '${context.l10n.printStationTestFailed} (${result.name})',
+        );
       }
     } finally {
       if (!mounted) {
@@ -176,6 +180,7 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
     final l10n = context.l10n;
     final coordinator = ref.read(printAgentCoordinatorProvider.notifier);
     final agentState = ref.watch(printAgentCoordinatorProvider);
+    final networkCapabilities = ref.watch(networkCapabilitiesProvider);
     if (!(widget.isSupportedOverride ?? coordinator.isSupported)) {
       return Center(
         child: PosExceptionAlert(
@@ -268,6 +273,24 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
                 const SizedBox(height: 14),
                 ToastMetricStrip(
                   metrics: [
+                    ToastMetric(
+                      label: l10n.printStationNetwork,
+                      value: networkCapabilities.when(
+                        data: (capabilities) => capabilities.wiredConnected
+                            ? l10n.settingsPrinterWired
+                            : capabilities.wirelessConnected
+                            ? l10n.settingsPrinterWireless
+                            : l10n.printStationNoNetwork,
+                        loading: () => '-',
+                        error: (_, __) => l10n.printStationNoNetwork,
+                      ),
+                      tone: networkCapabilities.maybeWhen(
+                        data: (capabilities) => capabilities.hasNetwork
+                            ? PosColors.success
+                            : PosColors.warning,
+                        orElse: () => PosColors.textSecondary,
+                      ),
+                    ),
                     ToastMetric(
                       label: l10n.printStationDestinations,
                       value: '${destinationState.destinations.length}',
@@ -526,13 +549,24 @@ class _DestinationTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  '${destination.ip}:${destination.port}',
-                  style: AppFonts.system(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
+                for (final endpoint in destination.endpoints)
+                  Text(
+                    '${endpoint.type == 'wired' ? l10n.settingsPrinterWired : l10n.settingsPrinterWireless}: '
+                    '${endpoint.ip}:${endpoint.port}',
+                    style: AppFonts.system(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
-                ),
+                if (destination.endpoints.isEmpty)
+                  Text(
+                    '${l10n.settingsPrinterWireless}: '
+                    '${destination.ip}:${destination.port}',
+                    style: AppFonts.system(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
                 const SizedBox(height: 6),
                 Wrap(
                   spacing: 6,
