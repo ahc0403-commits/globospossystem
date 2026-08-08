@@ -55,7 +55,7 @@ void main() {
       {'amount': 373302, 'amount_portion': 373464, 'method': 'BANKTRANSFER'},
       {'amount': 587000, 'amount_portion': 586292, 'method': 'BANKTRANSFER'},
       {'amount': 319032, 'amount_portion': 319032, 'method': 'CASH'},
-      {'amount': 103284, 'amount_portion': 103284, 'method': 'BANKTRANSFER'},
+      {'amount': 103284, 'amount_portion': 101304, 'method': 'BANKTRANSFER'},
       {'amount': 242140, 'amount_portion': 242140, 'method': 'BANKTRANSFER'},
     ];
 
@@ -67,8 +67,8 @@ void main() {
     expect(totals.bankTransfer, 2821448);
     expect(totals.ePay, 0);
     expect(totals.total, 4531424);
-    expect(salesTotal, 4530588);
-    expect(totals.total - salesTotal, 836);
+    expect(salesTotal, 4528608);
+    expect(totals.total - salesTotal, 2816);
   });
 
   test('paid order count de-duplicates split payment rows', () {
@@ -90,12 +90,12 @@ void main() {
     expect(path, isNot(startsWith('supabase/migrations/')));
     expect(sql, contains('begin;'));
     expect(sql, contains('commit;'));
-    expect(sql, contains('expected 10 exact payment rows'));
+    expect(sql, contains('expected 11 exact payment rows'));
     expect(sql, contains('manual tax review required'));
     expect(sql, contains("amount = 88200"));
     expect(sql, contains("method = 'BANKTRANSFER'"));
     expect(sql, contains("method = 'CASH'"));
-    expect(sql, contains('bank_statement_total <> 2476024'));
-    expect(sql, contains('bank_sales_total <> 2475188'));
+    expect(sql, contains('bank_statement_total <> 2821448'));
+    expect(sql, contains('bank_sales_total <> 2818632'));
   });
 }
