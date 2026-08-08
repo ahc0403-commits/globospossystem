@@ -105,6 +105,7 @@ try {
     "test",
     "test/print_routing_contract_test.dart",
     "test/windows_print_station_build_contract_test.dart",
+    "test/printer_network_endpoint_contract_test.dart",
     "test/cashier_receipt_print_contract_test.dart",
     "test/receipt_builder_contract_test.dart",
     "test/wifi_printer_service_test.dart"

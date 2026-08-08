@@ -236,6 +236,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     required double price,
     bool isCombo = false,
     List<Map<String, dynamic>> comboComponents = const [],
+    int comboDrinkChoiceCount = 0,
   }) async {
     Map<String, dynamic>? created;
     try {
@@ -262,6 +263,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
           itemId: itemId,
           isCombo: true,
           components: comboComponents,
+          drinkChoiceCount: comboDrinkChoiceCount,
         );
       }
       await fetchItems();
@@ -290,6 +292,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     required XFile photo,
     bool isCombo = false,
     List<Map<String, dynamic>> comboComponents = const [],
+    int comboDrinkChoiceCount = 0,
   }) async {
     Map<String, dynamic>? created;
     MenuImageUploadResult? uploaded;
@@ -316,6 +319,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
           itemId: itemId,
           isCombo: true,
           components: comboComponents,
+          drinkChoiceCount: comboDrinkChoiceCount,
         );
       }
 
@@ -412,12 +416,14 @@ class MenuNotifier extends StateNotifier<MenuState> {
     required String itemId,
     required bool isCombo,
     required List<Map<String, dynamic>> components,
+    int drinkChoiceCount = 0,
   }) async {
     try {
       await menuService.setMenuCombo(
         itemId: itemId,
         isCombo: isCombo,
         components: components,
+        drinkChoiceCount: drinkChoiceCount,
       );
       await fetchItems();
       state = state.copyWith(clearError: true);

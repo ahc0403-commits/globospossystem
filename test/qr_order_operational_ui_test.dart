@@ -126,6 +126,69 @@ void _expectNoLayoutFailure(WidgetTester tester) {
 }
 
 void main() {
+  testWidgets('combo addition requires the exact configured drink count', (
+    tester,
+  ) async {
+    const comboMenu = QrOrderMenu(
+      storeName: 'BunsikClub',
+      tableNumber: '8',
+      floorLabel: '1F',
+      categories: [QrMenuCategory(id: 'combo-category', name: 'Combo')],
+      items: [
+        QrMenuItem(
+          id: 'combo',
+          categoryId: 'combo-category',
+          name: 'Combo 3 + 2 drinks',
+          price: 300000,
+          isCombo: true,
+          comboDrinkChoiceCount: 2,
+          comboDrinkOptions: [
+            QrComboDrinkOption(id: 'cola', name: 'Cola'),
+            QrComboDrinkOption(id: 'water', name: 'Water'),
+          ],
+        ),
+      ],
+    );
+    List<QrOrderLine>? submitted;
+    await _pumpQr(
+      tester,
+      service: _service(
+        fetch: (_) async => comboMenu,
+        place: (_, items, __) async {
+          submitted = items;
+          return _result;
+        },
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('qr_add_combo')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('qr_combo_drink_dialog_combo')),
+      findsOneWidget,
+    );
+    final confirm = find.byKey(const Key('qr_combo_drink_confirm'));
+    expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+
+    await tester.tap(find.byKey(const Key('qr_combo_drink_plus_cola')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('qr_combo_drink_plus_water')));
+    await tester.pump();
+    expect(tester.widget<FilledButton>(confirm).onPressed, isNotNull);
+    await tester.tap(confirm);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('qr_open_review')));
+    await tester.pumpAndSettle();
+    expect(find.text('Cola, Water'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('qr_confirm_submit')));
+    await tester.pumpAndSettle();
+
+    expect(submitted, hasLength(1));
+    expect(submitted!.single.comboDrinkChoices, ['cola', 'water']);
+    _expectNoLayoutFailure(tester);
+  });
+
   testWidgets('loading, empty, and customer-safe load failures are explicit', (
     tester,
   ) async {

@@ -1374,7 +1374,7 @@ class _KitchenTicketItemRow extends StatelessWidget {
                   const SizedBox(height: 4),
                   for (final component in item.comboComponents)
                     Text(
-                      '• ${_localizedKitchenItemLabel(context, component.label)} ×${component.quantity * item.quantity}',
+                      '• ${_localizedKitchenItemLabel(context, component.label)} ×${component.displayQuantity(item.quantity)}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: PosSurfaceRole.action.text,
                         fontWeight: FontWeight.w700,

@@ -25,6 +25,28 @@ void main() {
     expect(item.nameEn, 'Korean rice roll');
   });
 
+  test('floor order item keeps snapshotted combo drink selections', () {
+    final item = OrderItem.fromJson({
+      'id': 'item-combo',
+      'menu_item_id': 'combo-3',
+      'label': 'Combo 3',
+      'unit_price': 199000,
+      'quantity': 2,
+      'status': 'pending',
+      'item_type': 'menu_item',
+      'combo_components': [
+        {'label': 'Kimbap', 'quantity': 1},
+        {'label': 'Cola', 'quantity': 1, 'is_total_quantity': true},
+        {'label': 'Water', 'quantity': 1, 'is_total_quantity': true},
+      ],
+    });
+
+    expect(item.comboComponents, hasLength(3));
+    expect(item.comboComponents.first.displayQuantity(item.quantity), 2);
+    expect(item.comboComponents[1].displayQuantity(item.quantity), 1);
+    expect(item.comboComponents[2].label, 'Water');
+  });
+
   test('order items are displayed in oldest-to-newest creation order', () {
     final order = Order.fromJson({
       'id': 'order-1',
@@ -94,4 +116,21 @@ void main() {
       );
     }
   });
+
+  test(
+    'floor order query and both floor order views include combo snapshots',
+    () {
+      final provider = File(
+        'lib/features/order/order_provider.dart',
+      ).readAsStringSync();
+      final workspace = File(
+        'lib/widgets/order_workspace.dart',
+      ).readAsStringSync();
+
+      expect(provider, contains('item_type, combo_components, menu_items'));
+      expect(workspace, contains('order_sent_item_combo_components_'));
+      expect(workspace, contains('order_current_ticket_combo_components_'));
+      expect(workspace, contains('component.displayQuantity(item.quantity)'));
+    },
+  );
 }

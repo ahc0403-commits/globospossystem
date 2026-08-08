@@ -99,6 +99,9 @@ class QrMenuItem {
     this.discountPercent = 0,
     this.description,
     this.imageUrl,
+    this.isCombo = false,
+    this.comboDrinkChoiceCount = 0,
+    this.comboDrinkOptions = const [],
   });
 
   final String id;
@@ -112,6 +115,9 @@ class QrMenuItem {
   final double discountPercent;
   final String? description;
   final String? imageUrl;
+  final bool isCombo;
+  final int comboDrinkChoiceCount;
+  final List<QrComboDrinkOption> comboDrinkOptions;
 
   String localizedName(String languageCode) => switch (languageCode) {
     'ko' => nameKo.isEmpty ? name : nameKo,
@@ -136,6 +142,51 @@ class QrMenuItem {
           ? null
           : _jsonDouble(json['original_price']),
       discountPercent: _jsonDouble(json['discount_percent']),
+      isCombo: json['is_combo'] == true,
+      comboDrinkChoiceCount: _jsonInt(json['combo_drink_choice_count']),
+      comboDrinkOptions: json['combo_drink_options'] is List
+          ? (json['combo_drink_options'] as List)
+                .whereType<Map>()
+                .map(
+                  (option) => QrComboDrinkOption.fromJson(
+                    Map<String, dynamic>.from(option),
+                  ),
+                )
+                .toList(growable: false)
+          : const [],
+    );
+  }
+}
+
+class QrComboDrinkOption {
+  const QrComboDrinkOption({
+    required this.id,
+    required this.name,
+    this.nameKo = '',
+    this.nameVi = '',
+    this.nameEn = '',
+  });
+
+  final String id;
+  final String name;
+  final String nameKo;
+  final String nameVi;
+  final String nameEn;
+
+  String localizedName(String languageCode) => switch (languageCode) {
+    'ko' => nameKo.isEmpty ? name : nameKo,
+    'vi' => nameVi.isEmpty ? name : nameVi,
+    _ => nameEn.isEmpty ? name : nameEn,
+  };
+
+  factory QrComboDrinkOption.fromJson(Map<String, dynamic> json) {
+    final fallback = json['name']?.toString() ?? '';
+    return QrComboDrinkOption(
+      id: json['id']?.toString() ?? '',
+      name: fallback,
+      nameKo: json['name_ko']?.toString() ?? fallback,
+      nameVi: json['name_vi']?.toString() ?? fallback,
+      nameEn: json['name_en']?.toString() ?? fallback,
     );
   }
 }
@@ -146,15 +197,28 @@ double _jsonDouble(dynamic value) => switch (value) {
   _ => 0,
 };
 
+int _jsonInt(dynamic value) => switch (value) {
+  int number => number,
+  num number => number.toInt(),
+  String text => int.tryParse(text) ?? 0,
+  _ => 0,
+};
+
 class QrOrderLine {
-  const QrOrderLine({required this.menuItemId, required this.quantity});
+  const QrOrderLine({
+    required this.menuItemId,
+    required this.quantity,
+    this.comboDrinkChoices = const [],
+  });
 
   final String menuItemId;
   final int quantity;
+  final List<String> comboDrinkChoices;
 
   Map<String, dynamic> toJson() => {
     'menu_item_id': menuItemId,
     'quantity': quantity,
+    if (comboDrinkChoices.isNotEmpty) 'combo_drink_choices': comboDrinkChoices,
   };
 }
 
@@ -238,6 +302,7 @@ class QrOrderService {
         'p_token': token,
         'p_items': items.map((item) => item.toJson()).toList(),
         'p_client_order_id': clientOrderId,
+        'p_validate_combo_choices': true,
       },
     );
     return QrOrderResult.fromJson(Map<String, dynamic>.from(result as Map));

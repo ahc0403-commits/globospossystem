@@ -138,6 +138,23 @@ class _PaymentNotifier extends PaymentNotifier {
   Future<void> loadOrders(String storeId) async {}
 
   @override
+  Future<List<QrOrderLedgerBatch>> fetchQrOrderLedger(String orderId) async {
+    return [
+      QrOrderLedgerBatch(
+        batchNo: 1,
+        createdAt: DateTime(2026, 7, 18, 12),
+        items: const [
+          QrOrderLedgerItem(
+            name: 'Phở bò đặc biệt',
+            quantity: 1,
+            unitPrice: 100000,
+          ),
+        ],
+      ),
+    ];
+  }
+
+  @override
   Future<bool> setWetTissueQuantity({
     required String storeId,
     required String orderId,
@@ -355,6 +372,31 @@ void main() {
     expect(find.text('소고기 쌀국수'), findsOneWidget);
     expect(find.text('Phở bò đặc biệt'), findsOneWidget);
     expect(find.text('Special beef pho'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('order number opens the customer QR order ledger', (
+    tester,
+  ) async {
+    await _pumpCashier(tester);
+    await _selectOrder(tester);
+
+    final ledgerAction = find.byKey(
+      const Key('cashier_order_ledger_action_$_orderId'),
+    );
+    await tester.ensureVisible(ledgerAction);
+    await tester.tap(ledgerAction);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('cashier_qr_order_ledger_dialog')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('cashier_qr_order_ledger_batch_1')),
+      findsOneWidget,
+    );
+    expect(find.text('Phở bò đặc biệt × 1'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

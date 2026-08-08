@@ -298,3 +298,14 @@ SHA. After login on the station, open **Print Station**, confirm all five
 destinations, print one test ticket per destination, then start polling. Do not
 call the station operational until the physical tickets and retry queue have
 been checked on the store network.
+
+For every physical printer, record its wired and wireless endpoints separately
+when available. On the POS/print-station PC verify the runtime link state:
+
+- wired link active: both wired and wireless printer endpoints are eligible;
+- wireless only: only wireless printer endpoints are eligible;
+- no active link: the agent must report `NETWORK_UNAVAILABLE` and print none.
+
+Confirm the endpoint type and exact `IP:port` shown by the print station for
+each physical test. A database `done` status without the expected paper output
+is not an operational pass.

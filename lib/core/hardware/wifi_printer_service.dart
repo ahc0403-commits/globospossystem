@@ -50,10 +50,20 @@ class WifiPrinterService implements PrinterService {
       await socket.flush().timeout(printFlushTimeout);
       await socket.close().timeout(socketCloseTimeout);
       return PrintResult.success;
-    } on SocketException {
-      return PrintResult.connectionFailed;
+    } on SocketException catch (error) {
+      return switch (error.osError?.errorCode) {
+        10061 || 61 || 111 => PrintResult.connectionRefused,
+        10060 || 60 || 110 => PrintResult.connectionTimeout,
+        10051 ||
+        10065 ||
+        51 ||
+        65 ||
+        101 ||
+        113 => PrintResult.networkUnreachable,
+        _ => PrintResult.connectionFailed,
+      };
     } on TimeoutException {
-      return PrintResult.connectionFailed;
+      return PrintResult.connectionTimeout;
     } catch (_) {
       return PrintResult.printFailed;
     } finally {

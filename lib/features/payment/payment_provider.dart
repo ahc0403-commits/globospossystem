@@ -142,6 +142,70 @@ class CashierOrderSearchResult {
   }
 }
 
+class QrOrderLedgerBatch {
+  const QrOrderLedgerBatch({
+    required this.batchNo,
+    required this.createdAt,
+    required this.items,
+  });
+
+  final int batchNo;
+  final DateTime createdAt;
+  final List<QrOrderLedgerItem> items;
+
+  factory QrOrderLedgerBatch.fromJson(Map<String, dynamic> json) {
+    final rawItems = json['items_snapshot'];
+    return QrOrderLedgerBatch(
+      batchNo: switch (json['batch_no']) {
+        int value => value,
+        num value => value.toInt(),
+        String value => int.tryParse(value) ?? 1,
+        _ => 1,
+      },
+      createdAt:
+          DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      items: rawItems is List
+          ? rawItems
+                .whereType<Map>()
+                .map(
+                  (item) => QrOrderLedgerItem.fromJson(
+                    Map<String, dynamic>.from(item),
+                  ),
+                )
+                .toList(growable: false)
+          : const [],
+    );
+  }
+}
+
+class QrOrderLedgerItem {
+  const QrOrderLedgerItem({
+    required this.name,
+    required this.quantity,
+    required this.unitPrice,
+  });
+
+  final String name;
+  final int quantity;
+  final double unitPrice;
+
+  double get lineTotal => unitPrice * quantity;
+
+  factory QrOrderLedgerItem.fromJson(Map<String, dynamic> json) {
+    return QrOrderLedgerItem(
+      name: json['name']?.toString() ?? '-',
+      quantity: switch (json['quantity']) {
+        int value => value,
+        num value => value.toInt(),
+        String value => int.tryParse(value) ?? 0,
+        _ => 0,
+      },
+      unitPrice: _toDoubleValue(json['unit_price']),
+    );
+  }
+}
+
 class PaymentState {
   const PaymentState({
     this.orders = const [],
@@ -212,7 +276,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       final response = await supabase
           .from('orders')
           .select(
-            'id, table_id, status, order_purpose, order_source, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, paying_amount_inc_tax, menu_items(name, name_vi, name_en, vat_category))',
+            'id, table_id, status, order_purpose, order_source, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, paying_amount_inc_tax, combo_components, menu_items(name, name_vi, name_en, vat_category))',
           )
           .eq('restaurant_id', storeId)
           // Payability is an order-status fact derived server-side by
@@ -324,7 +388,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     final response = await supabase
         .from('orders')
         .select(
-          'id, table_id, status, order_purpose, order_source, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, paying_amount_inc_tax, menu_items(name, name_vi, name_en, vat_category))',
+          'id, table_id, status, order_purpose, order_source, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, paying_amount_inc_tax, combo_components, menu_items(name, name_vi, name_en, vat_category))',
         )
         .eq('restaurant_id', storeId)
         .eq('status', 'completed')
@@ -470,6 +534,20 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     }
 
     return partialMatch;
+  }
+
+  Future<List<QrOrderLedgerBatch>> fetchQrOrderLedger(String orderId) async {
+    final response = await supabase
+        .from('qr_order_batches')
+        .select('batch_no, items_snapshot, created_at')
+        .eq('order_id', orderId)
+        .order('batch_no', ascending: true);
+
+    return response
+        .map(
+          (row) => QrOrderLedgerBatch.fromJson(Map<String, dynamic>.from(row)),
+        )
+        .toList(growable: false);
   }
 
   CashierOrderSearchResult? _cashierOrderSearchResultFromRpc(Object? raw) {

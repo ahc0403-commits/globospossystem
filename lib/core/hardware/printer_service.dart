@@ -8,4 +8,14 @@ abstract class PrinterService {
   });
 }
 
-enum PrintResult { success, connectionFailed, printFailed, notSupported }
+enum PrintResult {
+  success,
+  connectionFailed,
+  connectionRefused,
+  connectionTimeout,
+  networkUnreachable,
+  networkUnavailable,
+  noAllowedEndpoint,
+  printFailed,
+  notSupported,
+}

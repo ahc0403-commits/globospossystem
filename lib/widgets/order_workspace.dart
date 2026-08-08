@@ -1515,6 +1515,54 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                                                     fontWeight: FontWeight.w600,
                                                   ),
                                             ),
+                                            if (item
+                                                .comboComponents
+                                                .isNotEmpty) ...[
+                                              const SizedBox(height: 4),
+                                              Container(
+                                                key: ValueKey<String>(
+                                                  'order_sent_item_combo_components_${item.id}',
+                                                ),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 5,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: PosColors.surface,
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  border: Border.all(
+                                                    color: PosColors.border,
+                                                  ),
+                                                ),
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    for (final component
+                                                        in item.comboComponents)
+                                                      Text(
+                                                        '• ${_localizedMenuDataLabel(context, component.label)} ×${component.displayQuantity(item.quantity)}',
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style: Theme.of(context)
+                                                            .textTheme
+                                                            .bodySmall
+                                                            ?.copyWith(
+                                                              color: PosColors
+                                                                  .textSecondary,
+                                                              fontSize: 11,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w700,
+                                                            ),
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
                                           ],
                                         ),
                                       ),
@@ -1968,6 +2016,50 @@ class _CurrentTicketDetailSheet extends StatelessWidget {
                                   fontWeight: FontWeight.w700,
                                 ),
                           ),
+                          if (item.comboComponents.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              key: ValueKey<String>(
+                                'order_current_ticket_combo_components_${item.id}',
+                              ),
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: PosColors.panelMuted,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    l10n.kitchenComboComponents,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: PosColors.textSecondary,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  for (final component in item.comboComponents)
+                                    Text(
+                                      '• ${_localizedMenuDataLabel(context, component.label)} ×${component.displayQuantity(item.quantity)}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: PosColors.textSecondary,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
                           if (!canEditQty && !isCancelled) ...[
                             const SizedBox(height: 6),
                             Text(

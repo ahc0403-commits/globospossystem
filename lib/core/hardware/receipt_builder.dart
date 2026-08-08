@@ -18,7 +18,6 @@ class ReceiptBuilder {
     String? taxCode,
     List<String> addressLines = const [],
     String? receiptNumber,
-    String? orderNumber,
     String? cashierCode,
     double? subtotalAmount,
     double discountAmount = 0,
@@ -94,9 +93,6 @@ class ReceiptBuilder {
         'Ngay/Gio  : ${TimeUtils.formatDate(paidAt)} ${TimeUtils.formatTime(paidAt)}',
       ),
     );
-    if (orderNumber != null) {
-      bytes.addAll(generator.text('So don    : ${_escText(orderNumber)}'));
-    }
     if (cashierCode != null) {
       bytes.addAll(generator.text('Thu ngan  : ${_escText(cashierCode)}'));
     }
@@ -461,7 +457,7 @@ class ReceiptBuilder {
               width: compact ? 8 : 9,
             ),
             PosColumn(
-              text: 'x${component.quantity * item.quantity}',
+              text: 'x${component.displayQuantity(item.quantity)}',
               width: compact ? 4 : 3,
               styles: const PosStyles(align: PosAlign.right, bold: true),
             ),
@@ -801,10 +797,15 @@ class PrintTicketComboComponent {
   const PrintTicketComboComponent({
     required this.label,
     required this.quantity,
+    this.isTotalQuantity = false,
   });
 
   final String label;
   final int quantity;
+  final bool isTotalQuantity;
+
+  int displayQuantity(int orderItemQuantity) =>
+      isTotalQuantity ? quantity : quantity * orderItemQuantity;
 
   factory PrintTicketComboComponent.fromPayload(Map<String, dynamic> payload) {
     return PrintTicketComboComponent(
@@ -814,6 +815,11 @@ class PrintTicketComboComponent {
         num value => value.toInt(),
         String value => int.tryParse(value) ?? 1,
         _ => 1,
+      },
+      isTotalQuantity: switch (payload['is_total_quantity']) {
+        bool value => value,
+        String value => value.toLowerCase() == 'true',
+        _ => false,
       },
     );
   }
@@ -832,7 +838,6 @@ class QueuedPaymentReceipt {
     required this.taxCode,
     required this.addressLines,
     required this.receiptNumber,
-    required this.orderNumber,
     required this.cashierCode,
     required this.subtotalAmount,
     required this.discountAmount,
@@ -851,7 +856,6 @@ class QueuedPaymentReceipt {
   final String? taxCode;
   final List<String> addressLines;
   final String? receiptNumber;
-  final String? orderNumber;
   final String? cashierCode;
   final double? subtotalAmount;
   final double discountAmount;
@@ -909,7 +913,6 @@ class QueuedPaymentReceipt {
               .map((value) => value.toString())
               .toList(),
       receiptNumber: payload['receipt_number']?.toString(),
-      orderNumber: payload['order_number']?.toString(),
       cashierCode: payload['cashier_code']?.toString(),
       subtotalAmount: _payloadDouble(payload['subtotal_amount']),
       discountAmount: _payloadDouble(payload['discount_amount']) ?? 0,

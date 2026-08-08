@@ -146,15 +146,10 @@ void main() {
     expect(
       migration,
       isNot(
-        contains(
-          "ARRAY['kitchen', 'floor', 'confirmation'],\n    v_items,",
-        ),
+        contains("ARRAY['kitchen', 'floor', 'confirmation'],\n    v_items,"),
       ),
     );
-    expect(
-      verification,
-      contains('QR_PRINT_DELTA_VERIFY_CONTRACT_MISSING'),
-    );
+    expect(verification, contains('QR_PRINT_DELTA_VERIFY_CONTRACT_MISSING'));
   });
 
   test('confirmation slips reuse print routing and render cashier-only copy', () {
@@ -240,6 +235,9 @@ void main() {
       contains('bool get isQrOrder => orderSource == \'qr\''),
     );
     expect(paymentProvider, contains('class CashierOrderSearchResult'));
+    expect(paymentProvider, contains('class QrOrderLedgerBatch'));
+    expect(paymentProvider, contains('fetchQrOrderLedger'));
+    expect(paymentProvider, contains(".from('qr_order_batches')"));
     expect(paymentProvider, contains('searchActiveOrderForCashier'));
     expect(
       paymentProvider,
@@ -251,6 +249,12 @@ void main() {
     expect(cashierScreen, contains("Key('cashier_order_search')"));
     expect(cashierScreen, contains("Key('cashier_order_search_action')"));
     expect(cashierScreen, contains("Key('cashier_order_search_status')"));
+    expect(cashierScreen, contains('cashier_order_ledger_action_'));
+    expect(
+      cashierScreen,
+      contains("key: const Key('cashier_qr_order_ledger_dialog')"),
+    );
+    expect(cashierScreen, contains('class _CashierQrOrderLedgerDialog'));
     expect(cashierScreen, contains('Kitchen in progress'));
     expect(cashierScreen, contains('_filterCashierOrders'));
     expect(cashierScreen, contains('_handleOrderSearch'));

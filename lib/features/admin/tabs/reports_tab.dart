@@ -33,6 +33,12 @@ String _formatVnd(NumberFormat currency, num amount) {
   return '${currency.format(amount)} VND';
 }
 
+double _reportDouble(dynamic value) => switch (value) {
+  num number => number.toDouble(),
+  String text => double.tryParse(text) ?? 0,
+  _ => 0,
+};
+
 String _reportPaymentMethodLabel(BuildContext context, String method) {
   final normalized = normalizePaymentMethodInput(method);
   return switch (normalized) {
@@ -2556,18 +2562,41 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
   bool _closingAlreadyClosed = false;
 
   Future<void> _createClosing() async {
-    final confirmed = await ToastConfirmDialog.show(
+    setState(() => _isClosing = true);
+    late final Map<String, dynamic> preview;
+    try {
+      preview = await dailyClosingService.fetchCashPreview(
+        storeId: widget.storeId,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(mapDailyClosingError(e))));
+        setState(() => _isClosing = false);
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _isClosing = false);
+
+    final cashInput = await showDialog<_DailyClosingCashInput>(
       context: context,
-      title: context.l10n.reportsCloseToday,
-      description: context.l10n.reportsSaveClosingQuestion,
-      confirmLabel: context.l10n.close,
+      barrierDismissible: false,
+      builder: (_) => _DailyClosingCashDialog(
+        cashSales: _reportDouble(preview['payments_cash']),
+      ),
     );
 
-    if (confirmed != true || !mounted) return;
+    if (cashInput == null || !mounted) return;
 
     setState(() => _isClosing = true);
     try {
-      await dailyClosingService.createDailyClosing(storeId: widget.storeId);
+      await dailyClosingService.createDailyClosing(
+        storeId: widget.storeId,
+        openingCashAmount: cashInput.openingCashAmount,
+        cashDenominations: cashInput.denominations,
+      );
       ref.invalidate(dailyClosingHistoryProvider);
       if (mounted) {
         setState(() => _closingSucceeded = true);
@@ -2753,8 +2782,8 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
           _hCell(context.l10n.reportsCancel),
           _hCell(context.l10n.reportsRevenue),
           _hCell(context.l10n.reportsCash),
-          _hCell(context.l10n.reportsCard),
-          _hCell(context.l10n.reportsLow),
+          _hCell(context.l10n.reportsCountedCash),
+          _hCell(context.l10n.reportsCashVariance),
           _hCell(context.l10n.reportsAssignee),
         ],
       ),
@@ -2782,8 +2811,8 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
           _dCell('${record.ordersCancelled}'),
           _dCell(_formatVnd(currency, record.paymentsTotal)),
           _dCell(_formatVnd(currency, record.paymentsCash)),
-          _dCell(_formatVnd(currency, record.paymentsCard)),
-          _dCell('${record.lowStockCount}'),
+          _dCell(_formatVnd(currency, record.countedCashAmount)),
+          _dCell(_formatVnd(currency, record.cashVariance)),
           _dCell(record.closedByName, overflow: true),
         ],
       ),
@@ -2816,6 +2845,287 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
         ),
         overflow: overflow ? TextOverflow.ellipsis : null,
       ),
+    );
+  }
+}
+
+class _DailyClosingCashInput {
+  const _DailyClosingCashInput({
+    required this.openingCashAmount,
+    required this.denominations,
+  });
+
+  final double openingCashAmount;
+  final Map<String, int> denominations;
+}
+
+class _DailyClosingCashDialog extends StatefulWidget {
+  const _DailyClosingCashDialog({required this.cashSales});
+
+  final double cashSales;
+
+  @override
+  State<_DailyClosingCashDialog> createState() =>
+      _DailyClosingCashDialogState();
+}
+
+class _DailyClosingCashDialogState extends State<_DailyClosingCashDialog> {
+  static const double _defaultOpeningCash = 5000000;
+  static const List<int> _denominations = [
+    500000,
+    200000,
+    100000,
+    50000,
+    20000,
+    10000,
+    5000,
+    2000,
+    1000,
+  ];
+
+  late final Map<int, TextEditingController> _controllers;
+  final _currency = NumberFormat('#,###', 'vi_VN');
+
+  @override
+  void initState() {
+    super.initState();
+    _controllers = {
+      for (final denomination in _denominations)
+        denomination: TextEditingController(text: '0'),
+    };
+    for (final controller in _controllers.values) {
+      controller.addListener(_refreshTotals);
+    }
+  }
+
+  void _refreshTotals() => setState(() {});
+
+  int _countFor(int denomination) {
+    return int.tryParse(_controllers[denomination]?.text.trim() ?? '') ?? 0;
+  }
+
+  double get _countedCash => _denominations.fold<double>(
+    0,
+    (sum, denomination) => sum + (denomination * _countFor(denomination)),
+  );
+
+  double get _expectedCash => _defaultOpeningCash + widget.cashSales;
+
+  @override
+  void dispose() {
+    for (final controller in _controllers.values) {
+      controller
+        ..removeListener(_refreshTotals)
+        ..dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final variance = _countedCash - _expectedCash;
+    return AlertDialog(
+      key: const Key('daily_closing_cash_dialog'),
+      title: Text(l10n.reportsCashClosingTitle),
+      content: SizedBox(
+        width: 620,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _ClosingCashSummary(
+                    label: l10n.reportsOpeningCash,
+                    value: _defaultOpeningCash,
+                    currency: _currency,
+                  ),
+                  _ClosingCashSummary(
+                    label: l10n.reportsCashSales,
+                    value: widget.cashSales,
+                    currency: _currency,
+                  ),
+                  _ClosingCashSummary(
+                    label: l10n.reportsExpectedCash,
+                    value: _expectedCash,
+                    currency: _currency,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                l10n.reportsCountBanknotes,
+                style: AppFonts.system(
+                  color: AppColors.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              for (final denomination in _denominations)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${_currency.format(denomination)} VND',
+                          style: AppFonts.system(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 100,
+                        child: TextField(
+                          key: Key('daily_closing_note_$denomination'),
+                          controller: _controllers[denomination],
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.right,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            suffixText: l10n.reportsBanknoteUnit,
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 140,
+                        child: Text(
+                          _formatVnd(
+                            _currency,
+                            denomination * _countFor(denomination),
+                          ),
+                          textAlign: TextAlign.right,
+                          style: AppFonts.system(
+                            color: AppColors.textSecondary,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const Divider(height: 24),
+              _ClosingCashTotalRow(
+                label: l10n.reportsCountedCash,
+                value: _countedCash,
+                currency: _currency,
+              ),
+              const SizedBox(height: 8),
+              _ClosingCashTotalRow(
+                label: l10n.reportsCashVariance,
+                value: variance,
+                currency: _currency,
+                color: variance == 0
+                    ? AppColors.statusAvailable
+                    : AppColors.statusCancelled,
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(l10n.cancel),
+        ),
+        FilledButton.icon(
+          key: const Key('daily_closing_cash_confirm'),
+          onPressed: () => Navigator.of(context).pop(
+            _DailyClosingCashInput(
+              openingCashAmount: _defaultOpeningCash,
+              denominations: {
+                for (final denomination in _denominations)
+                  '$denomination': _countFor(denomination),
+              },
+            ),
+          ),
+          icon: const Icon(Icons.lock_clock),
+          label: Text(l10n.reportsCloseToday),
+        ),
+      ],
+    );
+  }
+}
+
+class _ClosingCashSummary extends StatelessWidget {
+  const _ClosingCashSummary({
+    required this.label,
+    required this.value,
+    required this.currency,
+  });
+
+  final String label;
+  final double value;
+  final NumberFormat currency;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 184,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface3),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: AppFonts.system(color: AppColors.textSecondary)),
+          const SizedBox(height: 4),
+          Text(
+            _formatVnd(currency, value),
+            style: AppFonts.system(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ClosingCashTotalRow extends StatelessWidget {
+  const _ClosingCashTotalRow({
+    required this.label,
+    required this.value,
+    required this.currency,
+    this.color = AppColors.textPrimary,
+  });
+
+  final String label;
+  final double value;
+  final NumberFormat currency;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: AppFonts.system(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Text(
+          _formatVnd(currency, value),
+          style: AppFonts.system(
+            color: color,
+            fontWeight: FontWeight.w900,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ],
     );
   }
 }
