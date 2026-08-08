@@ -5,6 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 String readRepoFile(String path) => File(path).readAsStringSync();
 
 void main() {
+  const qrPrintDeltaMigration =
+      'supabase/migrations/20260808140000_qr_additional_order_print_delta.sql';
+  const qrPrintDeltaVerification =
+      'scripts/verify_qr_additional_order_print_delta.sql';
+
   test('qr table ordering migration exposes only token-backed anon RPCs', () {
     final migration = readRepoFile(
       'supabase/migrations/20260710000000_qr_table_ordering_v1.sql',
@@ -120,6 +125,36 @@ void main() {
     expect(migration, contains('RETURN v_existing_batch.result_snapshot'));
     expect(migration, contains("'qr_place_order'"));
     expect(migration, isNot(contains('process_payment(')));
+  });
+
+  test('qr additions print only immutable rows inserted by that call', () {
+    final migration = readRepoFile(qrPrintDeltaMigration);
+    final verification = readRepoFile(qrPrintDeltaVerification);
+
+    expect(
+      migration,
+      contains('CREATE OR REPLACE FUNCTION public.qr_place_order'),
+    );
+    expect(migration, contains('RETURNING * INTO v_inserted_item'));
+    expect(migration, contains("'item_id', v_inserted_item.id::text"));
+    expect(
+      migration,
+      contains(
+        "ARRAY['kitchen', 'floor', 'confirmation'],\n    v_print_items,",
+      ),
+    );
+    expect(
+      migration,
+      isNot(
+        contains(
+          "ARRAY['kitchen', 'floor', 'confirmation'],\n    v_items,",
+        ),
+      ),
+    );
+    expect(
+      verification,
+      contains('QR_PRINT_DELTA_VERIFY_CONTRACT_MISSING'),
+    );
   });
 
   test('confirmation slips reuse print routing and render cashier-only copy', () {

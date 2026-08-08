@@ -22,6 +22,7 @@ DECLARE
   v_user uuid := 'f1000000-0000-4000-8000-0000000000c1';
   v_public_item uuid := 'f1000000-0000-4000-8000-0000000000d1';
   v_hidden_item uuid := 'f1000000-0000-4000-8000-0000000000d2';
+  v_append_item uuid := 'f1000000-0000-4000-8000-0000000000d3';
   v_client uuid := 'f1000000-0000-4000-8000-0000000000e1';
   v_menu jsonb;
   v_result jsonb;
@@ -35,6 +36,8 @@ DECLARE
   v_discount_id uuid := 'f1000000-0000-4000-8000-0000000000f1';
   v_discount_status text;
   v_order_status text;
+  v_appended_item_id uuid;
+  v_append_print_item jsonb;
 BEGIN
   INSERT INTO public.restaurants (id, name, address, is_active, brand_id, tax_entity_id)
   SELECT v_store, 'QR Contract Store', 'test', true, r.brand_id, r.tax_entity_id
@@ -151,6 +154,34 @@ BEGIN
   INSERT INTO _qr_results
   VALUES ('QR anon create_order runtime blocked', v_blocked, 'create_order guard');
 
+  INSERT INTO public.menu_items (
+    id,
+    restaurant_id,
+    name,
+    price,
+    is_available,
+    is_visible_public
+  )
+  VALUES (
+    v_append_item,
+    v_store,
+    'QR Rose Tteokbokki',
+    110000,
+    true,
+    true
+  );
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'menu_items'
+      AND column_name = 'name_vi'
+  ) THEN
+    EXECUTE
+      'UPDATE public.menu_items SET name_vi = $1 WHERE id = $2'
+      USING 'QR Rose Tteokbokki', v_append_item;
+  END IF;
+
   v_result := public.qr_place_order(
     'qr-contract-token',
     jsonb_build_array(
@@ -249,17 +280,34 @@ BEGIN
   PERFORM public.qr_place_order(
     'qr-contract-token',
     jsonb_build_array(
-      jsonb_build_object('menu_item_id', v_public_item, 'quantity', 1)
+      jsonb_build_object('menu_item_id', v_append_item, 'quantity', 1)
     ),
     'f1000000-0000-4000-8000-0000000000e4'
   );
+  SELECT id
+  INTO v_appended_item_id
+  FROM public.order_items
+  WHERE order_id = v_order
+    AND menu_item_id = v_append_item;
+  SELECT item.raw
+  INTO v_append_print_item
+  FROM public.print_jobs job
+  CROSS JOIN LATERAL jsonb_array_elements(job.payload->'items') item(raw)
+  WHERE job.order_id = v_order
+    AND job.copy_type = 'kitchen'
+    AND job.batch_no = 2;
   SELECT status INTO v_order_status FROM public.orders WHERE id = v_order;
   SELECT status INTO v_discount_status FROM public.order_discounts WHERE id = v_discount_id;
   INSERT INTO _qr_results
   VALUES (
     'QR append demotes serving and voids active discount',
-    v_order_status = 'confirmed' AND v_discount_status = 'voided',
-    'order=' || COALESCE(v_order_status, 'null') || ', discount=' || COALESCE(v_discount_status, 'null')
+    v_order_status = 'confirmed'
+      AND v_discount_status = 'voided'
+      AND v_append_print_item->>'item_id' = v_appended_item_id::text
+      AND v_append_print_item->>'label' = 'QR Rose Tteokbokki',
+    'order=' || COALESCE(v_order_status, 'null')
+      || ', discount=' || COALESCE(v_discount_status, 'null')
+      || ', print=' || COALESCE(v_append_print_item::text, 'null')
   );
 
   v_blocked := false;
