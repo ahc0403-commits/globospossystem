@@ -1,5 +1,16 @@
 import '../../main.dart';
 
+bool isValidPrinterIpv4Address(String value) {
+  final parts = value.trim().split('.');
+  if (parts.length != 4) return false;
+
+  return parts.every((part) {
+    if (part.isEmpty || !RegExp(r'^\d{1,3}$').hasMatch(part)) return false;
+    final octet = int.tryParse(part);
+    return octet != null && octet >= 0 && octet <= 255;
+  });
+}
+
 class PrinterDestinationConfig {
   const PrinterDestinationConfig({
     required this.id,
