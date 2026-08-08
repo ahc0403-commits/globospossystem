@@ -26,6 +26,10 @@ void main() {
       'supabase/migrations/20260710002000_receipt_print_queue.sql';
   const additionalOrderDeltaMigrationPath =
       'supabase/migrations/20260808090000_additional_order_print_delta.sql';
+  const floorConfirmationPricesMigrationPath =
+      'supabase/migrations/20260808150000_floor_confirmation_prices.sql';
+  const floorConfirmationPricesVerifyPath =
+      'scripts/verify_floor_confirmation_prices.sql';
   const additionalOrderDeltaVerifyPath =
       'scripts/verify_additional_order_print_delta.sql';
   const discountMigrationPath =
@@ -230,6 +234,57 @@ void main() {
       contains('ADDITIONAL_ORDER_PRINT_VERIFY_DELTA_CONTRACT_MISSING'),
     );
   });
+
+  test(
+    'floor confirmation payload preserves prices and expands added orders',
+    () {
+      final sql = readRepoFile(floorConfirmationPricesMigrationPath);
+
+      expect(
+        sql,
+        contains('CREATE OR REPLACE FUNCTION public.enqueue_print_jobs'),
+      );
+      expect(sql, contains("'unit_price', COALESCE("));
+      expect(sql, contains("NULLIF(item.raw->>'unit_price', '')::numeric"));
+      expect(sql, contains('order_item.unit_price'));
+      expect(sql, contains('menu_item.price'));
+      expect(
+        sql,
+        contains('SELECT candidate.combo_components, candidate.unit_price'),
+      );
+      expect(sql, contains("IF v_copy_type IN ('floor', 'confirmation')"));
+      expect(sql, contains("v_copy_type IN ('floor', 'tray', 'confirmation')"));
+      expect(sql, contains("'components', COALESCE("));
+      expect(sql, contains("order_item.status <> 'cancelled'"));
+      expect(
+        sql,
+        contains(
+          "v_copy_type IN ('floor', 'confirmation')\n            THEN v_full_items",
+        ),
+      );
+      expect(sql, contains('ELSE v_items'));
+      expect(
+        sql,
+        contains("NULLIF(delta.raw->>'item_id', '')::uuid = order_item.id"),
+      );
+
+      final verification = readRepoFile(floorConfirmationPricesVerifyPath);
+      expect(
+        verification,
+        contains('FLOOR_CONFIRMATION_PRICE_FUNCTION_MISSING'),
+      );
+      expect(
+        verification,
+        contains('FLOOR_CONFIRMATION_PRICE_CONTRACT_MISSING'),
+      );
+      expect(
+        verification,
+        contains('FLOOR_CONFIRMATION_PRICE_EXECUTE_EXPOSED'),
+      );
+      expect(verification, contains("has_function_privilege('anon'"));
+      expect(verification, contains("has_function_privilege('authenticated'"));
+    },
+  );
 
   test(
     'print routing hooks staff meal initial tickets when print helper exists',
