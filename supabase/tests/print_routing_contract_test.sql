@@ -23,7 +23,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap;
-SELECT plan(33);
+SELECT plan(35);
 
 SELECT set_config(
   'request.jwt.claim.sub',
@@ -322,6 +322,38 @@ SELECT is(
   ),
   1,
   'TP2 add_items kitchen batch contains only the delta item'
+);
+
+SELECT is(
+  (
+    SELECT jsonb_array_length(payload->'items')
+    FROM public.print_jobs
+    WHERE order_id = '00000000-0000-0000-0000-000000001111'
+      AND copy_type = 'floor'
+      AND batch_no = 2
+  ),
+  1,
+  'TP2 add_items floor batch contains only the delta item'
+);
+
+SELECT ok(
+  NOT EXISTS (
+    SELECT 1
+    FROM public.print_jobs job
+    CROSS JOIN LATERAL jsonb_array_elements(job.payload->'items') item(raw)
+    WHERE job.order_id = '00000000-0000-0000-0000-000000001111'
+      AND job.copy_type IN ('kitchen', 'floor')
+      AND job.batch_no = 2
+      AND item.raw->>'item_id' IS DISTINCT FROM (
+        SELECT oi.id::text
+        FROM public.order_items oi
+        WHERE oi.order_id = job.order_id
+          AND oi.menu_item_id = '00000000-0000-0000-0000-00000000e222'
+        ORDER BY oi.created_at DESC, oi.id DESC
+        LIMIT 1
+      )
+  ),
+  'TP2 add_items tickets identify only the newly inserted order item'
 );
 
 UPDATE public.order_items
