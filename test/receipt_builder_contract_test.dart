@@ -144,7 +144,12 @@ void main() {
       'printed_reason': 'serving',
       'at': '2026-07-06T12:10:00+07:00',
       'items': [
-        {'label': 'Bún chả', 'qty': '1', 'supplemental': 'true'},
+        {
+          'label': 'Bún chả',
+          'qty': '1',
+          'unit_price': '65000',
+          'supplemental': 'true',
+        },
       ],
     });
 
@@ -154,8 +159,80 @@ void main() {
     expect(ticket.batchNo, 3);
     expect(ticket.items.single.label, 'Bún chả');
     expect(ticket.items.single.quantity, 1);
+    expect(ticket.items.single.unitPrice, 65000);
     expect(ticket.items.single.supplemental, isTrue);
   });
+
+  test(
+    '2F and 3F order confirmation slips show item prices and total',
+    () async {
+      for (final floor in const ['2F', '3F']) {
+        final ticket = PrintTicket(
+          ticket: 'confirmation',
+          floorLabel: floor,
+          tableNumber: 'T07',
+          ticketCode: 'price123',
+          batchNo: 1,
+          printedReason: 'initial',
+          printedAt: '2026-08-08T12:00:00+07:00',
+          items: const [
+            PrintTicketItem(label: 'Pho bo', quantity: 2, unitPrice: 50000),
+            PrintTicketItem(label: 'Tra da', quantity: 1, unitPrice: 5000),
+          ],
+        );
+
+        final text = String.fromCharCodes(
+          await ReceiptBuilder.buildConfirmationSlip(ticket),
+        );
+
+        expect(text, contains('$floor / T07'));
+        expect(text, contains('2 x 50,000 VND = 100,000 VND'));
+        expect(text, contains('1 x 5,000 VND = 5,000 VND'));
+        expect(text, contains('Tong cong'));
+        expect(text, contains('105,000 VND'));
+      }
+    },
+  );
+
+  test(
+    '2F and 3F added-order confirmations identify and total all items',
+    () async {
+      for (final floor in const ['2F', '3F']) {
+        final ticket = PrintTicket(
+          ticket: 'confirmation',
+          floorLabel: floor,
+          tableNumber: 'T12',
+          ticketCode: 'added123',
+          batchNo: 2,
+          printedReason: 'added_items',
+          printedAt: '2026-08-08T12:10:00+07:00',
+          items: const [
+            PrintTicketItem(
+              label: 'Existing item',
+              quantity: 1,
+              unitPrice: 50000,
+            ),
+            PrintTicketItem(
+              label: 'Added item',
+              quantity: 2,
+              unitPrice: 25000,
+              supplemental: true,
+            ),
+          ],
+        );
+
+        final text = String.fromCharCodes(
+          await ReceiptBuilder.buildConfirmationSlip(ticket),
+        );
+
+        expect(text, contains('$floor / T12'));
+        expect(text, contains('*** MON THEM (DOT 2) ***'));
+        expect(text, contains('Existing item'));
+        expect(text, contains('+ Added item'));
+        expect(text, contains('100,000 VND'));
+      }
+    },
+  );
 
   test('combo components are preserved and printed for kitchen prep', () async {
     final ticket = PrintTicket.fromPayload({

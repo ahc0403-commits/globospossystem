@@ -339,7 +339,9 @@ class ReceiptBuilder {
         styles: const PosStyles(align: PosAlign.center),
       ),
     );
-    bytes.addAll(_buildTicketBody(generator, ticket, finish: false));
+    bytes.addAll(
+      _buildTicketBody(generator, ticket, finish: false, showPrices: true),
+    );
     bytes.addAll(
       generator.text(
         _escText('Vui long mang phieu nay den quay thu ngan.'),
@@ -398,6 +400,7 @@ class ReceiptBuilder {
     PrintTicket ticket, {
     bool compact = false,
     bool finish = true,
+    bool showPrices = false,
   }) {
     final bytes = <int>[];
     if (ticket.printedReason == 'added_items') {
@@ -435,6 +438,17 @@ class ReceiptBuilder {
           ),
         ]),
       );
+      if (showPrices && item.unitPrice != null) {
+        final lineTotal = item.unitPrice! * item.quantity;
+        bytes.addAll(
+          generator.text(
+            _escText(
+              '  ${item.quantity} x ${_formatVnd(item.unitPrice!)} = ${_formatVnd(lineTotal)}',
+            ),
+            styles: const PosStyles(align: PosAlign.right),
+          ),
+        );
+      }
       final notes = item.notes?.trim();
       if (notes != null && notes.isNotEmpty) {
         bytes.addAll(generator.text(_escText('  * $notes')));
@@ -460,6 +474,15 @@ class ReceiptBuilder {
     if (orderNotes != null && orderNotes.isNotEmpty) {
       bytes.addAll(generator.hr());
       bytes.addAll(generator.text(_escText('Ghi chu: $orderNotes')));
+    }
+
+    if (showPrices && ticket.items.every((item) => item.unitPrice != null)) {
+      final total = ticket.items.fold<double>(
+        0,
+        (sum, item) => sum + item.unitPrice! * item.quantity,
+      );
+      bytes.addAll(generator.hr());
+      bytes.addAll(_amountRow(generator, 'Tong cong', total));
     }
 
     bytes.addAll(generator.hr());
@@ -725,6 +748,7 @@ class PrintTicketItem {
   const PrintTicketItem({
     required this.label,
     required this.quantity,
+    this.unitPrice,
     this.notes,
     this.supplemental = false,
     this.components = const [],
@@ -732,6 +756,7 @@ class PrintTicketItem {
 
   final String label;
   final int quantity;
+  final double? unitPrice;
   final String? notes;
   final bool supplemental;
   final List<PrintTicketComboComponent> components;
@@ -744,6 +769,11 @@ class PrintTicketItem {
         num value => value.toInt(),
         String value => int.tryParse(value) ?? 1,
         _ => 1,
+      },
+      unitPrice: switch (payload['unit_price']) {
+        num value => value.toDouble(),
+        String value => double.tryParse(value),
+        _ => null,
       },
       notes: payload['notes']?.toString(),
       supplemental: switch (payload['supplemental']) {
