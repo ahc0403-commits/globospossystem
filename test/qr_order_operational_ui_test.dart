@@ -161,6 +161,8 @@ void main() {
       ),
     );
 
+    expect(find.text('G · Bàn 8'), findsOneWidget);
+
     await tester.tap(find.byKey(const Key('qr_add_combo')));
     await tester.pumpAndSettle();
     expect(

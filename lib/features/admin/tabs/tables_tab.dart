@@ -10,6 +10,7 @@ import '../../../core/services/tables_service.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
 import '../../../core/utils/number_input_utils.dart';
+import '../../../core/utils/floor_label.dart';
 import '../../../main.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../widgets/error_toast.dart';
@@ -1007,7 +1008,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     final l10n = context.l10n;
     final tableController = TextEditingController();
     final seatController = TextEditingController();
-    final floorController = TextEditingController(text: '1F');
+    final floorController = TextEditingController(text: 'G');
 
     await showDialog<void>(
       context: context,
@@ -1057,7 +1058,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
               onPressed: () async {
                 final tableNumber = tableController.text.trim();
                 final seatCount = parseIntInput(seatController.text);
-                final floorLabel = floorController.text.trim();
+                final floorLabel = storedFloorLabel(floorController.text);
                 if (tableNumber.isEmpty ||
                     seatCount == null ||
                     seatCount <= 0 ||
@@ -1102,7 +1103,9 @@ class _TablesTabState extends ConsumerState<TablesTab> {
     final seatController = TextEditingController(
       text: (table.seatCount ?? 0).toString(),
     );
-    final floorController = TextEditingController(text: table.floorLabel);
+    final floorController = TextEditingController(
+      text: displayFloorLabel(table.floorLabel),
+    );
 
     await showDialog<void>(
       context: context,
@@ -1152,7 +1155,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
               onPressed: () async {
                 final tableNumber = tableController.text.trim();
                 final seatCount = parseIntInput(seatController.text);
-                final floorLabel = floorController.text.trim();
+                final floorLabel = storedFloorLabel(floorController.text);
                 if (tableNumber.isEmpty ||
                     seatCount == null ||
                     seatCount <= 0 ||
@@ -1723,7 +1726,7 @@ class _AdminFloorSelectionInspector extends StatelessWidget {
         ),
         _AdminInspectorInfoRow(
           label: l10n.tablesFloorLabel,
-          value: table.floorLabel,
+          value: displayFloorLabel(table.floorLabel),
         ),
         _AdminInspectorInfoRow(
           label: l10n.status,

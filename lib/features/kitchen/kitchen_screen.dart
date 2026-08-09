@@ -10,6 +10,7 @@ import '../../core/i18n/locale_extensions.dart';
 import '../../core/layout/platform_info.dart';
 import '../../core/services/live_refresh_service.dart';
 import '../../core/utils/time_utils.dart';
+import '../../core/utils/floor_label.dart';
 
 import '../../core/ui/app_primitives.dart';
 import '../../core/ui/pos_design_tokens.dart';
@@ -2102,7 +2103,8 @@ class _KitchenFailedPrintJobRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${job.floorLabel} / ${job.tableNumber} / ${job.copyType}',
+                  '${displayFloorLabel(job.floorLabel)} / '
+                  '${job.tableNumber} / ${job.copyType}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppFonts.system(

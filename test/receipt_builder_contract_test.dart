@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/hardware/receipt_builder.dart';
+import 'package:globos_pos_system/core/utils/floor_label.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -120,12 +121,18 @@ void main() {
 
     final floorText = String.fromCharCodes(floorBytes);
     final trayText = String.fromCharCodes(trayBytes);
+    final expectedHeader = '${displayFloorLabel(ticket.floorLabel)} / T07';
 
+    expect(floorText, contains(expectedHeader));
     expect(
-      floorText.indexOf('2F / T07'),
+      floorText.indexOf(expectedHeader),
       lessThan(floorText.indexOf('PHIEU TANG')),
     );
-    expect(trayText.indexOf('2F / T07'), lessThan(trayText.indexOf('KHAY')));
+    expect(trayText, contains(expectedHeader));
+    expect(
+      trayText.indexOf(expectedHeader),
+      lessThan(trayText.indexOf('KHAY')),
+    );
     expect(floorText, contains('*** MON THEM (DOT 2) ***'));
     expect(floorText, contains('Pho bo'));
     expect(floorText, contains('No onion'));
@@ -185,7 +192,7 @@ void main() {
           await ReceiptBuilder.buildConfirmationSlip(ticket),
         );
 
-        expect(text, contains('$floor / T07'));
+        expect(text, contains('${displayFloorLabel(floor)} / T07'));
         expect(text, contains('2 x 50,000 VND = 100,000 VND'));
         expect(text, contains('1 x 5,000 VND = 5,000 VND'));
         expect(text, contains('Tong cong'));
@@ -225,7 +232,7 @@ void main() {
           await ReceiptBuilder.buildConfirmationSlip(ticket),
         );
 
-        expect(text, contains('$floor / T12'));
+        expect(text, contains('${displayFloorLabel(floor)} / T12'));
         expect(text, contains('*** MON THEM (DOT 2) ***'));
         expect(text, contains('Existing item'));
         expect(text, contains('+ Added item'));

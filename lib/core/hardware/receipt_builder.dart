@@ -1,10 +1,12 @@
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
+import '../utils/floor_label.dart';
 import '../utils/time_utils.dart';
 
 class ReceiptBuilder {
   static const bankTransferQrAsset = 'assets/images/woori_bank_account_qr.jpg';
+  static const internalBuzzerAlertBytes = <int>[0x1B, 0x42, 5, 9];
 
   static Future<List<int>> buildPaymentReceipt({
     required String restaurantName,
@@ -288,7 +290,9 @@ class ReceiptBuilder {
     bytes.addAll(generator.text(_escText('#${ticket.ticketCode}')));
     bytes.addAll(
       generator.text(
-        _escText('${ticket.floorLabel} / ${ticket.tableNumber}'),
+        _escText(
+          '${displayFloorLabel(ticket.floorLabel)} / ${ticket.tableNumber}',
+        ),
         styles: const PosStyles(bold: true),
       ),
     );
@@ -378,7 +382,9 @@ class ReceiptBuilder {
     final bytes = <int>[];
     bytes.addAll(
       generator.text(
-        _escText('${ticket.floorLabel} / ${ticket.tableNumber}'),
+        _escText(
+          '${displayFloorLabel(ticket.floorLabel)} / ${ticket.tableNumber}',
+        ),
         styles: const PosStyles(
           bold: true,
           align: PosAlign.center,

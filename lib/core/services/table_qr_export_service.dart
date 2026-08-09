@@ -13,6 +13,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../constants/app_constants.dart';
 import '../ui/app_fonts.dart';
+import '../utils/floor_label.dart';
 
 enum TableQrExportKind { pdf, png }
 
@@ -254,7 +255,7 @@ class TableQrExportService {
     );
     _drawCentered(
       canvas,
-      card.floorLabel,
+      displayFloorLabel(card.floorLabel),
       top: 390,
       fontSize: 42,
       bold: true,
@@ -377,9 +378,10 @@ class TableQrExportService {
     final tableNumber = supportsUnicode
         ? card.tableNumber
         : _toPdfAscii(card.tableNumber, fallback: 'TABLE');
+    final displayFloor = displayFloorLabel(card.floorLabel);
     final floorLabel = supportsUnicode
-        ? card.floorLabel
-        : _toPdfAscii(card.floorLabel, fallback: 'FLOOR');
+        ? displayFloor
+        : _toPdfAscii(displayFloor, fallback: 'FLOOR');
     final scanCopy = supportsUnicode
         ? TableQrCardModel.scanCopy
         : const <String>[

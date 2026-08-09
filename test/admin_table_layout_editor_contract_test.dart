@@ -102,7 +102,14 @@ void main() {
         adminTables,
         contains("Key('admin_tables_edit_floor_label_action')"),
       );
-      expect(adminTables, contains('value: table.floorLabel'));
+      expect(
+        adminTables,
+        contains('value: displayFloorLabel(table.floorLabel)'),
+      );
+      expect(
+        adminTables,
+        contains('storedFloorLabel(floorController.text)'),
+      );
       expect(c2Migration, contains('p_floor_label text DEFAULT'));
       expect(c2Migration, contains('floor_label = v_floor_label'));
     },
