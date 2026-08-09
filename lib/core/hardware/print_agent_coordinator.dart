@@ -103,6 +103,7 @@ class PrintAgentCoordinator extends StateNotifier<PrintAgentState> {
   static bool roleCanRun(String? role) => const {
     'cashier',
     'kitchen',
+    'print_station',
     'admin',
     'store_admin',
     'brand_admin',

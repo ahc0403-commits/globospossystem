@@ -97,6 +97,24 @@ void main() {
     coordinator.dispose();
   });
 
+  test('dedicated print station role starts the native queue agent', () async {
+    final driver = _FakeDriver();
+    final coordinator = PrintAgentCoordinator(
+      agent: driver,
+      preferenceStore: _FakePreferences(enabled: true),
+    );
+    await _flush();
+    await coordinator.syncSession(
+      authenticated: true,
+      role: 'print_station',
+      storeId: 'store-1',
+    );
+
+    expect(driver.startedStores, ['store-1']);
+    expect(coordinator.state.status, PrintAgentStatus.running);
+    coordinator.dispose();
+  });
+
   test('unsupported runtime never starts the native driver', () async {
     final driver = _FakeDriver(supported: false);
     final coordinator = PrintAgentCoordinator(
