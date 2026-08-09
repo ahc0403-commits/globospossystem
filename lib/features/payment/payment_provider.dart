@@ -550,6 +550,56 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         .toList(growable: false);
   }
 
+  Future<bool> showOnCustomerDisplay({
+    required String storeId,
+    required CashierOrder order,
+  }) async {
+    final items = order.items
+        .where((item) => item.status.toLowerCase() != 'cancelled')
+        .map(
+          (item) => <String, dynamic>{
+            'name': item.nameVi?.trim().isNotEmpty == true
+                ? item.nameVi!.trim()
+                : item.label?.trim().isNotEmpty == true
+                ? item.label!.trim()
+                : item.nameEn?.trim().isNotEmpty == true
+                ? item.nameEn!.trim()
+                : '-',
+            'quantity': item.quantity,
+            'amount': item.isServiceItem
+                ? 0
+                : item.payingAmountIncTax != null &&
+                      item.payingAmountIncTax! > 0
+                ? item.payingAmountIncTax
+                : item.unitPrice * item.quantity,
+          },
+        )
+        .toList(growable: false);
+
+    try {
+      await supabase.rpc(
+        'show_customer_payment_display',
+        params: {
+          'p_store_id': storeId,
+          'p_order_id': order.orderId,
+          'p_payload': {
+            'order_id': order.orderId,
+            'table_number': order.tableNumber,
+            'items': items,
+            'subtotal': order.menuSubtotal,
+            'service_charge': order.serviceChargeTotal,
+            'discount': order.discountTotal,
+            'total': order.remainingDue,
+          },
+        },
+      );
+      return true;
+    } catch (error) {
+      state = state.copyWith(error: 'Failed to show customer display: $error');
+      return false;
+    }
+  }
+
   CashierOrderSearchResult? _cashierOrderSearchResultFromRpc(Object? raw) {
     if (raw == null) {
       return null;

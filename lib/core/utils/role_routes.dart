@@ -13,6 +13,7 @@ const Set<String> kKnownPosRoles = {
   'kitchen',
   'cashier',
   'print_station',
+  'customer_display',
   'photo_objet_master',
   'photo_objet_store_operator',
 };
@@ -33,6 +34,7 @@ String homeRouteForRole(String? role) {
     'kitchen' => '/kitchen',
     'cashier' => '/cashier',
     'print_station' => '/print-station',
+    'customer_display' => '/customer-display',
     _ => '/login',
   };
 }
@@ -109,6 +111,7 @@ bool canAccessRouteForRole(
           path == '/print-station' ||
           path.startsWith('/payments/'),
     'print_station' => path == '/print-station',
+    'customer_display' => path == '/customer-display',
     _ => false,
   };
 }
