@@ -15,5 +15,6 @@ lt_ops1@globos.world
 nz_ops1@globos.world
 photo_bm1@globos.world
 photo_bm2@globos.world
+print@globos.world
 qt_ops1@globos.world
 td_ops1@globos.world
