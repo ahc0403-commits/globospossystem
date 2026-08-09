@@ -456,6 +456,46 @@ void main() {
     });
 
     test(
+      'processOnce prints kitchen and tray copies for added kitchen orders',
+      () async {
+        final backend = _FakePrintJobBackend(
+          jobs: [
+            _job(
+              id: 'job-added-kitchen-copies',
+              destinationId: 'dest-kitchen',
+              ticketType: 'kitchen',
+              printedReason: 'added_items',
+            ),
+          ],
+          destinations: const {
+            'dest-kitchen': PrintDestination(
+              id: 'dest-kitchen',
+              name: 'Kitchen',
+              ip: '192.168.1.55',
+              port: 9100,
+            ),
+          },
+        );
+        final printer = _FakePrinterService(PrintResult.success);
+        final agent = PrintJobAgentService(
+          backend: backend,
+          printerService: printer,
+          networkCapabilityService: _availableNetwork,
+        );
+
+        final results = await agent.processOnce('store-1');
+
+        expect(results.single.result, PrintResult.success);
+        expect(printer.prints, hasLength(2));
+        expect(printer.prints[0].bytes, printer.prints[1].bytes);
+        expect(
+          String.fromCharCodes(printer.prints[0].bytes),
+          allOf(contains('PHIEU BEP'), contains('MON THEM')),
+        );
+      },
+    );
+
+    test(
       'processOnce prints two complete copies for floor confirmation jobs',
       () async {
         final backend = _FakePrintJobBackend(
@@ -638,6 +678,7 @@ PrintAgentJob _job({
   required String destinationId,
   required String ticketType,
   double? unitPrice,
+  String printedReason = 'initial',
 }) {
   return PrintAgentJob(
     id: id,
@@ -648,7 +689,7 @@ PrintAgentJob _job({
       tableNumber: 'T07',
       ticketCode: 'abc12345',
       batchNo: 1,
-      printedReason: 'initial',
+      printedReason: printedReason,
       printedAt: '2026-07-06T12:00:00+07:00',
       items: [
         PrintTicketItem(label: 'Pho Bo', quantity: 1, unitPrice: unitPrice),
