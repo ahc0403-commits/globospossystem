@@ -2557,28 +2557,29 @@ class _DailyClosingSection extends ConsumerStatefulWidget {
 }
 
 class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
-  bool _isClosing = false;
+  String? _closingDate;
   bool _closingSucceeded = false;
   bool _closingAlreadyClosed = false;
 
-  Future<void> _createClosing() async {
-    setState(() => _isClosing = true);
+  Future<void> _createClosing(DailyClosingRecord record) async {
+    setState(() => _closingDate = record.closingDate);
     late final Map<String, dynamic> preview;
     try {
       preview = await dailyClosingService.fetchCashPreview(
         storeId: widget.storeId,
+        closingDate: record.closingDate,
       );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(mapDailyClosingError(e))));
-        setState(() => _isClosing = false);
+        setState(() => _closingDate = null);
       }
       return;
     }
     if (!mounted) return;
-    setState(() => _isClosing = false);
+    setState(() => _closingDate = null);
 
     final cashInput = await showDialog<_DailyClosingCashInput>(
       context: context,
@@ -2590,10 +2591,11 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
 
     if (cashInput == null || !mounted) return;
 
-    setState(() => _isClosing = true);
+    setState(() => _closingDate = record.closingDate);
     try {
       await dailyClosingService.createDailyClosing(
         storeId: widget.storeId,
+        closingDate: record.closingDate,
         openingCashAmount: cashInput.openingCashAmount,
         cashDenominations: cashInput.denominations,
       );
@@ -2616,7 +2618,7 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
         ).showSnackBar(SnackBar(content: Text(errorMsg)));
       }
     } finally {
-      if (mounted) setState(() => _isClosing = false);
+      if (mounted) setState(() => _closingDate = null);
     }
   }
 
@@ -2639,15 +2641,6 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
               ),
-            ),
-            const Spacer(),
-            PosActionButton(
-              key: const Key('daily_closing_submit_button'),
-              label: context.l10n.reportsCloseToday,
-              tone: PosActionTone.primary,
-              icon: Icons.lock_clock,
-              loading: _isClosing,
-              onPressed: _createClosing,
             ),
           ],
         ),
@@ -2785,6 +2778,7 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
           _hCell(context.l10n.reportsCountedCash),
           _hCell(context.l10n.reportsCashVariance),
           _hCell(context.l10n.reportsAssignee),
+          _hCell(context.l10n.reportsClosingStatus, flex: 2),
         ],
       ),
     );
@@ -2814,6 +2808,30 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
           _dCell(_formatVnd(currency, record.countedCashAmount)),
           _dCell(_formatVnd(currency, record.cashVariance)),
           _dCell(record.closedByName, overflow: true),
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(
+                width: 108,
+                child: PosActionButton(
+                  key: ValueKey('daily_closing_action_${record.closingDate}'),
+                  label: record.isClosed
+                      ? context.l10n.reportsClosed
+                      : context.l10n.reportsClose,
+                  tone: record.isClosed
+                      ? PosActionTone.secondary
+                      : PosActionTone.primary,
+                  icon: record.isClosed ? Icons.lock : Icons.lock_clock,
+                  compact: true,
+                  loading: _closingDate == record.closingDate,
+                  onPressed: record.isClosed || _closingDate != null
+                      ? null
+                      : () => _createClosing(record),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );

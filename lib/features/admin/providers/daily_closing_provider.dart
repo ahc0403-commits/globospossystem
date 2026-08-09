@@ -24,6 +24,7 @@ class DailyClosingRecord {
     required this.serviceCount,
     required this.serviceTotal,
     required this.lowStockCount,
+    required this.closeSource,
     this.notes,
     required this.createdAt,
   });
@@ -47,6 +48,7 @@ class DailyClosingRecord {
   final int serviceCount;
   final double serviceTotal;
   final int lowStockCount;
+  final String? closeSource;
   final String? notes;
   final DateTime createdAt;
 
@@ -71,12 +73,15 @@ class DailyClosingRecord {
       serviceCount: _toInt(json['service_count']),
       serviceTotal: _toDouble(json['service_total']),
       lowStockCount: _toInt(json['low_stock_count']),
+      closeSource: json['close_source']?.toString(),
       notes: json['notes']?.toString(),
       createdAt:
           DateTime.tryParse(json['created_at']?.toString() ?? '') ??
           DateTime.now(),
     );
   }
+
+  bool get isClosed => closeSource == 'manual';
 
   static int _toInt(dynamic v) => switch (v) {
     int val => val,
@@ -99,7 +104,10 @@ String mapDailyClosingError(Object error) {
 
   final message = error.message;
   if (message.contains('DAILY_CLOSING_ALREADY_EXISTS')) {
-    return "Today's closing is already complete.";
+    return 'Closing is already complete for this date.';
+  }
+  if (message.contains('DAILY_CLOSING_DATE_INVALID')) {
+    return 'A future date cannot be closed.';
   }
   if (message.contains('DAILY_CLOSING_FORBIDDEN')) {
     return 'No permission to perform closing.';
