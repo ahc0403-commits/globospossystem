@@ -85,6 +85,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   bool _isCombinedPaymentMode = false;
   final Set<String> _combinedOrderIds = <String>{};
   bool _isOrderSearchLoading = false;
+  bool _isPublishingCustomerDisplay = false;
   final TextEditingController _orderSearchController = TextEditingController();
   CashierOrderSearchResult? _orderSearchResult;
   String? _orderSearchFeedback;
@@ -1297,6 +1298,25 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                   canCompletePayment: cutoffState.canCompletePayment,
                   wetTissueQuantity: _wetTissueDraftQuantity,
                   wetTissueConfirmed: wetTissueConfirmed,
+                  isPublishingCustomerDisplay: _isPublishingCustomerDisplay,
+                  onShowCustomerDisplay: () async {
+                    if (storeId == null || _isPublishingCustomerDisplay) {
+                      return;
+                    }
+                    setState(() => _isPublishingCustomerDisplay = true);
+                    final shown = await notifier.showOnCustomerDisplay(
+                      storeId: storeId,
+                      order: selectedOrder,
+                    );
+                    if (!context.mounted) return;
+                    setState(() => _isPublishingCustomerDisplay = false);
+                    if (shown) {
+                      showSuccessToast(
+                        context,
+                        context.l10n.cashierCustomerDisplayShown,
+                      );
+                    }
+                  },
                   onOpenOrderLedger: () => _showCashierQrOrderLedger(
                     context: context,
                     order: selectedOrder,
@@ -2528,6 +2548,8 @@ class _SelectedOrderView extends StatelessWidget {
     required this.canCompletePayment,
     required this.wetTissueQuantity,
     required this.wetTissueConfirmed,
+    required this.isPublishingCustomerDisplay,
+    required this.onShowCustomerDisplay,
     required this.onOpenOrderLedger,
     required this.onWetTissueQuantityChanged,
     required this.onConfirmWetTissue,
@@ -2553,6 +2575,8 @@ class _SelectedOrderView extends StatelessWidget {
   final bool canCompletePayment;
   final int wetTissueQuantity;
   final bool wetTissueConfirmed;
+  final bool isPublishingCustomerDisplay;
+  final Future<void> Function() onShowCustomerDisplay;
   final Future<void> Function() onOpenOrderLedger;
   final ValueChanged<int> onWetTissueQuantityChanged;
   final Future<bool> Function(int quantity) onConfirmWetTissue;
@@ -2609,6 +2633,7 @@ class _SelectedOrderView extends StatelessWidget {
       builder: (context, constraints) {
         final dense =
             constraints.maxWidth >= 1080 && constraints.maxHeight < 1100;
+        final compactHeader = constraints.maxWidth < 640;
         final orderSummary = _CashierOrderSummarySurface(
           order: order,
           dense: dense,
@@ -2704,22 +2729,63 @@ class _SelectedOrderView extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                key: const Key('cashier_back_to_all_tables'),
-                onPressed: isProcessing ? null : onBackToTables,
-                icon: const Icon(Icons.arrow_back_rounded, size: 18),
-                label: Text(l10n.cashierSelectTableTitle),
-                style: dense
-                    ? OutlinedButton.styleFrom(
-                        minimumSize: const Size(0, 36),
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        visualDensity: VisualDensity.compact,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      )
-                    : null,
-              ),
+            Row(
+              children: [
+                OutlinedButton.icon(
+                  key: const Key('cashier_back_to_all_tables'),
+                  onPressed: isProcessing ? null : onBackToTables,
+                  icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                  label: Text(l10n.cashierSelectTableTitle),
+                  style: dense
+                      ? OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 36),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          visualDensity: VisualDensity.compact,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        )
+                      : null,
+                ),
+                const Spacer(),
+                if (!order.isStaffMeal)
+                  if (compactHeader)
+                    IconButton.filled(
+                      key: const Key('cashier_show_customer_display'),
+                      tooltip: l10n.cashierShowCustomerDisplay,
+                      onPressed:
+                          isProcessing ||
+                              isPublishingCustomerDisplay ||
+                              !isOnline ||
+                              !wetTissueConfirmed
+                          ? null
+                          : () => unawaited(onShowCustomerDisplay()),
+                      icon: isPublishingCustomerDisplay
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.tablet_mac_rounded, size: 18),
+                    )
+                  else
+                    FilledButton.icon(
+                      key: const Key('cashier_show_customer_display'),
+                      onPressed:
+                          isProcessing ||
+                              isPublishingCustomerDisplay ||
+                              !isOnline ||
+                              !wetTissueConfirmed
+                          ? null
+                          : () => unawaited(onShowCustomerDisplay()),
+                      icon: isPublishingCustomerDisplay
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.tablet_mac_rounded, size: 18),
+                      label: Text(l10n.cashierShowCustomerDisplay),
+                    ),
+              ],
             ),
             SizedBox(height: dense ? 5 : 10),
             Expanded(child: content),

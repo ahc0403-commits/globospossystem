@@ -1,0 +1,398 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+
+import '../../core/i18n/locale_extensions.dart';
+import '../../core/ui/pos_design_tokens.dart';
+import '../auth/auth_provider.dart';
+import 'customer_display_provider.dart';
+
+class CustomerDisplayScreen extends ConsumerStatefulWidget {
+  const CustomerDisplayScreen({super.key});
+
+  @override
+  ConsumerState<CustomerDisplayScreen> createState() =>
+      _CustomerDisplayScreenState();
+}
+
+class _CustomerDisplayScreenState extends ConsumerState<CustomerDisplayScreen> {
+  String? _startedStoreId;
+
+  void _ensureStarted(String? storeId) {
+    if (storeId == null || storeId == _startedStoreId) return;
+    _startedStoreId = storeId;
+    Future.microtask(
+      () => ref.read(customerDisplayProvider.notifier).start(storeId),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = ref.watch(authProvider);
+    final display = ref.watch(customerDisplayProvider);
+    _ensureStarted(auth.storeId);
+
+    if (display.isLoading && display.snapshot == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (display.error != null && display.snapshot == null) {
+      return Scaffold(
+        body: _CustomerDisplayError(
+          onRetry: () => ref.read(customerDisplayProvider.notifier).retry(),
+        ),
+      );
+    }
+
+    final snapshot = display.snapshot;
+    return Scaffold(
+      key: const Key('customer_display_root'),
+      backgroundColor: const Color(0xFFF4F6F8),
+      body: SafeArea(
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 280),
+          child: snapshot == null
+              ? _CustomerDisplayIdle(
+                  key: const Key('customer_display_idle'),
+                  onLogout: () => ref.read(authProvider.notifier).logout(),
+                )
+              : CustomerPaymentContent(
+                  key: ValueKey(snapshot.orderId),
+                  snapshot: snapshot,
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CustomerDisplayIdle extends StatelessWidget {
+  const _CustomerDisplayIdle({super.key, required this.onLogout});
+
+  final VoidCallback onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 96,
+                height: 96,
+                decoration: const BoxDecoration(
+                  color: PosColors.surface,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.point_of_sale_rounded,
+                  size: 48,
+                  color: PosColors.accent,
+                ),
+              ),
+              const SizedBox(height: 28),
+              Text(
+                context.l10n.customerDisplayWaitingTitle,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  color: PosColors.textPrimary,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                context.l10n.customerDisplayWaitingMessage,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: PosColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Positioned(
+          top: 8,
+          right: 8,
+          child: IconButton(
+            key: const Key('customer_display_logout'),
+            tooltip: context.l10n.logout,
+            color: PosColors.textSecondary,
+            onPressed: onLogout,
+            icon: const Icon(Icons.logout_rounded),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class CustomerPaymentContent extends StatelessWidget {
+  const CustomerPaymentContent({super.key, required this.snapshot});
+
+  final CustomerDisplaySnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final landscape = constraints.maxWidth >= 760;
+        final orderPanel = _CustomerOrderPanel(snapshot: snapshot);
+        const qrPanel = _CustomerQrPanel();
+
+        return Padding(
+          padding: EdgeInsets.all(landscape ? 24 : 16),
+          child: landscape
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(flex: 3, child: orderPanel),
+                    const SizedBox(width: 20),
+                    const Expanded(flex: 2, child: qrPanel),
+                  ],
+                )
+              : Column(
+                  children: [
+                    Expanded(flex: 3, child: orderPanel),
+                    const SizedBox(height: 16),
+                    const Expanded(flex: 2, child: qrPanel),
+                  ],
+                ),
+        );
+      },
+    );
+  }
+}
+
+class _CustomerOrderPanel extends StatelessWidget {
+  const _CustomerOrderPanel({required this.snapshot});
+
+  final CustomerDisplaySnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final currency = NumberFormat('#,###', 'vi_VN');
+    return Container(
+      decoration: BoxDecoration(
+        color: PosColors.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: PosColors.border),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  context.l10n.customerDisplayOrderTitle,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: PosColors.textPrimary,
+                  ),
+                ),
+              ),
+              Text(
+                context.l10n.cashierTableLabel(snapshot.tableNumber),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: PosColors.accent,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Divider(height: 1),
+          Expanded(
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              itemCount: snapshot.items.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final item = snapshot.items[index];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.name,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: PosColors.textPrimary,
+                              ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        '× ${item.quantity}',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(color: PosColors.textSecondary),
+                      ),
+                      const SizedBox(width: 24),
+                      SizedBox(
+                        width: 130,
+                        child: Text(
+                          '₫${currency.format(item.amount)}',
+                          textAlign: TextAlign.right,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                color: PosColors.textPrimary,
+                              ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          const Divider(height: 1),
+          if (snapshot.discount > 0 || snapshot.serviceCharge > 0) ...[
+            const SizedBox(height: 12),
+            if (snapshot.serviceCharge > 0)
+              _AmountRow(
+                label: context.l10n.cashierServiceCharge,
+                amount: snapshot.serviceCharge,
+              ),
+            if (snapshot.discount > 0)
+              _AmountRow(
+                label: context.l10n.cashierDiscountSummary,
+                amount: -snapshot.discount,
+              ),
+          ],
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            decoration: BoxDecoration(
+              color: PosColors.accent,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    context.l10n.customerDisplayTotal,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Text(
+                  '₫${currency.format(snapshot.total)}',
+                  key: const Key('customer_display_total'),
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AmountRow extends StatelessWidget {
+  const _AmountRow({required this.label, required this.amount});
+
+  final String label;
+  final double amount;
+
+  @override
+  Widget build(BuildContext context) {
+    final currency = NumberFormat('#,###', 'vi_VN');
+    final prefix = amount < 0 ? '-₫' : '₫';
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(color: PosColors.textSecondary),
+            ),
+          ),
+          Text(
+            '$prefix${currency.format(amount.abs())}',
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+              color: PosColors.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CustomerQrPanel extends StatelessWidget {
+  const _CustomerQrPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('customer_display_fixed_qr'),
+      decoration: BoxDecoration(
+        color: PosColors.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: PosColors.border),
+      ),
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            context.l10n.customerDisplayScanQr,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              color: PosColors.textPrimary,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 18),
+          Flexible(
+            child: AspectRatio(
+              aspectRatio: 1,
+              child: Image.asset(
+                'assets/images/woori_bank_account_qr.jpg',
+                fit: BoxFit.contain,
+                semanticLabel: context.l10n.customerDisplayQrSemanticLabel,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CustomerDisplayError extends StatelessWidget {
+  const _CustomerDisplayError({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.cloud_off_rounded, size: 56),
+          const SizedBox(height: 16),
+          Text(context.l10n.customerDisplayLoadFailed),
+          const SizedBox(height: 16),
+          FilledButton(onPressed: onRetry, child: Text(context.l10n.retry)),
+        ],
+      ),
+    );
+  }
+}

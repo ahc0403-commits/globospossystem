@@ -127,7 +127,8 @@ class AuthNotifier extends StateNotifier<PosAuthState> {
         accessibleStores: stores,
         extraPermissions: extraPermissions,
         passwordChangeRequired: data['must_change_password'] as bool? ?? false,
-        privacyConsentRequired: !hasPrivacyConsent,
+        privacyConsentRequired:
+            role != 'customer_display' && !hasPrivacyConsent,
         clearError: true,
       );
 
