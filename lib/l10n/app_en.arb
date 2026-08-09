@@ -440,6 +440,7 @@
   "reportsBanknoteUnit": "notes",
   "reportsCountedCash": "Counted cash",
   "reportsCashVariance": "Cash variance",
+  "reportsCashFloat": "Cash float",
   "reportsDepositTotal": "Deposit total",
   "reportsDineInRevenue": "Dine-in Revenue",
   "reportsDeliveryRevenue": "Delivery Revenue",

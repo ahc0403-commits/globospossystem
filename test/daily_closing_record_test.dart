@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/admin/providers/daily_closing_provider.dart';
 
 void main() {
-  test('deposit total uses counted cash minus cash sales and variance', () {
+  test('deposit total uses counted cash minus the opening cash float', () {
     final record = DailyClosingRecord(
       id: 'closing-id',
       closingDate: '2026-08-09',
@@ -12,15 +12,15 @@ void main() {
       ordersCancelled: 0,
       itemsCancelled: 0,
       paymentsCount: 4,
-      paymentsTotal: 12000000,
-      paymentsCash: 3000000,
-      paymentsCard: 9000000,
+      paymentsTotal: 5617056,
+      paymentsCash: 2035496,
+      paymentsCard: 0,
       paymentsPay: 0,
-      paymentsBankTransfer: 0,
+      paymentsBankTransfer: 3581560,
       openingCashAmount: 5000000,
-      expectedCashAmount: 8000000,
-      countedCashAmount: 8100000,
-      cashVariance: 100000,
+      expectedCashAmount: 7035496,
+      countedCashAmount: 7512000,
+      cashVariance: 476504,
       serviceCount: 0,
       serviceTotal: 0,
       lowStockCount: 0,
@@ -28,7 +28,7 @@ void main() {
       createdAt: DateTime(2026, 8, 9),
     );
 
-    expect(record.depositTotal, 5000000);
+    expect(record.depositTotal, 2512000);
   });
 
   test('deposit total remains zero until the date is closed', () {

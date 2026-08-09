@@ -439,6 +439,7 @@
   "reportsBanknoteUnit": "장",
   "reportsCountedCash": "실사 현금",
   "reportsCashVariance": "현금 차이",
+  "reportsCashFloat": "시제금",
   "reportsDepositTotal": "입금 총액",
   "reportsDineInRevenue": "매장 매출",
   "reportsDeliveryRevenue": "배달 매출",

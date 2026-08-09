@@ -87,7 +87,7 @@ class DailyClosingRecord {
   bool get isClosed => closeSource == 'manual';
 
   double get depositTotal =>
-      isClosed ? countedCashAmount - paymentsCash - cashVariance : 0;
+      isClosed ? countedCashAmount - openingCashAmount : 0;
 
   static int _toInt(dynamic v) => switch (v) {
     int val => val,

@@ -37,6 +37,7 @@ void main() {
     expect(screen, contains('record.paymentsPay'));
     expect(screen, contains('record.paymentsCard'));
     expect(screen, contains('record.paymentsBankTransfer'));
+    expect(screen, contains('record.openingCashAmount'));
     expect(screen, contains('daily_closing_action_\${record.closingDate}'));
     expect(screen, isNot(contains("Key('daily_closing_submit_button')")));
   });
