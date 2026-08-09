@@ -3,16 +3,18 @@ import '../../main.dart';
 class DailyClosingService {
   Future<Map<String, dynamic>> fetchCashPreview({
     required String storeId,
+    required String closingDate,
   }) async {
     final result = await supabase.rpc(
       'get_daily_closing_cash_preview',
-      params: {'p_store_id': storeId},
+      params: {'p_store_id': storeId, 'p_closing_date': closingDate},
     );
     return Map<String, dynamic>.from(result as Map);
   }
 
   Future<void> createDailyClosing({
     required String storeId,
+    required String closingDate,
     required Map<String, int> cashDenominations,
     double openingCashAmount = 5000000,
     String? notes,
@@ -21,6 +23,7 @@ class DailyClosingService {
       'create_daily_closing',
       params: {
         'p_store_id': storeId,
+        'p_closing_date': closingDate,
         'p_cash_denominations': cashDenominations,
         'p_opening_cash_amount': openingCashAmount,
         if (notes != null && notes.isNotEmpty) 'p_notes': notes,
@@ -33,7 +36,7 @@ class DailyClosingService {
     int limit = 30,
   }) async {
     final result = await supabase.rpc(
-      'get_daily_closings',
+      'get_daily_closing_days',
       params: {'p_store_id': storeId, 'p_limit': limit},
     );
 
