@@ -2780,6 +2780,7 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
           _hCell(context.l10n.reportsBankTransfer),
           _hCell(context.l10n.reportsCountedCash),
           _hCell(context.l10n.reportsCashVariance),
+          _hCell(context.l10n.reportsCashFloat),
           _hCell(context.l10n.reportsDepositTotal),
           _hCell(context.l10n.reportsAssignee),
           _hCell(context.l10n.reportsClosingStatus, flex: 2),
@@ -2814,6 +2815,7 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
           _dCell(_formatVnd(currency, record.paymentsBankTransfer)),
           _dCell(_formatVnd(currency, record.countedCashAmount)),
           _dCell(_formatVnd(currency, record.cashVariance)),
+          _dCell(_formatVnd(currency, record.openingCashAmount)),
           _dCell(_formatVnd(currency, record.depositTotal)),
           _dCell(record.closedByName, overflow: true),
           Expanded(

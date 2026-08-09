@@ -439,6 +439,7 @@
   "reportsBanknoteUnit": "tờ",
   "reportsCountedCash": "Tiền mặt thực đếm",
   "reportsCashVariance": "Chênh lệch tiền mặt",
+  "reportsCashFloat": "Tiền quỹ đầu ca",
   "reportsDepositTotal": "Tổng tiền nộp",
   "reportsDineInRevenue": "Doanh thu tại bàn",
   "reportsDeliveryRevenue": "Doanh thu giao hàng",
