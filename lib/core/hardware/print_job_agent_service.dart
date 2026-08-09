@@ -139,6 +139,7 @@ class PrintJobAgentService implements PrintAgentDriver {
     final bytes = await _buildBytes(job);
     final copyCount = switch (job.ticket.ticket) {
       'floor' || 'confirmation' => 2,
+      'kitchen' when job.ticket.printedReason == 'added_items' => 2,
       _ => 1,
     };
     final outcome = await _printToDestination(
