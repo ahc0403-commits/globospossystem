@@ -12,6 +12,7 @@ import '../../../core/services/pin_service.dart';
 import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
 import '../../../core/utils/number_input_utils.dart';
+import '../../../core/utils/floor_label.dart';
 import '../../../core/utils/role_routes.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
@@ -1546,7 +1547,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     final label = [
       _printerDestinationPurposeLabel(context, destination.purpose),
       if (destination.floorLabel != null && destination.floorLabel!.isNotEmpty)
-        destination.floorLabel!,
+        displayFloorLabel(destination.floorLabel!),
     ].join(' / ');
     final isTesting = _testingDestinationIds.contains(destination.id);
 
@@ -1761,7 +1762,9 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
               .toString(),
     );
     final floorController = TextEditingController(
-      text: destination?.floorLabel ?? '1F',
+      text: destination == null
+          ? 'G'
+          : displayFloorLabel(destination.floorLabel ?? '1F'),
     );
     var purpose = destination?.purpose ?? 'kitchen';
 
@@ -1900,7 +1903,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                     final wirelessPort = parseIntInput(
                       wirelessPortController.text,
                     );
-                    final floorLabel = floorController.text.trim();
+                    final floorLabel = storedFloorLabel(floorController.text);
                     if (name.isEmpty ||
                         (wiredIp.isEmpty && wirelessIp.isEmpty) ||
                         (wiredIp.isNotEmpty &&

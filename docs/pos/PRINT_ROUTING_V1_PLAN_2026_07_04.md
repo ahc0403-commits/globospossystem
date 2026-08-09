@@ -166,6 +166,12 @@ of the recalc edge for free.
 
 ### 4.2 Agent execution
 
+- Operational kitchen and floor destinations print two complete copies for
+  every normal, added-item, reprint, and direct test output. Each copy ends
+  with the internal-buzzer command `ESC B 5 9` (five 450 ms beeps), so two
+  copies produce two alert sequences. Receipt and dedicated tray destinations
+  remain one copy without the operational alert. A tray job that falls back
+  to a kitchen destination follows the kitchen destination policy.
 - `claim_print_jobs(p_store_id, p_limit int)` — `UPDATE … SET status='printing',
   claimed_by=auth.uid(), attempts=attempts+1 WHERE id IN (SELECT … WHERE
   status IN ('pending','failed') AND next_retry_at <= now() ORDER BY

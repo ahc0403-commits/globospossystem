@@ -11,6 +11,10 @@ import 'package:globos_pos_system/core/hardware/wifi_printer_service.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('operational printer alert is five 450ms beeps', () {
+    expect(ReceiptBuilder.internalBuzzerAlertBytes, <int>[0x1B, 0x42, 5, 9]);
+  });
+
   group('WifiPrinterService', () {
     test(
       'testConnection returns true when printer socket accepts connections',
@@ -111,6 +115,7 @@ void main() {
             name: 'Tray',
             ip: '192.168.1.50',
             port: 9100,
+            purpose: 'tray',
           ),
         },
       );
@@ -218,7 +223,9 @@ void main() {
         expect(printer.prints.map((call) => call.ip), [
           '192.168.1.120',
           '192.168.1.252',
+          '192.168.1.252',
         ]);
+        expect(_hasBuzzerAlert(printer.prints[1].bytes), isTrue);
       },
     );
 
@@ -276,7 +283,11 @@ void main() {
         final results = await agent.processOnce('store-1');
 
         expect(results.single.result, PrintResult.success);
-        expect(printer.prints.single.ip, '192.168.1.252');
+        expect(printer.prints, hasLength(2));
+        expect(
+          printer.prints.map((call) => call.ip),
+          everyElement('192.168.1.252'),
+        );
       },
     );
 
@@ -434,6 +445,7 @@ void main() {
             name: '2F',
             ip: '192.168.1.53',
             port: 9100,
+            purpose: 'floor',
           ),
         },
       );
@@ -449,11 +461,52 @@ void main() {
       expect(results.single.result, PrintResult.success);
       expect(printer.prints, hasLength(2));
       expect(printer.prints[0].bytes, printer.prints[1].bytes);
+      expect(_hasBuzzerAlert(printer.prints[0].bytes), isTrue);
       expect(
         String.fromCharCodes(printer.prints[0].bytes),
-        contains('PHIEU TANG'),
+        allOf(contains('PHIEU TANG'), contains('1F / T07')),
       );
     });
+
+    for (final printedReason in ['initial', 'reprint']) {
+      test(
+        'processOnce prints two alerted kitchen copies for $printedReason',
+        () async {
+          final backend = _FakePrintJobBackend(
+            jobs: [
+              _job(
+                id: 'job-kitchen-$printedReason',
+                destinationId: 'dest-kitchen',
+                ticketType: 'kitchen',
+                printedReason: printedReason,
+              ),
+            ],
+            destinations: const {
+              'dest-kitchen': PrintDestination(
+                id: 'dest-kitchen',
+                name: 'Kitchen',
+                ip: '192.168.1.55',
+                port: 9100,
+                purpose: 'kitchen',
+              ),
+            },
+          );
+          final printer = _FakePrinterService(PrintResult.success);
+          final agent = PrintJobAgentService(
+            backend: backend,
+            printerService: printer,
+            networkCapabilityService: _availableNetwork,
+          );
+
+          final results = await agent.processOnce('store-1');
+
+          expect(results.single.result, PrintResult.success);
+          expect(printer.prints, hasLength(2));
+          expect(printer.prints[0].bytes, printer.prints[1].bytes);
+          expect(_hasBuzzerAlert(printer.prints[0].bytes), isTrue);
+        },
+      );
+    }
 
     test(
       'processOnce prints kitchen and tray copies for added kitchen orders',
@@ -473,6 +526,7 @@ void main() {
               name: 'Kitchen',
               ip: '192.168.1.55',
               port: 9100,
+              purpose: 'kitchen',
             ),
           },
         );
@@ -488,6 +542,7 @@ void main() {
         expect(results.single.result, PrintResult.success);
         expect(printer.prints, hasLength(2));
         expect(printer.prints[0].bytes, printer.prints[1].bytes);
+        expect(_hasBuzzerAlert(printer.prints[0].bytes), isTrue);
         expect(
           String.fromCharCodes(printer.prints[0].bytes),
           allOf(contains('PHIEU BEP'), contains('MON THEM')),
@@ -513,6 +568,7 @@ void main() {
               name: '3F',
               ip: '192.168.1.54',
               port: 9100,
+              purpose: 'floor',
             ),
           },
         );
@@ -528,6 +584,7 @@ void main() {
         expect(results.single.result, PrintResult.success);
         expect(printer.prints, hasLength(2));
         expect(printer.prints[0].bytes, printer.prints[1].bytes);
+        expect(_hasBuzzerAlert(printer.prints[0].bytes), isTrue);
         expect(
           String.fromCharCodes(printer.prints[0].bytes),
           allOf(
@@ -569,6 +626,7 @@ void main() {
             name: 'Cashier',
             ip: '192.168.1.52',
             port: 9100,
+            purpose: 'receipt',
           ),
         },
       );
@@ -587,6 +645,7 @@ void main() {
       expect(output, contains('PHIEU THANH TOAN'));
       expect(output, contains('TONG CONG'));
       expect(output, isNot(contains('PHIEU BEP')));
+      expect(_hasBuzzerAlert(printer.prints.single.bytes), isFalse);
     });
 
     test(
@@ -620,6 +679,7 @@ void main() {
               name: '2F Printer',
               ip: '192.168.1.77',
               port: 9102,
+              purpose: 'floor',
             ),
           },
         );
@@ -633,12 +693,17 @@ void main() {
         final result = await agent.testPrintDestination('dest-test');
 
         expect(result, PrintResult.success);
-        expect(printer.prints.single.ip, '192.168.1.77');
-        expect(printer.prints.single.port, 9102);
+        expect(printer.prints, hasLength(2));
         expect(
-          String.fromCharCodes(printer.prints.single.bytes),
+          printer.prints.map((call) => call.ip),
+          everyElement('192.168.1.77'),
+        );
+        expect(printer.prints.map((call) => call.port), everyElement(9102));
+        expect(
+          String.fromCharCodes(printer.prints.first.bytes),
           contains('TEST'),
         );
+        expect(_hasBuzzerAlert(printer.prints.first.bytes), isTrue);
         expect(backend.completed, isEmpty);
       },
     );
@@ -868,6 +933,16 @@ class _UnsupportedPrinterService implements PrinterService {
   Future<bool> testConnection(String ip, {int port = 9100}) async {
     return false;
   }
+}
+
+bool _hasBuzzerAlert(List<int> bytes) {
+  final alert = ReceiptBuilder.internalBuzzerAlertBytes;
+  if (bytes.length < alert.length) return false;
+  final offset = bytes.length - alert.length;
+  for (var index = 0; index < alert.length; index++) {
+    if (bytes[offset + index] != alert[index]) return false;
+  }
+  return true;
 }
 
 class _PrintCall {

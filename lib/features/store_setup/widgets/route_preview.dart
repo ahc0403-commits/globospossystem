@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
 import '../store_setup_localization.dart';
+import '../../../core/utils/floor_label.dart';
 import '../store_setup_models.dart';
 
 class StoreSetupRoutePreview extends StatelessWidget {
@@ -30,7 +31,7 @@ class StoreSetupRoutePreview extends StatelessWidget {
               subtitle: Text(
                 '${context.l10n.storeSetupRoutePurpose}: '
                 '${localizeStoreSetupRoutePurpose(context.l10n, destination.purpose)}'
-                '${destination.floorLabel == null ? '' : '/${destination.floorLabel}'}\n'
+                '${destination.floorLabel == null ? '' : '/${displayFloorLabel(destination.floorLabel!)}'}\n'
                 '${destination.ip}:${destination.port}',
               ),
               trailing: Text(

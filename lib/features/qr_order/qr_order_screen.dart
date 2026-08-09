@@ -10,6 +10,7 @@ import '../../core/services/qr_order_service.dart';
 import '../../core/ui/app_fonts.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
+import '../../core/utils/floor_label.dart';
 
 class QrOrderScreen extends StatefulWidget {
   const QrOrderScreen({super.key, required this.token, this.service});
@@ -1722,11 +1723,14 @@ class QrOrderCopy {
     _ => 'Choose another menu category above.',
   };
 
-  String tableLabel(String tableNumber, String floorLabel) => switch (code) {
-    'ko' => '$floorLabel · $tableNumber번 테이블',
-    'vi' => '$floorLabel · Bàn $tableNumber',
-    _ => '$floorLabel · Table $tableNumber',
-  };
+  String tableLabel(String tableNumber, String floorLabel) {
+    final displayFloor = displayFloorLabel(floorLabel);
+    return switch (code) {
+      'ko' => '$displayFloor · $tableNumber번 테이블',
+      'vi' => '$displayFloor · Bàn $tableNumber',
+      _ => '$displayFloor · Table $tableNumber',
+    };
+  }
 
   String cartSummary(int count, String totalLabel) => switch (code) {
     'ko' => '$count개 · $totalLabel',

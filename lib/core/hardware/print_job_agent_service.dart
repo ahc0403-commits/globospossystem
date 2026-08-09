@@ -136,12 +136,12 @@ class PrintJobAgentService implements PrintAgentDriver {
       );
     }
 
-    final bytes = await _buildBytes(job);
-    final copyCount = switch (job.ticket.ticket) {
-      'floor' || 'confirmation' => 2,
-      'kitchen' when job.ticket.printedReason == 'added_items' => 2,
-      _ => 1,
-    };
+    final bytes = <int>[
+      ...await _buildBytes(job),
+      if (destination.usesOperationalAlert)
+        ...ReceiptBuilder.internalBuzzerAlertBytes,
+    ];
+    final copyCount = destination.usesOperationalAlert ? 2 : 1;
     final outcome = await _printToDestination(
       destination,
       bytes,
@@ -171,21 +171,29 @@ class PrintJobAgentService implements PrintAgentDriver {
       return PrintResult.connectionFailed;
     }
 
-    final bytes = await ReceiptBuilder.buildKitchenTicket(
-      PrintTicket(
-        ticket: 'kitchen',
-        floorLabel: 'THU',
-        tableNumber: 'MAY IN',
-        ticketCode: 'TEST',
-        batchNo: 1,
-        printedReason: 'initial',
-        printedAt: DateTime.now().toIso8601String(),
-        items: const [PrintTicketItem(label: 'Thu duong in', quantity: 1)],
-        orderNotes: 'Thu tram in',
+    final bytes = <int>[
+      ...await ReceiptBuilder.buildKitchenTicket(
+        PrintTicket(
+          ticket: 'kitchen',
+          floorLabel: 'THU',
+          tableNumber: 'MAY IN',
+          ticketCode: 'TEST',
+          batchNo: 1,
+          printedReason: 'initial',
+          printedAt: DateTime.now().toIso8601String(),
+          items: const [PrintTicketItem(label: 'Thu duong in', quantity: 1)],
+          orderNotes: 'Thu tram in',
+        ),
       ),
-    );
+      if (destination.usesOperationalAlert)
+        ...ReceiptBuilder.internalBuzzerAlertBytes,
+    ];
 
-    final outcome = await _printToDestination(destination, bytes);
+    final outcome = await _printToDestination(
+      destination,
+      bytes,
+      copyCount: destination.usesOperationalAlert ? 2 : 1,
+    );
     return outcome.result;
   }
 
@@ -352,7 +360,7 @@ class SupabasePrintJobBackend implements PrintJobBackend {
   Future<PrintDestination?> loadDestination(String destinationId) async {
     final response = await _client
         .from('printer_destinations')
-        .select('id, name, ip, port, physical_printer_id')
+        .select('id, name, ip, port, purpose, physical_printer_id')
         .eq('id', destinationId)
         .maybeSingle();
     if (response == null) {
@@ -456,6 +464,7 @@ class PrintDestination {
     required this.name,
     required this.ip,
     required this.port,
+    this.purpose = 'kitchen',
     this.endpoints = const <PrinterEndpoint>[],
   });
 
@@ -463,7 +472,10 @@ class PrintDestination {
   final String name;
   final String ip;
   final int port;
+  final String purpose;
   final List<PrinterEndpoint> endpoints;
+
+  bool get usesOperationalAlert => purpose == 'kitchen' || purpose == 'floor';
 
   factory PrintDestination.fromJson(Map<String, dynamic> json) {
     final parsedEndpoints = (json['endpoints'] as List? ?? const <Object?>[])
@@ -483,6 +495,7 @@ class PrintDestination {
         String value => int.tryParse(value) ?? 9100,
         _ => 9100,
       },
+      purpose: json['purpose']?.toString() ?? 'kitchen',
       endpoints: parsedEndpoints.isEmpty
           ? [
               PrinterEndpoint(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
 import '../store_setup_models.dart';
+import '../../../core/utils/floor_label.dart';
 
 class TableBulkEditor extends StatefulWidget {
   const TableBulkEditor({
@@ -135,9 +136,9 @@ class _TableBulkEditorState extends State<TableBulkEditor> {
                   labelText: context.l10n.storeSetupFloor,
                 ),
                 items: [
-                  DropdownMenuItem(value: '1F', child: Text('1F')),
-                  DropdownMenuItem(value: '2F', child: Text('2F')),
-                  DropdownMenuItem(value: '3F', child: Text('3F')),
+                  DropdownMenuItem(value: '1F', child: Text('G')),
+                  DropdownMenuItem(value: '2F', child: Text('1F')),
+                  DropdownMenuItem(value: '3F', child: Text('2F')),
                 ],
                 onChanged: (value) => setState(() => _floor = value ?? '1F'),
               ),
@@ -194,7 +195,7 @@ class _TableBulkEditorState extends State<TableBulkEditor> {
                     }),
               title: Text(
                 '${widget.tables[index].tableNumber} · '
-                '${widget.tables[index].floorLabel} · '
+                '${displayFloorLabel(widget.tables[index].floorLabel)} · '
                 '${widget.tables[index].seatCount}',
               ),
               subtitle: widget.tables[index].isProtected
@@ -218,7 +219,10 @@ class _TableBulkEditorState extends State<TableBulkEditor> {
                     widget.onReassign({..._selected}, floor);
                     setState(_selected.clear);
                   },
-                  child: Text('${context.l10n.storeSetupFloor} $floor'),
+                  child: Text(
+                    '${context.l10n.storeSetupFloor} '
+                    '${displayFloorLabel(floor)}',
+                  ),
                 ),
             ],
           ),

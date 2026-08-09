@@ -15,6 +15,7 @@ import '../../core/ui/app_fonts.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../core/utils/time_utils.dart';
+import '../../core/utils/floor_label.dart';
 import '../../main.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
@@ -577,7 +578,7 @@ class _DestinationTile extends StatelessWidget {
                         purpose,
                         if (destination.floorLabel != null &&
                             destination.floorLabel!.isNotEmpty)
-                          destination.floorLabel!,
+                          displayFloorLabel(destination.floorLabel!),
                       ].join(' / '),
                       color: PosColors.info,
                       compact: true,
@@ -639,7 +640,7 @@ class _PrintJobTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${job.floorLabel} / ${job.tableNumber} / '
+                  '${displayFloorLabel(job.floorLabel)} / ${job.tableNumber} / '
                   '${localizePrintCopyType(context.l10n, job.copyType)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
