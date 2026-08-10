@@ -47,6 +47,7 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
 
   final _service = createPrinterService();
   static const _ipKey = 'printer_ip';
+  int _ipRevision = 0;
 
   Future<void> _loadSavedIp() async {
     final prefs = await SharedPreferences.getInstance();
@@ -56,17 +57,20 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
 
   Future<void> setIp(String ip) async {
     final normalized = ip.trim();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_ipKey, normalized);
+    final revision = ++_ipRevision;
     state = state.copyWith(
       printerIp: normalized,
       clearTestResult: true,
       clearError: true,
     );
+    final prefs = await SharedPreferences.getInstance();
+    if (revision != _ipRevision) return;
+    await prefs.setString(_ipKey, normalized);
   }
 
-  Future<void> testConnection() async {
-    if (state.printerIp.isEmpty) {
+  Future<void> testConnection({String? ip}) async {
+    final targetIp = (ip ?? state.printerIp).trim();
+    if (targetIp.isEmpty) {
       state = state.copyWith(error: 'Enter the IP address first.');
       return;
     }
@@ -76,7 +80,7 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
       clearError: true,
       clearTestResult: true,
     );
-    final ok = await _service.testConnection(state.printerIp);
+    final ok = await _service.testConnection(targetIp);
     state = state.copyWith(isTesting: false, lastTestResult: ok);
   }
 
@@ -90,7 +94,9 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
     if (result == PrintResult.connectionFailed) {
       state = state.copyWith(error: 'Printer connection failed. Check the IP.');
     } else if (result == PrintResult.printFailed) {
-      state = state.copyWith(error: 'Receipt print failed. Check printer status.');
+      state = state.copyWith(
+        error: 'Receipt print failed. Check printer status.',
+      );
     } else if (result == PrintResult.notSupported) {
       state = state.copyWith(error: 'Printer is only supported on the app.');
     }

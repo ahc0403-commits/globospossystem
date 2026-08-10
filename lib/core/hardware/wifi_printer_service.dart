@@ -7,6 +7,7 @@ import 'printer_service.dart';
 
 class WifiPrinterService implements PrinterService {
   static const connectionTimeout = Duration(seconds: 5);
+  static const sourceAddressTimeout = Duration(seconds: 2);
   static const printFlushTimeout = Duration(seconds: 5);
   static const socketCloseTimeout = Duration(seconds: 2);
 
@@ -19,10 +20,10 @@ class WifiPrinterService implements PrinterService {
       return false;
     }
     try {
-      final socket = await Socket.connect(
+      final socket = await _connectToPrinter(
         ip,
         port,
-        timeout: const Duration(seconds: 3),
+        fallbackTimeout: const Duration(seconds: 3),
       );
       await socket.close();
       return true;
@@ -45,7 +46,11 @@ class WifiPrinterService implements PrinterService {
     }
     Socket? socket;
     try {
-      socket = await Socket.connect(ip, port, timeout: connectionTimeout);
+      socket = await _connectToPrinter(
+        ip,
+        port,
+        fallbackTimeout: connectionTimeout,
+      );
       socket.add(bytes);
       await socket.flush().timeout(printFlushTimeout);
       await socket.close().timeout(socketCloseTimeout);
@@ -68,6 +73,87 @@ class WifiPrinterService implements PrinterService {
       return PrintResult.printFailed;
     } finally {
       socket?.destroy();
+    }
+  }
+
+  Future<Socket> _connectToPrinter(
+    String ip,
+    int port, {
+    required Duration fallbackTimeout,
+  }) async {
+    Object? lastError;
+    StackTrace? lastStackTrace;
+    for (final sourceAddress in await _printerSourceAddresses(ip)) {
+      try {
+        return await Socket.connect(
+          ip,
+          port,
+          sourceAddress: sourceAddress,
+          timeout: sourceAddressTimeout,
+        );
+      } catch (error, stackTrace) {
+        lastError = error;
+        lastStackTrace = stackTrace;
+      }
+    }
+
+    try {
+      return await Socket.connect(ip, port, timeout: fallbackTimeout);
+    } catch (error, stackTrace) {
+      lastError = error;
+      lastStackTrace = stackTrace;
+    }
+
+    Error.throwWithStackTrace(lastError, lastStackTrace);
+  }
+
+  Future<List<String>> _printerSourceAddresses(String printerIp) async {
+    final targetAddress = InternetAddress.tryParse(printerIp);
+    if (targetAddress == null || targetAddress.isLoopback) {
+      return const <String>[];
+    }
+    final targetParts = printerIp.split('.');
+    if (targetParts.length != 4) return const <String>[];
+
+    try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLoopback: false,
+        includeLinkLocal: true,
+      );
+      final candidates = <({String address, int priority})>[];
+      for (final interface in interfaces) {
+        final interfaceName = interface.name.toLowerCase();
+        final isWireless =
+            interfaceName.contains('wi-fi') ||
+            interfaceName.contains('wifi') ||
+            interfaceName.contains('wireless') ||
+            interfaceName.contains('wlan');
+        final isWired =
+            interfaceName.contains('ethernet') ||
+            interfaceName.contains('이더넷') ||
+            interfaceName.contains('local area connection') ||
+            interfaceName == 'lan';
+        for (final address in interface.addresses) {
+          if (address.type != InternetAddressType.IPv4 || address.isLoopback) {
+            continue;
+          }
+          final sourceParts = address.address.split('.');
+          if (sourceParts.length != 4) continue;
+          final samePrinterSubnet =
+              sourceParts[0] == targetParts[0] &&
+              sourceParts[1] == targetParts[1] &&
+              sourceParts[2] == targetParts[2];
+          final priority =
+              (samePrinterSubnet ? 0 : 10) +
+              (isWired ? 0 : (isWireless ? 2 : 1));
+          candidates.add((address: address.address, priority: priority));
+        }
+      }
+      candidates.sort((a, b) => a.priority.compareTo(b.priority));
+      return candidates.map((candidate) => candidate.address).toSet().toList();
+    } catch (_) {
+      return const <String>[];
     }
   }
 }
