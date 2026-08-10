@@ -13,6 +13,7 @@ void main() {
     expect(router, contains("path: '/qr/:token'"));
     expect(router, contains('QrOrderScreen(token:'));
     expect(service, contains("'qr_get_menu'"));
+    expect(service, contains("'qr_get_active_order'"));
     expect(service, contains("'qr_place_order'"));
     expect(service, contains("'p_token': token"));
     expect(service, contains("'p_client_order_id': clientOrderId"));
@@ -24,6 +25,10 @@ void main() {
     final screen = readRepoFile('lib/features/qr_order/qr_order_screen.dart');
 
     expect(screen, contains("Key('qr_order_screen')"));
+    expect(screen, contains("Key('qr_active_order_summary')"));
+    expect(screen, contains('현재 주문 내역'));
+    expect(screen, contains('Các món đã gọi'));
+    expect(screen, contains('Current order'));
     expect(screen, contains("Key('qr_confirm_dialog')"));
     expect(screen, contains("Key('qr_confirm_submit')"));
     expect(screen, contains("String _languageCode = 'vi'"));

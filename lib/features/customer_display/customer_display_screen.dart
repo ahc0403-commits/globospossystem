@@ -36,29 +36,37 @@ class _CustomerDisplayScreenState extends ConsumerState<CustomerDisplayScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (display.error != null && display.snapshot == null) {
-      return Scaffold(
-        body: _CustomerDisplayError(
-          onRetry: () => ref.read(customerDisplayProvider.notifier).retry(),
+      return Localizations.override(
+        context: context,
+        locale: const Locale('vi'),
+        child: Scaffold(
+          body: _CustomerDisplayError(
+            onRetry: () => ref.read(customerDisplayProvider.notifier).retry(),
+          ),
         ),
       );
     }
 
     final snapshot = display.snapshot;
-    return Scaffold(
-      key: const Key('customer_display_root'),
-      backgroundColor: const Color(0xFFF4F6F8),
-      body: SafeArea(
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 280),
-          child: snapshot == null
-              ? _CustomerDisplayIdle(
-                  key: const Key('customer_display_idle'),
-                  onLogout: () => ref.read(authProvider.notifier).logout(),
-                )
-              : CustomerPaymentContent(
-                  key: ValueKey(snapshot.orderId),
-                  snapshot: snapshot,
-                ),
+    return Localizations.override(
+      context: context,
+      locale: const Locale('vi'),
+      child: Scaffold(
+        key: const Key('customer_display_root'),
+        backgroundColor: const Color(0xFFF4F6F8),
+        body: SafeArea(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 280),
+            child: snapshot == null
+                ? _CustomerDisplayIdle(
+                    key: const Key('customer_display_idle'),
+                    onLogout: () => ref.read(authProvider.notifier).logout(),
+                  )
+                : CustomerPaymentContent(
+                    key: ValueKey(snapshot.orderId),
+                    snapshot: snapshot,
+                  ),
+          ),
         ),
       ),
     );
@@ -134,32 +142,36 @@ class CustomerPaymentContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final landscape = constraints.maxWidth >= 760;
-        final orderPanel = _CustomerOrderPanel(snapshot: snapshot);
-        const qrPanel = _CustomerQrPanel();
+    return Localizations.override(
+      context: context,
+      locale: const Locale('vi'),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final landscape = constraints.maxWidth >= 760;
+          final orderPanel = _CustomerOrderPanel(snapshot: snapshot);
+          const qrPanel = _CustomerQrPanel();
 
-        return Padding(
-          padding: EdgeInsets.all(landscape ? 24 : 16),
-          child: landscape
-              ? Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(flex: 3, child: orderPanel),
-                    const SizedBox(width: 20),
-                    const Expanded(flex: 2, child: qrPanel),
-                  ],
-                )
-              : Column(
-                  children: [
-                    Expanded(flex: 3, child: orderPanel),
-                    const SizedBox(height: 16),
-                    const Expanded(flex: 2, child: qrPanel),
-                  ],
-                ),
-        );
-      },
+          return Padding(
+            padding: EdgeInsets.all(landscape ? 24 : 16),
+            child: landscape
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(flex: 3, child: orderPanel),
+                      const SizedBox(width: 20),
+                      const Expanded(flex: 2, child: qrPanel),
+                    ],
+                  )
+                : Column(
+                    children: [
+                      Expanded(flex: 3, child: orderPanel),
+                      const SizedBox(height: 16),
+                      const Expanded(flex: 2, child: qrPanel),
+                    ],
+                  ),
+          );
+        },
+      ),
     );
   }
 }

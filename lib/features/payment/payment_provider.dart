@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -7,6 +8,7 @@ import '../../core/payments/payment_total_calculator.dart';
 import '../../core/services/order_service.dart';
 import '../../core/services/payment_service.dart';
 import '../../core/utils/live_sync_scope.dart';
+import '../../l10n/app_localizations.dart';
 import '../../main.dart';
 import '../order/order_model.dart';
 
@@ -554,17 +556,14 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     required String storeId,
     required CashierOrder order,
   }) async {
+    final l10n = lookupAppLocalizations(const Locale('vi'));
     final items = order.items
         .where((item) => item.status.toLowerCase() != 'cancelled')
         .map(
           (item) => <String, dynamic>{
-            'name': item.nameVi?.trim().isNotEmpty == true
-                ? item.nameVi!.trim()
-                : item.label?.trim().isNotEmpty == true
-                ? item.label!.trim()
-                : item.nameEn?.trim().isNotEmpty == true
-                ? item.nameEn!.trim()
-                : '-',
+            'name': item.itemType == 'wet_tissue_charge'
+                ? l10n.cashierWetTissueCharge
+                : item.localizedName('vi'),
             'quantity': item.quantity,
             'amount': item.isServiceItem
                 ? 0
@@ -584,6 +583,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
           'p_order_id': order.orderId,
           'p_payload': {
             'order_id': order.orderId,
+            'locale_code': 'vi',
             'table_number': order.tableNumber,
             'items': items,
             'subtotal': order.menuSubtotal,

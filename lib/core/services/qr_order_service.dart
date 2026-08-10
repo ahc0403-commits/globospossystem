@@ -222,6 +222,75 @@ class QrOrderLine {
   };
 }
 
+class QrActiveOrder {
+  const QrActiveOrder({
+    required this.isActive,
+    required this.orderCode,
+    required this.status,
+    required this.items,
+  });
+
+  final bool isActive;
+  final String orderCode;
+  final String status;
+  final List<QrActiveOrderItem> items;
+
+  factory QrActiveOrder.fromJson(Map<String, dynamic> json) {
+    final itemsRaw = json['items'];
+    return QrActiveOrder(
+      isActive: json['active'] == true,
+      orderCode: json['order_code']?.toString() ?? '',
+      status: json['status']?.toString() ?? 'pending',
+      items: itemsRaw is List
+          ? itemsRaw
+                .whereType<Map>()
+                .map(
+                  (item) => QrActiveOrderItem.fromJson(
+                    Map<String, dynamic>.from(item),
+                  ),
+                )
+                .toList(growable: false)
+          : const <QrActiveOrderItem>[],
+    );
+  }
+}
+
+class QrActiveOrderItem {
+  const QrActiveOrderItem({
+    required this.name,
+    this.nameKo = '',
+    this.nameVi = '',
+    this.nameEn = '',
+    required this.quantity,
+    required this.status,
+  });
+
+  final String name;
+  final String nameKo;
+  final String nameVi;
+  final String nameEn;
+  final int quantity;
+  final String status;
+
+  String localizedName(String languageCode) => switch (languageCode) {
+    'ko' => nameKo.isEmpty ? name : nameKo,
+    'vi' => nameVi.isEmpty ? name : nameVi,
+    _ => nameEn.isEmpty ? name : nameEn,
+  };
+
+  factory QrActiveOrderItem.fromJson(Map<String, dynamic> json) {
+    final fallback = json['name']?.toString() ?? '';
+    return QrActiveOrderItem(
+      name: fallback,
+      nameKo: json['name_ko']?.toString() ?? fallback,
+      nameVi: json['name_vi']?.toString() ?? fallback,
+      nameEn: json['name_en']?.toString() ?? fallback,
+      quantity: _jsonInt(json['quantity']),
+      status: json['status']?.toString() ?? 'pending',
+    );
+  }
+}
+
 class QrOrderResult {
   const QrOrderResult({
     required this.orderCode,
@@ -289,6 +358,14 @@ class QrOrderService {
       params: {'p_token': token},
     );
     return QrOrderMenu.fromJson(Map<String, dynamic>.from(result as Map));
+  }
+
+  Future<QrActiveOrder> fetchActiveOrder(String token) async {
+    final result = await supabase.rpc(
+      'qr_get_active_order',
+      params: {'p_token': token},
+    );
+    return QrActiveOrder.fromJson(Map<String, dynamic>.from(result as Map));
   }
 
   Future<QrOrderResult> placeOrder({

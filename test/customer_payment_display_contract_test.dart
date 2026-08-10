@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/utils/role_routes.dart';
 import 'package:globos_pos_system/features/customer_display/customer_display_provider.dart';
 import 'package:globos_pos_system/features/customer_display/customer_display_screen.dart';
+import 'package:globos_pos_system/features/order/order_model.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 
 void main() {
@@ -33,6 +34,7 @@ void main() {
   test('customer display snapshot parses fixed payment payload', () {
     final snapshot = CustomerDisplaySnapshot.fromJson({
       'order_id': 'order-1',
+      'locale_code': 'vi',
       'table_number': '12',
       'items': [
         {'name': 'Phở bò', 'quantity': 2, 'amount': 180000},
@@ -44,10 +46,28 @@ void main() {
     });
 
     expect(snapshot.orderId, 'order-1');
+    expect(snapshot.localeCode, 'vi');
     expect(snapshot.tableNumber, '12');
     expect(snapshot.items.single.name, 'Phở bò');
     expect(snapshot.items.single.quantity, 2);
     expect(snapshot.total, 179000);
+  });
+
+  test('order item exposes the Vietnamese name for customer display', () {
+    final item = OrderItem(
+      id: 'item-1',
+      menuItemId: 'menu-1',
+      label: 'Legacy label',
+      unitPrice: 99000,
+      quantity: 1,
+      status: 'ready',
+      itemType: 'menu_item',
+      nameKo: '전통 떡볶이',
+      nameVi: 'Tteokbokki truyền thống',
+      nameEn: 'Traditional tteokbokki',
+    );
+
+    expect(item.localizedName('vi'), 'Tteokbokki truyền thống');
   });
 
   test('migration enforces dedicated read-only realtime display contract', () {
@@ -94,6 +114,59 @@ void main() {
     ).readAsStringSync();
     expect(cashier, contains("Key('cashier_show_customer_display')"));
     expect(paymentProvider, contains('show_customer_payment_display'));
+    expect(paymentProvider, contains("'locale_code': 'vi'"));
+    expect(paymentProvider, contains("item.localizedName('vi')"));
+  });
+
+  testWidgets('customer display fixed copy is always Vietnamese', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1024, 768);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const localeCodes = ['ko', 'vi', 'en'];
+    const vietnameseCopy = [
+      'Chi tiết đơn hàng',
+      'Tổng thanh toán',
+      'Quét mã QR để thanh toán',
+      'Bàn 12',
+      'Phí dịch vụ',
+      'Giảm giá',
+    ];
+
+    for (final localeCode in localeCodes) {
+      final snapshot = CustomerDisplaySnapshot.fromJson({
+        'order_id': 'order-$localeCode',
+        'locale_code': localeCode,
+        'table_number': '12',
+        'items': [
+          {'name': 'Menu item', 'quantity': 1, 'amount': 99000},
+        ],
+        'subtotal': 99000,
+        'service_charge': 9000,
+        'discount': 10000,
+        'total': 99000,
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ko'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: CustomerPaymentContent(snapshot: snapshot)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      for (final expected in vietnameseCopy) {
+        expect(find.text(expected), findsOneWidget, reason: localeCode);
+      }
+      expect(find.text('주문 내역'), findsNothing, reason: localeCode);
+      expect(find.text('Order details'), findsNothing, reason: localeCode);
+      expect(tester.takeException(), isNull, reason: localeCode);
+    }
   });
 
   testWidgets('tablet payment view renders items, total and fixed QR', (
@@ -106,6 +179,7 @@ void main() {
 
     final snapshot = CustomerDisplaySnapshot.fromJson({
       'order_id': 'order-1',
+      'locale_code': 'vi',
       'table_number': '12',
       'items': [
         {'name': 'Phở bò', 'quantity': 2, 'amount': 180000},
@@ -119,7 +193,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        locale: const Locale('vi'),
+        locale: const Locale('ko'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(body: CustomerPaymentContent(snapshot: snapshot)),
@@ -128,6 +202,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Phở bò'), findsOneWidget);
+    expect(find.text('Chi tiết đơn hàng'), findsOneWidget);
+    expect(find.text('Quét mã QR để thanh toán'), findsOneWidget);
+    expect(find.text('주문 내역'), findsNothing);
     expect(find.text('₫181.000'), findsOneWidget);
     expect(find.byKey(const Key('customer_display_fixed_qr')), findsOneWidget);
     expect(find.byType(Image), findsOneWidget);

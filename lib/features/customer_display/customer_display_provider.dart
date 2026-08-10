@@ -29,6 +29,7 @@ class CustomerDisplayItem {
 class CustomerDisplaySnapshot {
   const CustomerDisplaySnapshot({
     required this.orderId,
+    required this.localeCode,
     required this.tableNumber,
     required this.items,
     required this.subtotal,
@@ -38,6 +39,7 @@ class CustomerDisplaySnapshot {
   });
 
   final String orderId;
+  final String localeCode;
   final String tableNumber;
   final List<CustomerDisplayItem> items;
   final double subtotal;
@@ -49,6 +51,11 @@ class CustomerDisplaySnapshot {
     final rawItems = json['items'];
     return CustomerDisplaySnapshot(
       orderId: json['order_id']?.toString() ?? '',
+      localeCode: switch (json['locale_code']?.toString()) {
+        'vi' => 'vi',
+        'en' => 'en',
+        _ => 'ko',
+      },
       tableNumber: json['table_number']?.toString() ?? '-',
       items: rawItems is List
           ? rawItems

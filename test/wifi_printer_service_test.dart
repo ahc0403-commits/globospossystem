@@ -223,7 +223,6 @@ void main() {
         expect(printer.prints.map((call) => call.ip), [
           '192.168.1.120',
           '192.168.1.252',
-          '192.168.1.252',
         ]);
         expect(_hasBuzzerAlert(printer.prints[1].bytes), isTrue);
       },
@@ -283,7 +282,7 @@ void main() {
         final results = await agent.processOnce('store-1');
 
         expect(results.single.result, PrintResult.success);
-        expect(printer.prints, hasLength(2));
+        expect(printer.prints, hasLength(1));
         expect(
           printer.prints.map((call) => call.ip),
           everyElement('192.168.1.252'),
@@ -470,7 +469,7 @@ void main() {
 
     for (final printedReason in ['initial', 'reprint']) {
       test(
-        'processOnce prints two alerted kitchen copies for $printedReason',
+        'processOnce prints one alerted kitchen copy for $printedReason',
         () async {
           final backend = _FakePrintJobBackend(
             jobs: [
@@ -501,54 +500,61 @@ void main() {
           final results = await agent.processOnce('store-1');
 
           expect(results.single.result, PrintResult.success);
-          expect(printer.prints, hasLength(2));
-          expect(printer.prints[0].bytes, printer.prints[1].bytes);
+          expect(printer.prints, hasLength(1));
           expect(_hasBuzzerAlert(printer.prints[0].bytes), isTrue);
         },
       );
     }
 
-    test(
-      'processOnce prints kitchen and tray copies for added kitchen orders',
-      () async {
-        final backend = _FakePrintJobBackend(
-          jobs: [
-            _job(
-              id: 'job-added-kitchen-copies',
-              destinationId: 'dest-kitchen',
-              ticketType: 'kitchen',
-              printedReason: 'added_items',
-            ),
-          ],
-          destinations: const {
-            'dest-kitchen': PrintDestination(
-              id: 'dest-kitchen',
-              name: 'Kitchen',
-              ip: '192.168.1.55',
-              port: 9100,
-              purpose: 'kitchen',
-            ),
-          },
-        );
-        final printer = _FakePrinterService(PrintResult.success);
-        final agent = PrintJobAgentService(
-          backend: backend,
-          printerService: printer,
-          networkCapabilityService: _availableNetwork,
-        );
+    test('processOnce prints one kitchen and one fallback tray copy', () async {
+      final backend = _FakePrintJobBackend(
+        jobs: [
+          _job(
+            id: 'job-added-kitchen-copies',
+            destinationId: 'dest-kitchen',
+            ticketType: 'kitchen',
+            printedReason: 'added_items',
+          ),
+          _job(
+            id: 'job-added-tray-copy',
+            destinationId: 'dest-kitchen',
+            ticketType: 'tray',
+            printedReason: 'added_items',
+          ),
+        ],
+        destinations: const {
+          'dest-kitchen': PrintDestination(
+            id: 'dest-kitchen',
+            name: 'Kitchen',
+            ip: '192.168.1.55',
+            port: 9100,
+            purpose: 'kitchen',
+          ),
+        },
+      );
+      final printer = _FakePrinterService(PrintResult.success);
+      final agent = PrintJobAgentService(
+        backend: backend,
+        printerService: printer,
+        networkCapabilityService: _availableNetwork,
+      );
 
-        final results = await agent.processOnce('store-1');
+      final results = await agent.processOnce('store-1');
 
-        expect(results.single.result, PrintResult.success);
-        expect(printer.prints, hasLength(2));
-        expect(printer.prints[0].bytes, printer.prints[1].bytes);
-        expect(_hasBuzzerAlert(printer.prints[0].bytes), isTrue);
-        expect(
-          String.fromCharCodes(printer.prints[0].bytes),
-          allOf(contains('PHIEU BEP'), contains('MON THEM')),
-        );
-      },
-    );
+      expect(results, hasLength(2));
+      expect(
+        results.map((result) => result.result),
+        everyElement(PrintResult.success),
+      );
+      expect(printer.prints, hasLength(2));
+      expect(_hasBuzzerAlert(printer.prints[0].bytes), isTrue);
+      expect(_hasBuzzerAlert(printer.prints[1].bytes), isTrue);
+      expect(
+        String.fromCharCodes(printer.prints[0].bytes),
+        allOf(contains('PHIEU BEP'), contains('MON THEM')),
+      );
+      expect(String.fromCharCodes(printer.prints[1].bytes), contains('KHAY'));
+    });
 
     test(
       'processOnce prints two complete copies for floor confirmation jobs',
