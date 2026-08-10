@@ -161,16 +161,18 @@ class OrderItem {
   }
 
   String localizedName(String languageCode) {
-    final candidates = switch (languageCode) {
-      'vi' => [nameVi, nameKo, label, nameEn],
-      'en' => [nameEn, nameKo, label, nameVi],
-      _ => [nameKo, label, nameVi, nameEn],
+    final localized = switch (languageCode) {
+      'vi' => nameVi,
+      'en' => nameEn,
+      _ => nameKo,
     };
-    for (final candidate in candidates) {
-      final value = candidate?.trim() ?? '';
-      if (value.isNotEmpty) return value;
-    }
-    return '-';
+    final value = localized?.trim() ?? '';
+    if (value.isNotEmpty) return value;
+    return switch (languageCode) {
+      'vi' => 'Món',
+      'en' => 'Item',
+      _ => '메뉴',
+    };
   }
 }
 

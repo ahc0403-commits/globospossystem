@@ -1,11 +1,11 @@
 {
-    "name": "globos_pos_system",
-    "short_name": "globos_pos_system",
+    "name": "GLOBOS POS Web",
+    "short_name": "GLOBOS POS",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "GLOBOS browser-based restaurant POS and emergency fulfilment screens.",
     "orientation": "any",
     "prefer_related_applications": false,
     "icons": [

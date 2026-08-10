@@ -73,7 +73,7 @@ void main() {
     expect(
       tableProvider,
       contains(
-        'order_items(id, created_at, label, quantity, status, menu_items(name))',
+        'order_items(id, created_at, label, quantity, status, menu_items(name, name_vi, name_en))',
       ),
     );
     expect(

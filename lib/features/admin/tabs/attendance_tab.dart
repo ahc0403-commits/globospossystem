@@ -1121,35 +1121,52 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                flex: 2,
-                child: Text(
-                  context.l10n.attendanceManagementTitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 5,
-                child: ToastMetricStrip(
-                  dense: true,
-                  metrics: attendanceMetrics,
-                ),
-              ),
-              const SizedBox(width: 10),
-              ToastStatusBadge(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final title = Text(
+                context.l10n.attendanceManagementTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleLarge,
+              );
+              final metrics = ToastMetricStrip(
+                dense: true,
+                metrics: attendanceMetrics,
+              );
+              final badge = ToastStatusBadge(
                 label: _payrollUnlocked
                     ? context.l10n.attendancePayrollUnlockedBadge
                     : context.l10n.attendancePayrollLockedBadge,
                 color: _payrollUnlocked ? PosColors.success : PosColors.warning,
                 compact: true,
-              ),
-            ],
+              );
+              if (constraints.maxWidth < 620 ||
+                  MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [title, badge],
+                    ),
+                    const SizedBox(height: 8),
+                    metrics,
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 2, child: title),
+                  const SizedBox(width: 10),
+                  Expanded(flex: 5, child: metrics),
+                  const SizedBox(width: 10),
+                  badge,
+                ],
+              );
+            },
           ),
           const SizedBox(height: 4),
           Wrap(

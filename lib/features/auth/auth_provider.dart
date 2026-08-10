@@ -11,6 +11,7 @@ import '../admin/providers/settings_provider.dart';
 import '../admin/providers/staff_provider.dart';
 import '../inventory/inventory_provider.dart';
 import '../kitchen/kitchen_provider.dart';
+import '../emergency_fulfillment/emergency_fulfillment_provider.dart';
 import '../order/order_provider.dart';
 import '../payment/payment_provider.dart';
 import '../photo_ops/photo_ops_provider.dart';
@@ -496,6 +497,7 @@ final authProvider = StateNotifierProvider<AuthNotifier, PosAuthState>(
       ref.invalidate(orderProvider);
       ref.invalidate(paymentProvider);
       ref.invalidate(kitchenProvider);
+      ref.invalidate(emergencyFulfillmentProvider);
       ref.invalidate(waiterTableProvider);
       ref.invalidate(staffProvider);
       ref.invalidate(attendanceProvider);

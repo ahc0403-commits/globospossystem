@@ -50,7 +50,7 @@ void main() {
       expect(pairs.single.$2, isNotNull);
     });
 
-    test('historical second shift on the same day cannot double payroll', () {
+    test('alternating events create separate split shifts on the same day', () {
       final pairs = PayrollService().pairLogs([
         _log('clock_in', '2026-07-27T01:00:00Z'),
         _log('clock_out', '2026-07-27T03:00:00Z'),
@@ -58,9 +58,11 @@ void main() {
         _log('clock_out', '2026-07-27T07:00:00Z'),
       ]);
 
-      expect(pairs, hasLength(1));
-      expect(pairs.single.$1, DateTime(2026, 7, 27, 8));
-      expect(pairs.single.$2, DateTime(2026, 7, 27, 14));
+      expect(pairs, hasLength(2));
+      expect(pairs.first.$1, DateTime(2026, 7, 27, 8));
+      expect(pairs.first.$2, DateTime(2026, 7, 27, 10));
+      expect(pairs.last.$1, DateTime(2026, 7, 27, 12));
+      expect(pairs.last.$2, DateTime(2026, 7, 27, 14));
     });
 
     test('overnight shift remains one payable pair', () {

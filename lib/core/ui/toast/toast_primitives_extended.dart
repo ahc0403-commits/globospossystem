@@ -98,7 +98,6 @@ class ToastOperationalQueuePane extends StatelessWidget {
           final body = constraints.hasBoundedHeight
               ? Expanded(child: child)
               : child;
-
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -911,18 +910,33 @@ class PosToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     return ToastWorkSurface(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Row(
-        children: [
-          Expanded(
-            child: Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: children,
-            ),
-          ),
-          if (trailing != null) ...[const SizedBox(width: 12), trailing!],
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final controls = Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: children,
+          );
+          if (trailing != null &&
+              (constraints.maxWidth < 560 ||
+                  MediaQuery.textScalerOf(context).scale(1) > 1.5)) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                controls,
+                const SizedBox(height: 12),
+                Align(alignment: Alignment.centerRight, child: trailing!),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: controls),
+              if (trailing != null) ...[const SizedBox(width: 12), trailing!],
+            ],
+          );
+        },
       ),
     );
   }
@@ -953,38 +967,59 @@ class PosDataPanel extends StatelessWidget {
           final body = constraints.hasBoundedHeight
               ? Expanded(child: child)
               : child;
+          final canStackHeader =
+              !constraints.hasBoundedHeight || constraints.maxHeight >= 240;
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+              LayoutBuilder(
+                builder: (context, headerConstraints) {
+                  final titleBlock = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(
+                          context,
+                        ).textTheme.titleLarge?.copyWith(fontSize: 20),
+                      ),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 4),
                         Text(
-                          title,
-                          style: Theme.of(
-                            context,
-                          ).textTheme.titleLarge?.copyWith(fontSize: 20),
+                          subtitle!,
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
-                        if (subtitle != null) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            subtitle!,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
                       ],
-                    ),
-                  ),
-                  if (trailing != null) ...[
-                    const SizedBox(width: 12),
-                    trailing!,
-                  ],
-                ],
+                    ],
+                  );
+                  if (trailing != null &&
+                      canStackHeader &&
+                      (headerConstraints.maxWidth < 560 ||
+                          MediaQuery.textScalerOf(context).scale(1) > 1.5)) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        titleBlock,
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: trailing!,
+                        ),
+                      ],
+                    );
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: titleBlock),
+                      if (trailing != null) ...[
+                        const SizedBox(width: 12),
+                        trailing!,
+                      ],
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 16),
               body,
@@ -1086,29 +1121,44 @@ class PosActionCard extends StatelessWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
+              LayoutBuilder(
+                builder: (context, headerConstraints) {
+                  final titleBlock = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          subtitle!,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ],
+                  );
+                  if (badge != null &&
+                      (headerConstraints.maxWidth < 560 ||
+                          MediaQuery.textScalerOf(context).scale(1) > 1.5)) {
+                    return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          title,
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        if (subtitle != null) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            subtitle!,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
+                        titleBlock,
+                        const SizedBox(height: 10),
+                        badge!,
                       ],
-                    ),
-                  ),
-                  if (badge != null) badge!,
-                ],
+                    );
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: titleBlock),
+                      if (badge != null) badge!,
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 16),
               body,

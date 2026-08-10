@@ -110,6 +110,20 @@ abstract final class WorkforcePresetCatalog {
         displayName: '${prefix.toUpperCase()} Kitchen',
         scope: 'store',
       ),
+      WorkforceAccountTemplate(
+        accountCode: '${prefix}_print',
+        accountType: 'device_print_station',
+        role: 'print_station',
+        displayName: '${prefix.toUpperCase()} Print Station',
+        scope: 'store',
+      ),
+      WorkforceAccountTemplate(
+        accountCode: '${prefix}_customer',
+        accountType: 'device_customer_display',
+        role: 'customer_display',
+        displayName: '${prefix.toUpperCase()} Customer Display',
+        scope: 'store',
+      ),
     ];
   }
 }

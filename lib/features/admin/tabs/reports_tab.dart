@@ -641,39 +641,56 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                flex: 2,
-                child: Text(
-                  l10n.reports,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleLarge,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final title = Text(
+                l10n.reports,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleLarge,
+              );
+              final metrics = KeyedSubtree(
+                key: const Key('reports_order_accuracy_metrics'),
+                child: ToastMetricStrip(
+                  dense: true,
+                  maxColumns: 4,
+                  metrics: reportMetrics,
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 6,
-                child: KeyedSubtree(
-                  key: const Key('reports_order_accuracy_metrics'),
-                  child: ToastMetricStrip(
-                    dense: true,
-                    maxColumns: 4,
-                    metrics: reportMetrics,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              ToastStatusBadge(
+              );
+              final badge = ToastStatusBadge(
                 label: hasException
                     ? l10n.reportsNeedsReviewShort
                     : l10n.reportsHealthyShort,
                 color: hasException ? PosColors.warning : PosColors.success,
                 compact: true,
-              ),
-            ],
+              );
+              if (constraints.maxWidth < 620 ||
+                  MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [title, badge],
+                    ),
+                    const SizedBox(height: 8),
+                    metrics,
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 2, child: title),
+                  const SizedBox(width: 10),
+                  Expanded(flex: 6, child: metrics),
+                  const SizedBox(width: 10),
+                  badge,
+                ],
+              );
+            },
           ),
           const SizedBox(height: 4),
           Wrap(

@@ -80,6 +80,17 @@ void main() {
         '/super-admin': false,
         '/payments/some-id': false,
       },
+      'emergency_station': {
+        '/emergency': true,
+        '/attendance-kiosk': false,
+        '/waiter': false,
+        '/kitchen': false,
+        '/cashier': false,
+        '/admin': false,
+        '/super-admin': false,
+        '/print-station': false,
+        '/payments/some-id': false,
+      },
       'photo_objet_master': {
         '/photo-ops': true,
         '/print-station': false,
@@ -227,6 +238,7 @@ void main() {
       expect(homeRouteForRole('kitchen'), '/kitchen');
       expect(homeRouteForRole('cashier'), '/cashier');
       expect(homeRouteForRole('print_station'), '/print-station');
+      expect(homeRouteForRole('emergency_station'), '/emergency');
       expect(homeRouteForRole('photo_objet_master'), '/photo-ops');
       expect(homeRouteForRole('photo_objet_store_operator'), '/photo-ops');
       expect(homeRouteForRole('photo_objet_store_admin'), '/login');

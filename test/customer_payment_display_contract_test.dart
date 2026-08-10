@@ -210,4 +210,46 @@ void main() {
     expect(find.byType(Image), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('tablet payment view keeps at least eight order rows visible', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1024, 768);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final snapshot = CustomerDisplaySnapshot.fromJson({
+      'order_id': 'order-eight',
+      'locale_code': 'ko',
+      'table_number': '12',
+      'items': [
+        for (var index = 1; index <= 8; index++)
+          {'name': 'Món Việt $index', 'quantity': 1, 'amount': 10000 * index},
+      ],
+      'subtotal': 360000,
+      'service_charge': 0,
+      'discount': 0,
+      'total': 360000,
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ko'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: CustomerPaymentContent(snapshot: snapshot)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    for (var index = 0; index < 8; index++) {
+      final row = find.byKey(ValueKey('customer_display_item_$index'));
+      expect(row, findsOneWidget);
+      expect(tester.getBottomLeft(row).dy, lessThan(768));
+    }
+    expect(find.text('Chi tiết đơn hàng'), findsOneWidget);
+    expect(find.text('주문 내역'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }

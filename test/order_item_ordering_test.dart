@@ -21,8 +21,27 @@ void main() {
     });
 
     expect(item.label, '김밥');
+    expect(item.localizedName('ko'), '김밥');
     expect(item.nameVi, 'Cơm cuộn Hàn Quốc');
+    expect(item.localizedName('vi'), 'Cơm cuộn Hàn Quốc');
     expect(item.nameEn, 'Korean rice roll');
+    expect(item.localizedName('en'), 'Korean rice roll');
+  });
+
+  test('selected language never falls back to an order snapshot language', () {
+    final item = OrderItem.fromJson({
+      'id': 'item-1',
+      'menu_item_id': 'menu-1',
+      'label': '김밥',
+      'unit_price': 39000,
+      'quantity': 1,
+      'status': 'ready',
+      'item_type': 'menu_item',
+      'menu_items': {'name': '김밥', 'name_en': 'Korean rice roll'},
+    });
+
+    expect(item.localizedName('vi'), 'Món');
+    expect(item.localizedName('vi'), isNot(contains('김밥')));
   });
 
   test('floor order item keeps snapshotted combo drink selections', () {

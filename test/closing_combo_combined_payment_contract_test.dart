@@ -101,7 +101,7 @@ void main() {
     expect(
       screen,
       contains(
-        "'\${item.label ?? l10n.cashierItemFallback} × \${item.quantity}'",
+        "'\${_cashierOrderItemName(context, item)} × \${item.quantity}'",
       ),
     );
     expect(screen, contains('item.unitPrice * item.quantity'));

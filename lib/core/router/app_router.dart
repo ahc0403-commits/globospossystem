@@ -13,6 +13,7 @@ import '../../features/auth/initial_password_change_screen.dart';
 import '../../features/auth/privacy_consent_screen.dart';
 import '../../features/cashier/cashier_screen.dart';
 import '../../features/customer_display/customer_display_screen.dart';
+import '../../features/emergency_fulfillment/emergency_fulfillment_screen.dart';
 import '../../features/kitchen/kitchen_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
 import '../../features/photo_ops/photo_ops_screen.dart';
@@ -275,6 +276,10 @@ GoRouter buildAppRouter(ProviderContainer container) {
       GoRoute(
         path: '/customer-display',
         builder: (_, __) => const CustomerDisplayScreen(),
+      ),
+      GoRoute(
+        path: '/emergency',
+        builder: (_, __) => const EmergencyFulfillmentScreen(),
       ),
       GoRoute(
         path: '/attendance-kiosk',

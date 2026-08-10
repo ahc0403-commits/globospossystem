@@ -220,7 +220,13 @@ class _PaymentCompletionDialogState extends State<PaymentCompletionDialog> {
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
-                                    item.label ?? l10n.cashierItemFallback,
+                                    item.itemType == 'wet_tissue_charge'
+                                        ? l10n.cashierWetTissueCharge
+                                        : item.localizedName(
+                                            Localizations.localeOf(
+                                              context,
+                                            ).languageCode,
+                                          ),
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     style: Theme.of(context).textTheme.bodyLarge

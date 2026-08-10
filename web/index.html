@@ -19,12 +19,12 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="GLOBOS browser-based restaurant POS">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="globos_pos_system">
+  <meta name="apple-mobile-web-app-title" content="GLOBOS POS">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
@@ -58,6 +58,99 @@
   </style>
 </head>
 <body>
+  <script>
+    (() => {
+      let emergencyAudioContext = null;
+      const outboxDbName = 'globos-pos-emergency';
+      const outboxStoreName = 'progress-outbox';
+
+      function openOutbox() {
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open(outboxDbName, 1);
+          request.onupgradeneeded = () => {
+            const db = request.result;
+            if (!db.objectStoreNames.contains(outboxStoreName)) {
+              db.createObjectStore(outboxStoreName, { keyPath: 'id' });
+            }
+          };
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+      }
+
+      window.globosEmergencyAlarmEnable = () => {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return false;
+        emergencyAudioContext ||= new AudioContext();
+        if (emergencyAudioContext.state === 'suspended') {
+          emergencyAudioContext.resume();
+        }
+        return true;
+      };
+
+      window.globosEmergencyAlarmPlay = () => {
+        if (!emergencyAudioContext || emergencyAudioContext.state !== 'running') return;
+        const start = emergencyAudioContext.currentTime;
+        [0, 0.18, 0.36].forEach((offset, index) => {
+          const oscillator = emergencyAudioContext.createOscillator();
+          const gain = emergencyAudioContext.createGain();
+          oscillator.type = 'sine';
+          oscillator.frequency.value = index === 1 ? 1046 : 880;
+          gain.gain.setValueAtTime(0.0001, start + offset);
+          gain.gain.exponentialRampToValueAtTime(0.22, start + offset + 0.015);
+          gain.gain.exponentialRampToValueAtTime(0.0001, start + offset + 0.14);
+          oscillator.connect(gain).connect(emergencyAudioContext.destination);
+          oscillator.start(start + offset);
+          oscillator.stop(start + offset + 0.15);
+        });
+      };
+
+      window.globosEmergencyOutboxPut = async (id, payload) => {
+        const db = await openOutbox();
+        await new Promise((resolve, reject) => {
+          const request = db.transaction(outboxStoreName, 'readwrite')
+            .objectStore(outboxStoreName).put({ id, payload, createdAt: Date.now() });
+          request.onsuccess = () => resolve();
+          request.onerror = () => reject(request.error);
+        });
+        db.close();
+      };
+
+      window.globosEmergencyOutboxReadAll = async () => {
+        const db = await openOutbox();
+        const records = await new Promise((resolve, reject) => {
+          const request = db.transaction(outboxStoreName, 'readonly')
+            .objectStore(outboxStoreName).getAll();
+          request.onsuccess = () => resolve(request.result || []);
+          request.onerror = () => reject(request.error);
+        });
+        db.close();
+        records.sort((left, right) => (left.createdAt || 0) - (right.createdAt || 0));
+        return JSON.stringify(records);
+      };
+
+      window.globosEmergencyOutboxDelete = async (id) => {
+        const db = await openOutbox();
+        await new Promise((resolve, reject) => {
+          const request = db.transaction(outboxStoreName, 'readwrite')
+            .objectStore(outboxStoreName).delete(id);
+          request.onsuccess = () => resolve();
+          request.onerror = () => reject(request.error);
+        });
+        db.close();
+      };
+
+      window.globosEmergencyConfigurePushWorker = async (configJson) => {
+        if (!('serviceWorker' in navigator)) return false;
+        await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        const registration = await navigator.serviceWorker.ready;
+        const worker = registration.active;
+        if (!worker) return false;
+        worker.postMessage({ type: 'GLOBOS_FIREBASE_CONFIG', config: JSON.parse(configJson) });
+        return true;
+      };
+    })();
+  </script>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader

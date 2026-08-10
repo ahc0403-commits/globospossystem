@@ -95,6 +95,13 @@ printf 'dart %s\n' "$*" >>"$CALL_LOG"
 [[ -f .dart_tool/package_config.json ]] || exit 84
 EOF
 
+cat >"$FAKE_BIN/deno" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'deno %s\n' "$*" >>"$CALL_LOG"
+[[ "${1:-}" == test ]] || exit 88
+EOF
+
 cat >"$FAKE_BIN/supabase" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -145,7 +152,12 @@ sql_name="$(basename "$sql_file")"
 printf 'psql %s\n' "$sql_name" >>"$CALL_LOG"
 [[ "${FAIL_SQL_PHASE:-}" != "$sql_name" ]] || exit 87
 EOF
-chmod +x "$FAKE_BIN/flutter" "$FAKE_BIN/dart" "$FAKE_BIN/supabase" "$FAKE_BIN/psql"
+chmod +x \
+  "$FAKE_BIN/flutter" \
+  "$FAKE_BIN/dart" \
+  "$FAKE_BIN/deno" \
+  "$FAKE_BIN/supabase" \
+  "$FAKE_BIN/psql"
 
 export PATH="$FAKE_BIN:$PATH"
 export CALL_LOG HISTORY_STATE

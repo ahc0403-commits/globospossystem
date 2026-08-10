@@ -14,8 +14,9 @@ import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/app_fonts.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
-import '../../core/utils/time_utils.dart';
 import '../../core/utils/floor_label.dart';
+import '../../core/utils/number_input_utils.dart';
+import '../../core/utils/time_utils.dart';
 import '../../main.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
@@ -101,6 +102,295 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
         setState(() => _testingDestinationIds.remove(destination.id));
       }
     }
+  }
+
+  Future<void> _deleteDestination(
+    String storeId,
+    PrinterDestinationConfig destination,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        key: const Key('print_station_destination_delete_dialog'),
+        backgroundColor: AppColors.surface1,
+        title: Text(
+          context.l10n.settingsPrintDestinationDeleteTitle,
+          style: AppFonts.system(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        content: Text(
+          context.l10n.settingsPrintDestinationDeleteMessage(destination.name),
+          style: AppFonts.system(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(context.l10n.cancel),
+          ),
+          FilledButton(
+            key: const Key('print_station_destination_delete_confirm'),
+            style: FilledButton.styleFrom(
+              backgroundColor: PosColors.danger,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(context.l10n.settingsPrintDestinationDeleteAction),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final success = await ref
+        .read(printerDestinationsProvider(storeId).notifier)
+        .deleteDestination(destination.id);
+    if (!mounted || !success) return;
+    showSuccessToast(
+      context,
+      context.l10n.settingsPrintDestinationDeletedToast,
+    );
+  }
+
+  Future<void> _showPrinterDestinationDialog({
+    required String storeId,
+    PrinterDestinationConfig? destination,
+  }) async {
+    final pageContext = context;
+    final l10n = context.l10n;
+    final nameController = TextEditingController(text: destination?.name ?? '');
+
+    PrinterEndpointConfig? endpointOf(String type) {
+      for (final endpoint
+          in destination?.endpoints ?? const <PrinterEndpointConfig>[]) {
+        if (endpoint.type == type) return endpoint;
+      }
+      return null;
+    }
+
+    final wiredEndpoint = endpointOf('wired');
+    final wirelessEndpoint = endpointOf('wireless');
+    final wiredIpController = TextEditingController(
+      text: wiredEndpoint?.ip ?? '',
+    );
+    final wiredPortController = TextEditingController(
+      text: (wiredEndpoint?.port ?? 9100).toString(),
+    );
+    final wirelessIpController = TextEditingController(
+      text:
+          wirelessEndpoint?.ip ??
+          (destination?.endpoints.isEmpty == true ? destination?.ip : null) ??
+          '',
+    );
+    final wirelessPortController = TextEditingController(
+      text:
+          (wirelessEndpoint?.port ??
+                  (destination?.endpoints.isEmpty == true
+                      ? destination?.port
+                      : null) ??
+                  9100)
+              .toString(),
+    );
+    final floorController = TextEditingController(
+      text: destination == null
+          ? 'G'
+          : displayFloorLabel(destination.floorLabel ?? '1F'),
+    );
+    var purpose = destination?.purpose ?? 'kitchen';
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          key: const Key('print_station_destination_dialog'),
+          backgroundColor: AppColors.surface1,
+          title: Text(
+            destination == null
+                ? l10n.settingsPrintDestinationAdd
+                : l10n.settingsPrintDestinationEdit,
+            style: AppFonts.system(color: AppColors.textPrimary),
+          ),
+          content: SizedBox(
+            width: (MediaQuery.sizeOf(dialogContext).width - 80).clamp(
+              240,
+              460,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    key: const Key('print_station_destination_name'),
+                    controller: nameController,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      labelText: l10n.settingsPrintDestinationName,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('print_station_destination_wired_ip'),
+                    controller: wiredIpController,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      labelText: l10n.settingsPrinterWiredIp,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('print_station_destination_wired_port'),
+                    controller: wiredPortController,
+                    keyboardType: TextInputType.number,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      labelText: l10n.settingsPrinterWiredPort,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('print_station_destination_wireless_ip'),
+                    controller: wirelessIpController,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      labelText: l10n.settingsPrinterWirelessIp,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('print_station_destination_wireless_port'),
+                    controller: wirelessPortController,
+                    keyboardType: TextInputType.number,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      labelText: l10n.settingsPrinterWirelessPort,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    key: const Key('print_station_destination_purpose'),
+                    initialValue: purpose,
+                    dropdownColor: AppColors.surface1,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      labelText: l10n.settingsPrintDestinationPurpose,
+                    ),
+                    items: [
+                      DropdownMenuItem(
+                        value: 'kitchen',
+                        child: Text(l10n.settingsPrintDestinationKitchen),
+                      ),
+                      DropdownMenuItem(
+                        value: 'floor',
+                        child: Text(l10n.settingsPrintDestinationFloor),
+                      ),
+                      DropdownMenuItem(
+                        value: 'tray',
+                        child: Text(l10n.settingsPrintDestinationTray),
+                      ),
+                      DropdownMenuItem(
+                        value: 'receipt',
+                        child: Text(l10n.settingsPrintDestinationReceipt),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() => purpose = value);
+                      }
+                    },
+                  ),
+                  if (purpose == 'floor') ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      key: const Key('print_station_destination_floor_label'),
+                      controller: floorController,
+                      textCapitalization: TextCapitalization.characters,
+                      style: AppFonts.system(color: AppColors.textPrimary),
+                      decoration: InputDecoration(
+                        labelText: l10n.tablesFloorLabel,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              key: const Key('print_station_destination_save'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.amber500,
+                foregroundColor: AppColors.surface0,
+              ),
+              onPressed: () async {
+                final name = nameController.text.trim();
+                final wiredIp = wiredIpController.text.trim();
+                final wiredPort = parseIntInput(wiredPortController.text);
+                final wirelessIp = wirelessIpController.text.trim();
+                final wirelessPort = parseIntInput(wirelessPortController.text);
+                final floorLabel = storedFloorLabel(floorController.text);
+                if (name.isEmpty ||
+                    (wiredIp.isEmpty && wirelessIp.isEmpty) ||
+                    (wiredIp.isNotEmpty &&
+                        (!isValidPrinterIpv4Address(wiredIp) ||
+                            wiredPort == null ||
+                            wiredPort <= 0 ||
+                            wiredPort > 65535)) ||
+                    (wirelessIp.isNotEmpty &&
+                        (!isValidPrinterIpv4Address(wirelessIp) ||
+                            wirelessPort == null ||
+                            wirelessPort <= 0 ||
+                            wirelessPort > 65535)) ||
+                    (purpose == 'floor' && floorLabel.isEmpty)) {
+                  showErrorToast(
+                    dialogContext,
+                    l10n.settingsPrintDestinationInputError,
+                  );
+                  return;
+                }
+
+                final success = await ref
+                    .read(printerDestinationsProvider(storeId).notifier)
+                    .upsertDestination(
+                      PrinterDestinationDraft(
+                        id: destination?.id,
+                        name: name,
+                        wiredIp: wiredIp,
+                        wiredPort: wiredPort ?? 9100,
+                        wirelessIp: wirelessIp,
+                        wirelessPort: wirelessPort ?? 9100,
+                        purpose: purpose,
+                        floorLabel: purpose == 'floor' ? floorLabel : null,
+                        isActive: true,
+                      ),
+                    );
+                if (!dialogContext.mounted || !success) return;
+                Navigator.of(dialogContext).pop();
+                if (mounted) {
+                  showSuccessToast(
+                    pageContext,
+                    l10n.settingsPrintDestinationSavedToast,
+                  );
+                }
+              },
+              child: Text(l10n.save),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    await Future<void>.delayed(kThemeAnimationDuration);
+    nameController.dispose();
+    wiredIpController.dispose();
+    wiredPortController.dispose();
+    wirelessIpController.dispose();
+    wirelessPortController.dispose();
+    floorController.dispose();
   }
 
   @override
@@ -356,7 +646,24 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
           const SizedBox(height: 14),
           _PrintStationSection(
             title: l10n.printStationDestinations,
-            child: _buildDestinations(destinationState),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: OutlinedButton.icon(
+                    key: const Key('print_station_destination_add'),
+                    onPressed: destinationState.isSaving
+                        ? null
+                        : () => _showPrinterDestinationDialog(storeId: storeId),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: Text(l10n.settingsPrintDestinationAdd),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _buildDestinations(storeId, destinationState),
+              ],
+            ),
           ),
           const SizedBox(height: 14),
           _PrintStationSection(
@@ -401,7 +708,7 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
     );
   }
 
-  Widget _buildDestinations(PrinterDestinationsState state) {
+  Widget _buildDestinations(String storeId, PrinterDestinationsState state) {
     final l10n = context.l10n;
     if (state.isLoading) {
       return const Center(
@@ -431,12 +738,19 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
     }
 
     return Column(
+      key: const Key('print_station_destination_test'),
       children: [
         for (final destination in state.destinations)
           _DestinationTile(
             destination: destination,
+            isSaving: state.isSaving,
             isTesting: _testingDestinationIds.contains(destination.id),
             onTest: () => _testDestination(destination),
+            onEdit: () => _showPrinterDestinationDialog(
+              storeId: storeId,
+              destination: destination,
+            ),
+            onDelete: () => _deleteDestination(storeId, destination),
           ),
       ],
     );
@@ -504,13 +818,19 @@ class _PrintStationSection extends StatelessWidget {
 class _DestinationTile extends StatelessWidget {
   const _DestinationTile({
     required this.destination,
+    required this.isSaving,
     required this.isTesting,
     required this.onTest,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   final PrinterDestinationConfig destination;
+  final bool isSaving;
   final bool isTesting;
   final VoidCallback onTest;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -525,93 +845,137 @@ class _DestinationTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.surface2),
       ),
-      child: Row(
-        children: [
-          Icon(
-            destination.isFloorDestination
-                ? Icons.layers_outlined
-                : Icons.print_outlined,
-            color: destination.isActive
-                ? AppColors.textPrimary
-                : AppColors.textSecondary,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  destination.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppFonts.system(
-                    color: AppColors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                for (final endpoint in destination.endpoints)
-                  Text(
-                    '${endpoint.type == 'wired' ? l10n.settingsPrinterWired : l10n.settingsPrinterWireless}: '
-                    '${endpoint.ip}:${endpoint.port}',
-                    style: AppFonts.system(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                    ),
-                  ),
-                if (destination.endpoints.isEmpty)
-                  Text(
-                    '${l10n.settingsPrinterWireless}: '
-                    '${destination.ip}:${destination.port}',
-                    style: AppFonts.system(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                    ),
-                  ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final details = Row(
+            children: [
+              Icon(
+                destination.isFloorDestination
+                    ? Icons.layers_outlined
+                    : Icons.print_outlined,
+                color: destination.isActive
+                    ? AppColors.textPrimary
+                    : AppColors.textSecondary,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ToastStatusBadge(
-                      label: [
-                        purpose,
-                        if (destination.floorLabel != null &&
-                            destination.floorLabel!.isNotEmpty)
-                          displayFloorLabel(destination.floorLabel!),
-                      ].join(' / '),
-                      color: PosColors.info,
-                      compact: true,
+                    Text(
+                      destination.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppFonts.system(
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                    ToastStatusBadge(
-                      label: destination.isActive
-                          ? l10n.settingsPrintDestinationActiveStatus
-                          : l10n.settingsPrintDestinationInactiveStatus,
-                      color: destination.isActive
-                          ? PosColors.success
-                          : PosColors.textSecondary,
-                      compact: true,
+                    const SizedBox(height: 4),
+                    for (final endpoint in destination.endpoints)
+                      Text(
+                        '${endpoint.type == 'wired' ? l10n.settingsPrinterWired : l10n.settingsPrinterWireless}: '
+                        '${endpoint.ip}:${endpoint.port}',
+                        style: AppFonts.system(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    if (destination.endpoints.isEmpty)
+                      Text(
+                        '${l10n.settingsPrinterWireless}: '
+                        '${destination.ip}:${destination.port}',
+                        style: AppFonts.system(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        ToastStatusBadge(
+                          label: [
+                            purpose,
+                            if (destination.floorLabel != null &&
+                                destination.floorLabel!.isNotEmpty)
+                              displayFloorLabel(destination.floorLabel!),
+                          ].join(' / '),
+                          color: PosColors.info,
+                          compact: true,
+                        ),
+                        ToastStatusBadge(
+                          label: destination.isActive
+                              ? l10n.settingsPrintDestinationActiveStatus
+                              : l10n.settingsPrintDestinationInactiveStatus,
+                          color: destination.isActive
+                              ? PosColors.success
+                              : PosColors.textSecondary,
+                          compact: true,
+                        ),
+                      ],
                     ),
                   ],
                 ),
+              ),
+            ],
+          );
+          final actions = Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              OutlinedButton.icon(
+                key: ValueKey(
+                  'print_station_destination_test_${destination.id}',
+                ),
+                onPressed: isSaving || isTesting ? null : onTest,
+                icon: isTesting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.receipt_long_outlined, size: 16),
+                label: Text(l10n.printStationTestPrint),
+              ),
+              IconButton.outlined(
+                key: ValueKey(
+                  'print_station_destination_edit_${destination.id}',
+                ),
+                onPressed: isSaving ? null : onEdit,
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                tooltip: l10n.settingsPrintDestinationEditTooltip,
+              ),
+              IconButton.outlined(
+                key: ValueKey(
+                  'print_station_destination_remove_${destination.id}',
+                ),
+                onPressed: isSaving ? null : onDelete,
+                icon: const Icon(Icons.delete_outline, size: 18),
+                tooltip: l10n.settingsPrintDestinationDeleteTooltip,
+              ),
+            ],
+          );
+          if (constraints.maxWidth < 560) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                details,
+                const SizedBox(height: 10),
+                Align(alignment: Alignment.centerRight, child: actions),
               ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          OutlinedButton.icon(
-            key: const Key('print_station_destination_test'),
-            onPressed: isTesting ? null : onTest,
-            icon: isTesting
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.receipt_long_outlined, size: 16),
-            label: Text(l10n.printStationTestPrint),
-          ),
-        ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: details),
+              const SizedBox(width: 8),
+              actions,
+            ],
+          );
+        },
       ),
     );
   }

@@ -1024,10 +1024,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              _localizedMenuDataLabel(
-                context,
-                item.label ?? l10n.orderWorkspaceItemFallback,
-              ),
+              item.localizedName(Localizations.localeOf(context).languageCode),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: PosColors.textSecondary,
                 fontSize: 13,
@@ -1404,9 +1401,8 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                             ),
                             const SizedBox(height: 6),
                             ...widget.state.activeOrder!.items.map((item) {
-                              final label = _localizedMenuDataLabel(
-                                context,
-                                item.label ?? 'Item',
+                              final label = item.localizedName(
+                                Localizations.localeOf(context).languageCode,
                               );
                               final isCancelled = item.status == 'cancelled';
                               final statusLabel = _orderItemStatusLabel(
@@ -1987,10 +1983,10 @@ class _CurrentTicketDetailSheet extends StatelessWidget {
                             children: [
                               Expanded(
                                 child: Text(
-                                  _localizedMenuDataLabel(
-                                    context,
-                                    item.label ??
-                                        l10n.orderWorkspaceItemFallback,
+                                  item.localizedName(
+                                    Localizations.localeOf(
+                                      context,
+                                    ).languageCode,
                                   ),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,

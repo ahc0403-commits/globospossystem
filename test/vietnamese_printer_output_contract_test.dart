@@ -40,7 +40,7 @@ void main() {
         provider,
         contains('menu_items(name, name_vi, name_en, vat_category)'),
       );
-      expect(service, contains('menu_items(name, name_vi)'));
+      expect(service, contains('menu_items(name, name_vi, name_en)'));
       expect(receiptItemsBody, isNotNull);
       expect(receiptItemsBody, contains("menuItem['name_vi']"));
       expect(receiptItemsBody, contains("RegExp(r'[\\uac00-\\ud7a3]')"));

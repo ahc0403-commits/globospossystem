@@ -43,6 +43,13 @@ import 'red_invoice_modal.dart';
 
 const _wetTissueUnitPrice = 2000;
 
+String _cashierUnservedLabel(BuildContext context, int quantity) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => 'Chưa phục vụ: $quantity',
+      'en' => 'Unserved: $quantity',
+      _ => '미제공 $quantity',
+    };
+
 class CashierScreen extends ConsumerStatefulWidget {
   const CashierScreen({
     super.key,
@@ -967,18 +974,13 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       key: const Key('cashier_pending_payment_list'),
       title: l10n.cashierPendingStatus,
       subtitle: l10n.cashierSelectOrderToPay,
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (!_isCombinedPaymentMode && selectedOrder != null) ...[
-            ToastStatusBadge(
+      trailing: !_isCombinedPaymentMode && selectedOrder != null
+          ? ToastStatusBadge(
               label: l10n.selected,
               color: PosColors.accent,
               compact: true,
-            ),
-          ],
-        ],
-      ),
+            )
+          : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -2885,6 +2887,38 @@ class _CashierOrderSummarySurface extends StatelessWidget {
               ),
             ),
           ),
+          if (order.emergencyModeActive && order.unservedQuantity > 0) ...[
+            Container(
+              key: const Key('cashier_unserved_warning'),
+              width: double.infinity,
+              margin: const EdgeInsets.only(top: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFE5E5),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: PosColors.danger),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: PosColors.danger,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _cashierUnservedLabel(context, order.unservedQuantity),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: PosColors.danger,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           SizedBox(height: dense ? 6 : 12),
           if (compact) itemsPanel else Expanded(child: itemsPanel),
           SizedBox(height: dense ? 6 : 12),
@@ -3041,11 +3075,7 @@ class _CashierOrderItemsPanel extends StatelessWidget {
               separatorBuilder: (_, _) => SizedBox(height: dense ? 6 : 12),
               itemBuilder: (context, index) {
                 final item = order.items[index];
-                final itemName = item.label ?? l10n.cashierItemFallback;
-                final translatedNames = _cashierTranslatedItemNames(
-                  item,
-                  itemName,
-                );
+                final itemName = _cashierOrderItemName(context, item);
                 final lineTotal = item.unitPrice * item.quantity;
                 final itemType = item.itemType.toLowerCase();
                 final isCancelled = item.status.toLowerCase() == 'cancelled';
@@ -3118,20 +3148,6 @@ class _CashierOrderItemsPanel extends StatelessWidget {
                                         color: PosColors.textPrimary,
                                       ),
                                 ),
-                                for (final translatedName
-                                    in translatedNames) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    translatedName,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(
-                                          color: PosColors.textSecondary,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                  ),
-                                ],
                                 if (item.isServiceItem) ...[
                                   const SizedBox(height: 6),
                                   Align(
@@ -3256,18 +3272,11 @@ class _CashierOrderItemsPanel extends StatelessWidget {
   }
 }
 
-List<String> _cashierTranslatedItemNames(OrderItem item, String primaryName) {
-  final names = <String>[];
-  final normalizedPrimary = primaryName.trim().toLowerCase();
-  for (final candidate in [item.nameVi, item.nameEn]) {
-    final name = candidate?.trim() ?? '';
-    if (name.isEmpty || name.toLowerCase() == normalizedPrimary) continue;
-    if (names.any((existing) => existing.toLowerCase() == name.toLowerCase())) {
-      continue;
-    }
-    names.add(name);
+String _cashierOrderItemName(BuildContext context, OrderItem item) {
+  if (item.itemType == 'wet_tissue_charge') {
+    return context.l10n.cashierWetTissueCharge;
   }
-  return names;
+  return item.localizedName(Localizations.localeOf(context).languageCode);
 }
 
 class _CashierPaymentRail extends StatelessWidget {
@@ -4354,7 +4363,7 @@ class _CashierQrOrderLedgerDialogState
                                     children: [
                                       Expanded(
                                         child: Text(
-                                          '${item.name} × ${item.quantity}',
+                                          '${item.localizedName(Localizations.localeOf(context).languageCode)} × ${item.quantity}',
                                           style: Theme.of(context)
                                               .textTheme
                                               .bodyMedium
@@ -5195,7 +5204,7 @@ class _CombinedTablePaymentDialogState
                               children: [
                                 Expanded(
                                   child: Text(
-                                    '${item.label ?? l10n.cashierItemFallback} × ${item.quantity}',
+                                    '${_cashierOrderItemName(context, item)} × ${item.quantity}',
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     style: Theme.of(context).textTheme.bodySmall

@@ -32,4 +32,24 @@ void main() {
     );
     expect(checker, contains("'print_station'"));
   });
+
+  test('store workforce creates a short-code-scoped print account', () {
+    final models = File(
+      'lib/features/store_setup/store_setup_models.dart',
+    ).readAsStringSync();
+    final workforceUi = File(
+      'lib/features/store_setup/widgets/workforce_setup_card.dart',
+    ).readAsStringSync();
+    final migration = File(
+      'supabase/migrations/20260810110000_store_scoped_print_station_accounts.sql',
+    ).readAsStringSync();
+
+    expect(models, contains("accountCode: '\${prefix}_print'"));
+    expect(models, contains("accountType: 'device_print_station'"));
+    expect(models, contains("role: 'print_station'"));
+    expect(workforceUi, contains("'device_print_station'"));
+    expect(migration, contains("'device_print_station'"));
+    expect(migration, contains("'print_station'"));
+    expect(migration, contains("'STORE_ACCOUNT_CODE_PREFIX_INVALID'"));
+  });
 }

@@ -615,11 +615,14 @@ Future<void> _pump(
   required Widget child,
   required List<Override> overrides,
   PosAuthState authState = _authState,
+  Size physicalSize = const Size(1440, 900),
+  double textScale = 1,
 }) async {
   tester.view.devicePixelRatio = 1;
-  tester.view.physicalSize = const Size(1440, 900);
+  tester.view.physicalSize = physicalSize;
   await tester.pumpWidget(
     ProviderScope(
+      key: UniqueKey(),
       overrides: [
         authProvider.overrideWith((ref) => _AuthNotifier(authState)),
         orderProvider.overrideWith((ref) => _OrderNotifier()),
@@ -639,6 +642,12 @@ Future<void> _pump(
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
         home: Scaffold(body: child),
       ),
     ),
@@ -677,6 +686,93 @@ void main() {
 
   tearDown(() {
     FocusManager.instance.primaryFocus?.unfocus();
+  });
+
+  testWidgets('populated admin workspaces remain usable on a phone', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const phone = Size(390, 844);
+
+    final tables = _TablesNotifier();
+    await _pump(
+      tester,
+      child: const TablesTab(),
+      physicalSize: phone,
+      textScale: 1.3,
+      overrides: [tablesProvider.overrideWith((ref, storeId) => tables)],
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('A1'), findsWidgets);
+    expect(tester.takeException(), isNull);
+
+    await _pump(
+      tester,
+      child: const MenuTab(),
+      physicalSize: phone,
+      textScale: 1.3,
+      overrides: [menuProvider.overrideWith((ref, storeId) => _MenuNotifier())],
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Phở bò đặc biệt'), findsWidgets);
+    expect(tester.takeException(), isNull);
+
+    await _pump(
+      tester,
+      child: const StaffTab(),
+      physicalSize: phone,
+      textScale: 1.3,
+      overrides: [
+        staffProvider.overrideWith((ref) => _StaffNotifier()),
+        attendanceProvider.overrideWith((ref) => _AttendanceNotifier()),
+      ],
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Nguyễn Minh Anh'), findsWidgets);
+    expect(tester.takeException(), isNull);
+
+    await _pump(
+      tester,
+      child: const QcTab(),
+      physicalSize: phone,
+      textScale: 1.3,
+      overrides: [
+        qcTemplateProvider.overrideWith((ref) => _QcTemplateNotifier()),
+        qcCheckProvider.overrideWith((ref) => _QcCheckNotifier()),
+        qcFollowupProvider.overrideWith((ref) => _QcFollowupNotifier()),
+      ],
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('qc_root')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await _pump(
+      tester,
+      child: SettingsTab(pinServiceOverride: _PinService()),
+      physicalSize: phone,
+      textScale: 1.3,
+      overrides: [
+        settingsProvider.overrideWith((ref) => _SettingsNotifier()),
+        printerDestinationsProvider.overrideWith(
+          (ref, storeId) => _PrinterDestinationsNotifier(),
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('GLOBOS Nguyễn Huệ'), findsWidgets);
+    expect(tester.takeException(), isNull);
+
+    await _pump(
+      tester,
+      child: AttendanceTab(attendanceServiceOverride: _AttendanceService()),
+      physicalSize: phone,
+      textScale: 1.3,
+      overrides: const [],
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Nguyễn Minh Anh'), findsWidgets);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('all six table dialog entrypoints execute real workflows', (

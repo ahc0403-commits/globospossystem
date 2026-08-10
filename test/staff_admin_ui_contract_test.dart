@@ -22,11 +22,18 @@ void main() {
 
   test('staff compact stack keeps the directory list on the parent scroll', () {
     final source = readRepoFile('lib/features/admin/tabs/staff_tab.dart');
+    final toastPrimitives = readRepoFile(
+      'lib/core/ui/toast/toast_primitives.dart',
+    );
 
     expect(source, contains('final compact = viewport.maxWidth < 1120'));
     expect(source, contains('header(compact: true)'));
     expect(source, contains('compact: true'));
-    expect(source, contains('scrollDirection: Axis.horizontal'));
+    expect(
+      toastPrimitives,
+      contains("Key('toast_dense_table_horizontal_scroll')"),
+    );
+    expect(toastPrimitives, contains('scrollDirection: Axis.horizontal'));
     expect(source, contains('ToastResponsiveScrollBody('));
     expect(source, contains('scrollable: false'));
     expect(source, contains('bool scrollable = true'));

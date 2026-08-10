@@ -649,30 +649,50 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                flex: 2,
-                child: Text(
-                  context.l10n.settings,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 5,
-                child: ToastMetricStrip(dense: true, metrics: settingsMetrics),
-              ),
-              const SizedBox(width: 10),
-              ToastStatusBadge(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final title = Text(
+                context.l10n.settings,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleLarge,
+              );
+              final metrics = ToastMetricStrip(
+                dense: true,
+                metrics: settingsMetrics,
+              );
+              final badge = ToastStatusBadge(
                 label: selectedCategory.label,
                 color: PosColors.accent,
                 compact: true,
-              ),
-            ],
+              );
+              if (constraints.maxWidth < 620 ||
+                  MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [title, badge],
+                    ),
+                    const SizedBox(height: 8),
+                    metrics,
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 2, child: title),
+                  const SizedBox(width: 10),
+                  Expanded(flex: 5, child: metrics),
+                  const SizedBox(width: 10),
+                  badge,
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -2038,27 +2058,37 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     required String summary,
     required Widget badge,
   }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final titleBlock = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 4),
+            Text(
+              summary,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
+            ),
+          ],
+        );
+        if (constraints.maxWidth < 560 ||
+            MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+          return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 4),
-              Text(
-                summary,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 12),
-        badge,
-      ],
+            children: [titleBlock, const SizedBox(height: 10), badge],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: titleBlock),
+            const SizedBox(width: 12),
+            badge,
+          ],
+        );
+      },
     );
   }
 

@@ -185,37 +185,48 @@ class _QcTabState extends ConsumerState<QcTab>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.qcManagementTitle,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.headlineLarge?.copyWith(letterSpacing: 0),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final titleBlock = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.qcManagementTitle,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.headlineLarge?.copyWith(letterSpacing: 0),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    l10n.qcSurfaceFollowUpSummary,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: PosColors.textSecondary,
+                      fontSize: 13,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      l10n.qcSurfaceFollowUpSummary,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: PosColors.textSecondary,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              ToastStatusBadge(
+                  ),
+                ],
+              );
+              final badge = ToastStatusBadge(
                 label: _qcSurfaceLabel(currentSurface),
                 color: needsReview ? PosColors.danger : PosColors.success,
                 compact: true,
-              ),
-            ],
+              );
+              if (constraints.maxWidth < 560 ||
+                  MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [titleBlock, const SizedBox(height: 10), badge],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: titleBlock),
+                  const SizedBox(width: 12),
+                  badge,
+                ],
+              );
+            },
           ),
           const SizedBox(height: 14),
           ToastMetricStrip(
@@ -276,18 +287,26 @@ class _QcTabState extends ConsumerState<QcTab>
     return ToastWorkSurface(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       backgroundColor: PosColors.surface,
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          for (var index = 0; index < surfaces.length; index++)
-            _QcSurfaceTab(
-              key: Key('admin_qc_surface_$index'),
-              label: _qcSurfaceDisplayLabel(surfaces[index]),
-              selected: index == _selectedSurfaceIndex,
-              onTap: () => _tabController.animateTo(index),
-            ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final stackTabs = constraints.maxWidth < 560;
+          return Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (var index = 0; index < surfaces.length; index++)
+                SizedBox(
+                  width: stackTabs ? constraints.maxWidth : null,
+                  child: _QcSurfaceTab(
+                    key: Key('admin_qc_surface_$index'),
+                    label: _qcSurfaceDisplayLabel(surfaces[index]),
+                    selected: index == _selectedSurfaceIndex,
+                    onTap: () => _tabController.animateTo(index),
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -399,22 +418,34 @@ class _TemplateManagementTab extends ConsumerWidget {
       padding: const EdgeInsets.all(16),
       child: ListView(
         children: [
-          Row(
-            children: [
-              Text(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final title = Text(
                 context.l10n.qcTemplateBoardTitle,
                 style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const Spacer(),
-              FilledButton.icon(
+              );
+              final action = FilledButton.icon(
                 key: const Key('admin_qc_add_template_action'),
                 onPressed: storeId == null
                     ? null
                     : () => _showTemplateSheet(context, ref, picker, storeId!),
                 icon: const Icon(Icons.add),
                 label: Text(context.l10n.qcAdminAddCriterion),
-              ),
-            ],
+              );
+              if (constraints.maxWidth < 560 ||
+                  MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [title, const SizedBox(height: 10), action],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: title),
+                  action,
+                ],
+              );
+            },
           ),
           const SizedBox(height: 12),
           Align(
@@ -1939,15 +1970,17 @@ class _FollowupTabState extends ConsumerState<_FollowupTab> {
           const SizedBox(height: 16),
           Row(
             children: [
-              Text(
-                context.l10n.qcFollowupManagementTitle,
-                style: AppFonts.system(
-                  color: AppColors.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
+              Expanded(
+                child: Text(
+                  context.l10n.qcFollowupManagementTitle,
+                  style: AppFonts.system(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 12),
               Text(
                 '${filtered.length}',
                 style: AppFonts.system(

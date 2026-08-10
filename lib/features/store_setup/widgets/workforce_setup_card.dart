@@ -680,6 +680,9 @@ const _accountTypes = <String>[
   'device_pos',
   'device_tablet',
   'device_kitchen',
+  'device_print_station',
+  'device_customer_display',
+  'device_emergency_station',
   'store_operator',
 ];
 
@@ -688,6 +691,9 @@ List<String> _rolesForAccountType(String accountType) => switch (accountType) {
   'store_manager' => const ['store_admin'],
   'device_pos' || 'device_tablet' => const ['cashier'],
   'device_kitchen' => const ['kitchen'],
+  'device_print_station' => const ['print_station'],
+  'device_customer_display' => const ['customer_display'],
+  'device_emergency_station' => const ['emergency_station'],
   _ => const ['photo_objet_store_operator'],
 };
 
@@ -697,6 +703,15 @@ String _accountTypeLabel(BuildContext context, String value) => switch (value) {
   'device_pos' => context.l10n.storeSetupAccountTypePosDevice,
   'device_tablet' => context.l10n.storeSetupAccountTypeTabletDevice,
   'device_kitchen' => context.l10n.storeSetupAccountTypeKitchenDevice,
+  'device_print_station' => context.l10n.printStationTitle,
+  'device_customer_display' => context.l10n.cashierShowCustomerDisplay,
+  'device_emergency_station' => switch (Localizations.localeOf(
+    context,
+  ).languageCode) {
+    'vi' => 'Trạm khẩn cấp',
+    'en' => 'Emergency station',
+    _ => '비상 스테이션',
+  },
   _ => context.l10n.storeSetupAccountTypeStoreOperator,
 };
 
@@ -705,6 +720,13 @@ String _accountRoleLabel(BuildContext context, String value) => switch (value) {
   'store_admin' => context.l10n.roleStoreAdminMenu,
   'cashier' => context.l10n.roleCashierMenu,
   'kitchen' => context.l10n.roleKitchenMenu,
+  'print_station' => context.l10n.printStationTitle,
+  'customer_display' => context.l10n.cashierShowCustomerDisplay,
+  'emergency_station' => switch (Localizations.localeOf(context).languageCode) {
+    'vi' => 'Trạm khẩn cấp',
+    'en' => 'Emergency station',
+    _ => '비상 스테이션',
+  },
   'photo_objet_master' => context.l10n.rolePhotoObjetMasterMenu,
   _ => context.l10n.rolePhotoObjetStoreOperatorMenu,
 };

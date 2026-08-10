@@ -528,29 +528,35 @@ class _QrOrderScreenState extends State<QrOrderScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            menu.storeName,
-            style: AppFonts.system(
-              color: ToastColorTokens.textSecondary,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: ToastSpacingTokens.sm),
-          Align(
-            alignment: Alignment.centerRight,
-            child: DropdownButton<String>(
-              key: const Key('qr_language_selector'),
-              value: _languageCode,
-              items: const [
-                DropdownMenuItem(value: 'vi', child: Text('Tiếng Việt')),
-                DropdownMenuItem(value: 'ko', child: Text('한국어')),
-                DropdownMenuItem(value: 'en', child: Text('English')),
-              ],
-              onChanged: (value) {
-                if (value != null) setState(() => _languageCode = value);
-              },
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  menu.storeName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppFonts.system(
+                    color: ToastColorTokens.textSecondary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: ToastSpacingTokens.sm),
+              DropdownButton<String>(
+                key: const Key('qr_language_selector'),
+                value: _languageCode,
+                items: const [
+                  DropdownMenuItem(value: 'vi', child: Text('Tiếng Việt')),
+                  DropdownMenuItem(value: 'ko', child: Text('한국어')),
+                  DropdownMenuItem(value: 'en', child: Text('English')),
+                ],
+                onChanged: (value) {
+                  if (value != null) setState(() => _languageCode = value);
+                },
+              ),
+            ],
           ),
           const SizedBox(height: ToastSpacingTokens.sm),
           ToastWorkSurface(
@@ -571,30 +577,45 @@ class _QrOrderScreenState extends State<QrOrderScreen>
                   ),
                 ),
                 const SizedBox(height: ToastSpacingTokens.sm),
-                if (menu.promotionDiscountPercent > 0) ...[
-                  Container(
-                    key: const Key('qr_active_promotion'),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: ToastSpacingTokens.sm,
-                      vertical: ToastSpacingTokens.xs,
-                    ),
-                    decoration: BoxDecoration(
-                      color: ToastColorTokens.warningMuted,
-                      borderRadius: ToastRadiusTokens.sm,
-                    ),
-                    child: Text(
-                      _copy.promotionLabel(
-                        menu.promotionName ?? '',
-                        menu.promotionDiscountPercent,
-                      ),
-                      style: AppFonts.system(
-                        color: ToastColorTokens.textPrimary,
-                        fontWeight: FontWeight.w800,
-                      ),
+                Container(
+                  key: menu.promotionDiscountPercent > 0
+                      ? const Key('qr_active_promotion')
+                      : const Key('qr_welcome_message'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: ToastSpacingTokens.sm,
+                    vertical: ToastSpacingTokens.xs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: menu.promotionDiscountPercent > 0
+                        ? ToastColorTokens.warningMuted
+                        : ToastColorTokens.mutedSurface,
+                    borderRadius: ToastRadiusTokens.sm,
+                  ),
+                  child: Text(
+                    menu.promotionDiscountPercent > 0
+                        ? _copy.promotionLabel(
+                            menu.promotionName ?? '',
+                            menu.promotionDiscountPercent,
+                          )
+                        : _copy.welcomeMessage,
+                    style: AppFonts.system(
+                      color: ToastColorTokens.textPrimary,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                  const SizedBox(height: ToastSpacingTokens.sm),
-                ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _copy.vatExclusiveNotice,
+                  key: const Key('qr_vat_exclusive_notice'),
+                  style: AppFonts.system(
+                    color: ToastColorTokens.textSecondary,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    height: 1.25,
+                  ),
+                ),
+                const SizedBox(height: ToastSpacingTokens.sm),
                 Text(
                   _copy.headerHint,
                   style: AppFonts.system(
@@ -1818,6 +1839,18 @@ class QrOrderCopy {
       _ => '$prefix$percentLabel% off all menu items',
     };
   }
+
+  String get welcomeMessage => switch (code) {
+    'ko' => '정성껏 만들었습니다. 맛있게 드세요.',
+    'vi' => 'Món ăn được chuẩn bị tận tâm. Chúc quý khách ngon miệng.',
+    _ => 'Made with care. Enjoy your meal.',
+  };
+
+  String get vatExclusiveNotice => switch (code) {
+    'ko' => '부가세 8% 별도입니다.',
+    'vi' => 'Chưa bao gồm 8% VAT.',
+    _ => '8% VAT is not included.',
+  };
 
   String get confirmTitle => switch (code) {
     'ko' => '주문 확인',
