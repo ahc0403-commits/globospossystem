@@ -104,6 +104,9 @@ void main() {
 
   test('production release deploys and verifies the emergency dispatcher', () {
     final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
+    final vercelBuild = File(
+      'scripts/vercel_build_web.sh',
+    ).readAsStringSync();
     final authCheck = File(
       'scripts/check_pilot_auth_accounts.sh',
     ).readAsStringSync();
@@ -116,7 +119,18 @@ void main() {
       contains('functions deploy emergency-fulfillment-dispatcher'),
     );
     expect(deploy, contains('verify_emergency_dispatcher_readiness'));
+    expect(deploy, contains('verify_vercel_firebase_web_env'));
     expect(deploy, contains('FIREBASE_SERVICE_ACCOUNT_JSON'));
+    for (final name in [
+      'FIREBASE_API_KEY',
+      'FIREBASE_APP_ID',
+      'FIREBASE_MESSAGING_SENDER_ID',
+      'FIREBASE_PROJECT_ID',
+      'FIREBASE_WEB_VAPID_KEY',
+    ]) {
+      expect(deploy, contains(name));
+      expect(vercelBuild, contains('--dart-define=$name='));
+    }
     expect(authCheck, contains("'emergency_station'"));
     expect(migration, contains("'app.settings.cron_secret'"));
   });

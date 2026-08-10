@@ -424,6 +424,34 @@ preflight() {
   fi
 }
 
+verify_vercel_firebase_web_env() {
+  if [[ "$SKIP_VERCEL" == "1" ]]; then
+    return 0
+  fi
+
+  log "Vercel Firebase web push environment"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '+ vercel env ls production; require Firebase web config names only\n'
+    return 0
+  fi
+
+  local env_listing
+  env_listing="$(vercel env ls production --no-color 2>&1)" ||
+    fail "Could not inspect Vercel production environment names."
+
+  local env_name
+  for env_name in \
+    FIREBASE_API_KEY \
+    FIREBASE_APP_ID \
+    FIREBASE_MESSAGING_SENDER_ID \
+    FIREBASE_PROJECT_ID \
+    FIREBASE_WEB_VAPID_KEY; do
+    grep -Eq "^[[:space:]]*$env_name[[:space:]]" <<<"$env_listing" ||
+      fail "Vercel production environment is missing $env_name."
+  done
+  printf 'Vercel Firebase web push environment: ready.\n'
+}
+
 run_auth_check() {
   if [[ "$SKIP_AUTH_CHECK" == "1" ]]; then
     log "Production Auth and test-data hygiene check skipped"
@@ -768,10 +796,15 @@ local_flutter_build() {
   log "Local Flutter web build precheck"
   ensure_flutter_env
   run_masked \
-    "flutter build web --release --dart-define=SUPABASE_URL=<set> --dart-define=SUPABASE_ANON_KEY=<set> --no-wasm-dry-run" \
+    "flutter build web --release --dart-define=SUPABASE_URL=<set> --dart-define=SUPABASE_ANON_KEY=<set> --dart-define=FIREBASE_*=<optional> --no-wasm-dry-run" \
     flutter build web --release \
       --dart-define=SUPABASE_URL="$SUPABASE_URL" \
       --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+      --dart-define=FIREBASE_API_KEY="${FIREBASE_API_KEY:-}" \
+      --dart-define=FIREBASE_APP_ID="${FIREBASE_APP_ID:-}" \
+      --dart-define=FIREBASE_MESSAGING_SENDER_ID="${FIREBASE_MESSAGING_SENDER_ID:-}" \
+      --dart-define=FIREBASE_PROJECT_ID="${FIREBASE_PROJECT_ID:-}" \
+      --dart-define=FIREBASE_WEB_VAPID_KEY="${FIREBASE_WEB_VAPID_KEY:-}" \
       --no-wasm-dry-run
 }
 
@@ -949,6 +982,7 @@ main() {
   load_env
   ensure_flutter_env
   verify_allowed_production_origins
+  verify_vercel_firebase_web_env
   run_auth_check
   run_checks
   verify_sepay_alert_secrets
