@@ -262,6 +262,7 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
                     OutlinedButton.icon(
                       key: const Key('print_station_refresh'),
                       onPressed: () {
+                        ref.invalidate(networkCapabilitiesProvider);
                         ref.invalidate(printerDestinationsProvider(storeId));
                         ref.invalidate(printStationJobsProvider(storeId));
                         ref.invalidate(failedPrintJobsProvider(storeId));

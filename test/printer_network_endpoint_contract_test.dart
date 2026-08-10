@@ -49,11 +49,14 @@ void main() {
     final cmake = File('windows/runner/CMakeLists.txt').readAsStringSync();
 
     expect(runner, contains('globos/network_capabilities'));
-    expect(runner, contains('IF_TYPE_ETHERNET_CSMACD'));
     expect(runner, contains('IF_TYPE_IEEE80211'));
     expect(runner, contains('GetIfEntry2'));
-    expect(runner, contains('HardwareInterface'));
+    expect(runner, contains('IF_TYPE_SOFTWARE_LOOPBACK'));
+    expect(runner, contains('IF_TYPE_TUNNEL'));
+    expect(runner, isNot(contains('HardwareInterface ||')));
+    expect(runner, isNot(contains('EndPointInterface')));
     expect(runner, contains('NotMediaConnected'));
+    expect(runner, contains('wired_connected = true'));
     expect(cmake, contains('iphlpapi.lib'));
   });
 

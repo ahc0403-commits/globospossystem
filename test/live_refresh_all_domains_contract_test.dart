@@ -71,6 +71,19 @@ void main() {
     }
   });
 
+  test('settings live refresh preserves open settings dialogs', () {
+    final source = File(
+      'lib/features/admin/admin_screen.dart',
+    ).readAsStringSync();
+
+    expect(source, contains('SettingsTab() => 0'));
+    expect(
+      source,
+      contains('ref.invalidate(printerDestinationsProvider(liveStoreId))'),
+    );
+    expect(source, contains('.loadSettings(liveStoreId, auth.user!.id)'));
+  });
+
   test('anonymous QR menu subscribes by store with a silent fallback', () {
     final source = File(
       'lib/features/qr_order/qr_order_screen.dart',

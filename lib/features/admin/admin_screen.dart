@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../core/layout/platform_info.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -26,6 +28,8 @@ import '../inventory_purchase/inventory_purchase_screen.dart';
 import '../photo_inventory/photo_inventory_screen.dart';
 import 'providers/admin_audit_provider.dart';
 import 'providers/menu_provider.dart';
+import 'providers/printer_destinations_provider.dart';
+import 'providers/settings_provider.dart';
 
 final _adminStoreBrandIdProvider = FutureProvider.family<String?, String>((
   ref,
@@ -78,6 +82,16 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
           if (!mounted) return;
           if (event.affects({'menu'})) {
             ref.invalidate(menuProvider(liveStoreId));
+          }
+          if (event.affects({'print'})) {
+            ref.invalidate(printerDestinationsProvider(liveStoreId));
+          }
+          if (event.affects({'settings'}) && auth.user != null) {
+            unawaited(
+              ref
+                  .read(settingsProvider.notifier)
+                  .loadSettings(liveStoreId, auth.user!.id),
+            );
           }
           ref.invalidate(adminAuditTraceProvider(liveStoreId));
           setState(() {
@@ -141,7 +155,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
               AttendanceTab() => _revisionForDomains({'attendance', 'staff'}),
               InventoryPurchaseScreen() || PhotoInventoryScreen() => _revisionForDomains({'inventory', 'menu', 'photo_ops'}),
               QcTab() => _revisionForDomains({'qc'}),
-              SettingsTab() => _revisionForDomains({'settings', 'print', 'staff'}),
+              // Settings contains editable dialogs. Keep its element stable
+              // across live events so an update cannot dismiss the dialog or
+              // reset the selected settings category.
+              SettingsTab() => 0,
               DeliverySettlementTab() => _revisionForDomains({'delivery'}),
               EinvoiceTab() => _revisionForDomains({'einvoice', 'settings'}),
               _ => _allLiveRevision,
