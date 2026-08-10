@@ -263,16 +263,17 @@ void main() {
     expect(verification, contains("has_function_privilege('anon'"));
   });
 
-  test('production deploy exposes only the HMAC-protected SePay endpoint', () {
+  test('production deploy keeps SePay limited to the HMAC endpoint', () {
     final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
     expect(deploy, contains('functions deploy sepay-webhook --no-verify-jwt'));
     expect(deploy, isNot(contains('functions deploy sepay-alert-dispatcher')));
-    expect(deploy, isNot(contains('FIREBASE_SERVICE_ACCOUNT_JSON')));
     expect(deploy, contains('SEPAY_WEBHOOK_SECRET'));
 
     final edge = File(
       'supabase/functions/sepay-webhook/index.ts',
     ).readAsStringSync();
+    expect(edge, isNot(contains('FIREBASE_SERVICE_ACCOUNT_JSON')));
+    expect(edge, isNot(contains('firebase')));
     expect(edge, contains('x-sepay-signature'));
     expect(edge, contains('x-sepay-timestamp'));
     expect(edge, contains('SEPAY_SIGNATURE_INVALID'));

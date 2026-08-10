@@ -217,7 +217,7 @@ class PaymentService {
       final orderQuery = supabase
           .from('orders')
           .select(
-            'id, restaurant_id, table_id, status, created_at, updated_at, tables(table_number), order_items(id, created_at, status, label, unit_price, quantity, is_service_item, service_reason, paying_amount_inc_tax, menu_items(name, name_vi))',
+            'id, restaurant_id, table_id, status, created_at, updated_at, tables(table_number), order_items(id, created_at, status, label, unit_price, quantity, is_service_item, service_reason, paying_amount_inc_tax, menu_items(name, name_vi, name_en))',
           )
           .eq('id', orderId);
       final order = scopedStoreId == null || scopedStoreId.isEmpty

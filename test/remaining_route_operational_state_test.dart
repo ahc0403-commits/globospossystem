@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/services/connectivity_service.dart';
+import 'package:globos_pos_system/core/services/printer_destination_service.dart';
 import 'package:globos_pos_system/core/ui/app_primitives.dart';
 import 'package:globos_pos_system/core/ui/app_theme.dart';
 import 'package:globos_pos_system/features/admin/providers/printer_destinations_provider.dart';
@@ -361,6 +362,77 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(const Key('print_station_start')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await _pump(
+        tester,
+        child: const PrintStationScreen(isSupportedOverride: true),
+        physicalSize: const Size(390, 844),
+        overrides: [
+          connectivityProvider.overrideWith((ref) => Stream.value(true)),
+          printerDestinationsProvider.overrideWith(
+            (ref, storeId) => _PrinterDestinationsNotifier(
+              const PrinterDestinationsState(
+                destinations: [
+                  PrinterDestinationConfig(
+                    id: 'kitchen-printer',
+                    storeId: _storeId,
+                    name: 'Máy in bếp chính',
+                    ip: '192.168.10.51',
+                    port: 9100,
+                    purpose: 'kitchen',
+                    isActive: true,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          printStationJobsProvider.overrideWith(
+            (ref, storeId) async => const <FailedPrintJob>[],
+          ),
+          failedPrintJobsProvider.overrideWith(
+            (ref, storeId) async => const <FailedPrintJob>[],
+          ),
+        ],
+      );
+      await tester.pumpAndSettle();
+      final addDestination = find.byKey(
+        const Key('print_station_destination_add'),
+      );
+      expect(addDestination, findsOneWidget);
+      expect(
+        find.byKey(
+          const ValueKey('print_station_destination_edit_kitchen-printer'),
+        ),
+        findsOneWidget,
+      );
+      final removeDestination = find.byKey(
+        const ValueKey('print_station_destination_remove_kitchen-printer'),
+      );
+      expect(removeDestination, findsOneWidget);
+      await tester.ensureVisible(addDestination);
+      final pageScrollController = tester
+          .widget<ListView>(find.byType(ListView).first)
+          .controller!;
+      pageScrollController.jumpTo(
+        (pageScrollController.position.maxScrollExtent - 80).clamp(
+          pageScrollController.position.minScrollExtent,
+          pageScrollController.position.maxScrollExtent,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(removeDestination);
+      await tester.pumpAndSettle();
+      const deleteDialog = Key('print_station_destination_delete_dialog');
+      expect(find.byKey(deleteDialog), findsOneWidget);
+      Navigator.of(tester.element(find.byKey(deleteDialog))).pop(false);
+      await tester.pumpAndSettle();
+      await tester.tap(addDestination);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('print_station_destination_dialog')),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     },
   );

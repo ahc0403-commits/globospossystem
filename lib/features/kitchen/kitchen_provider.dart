@@ -48,6 +48,9 @@ class KitchenItem {
     required this.createdAt,
     this.isSupplemental = false,
     this.comboComponents = const [],
+    this.nameKo,
+    this.nameVi,
+    this.nameEn,
   });
 
   final String itemId;
@@ -57,6 +60,24 @@ class KitchenItem {
   final DateTime createdAt;
   final bool isSupplemental;
   final List<KitchenComboComponent> comboComponents;
+  final String? nameKo;
+  final String? nameVi;
+  final String? nameEn;
+
+  String localizedName(String languageCode) {
+    final localized = switch (languageCode) {
+      'vi' => nameVi,
+      'en' => nameEn,
+      _ => nameKo,
+    };
+    final value = localized?.trim() ?? '';
+    if (value.isNotEmpty) return value;
+    return switch (languageCode) {
+      'vi' => 'Món',
+      'en' => 'Item',
+      _ => '메뉴',
+    };
+  }
 
   KitchenItem copyWith({
     String? itemId,
@@ -66,6 +87,9 @@ class KitchenItem {
     DateTime? createdAt,
     bool? isSupplemental,
     List<KitchenComboComponent>? comboComponents,
+    String? nameKo,
+    String? nameVi,
+    String? nameEn,
   }) {
     return KitchenItem(
       itemId: itemId ?? this.itemId,
@@ -75,6 +99,9 @@ class KitchenItem {
       createdAt: createdAt ?? this.createdAt,
       isSupplemental: isSupplemental ?? this.isSupplemental,
       comboComponents: comboComponents ?? this.comboComponents,
+      nameKo: nameKo ?? this.nameKo,
+      nameVi: nameVi ?? this.nameVi,
+      nameEn: nameEn ?? this.nameEn,
     );
   }
 
@@ -83,8 +110,12 @@ class KitchenItem {
     final createdAtRaw = json['created_at']?.toString();
     final menuItemRaw = json['menu_items'];
     String? menuItemName;
+    String? menuItemNameVi;
+    String? menuItemNameEn;
     if (menuItemRaw is Map<String, dynamic>) {
       menuItemName = menuItemRaw['name']?.toString();
+      menuItemNameVi = menuItemRaw['name_vi']?.toString();
+      menuItemNameEn = menuItemRaw['name_en']?.toString();
     }
     final comboRaw = json['combo_components'];
     final comboComponents = comboRaw is List
@@ -115,6 +146,9 @@ class KitchenItem {
           ? DateTime.tryParse(createdAtRaw) ?? DateTime.now().toUtc()
           : DateTime.now().toUtc(),
       comboComponents: comboComponents,
+      nameKo: menuItemName,
+      nameVi: menuItemNameVi,
+      nameEn: menuItemNameEn,
     );
   }
 }
@@ -261,7 +295,7 @@ class KitchenNotifier extends StateNotifier<KitchenState> {
       final response = await supabase
           .from('orders')
           .select(
-            'id, created_at, status, order_purpose, order_source, tables(table_number), order_items(id, created_at, label, quantity, status, combo_components, menu_items(name))',
+            'id, created_at, status, order_purpose, order_source, tables(table_number), order_items(id, created_at, label, quantity, status, combo_components, menu_items(name, name_vi, name_en))',
           )
           .eq('restaurant_id', storeId)
           .inFilter('status', ['pending', 'confirmed', 'serving', 'completed'])

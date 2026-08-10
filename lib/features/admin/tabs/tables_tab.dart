@@ -333,28 +333,37 @@ class _TablesTabState extends ConsumerState<TablesTab> {
           maxWidth: 1480,
           padding: const EdgeInsets.all(16),
           child: _showOrderPanel && selectedTable != null
-              ? Row(
+              ? LayoutBuilder(
                   key: ValueKey<String>('admin-order-${selectedTable.id}'),
-                  children: [
-                    Expanded(
-                      flex: 5,
-                      child: _buildTableGrid(
-                        tablesState: tablesState,
-                        tablesNotifier: tablesNotifier,
-                        storeId: storeId,
-                        auditTraceAsync: auditTraceAsync,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      flex: 6,
-                      child: _AdminTableOperationsPanel(
-                        table: selectedTable,
-                        orderState: orderState,
-                        onClose: _closeOrderPanel,
-                      ),
-                    ),
-                  ],
+                  builder: (context, constraints) {
+                    final tableGrid = _buildTableGrid(
+                      tablesState: tablesState,
+                      tablesNotifier: tablesNotifier,
+                      storeId: storeId,
+                      auditTraceAsync: auditTraceAsync,
+                    );
+                    final operations = _AdminTableOperationsPanel(
+                      table: selectedTable,
+                      orderState: orderState,
+                      onClose: _closeOrderPanel,
+                    );
+                    if (constraints.maxWidth < 900) {
+                      return Column(
+                        children: [
+                          Expanded(flex: 5, child: tableGrid),
+                          const SizedBox(height: 16),
+                          Expanded(flex: 6, child: operations),
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(flex: 5, child: tableGrid),
+                        const SizedBox(width: 16),
+                        Expanded(flex: 6, child: operations),
+                      ],
+                    );
+                  },
                 )
               : _buildTableGrid(
                   key: const ValueKey<String>('admin-table-grid'),
@@ -663,39 +672,50 @@ class _TablesTabState extends ConsumerState<TablesTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.tablesManagementTitle,
-                      style: Theme.of(context).textTheme.headlineLarge,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final titleBlock = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.tablesManagementTitle,
+                    style: Theme.of(context).textTheme.headlineLarge,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _layoutEditMode
+                        ? l10n.tablesManagementEditSubtitle
+                        : l10n.tablesManagementMonitorSubtitle,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: PosColors.textSecondary,
+                      fontSize: 13,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _layoutEditMode
-                          ? l10n.tablesManagementEditSubtitle
-                          : l10n.tablesManagementMonitorSubtitle,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: PosColors.textSecondary,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              ToastStatusBadge(
+                  ),
+                ],
+              );
+              final badge = ToastStatusBadge(
                 label: _layoutEditMode
                     ? l10n.tablesLayoutEditMode
                     : l10n.tablesOperationMonitor,
                 color: _layoutEditMode ? PosColors.warning : PosColors.info,
                 compact: true,
-              ),
-            ],
+              );
+              if (constraints.maxWidth < 560 ||
+                  MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [titleBlock, const SizedBox(height: 10), badge],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: titleBlock),
+                  const SizedBox(width: 12),
+                  badge,
+                ],
+              );
+            },
           ),
           const SizedBox(height: 14),
           ToastMetricStrip(
@@ -2023,8 +2043,9 @@ class _AdminTableOperationsPanel extends StatelessWidget {
                     items: activeOrder.items
                         .map(
                           (item) => _AdminTableOrderLine(
-                            label:
-                                item.label ?? l10n.orderWorkspaceItemFallback,
+                            label: item.localizedName(
+                              Localizations.localeOf(context).languageCode,
+                            ),
                             quantity: item.quantity,
                             status: item.status,
                             amount: item.unitPrice * item.quantity,

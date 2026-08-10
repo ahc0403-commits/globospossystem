@@ -139,6 +139,7 @@ class PayrollService {
       final records = <DailyRecord>[];
       var lateMinutes = 0;
       final lateDatesCounted = <DateTime>{};
+      final allowanceDatesApplied = <DateTime>{};
       final scheduledStart = _toMinutes(
         hourlyRule?['scheduled_start']?.toString() ?? '09:00',
       );
@@ -167,11 +168,17 @@ class PayrollService {
         final date = DateTime(baseTime.year, baseTime.month, baseTime.day);
         final dateKey = date.toIso8601String().substring(0, 10);
         final allowance = allowanceByEmployeeDate['$userId|$dateKey'];
-        final mealAllowance =
-            double.tryParse('${allowance?['meal_allowance_amount'] ?? 0}') ?? 0;
-        final parkingAllowance =
-            double.tryParse('${allowance?['parking_allowance_amount'] ?? 0}') ??
-            0;
+        final appliesDailyAllowance = allowanceDatesApplied.add(date);
+        final mealAllowance = appliesDailyAllowance
+            ? double.tryParse('${allowance?['meal_allowance_amount'] ?? 0}') ??
+                  0
+            : 0.0;
+        final parkingAllowance = appliesDailyAllowance
+            ? double.tryParse(
+                    '${allowance?['parking_allowance_amount'] ?? 0}',
+                  ) ??
+                  0
+            : 0.0;
         final hours = (clockIn != null && clockOut != null)
             ? max(0, clockOut.difference(clockIn).inMinutes) / 60.0
             : 0.0;
@@ -263,18 +270,19 @@ class PayrollService {
       });
 
     DateTime? pendingClockIn;
-    DateTime? pendingClockOut;
     DateTime? orphanClockOut;
+    var lastClosedPairIndex = -1;
+    var canExtendLastClockOut = false;
 
     void finishPendingShift() {
       if (pendingClockIn != null) {
-        pairs.add((pendingClockIn, pendingClockOut));
+        pairs.add((pendingClockIn, null));
       } else if (orphanClockOut != null) {
         pairs.add((null, orphanClockOut));
       }
       pendingClockIn = null;
-      pendingClockOut = null;
       orphanClockOut = null;
+      canExtendLastClockOut = false;
     }
 
     for (final row in chronologicalLogs) {
@@ -288,6 +296,7 @@ class PayrollService {
         if (pendingClockIn == null) {
           if (orphanClockOut != null) finishPendingShift();
           pendingClockIn = dt;
+          canExtendLastClockOut = false;
           continue;
         }
         final activeClockIn = pendingClockIn!;
@@ -306,10 +315,19 @@ class PayrollService {
 
       final activeClockIn = pendingClockIn;
       if (activeClockIn != null && !dt.isBefore(activeClockIn)) {
-        // Historical repeated check-outs are recovered by keeping the last
-        // check-out before the employee's next shift.
-        pendingClockOut = dt;
-      } else if (pendingClockIn == null) {
+        pairs.add((activeClockIn, dt));
+        pendingClockIn = null;
+        lastClosedPairIndex = pairs.length - 1;
+        canExtendLastClockOut = true;
+      } else if (canExtendLastClockOut && lastClosedPairIndex >= 0) {
+        // Legacy duplicate check-outs are recovered by keeping the last one,
+        // but a following clock-in starts a distinct split shift.
+        final lastPair = pairs[lastClosedPairIndex];
+        final lastClockOut = lastPair.$2;
+        if (lastClockOut != null && !dt.isBefore(lastClockOut)) {
+          pairs[lastClosedPairIndex] = (lastPair.$1, dt);
+        }
+      } else {
         orphanClockOut = dt;
       }
     }

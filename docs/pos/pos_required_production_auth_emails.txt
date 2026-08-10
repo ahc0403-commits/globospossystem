@@ -6,6 +6,9 @@
 andre@globos.world
 bh_ops1@globos.world
 bt_kit1@globos.world
+bt_tray1@globos.world
+bt_floor_1f@globos.world
+bt_floor_2f@globos.world
 bt_pos1@globos.world
 bt_tab1@globos.world
 bunsik_bm1@globos.world
@@ -15,6 +18,6 @@ lt_ops1@globos.world
 nz_ops1@globos.world
 photo_bm1@globos.world
 photo_bm2@globos.world
-print@globos.world
+bt_print@globos.world
 qt_ops1@globos.world
 td_ops1@globos.world

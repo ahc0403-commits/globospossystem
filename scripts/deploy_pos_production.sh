@@ -396,6 +396,8 @@ preflight() {
       fail "Missing complete-initial-password-change Edge function."
     [[ -f "$ROOT_DIR/supabase/functions/sepay-webhook/index.ts" ]] ||
       fail "Missing sepay-webhook Edge function."
+    [[ -f "$ROOT_DIR/supabase/functions/emergency-fulfillment-dispatcher/index.ts" ]] ||
+      fail "Missing emergency-fulfillment-dispatcher Edge function."
   fi
   if [[ "$DB_ONLY" != "1" && "$SKIP_AUTH_CHECK" != "1" ]]; then
     [[ -f "$ROOT_DIR/scripts/check_pilot_auth_accounts.sh" ]] ||
@@ -457,6 +459,10 @@ run_checks() {
   run deno test \
     "$ROOT_DIR/supabase/functions/sepay-webhook/index_test.ts"
 
+  log "Emergency fulfilment Edge tests"
+  run deno test \
+    "$ROOT_DIR/supabase/functions/emergency-fulfillment-dispatcher/index_test.ts"
+
   if [[ -z "$TEST_TARGETS" ]]; then
     log "Flutter tests skipped"
     return 0
@@ -489,7 +495,10 @@ verify_sepay_alert_secrets() {
   secret_names="$(supabase secrets list --project-ref "$POS_PROJECT_REF" 2>/dev/null | awk -F '|' 'NF >= 2 {gsub(/[[:space:]]/, "", $1); print $1}')" ||
     fail "Could not inspect Supabase Edge secret names."
   local required_secret
-  for required_secret in SEPAY_WEBHOOK_SECRET; do
+  for required_secret in \
+    SEPAY_WEBHOOK_SECRET \
+    CRON_SECRET \
+    FIREBASE_SERVICE_ACCOUNT_JSON; do
     grep -Fxq "$required_secret" <<<"$secret_names" ||
       fail "Missing required Supabase Edge secret: $required_secret"
   done
@@ -824,6 +833,25 @@ deploy_pos_edge_functions() {
     --project-ref "$POS_PROJECT_REF"
   run supabase functions deploy sepay-webhook --no-verify-jwt \
     --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy emergency-fulfillment-dispatcher \
+    --no-verify-jwt --project-ref "$POS_PROJECT_REF"
+}
+
+verify_emergency_dispatcher_readiness() {
+  log "Emergency fulfilment dispatcher readiness"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '+ POST emergency-fulfillment-dispatcher without authorization; require HTTP 401\n'
+    return 0
+  fi
+
+  local status
+  status="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+    "$SUPABASE_URL/functions/v1/emergency-fulfillment-dispatcher" \
+    -H 'Content-Type: application/json' \
+    --data '{}')" || fail "Could not reach emergency fulfilment dispatcher."
+  [[ "$status" == "401" ]] ||
+    fail "Emergency fulfilment dispatcher readiness returned HTTP $status instead of 401."
+  printf 'Emergency fulfilment dispatcher secrets and auth gate verified.\n'
 }
 
 verify_remote_allowed_origin() {
@@ -930,6 +958,7 @@ main() {
   # fail-closed migration and verification succeed.
   deploy_pos_edge_functions
   verify_remote_allowed_origin
+  verify_emergency_dispatcher_readiness
   apply_migration
   local_flutter_build
   deploy_vercel

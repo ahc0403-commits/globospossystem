@@ -46,6 +46,7 @@ final _cashierOrder = CashierOrder(
       id: 'cashier-item-pho',
       menuItemId: 'menu-pho',
       label: '소고기 쌀국수',
+      nameKo: '소고기 쌀국수',
       nameVi: 'Phở bò đặc biệt',
       nameEn: 'Special beef pho',
       unitPrice: 100000,
@@ -146,6 +147,9 @@ class _PaymentNotifier extends PaymentNotifier {
         items: const [
           QrOrderLedgerItem(
             name: 'Phở bò đặc biệt',
+            nameKo: '특선 소고기 쌀국수',
+            nameVi: 'Phở bò đặc biệt',
+            nameEn: 'Special beef pho',
             quantity: 1,
             unitPrice: 100000,
           ),
@@ -363,15 +367,15 @@ void main() {
     );
   });
 
-  testWidgets('cashier item rows show Vietnamese and English menu names', (
+  testWidgets('cashier item rows show only the selected menu language', (
     tester,
   ) async {
     await _pumpCashier(tester);
     await _selectOrder(tester);
 
-    expect(find.text('소고기 쌀국수'), findsOneWidget);
     expect(find.text('Phở bò đặc biệt'), findsOneWidget);
-    expect(find.text('Special beef pho'), findsOneWidget);
+    expect(find.text('소고기 쌀국수'), findsNothing);
+    expect(find.text('Special beef pho'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -397,6 +401,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Phở bò đặc biệt × 1'), findsOneWidget);
+    expect(find.text('특선 소고기 쌀국수 × 1'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

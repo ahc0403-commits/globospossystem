@@ -686,37 +686,48 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
       key: const Key('einvoice_compact_header'),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       backgroundColor: PosColors.surface,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  l10n.eInvoice,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                Text(
-                  '${l10n.einvoicePendingIssue} ${pendingJobs.length}',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: PosColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          PosSecondaryButton(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final titleBlock = Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n.eInvoice,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              Text(
+                '${l10n.einvoicePendingIssue} ${pendingJobs.length}',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
+              ),
+            ],
+          );
+          final action = PosSecondaryButton(
             key: const Key('misa_pending_excel_download'),
             label: l10n.reportsDownload,
             icon: Icons.download_outlined,
             onPressed: pendingJobs.isEmpty || _isExporting
                 ? null
                 : () => _downloadMisaWorkbook(pendingJobs),
-          ),
-        ],
+          );
+          if (constraints.maxWidth < 560 ||
+              MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [titleBlock, const SizedBox(height: 10), action],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: titleBlock),
+              const SizedBox(width: 12),
+              action,
+            ],
+          );
+        },
       ),
     );
   }

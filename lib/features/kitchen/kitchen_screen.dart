@@ -20,6 +20,7 @@ import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
+import '../emergency_fulfillment/emergency_fulfillment_screen.dart';
 import 'kitchen_provider.dart';
 
 final kitchenRestaurantNameProvider = FutureProvider.family<String, String>((
@@ -34,68 +35,17 @@ final kitchenRestaurantNameProvider = FutureProvider.family<String, String>((
   return response?['name']?.toString() ?? '';
 });
 
-/// Kitchen execution is retained for a future rollout, but the restaurant's
-/// current operating model uses printed tickets and cashier payment only.
+/// Printer-first by default. The separate emergency ledger becomes visible
+/// only while a Super Admin has activated the store fallback session.
 class KitchenScreen extends StatelessWidget {
   const KitchenScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      key: const Key('kitchen_paused_screen'),
-      backgroundColor: ToastColorTokens.canvas,
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: ToastWorkSurface(
-              padding: const EdgeInsets.all(ToastSpacingTokens.xl),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.print_rounded,
-                    size: 42,
-                    color: ToastColorTokens.accentStrong,
-                  ),
-                  const SizedBox(height: ToastSpacingTokens.md),
-                  Text(
-                    context.l10n.kitchenTitle,
-                    textAlign: TextAlign.center,
-                    style: AppFonts.system(
-                      color: ToastColorTokens.textPrimary,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: ToastSpacingTokens.sm),
-                  Text(
-                    context.l10n.kitchenPausedTitle,
-                    textAlign: TextAlign.center,
-                    style: AppFonts.system(
-                      color: ToastColorTokens.textPrimary,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: ToastSpacingTokens.xs),
-                  Text(
-                    context.l10n.kitchenPausedBody,
-                    textAlign: TextAlign.center,
-                    style: AppFonts.system(
-                      color: ToastColorTokens.textSecondary,
-                      fontSize: 15,
-                      height: 1.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const EmergencyFulfillmentScreen(
+    expectedStationType: 'kitchen',
+    // Compatibility key for the existing printer-first paused surface.
+    printerModeKey: Key('kitchen_paused_screen'),
+  );
 }
 
 /// Preserved implementation for a later kitchen-tablet rollout.
@@ -1304,7 +1254,9 @@ class _KitchenTicketItemRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final isActionable = _isKitchenItemActionable(item);
     final statusColor = _kitchenStatusColor(item.status);
-    final itemLabel = _localizedKitchenItemLabel(context, item.label);
+    final itemLabel = item.localizedName(
+      Localizations.localeOf(context).languageCode,
+    );
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
@@ -2210,7 +2162,9 @@ List<KitchenOrder> _filterKitchenOrders(
       order.tableNumber,
       if (order.isStaffMeal) 'staff meal',
       if (order.isQrOrder) 'qr table order',
-      ...order.items.map((item) => item.label),
+      ...order.items
+          .expand((item) => [item.nameKo, item.nameVi, item.nameEn, item.label])
+          .whereType<String>(),
     ].map(_normalizeKitchenSearch).join(' ');
     return haystack.contains(normalizedQuery);
   }).toList();

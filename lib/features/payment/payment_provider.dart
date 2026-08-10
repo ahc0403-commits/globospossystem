@@ -33,6 +33,8 @@ class CashierOrder {
     required this.createdAt,
     this.completedAt,
     this.activeDiscount,
+    this.emergencyModeActive = false,
+    this.unservedQuantity = 0,
   });
 
   final String orderId;
@@ -54,6 +56,8 @@ class CashierOrder {
   final DateTime createdAt;
   final DateTime? completedAt;
   final ActiveOrderDiscount? activeDiscount;
+  final bool emergencyModeActive;
+  final int unservedQuantity;
 
   bool get isStaffMeal => orderPurpose == 'staff_meal';
   bool get isQrOrder => orderSource == 'qr';
@@ -155,6 +159,14 @@ class QrOrderLedgerBatch {
   final DateTime createdAt;
   final List<QrOrderLedgerItem> items;
 
+  QrOrderLedgerBatch copyWith({List<QrOrderLedgerItem>? items}) {
+    return QrOrderLedgerBatch(
+      batchNo: batchNo,
+      createdAt: createdAt,
+      items: items ?? this.items,
+    );
+  }
+
   factory QrOrderLedgerBatch.fromJson(Map<String, dynamic> json) {
     final rawItems = json['items_snapshot'];
     return QrOrderLedgerBatch(
@@ -183,19 +195,55 @@ class QrOrderLedgerBatch {
 
 class QrOrderLedgerItem {
   const QrOrderLedgerItem({
+    this.menuItemId = '',
     required this.name,
     required this.quantity,
     required this.unitPrice,
+    this.nameKo,
+    this.nameVi,
+    this.nameEn,
   });
 
+  final String menuItemId;
   final String name;
   final int quantity;
   final double unitPrice;
+  final String? nameKo;
+  final String? nameVi;
+  final String? nameEn;
 
   double get lineTotal => unitPrice * quantity;
 
+  QrOrderLedgerItem copyWith({String? nameKo, String? nameVi, String? nameEn}) {
+    return QrOrderLedgerItem(
+      menuItemId: menuItemId,
+      name: name,
+      quantity: quantity,
+      unitPrice: unitPrice,
+      nameKo: nameKo ?? this.nameKo,
+      nameVi: nameVi ?? this.nameVi,
+      nameEn: nameEn ?? this.nameEn,
+    );
+  }
+
+  String localizedName(String languageCode) {
+    final localized = switch (languageCode) {
+      'vi' => nameVi,
+      'en' => nameEn,
+      _ => nameKo,
+    };
+    final value = localized?.trim() ?? '';
+    if (value.isNotEmpty) return value;
+    return switch (languageCode) {
+      'vi' => 'Món',
+      'en' => 'Item',
+      _ => '메뉴',
+    };
+  }
+
   factory QrOrderLedgerItem.fromJson(Map<String, dynamic> json) {
     return QrOrderLedgerItem(
+      menuItemId: json['menu_item_id']?.toString() ?? '',
       name: json['name']?.toString() ?? '-',
       quantity: switch (json['quantity']) {
         int value => value,
@@ -259,6 +307,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
 
   RealtimeChannel? _ordersChannel;
   RealtimeChannel? _paymentsChannel;
+  RealtimeChannel? _emergencyChannel;
   String? _restaurantId;
   // Realtime can be delayed or dropped on mobile web. Keep cashier payment
   // readiness moving so kitchen-ready tables do not wait for a manual refresh.
@@ -288,6 +337,10 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
           .order('created_at', ascending: true)
           .order('created_at', referencedTable: 'order_items', ascending: true)
           .order('id', referencedTable: 'order_items', ascending: true);
+
+      final emergencySummaries = await _loadEmergencySummaries(
+        response.map((row) => row['id'].toString()).toList(growable: false),
+      );
 
       final orders = response
           .map<CashierOrder?>((row) {
@@ -324,6 +377,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
                 : '-';
 
             final createdAtRaw = data['created_at']?.toString();
+            final emergencySummary = emergencySummaries[data['id'].toString()];
 
             return CashierOrder(
               orderId: data['id'].toString(),
@@ -346,6 +400,8 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
                   ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
                   : DateTime.now(),
               activeDiscount: activeDiscount,
+              emergencyModeActive: emergencySummary != null,
+              unservedQuantity: emergencySummary ?? 0,
             );
           })
           .whereType<CashierOrder>()
@@ -378,6 +434,33 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       await subscribeRealtime(storeId);
     } catch (error) {
       state = state.copyWith(error: 'Failed to load payable orders: $error');
+    }
+  }
+
+  Future<Map<String, int>> _loadEmergencySummaries(
+    List<String> orderIds,
+  ) async {
+    if (orderIds.isEmpty) return const {};
+    try {
+      final raw = await supabase.rpc(
+        'get_emergency_order_summaries',
+        params: {'p_order_ids': orderIds},
+      );
+      if (raw is! List) return const {};
+      return {
+        for (final row in raw.whereType<Map>())
+          if ((row['order_id']?.toString() ?? '').isNotEmpty)
+            row['order_id'].toString(): switch (row['unserved_quantity']) {
+              int value => value,
+              num value => value.toInt(),
+              String value => int.tryParse(value) ?? 0,
+              _ => 0,
+            },
+      };
+    } catch (_) {
+      // The payment surface must remain usable while a migration is pending or
+      // the emergency summary service is temporarily unavailable.
+      return const {};
     }
   }
 
@@ -545,9 +628,43 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         .eq('order_id', orderId)
         .order('batch_no', ascending: true);
 
-    return response
+    final batches = response
         .map(
           (row) => QrOrderLedgerBatch.fromJson(Map<String, dynamic>.from(row)),
+        )
+        .toList(growable: false);
+    final menuItemIds = batches
+        .expand((batch) => batch.items)
+        .map((item) => item.menuItemId)
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (menuItemIds.isEmpty) return batches;
+
+    final menuRows = await supabase
+        .from('menu_items')
+        .select('id, name, name_vi, name_en')
+        .inFilter('id', menuItemIds);
+    final namesById = <String, Map<String, dynamic>>{
+      for (final row in menuRows)
+        row['id'].toString(): Map<String, dynamic>.from(row),
+    };
+
+    return batches
+        .map(
+          (batch) => batch.copyWith(
+            items: batch.items
+                .map((item) {
+                  final names = namesById[item.menuItemId];
+                  if (names == null) return item;
+                  return item.copyWith(
+                    nameKo: names['name']?.toString(),
+                    nameVi: names['name_vi']?.toString(),
+                    nameEn: names['name_en']?.toString(),
+                  );
+                })
+                .toList(growable: false),
+          ),
         )
         .toList(growable: false);
   }
@@ -995,7 +1112,8 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   Future<void> subscribeRealtime(String storeId) async {
     if (_restaurantId == storeId &&
         _ordersChannel != null &&
-        _paymentsChannel != null) {
+        _paymentsChannel != null &&
+        _emergencyChannel != null) {
       _ensureAutoRefresh(storeId);
       return;
     }
@@ -1005,6 +1123,9 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     }
     if (_paymentsChannel != null) {
       await _paymentsChannel!.unsubscribe();
+    }
+    if (_emergencyChannel != null) {
+      await _emergencyChannel!.unsubscribe();
     }
     _pollTimer?.cancel();
     _pollTimer = null;
@@ -1074,6 +1195,17 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
             _ensureAutoRefresh(storeId);
           }
         });
+
+    _emergencyChannel = supabase
+        .channel(LiveSyncScope.storeChannel('cashier_emergency', storeId))
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'emergency_fulfillment_items',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshPaymentOrdersFromRealtime(storeId),
+        )
+        .subscribe();
     _ensureAutoRefresh(storeId);
     Future.delayed(_autoRefreshInterval, () {
       if (mounted && !_realtimeConnected && _restaurantId == storeId) {
@@ -1116,8 +1248,10 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     _pollStoreId = null;
     _ordersChannel?.unsubscribe();
     _paymentsChannel?.unsubscribe();
+    _emergencyChannel?.unsubscribe();
     _ordersChannel = null;
     _paymentsChannel = null;
+    _emergencyChannel = null;
     super.dispose();
   }
 }

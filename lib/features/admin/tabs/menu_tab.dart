@@ -255,33 +255,31 @@ class _MenuTabState extends ConsumerState<MenuTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n.menuManagementTitle,
-                      style: Theme.of(context).textTheme.headlineLarge,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final titleBlock = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    context.l10n.menuManagementTitle,
+                    style: Theme.of(context).textTheme.headlineLarge,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    context.l10n.menuManagementSubtitle,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: PosColors.textSecondary,
+                      fontSize: 13,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      context.l10n.menuManagementSubtitle,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: PosColors.textSecondary,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Wrap(
+                  ),
+                ],
+              );
+              final actions = Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                alignment: WrapAlignment.end,
+                alignment: constraints.maxWidth < 720
+                    ? WrapAlignment.start
+                    : WrapAlignment.end,
                 children: [
                   OutlinedButton.icon(
                     key: const Key('admin_menu_export_excel_action'),
@@ -329,8 +327,23 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     label: Text(context.l10n.menuAddMenu),
                   ),
                 ],
-              ),
-            ],
+              );
+              if (constraints.maxWidth < 720 ||
+                  MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [titleBlock, const SizedBox(height: 12), actions],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: titleBlock),
+                  const SizedBox(width: 12),
+                  Flexible(child: actions),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 14),
           _MenuImportDropZone(
@@ -2023,167 +2036,193 @@ class _ItemsPanel extends StatelessWidget {
                       horizontal: 12,
                       vertical: 10,
                     ),
-                    child: Row(
-                      children: [
-                        _MenuItemThumbnail(imageUrl: imageUrl),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppFonts.system(
-                                  color: AppColors.textPrimary,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '₫${numberFormat.format(priceValue)}',
-                                style: AppFonts.system(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              if (isCombo) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  comboComponents
-                                      .map((component) {
-                                        final componentItem =
-                                            component['component'];
-                                        final componentName =
-                                            componentItem is Map
-                                            ? componentItem['name']
-                                                      ?.toString() ??
-                                                  '-'
-                                            : '-';
-                                        final quantity =
-                                            component['quantity']?.toString() ??
-                                            '1';
-                                        return '$componentName ×$quantity';
-                                      })
-                                      .join(' · '),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppFonts.system(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                if ((item['combo_drink_choice_count'] as num?)
-                                        ?.toInt() !=
-                                    0) ...[
-                                  const SizedBox(height: 3),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final itemDetails = Row(
+                          children: [
+                            _MenuItemThumbnail(imageUrl: imageUrl),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
                                   Text(
-                                    '${l10n.menuComboDrinkChoiceSlot}: ${item['combo_drink_choice_count']}',
+                                    name,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: AppFonts.system(
-                                      color: AppColors.textSecondary,
-                                      fontSize: 11,
+                                      color: AppColors.textPrimary,
+                                      fontSize: 15,
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '₫${numberFormat.format(priceValue)}',
+                                    style: AppFonts.system(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  if (isCombo) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      comboComponents
+                                          .map((component) {
+                                            final componentItem =
+                                                component['component'];
+                                            final componentName =
+                                                componentItem is Map
+                                                ? componentItem['name']
+                                                          ?.toString() ??
+                                                      '-'
+                                                : '-';
+                                            final quantity =
+                                                component['quantity']
+                                                    ?.toString() ??
+                                                '1';
+                                            return '$componentName ×$quantity';
+                                          })
+                                          .join(' · '),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppFonts.system(
+                                        color: AppColors.textSecondary,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                    if ((item['combo_drink_choice_count']
+                                                as num?)
+                                            ?.toInt() !=
+                                        0) ...[
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        '${l10n.menuComboDrinkChoiceSlot}: ${item['combo_drink_choice_count']}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: AppFonts.system(
+                                          color: AppColors.textSecondary,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ],
-                              ],
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        if (isCombo) ...[
-                          ToastStatusBadge(
-                            label: l10n.menuComboBadge,
-                            color: PosColors.accent,
-                            compact: true,
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        ToastStatusBadge(
-                          label: isAvailable
-                              ? l10n.menuAvailable
-                              : l10n.menuSoldOut,
-                          color: isAvailable
-                              ? PosColors.success
-                              : PosColors.textSecondary,
-                          compact: true,
-                        ),
-                        const SizedBox(width: 8),
-                        Tooltip(
-                          message: 'Show on QR menu',
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text(
-                                'QR',
-                                style: TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                ),
                               ),
-                              Switch(
-                                key: Key('admin_menu_qr_public_$itemId'),
-                                value: isVisiblePublic,
-                                activeThumbColor: AppColors.amber500,
-                                onChanged: itemId.isEmpty
-                                    ? null
-                                    : (value) async {
-                                        final success =
-                                            await onTogglePublicVisibility(
-                                              itemId,
-                                              value,
+                            ),
+                          ],
+                        );
+                        final itemActions = Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            if (isCombo)
+                              ToastStatusBadge(
+                                label: l10n.menuComboBadge,
+                                color: PosColors.accent,
+                                compact: true,
+                              ),
+                            ToastStatusBadge(
+                              label: isAvailable
+                                  ? l10n.menuAvailable
+                                  : l10n.menuSoldOut,
+                              color: isAvailable
+                                  ? PosColors.success
+                                  : PosColors.textSecondary,
+                              compact: true,
+                            ),
+                            Tooltip(
+                              message: 'Show on QR menu',
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text(
+                                    'QR',
+                                    style: TextStyle(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  Switch(
+                                    key: Key('admin_menu_qr_public_$itemId'),
+                                    value: isVisiblePublic,
+                                    activeThumbColor: AppColors.amber500,
+                                    onChanged: itemId.isEmpty
+                                        ? null
+                                        : (value) async {
+                                            final success =
+                                                await onTogglePublicVisibility(
+                                                  itemId,
+                                                  value,
+                                                );
+                                            if (!context.mounted || !success) {
+                                              return;
+                                            }
+                                            showSuccessToast(
+                                              context,
+                                              value
+                                                  ? '$name visible on QR menu'
+                                                  : '$name hidden from QR menu',
                                             );
-                                        if (!context.mounted || !success) {
-                                          return;
-                                        }
-                                        showSuccessToast(
-                                          context,
-                                          value
-                                              ? '$name visible on QR menu'
-                                              : '$name hidden from QR menu',
-                                        );
-                                      },
+                                          },
+                                  ),
+                                ],
                               ),
+                            ),
+                            Switch(
+                              value: isAvailable,
+                              activeThumbColor: AppColors.amber500,
+                              onChanged: itemId.isEmpty
+                                  ? null
+                                  : (value) async {
+                                      final success =
+                                          await onToggleAvailability(
+                                            itemId,
+                                            value,
+                                          );
+                                      if (!context.mounted || !success) return;
+                                      showSuccessToast(
+                                        context,
+                                        value
+                                            ? l10n.menuMarkedAvailable(name)
+                                            : l10n.menuMarkedSoldOut(name),
+                                      );
+                                    },
+                            ),
+                            IconButton(
+                              key: Key('admin_menu_edit_item_$itemId'),
+                              onPressed: itemId.isEmpty
+                                  ? null
+                                  : () => onEditItem(item),
+                              icon: const Icon(
+                                Icons.edit_outlined,
+                                color: AppColors.textSecondary,
+                              ),
+                              tooltip: l10n.menuEditMenu,
+                            ),
+                          ],
+                        );
+                        if (constraints.maxWidth < 760) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              itemDetails,
+                              const SizedBox(height: 10),
+                              itemActions,
                             ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Switch(
-                          value: isAvailable,
-                          activeThumbColor: AppColors.amber500,
-                          onChanged: itemId.isEmpty
-                              ? null
-                              : (value) async {
-                                  final success = await onToggleAvailability(
-                                    itemId,
-                                    value,
-                                  );
-                                  if (!context.mounted || !success) return;
-                                  showSuccessToast(
-                                    context,
-                                    value
-                                        ? l10n.menuMarkedAvailable(name)
-                                        : l10n.menuMarkedSoldOut(name),
-                                  );
-                                },
-                        ),
-                        IconButton(
-                          key: Key('admin_menu_edit_item_$itemId'),
-                          onPressed: itemId.isEmpty
-                              ? null
-                              : () => onEditItem(item),
-                          icon: const Icon(
-                            Icons.edit_outlined,
-                            color: AppColors.textSecondary,
-                          ),
-                          tooltip: l10n.menuEditMenu,
-                        ),
-                      ],
+                          );
+                        }
+                        return Row(
+                          children: [
+                            Expanded(child: itemDetails),
+                            const SizedBox(width: 12),
+                            itemActions,
+                          ],
+                        );
+                      },
                     ),
                   );
                 },

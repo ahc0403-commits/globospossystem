@@ -629,6 +629,7 @@ class _TableOrderPreviewChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final visibleLines = preview.lines.take(2).toList();
     final hiddenCount = preview.lines.length - visibleLines.length;
+    final languageCode = Localizations.localeOf(context).languageCode;
 
     return Container(
       width: double.infinity,
@@ -658,7 +659,7 @@ class _TableOrderPreviewChip extends StatelessWidget {
           ),
           for (final line in visibleLines)
             Text(
-              '${line.label} x${line.quantity}',
+              '${line.localizedName(languageCode)} x${line.quantity}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppFonts.system(

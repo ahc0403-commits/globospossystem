@@ -132,7 +132,7 @@ void main() {
   );
 
   test(
-    'split-shift meal and parking allowances are added once per day',
+    'split shifts exclude the break and add allowances once per day',
     () async {
       final attendance =
           _AttendanceServiceFake([
@@ -148,7 +148,21 @@ void main() {
                 name: 'Mai',
                 role: 'part_timer',
                 type: 'clock_out',
+                loggedAt: '2026-07-27T04:00:00Z',
+              ),
+              _log(
+                employeeId: 'part-timer',
+                name: 'Mai',
+                role: 'part_timer',
+                type: 'clock_in',
                 loggedAt: '2026-07-27T06:00:00Z',
+              ),
+              _log(
+                employeeId: 'part-timer',
+                name: 'Mai',
+                role: 'part_timer',
+                type: 'clock_out',
+                loggedAt: '2026-07-27T08:00:00Z',
               ),
             ])
             ..allowances = [
@@ -167,6 +181,8 @@ void main() {
             periodEnd: DateTime(2026, 7, 27),
           )).single;
 
+      expect(payroll.dailyRecords, hasLength(2));
+      expect(payroll.totalHours, 4);
       expect(payroll.grossAmount, 120000);
       expect(payroll.totalMealAllowance, 25000);
       expect(payroll.totalParkingAllowance, 5000);
@@ -258,43 +274,42 @@ void main() {
     },
   );
 
-  test(
-    'historical duplicate cycles cannot create two paid shifts in one day',
-    () {
-      final pairs = PayrollService().pairLogs([
-        _log(
-          employeeId: 'part-timer',
-          name: 'Mai',
-          role: 'part_timer',
-          type: 'clock_in',
-          loggedAt: '2026-07-27T01:00:00Z',
-        ),
-        _log(
-          employeeId: 'part-timer',
-          name: 'Mai',
-          role: 'part_timer',
-          type: 'clock_out',
-          loggedAt: '2026-07-27T03:00:00Z',
-        ),
-        _log(
-          employeeId: 'part-timer',
-          name: 'Mai',
-          role: 'part_timer',
-          type: 'clock_in',
-          loggedAt: '2026-07-27T04:00:00Z',
-        ),
-        _log(
-          employeeId: 'part-timer',
-          name: 'Mai',
-          role: 'part_timer',
-          type: 'clock_out',
-          loggedAt: '2026-07-27T06:00:00Z',
-        ),
-      ]);
+  test('alternating cycles create separate paid split shifts in one day', () {
+    final pairs = PayrollService().pairLogs([
+      _log(
+        employeeId: 'part-timer',
+        name: 'Mai',
+        role: 'part_timer',
+        type: 'clock_in',
+        loggedAt: '2026-07-27T01:00:00Z',
+      ),
+      _log(
+        employeeId: 'part-timer',
+        name: 'Mai',
+        role: 'part_timer',
+        type: 'clock_out',
+        loggedAt: '2026-07-27T03:00:00Z',
+      ),
+      _log(
+        employeeId: 'part-timer',
+        name: 'Mai',
+        role: 'part_timer',
+        type: 'clock_in',
+        loggedAt: '2026-07-27T04:00:00Z',
+      ),
+      _log(
+        employeeId: 'part-timer',
+        name: 'Mai',
+        role: 'part_timer',
+        type: 'clock_out',
+        loggedAt: '2026-07-27T06:00:00Z',
+      ),
+    ]);
 
-      expect(pairs, hasLength(1));
-      expect(pairs.single.$1, DateTime(2026, 7, 27, 8));
-      expect(pairs.single.$2, DateTime(2026, 7, 27, 13));
-    },
-  );
+    expect(pairs, hasLength(2));
+    expect(pairs.first.$1, DateTime(2026, 7, 27, 8));
+    expect(pairs.first.$2, DateTime(2026, 7, 27, 10));
+    expect(pairs.last.$1, DateTime(2026, 7, 27, 11));
+    expect(pairs.last.$2, DateTime(2026, 7, 27, 13));
+  });
 }

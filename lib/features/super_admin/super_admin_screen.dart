@@ -20,6 +20,7 @@ import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../auth/auth_provider.dart';
 import '../auth/auth_state.dart';
+import '../emergency_fulfillment/emergency_control_panel.dart';
 import '../qc/qc_provider.dart';
 import 'super_admin_provider.dart';
 
@@ -291,6 +292,7 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
         onGoToAdmin: (storeId) => context.go('/admin/$storeId'),
       ),
       _AllReportsTab(state: state, notifier: notifier),
+      const EmergencyControlPanel(),
       const _QcOverviewTab(),
       const _QcGlobalTemplatesTab(),
       _SystemSettingsTab(authState: authState),
@@ -316,6 +318,13 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
             urgency: ToastSidebarUrgency.backOffice,
             helperLabel: l10n.superAdminReportsHelper,
             itemKey: const Key('super_admin_nav_reports'),
+          ),
+          ToastSidebarItem(
+            icon: Icons.crisis_alert_rounded,
+            label: _superAdminEmergencyLabel(context),
+            urgency: ToastSidebarUrgency.exception,
+            helperLabel: _superAdminEmergencyHelper(context),
+            itemKey: const Key('super_admin_nav_emergency'),
           ),
         ],
       ),
@@ -353,6 +362,20 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
     ];
   }
 }
+
+String _superAdminEmergencyLabel(BuildContext context) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => 'Vận hành khẩn cấp',
+      'en' => 'Emergency operation',
+      _ => '비상 디지털 운영',
+    };
+
+String _superAdminEmergencyHelper(BuildContext context) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => 'Bật màn hình dự phòng theo cửa hàng',
+      'en' => 'Enable store fallback screens',
+      _ => '매장별 비상 화면 개방',
+    };
 
 String _superAdminUrgencyLabel(
   BuildContext context,

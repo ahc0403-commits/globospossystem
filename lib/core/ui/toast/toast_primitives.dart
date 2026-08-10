@@ -995,23 +995,47 @@ class ToastDenseDataTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface1,
-        borderRadius: BorderRadius.circular(compact ? 12 : 16),
-      ),
-      child: Column(
-        children: [
-          _header(),
-          ...rows.asMap().entries.map((entry) {
-            final i = entry.key;
-            final row = entry.value;
-            final bg = i.isEven ? AppColors.surface1 : AppColors.surface0;
-            return _row(row, bg);
-          }),
-          if (totalsRow != null) _footer(totalsRow!),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final minimumWidth = columns.fold<double>(
+          0,
+          (width, column) => width + math.max(112, column.flex * 72),
+        );
+        final availableWidth = constraints.hasBoundedWidth
+            ? constraints.maxWidth
+            : minimumWidth;
+        final tableWidth = math.max(availableWidth, minimumWidth);
+        final table = SizedBox(
+          width: tableWidth,
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.surface1,
+              borderRadius: BorderRadius.circular(compact ? 12 : 16),
+            ),
+            child: Column(
+              children: [
+                _header(),
+                ...rows.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final row = entry.value;
+                  final bg = i.isEven ? AppColors.surface1 : AppColors.surface0;
+                  return _row(row, bg);
+                }),
+                if (totalsRow != null) _footer(totalsRow!),
+              ],
+            ),
+          ),
+        );
+
+        if (!constraints.hasBoundedWidth || tableWidth <= availableWidth) {
+          return table;
+        }
+        return SingleChildScrollView(
+          key: const Key('toast_dense_table_horizontal_scroll'),
+          scrollDirection: Axis.horizontal,
+          child: table,
+        );
+      },
     );
   }
 

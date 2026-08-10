@@ -260,6 +260,7 @@ select
     when coalesce(m.role::text, '') not in (
       'super_admin', 'brand_admin', 'store_admin', 'admin',
       'waiter', 'kitchen', 'cashier', 'print_station',
+      'emergency_station',
       'photo_objet_master', 'photo_objet_store_admin',
       'photo_objet_store_operator'
     ) then 'UNKNOWN_ROLE'

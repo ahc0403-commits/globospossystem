@@ -78,7 +78,11 @@ void main() {
       'bt_pos1',
       'bt_tab1',
       'bt_kit1',
+      'bt_print',
+      'bt_customer',
     ]);
+    expect(bunsik[bunsik.length - 2].accountType, 'device_print_station');
+    expect(bunsik[bunsik.length - 2].role, 'print_station');
   });
 
   test('setup and Photo inventory consume additive RPC contracts', () {

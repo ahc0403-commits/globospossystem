@@ -7,7 +7,7 @@ void main() {
 
   setUpAll(() {
     migration = File(
-      'supabase/migrations/20260728060000_employee_attendance_daily_guard.sql',
+      'supabase/migrations/20260810130000_split_shift_attendance.sql',
     ).readAsStringSync();
   });
 
@@ -19,33 +19,33 @@ void main() {
     );
   });
 
-  test('uses Vietnam date for the one-clock-in rule', () {
-    expect(migration, contains("AT TIME ZONE 'Asia/Ho_Chi_Minh'"));
-    expect(migration, contains('v_has_clock_in_today'));
-    expect(migration, contains('::date ='));
+  test('removes the one-clock-in-per-day guard', () {
+    expect(migration, isNot(contains('v_has_clock_in_today')));
+    expect(migration, isNot(contains('ATTENDANCE_ALREADY_CLOCKED_IN_TODAY')));
   });
 
-  test('blocks repeated events but permits an overnight checkout', () {
+  test('blocks repeated events but permits split and overnight shifts', () {
     expect(
       migration,
-      contains("RAISE EXCEPTION 'ATTENDANCE_ALREADY_CLOCKED_IN_TODAY'"),
+      contains("RAISE EXCEPTION 'ATTENDANCE_ALREADY_CLOCKED_IN'"),
     );
     expect(
       migration,
-      contains("RAISE EXCEPTION 'ATTENDANCE_ALREADY_CLOCKED_OUT_TODAY'"),
+      contains("RAISE EXCEPTION 'ATTENDANCE_ALREADY_CLOCKED_OUT'"),
     );
     expect(
       migration,
       contains("RAISE EXCEPTION 'ATTENDANCE_CLOCK_IN_REQUIRED'"),
     );
 
-    // The latest event controls check-out, so yesterday's open shift can
-    // close after midnight; the Vietnam-date lookup blocks a second check-in.
+    // Only the latest event controls the open shift. A clock-out can therefore
+    // be followed by another same-day clock-in, while duplicate taps remain
+    // blocked by the employee row lock and alternating-event checks.
     expect(
       migration,
       contains(
         "IF p_type = 'clock_in' THEN\n"
-        "    IF v_last_type = 'clock_in' OR v_has_clock_in_today THEN",
+        "    IF v_last_type = 'clock_in' THEN",
       ),
     );
     expect(migration, contains("IF v_last_type = 'clock_out' THEN"));

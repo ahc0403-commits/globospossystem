@@ -91,6 +91,15 @@ const _coverage = <_OperationalCoverage>[
     markers: ['red_invoice_intake_edit_dialog'],
   ),
   _OperationalCoverage(
+    source: 'lib/features/print_station/print_station_screen.dart',
+    directCalls: 2,
+    test: 'test/remaining_route_operational_state_test.dart',
+    markers: [
+      'print_station_destination_dialog',
+      'print_station_destination_delete_dialog',
+    ],
+  ),
+  _OperationalCoverage(
     source: 'lib/features/qr_order/qr_order_screen.dart',
     directCalls: 2,
     test: 'test/qr_order_operational_ui_test.dart',
@@ -269,6 +278,12 @@ const _coverage = <_OperationalCoverage>[
     test: 'test/settings_admin_ui_contract_test.dart',
     markers: ['promotion_settings_dialog'],
   ),
+  _OperationalCoverage(
+    source: 'lib/features/emergency_fulfillment/emergency_control_panel.dart',
+    directCalls: 1,
+    test: 'test/emergency_fulfillment_responsive_test.dart',
+    markers: ['emergency_mode_confirm'],
+  ),
 ];
 
 String _withoutLineComments(String source) => source
@@ -281,7 +296,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 99 dialog and sheet entrypoints map to operational tests', () {
+  test('all 102 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -293,10 +308,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 98);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 101);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      99,
+      102,
     );
 
     final settings = File(

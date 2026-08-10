@@ -152,20 +152,20 @@ class CustomerPaymentContent extends StatelessWidget {
           const qrPanel = _CustomerQrPanel();
 
           return Padding(
-            padding: EdgeInsets.all(landscape ? 24 : 16),
+            padding: EdgeInsets.all(landscape ? 18 : 12),
             child: landscape
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Expanded(flex: 3, child: orderPanel),
-                      const SizedBox(width: 20),
+                      const SizedBox(width: 14),
                       const Expanded(flex: 2, child: qrPanel),
                     ],
                   )
                 : Column(
                     children: [
                       Expanded(flex: 3, child: orderPanel),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       const Expanded(flex: 2, child: qrPanel),
                     ],
                   ),
@@ -187,10 +187,10 @@ class _CustomerOrderPanel extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: PosColors.surface,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: PosColors.border),
       ),
-      padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -214,43 +214,52 @@ class _CustomerOrderPanel extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           const Divider(height: 1),
           Expanded(
             child: ListView.separated(
-              padding: const EdgeInsets.symmetric(vertical: 12),
+              padding: const EdgeInsets.symmetric(vertical: 6),
               itemCount: snapshot.items.length,
               separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final item = snapshot.items[index];
                 return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  key: ValueKey('customer_display_item_$index'),
+                  padding: const EdgeInsets.symmetric(vertical: 7),
                   child: Row(
                     children: [
                       Expanded(
                         child: Text(
                           item.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(
+                                fontSize: 11.2,
                                 fontWeight: FontWeight.w700,
                                 color: PosColors.textPrimary,
+                                height: 1.15,
                               ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       Text(
                         '× ${item.quantity}',
                         style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(color: PosColors.textSecondary),
+                            ?.copyWith(
+                              fontSize: 11.2,
+                              color: PosColors.textSecondary,
+                            ),
                       ),
-                      const SizedBox(width: 24),
+                      const SizedBox(width: 10),
                       SizedBox(
-                        width: 130,
+                        width: 94,
                         child: Text(
                           '₫${currency.format(item.amount)}',
                           textAlign: TextAlign.right,
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(
+                                fontSize: 11.2,
                                 fontWeight: FontWeight.w800,
                                 color: PosColors.textPrimary,
                               ),
@@ -264,7 +273,7 @@ class _CustomerOrderPanel extends StatelessWidget {
           ),
           const Divider(height: 1),
           if (snapshot.discount > 0 || snapshot.serviceCharge > 0) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             if (snapshot.serviceCharge > 0)
               _AmountRow(
                 label: context.l10n.cashierServiceCharge,
@@ -276,12 +285,12 @@ class _CustomerOrderPanel extends StatelessWidget {
                 amount: -snapshot.discount,
               ),
           ],
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
               color: PosColors.accent,
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(14),
             ),
             child: Row(
               children: [
@@ -322,7 +331,7 @@ class _AmountRow extends StatelessWidget {
     final currency = NumberFormat('#,###', 'vi_VN');
     final prefix = amount < 0 ? '-₫' : '₫';
     return Padding(
-      padding: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.only(top: 4),
       child: Row(
         children: [
           Expanded(
@@ -330,12 +339,12 @@ class _AmountRow extends StatelessWidget {
               label,
               style: Theme.of(
                 context,
-              ).textTheme.bodyLarge?.copyWith(color: PosColors.textSecondary),
+              ).textTheme.bodyMedium?.copyWith(color: PosColors.textSecondary),
             ),
           ),
           Text(
             '$prefix${currency.format(amount.abs())}',
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: PosColors.textPrimary,
               fontWeight: FontWeight.w700,
             ),
@@ -355,10 +364,10 @@ class _CustomerQrPanel extends StatelessWidget {
       key: const Key('customer_display_fixed_qr'),
       decoration: BoxDecoration(
         color: PosColors.surface,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: PosColors.border),
       ),
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(16),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -370,7 +379,7 @@ class _CustomerQrPanel extends StatelessWidget {
               fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
           Flexible(
             child: AspectRatio(
               aspectRatio: 1,
