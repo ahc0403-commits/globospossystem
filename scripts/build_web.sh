@@ -22,6 +22,11 @@ fi
 flutter build web --release \
   --dart-define=SUPABASE_URL="$SUPABASE_URL" \
   --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+  --dart-define=FIREBASE_API_KEY="${FIREBASE_API_KEY:-}" \
+  --dart-define=FIREBASE_APP_ID="${FIREBASE_APP_ID:-}" \
+  --dart-define=FIREBASE_MESSAGING_SENDER_ID="${FIREBASE_MESSAGING_SENDER_ID:-}" \
+  --dart-define=FIREBASE_PROJECT_ID="${FIREBASE_PROJECT_ID:-}" \
+  --dart-define=FIREBASE_WEB_VAPID_KEY="${FIREBASE_WEB_VAPID_KEY:-}" \
   --no-wasm-dry-run
 
 echo "Web build complete: build/web/"
