@@ -91,16 +91,19 @@ bool FlutterWindow::OnCreate() {
           MIB_IF_ROW2 interface_row{};
           interface_row.InterfaceLuid = adapter->Luid;
           if (GetIfEntry2(&interface_row) != NO_ERROR ||
-              !interface_row.InterfaceAndOperStatusFlags.HardwareInterface ||
               interface_row.InterfaceAndOperStatusFlags.FilterInterface ||
-              interface_row.InterfaceAndOperStatusFlags.NotMediaConnected ||
-              interface_row.InterfaceAndOperStatusFlags.EndPointInterface) {
+              interface_row.InterfaceAndOperStatusFlags.NotMediaConnected) {
             continue;
           }
-          if (adapter->IfType == IF_TYPE_ETHERNET_CSMACD) {
-            wired_connected = true;
-          } else if (adapter->IfType == IF_TYPE_IEEE80211) {
+          if (adapter->IfType == IF_TYPE_IEEE80211) {
             wireless_connected = true;
+          } else if (adapter->IfType != IF_TYPE_SOFTWARE_LOOPBACK &&
+                     adapter->IfType != IF_TYPE_TUNNEL) {
+            // Windows exposes USB, gigabit, dock and bridged Ethernet with
+            // several interface types and does not consistently mark all of
+            // them as HardwareInterface. Any active, non-filtered IPv4 link
+            // that is not Wi-Fi/loopback/tunnel is usable for local printers.
+            wired_connected = true;
           }
         }
 
