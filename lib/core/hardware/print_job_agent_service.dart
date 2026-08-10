@@ -136,10 +136,11 @@ class PrintJobAgentService implements PrintAgentDriver {
       );
     }
 
+    final ticketBytes = await _buildBytes(job);
     final bytes = <int>[
-      ...await _buildBytes(job),
       if (destination.usesOperationalAlert)
         ...ReceiptBuilder.internalBuzzerAlertBytes,
+      ...ticketBytes,
     ];
     final copyCount = _copyCountForTicket(job.ticket.ticket);
     final outcome = await _printToDestination(
@@ -171,22 +172,23 @@ class PrintJobAgentService implements PrintAgentDriver {
       return PrintResult.connectionFailed;
     }
 
-    final bytes = <int>[
-      ...await ReceiptBuilder.buildKitchenTicket(
-        PrintTicket(
-          ticket: 'kitchen',
-          floorLabel: 'THU',
-          tableNumber: 'MAY IN',
-          ticketCode: 'TEST',
-          batchNo: 1,
-          printedReason: 'initial',
-          printedAt: DateTime.now().toIso8601String(),
-          items: const [PrintTicketItem(label: 'Thu duong in', quantity: 1)],
-          orderNotes: 'Thu tram in',
-        ),
+    final ticketBytes = await ReceiptBuilder.buildKitchenTicket(
+      PrintTicket(
+        ticket: 'kitchen',
+        floorLabel: 'THU',
+        tableNumber: 'MAY IN',
+        ticketCode: 'TEST',
+        batchNo: 1,
+        printedReason: 'initial',
+        printedAt: DateTime.now().toIso8601String(),
+        items: const [PrintTicketItem(label: 'Thu duong in', quantity: 1)],
+        orderNotes: 'Thu tram in',
       ),
+    );
+    final bytes = <int>[
       if (destination.usesOperationalAlert)
         ...ReceiptBuilder.internalBuzzerAlertBytes,
+      ...ticketBytes,
     ];
 
     final outcome = await _printToDestination(
