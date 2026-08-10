@@ -94,6 +94,15 @@ class _FixtureQrOrderService extends QrOrderService {
   Future<QrOrderMenu> fetchMenu(String token) async => _routeMenu;
 
   @override
+  Future<QrActiveOrder> fetchActiveOrder(String token) async =>
+      const QrActiveOrder(
+        isActive: false,
+        orderCode: '',
+        status: '',
+        items: [],
+      );
+
+  @override
   Future<QrOrderResult> placeOrder({
     required String token,
     required List<QrOrderLine> items,

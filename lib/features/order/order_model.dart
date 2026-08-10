@@ -35,6 +35,7 @@ class OrderItem {
     required this.quantity,
     required this.status,
     required this.itemType,
+    this.nameKo,
     this.nameVi,
     this.nameEn,
     this.isServiceItem = false,
@@ -51,6 +52,7 @@ class OrderItem {
   final int quantity;
   final String status;
   final String itemType;
+  final String? nameKo;
   final String? nameVi;
   final String? nameEn;
   final bool isServiceItem;
@@ -67,6 +69,7 @@ class OrderItem {
     int? quantity,
     String? status,
     String? itemType,
+    String? nameKo,
     String? nameVi,
     String? nameEn,
     bool? isServiceItem,
@@ -83,6 +86,7 @@ class OrderItem {
       quantity: quantity ?? this.quantity,
       status: status ?? this.status,
       itemType: itemType ?? this.itemType,
+      nameKo: nameKo ?? this.nameKo,
       nameVi: nameVi ?? this.nameVi,
       nameEn: nameEn ?? this.nameEn,
       isServiceItem: isServiceItem ?? this.isServiceItem,
@@ -128,6 +132,7 @@ class OrderItem {
       },
       status: json['status']?.toString() ?? 'pending',
       itemType: json['item_type']?.toString() ?? 'menu_item',
+      nameKo: menuItemName,
       nameVi: menuItemNameVi,
       nameEn: menuItemNameEn,
       isServiceItem: switch (json['is_service_item']) {
@@ -153,6 +158,19 @@ class OrderItem {
                 .toList(growable: false)
           : const [],
     );
+  }
+
+  String localizedName(String languageCode) {
+    final candidates = switch (languageCode) {
+      'vi' => [nameVi, nameKo, label, nameEn],
+      'en' => [nameEn, nameKo, label, nameVi],
+      _ => [nameKo, label, nameVi, nameEn],
+    };
+    for (final candidate in candidates) {
+      final value = candidate?.trim() ?? '';
+      if (value.isNotEmpty) return value;
+    }
+    return '-';
   }
 }
 

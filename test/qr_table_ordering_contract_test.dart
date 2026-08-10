@@ -5,6 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 String readRepoFile(String path) => File(path).readAsStringSync();
 
 void main() {
+  const qrActiveOrderMigration =
+      'supabase/migrations/20260810000000_qr_active_order_summary.sql';
+  const qrActiveOrderVerification =
+      'scripts/verify_qr_active_order_summary.sql';
+  const qrActiveOrderRollback = 'scripts/rollback_qr_active_order_summary.sql';
   const qrPrintDeltaMigration =
       'supabase/migrations/20260808140000_qr_additional_order_print_delta.sql';
   const qrPrintDeltaVerification =
@@ -125,6 +130,48 @@ void main() {
     expect(migration, contains('RETURN v_existing_batch.result_snapshot'));
     expect(migration, contains("'qr_place_order'"));
     expect(migration, isNot(contains('process_payment(')));
+  });
+
+  test('active QR order summary is scoped exclusively by its token', () {
+    final migration = readRepoFile(qrActiveOrderMigration);
+    final verification = readRepoFile(qrActiveOrderVerification);
+    final rollback = readRepoFile(qrActiveOrderRollback);
+
+    expect(
+      migration,
+      contains('CREATE OR REPLACE FUNCTION public.qr_get_active_order'),
+    );
+    expect(migration, contains('FROM public.table_qr_tokens q'));
+    expect(migration, contains('WHERE q.token = v_token'));
+    expect(migration, contains('AND q.is_active = true'));
+    expect(
+      migration,
+      contains("AND o.status IN ('pending', 'confirmed', 'serving')"),
+    );
+    expect(migration, contains('AND oi.status <> \'cancelled\''));
+    expect(migration, contains("AND oi.item_type = 'menu_item'"));
+    expect(migration, contains('COALESCE(oi.is_service_item, false) = false'));
+    expect(
+      migration,
+      contains(
+        'REVOKE ALL ON FUNCTION public.qr_get_active_order(text) FROM PUBLIC',
+      ),
+    );
+    expect(
+      migration,
+      contains('GRANT EXECUTE ON FUNCTION public.qr_get_active_order(text)'),
+    );
+    expect(migration, isNot(contains('p_table_id')));
+    expect(migration, isNot(contains('p_order_id')));
+    expect(verification, contains("'public.qr_get_active_order(text)'"));
+    expect(verification, contains('WHERE q.token = v_token'));
+    expect(verification, contains("'anon'"));
+    expect(verification, contains("'authenticated'"));
+    expect(verification, contains("'service_role'"));
+    expect(
+      rollback,
+      contains('DROP FUNCTION IF EXISTS public.qr_get_active_order(text)'),
+    );
   });
 
   test('qr additions print only immutable rows inserted by that call', () {

@@ -31,6 +31,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
   final _uuid = const Uuid();
   final _currency = NumberFormat('#,###', 'vi_VN');
   QrOrderMenu? _menu;
+  QrActiveOrder? _activeOrder;
   QrOrderResult? _result;
   String? _selectedCategoryId;
   QrOrderFailurePresentation? _failure;
@@ -120,11 +121,17 @@ class _QrOrderScreenState extends State<QrOrderScreen>
       });
     }
     try {
-      final menu = await _service.fetchMenu(widget.token);
+      final responses = await Future.wait<Object>([
+        _service.fetchMenu(widget.token),
+        _service.fetchActiveOrder(widget.token),
+      ]);
+      final menu = responses[0] as QrOrderMenu;
+      final activeOrder = responses[1] as QrActiveOrder;
       if (!mounted) return;
       unawaited(_subscribeMenuEvents(menu.storeId));
       setState(() {
         _menu = menu;
+        _activeOrder = activeOrder;
         final categoryStillExists = menu.categories.any(
           (category) => category.id == _selectedCategoryId,
         );
@@ -329,6 +336,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
       _failure = null;
       _clientOrderId = null;
     });
+    unawaited(_loadMenu(showLoading: false));
   }
 
   @override
@@ -422,6 +430,15 @@ class _QrOrderScreenState extends State<QrOrderScreen>
                 key: const Key('qr_menu_scroll'),
                 slivers: [
                   SliverToBoxAdapter(child: _buildHeader(menu)),
+                  if (_activeOrder?.isActive == true &&
+                      _activeOrder!.items.isNotEmpty)
+                    SliverToBoxAdapter(
+                      child: _QrActiveOrderCard(
+                        order: _activeOrder!,
+                        languageCode: _languageCode,
+                        copy: _copy,
+                      ),
+                    ),
                   if (_failure != null)
                     SliverToBoxAdapter(
                       child: Padding(
@@ -430,6 +447,25 @@ class _QrOrderScreenState extends State<QrOrderScreen>
                           failure: _failure!,
                           retryLabel: _copy.retry,
                           onRetry: _submitOrder,
+                        ),
+                      ),
+                    ),
+                  if (_activeOrder?.isActive == true &&
+                      _activeOrder!.items.isNotEmpty)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+                        child: Semantics(
+                          header: true,
+                          child: Text(
+                            _copy.addItemsTitle,
+                            key: const Key('qr_additional_order_title'),
+                            style: AppFonts.system(
+                              color: ToastColorTokens.textPrimary,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -605,6 +641,161 @@ class _QrOrderScreenState extends State<QrOrderScreen>
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _QrActiveOrderCard extends StatelessWidget {
+  const _QrActiveOrderCard({
+    required this.order,
+    required this.languageCode,
+    required this.copy,
+  });
+
+  final QrActiveOrder order;
+  final String languageCode;
+  final QrOrderCopy copy;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: ToastWorkSurface(
+        key: const Key('qr_active_order_summary'),
+        padding: const EdgeInsets.all(ToastSpacingTokens.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(ToastSpacingTokens.sm),
+                  decoration: BoxDecoration(
+                    color: ToastColorTokens.successMuted,
+                    borderRadius: ToastRadiusTokens.sm,
+                  ),
+                  child: const Icon(
+                    Icons.receipt_long_rounded,
+                    color: ToastColorTokens.success,
+                  ),
+                ),
+                const SizedBox(width: ToastSpacingTokens.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Semantics(
+                        header: true,
+                        child: Text(
+                          copy.activeOrderTitle,
+                          style: AppFonts.system(
+                            color: ToastColorTokens.textPrimary,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: ToastSpacingTokens.xs),
+                      Text(
+                        copy.activeOrderHelper,
+                        style: AppFonts.system(
+                          color: ToastColorTokens.textSecondary,
+                          fontSize: 14,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: ToastSpacingTokens.md),
+            const Divider(height: 1),
+            for (var index = 0; index < order.items.length; index++) ...[
+              Padding(
+                key: Key('qr_active_order_item_$index'),
+                padding: const EdgeInsets.symmetric(
+                  vertical: ToastSpacingTokens.sm,
+                ),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final item = order.items[index];
+                    final name = Text(
+                      item.localizedName(languageCode),
+                      style: AppFonts.system(
+                        color: ToastColorTokens.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        height: 1.35,
+                      ),
+                    );
+                    final details = Wrap(
+                      spacing: ToastSpacingTokens.sm,
+                      runSpacing: ToastSpacingTokens.xs,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          '× ${item.quantity}',
+                          style: AppFonts.system(
+                            color: ToastColorTokens.textPrimary,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: ToastSpacingTokens.sm,
+                            vertical: ToastSpacingTokens.xs,
+                          ),
+                          decoration: BoxDecoration(
+                            color: ToastColorTokens.infoMuted,
+                            borderRadius: ToastRadiusTokens.pill,
+                          ),
+                          child: Text(
+                            copy.itemStatus(item.status),
+                            style: AppFonts.system(
+                              color: ToastColorTokens.info,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                    final stacked =
+                        constraints.maxWidth < 420 ||
+                        MediaQuery.textScalerOf(context).scale(1) > 1.4;
+                    if (stacked) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          name,
+                          const SizedBox(height: ToastSpacingTokens.sm),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: details,
+                          ),
+                        ],
+                      );
+                    }
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(child: name),
+                        const SizedBox(width: ToastSpacingTokens.sm),
+                        details,
+                      ],
+                    );
+                  },
+                ),
+              ),
+              if (index < order.items.length - 1) const Divider(height: 1),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -1571,6 +1762,49 @@ class QrOrderCopy {
     'ko' => '주문 전 테이블 번호를 확인해 주세요.',
     'vi' => 'Vui lòng kiểm tra đúng số bàn trước khi gọi món.',
     _ => 'Please confirm the table number before ordering.',
+  };
+
+  String get activeOrderTitle => switch (code) {
+    'ko' => '현재 주문 내역',
+    'vi' => 'Các món đã gọi',
+    _ => 'Current order',
+  };
+
+  String get activeOrderHelper => switch (code) {
+    'ko' => '이미 접수된 메뉴입니다. 추가로 주문할 메뉴는 아래에서 선택해 주세요.',
+    'vi' =>
+      'Các món này đã được gửi. Chọn thêm món bên dưới nếu bạn muốn gọi thêm.',
+    _ =>
+      'These items have already been sent. Choose more items below to add an order.',
+  };
+
+  String get addItemsTitle => switch (code) {
+    'ko' => '추가 주문 메뉴',
+    'vi' => 'Chọn món gọi thêm',
+    _ => 'Add more items',
+  };
+
+  String itemStatus(String status) => switch (status) {
+    'preparing' => switch (code) {
+      'ko' => '준비 중',
+      'vi' => 'Đang chuẩn bị',
+      _ => 'Preparing',
+    },
+    'ready' => switch (code) {
+      'ko' => '준비 완료',
+      'vi' => 'Đã sẵn sàng',
+      _ => 'Ready',
+    },
+    'served' => switch (code) {
+      'ko' => '제공 완료',
+      'vi' => 'Đã phục vụ',
+      _ => 'Served',
+    },
+    _ => switch (code) {
+      'ko' => '접수 완료',
+      'vi' => 'Đã nhận',
+      _ => 'Received',
+    },
   };
 
   String promotionLabel(String name, double percent) {

@@ -8,9 +8,14 @@ import 'package:globos_pos_system/core/ui/app_theme.dart';
 import 'package:globos_pos_system/features/qr_order/qr_order_screen.dart';
 
 class _FakeQrOrderService extends QrOrderService {
-  _FakeQrOrderService({required this.fetch, required this.place});
+  _FakeQrOrderService({
+    required this.fetch,
+    required this.fetchActive,
+    required this.place,
+  });
 
   final Future<QrOrderMenu> Function(String token) fetch;
+  final Future<QrActiveOrder> Function(String token) fetchActive;
   final Future<QrOrderResult> Function(
     String token,
     List<QrOrderLine> items,
@@ -20,6 +25,9 @@ class _FakeQrOrderService extends QrOrderService {
 
   @override
   Future<QrOrderMenu> fetchMenu(String token) => fetch(token);
+
+  @override
+  Future<QrActiveOrder> fetchActiveOrder(String token) => fetchActive(token);
 
   @override
   Future<QrOrderResult> placeOrder({
@@ -70,8 +78,16 @@ const _result = QrOrderResult(
   ],
 );
 
+const _noActiveOrder = QrActiveOrder(
+  isActive: false,
+  orderCode: '',
+  status: '',
+  items: [],
+);
+
 _FakeQrOrderService _service({
   Future<QrOrderMenu> Function(String token)? fetch,
+  Future<QrActiveOrder> Function(String token)? fetchActive,
   Future<QrOrderResult> Function(
     String token,
     List<QrOrderLine> items,
@@ -81,6 +97,7 @@ _FakeQrOrderService _service({
 }) {
   return _FakeQrOrderService(
     fetch: fetch ?? (_) async => _menu,
+    fetchActive: fetchActive ?? (_) async => _noActiveOrder,
     place: place ?? (_, __, ___) async => _result,
   );
 }
@@ -126,6 +143,47 @@ void _expectNoLayoutFailure(WidgetTester tester) {
 }
 
 void main() {
+  testWidgets(
+    'active table order is visible and follows the selected language',
+    (tester) async {
+      const activeOrder = QrActiveOrder(
+        isActive: true,
+        orderCode: 'abcd1234',
+        status: 'confirmed',
+        items: [
+          QrActiveOrderItem(
+            name: '떡볶이',
+            nameKo: '떡볶이',
+            nameVi: 'Bánh gạo cay',
+            nameEn: 'Spicy rice cakes',
+            quantity: 2,
+            status: 'preparing',
+          ),
+        ],
+      );
+      await _pumpQr(
+        tester,
+        service: _service(fetchActive: (_) async => activeOrder),
+      );
+      expect(find.byKey(const Key('qr_active_order_summary')), findsOneWidget);
+      expect(find.text('Các món đã gọi'), findsOneWidget);
+      expect(find.text('Bánh gạo cay'), findsOneWidget);
+      expect(find.text('Đang chuẩn bị'), findsOneWidget);
+      expect(find.text('Chọn món gọi thêm'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('qr_language_selector')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('한국어').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('현재 주문 내역'), findsOneWidget);
+      expect(find.text('떡볶이'), findsOneWidget);
+      expect(find.text('준비 중'), findsOneWidget);
+      expect(find.text('추가 주문 메뉴'), findsOneWidget);
+      _expectNoLayoutFailure(tester);
+    },
+  );
+
   testWidgets('combo addition requires the exact configured drink count', (
     tester,
   ) async {

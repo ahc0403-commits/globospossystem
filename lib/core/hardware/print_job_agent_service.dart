@@ -141,7 +141,7 @@ class PrintJobAgentService implements PrintAgentDriver {
       if (destination.usesOperationalAlert)
         ...ReceiptBuilder.internalBuzzerAlertBytes,
     ];
-    final copyCount = destination.usesOperationalAlert ? 2 : 1;
+    final copyCount = _copyCountForTicket(job.ticket.ticket);
     final outcome = await _printToDestination(
       destination,
       bytes,
@@ -192,9 +192,13 @@ class PrintJobAgentService implements PrintAgentDriver {
     final outcome = await _printToDestination(
       destination,
       bytes,
-      copyCount: destination.usesOperationalAlert ? 2 : 1,
+      copyCount: destination.purpose == 'floor' ? 2 : 1,
     );
     return outcome.result;
+  }
+
+  int _copyCountForTicket(String ticketType) {
+    return ticketType == 'floor' || ticketType == 'confirmation' ? 2 : 1;
   }
 
   Future<_EndpointPrintOutcome> _printToDestination(
