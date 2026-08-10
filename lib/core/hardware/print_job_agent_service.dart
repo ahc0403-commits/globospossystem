@@ -238,14 +238,7 @@ class PrintJobAgentService implements PrintAgentDriver {
           ]
         : destination.endpoints;
     final candidates =
-        configuredEndpoints
-            .where(
-              (endpoint) =>
-                  endpoint.isActive &&
-                  (capabilities.wiredConnected ||
-                      endpoint.type == PrinterEndpointType.wireless),
-            )
-            .toList()
+        configuredEndpoints.where((endpoint) => endpoint.isActive).toList()
           ..sort((a, b) => a.priority.compareTo(b.priority));
     if (candidates.isEmpty) {
       return const _EndpointPrintOutcome(

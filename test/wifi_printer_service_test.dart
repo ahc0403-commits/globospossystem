@@ -229,7 +229,7 @@ void main() {
     );
 
     test(
-      'wireless-only PC uses wireless endpoint and never tries wired',
+      'wireless-connected PC tries configured endpoints by priority',
       () async {
         final backend = _FakePrintJobBackend(
           jobs: [
@@ -283,14 +283,11 @@ void main() {
 
         expect(results.single.result, PrintResult.success);
         expect(printer.prints, hasLength(1));
-        expect(
-          printer.prints.map((call) => call.ip),
-          everyElement('192.168.1.252'),
-        );
+        expect(printer.prints.single.ip, '192.168.1.120');
       },
     );
 
-    test('wireless-only PC rejects a wired-only printer', () async {
+    test('wireless-connected PC can reach a wired-only printer IP', () async {
       final backend = _FakePrintJobBackend(
         jobs: [
           _job(id: 'job-blocked', destinationId: 'dest', ticketType: 'kitchen'),
@@ -314,7 +311,9 @@ void main() {
           ),
         },
       );
-      final printer = _EndpointAwareFakePrinterService({});
+      final printer = _EndpointAwareFakePrinterService({
+        '192.168.1.120': PrintResult.success,
+      });
       final agent = PrintJobAgentService(
         backend: backend,
         printerService: printer,
@@ -326,9 +325,9 @@ void main() {
 
       final results = await agent.processOnce('store-1');
 
-      expect(results.single.result, PrintResult.noAllowedEndpoint);
-      expect(printer.prints, isEmpty);
-      expect(backend.completed.single.error, 'NO_ALLOWED_PRINTER_ENDPOINT');
+      expect(results.single.result, PrintResult.success);
+      expect(printer.prints.single.ip, '192.168.1.120');
+      expect(backend.completed.single.ok, isTrue);
     });
 
     test(
