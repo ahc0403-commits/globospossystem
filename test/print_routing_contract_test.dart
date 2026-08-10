@@ -28,6 +28,8 @@ void main() {
       'supabase/migrations/20260808090000_additional_order_print_delta.sql';
   const floorConfirmationPricesMigrationPath =
       'supabase/migrations/20260808150000_floor_confirmation_prices.sql';
+  const immediateKitchenTrayMigrationPath =
+      'supabase/migrations/20260810120000_immediate_kitchen_tray_copy.sql';
   const floorConfirmationPricesVerifyPath =
       'scripts/verify_floor_confirmation_prices.sql';
   const additionalOrderDeltaVerifyPath =
@@ -199,6 +201,35 @@ void main() {
         "WHERE order_id = p_order_id\n    AND status IN ('pending', 'failed')",
       ),
     );
+  });
+
+  test('every kitchen job immediately queues one tray copy', () {
+    final sql = readRepoFile(immediateKitchenTrayMigrationPath);
+
+    expect(sql, contains('CREATE TRIGGER print_jobs_enqueue_immediate_tray'));
+    expect(sql, contains('-- production-gate: self-verifying'));
+    expect(sql, contains("IF NEW.copy_type <> 'kitchen' THEN"));
+    expect(sql, contains("destination.purpose = 'tray'"));
+    expect(
+      sql,
+      contains(
+        'v_destination_id := COALESCE(v_destination_id, NEW.destination_id)',
+      ),
+    );
+    expect(sql, contains("'tray',\n    NEW.batch_no"));
+    expect(
+      sql,
+      contains(
+        "jsonb_set(NEW.payload, '{ticket}', to_jsonb('tray'::text), true)",
+      ),
+    );
+    expect(
+      sql,
+      contains('CREATE OR REPLACE FUNCTION public.recalc_order_status'),
+    );
+    expect(sql, isNot(contains("ARRAY['tray']")));
+    expect(sql, contains('IMMEDIATE_KITCHEN_TRAY_TRIGGER_VERIFICATION_FAILED'));
+    expect(sql, contains('LATE_TRAY_DUPLICATE_GUARD_VERIFICATION_FAILED'));
   });
 
   test('additional-order print payload is built only from inserted rows', () {

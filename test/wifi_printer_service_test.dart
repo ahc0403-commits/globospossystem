@@ -502,6 +502,10 @@ void main() {
           expect(results.single.result, PrintResult.success);
           expect(printer.prints, hasLength(1));
           expect(_hasBuzzerAlert(printer.prints[0].bytes), isTrue);
+          expect(
+            printer.prints[0].bytes.take(4),
+            ReceiptBuilder.internalBuzzerAlertBytes,
+          );
         },
       );
     }
@@ -944,11 +948,17 @@ class _UnsupportedPrinterService implements PrinterService {
 bool _hasBuzzerAlert(List<int> bytes) {
   final alert = ReceiptBuilder.internalBuzzerAlertBytes;
   if (bytes.length < alert.length) return false;
-  final offset = bytes.length - alert.length;
-  for (var index = 0; index < alert.length; index++) {
-    if (bytes[offset + index] != alert[index]) return false;
+  for (var offset = 0; offset <= bytes.length - alert.length; offset++) {
+    var matches = true;
+    for (var index = 0; index < alert.length; index++) {
+      if (bytes[offset + index] != alert[index]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) return true;
   }
-  return true;
+  return false;
 }
 
 class _PrintCall {
