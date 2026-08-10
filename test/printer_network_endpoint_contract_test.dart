@@ -60,6 +60,21 @@ void main() {
     expect(cmake, contains('iphlpapi.lib'));
   });
 
+  test('printer sockets retry through explicit local IPv4 interfaces', () {
+    final service = File(
+      'lib/core/hardware/wifi_printer_service.dart',
+    ).readAsStringSync();
+    final settings = File(
+      'lib/features/admin/tabs/settings_tab.dart',
+    ).readAsStringSync();
+
+    expect(service, contains('NetworkInterface.list('));
+    expect(service, contains('sourceAddress: sourceAddress'));
+    expect(service, contains('samePrinterSubnet'));
+    expect(service, contains('sourceAddressTimeout'));
+    expect(settings, contains('ip: _printerIpController.text'));
+  });
+
   test(
     'production migration gate checks printer preconditions and outcome',
     () {

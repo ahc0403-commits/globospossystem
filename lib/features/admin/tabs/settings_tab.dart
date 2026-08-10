@@ -1282,7 +1282,9 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                               );
                               return;
                             }
-                            await printerNotifier.testConnection();
+                            await printerNotifier.testConnection(
+                              ip: _printerIpController.text,
+                            );
                           },
                     child: printerState.isTesting
                         ? const SizedBox(
