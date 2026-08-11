@@ -30,6 +30,7 @@ const {
   runWithTransientRetry,
   runPreflight,
   preparedSlotFromCron,
+  preparedSlotFromEnvironment,
   scheduledExecutionOwner,
   scheduledParallelism,
   selectRowsForInterval,
@@ -433,6 +434,38 @@ test('delayed 22:00 schedule crossing HCM midnight retains the previous target d
   );
 });
 
+test('00:30 recovery and explicit dispatch retain the exact missing business date', () => {
+  const scheduled = {
+    PHOTO_OBJET_SCHEDULED: 'true',
+    PHOTO_OBJET_EXECUTOR_ROLE: 'backup',
+    PHOTO_OBJET_SCHEDULE_CRON: '30 17 * * *',
+    PHOTO_OBJET_RUN_STARTED_AT: '2026-08-10T18:23:00Z',
+  };
+  assert.deepEqual(preparedSlotFromEnvironment(scheduled), {
+    slotDateHcm: '2026-08-10',
+    slotTimeHcm: '22:00',
+  });
+  assert.deepEqual(parseArgs([], scheduled).targetDates, ['2026-08-10']);
+
+  const dispatched = {
+    ...scheduled,
+    PHOTO_OBJET_RUN_STARTED_AT: '2026-08-11T03:00:00Z',
+    PHOTO_OBJET_SLOT_DATE_HCM: '2026-08-08',
+  };
+  const options = parseArgs([], dispatched);
+  const identity = createRunIdentity(options, '2026-08-08', dispatched);
+  assert.equal(identity.slotId, 'scheduled:2026-08-08T22:00+07:00');
+  assert.equal(identity.intervalStartAt, '2026-08-07T17:00:00.000Z');
+  assert.equal(identity.intervalEndAt, '2026-08-08T15:00:00.000Z');
+  assert.throws(
+    () => preparedSlotFromEnvironment({
+      ...dispatched,
+      PHOTO_OBJET_SLOT_DATE_HCM: '2026-02-30',
+    }),
+    /not a valid calendar date/,
+  );
+});
+
 test('22:00 scheduled collection accepts the full HCM day through 21:59:59', () => {
   const identity = createRunIdentity(
     { backfill: false },
@@ -580,12 +613,22 @@ test('collector has independently prepared primary and backup workflows', () => 
     path.join(__dirname, '../../.github/workflows/photo_objet_sales_collect_runner.yml'),
     'utf8',
   );
+  const recovery = fs.readFileSync(
+    path.join(__dirname, '../../.github/workflows/photo_objet_sales_collect_recovery.yml'),
+    'utf8',
+  );
   assert.match(primary, /cron: '40 14 \* \* \*'/);
   assert.match(primary, /executor_role: primary/);
   assert.match(backup, /cron: '50 14 \* \* \*'/);
   assert.match(backup, /executor_role: backup/);
+  assert.match(recovery, /cron: '30 17 \* \* \*'/);
+  assert.match(recovery, /workflow_dispatch:/);
+  assert.match(recovery, /slot_date_hcm:/);
+  assert.match(recovery, /executor_role: backup/);
+  assert.match(recovery, /test "\$\{SOURCE_REF\}" = 'refs\/heads\/main'/);
   assert.match(runner, /timeout-minutes: 50/);
   assert.match(runner, /PHOTO_OBJET_PARALLELISM: '3'/);
+  assert.match(runner, /PHOTO_OBJET_SLOT_DATE_HCM:/);
   assert.doesNotMatch(primary + backup, /concurrency:/);
 });
 
