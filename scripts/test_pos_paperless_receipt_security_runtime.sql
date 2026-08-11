@@ -65,11 +65,11 @@ BEGIN
   END IF;
   SELECT last_presented_at INTO v_presented_at
   FROM public.digital_receipt_links
-  WHERE token_hash = digest(v_token, 'sha256');
+  WHERE token_hash = extensions.digest(v_token, 'sha256');
   PERFORM public.get_public_receipt(v_token);
   SELECT last_presented_at INTO v_presented_again
   FROM public.digital_receipt_links
-  WHERE token_hash = digest(v_token, 'sha256');
+  WHERE token_hash = extensions.digest(v_token, 'sha256');
   IF v_presented_again IS DISTINCT FROM v_presented_at THEN
     RAISE EXCEPTION 'DIGITAL_RECEIPT_PRESENTATION_WRITE_NOT_THROTTLED';
   END IF;
@@ -78,7 +78,7 @@ BEGIN
     digital_receipt_id, token_hash, created_at, expires_at
   ) VALUES (
     v_receipt_id,
-    digest(v_old_token, 'sha256'),
+    extensions.digest(v_old_token, 'sha256'),
     now() - interval '121 days',
     now() - interval '31 days'
   );
@@ -88,7 +88,7 @@ BEGIN
   PERFORM public.cleanup_digital_receipt_security_state(1000);
   IF EXISTS (
     SELECT 1 FROM public.digital_receipt_links
-    WHERE token_hash = digest(v_old_token, 'sha256')
+    WHERE token_hash = extensions.digest(v_old_token, 'sha256')
   ) THEN
     RAISE EXCEPTION 'DIGITAL_RECEIPT_EXPIRED_HASH_NOT_CLEANED';
   END IF;

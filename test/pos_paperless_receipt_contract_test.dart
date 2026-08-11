@@ -20,6 +20,10 @@ void main() {
       final migration = File(
         'supabase/migrations/20260811170000_pos_paperless_receipts.sql',
       ).readAsStringSync();
+      final pgcryptoFix = File(
+        'supabase/migrations/'
+        '20260811180000_fix_public_receipt_pgcrypto_schema.sql',
+      ).readAsStringSync();
 
       expect(migration, contains("DEFAULT 'pos_print'"));
       expect(migration, contains('orders.fulfillment_mode_snapshot'));
@@ -50,6 +54,10 @@ void main() {
       );
       expect(migration, isNot(contains('red_invoice_intakes')));
       expect(migration, isNot(contains('einvoice_jobs')));
+      expect(pgcryptoFix, contains('extensions.gen_random_bytes(24)'));
+      expect(pgcryptoFix, contains("extensions.digest(v_token, 'sha256')"));
+      expect(pgcryptoFix, contains("extensions.digest(p_token, 'sha256')"));
+      expect(pgcryptoFix, contains("pg_notify('pgrst', 'reload schema')"));
     },
   );
 
