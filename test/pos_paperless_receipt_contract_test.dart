@@ -115,6 +115,9 @@ void main() {
       expect(vercel, contains('noindex, nofollow, noarchive'));
       expect(edge, contains('consume_digital_receipt_rate_limit'));
       expect(edge, contains('DIGITAL_RECEIPT_RATE_LIMIT_SECRET'));
+      expect(edge, contains('SUPABASE_SECRET_KEYS'));
+      expect(edge, contains('PUBLIC_RECEIPT_SUPABASE_SECRET_KEY_NAME'));
+      expect(edge, isNot(contains('SUPABASE_SERVICE_ROLE_KEY')));
       expect(edge, isNot(contains('console.log')));
     },
   );

@@ -534,7 +534,8 @@ verify_sepay_alert_secrets() {
     SEPAY_WEBHOOK_SECRET \
     CRON_SECRET \
     FIREBASE_SERVICE_ACCOUNT_JSON \
-    DIGITAL_RECEIPT_RATE_LIMIT_SECRET; do
+    DIGITAL_RECEIPT_RATE_LIMIT_SECRET \
+    PUBLIC_RECEIPT_SUPABASE_SECRET_KEY_NAME; do
     grep -Fxq "$required_secret" <<<"$secret_names" ||
       fail "Missing required Supabase Edge secret: $required_secret"
   done
