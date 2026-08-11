@@ -272,12 +272,20 @@ class _CustomerOrderPanel extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
-          if (snapshot.discount > 0 || snapshot.serviceCharge > 0) ...[
+          if (snapshot.discount > 0 ||
+              snapshot.serviceCharge > 0 ||
+              snapshot.vat > 0) ...[
             const SizedBox(height: 8),
             if (snapshot.serviceCharge > 0)
               _AmountRow(
                 label: context.l10n.cashierServiceCharge,
                 amount: snapshot.serviceCharge,
+              ),
+            if (snapshot.vat > 0)
+              _AmountRow(
+                key: const Key('customer_display_vat'),
+                label: context.l10n.einvoiceVat,
+                amount: snapshot.vat,
               ),
             if (snapshot.discount > 0)
               _AmountRow(
@@ -321,7 +329,7 @@ class _CustomerOrderPanel extends StatelessWidget {
 }
 
 class _AmountRow extends StatelessWidget {
-  const _AmountRow({required this.label, required this.amount});
+  const _AmountRow({super.key, required this.label, required this.amount});
 
   final String label;
   final double amount;

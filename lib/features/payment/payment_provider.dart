@@ -26,6 +26,7 @@ class CashierOrder {
     required this.serviceItemTotal,
     required this.fixedChargeTotal,
     required this.discountTotal,
+    required this.vatTotal,
     required this.totalAmount,
     required this.paidTotal,
     required this.paymentCount,
@@ -49,6 +50,7 @@ class CashierOrder {
   final double serviceItemTotal;
   final double fixedChargeTotal;
   final double discountTotal;
+  final double vatTotal;
   final double totalAmount;
   final double paidTotal;
   final int paymentCount;
@@ -327,7 +329,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       final response = await supabase
           .from('orders')
           .select(
-            'id, table_id, status, order_purpose, order_source, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, paying_amount_inc_tax, combo_components, menu_items(name, name_vi, name_en, vat_category))',
+            'id, table_id, status, order_purpose, order_source, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, paying_amount_inc_tax, combo_components, menu_items(name, name_vi, name_en, vat_category))',
           )
           .eq('restaurant_id', storeId)
           // Payability is an order-status fact derived server-side by
@@ -392,6 +394,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
               serviceItemTotal: quote.serviceItemTotal,
               fixedChargeTotal: quote.fixedChargeTotal,
               discountTotal: quote.discountTotal,
+              vatTotal: quote.vatTotal,
               totalAmount: quote.payableTotal,
               paidTotal: paidTotal,
               paymentCount: paymentCount,
@@ -473,7 +476,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     final response = await supabase
         .from('orders')
         .select(
-          'id, table_id, status, order_purpose, order_source, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, paying_amount_inc_tax, combo_components, menu_items(name, name_vi, name_en, vat_category))',
+          'id, table_id, status, order_purpose, order_source, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, paying_amount_inc_tax, combo_components, menu_items(name, name_vi, name_en, vat_category))',
         )
         .eq('restaurant_id', storeId)
         .eq('status', 'completed')
@@ -533,6 +536,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         serviceItemTotal: quote.serviceItemTotal,
         fixedChargeTotal: quote.fixedChargeTotal,
         discountTotal: quote.discountTotal,
+        vatTotal: quote.vatTotal,
         totalAmount: quote.payableTotal,
         paidTotal: paidTotal,
         paymentCount: paymentCount,
@@ -706,6 +710,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
             'subtotal': order.menuSubtotal,
             'service_charge': order.serviceChargeTotal,
             'discount': order.discountTotal,
+            'vat': order.vatTotal,
             'total': order.remainingDue,
           },
         },
@@ -1439,6 +1444,7 @@ PaymentQuoteLine _paymentQuoteLineFromRow(Map<String, dynamic> row) {
   }
 
   return PaymentQuoteLine(
+    id: row['id']?.toString() ?? '',
     unitPrice: _toDoubleValue(row['unit_price']),
     quantity: _toIntValue(row['quantity']),
     status: row['status']?.toString() ?? 'pending',
@@ -1449,6 +1455,7 @@ PaymentQuoteLine _paymentQuoteLineFromRow(Map<String, dynamic> row) {
       _ => false,
     },
     vatCategory: row['vat_category']?.toString() ?? vatCategory,
+    vatRate: _nullableDoubleValue(row['vat_rate']),
     payingAmountIncTax: _nullableDoubleValue(row['paying_amount_inc_tax']),
   );
 }

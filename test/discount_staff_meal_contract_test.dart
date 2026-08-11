@@ -15,6 +15,9 @@ void main() {
   final meinvoiceGuardMigration = File(
     'supabase/migrations/20260706013000_discount_staff_meal_v1_meinvoice_guard.sql',
   );
+  final cashierDiscountAccessMigration = File(
+    'supabase/migrations/20260811120000_cashier_discount_manager_pin_access.sql',
+  );
   final photoObjetContractMigration = File(
     'supabase/migrations/301_photo_objet_sales_pos_contract_closure.sql',
   );
@@ -89,6 +92,28 @@ void main() {
       ),
     );
   });
+
+  test(
+    'cashier discount access still requires store scope and manager PIN',
+    () {
+      final sql = cashierDiscountAccessMigration.readAsStringSync();
+
+      expect(
+        sql,
+        contains(
+          "'cashier', 'admin', 'store_admin', 'brand_admin', 'super_admin'",
+        ),
+      );
+      expect(sql, contains('public.user_accessible_stores(auth.uid())'));
+      expect(sql, contains('public.verify_discount_manager_pin_or_raise'));
+      expect(sql, contains("'manager_pin'"));
+      expect(sql, isNot(contains('v_actor.extra_permissions')));
+      expect(
+        sql,
+        contains('CASHIER_DISCOUNT_MANAGER_PIN_ACCESS_VERIFICATION_FAILED'),
+      );
+    },
+  );
 
   test('process payment preserves lifecycle and service invariants', () {
     final sql = paymentMigration.readAsStringSync();

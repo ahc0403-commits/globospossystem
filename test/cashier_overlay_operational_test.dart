@@ -69,6 +69,7 @@ final _cashierOrder = CashierOrder(
   serviceItemTotal: 0,
   fixedChargeTotal: 0,
   discountTotal: 0,
+  vatTotal: 10370.37,
   totalAmount: 140000,
   paidTotal: 0,
   paymentCount: 0,
@@ -99,6 +100,7 @@ final _cashierOrderB = CashierOrder(
   serviceItemTotal: 0,
   fixedChargeTotal: 0,
   discountTotal: 0,
+  vatTotal: 5925.93,
   totalAmount: 80000,
   paidTotal: 0,
   paymentCount: 0,
@@ -107,8 +109,8 @@ final _cashierOrderB = CashierOrder(
 );
 
 class _AuthNotifier extends AuthNotifier {
-  _AuthNotifier() : super() {
-    state = _authState;
+  _AuthNotifier([PosAuthState initialState = _authState]) : super() {
+    state = initialState;
   }
 
   @override
@@ -378,6 +380,40 @@ void main() {
     expect(find.text('Special beef pho'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'cashier without extra permissions can open discount but not service item controls',
+    (tester) async {
+      await _pumpCashier(
+        tester,
+        authState: const PosAuthState(
+          role: 'cashier',
+          storeId: _storeId,
+          primaryStoreId: _storeId,
+          accessibleStores: [
+            AccessibleStore(id: _storeId, name: 'GLOBOS Nguyễn Huệ'),
+          ],
+        ),
+      );
+      await _selectOrder(tester);
+
+      expect(find.byKey(const Key('cashier_discount_button')), findsOneWidget);
+      final serviceItemAction = find.byKey(
+        const Key('cashier_service_item_action_cashier-item-pho'),
+      );
+      expect(serviceItemAction, findsOneWidget);
+      expect(
+        tester.widget<OutlinedButton>(serviceItemAction).onPressed,
+        isNull,
+      );
+      await _openAndDismiss(
+        tester,
+        action: find.byKey(const Key('cashier_discount_button')),
+        surface: find.byKey(const Key('cashier_discount_dialog')),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('order number opens the customer QR order ledger', (
     tester,
@@ -1012,6 +1048,7 @@ class _CashierHarness {
 
 Future<_CashierHarness> _pumpCashier(
   WidgetTester tester, {
+  PosAuthState authState = _authState,
   bool includeSecondOrder = false,
   bool completeOrdersOnPayment = false,
   int? tableCount,
@@ -1062,7 +1099,7 @@ Future<_CashierHarness> _pumpCashier(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        authProvider.overrideWith((ref) => _AuthNotifier()),
+        authProvider.overrideWith((ref) => _AuthNotifier(authState)),
         connectivityProvider.overrideWith((ref) => Stream.value(true)),
         paymentProvider.overrideWith((ref) => notifier),
         waiterTableProvider.overrideWith(

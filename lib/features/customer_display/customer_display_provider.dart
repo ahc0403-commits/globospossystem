@@ -36,6 +36,7 @@ class CustomerDisplaySnapshot {
     required this.subtotal,
     required this.serviceCharge,
     required this.discount,
+    required this.vat,
     required this.total,
   });
 
@@ -46,6 +47,7 @@ class CustomerDisplaySnapshot {
   final double subtotal;
   final double serviceCharge;
   final double discount;
+  final double vat;
   final double total;
 
   factory CustomerDisplaySnapshot.fromJson(Map<String, dynamic> json) {
@@ -71,6 +73,7 @@ class CustomerDisplaySnapshot {
       subtotal: _toDouble(json['subtotal']),
       serviceCharge: _toDouble(json['service_charge']),
       discount: _toDouble(json['discount']),
+      vat: _toDouble(json['vat']),
       total: _toDouble(json['total']),
     );
   }

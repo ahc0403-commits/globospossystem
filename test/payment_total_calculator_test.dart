@@ -27,6 +27,7 @@ void main() {
 
     expect(quote.menuSubtotal, 218000);
     expect(quote.serviceChargeTotal, 10900);
+    expect(quote.vatTotal, 18900);
     expect(quote.payableTotal, 228900);
   });
 
@@ -48,6 +49,7 @@ void main() {
 
     expect(quote.menuSubtotal, 108000);
     expect(quote.serviceChargeTotal, 5400);
+    expect(quote.vatTotal, 8400);
     expect(quote.payableTotal, 113400);
   });
 
@@ -69,6 +71,7 @@ void main() {
           quantity: 1,
           status: 'served',
           itemType: 'service_charge',
+          vatRate: 8,
           payingAmountIncTax: 6480,
         ),
       ],
@@ -76,6 +79,7 @@ void main() {
 
     expect(quote.menuSubtotal, 108000);
     expect(quote.serviceChargeTotal, 6480);
+    expect(quote.vatTotal, 8480);
     expect(quote.payableTotal, 114480);
   });
 
@@ -188,5 +192,37 @@ void main() {
     expect(quote.serviceItemTotal, 50000);
     expect(quote.discountTotal, 108000);
     expect(quote.payableTotal, 10800);
+  });
+
+  test('VAT reflects a 20 percent discount across food and alcohol', () {
+    final quote = calculatePaymentQuote(
+      vatPricingMode: vatPricingModeExclusive,
+      serviceChargeEnabled: false,
+      serviceChargeRate: 0,
+      discountTotal: 32600,
+      lines: const [
+        PaymentQuoteLine(
+          id: 'food-line',
+          unitPrice: 100000,
+          quantity: 1,
+          status: 'served',
+          itemType: 'menu_item',
+          vatCategory: 'food',
+        ),
+        PaymentQuoteLine(
+          id: 'alcohol-line',
+          unitPrice: 50000,
+          quantity: 1,
+          status: 'served',
+          itemType: 'menu_item',
+          vatCategory: 'alcohol',
+        ),
+      ],
+    );
+
+    expect(quote.menuSubtotal, 163000);
+    expect(quote.discountTotal, 32600);
+    expect(quote.vatTotal, 10400);
+    expect(quote.payableTotal, 130400);
   });
 }
