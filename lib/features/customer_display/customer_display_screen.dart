@@ -56,7 +56,7 @@ class _CustomerDisplayScreenState extends ConsumerState<CustomerDisplayScreen> {
         backgroundColor: const Color(0xFFF4F6F8),
         body: SafeArea(
           child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 280),
+            duration: const Duration(milliseconds: 120),
             child: snapshot == null
                 ? _CustomerDisplayIdle(
                     key: const Key('customer_display_idle'),

@@ -53,6 +53,38 @@ void main() {
     expect(snapshot.total, 179000);
   });
 
+  test('customer display realtime path uses store_id and direct records', () {
+    final provider = File(
+      'lib/features/customer_display/customer_display_provider.dart',
+    ).readAsStringSync();
+
+    expect(
+      provider,
+      contains("LiveSyncScope.storeFilter(storeId, column: 'store_id')"),
+    );
+    expect(provider, contains('payload.newRecord'));
+    expect(provider, contains('_applyRow(storeId, row)'));
+    expect(
+      provider,
+      isNot(contains('callback: (_) => unawaited(_load(storeId))')),
+    );
+    expect(
+      provider.indexOf('.subscribe((status, [error])'),
+      lessThan(provider.indexOf('await _load(storeId);')),
+    );
+  });
+
+  test('customer display polls within one second only while disconnected', () {
+    expect(
+      CustomerDisplayNotifier.fallbackIntervalForConnection(connected: false),
+      const Duration(seconds: 1),
+    );
+    expect(
+      CustomerDisplayNotifier.fallbackIntervalForConnection(connected: true),
+      const Duration(seconds: 15),
+    );
+  });
+
   test('order item exposes the Vietnamese name for customer display', () {
     final item = OrderItem(
       id: 'item-1',
@@ -116,6 +148,7 @@ void main() {
     expect(paymentProvider, contains('show_customer_payment_display'));
     expect(paymentProvider, contains("'locale_code': 'vi'"));
     expect(paymentProvider, contains("item.localizedName('vi')"));
+    expect(screen, contains('Duration(milliseconds: 120)'));
   });
 
   testWidgets('customer display fixed copy is always Vietnamese', (

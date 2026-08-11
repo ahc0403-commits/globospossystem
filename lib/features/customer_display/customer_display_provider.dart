@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -90,36 +91,47 @@ class CustomerDisplayState {
 class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
   CustomerDisplayNotifier() : super(const CustomerDisplayState());
 
-  static const _fallbackRefreshInterval = Duration(seconds: 15);
+  static const _connectedHealthRefreshInterval = Duration(seconds: 15);
+  static const _disconnectedRefreshInterval = Duration(seconds: 1);
 
   RealtimeChannel? _channel;
   Timer? _pollTimer;
   String? _storeId;
+  Duration? _pollInterval;
+  bool _realtimeConnected = false;
+  int _realtimeRevision = 0;
 
   Future<void> start(String storeId) async {
     if (_storeId == storeId && _channel != null) return;
     _storeId = storeId;
     state = const CustomerDisplayState(isLoading: true);
     await _channel?.unsubscribe();
+    _channel = null;
     _pollTimer?.cancel();
+    _pollTimer = null;
+    _pollInterval = null;
+    _realtimeConnected = false;
+    _realtimeRevision = 0;
 
-    await _load(storeId);
     _channel = supabase
         .channel(LiveSyncScope.storeChannel('customer_display', storeId))
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'customer_payment_displays',
-          filter: LiveSyncScope.storeFilter(storeId),
-          callback: (_) => unawaited(_load(storeId)),
+          filter: LiveSyncScope.storeFilter(storeId, column: 'store_id'),
+          callback: (payload) => _applyRealtimeChange(storeId, payload),
         )
-        .subscribe();
+        .subscribe((status, [error]) {
+          if (!mounted || _storeId != storeId) return;
+          final connected = status == RealtimeSubscribeStatus.subscribed;
+          if (connected == _realtimeConnected) return;
+          _realtimeConnected = connected;
+          _ensurePolling(storeId);
+        });
 
-    _pollTimer = Timer.periodic(_fallbackRefreshInterval, (_) {
-      if (mounted && _storeId == storeId) {
-        unawaited(_load(storeId));
-      }
-    });
+    _ensurePolling(storeId);
+    await _load(storeId);
   }
 
   Future<void> retry() async {
@@ -130,22 +142,18 @@ class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
   }
 
   Future<void> _load(String storeId) async {
+    final revision = _realtimeRevision;
     try {
       final row = await supabase
           .from('customer_payment_displays')
-          .select('status, payload')
+          .select('store_id, status, payload')
           .eq('store_id', storeId)
           .maybeSingle();
-      if (!mounted || _storeId != storeId) return;
+      if (!mounted || _storeId != storeId || revision != _realtimeRevision) {
+        return;
+      }
 
-      final rawPayload = row?['payload'];
-      final isShowing = row?['status']?.toString() == 'showing';
-      final snapshot = isShowing && rawPayload is Map
-          ? CustomerDisplaySnapshot.fromJson(
-              Map<String, dynamic>.from(rawPayload),
-            )
-          : null;
-      state = CustomerDisplayState(snapshot: snapshot);
+      _applyRow(storeId, row);
     } catch (error) {
       if (!mounted || _storeId != storeId) return;
       state = CustomerDisplayState(
@@ -153,6 +161,54 @@ class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
         error: error.toString(),
       );
     }
+  }
+
+  void _applyRealtimeChange(String storeId, PostgresChangePayload payload) {
+    if (!mounted || _storeId != storeId) return;
+    _realtimeRevision += 1;
+    final row = payload.newRecord;
+    if (row.isEmpty) {
+      unawaited(_load(storeId));
+      return;
+    }
+    _applyRow(storeId, row);
+  }
+
+  void _applyRow(String storeId, Map<String, dynamic>? row) {
+    if (!mounted || _storeId != storeId) return;
+    final rowStoreId = row?['store_id']?.toString();
+    if (rowStoreId != null && rowStoreId != storeId) return;
+
+    final rawPayload = row?['payload'];
+    final isShowing = row?['status']?.toString() == 'showing';
+    final snapshot = isShowing && rawPayload is Map
+        ? CustomerDisplaySnapshot.fromJson(
+            Map<String, dynamic>.from(rawPayload),
+          )
+        : null;
+    state = CustomerDisplayState(snapshot: snapshot);
+  }
+
+  void _ensurePolling(String storeId) {
+    final interval = _realtimeConnected
+        ? _connectedHealthRefreshInterval
+        : _disconnectedRefreshInterval;
+    if (_pollTimer != null && _pollInterval == interval) return;
+
+    _pollTimer?.cancel();
+    _pollInterval = interval;
+    _pollTimer = Timer.periodic(interval, (_) {
+      if (mounted && _storeId == storeId) {
+        unawaited(_load(storeId));
+      }
+    });
+  }
+
+  @visibleForTesting
+  static Duration fallbackIntervalForConnection({required bool connected}) {
+    return connected
+        ? _connectedHealthRefreshInterval
+        : _disconnectedRefreshInterval;
   }
 
   @override
