@@ -35,6 +35,10 @@ class PermissionUtils {
     return extraPermissions.contains(permission);
   }
 
+  static bool canApplyDiscount(String? role, List<String> extraPermissions) =>
+      role == 'cashier' ||
+      hasPermission(role, extraPermissions, 'discount_apply');
+
   static bool canDoQcCheck(String? role, List<String> extraPermissions) =>
       hasPermission(role, extraPermissions, 'qc_check');
 

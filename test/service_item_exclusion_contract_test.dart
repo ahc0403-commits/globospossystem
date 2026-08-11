@@ -126,8 +126,11 @@ void main() {
       expect(provider, contains('final int paymentCount;'));
       expect(
         cashier,
-        contains('final canManageServiceItems = isAdmin || canApplyDiscount'),
+        contains(
+          'final canManageServiceItems = PermissionUtils.hasPermission(',
+        ),
       );
+      expect(cashier, contains("'discount_apply',"));
       expect(cashier, contains('order.paymentCount == 0'));
       expect(cashier, contains('cashier_service_item_badge'));
       expect(cashier, contains('cashier_service_item_action_'));

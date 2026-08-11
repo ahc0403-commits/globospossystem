@@ -924,12 +924,15 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     final isAdmin = PermissionUtils.isAdminLike(role);
     final canCancelOrders = role == 'cashier' || isAdmin;
     final canProcessNonRevenue = role == 'cashier' || isAdmin;
-    final canApplyDiscount = PermissionUtils.hasPermission(
+    final canApplyDiscount = PermissionUtils.canApplyDiscount(
+      role,
+      authState.extraPermissions,
+    );
+    final canManageServiceItems = PermissionUtils.hasPermission(
       role,
       authState.extraPermissions,
       'discount_apply',
     );
-    final canManageServiceItems = isAdmin || canApplyDiscount;
     _ensureLoaded(storeId);
     final cutoffState = storeId == null
         ? const RestaurantCutoffState.unrestricted()

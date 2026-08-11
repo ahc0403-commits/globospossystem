@@ -42,6 +42,7 @@ void main() {
       'subtotal': 180000,
       'service_charge': 9000,
       'discount': 10000,
+      'vat': 13259.26,
       'total': 179000,
     });
 
@@ -50,6 +51,7 @@ void main() {
     expect(snapshot.tableNumber, '12');
     expect(snapshot.items.single.name, 'Phở bò');
     expect(snapshot.items.single.quantity, 2);
+    expect(snapshot.vat, 13259.26);
     expect(snapshot.total, 179000);
   });
 
@@ -148,6 +150,7 @@ void main() {
     expect(paymentProvider, contains('show_customer_payment_display'));
     expect(paymentProvider, contains("'locale_code': 'vi'"));
     expect(paymentProvider, contains("item.localizedName('vi')"));
+    expect(paymentProvider, contains("'vat': order.vatTotal"));
     expect(screen, contains('Duration(milliseconds: 120)'));
   });
 
@@ -221,6 +224,7 @@ void main() {
       'subtotal': 182000,
       'service_charge': 9000,
       'discount': 10000,
+      'vat': 12593,
       'total': 181000,
     });
 
@@ -239,6 +243,9 @@ void main() {
     expect(find.text('Quét mã QR để thanh toán'), findsOneWidget);
     expect(find.text('주문 내역'), findsNothing);
     expect(find.text('₫181.000'), findsOneWidget);
+    expect(find.text('VAT'), findsOneWidget);
+    expect(find.text('₫12.593'), findsOneWidget);
+    expect(find.byKey(const Key('customer_display_vat')), findsOneWidget);
     expect(find.byKey(const Key('customer_display_fixed_qr')), findsOneWidget);
     expect(find.byType(Image), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -263,6 +270,7 @@ void main() {
       'subtotal': 360000,
       'service_charge': 0,
       'discount': 0,
+      'vat': 26667,
       'total': 360000,
     });
 
