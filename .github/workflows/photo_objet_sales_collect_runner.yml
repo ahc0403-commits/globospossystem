@@ -9,6 +9,10 @@ on:
       trigger_cron:
         required: true
         type: string
+      slot_date_hcm:
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -24,6 +28,7 @@ jobs:
       PHOTO_OBJET_SCHEDULED: 'true'
       PHOTO_OBJET_SCHEDULE_CRON: ${{ inputs.trigger_cron }}
       PHOTO_OBJET_TARGET_SLOT_TIME_HCM: '22:00'
+      PHOTO_OBJET_SLOT_DATE_HCM: ${{ inputs.slot_date_hcm }}
       PHOTO_OBJET_EXECUTOR_ROLE: ${{ inputs.executor_role }}
       PHOTO_OBJET_PARALLELISM: '3'
       PHOTO_OBJET_INCLUDE_YESTERDAY: 'false'

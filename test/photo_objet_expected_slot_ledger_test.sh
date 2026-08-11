@@ -967,6 +967,40 @@ psql_db "$RECOVERY_DB" --single-transaction \
 psql_db "$RECOVERY_DB" \
   --file "$ROOT_DIR/scripts/verify_photo_objet_precise_start_report_ready.sql" \
   | grep -q 'Photo Objet precise start/report ready verification passed'
+psql_db "$RECOVERY_DB" \
+  --file "$ROOT_DIR/scripts/preflight_photo_objet_late_slot_recovery.sql" \
+  | grep -q 'Photo Objet late slot recovery preflight passed'
+psql_db "$RECOVERY_DB" --single-transaction \
+  --file "$ROOT_DIR/supabase/migrations/20260811083000_photo_objet_late_slot_recovery.sql" \
+  >/dev/null
+psql_db "$RECOVERY_DB" \
+  --file "$ROOT_DIR/scripts/verify_photo_objet_late_slot_recovery.sql" \
+  | grep -q 'Photo Objet late slot recovery verification passed'
+psql_db "$RECOVERY_DB" \
+  --file "$ROOT_DIR/test/fixtures/photo_objet_late_slot_recovery_assertions.sql" \
+  | grep -q 'PHOTO_OBJET_LATE_SLOT_RECOVERY_ASSERTIONS_PASS'
+
+late_execution_date="$(psql_db "$RECOVERY_DB" -Atqc "
+  SELECT (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - 1
+")"
+psql_db "$RECOVERY_DB" -Atqc "
+  SELECT lease_acquired || '|' || execution_status
+  FROM public.photo_objet_claim_daily_execution(
+    '$late_execution_date', TIME '22:00', 'late-fixture', 'primary'
+  )
+" | grep -qx 'true|running'
+psql_db "$RECOVERY_DB" -Atqc "
+  SELECT public.photo_objet_heartbeat_daily_execution(
+    '$late_execution_date', TIME '22:00', 'late-fixture'
+  ) IS NOT NULL
+" | grep -qx t
+psql_db "$RECOVERY_DB" -c "
+  SELECT public.photo_objet_fail_daily_execution(
+    '$late_execution_date', TIME '22:00', 'late-fixture', 'fixture cleanup'
+  );
+  DELETE FROM public.photo_objet_daily_executions
+  WHERE slot_date_hcm = '$late_execution_date';
+" >/dev/null
 
 v4_date="$(psql_db "$RECOVERY_DB" -Atqc "
   SELECT min(slot.slot_date_hcm)

@@ -27,6 +27,9 @@ total.
 - A sale at 21:59:59 is included; a sale at exactly 22:00:00 is not.
 - A delayed GitHub start retains the intended `slot_date_hcm` and
   `slot_time_hcm`; wall-clock `started_at` is not slot identity.
+- The 22:25 reporting target is an observable SLA, not a data-loss boundary.
+  A delayed runner still collects the exact immutable interval and records the
+  slot as recovered.
 - Excel may contain the entire day, but only rows in the exact interval enter
   the immutable ledger. Previously stored source rows must still be present.
 
@@ -71,10 +74,13 @@ authoritative slot:
 
 The backup cannot take the lease before 22:01 HCM. It remains prepared and
 takes over only after the primary heartbeat expires or the primary records a
-failure. Current-day recovery excludes all historical v3 backlog, no new work
-starts at or after 22:20, and the exact six-store report must become
-`REPORT_READY` before 22:25. The independent final health check runs at 22:30
-HCM after the slot's 25-minute grace. Status is one of
+failure. A third recovery workflow runs at 00:30 HCM for the preceding business
+date and can also be dispatched with an explicit missing slot date. Current-day
+recovery excludes all historical v3 backlog. The exact six-store report targets
+`REPORT_READY` by 22:25, while a later exact-slot success remains admissible and
+recoverable. The independent final health check runs at 22:30 HCM after the
+slot's 25-minute grace and continues to expose late execution as an SLA failure
+until recovery completes. Status is one of
 `expected`, `running`, `collected`, `collected_zero`, `missing`, `failed`, or
 `recovered`. A later exact slot cannot satisfy an earlier one. Manual and
 backfill runs cannot satisfy scheduled history.

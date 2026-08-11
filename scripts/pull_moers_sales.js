@@ -13,12 +13,15 @@ const MAX_AUTOMATIC_RECOVERY_STORE_DAYS = 6;
 const DEFAULT_SCHEDULED_PARALLELISM = 3;
 const PRIMARY_TRIGGER_CRON = '40 14 * * *';
 const BACKUP_TRIGGER_CRON = '50 14 * * *';
+const RECOVERY_TRIGGER_CRON = '30 17 * * *';
 const TARGET_SLOT_TIME_HCM = '22:00';
-const BACKUP_NOT_BEFORE_HCM = '22:01';
-const COLLECTION_HARD_DEADLINE_HCM = '22:20';
 const SOURCE_IDENTITY_VERSION = 2;
 const COLLECTOR_STARTED_AT = new Date();
-const PREPARE_SCHEDULE_CRONS = new Set([PRIMARY_TRIGGER_CRON, BACKUP_TRIGGER_CRON]);
+const PREPARE_SCHEDULE_DATE_OFFSETS = Object.freeze({
+  [PRIMARY_TRIGGER_CRON]: 0,
+  [BACKUP_TRIGGER_CRON]: 0,
+  [RECOVERY_TRIGGER_CRON]: -1,
+});
 const SCHEDULED_INTERVAL_MINUTES = Object.freeze({
   '22:00': 22 * 60,
   '22:20': 22 * 60 + 20,
@@ -300,10 +303,7 @@ function isScheduledInvocation(env = process.env) {
 function getTargetDates(env = process.env, now = COLLECTOR_STARTED_AT) {
   if (env.TARGET_DATE) return [env.TARGET_DATE];
   if (isScheduledInvocation(env)) {
-    return [preparedSlotFromCron(
-      env.PHOTO_OBJET_SCHEDULE_CRON,
-      resolveRunTimestamp(env, now),
-    ).slotDateHcm];
+    return [preparedSlotFromEnvironment(env, now).slotDateHcm];
   }
   const dates = [hcmDateString(0, now)];
   if (envFlagFrom(env, 'PHOTO_OBJET_INCLUDE_YESTERDAY', false)) {
@@ -731,7 +731,8 @@ function scheduledSlotFromCron(cron, runTimestamp) {
 
 function preparedSlotFromCron(cron, runTimestamp, targetSlotTime = TARGET_SLOT_TIME_HCM) {
   const normalizedCron = String(cron || '').trim();
-  if (!PREPARE_SCHEDULE_CRONS.has(normalizedCron)) {
+  const dateOffset = PREPARE_SCHEDULE_DATE_OFFSETS[normalizedCron];
+  if (dateOffset === undefined) {
     throw deterministic(`Unsupported Photo Objet prepare schedule: ${cron}`);
   }
   if (!Object.prototype.hasOwnProperty.call(SCHEDULED_INTERVAL_MINUTES, targetSlotTime)) {
@@ -748,9 +749,21 @@ function preparedSlotFromCron(cron, runTimestamp, targetSlotTime = TARGET_SLOT_T
   occurrence.setUTCHours(utcHour, minute, 0, 0);
   if (occurrence > anchor) occurrence.setUTCDate(occurrence.getUTCDate() - 1);
   return {
-    slotDateHcm: hcmDateString(0, occurrence),
+    slotDateHcm: hcmDateString(dateOffset, occurrence),
     slotTimeHcm: targetSlotTime,
   };
+}
+
+function preparedSlotFromEnvironment(env = process.env, now = COLLECTOR_STARTED_AT) {
+  const slot = preparedSlotFromCron(
+    env.PHOTO_OBJET_SCHEDULE_CRON,
+    resolveRunTimestamp(env, now),
+    env.PHOTO_OBJET_TARGET_SLOT_TIME_HCM || TARGET_SLOT_TIME_HCM,
+  );
+  const explicitDate = String(env.PHOTO_OBJET_SLOT_DATE_HCM || '').trim();
+  if (!explicitDate) return slot;
+  validateDate(explicitDate, 'PHOTO_OBJET_SLOT_DATE_HCM');
+  return { ...slot, slotDateHcm: explicitDate };
 }
 
 function fullDayInterval(targetDate) {
@@ -796,11 +809,7 @@ function createRunIdentity(options, targetDate, env = process.env) {
     };
   }
   if (isScheduledInvocation(env)) {
-    const slot = preparedSlotFromCron(
-      env.PHOTO_OBJET_SCHEDULE_CRON,
-      resolveRunTimestamp(env),
-      env.PHOTO_OBJET_TARGET_SLOT_TIME_HCM || TARGET_SLOT_TIME_HCM,
-    );
+    const slot = preparedSlotFromEnvironment(env);
     if (targetDate !== slot.slotDateHcm) {
       throw deterministic(
         `Scheduled target date ${targetDate} does not match intended HCM slot date ${slot.slotDateHcm}`,
@@ -1749,6 +1758,7 @@ module.exports = {
   createRunIdentity,
   createRecoveryRunIdentity,
   preparedSlotFromCron,
+  preparedSlotFromEnvironment,
   scheduledExecutionOwner,
   completeScheduledExpectation,
   failScheduledExpectation,

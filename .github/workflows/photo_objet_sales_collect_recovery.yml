@@ -1,0 +1,36 @@
+name: Photo Objet Sales Recover Missing Slot
+
+on:
+  schedule:
+    # Recover the preceding 22:00 HCM slot after scheduler or runner outages.
+    - cron: '30 17 * * *'
+  workflow_dispatch:
+    inputs:
+      slot_date_hcm:
+        description: 'Exact missing 22:00 HCM slot date (YYYY-MM-DD)'
+        required: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Restrict manual recovery to main
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          SOURCE_REF: ${{ github.ref }}
+        run: |
+          if [ "${EVENT_NAME}" = 'workflow_dispatch' ]; then
+            test "${SOURCE_REF}" = 'refs/heads/main'
+          fi
+  collect:
+    needs: validate
+    uses: ./.github/workflows/photo_objet_sales_collect_runner.yml
+    with:
+      executor_role: backup
+      trigger_cron: '30 17 * * *'
+      slot_date_hcm: ${{ github.event.inputs.slot_date_hcm || '' }}
+    secrets: inherit

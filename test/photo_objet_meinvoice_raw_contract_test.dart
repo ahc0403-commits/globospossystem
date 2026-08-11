@@ -251,6 +251,9 @@ void main() {
     final collectRunner = readRepoFile(
       '.github/workflows/photo_objet_sales_collect_runner.yml',
     );
+    final collectRecovery = readRepoFile(
+      '.github/workflows/photo_objet_sales_collect_recovery.yml',
+    );
     final slotHealth = readRepoFile(
       '.github/workflows/photo_objet_sales_health.yml',
     );
@@ -277,6 +280,14 @@ void main() {
     expect(collectRunner, isNot(contains('--install-deps')));
     expect(collectRunner, isNot(contains('audit-missing-runs')));
     expect(collectRunner, isNot(contains('backfill')));
+    expect(collectRecovery, contains("cron: '30 17 * * *'"));
+    expect(collectRecovery, contains('workflow_dispatch:'));
+    expect(collectRecovery, contains('slot_date_hcm:'));
+    expect(collectRecovery, contains('executor_role: backup'));
+    expect(
+      collectRecovery,
+      contains("test \"\${SOURCE_REF}\" = 'refs/heads/main'"),
+    );
 
     expect(slotHealth, contains("cron: '30 15 * * *'"));
     expect(RegExp(r"cron: '[^']+'\n").allMatches(slotHealth), hasLength(1));
