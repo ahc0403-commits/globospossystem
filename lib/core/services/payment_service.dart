@@ -159,6 +159,24 @@ class PaymentService {
     return Map<String, dynamic>.from(result as Map);
   }
 
+  Future<Map<String, dynamic>> printFirstReceiptCopy({
+    required String orderId,
+    double? receivedAmount,
+  }) => enqueueReceiptPrintJob(
+    orderId: orderId,
+    receivedAmount: receivedAmount,
+    reprint: false,
+  );
+
+  Future<Map<String, dynamic>> reprintReceipt({
+    required String orderId,
+    double? receivedAmount,
+  }) => enqueueReceiptPrintJob(
+    orderId: orderId,
+    receivedAmount: receivedAmount,
+    reprint: true,
+  );
+
   Future<Map<String, dynamic>> markOrderItemService({
     required String itemId,
     required String storeId,
@@ -217,7 +235,7 @@ class PaymentService {
       final orderQuery = supabase
           .from('orders')
           .select(
-            'id, restaurant_id, table_id, status, created_at, updated_at, tables(table_number), order_items(id, created_at, status, label, unit_price, quantity, is_service_item, service_reason, paying_amount_inc_tax, menu_items(name, name_vi, name_en))',
+            'id, restaurant_id, table_id, status, created_at, updated_at, tables(table_number), order_items(id, created_at, status, label, unit_price, quantity, is_service_item, service_reason, vat_amount, paying_amount_inc_tax, menu_items(name, name_vi, name_en))',
           )
           .eq('id', orderId);
       final order = scopedStoreId == null || scopedStoreId.isEmpty

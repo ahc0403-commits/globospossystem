@@ -20,6 +20,7 @@ void main() {
       addressLines: const ['69/1A2 Nguyễn Gia Trí'],
       receiptNumber: 'BC-20260721-000123',
       cashierCode: 'EMP001',
+      vatAmount: 3703.70,
     );
 
     expect(bytes, isNotEmpty);
@@ -32,12 +33,51 @@ void main() {
     expect(text, isNot(contains('So don')));
     expect(text, contains('Ca phe sua da'));
     expect(text, contains('VND'));
+    expect(text, contains('VAT (da gom)'));
+    expect(text, contains('3,703 VND'));
+    expect(text, isNot(contains('***')));
     expect(text, contains('CHUYEN KHOAN'));
     expect(text, contains('WOORI BANK - 100202042976'));
     expect(text, contains('AHN HYOCHANG'));
     expect(bytes, contains(0x76));
     expect(bytes, contains(0x1d));
     expect(bytes, contains(0x56));
+  });
+
+  test(
+    'payment receipt prints zero VAT numerically when VAT is absent',
+    () async {
+      final text = String.fromCharCodes(
+        await ReceiptBuilder.buildPaymentReceipt(
+          restaurantName: 'GLOBOS POS',
+          tableNumber: 'A1',
+          items: const [
+            ReceiptItem(name: 'Staff meal', quantity: 1, unitPrice: 10000),
+          ],
+          totalAmount: 10000,
+          paymentMethod: 'service',
+          paidAt: DateTime.utc(2026, 8, 11, 10, 30),
+          isService: true,
+        ),
+      );
+
+      expect(text, contains('VAT (da gom)'));
+      expect(text, contains('0 VND'));
+      expect(text, isNot(contains('***')));
+    },
+  );
+
+  test('queued payment receipt reads VAT amount from print payload', () {
+    final receipt = QueuedPaymentReceipt.fromPayload({
+      'restaurant_name': 'GLOBOS POS',
+      'table_number': 'A1',
+      'items': const [],
+      'total_amount': 50000,
+      'payment_method': 'cash',
+      'vat_amount': '3703.70',
+    });
+
+    expect(receipt.vatAmount, 3703.70);
   });
 
   test('service receipts include non-revenue service note', () async {

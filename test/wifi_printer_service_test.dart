@@ -370,6 +370,48 @@ void main() {
       },
     );
 
+    test('USB printer works without an active network connection', () async {
+      final backend = _FakePrintJobBackend(
+        jobs: [
+          _job(id: 'job-usb', destinationId: 'dest', ticketType: 'kitchen'),
+        ],
+        destinations: const {
+          'dest': PrintDestination(
+            id: 'dest',
+            name: 'USB Kitchen',
+            ip: '127.0.0.1',
+            port: 9100,
+            endpoints: [
+              PrinterEndpoint(
+                id: 'usb',
+                type: PrinterEndpointType.usb,
+                ip: '',
+                deviceName: 'EPSON TM-T88VII Receipt',
+                port: 9100,
+                priority: 5,
+                isActive: true,
+              ),
+            ],
+          ),
+        },
+      );
+      final printer = _UsbAwareFakePrinterService();
+      final agent = PrintJobAgentService(
+        backend: backend,
+        printerService: printer,
+        networkCapabilityService: const _FakeNetworkCapabilityService(
+          wiredConnected: false,
+          wirelessConnected: false,
+        ),
+      );
+
+      final results = await agent.processOnce('store-1');
+
+      expect(results.single.result, PrintResult.success);
+      expect(printer.usbPrinterNames, ['EPSON TM-T88VII Receipt']);
+      expect(backend.completed.single.ok, isTrue);
+    });
+
     test('partial multi-copy print never switches printer endpoints', () async {
       final backend = _FakePrintJobBackend(
         jobs: [
@@ -942,6 +984,32 @@ class _UnsupportedPrinterService implements PrinterService {
   Future<bool> testConnection(String ip, {int port = 9100}) async {
     return false;
   }
+}
+
+class _UsbAwareFakePrinterService implements PrinterService, UsbPrinterService {
+  final usbPrinterNames = <String>[];
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  Future<PrintResult> printReceipt(
+    String ip,
+    List<int> bytes, {
+    int port = 9100,
+  }) async => PrintResult.connectionFailed;
+
+  @override
+  Future<PrintResult> printUsbReceipt(
+    String printerName,
+    List<int> bytes,
+  ) async {
+    usbPrinterNames.add(printerName);
+    return PrintResult.success;
+  }
+
+  @override
+  Future<bool> testConnection(String ip, {int port = 9100}) async => false;
 }
 
 bool _hasBuzzerAlert(List<int> bytes) {

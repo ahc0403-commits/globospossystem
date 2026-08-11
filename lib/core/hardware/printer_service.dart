@@ -8,6 +8,10 @@ abstract class PrinterService {
   });
 }
 
+abstract class UsbPrinterService {
+  Future<PrintResult> printUsbReceipt(String printerName, List<int> bytes);
+}
+
 enum PrintResult {
   success,
   connectionFailed,

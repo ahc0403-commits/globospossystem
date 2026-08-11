@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/services/digital_receipt_service.dart';
 import '../../core/utils/live_sync_scope.dart';
 import '../../main.dart';
 
@@ -38,6 +39,10 @@ class CustomerDisplaySnapshot {
     required this.discount,
     required this.vat,
     required this.total,
+    this.phase = 'payment',
+    this.displayRevision,
+    this.receiptId,
+    this.receiptUrl,
   });
 
   final String orderId;
@@ -49,6 +54,29 @@ class CustomerDisplaySnapshot {
   final double discount;
   final double vat;
   final double total;
+  final String phase;
+  final String? displayRevision;
+  final String? receiptId;
+  final String? receiptUrl;
+
+  bool get isReceipt => phase == 'receipt';
+
+  CustomerDisplaySnapshot copyWith({String? receiptUrl}) =>
+      CustomerDisplaySnapshot(
+        orderId: orderId,
+        localeCode: localeCode,
+        tableNumber: tableNumber,
+        items: items,
+        subtotal: subtotal,
+        serviceCharge: serviceCharge,
+        discount: discount,
+        vat: vat,
+        total: total,
+        phase: phase,
+        displayRevision: displayRevision,
+        receiptId: receiptId,
+        receiptUrl: receiptUrl ?? this.receiptUrl,
+      );
 
   factory CustomerDisplaySnapshot.fromJson(Map<String, dynamic> json) {
     final rawItems = json['items'];
@@ -75,6 +103,9 @@ class CustomerDisplaySnapshot {
       discount: _toDouble(json['discount']),
       vat: _toDouble(json['vat']),
       total: _toDouble(json['total']),
+      phase: json['phase']?.toString() == 'receipt' ? 'receipt' : 'payment',
+      displayRevision: json['display_revision']?.toString(),
+      receiptId: json['receipt_id']?.toString(),
     );
   }
 }
@@ -94,15 +125,27 @@ class CustomerDisplayState {
 class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
   CustomerDisplayNotifier() : super(const CustomerDisplayState());
 
-  static const _connectedHealthRefreshInterval = Duration(seconds: 15);
+  // A subscribed socket does not guarantee that Postgres change events are
+  // actually reaching this device. Keep the indexed single-row fallback fast
+  // even while Realtime reports a healthy connection.
+  static const _connectedHealthRefreshInterval = Duration(seconds: 1);
   static const _disconnectedRefreshInterval = Duration(seconds: 1);
+  static const receiptDisplayDuration = Duration(seconds: 90);
 
   RealtimeChannel? _channel;
   Timer? _pollTimer;
+  Timer? _receiptTimer;
   String? _storeId;
   Duration? _pollInterval;
   bool _realtimeConnected = false;
   int _realtimeRevision = 0;
+  String? _resolvedReceiptId;
+  String? _resolvedReceiptUrl;
+  String? _failedReceiptId;
+  DateTime? _receiptRetryAfter;
+  String? _resolvingReceiptId;
+  String? _visibleReceiptRevision;
+  String? _hiddenReceiptRevision;
 
   Future<void> start(String storeId) async {
     if (_storeId == storeId && _channel != null) return;
@@ -111,10 +154,18 @@ class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
     await _channel?.unsubscribe();
     _channel = null;
     _pollTimer?.cancel();
+    _receiptTimer?.cancel();
     _pollTimer = null;
     _pollInterval = null;
     _realtimeConnected = false;
     _realtimeRevision = 0;
+    _resolvedReceiptId = null;
+    _resolvedReceiptUrl = null;
+    _failedReceiptId = null;
+    _receiptRetryAfter = null;
+    _resolvingReceiptId = null;
+    _visibleReceiptRevision = null;
+    _hiddenReceiptRevision = null;
 
     _channel = supabase
         .channel(LiveSyncScope.storeChannel('customer_display', storeId))
@@ -184,12 +235,74 @@ class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
 
     final rawPayload = row?['payload'];
     final isShowing = row?['status']?.toString() == 'showing';
-    final snapshot = isShowing && rawPayload is Map
+    var snapshot = isShowing && rawPayload is Map
         ? CustomerDisplaySnapshot.fromJson(
             Map<String, dynamic>.from(rawPayload),
           )
         : null;
+    if (snapshot?.isReceipt == true) {
+      final revision = snapshot!.displayRevision ?? snapshot.receiptId;
+      if (revision != null && revision == _hiddenReceiptRevision) {
+        state = const CustomerDisplayState();
+        return;
+      }
+      if (snapshot.receiptId == _resolvedReceiptId) {
+        snapshot = snapshot.copyWith(receiptUrl: _resolvedReceiptUrl);
+      } else if (snapshot.receiptId == _failedReceiptId &&
+          DateTime.now().isBefore(
+            _receiptRetryAfter ?? DateTime.fromMillisecondsSinceEpoch(0),
+          )) {
+        snapshot = snapshot.copyWith(receiptUrl: '');
+      } else if (snapshot.receiptId != _resolvingReceiptId) {
+        unawaited(_resolveReceiptLink(storeId, snapshot));
+      }
+      if (revision != null && revision != _visibleReceiptRevision) {
+        _visibleReceiptRevision = revision;
+        _receiptTimer?.cancel();
+        _receiptTimer = Timer(receiptDisplayDuration, () {
+          if (!mounted || _storeId != storeId) return;
+          _hiddenReceiptRevision = revision;
+          state = const CustomerDisplayState();
+        });
+      }
+    } else {
+      _receiptTimer?.cancel();
+      _visibleReceiptRevision = null;
+      _hiddenReceiptRevision = null;
+    }
     state = CustomerDisplayState(snapshot: snapshot);
+  }
+
+  Future<void> _resolveReceiptLink(
+    String storeId,
+    CustomerDisplaySnapshot snapshot,
+  ) async {
+    final receiptId = snapshot.receiptId;
+    if (receiptId == null || receiptId.isEmpty) return;
+    _resolvingReceiptId = receiptId;
+    try {
+      final access = await digitalReceiptService.issueLink(receiptId);
+      if (!mounted || _storeId != storeId) return;
+      final current = state.snapshot;
+      if (current?.receiptId != receiptId || current?.isReceipt != true) return;
+      _resolvedReceiptId = receiptId;
+      _resolvedReceiptUrl = access.publicUrl;
+      _failedReceiptId = null;
+      _receiptRetryAfter = null;
+      state = CustomerDisplayState(
+        snapshot: current!.copyWith(receiptUrl: access.publicUrl),
+      );
+    } catch (error) {
+      if (!mounted || _storeId != storeId) return;
+      _failedReceiptId = receiptId;
+      _receiptRetryAfter = DateTime.now().add(const Duration(seconds: 15));
+      state = CustomerDisplayState(
+        snapshot: state.snapshot?.copyWith(receiptUrl: ''),
+        error: error.toString(),
+      );
+    } finally {
+      if (_resolvingReceiptId == receiptId) _resolvingReceiptId = null;
+    }
   }
 
   void _ensurePolling(String storeId) {
@@ -217,6 +330,7 @@ class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _receiptTimer?.cancel();
     _channel?.unsubscribe();
     super.dispose();
   }

@@ -12,6 +12,7 @@ import '../../core/hardware/receipt_builder.dart';
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/layout/platform_info.dart';
 import '../../core/services/payment_service.dart';
+import '../../core/services/digital_receipt_service.dart';
 import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/app_primitives.dart';
 import '../../core/ui/toast/toast.dart';
@@ -21,6 +22,20 @@ import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../auth/auth_provider.dart';
 import '../settings/printer_provider.dart';
+
+String _digitalReceiptLabel(BuildContext context) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => 'Mở biên lai điện tử',
+      'en' => 'Open digital receipt',
+      _ => '디지털 영수증 열기',
+    };
+
+String _digitalReceiptErrorLabel(BuildContext context) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => 'Không thể mở biên lai điện tử.',
+      'en' => 'Could not open the digital receipt.',
+      _ => '디지털 영수증을 열지 못했습니다.',
+    };
 
 class PaymentDetailScreen extends ConsumerStatefulWidget {
   const PaymentDetailScreen({
@@ -52,6 +67,7 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
   bool _realtimeConnected = false;
   bool _refreshInFlight = false;
   bool _adjustmentInFlight = false;
+  bool _digitalReceiptInFlight = false;
 
   @override
   void initState() {
@@ -508,6 +524,18 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
                               onPressed: () => _printReceipt(detail),
                             ),
                             PosActionButton(
+                              key: const Key(
+                                'payment_detail_open_digital_receipt',
+                              ),
+                              label: _digitalReceiptLabel(context),
+                              tone: PosActionTone.secondary,
+                              icon: Icons.qr_code_2_rounded,
+                              loading: _digitalReceiptInFlight,
+                              onPressed: _digitalReceiptInFlight
+                                  ? null
+                                  : () => _openDigitalReceipt(detail),
+                            ),
+                            PosActionButton(
                               key: const Key('payment_detail_refund_payment'),
                               label: l10n.paymentDetailRefund,
                               tone: PosActionTone.destructive,
@@ -771,6 +799,27 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
+  Future<void> _openDigitalReceipt(Map<String, dynamic> detail) async {
+    final orderId = _map(detail['order'])['id']?.toString();
+    if (orderId == null || orderId.isEmpty || _digitalReceiptInFlight) return;
+    setState(() => _digitalReceiptInFlight = true);
+    try {
+      final access = await digitalReceiptService.ensureAndIssue(
+        orderId: orderId,
+      );
+      final uri = Uri.parse(access.publicUrl);
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        throw StateError('DIGITAL_RECEIPT_OPEN_FAILED');
+      }
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(context, _digitalReceiptErrorLabel(context));
+      }
+    } finally {
+      if (mounted) setState(() => _digitalReceiptInFlight = false);
+    }
+  }
+
   Future<void> _printReceipt(Map<String, dynamic> detail) async {
     final l10n = context.l10n;
     final order = _map(detail['order']);
@@ -819,6 +868,7 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
       paymentMethod: _stringOrDash(
         payment['method'] ?? payment['payment_method'],
       ),
+      vatAmount: _receiptVatAmount(order),
       paidAt: _dateValue(payment['created_at']) ?? DateTime.now(),
       isService:
           _stringOrDash(payment['method'] ?? payment['payment_method']) ==
@@ -1013,6 +1063,23 @@ class _PaymentDetailScreenState extends ConsumerState<PaymentDetailScreen> {
           );
         })
         .toList();
+  }
+
+  double _receiptVatAmount(Map<String, dynamic> order) {
+    final items = order['order_items'];
+    if (items is! List) return 0;
+
+    return items
+        .map((item) => Map<String, dynamic>.from(item))
+        .where(
+          (item) =>
+              item['status']?.toString() != 'cancelled' &&
+              !_boolValue(item['is_service_item']),
+        )
+        .fold<double>(
+          0,
+          (sum, item) => sum + _numValue(item['vat_amount']).toDouble(),
+        );
   }
 
   num _numValue(dynamic value) {

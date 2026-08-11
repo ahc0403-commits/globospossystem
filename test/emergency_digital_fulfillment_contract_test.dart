@@ -94,19 +94,38 @@ void main() {
       'lib/features/emergency_fulfillment/emergency_fulfillment_provider.dart',
     ).readAsStringSync();
     expect(screen, contains("Key('emergency_enable_alarm')"));
-    expect(screen, contains('constraints.maxWidth >= 760'));
+    expect(screen, contains('final pageSize = isPhone ? 4 : 8;'));
+    expect(screen, contains("'emergency_order_grid_\${pageSize}_slots'"));
+    expect(screen, contains("Key('emergency_complete_order')"));
+    expect(screen, contains("Key('emergency_revert_order')"));
     expect(index, contains('indexedDB.open'));
     expect(index, contains('AudioContext'));
     expect(worker, contains('emergency_fulfillment'));
     expect(provider, contains('EmergencyWebBridge.putOutbox'));
     expect(provider, contains("'p_event_id': payload['event_id']"));
+    expect(provider, contains("'emergency_complete_order_stage'"));
+    expect(provider, contains("'emergency_revert_order_action'"));
+  });
+
+  test('order action contract is atomic, idempotent, and reversible', () {
+    final migration = File(
+      'supabase/migrations/20260811140000_emergency_kds_order_actions.sql',
+    ).readAsStringSync();
+    expect(migration, contains('emergency_fulfillment_actions'));
+    expect(migration, contains('emergency_complete_order_stage'));
+    expect(migration, contains('emergency_revert_order_action'));
+    expect(migration, contains('FOR UPDATE OF queue'));
+    expect(migration, contains('FOR UPDATE'));
+    expect(migration, contains('ON CONFLICT (action_id) DO NOTHING'));
+    expect(migration, contains('EMERGENCY_REVERT_DOWNSTREAM_PROGRESS'));
+    expect(migration, contains("'tray_received'"));
+    expect(migration, contains("'tray_dispatched'"));
+    expect(migration, contains('original_action_id'));
   });
 
   test('production release deploys and verifies the emergency dispatcher', () {
     final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
-    final vercelBuild = File(
-      'scripts/vercel_build_web.sh',
-    ).readAsStringSync();
+    final vercelBuild = File('scripts/vercel_build_web.sh').readAsStringSync();
     final authCheck = File(
       'scripts/check_pilot_auth_accounts.sh',
     ).readAsStringSync();

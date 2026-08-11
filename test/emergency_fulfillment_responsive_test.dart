@@ -20,6 +20,8 @@ class _FixtureEmergencyNotifier extends EmergencyFulfillmentNotifier {
   }
 
   final List<(String, String, int)> recordedProgress = [];
+  final List<String> completedQueues = [];
+  final List<(String, String)> revertedActions = [];
 
   @override
   Future<void> load({bool showLoading = true}) async {}
@@ -31,6 +33,21 @@ class _FixtureEmergencyNotifier extends EmergencyFulfillmentNotifier {
     int delta = 1,
   }) async {
     recordedProgress.add((itemId, stage, delta));
+  }
+
+  @override
+  Future<bool> completeOrder({required String queueId}) async {
+    completedQueues.add(queueId);
+    return true;
+  }
+
+  @override
+  Future<bool> revertOrder({
+    required String queueId,
+    required String actionId,
+  }) async {
+    revertedActions.add((queueId, actionId));
+    return true;
   }
 }
 
@@ -92,7 +109,7 @@ void main() {
     );
   });
 
-  testWidgets('tray workflow stays usable on a 390px Vietnamese web screen', (
+  testWidgets('phone uses four slots and opens the tray order detail', (
     tester,
   ) async {
     final fixture = _FixtureEmergencyNotifier(_activeState('tray'));
@@ -104,38 +121,55 @@ void main() {
     );
 
     expect(find.byKey(const Key('emergency_fulfillment_screen')), findsOne);
+    expect(find.byKey(const Key('emergency_order_grid_4_slots')), findsOne);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget.key is Key &&
+            widget.key.toString().contains('emergency_empty_slot_'),
+      ),
+      findsNWidgets(3),
+    );
     expect(find.byKey(const Key('emergency_order_order-1')), findsOne);
+    expect(find.text('Bánh gạo cay'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('emergency_order_order-1')));
+    await tester.pump();
     expect(find.text('Bánh gạo cay'), findsOne);
     expect(find.text('떡볶이'), findsNothing);
-    expect(find.text('Đã nhận từ bếp 0/2'), findsOne);
-    expect(find.text('Đã chuyển lên tầng 0/0'), findsOne);
+    expect(find.text('0 / 2'), findsOne);
+    expect(find.byKey(const Key('emergency_complete_order')), findsOne);
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.text('Đã nhận từ bếp 0/2'));
+    await tester.tap(find.byKey(const Key('emergency_complete_order')));
     await tester.pump();
-    expect(fixture.recordedProgress, [('item-1', 'tray_received', 1)]);
+    expect(fixture.completedQueues, ['queue-1']);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'kitchen uses the tablet split layout with actionable order data',
-    (tester) async {
-      final fixture = _FixtureEmergencyNotifier(_activeState('kitchen'));
-      await _pumpEmergency(
-        tester,
-        fixture: fixture,
-        size: const Size(1024, 768),
-        locale: const Locale('ko'),
-        expectedStationType: 'kitchen',
-      );
+  testWidgets('tablet uses eight slots and opens all kitchen menu data', (
+    tester,
+  ) async {
+    final fixture = _FixtureEmergencyNotifier(_activeState('kitchen'));
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(1024, 768),
+      locale: const Locale('ko'),
+      expectedStationType: 'kitchen',
+    );
 
-      expect(find.text('#101'), findsOne);
-      expect(find.text('떡볶이'), findsOne);
-      expect(find.text('Bánh gạo cay'), findsNothing);
-      expect(find.text('조리 완료 0/2'), findsOne);
-      expect(tester.takeException(), isNull);
-    },
-  );
+    expect(find.byKey(const Key('emergency_order_grid_8_slots')), findsOne);
+    expect(find.text('#101'), findsOne);
+    expect(find.text('떡볶이'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('emergency_order_order-1')));
+    await tester.pump();
+    expect(find.text('떡볶이'), findsOne);
+    expect(find.text('Bánh gạo cay'), findsNothing);
+    expect(find.text('0 / 2'), findsOne);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('floor workflow has no G-floor surface and renders on mobile', (
     tester,
@@ -149,9 +183,56 @@ void main() {
     );
 
     expect(find.text('2F 주문확인'), findsOne);
-    expect(find.text('제공 완료 0/1'), findsOne);
+    expect(find.byKey(const Key('emergency_order_grid_4_slots')), findsOne);
+    await tester.tap(find.byKey(const Key('emergency_order_order-1')));
+    await tester.pump();
+    expect(find.text('0 / 1'), findsOne);
     expect(find.textContaining('G층'), findsNothing);
     expect(find.textContaining('GF'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('ninth tablet order is placed on the next eight-slot page', (
+    tester,
+  ) async {
+    final fixture = _FixtureEmergencyNotifier(
+      _activeState('kitchen', orderCount: 9),
+    );
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(1024, 768),
+      locale: const Locale('ko'),
+    );
+
+    expect(find.byKey(const Key('emergency_order_order-1')), findsOne);
+    expect(find.byKey(const Key('emergency_order_order-9')), findsNothing);
+    await tester.tap(find.byKey(const Key('emergency_board_next')));
+    await tester.pump();
+    expect(find.byKey(const Key('emergency_order_order-1')), findsNothing);
+    expect(find.byKey(const Key('emergency_order_order-9')), findsOne);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('recent completed order exposes cancel and revert', (
+    tester,
+  ) async {
+    final fixture = _FixtureEmergencyNotifier(_completedState('floor'));
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(390, 844),
+      locale: const Locale('ko'),
+    );
+
+    await tester.tap(find.text('최근 완료 1'));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('emergency_order_order-1')));
+    await tester.pump();
+    expect(find.byKey(const Key('emergency_revert_order')), findsOne);
+    await tester.tap(find.byKey(const Key('emergency_revert_order')));
+    await tester.pump();
+    expect(fixture.revertedActions, [('queue-1', 'action-1')]);
     expect(tester.takeException(), isNull);
   });
 
@@ -199,40 +280,58 @@ void main() {
   });
 }
 
-EmergencyFulfillmentState _activeState(String stationType) =>
-    EmergencyFulfillmentState(
-      assigned: true,
-      active: true,
-      restaurantId: 'store-bt',
-      sessionId: 'session-1',
-      stationType: stationType,
-      floorLabel: stationType == 'floor' ? '2F' : null,
-      orders: [
-        EmergencyFulfillmentOrder(
-          queueId: 'queue-1',
-          orderId: 'order-1',
-          queueNo: 101,
-          tableNumber: 'T12',
-          floorLabel: '2F',
-          createdAt: DateTime.utc(2026, 8, 10, 10),
-          items: [
-            EmergencyFulfillmentItem(
-              id: 'item-1',
-              orderItemId: 'order-item-1',
-              nameKo: '떡볶이',
-              nameVi: 'Bánh gạo cay',
-              nameEn: 'Spicy rice cake',
-              orderedQuantity: 2,
-              kitchenDoneQuantity: stationType == 'kitchen' ? 0 : 2,
-              trayReceivedQuantity: stationType == 'floor' ? 2 : 0,
-              trayDispatchedQuantity: stationType == 'floor' ? 1 : 0,
-              floorServedQuantity: 0,
-              needsReview: false,
-            ),
-          ],
+EmergencyFulfillmentState _activeState(
+  String stationType, {
+  int orderCount = 1,
+}) => EmergencyFulfillmentState(
+  assigned: true,
+  active: true,
+  restaurantId: 'store-bt',
+  sessionId: 'session-1',
+  stationType: stationType,
+  floorLabel: stationType == 'floor' ? '2F' : null,
+  orders: List.generate(
+    orderCount,
+    (index) => EmergencyFulfillmentOrder(
+      queueId: 'queue-${index + 1}',
+      orderId: 'order-${index + 1}',
+      queueNo: 101 + index,
+      tableNumber: 'T${12 + index}',
+      floorLabel: '2F',
+      createdAt: DateTime.utc(2026, 8, 10, 10, index),
+      items: [
+        EmergencyFulfillmentItem(
+          id: 'item-${index + 1}',
+          orderItemId: 'order-item-${index + 1}',
+          nameKo: '떡볶이',
+          nameVi: 'Bánh gạo cay',
+          nameEn: 'Spicy rice cake',
+          orderedQuantity: 2,
+          kitchenDoneQuantity: stationType == 'kitchen' ? 0 : 2,
+          trayReceivedQuantity: stationType == 'floor' ? 2 : 0,
+          trayDispatchedQuantity: stationType == 'floor' ? 1 : 0,
+          floorServedQuantity: 0,
+          needsReview: false,
         ),
       ],
-    );
+    ),
+  ),
+);
+
+EmergencyFulfillmentState _completedState(String stationType) {
+  final active = _activeState(stationType);
+  final order = active.orders.single;
+  final item = order.items.single;
+  return active.copyWith(
+    orders: [
+      order.copyWith(
+        lastActionId: 'action-1',
+        lastActionAt: DateTime.utc(2026, 8, 11, 10),
+        items: [item.withStage('floor_served', item.trayDispatchedQuantity)],
+      ),
+    ],
+  );
+}
 
 Future<void> _pumpEmergency(
   WidgetTester tester, {

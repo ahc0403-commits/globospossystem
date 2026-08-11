@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/payments/cash_tender.dart';
 import '../../core/payments/payment_method_contract.dart';
 import '../../core/ui/pos_design_tokens.dart';
+import '../digital_receipt/digital_receipt_model.dart';
 import '../payment/payment_provider.dart';
 
 class PaymentCompletionDialog extends StatefulWidget {
@@ -14,12 +16,16 @@ class PaymentCompletionDialog extends StatefulWidget {
     required this.paymentMethod,
     this.cashTender,
     required this.onReprint,
+    this.receiptAccess,
+    this.onPaperReceipt,
   });
 
   final CashierOrder order;
   final String paymentMethod;
   final CashTender? cashTender;
   final Future<void> Function() onReprint;
+  final DigitalReceiptAccess? receiptAccess;
+  final Future<void> Function()? onPaperReceipt;
 
   @override
   State<PaymentCompletionDialog> createState() =>
@@ -28,6 +34,7 @@ class PaymentCompletionDialog extends StatefulWidget {
 
 class _PaymentCompletionDialogState extends State<PaymentCompletionDialog> {
   bool _isReprinting = false;
+  bool _isPrintingPaper = false;
 
   Future<void> _reprint() async {
     if (_isReprinting) return;
@@ -39,6 +46,16 @@ class _PaymentCompletionDialogState extends State<PaymentCompletionDialog> {
     }
   }
 
+  Future<void> _printPaper() async {
+    if (_isPrintingPaper || widget.onPaperReceipt == null) return;
+    setState(() => _isPrintingPaper = true);
+    try {
+      await widget.onPaperReceipt!();
+    } finally {
+      if (mounted) setState(() => _isPrintingPaper = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -47,6 +64,8 @@ class _PaymentCompletionDialogState extends State<PaymentCompletionDialog> {
     final activeItems = widget.order.items
         .where((item) => item.status.toLowerCase() != 'cancelled')
         .toList();
+    final paperless = widget.order.fulfillmentMode.isPaperless;
+    final copy = _CompletionCopy.of(context);
 
     return Dialog(
       key: const Key('cashier_payment_completion_dialog'),
@@ -182,6 +201,58 @@ class _PaymentCompletionDialogState extends State<PaymentCompletionDialog> {
                 ),
               ),
               const SizedBox(height: 16),
+              if (paperless) ...[
+                Container(
+                  key: const Key('cashier_digital_receipt_panel'),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: PosColors.info.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: PosColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      SizedBox.square(
+                        dimension: 132,
+                        child: widget.receiptAccess == null
+                            ? const Center(
+                                child: Icon(Icons.qr_code_2_rounded, size: 54),
+                              )
+                            : QrImageView(
+                                data: widget.receiptAccess!.publicUrl,
+                                version: QrVersions.auto,
+                                backgroundColor: Colors.white,
+                              ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.receiptAccess == null
+                                  ? copy.digitalUnavailable
+                                  : copy.scanReceipt,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                color: PosColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              copy.receiptHelp,
+                              style: const TextStyle(
+                                color: PosColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
               Flexible(
                 child: Container(
                   decoration: BoxDecoration(
@@ -254,15 +325,17 @@ class _PaymentCompletionDialogState extends State<PaymentCompletionDialog> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.print_rounded,
+                    Icon(
+                      paperless ? Icons.eco_rounded : Icons.print_rounded,
                       color: PosColors.info,
                       size: 20,
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        l10n.cashierReceiptQueued,
+                        paperless
+                            ? copy.paperlessDefault
+                            : l10n.cashierReceiptQueued,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: PosColors.textPrimary,
                           fontWeight: FontWeight.w700,
@@ -277,16 +350,24 @@ class _PaymentCompletionDialogState extends State<PaymentCompletionDialog> {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      key: const Key('cashier_payment_completion_reprint'),
-                      onPressed: _isReprinting ? null : _reprint,
-                      icon: _isReprinting
+                      key: paperless
+                          ? const Key(
+                              'cashier_payment_completion_paper_receipt',
+                            )
+                          : const Key('cashier_payment_completion_reprint'),
+                      onPressed: paperless
+                          ? (_isPrintingPaper ? null : _printPaper)
+                          : (_isReprinting ? null : _reprint),
+                      icon: (paperless ? _isPrintingPaper : _isReprinting)
                           ? const SizedBox(
                               width: 18,
                               height: 18,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.print_outlined),
-                      label: Text(l10n.cashierReprint),
+                      label: Text(
+                        paperless ? copy.paperReceipt : l10n.cashierReprint,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -306,6 +387,44 @@ class _PaymentCompletionDialogState extends State<PaymentCompletionDialog> {
       ),
     );
   }
+}
+
+class _CompletionCopy {
+  const _CompletionCopy(this.code);
+
+  final String code;
+
+  static _CompletionCopy of(BuildContext context) =>
+      _CompletionCopy(Localizations.localeOf(context).languageCode);
+
+  String pick(String ko, String vi, String en) => switch (code) {
+    'vi' => vi,
+    'en' => en,
+    _ => ko,
+  };
+
+  String get scanReceipt => pick(
+    'QR을 스캔하면 영수증 확인·PDF 저장·직접 인쇄가 가능합니다.',
+    'Quét QR để xem, lưu PDF hoặc tự in biên lai.',
+    'Scan the QR to view, save PDF, or print the receipt.',
+  );
+  String get digitalUnavailable => pick(
+    '디지털 영수증을 준비하지 못했습니다.',
+    'Chưa thể chuẩn bị biên lai điện tử.',
+    'The digital receipt is not ready.',
+  );
+  String get receiptHelp => pick(
+    '종이가 필요한 고객에게만 아래 버튼으로 출력하세요.',
+    'Chỉ in giấy bằng nút bên dưới khi khách yêu cầu.',
+    'Use the button below only when the customer requests paper.',
+  );
+  String get paperlessDefault => pick(
+    '디지털 영수증이 기본입니다. 종이 출력은 선택 사항입니다.',
+    'Biên lai điện tử là mặc định; in giấy là tùy chọn.',
+    'Digital receipt is the default; paper is optional.',
+  );
+  String get paperReceipt =>
+      pick('종이 영수증 출력', 'In biên lai giấy', 'Print paper receipt');
 }
 
 class _CompletionMetric extends StatelessWidget {

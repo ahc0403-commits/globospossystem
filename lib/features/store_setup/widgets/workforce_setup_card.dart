@@ -708,9 +708,9 @@ String _accountTypeLabel(BuildContext context, String value) => switch (value) {
   'device_emergency_station' => switch (Localizations.localeOf(
     context,
   ).languageCode) {
-    'vi' => 'Trạm khẩn cấp',
-    'en' => 'Emergency station',
-    _ => '비상 스테이션',
+    'vi' => 'Trạm vận hành không giấy',
+    'en' => 'Paperless station',
+    _ => '페이퍼리스 스테이션',
   },
   _ => context.l10n.storeSetupAccountTypeStoreOperator,
 };
@@ -723,9 +723,9 @@ String _accountRoleLabel(BuildContext context, String value) => switch (value) {
   'print_station' => context.l10n.printStationTitle,
   'customer_display' => context.l10n.cashierShowCustomerDisplay,
   'emergency_station' => switch (Localizations.localeOf(context).languageCode) {
-    'vi' => 'Trạm khẩn cấp',
-    'en' => 'Emergency station',
-    _ => '비상 스테이션',
+    'vi' => 'Trạm vận hành không giấy',
+    'en' => 'Paperless station',
+    _ => '페이퍼리스 스테이션',
   },
   'photo_objet_master' => context.l10n.rolePhotoObjetMasterMenu,
   _ => context.l10n.rolePhotoObjetStoreOperatorMenu,

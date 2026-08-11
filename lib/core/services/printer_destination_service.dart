@@ -69,6 +69,7 @@ class PrinterEndpointConfig {
     required this.physicalPrinterId,
     required this.type,
     required this.ip,
+    required this.deviceName,
     required this.port,
     required this.priority,
     required this.isActive,
@@ -78,6 +79,7 @@ class PrinterEndpointConfig {
   final String physicalPrinterId;
   final String type;
   final String ip;
+  final String deviceName;
   final int port;
   final int priority;
   final bool isActive;
@@ -88,6 +90,7 @@ class PrinterEndpointConfig {
       physicalPrinterId: json['physical_printer_id']?.toString() ?? '',
       type: json['endpoint_type']?.toString() ?? 'wireless',
       ip: json['ip']?.toString() ?? '',
+      deviceName: json['device_name']?.toString() ?? '',
       port: switch (json['port']) {
         int value => value,
         num value => value.toInt(),
@@ -112,6 +115,7 @@ class PrinterDestinationDraft {
     required this.wiredPort,
     required this.wirelessIp,
     required this.wirelessPort,
+    required this.usbPrinterName,
     required this.purpose,
     this.floorLabel,
     this.isActive = true,
@@ -123,6 +127,7 @@ class PrinterDestinationDraft {
   final int wiredPort;
   final String wirelessIp;
   final int wirelessPort;
+  final String usbPrinterName;
   final String purpose;
   final String? floorLabel;
   final bool isActive;
@@ -182,7 +187,7 @@ class PrinterDestinationService {
     required PrinterDestinationDraft draft,
   }) async {
     final response = await supabase.rpc(
-      'admin_upsert_printer_destination_v2',
+      'admin_upsert_printer_destination_v3',
       params: {
         'p_store_id': storeId,
         'p_destination_id': draft.id,
@@ -194,6 +199,7 @@ class PrinterDestinationService {
         'p_wired_port': draft.wiredPort,
         'p_wireless_ip': draft.wirelessIp,
         'p_wireless_port': draft.wirelessPort,
+        'p_usb_printer_name': draft.usbPrinterName,
       },
     );
 

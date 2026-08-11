@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/models/fulfillment_mode.dart';
 import '../../core/payments/payment_total_calculator.dart';
 import '../../core/services/order_service.dart';
 import '../../core/services/payment_service.dart';
@@ -34,6 +35,7 @@ class CashierOrder {
     required this.createdAt,
     this.completedAt,
     this.activeDiscount,
+    this.fulfillmentMode = FulfillmentMode.posPrint,
     this.emergencyModeActive = false,
     this.unservedQuantity = 0,
   });
@@ -58,6 +60,7 @@ class CashierOrder {
   final DateTime createdAt;
   final DateTime? completedAt;
   final ActiveOrderDiscount? activeDiscount;
+  final FulfillmentMode fulfillmentMode;
   final bool emergencyModeActive;
   final int unservedQuantity;
 
@@ -329,7 +332,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       final response = await supabase
           .from('orders')
           .select(
-            'id, table_id, status, order_purpose, order_source, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, paying_amount_inc_tax, combo_components, menu_items(name, name_vi, name_en, vat_category))',
+            'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, paying_amount_inc_tax, combo_components, menu_items(name, name_vi, name_en, vat_category))',
           )
           .eq('restaurant_id', storeId)
           // Payability is an order-status fact derived server-side by
@@ -403,6 +406,9 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
                   ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
                   : DateTime.now(),
               activeDiscount: activeDiscount,
+              fulfillmentMode: FulfillmentMode.fromValue(
+                data['fulfillment_mode_snapshot'],
+              ),
               emergencyModeActive: emergencySummary != null,
               unservedQuantity: emergencySummary ?? 0,
             );
@@ -476,7 +482,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     final response = await supabase
         .from('orders')
         .select(
-          'id, table_id, status, order_purpose, order_source, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, paying_amount_inc_tax, combo_components, menu_items(name, name_vi, name_en, vat_category))',
+          'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, paying_amount_inc_tax, combo_components, menu_items(name, name_vi, name_en, vat_category))',
         )
         .eq('restaurant_id', storeId)
         .eq('status', 'completed')
@@ -548,6 +554,9 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
             ? DateTime.tryParse(updatedAtRaw)
             : null,
         activeDiscount: consumedDiscount,
+        fulfillmentMode: FulfillmentMode.fromValue(
+          data['fulfillment_mode_snapshot'],
+        ),
       );
     }).toList();
   }
@@ -703,6 +712,9 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
           'p_store_id': storeId,
           'p_order_id': order.orderId,
           'p_payload': {
+            'phase': 'payment',
+            'display_revision': DateTime.now().microsecondsSinceEpoch
+                .toString(),
             'order_id': order.orderId,
             'locale_code': 'vi',
             'table_number': order.tableNumber,
@@ -718,6 +730,28 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       return true;
     } catch (error) {
       state = state.copyWith(error: 'Failed to show customer display: $error');
+      return false;
+    }
+  }
+
+  Future<bool> showReceiptOnCustomerDisplay({
+    required String storeId,
+    required String orderId,
+    required String receiptId,
+  }) async {
+    try {
+      await supabase.rpc(
+        'show_customer_receipt_display',
+        params: {
+          'p_store_id': storeId,
+          'p_order_id': orderId,
+          'p_receipt_id': receiptId,
+        },
+      );
+      return true;
+    } catch (_) {
+      // A customer display is optional. Receipt presentation must never change
+      // the already-committed payment result.
       return false;
     }
   }

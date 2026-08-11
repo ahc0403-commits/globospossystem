@@ -543,7 +543,7 @@ void main() {
     expect(service, contains('class PrinterDestinationDraft'));
     expect(service, contains(".from('printer_destinations')"));
     expect(service, contains(".from('printer_endpoints')"));
-    expect(service, contains("'admin_upsert_printer_destination_v2'"));
+    expect(service, contains("'admin_upsert_printer_destination_v3'"));
     expect(service, contains("'admin_delete_printer_destination'"));
     expect(service, contains("'admin_enqueue_printer_test_job'"));
     expect(provider, contains('printerDestinationsProvider'));
