@@ -494,7 +494,8 @@ run_checks() {
     "$ROOT_DIR/supabase/functions/emergency-fulfillment-dispatcher/index_test.ts"
 
   log "Public receipt Edge security tests"
-  run deno test \
+  run deno test --config \
+    "$ROOT_DIR/supabase/functions/public-receipt/deno.json" \
     "$ROOT_DIR/supabase/functions/public-receipt/index_test.ts"
 
   if [[ -z "$TEST_TARGETS" ]]; then
