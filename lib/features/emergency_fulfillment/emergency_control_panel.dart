@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
+import '../../core/models/fulfillment_mode.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../main.dart';
 
@@ -8,26 +10,39 @@ class EmergencyStoreStatus {
   const EmergencyStoreStatus({
     required this.restaurantId,
     required this.restaurantName,
-    required this.active,
     required this.unresolvedQuantity,
     required this.orderCount,
+    FulfillmentMode? mode,
+    bool? active,
+    this.draining = false,
+    this.kdsReady = false,
     this.reason,
-  });
+  }) : mode =
+           mode ??
+           (active == true
+               ? FulfillmentMode.paperless
+               : FulfillmentMode.posPrint);
 
   final String restaurantId;
   final String restaurantName;
-  final bool active;
+  final FulfillmentMode mode;
   final int unresolvedQuantity;
   final int orderCount;
+  final bool draining;
+  final bool kdsReady;
   final String? reason;
+
+  bool get active => mode.isPaperless;
 
   factory EmergencyStoreStatus.fromJson(Map<String, dynamic> json) =>
       EmergencyStoreStatus(
         restaurantId: json['restaurant_id']?.toString() ?? '',
         restaurantName: json['restaurant_name']?.toString() ?? '-',
-        active: json['active'] == true,
+        mode: FulfillmentMode.fromValue(json['mode']),
         unresolvedQuantity: _intValue(json['unresolved_quantity']),
         orderCount: _intValue(json['order_count']),
+        draining: json['draining'] == true,
+        kdsReady: json['kds_ready'] == true,
         reason: json['reason']?.toString(),
       );
 }
@@ -69,7 +84,7 @@ class EmergencyControlNotifier extends StateNotifier<EmergencyControlState> {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       final raw = await supabase.rpc(
-        'super_admin_get_emergency_store_statuses',
+        'super_admin_get_fulfillment_store_statuses',
       );
       final stores = raw is List
           ? raw
@@ -104,13 +119,14 @@ class EmergencyControlNotifier extends StateNotifier<EmergencyControlState> {
     state = state.copyWith(processingStoreId: storeId, clearError: true);
     try {
       await supabase.rpc(
-        'super_admin_set_emergency_mode',
+        'super_admin_set_fulfillment_mode',
         params: {
           'p_store_id': storeId,
-          'p_enabled': enabled,
+          'p_mode': enabled
+              ? FulfillmentMode.paperless.dbValue
+              : FulfillmentMode.posPrint.dbValue,
           'p_reason': reason,
-          'p_resolution': resolution,
-          'p_force': force,
+          'p_request_id': const Uuid().v4(),
         },
       );
       await load();
@@ -247,10 +263,6 @@ class _EmergencyControlPanelState extends ConsumerState<EmergencyControlPanel> {
     _ControlCopy copy,
   ) async {
     var reason = '';
-    var resolution = store.unresolvedQuantity > 0
-        ? 'reprint'
-        : 'digital_completed';
-    var force = false;
     final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -271,45 +283,8 @@ class _EmergencyControlPanelState extends ConsumerState<EmergencyControlPanel> {
                   onChanged: (value) => reason = value,
                   decoration: InputDecoration(labelText: copy.reason),
                 ),
-                if (store.active) ...[
-                  const SizedBox(height: 12),
-                  Text('${copy.unserved}: ${store.unresolvedQuantity}'),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    key: const Key('emergency_close_resolution'),
-                    initialValue: resolution,
-                    decoration: InputDecoration(
-                      labelText: copy.printResolution,
-                    ),
-                    items: [
-                      if (store.unresolvedQuantity == 0)
-                        DropdownMenuItem(
-                          value: 'digital_completed',
-                          child: Text(copy.digitalCompleted),
-                        ),
-                      DropdownMenuItem(
-                        value: 'reprint',
-                        child: Text(copy.reprint),
-                      ),
-                      DropdownMenuItem(
-                        value: 'dismiss',
-                        child: Text(copy.dismiss),
-                      ),
-                    ],
-                    onChanged: (value) =>
-                        setDialogState(() => resolution = value ?? resolution),
-                  ),
-                  if (store.unresolvedQuantity > 0)
-                    CheckboxListTile(
-                      key: const Key('emergency_force_close'),
-                      contentPadding: EdgeInsets.zero,
-                      value: force,
-                      title: Text(copy.forceClose),
-                      subtitle: Text(copy.forceCloseWarning),
-                      onChanged: (value) =>
-                          setDialogState(() => force = value ?? false),
-                    ),
-                ],
+                const SizedBox(height: 12),
+                _ModeChangeNotice(store: store, copy: copy),
               ],
             ),
           ),
@@ -321,8 +296,7 @@ class _EmergencyControlPanelState extends ConsumerState<EmergencyControlPanel> {
             FilledButton(
               key: const Key('emergency_mode_confirm'),
               onPressed: () {
-                if (reason.trim().isEmpty ||
-                    (store.active && store.unresolvedQuantity > 0 && !force)) {
+                if (reason.trim().isEmpty) {
                   return;
                 }
                 Navigator.of(dialogContext).pop(true);
@@ -330,7 +304,7 @@ class _EmergencyControlPanelState extends ConsumerState<EmergencyControlPanel> {
               style: FilledButton.styleFrom(
                 backgroundColor: store.active
                     ? PosColors.textSecondary
-                    : PosColors.danger,
+                    : PosColors.accent,
               ),
               child: Text(store.active ? copy.close : copy.activate),
             ),
@@ -345,10 +319,37 @@ class _EmergencyControlPanelState extends ConsumerState<EmergencyControlPanel> {
           storeId: store.restaurantId,
           enabled: !store.active,
           reason: reason.trim(),
-          resolution: resolution,
-          force: force,
         );
   }
+}
+
+class _ModeChangeNotice extends StatelessWidget {
+  const _ModeChangeNotice({required this.store, required this.copy});
+
+  final EmergencyStoreStatus store;
+  final _ControlCopy copy;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: PosSurfaceRole.background.fill,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: PosColors.border),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(copy.newOrdersOnly),
+        if (!store.active)
+          Text(store.kdsReady ? copy.kdsReady : copy.kdsWarning),
+        if (store.unresolvedQuantity > 0)
+          Text(
+            '${copy.unserved}: ${store.unresolvedQuantity} · ${copy.drainNotice}',
+          ),
+      ],
+    ),
+  );
 }
 
 class _EmergencyStoreCard extends StatelessWidget {
@@ -397,7 +398,7 @@ class _EmergencyStoreCard extends StatelessWidget {
                   Chip(
                     avatar: Icon(
                       store.active
-                          ? Icons.crisis_alert_rounded
+                          ? Icons.tablet_mac_rounded
                           : Icons.print_rounded,
                       size: 16,
                     ),
@@ -408,9 +409,10 @@ class _EmergencyStoreCard extends StatelessWidget {
                   ),
                 ],
               ),
-              if (store.active) ...[
+              if (store.active || store.draining) ...[
                 Text('${copy.orders}: ${store.orderCount}'),
                 Text('${copy.unserved}: ${store.unresolvedQuantity}'),
+                if (store.draining) Text(copy.draining),
                 if ((store.reason ?? '').isNotEmpty)
                   Text(
                     store.reason!,
@@ -437,7 +439,7 @@ class _EmergencyStoreCard extends StatelessWidget {
             style: FilledButton.styleFrom(
               backgroundColor: store.active
                   ? PosColors.textSecondary
-                  : PosColors.danger,
+                  : PosColors.accent,
             ),
           );
           if (constraints.maxWidth < 640) {
@@ -471,43 +473,58 @@ class _ControlCopy {
     _ => ko,
   };
   String get title =>
-      pick('비상 디지털 운영', 'Vận hành số khẩn cấp', 'Emergency digital operation');
+      pick('매장 운영 방식', 'Chế độ vận hành', 'Store operation mode');
   String get description => pick(
-    '프린터 장애·정전 등 긴급 상황에만 매장별로 엽니다. 평상시는 출력물이 기준입니다.',
-    'Chỉ bật theo từng cửa hàng khi máy in hỏng hoặc mất điện. Phiếu in là quy trình mặc định.',
-    'Enable per store only for printer failure or power incidents. Printed tickets are the default.',
+    '포스 프린트 또는 페이퍼리스 작업 방식을 매장별로 선택합니다. 전환은 새 주문부터 적용됩니다.',
+    'Chọn in POS hoặc vận hành không giấy cho từng cửa hàng. Thay đổi áp dụng cho đơn mới.',
+    'Choose POS print or paperless operation per store. Changes apply to new orders.',
   );
   String get refresh => pick('새로고침', 'Làm mới', 'Refresh');
   String get retry => pick('다시 시도', 'Thử lại', 'Retry');
-  String get active => pick('비상 운영 중', 'Đang khẩn cấp', 'Emergency active');
-  String get inactive => pick('프린터 운영', 'Đang dùng máy in', 'Printer mode');
-  String get activate => pick('비상 모드 열기', 'Bật khẩn cấp', 'Activate');
-  String get close => pick('비상 모드 종료', 'Tắt khẩn cấp', 'Close');
-  String get openTitle =>
-      pick('비상 모드 활성화', 'Bật chế độ khẩn cấp', 'Activate emergency mode');
-  String get closeTitle =>
-      pick('비상 모드 종료', 'Đóng chế độ khẩn cấp', 'Close emergency mode');
+  String get active => pick('페이퍼리스 모드', 'Chế độ không giấy', 'Paperless mode');
+  String get inactive => pick('포스 프린트 모드', 'Chế độ in POS', 'POS print mode');
+  String get activate =>
+      pick('페이퍼리스로 전환', 'Chuyển sang không giấy', 'Switch to paperless');
+  String get close =>
+      pick('포스 프린트로 전환', 'Chuyển sang in POS', 'Switch to POS print');
+  String get openTitle => pick(
+    '페이퍼리스 모드로 전환',
+    'Chuyển sang chế độ không giấy',
+    'Switch to paperless mode',
+  );
+  String get closeTitle => pick(
+    '포스 프린트 모드로 전환',
+    'Chuyển sang chế độ in POS',
+    'Switch to POS print mode',
+  );
   String get reason => pick('사유 (필수)', 'Lý do (bắt buộc)', 'Reason (required)');
   String get orders => pick('주문', 'Đơn', 'Orders');
   String get unserved =>
       pick('미제공 수량', 'Số lượng chưa phục vụ', 'Unserved quantity');
-  String get printResolution =>
-      pick('보류 출력물 처리', 'Xử lý phiếu đang giữ', 'Held print jobs');
-  String get digitalCompleted =>
-      pick('디지털 완료 처리', 'Hoàn tất bằng màn hình', 'Digital completion');
-  String get reprint =>
-      pick('보류 출력물 재출력', 'In lại phiếu đang giữ', 'Reprint held jobs');
-  String get dismiss =>
-      pick('보류 출력물 폐기', 'Bỏ phiếu đang giữ', 'Dismiss held jobs');
-  String get forceClose => pick(
-    '미제공 상태로 강제 종료',
-    'Buộc đóng khi còn món',
-    'Force close with unserved items',
+  String get newOrdersOnly => pick(
+    '전환 이후 생성되는 새 주문과 추가 메뉴부터 적용됩니다.',
+    'Áp dụng cho đơn và món thêm được tạo sau khi chuyển.',
+    'Applies to new orders and added items created after the switch.',
   );
-  String get forceCloseWarning => pick(
-    '미제공 수량이 남습니다. 재출력 또는 폐기 선택을 반드시 확인하세요.',
-    'Vẫn còn món chưa phục vụ. Hãy xác nhận in lại hoặc bỏ phiếu.',
-    'Unserved items remain. Confirm reprint or dismissal.',
+  String get kdsReady => pick(
+    '키친·트레이·층별 KDS 준비 완료',
+    'KDS bếp, khay và tầng đã sẵn sàng',
+    'Kitchen, tray, and floor KDS are ready',
+  );
+  String get kdsWarning => pick(
+    'KDS 배정을 확인하세요. 전환 후 주문은 화면으로 전달됩니다.',
+    'Kiểm tra phân công KDS. Đơn mới sẽ được chuyển tới màn hình.',
+    'Check KDS assignments. New orders will route to screens.',
+  );
+  String get drainNotice => pick(
+    '기존 주문은 KDS에서 마감',
+    'Hoàn tất đơn cũ trên KDS',
+    'Finish existing orders on KDS',
+  );
+  String get draining => pick(
+    '기존 페이퍼리스 주문 마감 중',
+    'Đang hoàn tất đơn không giấy cũ',
+    'Draining existing paperless orders',
   );
   String get cancel => pick('취소', 'Hủy', 'Cancel');
 }

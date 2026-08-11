@@ -7,7 +7,7 @@ class PrinterDestinationErrorCodes {
   const PrinterDestinationErrorCodes._();
 
   static const nameRequired = 'PRINTER_NAME_REQUIRED';
-  static const ipRequired = 'PRINTER_IP_REQUIRED';
+  static const endpointRequired = 'PRINTER_ENDPOINT_REQUIRED';
   static const portInvalid = 'PRINTER_PORT_INVALID';
   static const purposeInvalid = 'PRINTER_PURPOSE_INVALID';
   static const floorRequired = 'PRINTER_FLOOR_LABEL_REQUIRED';
@@ -67,8 +67,9 @@ class PrinterDestinationsNotifier
     if (message.contains(PrinterDestinationErrorCodes.nameRequired)) {
       return PrinterDestinationErrorCodes.nameRequired;
     }
-    if (message.contains(PrinterDestinationErrorCodes.ipRequired)) {
-      return PrinterDestinationErrorCodes.ipRequired;
+    if (message.contains(PrinterDestinationErrorCodes.endpointRequired) ||
+        message.contains('PRINTER_IP_REQUIRED')) {
+      return PrinterDestinationErrorCodes.endpointRequired;
     }
     if (message.contains(PrinterDestinationErrorCodes.portInvalid)) {
       return PrinterDestinationErrorCodes.portInvalid;

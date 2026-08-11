@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/hardware/print_job_agent_service.dart';
 import '../../core/i18n/locale_extensions.dart';
@@ -15,6 +16,7 @@ import '../../core/services/bank_transfer_alert_service.dart';
 import '../../core/services/bank_transfer_alert_sound.dart';
 import '../../core/services/bank_transfer_alert_coordinator.dart';
 import '../../core/services/connectivity_service.dart';
+import '../../core/services/digital_receipt_service.dart';
 import '../../core/services/live_refresh_service.dart';
 import '../../core/services/menu_service.dart';
 import '../../core/layout/platform_info.dart';
@@ -25,6 +27,7 @@ import '../../widgets/app_nav_bar.dart';
 import '../../widgets/error_toast.dart';
 import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
+import '../digital_receipt/digital_receipt_model.dart';
 import '../order/order_model.dart';
 import '../payment/payment_provider.dart';
 import '../payment/einvoice_status_badge.dart';
@@ -50,6 +53,16 @@ String _cashierUnservedLabel(BuildContext context, int quantity) =>
       _ => '미제공 $quantity',
     };
 
+String _digitalReceiptFailureCopy(
+  BuildContext context,
+) => switch (Localizations.localeOf(context).languageCode) {
+  'vi' =>
+    'Không thể tạo QR biên lai. Thanh toán đã hoàn tất; hãy in biên lai giấy.',
+  'en' =>
+    'Receipt QR is unavailable. Payment is complete; offer a paper receipt.',
+  _ => '영수증 QR을 준비하지 못했습니다. 결제는 완료되었으니 종이 영수증을 제공하세요.',
+};
+
 class CashierScreen extends ConsumerStatefulWidget {
   const CashierScreen({
     super.key,
@@ -60,6 +73,7 @@ class CashierScreen extends ConsumerStatefulWidget {
     this.bankTransferAlertServiceOverride,
     this.bankTransferAlertSoundServiceOverride,
     this.menuServiceOverride,
+    this.digitalReceiptServiceOverride,
     this.bankTransferAlertPollInterval = const Duration(seconds: 2),
   });
 
@@ -70,6 +84,7 @@ class CashierScreen extends ConsumerStatefulWidget {
   final BankTransferAlertService? bankTransferAlertServiceOverride;
   final BankTransferAlertSoundService? bankTransferAlertSoundServiceOverride;
   final MenuService? menuServiceOverride;
+  final DigitalReceiptService? digitalReceiptServiceOverride;
   final Duration bankTransferAlertPollInterval;
 
   @override
@@ -103,6 +118,8 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       widget.paymentProofServiceOverride ?? paymentProofService;
   PaymentService get _paymentService =>
       widget.paymentServiceOverride ?? paymentService;
+  DigitalReceiptService get _digitalReceiptService =>
+      widget.digitalReceiptServiceOverride ?? digitalReceiptService;
   RestaurantCutoffService get _restaurantCutoffService =>
       widget.restaurantCutoffServiceOverride ?? restaurantCutoffService;
 
@@ -649,7 +666,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     }
 
     for (final order in paymentOrders) {
-      await _printReceipt(order: order, method: method);
+      if (!order.fulfillmentMode.isPaperless) {
+        await _printReceipt(order: order, method: method);
+      }
     }
 
     final rawPayments = result['payments'];
@@ -693,6 +712,14 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       );
     }
 
+    final receiptAccessByOrderId = <String, DigitalReceiptAccess?>{};
+    for (final order in paymentOrders) {
+      receiptAccessByOrderId[order.orderId] = await _prepareDigitalReceipt(
+        storeId: storeId,
+        order: order,
+      );
+    }
+
     if (!mounted) return;
     setState(() {
       _combinedOrderIds.clear();
@@ -709,8 +736,12 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
         totalAmount: combinedTotal,
         paymentMethod: method,
         cashTender: cashTender,
+        receiptAccessByOrderId: receiptAccessByOrderId,
+        onPaperReceipt: (order) => _printReceipt(order: order, method: method),
         onReprint: () async {
-          for (final order in paymentOrders) {
+          for (final order in paymentOrders.where(
+            (order) => !order.fulfillmentMode.isPaperless,
+          )) {
             await _printReceipt(order: order, method: method, reprint: true);
           }
         },
@@ -729,6 +760,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     required CashierOrder order,
     required String paymentMethod,
     CashTender? cashTender,
+    DigitalReceiptAccess? receiptAccess,
   }) {
     return showDialog<void>(
       context: context,
@@ -737,6 +769,12 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
         order: order,
         paymentMethod: paymentMethod,
         cashTender: cashTender,
+        receiptAccess: receiptAccess,
+        onPaperReceipt: () => _printReceipt(
+          order: order,
+          method: paymentMethod,
+          cashTender: cashTender,
+        ),
         onReprint: () => _printReceipt(
           order: order,
           method: paymentMethod,
@@ -864,6 +902,35 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       if (mounted) {
         showErrorToast(context, l10n.cashierReceiptPrintFailed);
       }
+    }
+  }
+
+  Future<DigitalReceiptAccess?> _prepareDigitalReceipt({
+    required String storeId,
+    required CashierOrder order,
+    CashTender? cashTender,
+  }) async {
+    try {
+      final access = await _digitalReceiptService.ensureAndIssue(
+        orderId: order.orderId,
+        receivedAmount: cashTender?.receivedAmount,
+        changeAmount: cashTender?.changeAmount,
+      );
+      if (order.fulfillmentMode.isPaperless) {
+        await ref
+            .read(paymentProvider.notifier)
+            .showReceiptOnCustomerDisplay(
+              storeId: storeId,
+              orderId: order.orderId,
+              receiptId: access.receiptId,
+            );
+      }
+      return access;
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(context, _digitalReceiptFailureCopy(context));
+      }
+      return null;
     }
   }
 
@@ -1485,11 +1552,13 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                             managerPin: nonRevenueInput['managerPin'] ?? '',
                           );
                     if (mounted && ref.read(paymentProvider).paymentSuccess) {
-                      await _printReceipt(
-                        order: selectedOrder,
-                        method: method,
-                        cashTender: cashTender,
-                      );
+                      if (!selectedOrder.fulfillmentMode.isPaperless) {
+                        await _printReceipt(
+                          order: selectedOrder,
+                          method: method,
+                          cashTender: cashTender,
+                        );
+                      }
                       setState(() {
                         _selectedMethod = null;
                         _lastCompletedOrderId = selectedOrder.orderId;
@@ -1564,11 +1633,20 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                         );
                       }
 
+                      final receiptAccess = context.mounted
+                          ? await _prepareDigitalReceipt(
+                              storeId: storeId,
+                              order: selectedOrder,
+                              cashTender: cashTender,
+                            )
+                          : null;
+
                       if (context.mounted) {
                         await _showPaymentCompletion(
                           order: selectedOrder,
                           paymentMethod: method,
                           cashTender: cashTender,
+                          receiptAccess: receiptAccess,
                         );
                         if (context.mounted) {
                           unawaited(
@@ -1612,10 +1690,12 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       splits,
                     );
                     if (mounted && ref.read(paymentProvider).paymentSuccess) {
-                      await _printReceipt(
-                        order: selectedOrder,
-                        method: 'SPLIT',
-                      );
+                      if (!selectedOrder.fulfillmentMode.isPaperless) {
+                        await _printReceipt(
+                          order: selectedOrder,
+                          method: 'SPLIT',
+                        );
+                      }
                       setState(() {
                         _selectedMethod = null;
                         _lastCompletedOrderId = selectedOrder.orderId;
@@ -1670,10 +1750,18 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                         );
                       }
 
+                      final receiptAccess = context.mounted
+                          ? await _prepareDigitalReceipt(
+                              storeId: storeId,
+                              order: selectedOrder,
+                            )
+                          : null;
+
                       if (context.mounted) {
                         await _showPaymentCompletion(
                           order: selectedOrder,
                           paymentMethod: 'SPLIT',
+                          receiptAccess: receiptAccess,
                         );
                         if (context.mounted) {
                           unawaited(
@@ -5264,6 +5352,8 @@ class _CombinedPaymentCompletionDialog extends StatelessWidget {
     required this.totalAmount,
     required this.paymentMethod,
     required this.cashTender,
+    required this.receiptAccessByOrderId,
+    required this.onPaperReceipt,
     required this.onReprint,
   });
 
@@ -5271,6 +5361,8 @@ class _CombinedPaymentCompletionDialog extends StatelessWidget {
   final double totalAmount;
   final String paymentMethod;
   final CashTender? cashTender;
+  final Map<String, DigitalReceiptAccess?> receiptAccessByOrderId;
+  final Future<void> Function(CashierOrder order) onPaperReceipt;
   final Future<void> Function() onReprint;
 
   @override
@@ -5278,6 +5370,12 @@ class _CombinedPaymentCompletionDialog extends StatelessWidget {
     final l10n = context.l10n;
     final currency = NumberFormat('#,###', 'vi_VN');
     final tableNumbers = orders.map((order) => order.tableNumber).join(', ');
+    final paperlessOrders = orders
+        .where((order) => order.fulfillmentMode.isPaperless)
+        .toList(growable: false);
+    final hasPrintedOrders = orders.any(
+      (order) => !order.fulfillmentMode.isPaperless,
+    );
     return AlertDialog(
       title: Text(l10n.cashierCombinedCompleted),
       content: SizedBox(
@@ -5311,16 +5409,69 @@ class _CombinedPaymentCompletionDialog extends StatelessWidget {
                 ),
               ),
             ],
+            if (paperlessOrders.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              SizedBox(
+                height: 210,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: paperlessOrders.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 10),
+                  itemBuilder: (context, index) {
+                    final order = paperlessOrders[index];
+                    final access = receiptAccessByOrderId[order.orderId];
+                    return Container(
+                      key: ValueKey(
+                        'cashier_combined_receipt_${order.orderId}',
+                      ),
+                      width: 170,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: PosSurfaceRole.background.fill,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: PosColors.border),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            l10n.cashierTableLabel(order.tableNumber),
+                            style: const TextStyle(fontWeight: FontWeight.w900),
+                          ),
+                          const SizedBox(height: 6),
+                          Expanded(
+                            child: access == null
+                                ? const Icon(Icons.qr_code_2_rounded, size: 64)
+                                : QrImageView(
+                                    data: access.publicUrl,
+                                    backgroundColor: Colors.white,
+                                  ),
+                          ),
+                          TextButton.icon(
+                            key: ValueKey(
+                              'cashier_combined_paper_receipt_${order.orderId}',
+                            ),
+                            onPressed: () => unawaited(onPaperReceipt(order)),
+                            icon: const Icon(Icons.print_outlined, size: 16),
+                            label: const Text('종이 출력'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ],
         ),
       ),
       actions: [
-        TextButton.icon(
-          key: const Key('cashier_combined_payment_reprint'),
-          onPressed: () => unawaited(onReprint()),
-          icon: const Icon(Icons.print_rounded, size: 18),
-          label: Text(l10n.cashierReprint),
-        ),
+        if (hasPrintedOrders)
+          TextButton.icon(
+            key: const Key('cashier_combined_payment_reprint'),
+            onPressed: () => unawaited(onReprint()),
+            icon: const Icon(Icons.print_rounded, size: 18),
+            label: Text(l10n.cashierReprint),
+          ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(),
           child: Text(l10n.confirm),

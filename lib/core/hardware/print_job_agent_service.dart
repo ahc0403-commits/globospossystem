@@ -208,23 +208,6 @@ class PrintJobAgentService implements PrintAgentDriver {
     List<int> bytes, {
     int copyCount = 1,
   }) async {
-    NetworkCapabilities capabilities;
-    try {
-      capabilities = await _networkCapabilityService.loadCapabilities();
-    } catch (_) {
-      return const _EndpointPrintOutcome(
-        result: PrintResult.networkUnavailable,
-        error: 'NETWORK_CAPABILITIES_UNAVAILABLE',
-      );
-    }
-
-    if (!capabilities.hasNetwork) {
-      return const _EndpointPrintOutcome(
-        result: PrintResult.networkUnavailable,
-        error: 'NETWORK_UNAVAILABLE',
-      );
-    }
-
     final configuredEndpoints = destination.endpoints.isEmpty
         ? <PrinterEndpoint>[
             PrinterEndpoint(
@@ -247,16 +230,42 @@ class PrintJobAgentService implements PrintAgentDriver {
       );
     }
 
+    final hasUsbEndpoint = candidates.any(
+      (endpoint) => endpoint.type == PrinterEndpointType.usb,
+    );
+    if (!hasUsbEndpoint) {
+      NetworkCapabilities capabilities;
+      try {
+        capabilities = await _networkCapabilityService.loadCapabilities();
+      } catch (_) {
+        return const _EndpointPrintOutcome(
+          result: PrintResult.networkUnavailable,
+          error: 'NETWORK_CAPABILITIES_UNAVAILABLE',
+        );
+      }
+      if (!capabilities.hasNetwork) {
+        return const _EndpointPrintOutcome(
+          result: PrintResult.networkUnavailable,
+          error: 'NETWORK_UNAVAILABLE',
+        );
+      }
+    }
+
     final failures = <String>[];
     for (final endpoint in candidates) {
       var printedCopies = 0;
       var result = PrintResult.success;
       while (printedCopies < copyCount) {
-        result = await _printerService.printReceipt(
-          endpoint.ip,
-          bytes,
-          port: endpoint.port,
-        );
+        result = endpoint.type == PrinterEndpointType.usb
+            ? _printerService is UsbPrinterService
+                  ? await (_printerService as UsbPrinterService)
+                        .printUsbReceipt(endpoint.deviceName, bytes)
+                  : PrintResult.notSupported
+            : await _printerService.printReceipt(
+                endpoint.ip,
+                bytes,
+                port: endpoint.port,
+              );
         if (result != PrintResult.success) break;
         printedCopies++;
       }
@@ -267,7 +276,7 @@ class PrintJobAgentService implements PrintAgentDriver {
         );
       }
       failures.add(
-        '${endpoint.type.name}@${endpoint.ip}:${endpoint.port}=${result.name}',
+        '${endpoint.type.name}@${endpoint.displayAddress}=${result.name}',
       );
       // Do not switch endpoints after a partial multi-copy print; doing so can
       // create an extra first copy at a different physical interface.
@@ -313,6 +322,7 @@ class PrintJobAgentService implements PrintAgentDriver {
       cashierCode: receipt.cashierCode,
       subtotalAmount: receipt.subtotalAmount,
       discountAmount: receipt.discountAmount,
+      vatAmount: receipt.vatAmount,
       receivedAmount: receipt.receivedAmount,
       changeAmount: receipt.changeAmount,
     );
@@ -370,7 +380,9 @@ class SupabasePrintJobBackend implements PrintJobBackend {
     if (physicalPrinterId != null && physicalPrinterId.isNotEmpty) {
       final endpointRows = await _client
           .from('printer_endpoints')
-          .select('id, endpoint_type, ip, port, priority, is_active')
+          .select(
+            'id, endpoint_type, ip, device_name, port, priority, is_active',
+          )
           .eq('physical_printer_id', physicalPrinterId)
           .eq('is_active', true)
           .order('priority');
@@ -516,13 +528,14 @@ class PrintDestination {
   }
 }
 
-enum PrinterEndpointType { wired, wireless }
+enum PrinterEndpointType { usb, wired, wireless }
 
 class PrinterEndpoint {
   const PrinterEndpoint({
     required this.id,
     required this.type,
     required this.ip,
+    this.deviceName = '',
     required this.port,
     required this.priority,
     required this.isActive,
@@ -531,17 +544,24 @@ class PrinterEndpoint {
   final String id;
   final PrinterEndpointType type;
   final String ip;
+  final String deviceName;
   final int port;
   final int priority;
   final bool isActive;
 
+  String get displayAddress =>
+      type == PrinterEndpointType.usb ? deviceName : '$ip:$port';
+
   factory PrinterEndpoint.fromJson(Map<String, dynamic> json) {
     return PrinterEndpoint(
       id: json['id']?.toString() ?? '',
-      type: json['endpoint_type']?.toString() == 'wired'
-          ? PrinterEndpointType.wired
-          : PrinterEndpointType.wireless,
+      type: switch (json['endpoint_type']?.toString()) {
+        'usb' => PrinterEndpointType.usb,
+        'wired' => PrinterEndpointType.wired,
+        _ => PrinterEndpointType.wireless,
+      },
       ip: json['ip']?.toString() ?? '',
+      deviceName: json['device_name']?.toString() ?? '',
       port: switch (json['port']) {
         int value => value,
         num value => value.toInt(),

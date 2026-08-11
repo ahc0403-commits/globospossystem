@@ -12,18 +12,47 @@
 #endif
 
 #include <winsock2.h>
+#include <windows.h>
 #include <netioapi.h>
 #include <iphlpapi.h>
+#include <winspool.h>
 
 #include "flutter_window.h"
 
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
 
+#include <cstdint>
 #include <optional>
+#include <string>
+#include <variant>
 #include <vector>
 
 #include "flutter/generated_plugin_registrant.h"
+
+namespace {
+
+std::wstring Utf8ToWide(const std::string& value) {
+  if (value.empty()) {
+    return std::wstring();
+  }
+  const int size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+                                       value.data(),
+                                       static_cast<int>(value.size()), nullptr,
+                                       0);
+  if (size <= 0) {
+    return std::wstring();
+  }
+  std::wstring result(size, L'\0');
+  if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(),
+                          static_cast<int>(value.size()), result.data(), size) <=
+      0) {
+    return std::wstring();
+  }
+  return result;
+}
+
+}  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -114,6 +143,91 @@ bool FlutterWindow::OnCreate() {
             flutter::EncodableValue(wireless_connected);
         result->Success(flutter::EncodableValue(capabilities));
       });
+  usb_printer_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(), "globos/usb_printer",
+          &flutter::StandardMethodCodec::GetInstance());
+  usb_printer_channel_->SetMethodCallHandler(
+      [](const flutter::MethodCall<flutter::EncodableValue>& call,
+         std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+        if (call.method_name() != "printRaw") {
+          result->NotImplemented();
+          return;
+        }
+
+        const auto* arguments =
+            std::get_if<flutter::EncodableMap>(call.arguments());
+        if (arguments == nullptr) {
+          result->Error("USB_PRINTER_ARGUMENTS_INVALID",
+                        "USB printer arguments are required.");
+          return;
+        }
+        const auto name_it =
+            arguments->find(flutter::EncodableValue("printerName"));
+        const auto bytes_it = arguments->find(flutter::EncodableValue("bytes"));
+        if (name_it == arguments->end() || bytes_it == arguments->end()) {
+          result->Error("USB_PRINTER_ARGUMENTS_INVALID",
+                        "Printer name and raw bytes are required.");
+          return;
+        }
+        const auto* printer_name_utf8 =
+            std::get_if<std::string>(&name_it->second);
+        const auto* bytes =
+            std::get_if<std::vector<uint8_t>>(&bytes_it->second);
+        if (printer_name_utf8 == nullptr || printer_name_utf8->empty() ||
+            bytes == nullptr || bytes->empty()) {
+          result->Error("USB_PRINTER_ARGUMENTS_INVALID",
+                        "Printer name and raw bytes must not be empty.");
+          return;
+        }
+
+        const std::wstring printer_name = Utf8ToWide(*printer_name_utf8);
+        if (printer_name.empty()) {
+          result->Error("USB_PRINTER_NAME_INVALID",
+                        "The Windows printer name is not valid UTF-8.");
+          return;
+        }
+
+        HANDLE printer = nullptr;
+        if (!OpenPrinterW(const_cast<LPWSTR>(printer_name.c_str()), &printer,
+                          nullptr)) {
+          result->Error("USB_PRINTER_OPEN_FAILED",
+                        "Windows could not open the configured printer.");
+          return;
+        }
+
+        wchar_t document_name[] = L"GLOBOS POS Receipt";
+        wchar_t data_type[] = L"RAW";
+        DOC_INFO_1W document_info{};
+        document_info.pDocName = document_name;
+        document_info.pDatatype = data_type;
+        const DWORD document_id =
+            StartDocPrinterW(printer, 1, reinterpret_cast<LPBYTE>(&document_info));
+        if (document_id == 0) {
+          ClosePrinter(printer);
+          result->Error("USB_PRINTER_DOCUMENT_FAILED",
+                        "Windows could not start the raw print document.");
+          return;
+        }
+
+        bool ok = StartPagePrinter(printer) != FALSE;
+        DWORD written = 0;
+        if (ok) {
+          ok = WritePrinter(printer, const_cast<uint8_t*>(bytes->data()),
+                            static_cast<DWORD>(bytes->size()), &written) != FALSE &&
+               written == static_cast<DWORD>(bytes->size());
+          EndPagePrinter(printer);
+        }
+        EndDocPrinter(printer);
+        ClosePrinter(printer);
+
+        if (!ok) {
+          result->Error("USB_PRINTER_WRITE_FAILED",
+                        "Windows could not write all raw receipt bytes.");
+          return;
+        }
+        result->Success(flutter::EncodableValue(true));
+      });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -129,6 +243,7 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  usb_printer_channel_.reset();
   network_channel_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;

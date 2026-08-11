@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/models/fulfillment_mode.dart';
 import '../../core/services/emergency_web_bridge.dart';
 import '../../core/utils/live_sync_scope.dart';
 import '../../main.dart';
@@ -98,6 +99,8 @@ class EmergencyFulfillmentOrder {
     required this.floorLabel,
     required this.createdAt,
     required this.items,
+    this.lastActionId,
+    this.lastActionAt,
   });
 
   final String queueId;
@@ -107,6 +110,36 @@ class EmergencyFulfillmentOrder {
   final String floorLabel;
   final DateTime createdAt;
   final List<EmergencyFulfillmentItem> items;
+  final String? lastActionId;
+  final DateTime? lastActionAt;
+
+  bool hasActionableQuantity(String stationType) => items.any(
+    (item) => switch (stationType) {
+      'kitchen' => item.kitchenDoneQuantity < item.orderedQuantity,
+      'tray' =>
+        item.trayReceivedQuantity < item.kitchenDoneQuantity ||
+            item.trayDispatchedQuantity < item.kitchenDoneQuantity,
+      'floor' => item.floorServedQuantity < item.trayDispatchedQuantity,
+      _ => false,
+    },
+  );
+
+  EmergencyFulfillmentOrder copyWith({
+    List<EmergencyFulfillmentItem>? items,
+    String? lastActionId,
+    DateTime? lastActionAt,
+    bool clearLastAction = false,
+  }) => EmergencyFulfillmentOrder(
+    queueId: queueId,
+    orderId: orderId,
+    queueNo: queueNo,
+    tableNumber: tableNumber,
+    floorLabel: floorLabel,
+    createdAt: createdAt,
+    items: items ?? this.items,
+    lastActionId: clearLastAction ? null : (lastActionId ?? this.lastActionId),
+    lastActionAt: clearLastAction ? null : (lastActionAt ?? this.lastActionAt),
+  );
 
   bool isCompleteForStage(String stage) =>
       items.isNotEmpty &&
@@ -125,6 +158,8 @@ class EmergencyFulfillmentOrder {
       createdAt:
           DateTime.tryParse(json['created_at']?.toString() ?? '') ??
           DateTime.now().toUtc(),
+      lastActionId: json['last_action_id']?.toString(),
+      lastActionAt: DateTime.tryParse(json['last_action_at']?.toString() ?? ''),
       items: rawItems is List
           ? rawItems
                 .whereType<Map>()
@@ -148,8 +183,10 @@ class EmergencyFulfillmentState {
     this.sessionId,
     this.stationType,
     this.floorLabel,
+    this.fulfillmentMode = FulfillmentMode.paperless,
     this.orders = const [],
     this.pendingOutboxCount = 0,
+    this.pendingQueueIds = const {},
     this.error,
   });
 
@@ -160,9 +197,13 @@ class EmergencyFulfillmentState {
   final String? sessionId;
   final String? stationType;
   final String? floorLabel;
+  final FulfillmentMode fulfillmentMode;
   final List<EmergencyFulfillmentOrder> orders;
   final int pendingOutboxCount;
+  final Set<String> pendingQueueIds;
   final String? error;
+
+  bool get isDraining => active && !fulfillmentMode.isPaperless;
 
   EmergencyFulfillmentState copyWith({
     bool? assigned,
@@ -172,8 +213,10 @@ class EmergencyFulfillmentState {
     String? sessionId,
     String? stationType,
     String? floorLabel,
+    FulfillmentMode? fulfillmentMode,
     List<EmergencyFulfillmentOrder>? orders,
     int? pendingOutboxCount,
+    Set<String>? pendingQueueIds,
     String? error,
     bool clearError = false,
   }) => EmergencyFulfillmentState(
@@ -184,8 +227,10 @@ class EmergencyFulfillmentState {
     sessionId: sessionId ?? this.sessionId,
     stationType: stationType ?? this.stationType,
     floorLabel: floorLabel ?? this.floorLabel,
+    fulfillmentMode: fulfillmentMode ?? this.fulfillmentMode,
     orders: orders ?? this.orders,
     pendingOutboxCount: pendingOutboxCount ?? this.pendingOutboxCount,
+    pendingQueueIds: pendingQueueIds ?? this.pendingQueueIds,
     error: clearError ? null : (error ?? this.error),
   );
 
@@ -198,6 +243,9 @@ class EmergencyFulfillmentState {
       sessionId: json['session_id']?.toString(),
       stationType: json['station_type']?.toString(),
       floorLabel: json['floor_label']?.toString(),
+      fulfillmentMode: FulfillmentMode.fromValue(
+        json['fulfillment_mode'] ?? 'paperless',
+      ),
       orders: rawOrders is List
           ? rawOrders
                 .whereType<Map>()
@@ -227,16 +275,30 @@ class EmergencyFulfillmentNotifier
     _refreshing = true;
     if (showLoading) state = state.copyWith(isLoading: true, clearError: true);
     try {
-      await _flushOutbox();
+      final outboxError = await _flushOutbox();
       final raw = await supabase.rpc('get_emergency_station_snapshot');
       final json = raw is Map
           ? Map<String, dynamic>.from(raw)
           : <String, dynamic>{};
+      final storeId = json['restaurant_id']?.toString();
+      if (storeId != null && storeId.isNotEmpty) {
+        try {
+          json['fulfillment_mode'] = await supabase.rpc(
+            'get_store_fulfillment_mode',
+            params: {'p_store_id': storeId},
+          );
+        } catch (_) {
+          // Compatibility with the pre-mode migration during a staged rollout.
+        }
+      }
       final next = EmergencyFulfillmentState.fromJson(json);
+      final pendingRecords = await EmergencyWebBridge.readOutbox();
       state = next.copyWith(
         isLoading: false,
-        pendingOutboxCount: (await EmergencyWebBridge.readOutbox()).length,
-        clearError: true,
+        pendingOutboxCount: pendingRecords.length,
+        pendingQueueIds: _pendingQueueIds(pendingRecords),
+        error: outboxError,
+        clearError: outboxError == null,
       );
       await _subscribe(next.restaurantId);
     } catch (error) {
@@ -320,6 +382,74 @@ class EmergencyFulfillmentNotifier
     }
   }
 
+  Future<bool> completeOrder({required String queueId}) async {
+    final actionId = _uuid.v4();
+    final payload = <String, dynamic>{
+      'kind': 'complete_order',
+      'queue_id': queueId,
+      'action_id': actionId,
+    };
+    final previous = state;
+    _applyOptimisticOrderCompletion(queueId: queueId, actionId: actionId);
+    try {
+      await _sendOutboxPayload(payload);
+      await load(showLoading: false);
+      return true;
+    } catch (error) {
+      if (error is PostgrestException) {
+        state = previous.copyWith(error: error.message);
+        return false;
+      }
+      try {
+        await EmergencyWebBridge.putOutbox(actionId, jsonEncode(payload));
+        state = state.copyWith(
+          pendingOutboxCount: state.pendingOutboxCount + 1,
+          pendingQueueIds: {...state.pendingQueueIds, queueId},
+          error: 'EMERGENCY_ORDER_ACTION_QUEUED',
+        );
+        return true;
+      } catch (_) {
+        state = previous.copyWith(error: 'EMERGENCY_ORDER_ACTION_FAILED');
+        return false;
+      }
+    }
+  }
+
+  Future<bool> revertOrder({
+    required String queueId,
+    required String actionId,
+  }) async {
+    final revertId = _uuid.v4();
+    final payload = <String, dynamic>{
+      'kind': 'revert_order',
+      'queue_id': queueId,
+      'action_id': actionId,
+      'revert_id': revertId,
+    };
+    try {
+      await _sendOutboxPayload(payload);
+      await load(showLoading: false);
+      return true;
+    } catch (error) {
+      if (error is PostgrestException) {
+        state = state.copyWith(error: error.message);
+        return false;
+      }
+      try {
+        await EmergencyWebBridge.putOutbox(revertId, jsonEncode(payload));
+        state = state.copyWith(
+          pendingOutboxCount: state.pendingOutboxCount + 1,
+          pendingQueueIds: {...state.pendingQueueIds, queueId},
+          error: 'EMERGENCY_ORDER_ACTION_QUEUED',
+        );
+        return true;
+      } catch (_) {
+        state = state.copyWith(error: 'EMERGENCY_ORDER_REVERT_FAILED');
+        return false;
+      }
+    }
+  }
+
   void _applyOptimistic({
     required String itemId,
     required String stage,
@@ -335,6 +465,8 @@ class EmergencyFulfillmentNotifier
               tableNumber: order.tableNumber,
               floorLabel: order.floorLabel,
               createdAt: order.createdAt,
+              lastActionId: order.lastActionId,
+              lastActionAt: order.lastActionAt,
               items: order.items
                   .map((item) {
                     if (item.id != itemId) return item;
@@ -364,17 +496,94 @@ class EmergencyFulfillmentNotifier
     );
   }
 
-  Future<void> _flushOutbox() async {
-    if (_flushing) return;
+  Future<void> _sendOutboxPayload(Map<String, dynamic> payload) async {
+    switch (payload['kind']) {
+      case 'complete_order':
+        await supabase.rpc(
+          'emergency_complete_order_stage',
+          params: {
+            'p_queue_id': payload['queue_id'],
+            'p_action_id': payload['action_id'],
+          },
+        );
+      case 'revert_order':
+        await supabase.rpc(
+          'emergency_revert_order_action',
+          params: {
+            'p_queue_id': payload['queue_id'],
+            'p_action_id': payload['action_id'],
+            'p_revert_id': payload['revert_id'],
+          },
+        );
+      default:
+        await _sendProgress(payload);
+    }
+  }
+
+  void _applyOptimisticOrderCompletion({
+    required String queueId,
+    required String actionId,
+  }) {
+    final stationType = state.stationType;
+    state = state.copyWith(
+      orders: state.orders
+          .map((order) {
+            if (order.queueId != queueId) return order;
+            return order.copyWith(
+              lastActionId: actionId,
+              lastActionAt: DateTime.now().toUtc(),
+              items: order.items
+                  .map((item) {
+                    return switch (stationType) {
+                      'kitchen' => item.withStage(
+                        'kitchen_done',
+                        item.orderedQuantity,
+                      ),
+                      'tray' =>
+                        item
+                            .withStage(
+                              'tray_received',
+                              item.kitchenDoneQuantity,
+                            )
+                            .withStage(
+                              'tray_dispatched',
+                              item.kitchenDoneQuantity,
+                            ),
+                      'floor' => item.withStage(
+                        'floor_served',
+                        item.trayDispatchedQuantity,
+                      ),
+                      _ => item,
+                    };
+                  })
+                  .toList(growable: false),
+            );
+          })
+          .toList(growable: false),
+      clearError: true,
+    );
+  }
+
+  Future<String?> _flushOutbox() async {
+    if (_flushing) return null;
     _flushing = true;
+    String? rejectedError;
     try {
       final records = await EmergencyWebBridge.readOutbox();
       for (final record in records) {
         try {
           final decoded = jsonDecode(record.payload);
-          if (decoded is! Map) continue;
-          await _sendProgress(Map<String, dynamic>.from(decoded));
+          if (decoded is! Map) {
+            await EmergencyWebBridge.deleteOutbox(record.id);
+            continue;
+          }
+          await _sendOutboxPayload(Map<String, dynamic>.from(decoded));
           await EmergencyWebBridge.deleteOutbox(record.id);
+        } on PostgrestException catch (error) {
+          // A server-side contract rejection will not succeed on retry. Remove
+          // it so one invalid undo cannot block later offline actions forever.
+          await EmergencyWebBridge.deleteOutbox(record.id);
+          rejectedError = error.message;
         } catch (_) {
           // Preserve ordering and retry the first unavailable event later.
           break;
@@ -383,6 +592,7 @@ class EmergencyFulfillmentNotifier
     } finally {
       _flushing = false;
     }
+    return rejectedError;
   }
 
   @override
@@ -392,6 +602,19 @@ class EmergencyFulfillmentNotifier
     super.dispose();
   }
 }
+
+Set<String> _pendingQueueIds(List<EmergencyOutboxRecord> records) => records
+    .map((record) {
+      try {
+        final decoded = jsonDecode(record.payload);
+        return decoded is Map ? decoded['queue_id']?.toString() : null;
+      } catch (_) {
+        return null;
+      }
+    })
+    .whereType<String>()
+    .where((id) => id.isNotEmpty)
+    .toSet();
 
 final emergencyFulfillmentProvider =
     StateNotifierProvider<

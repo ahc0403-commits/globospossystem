@@ -365,16 +365,16 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
 
 String _superAdminEmergencyLabel(BuildContext context) =>
     switch (Localizations.localeOf(context).languageCode) {
-      'vi' => 'Vận hành khẩn cấp',
-      'en' => 'Emergency operation',
-      _ => '비상 디지털 운영',
+      'vi' => 'Chế độ vận hành',
+      'en' => 'Operation mode',
+      _ => '매장 운영 방식',
     };
 
 String _superAdminEmergencyHelper(BuildContext context) =>
     switch (Localizations.localeOf(context).languageCode) {
-      'vi' => 'Bật màn hình dự phòng theo cửa hàng',
-      'en' => 'Enable store fallback screens',
-      _ => '매장별 비상 화면 개방',
+      'vi' => 'Chuyển đổi in POS và không giấy',
+      'en' => 'Switch POS print and paperless',
+      _ => '포스 프린트·페이퍼리스 전환',
     };
 
 String _superAdminUrgencyLabel(

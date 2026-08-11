@@ -8,6 +8,9 @@
   const isQrOrderRoute =
     window.location.hash.startsWith('#/qr/') ||
     window.location.pathname.startsWith('/qr/');
+  const isDigitalReceiptRoute =
+    window.location.hash.startsWith('#/receipt') ||
+    window.location.pathname === '/receipt';
 
   const languageCode = (navigator.language || 'en').toLowerCase();
   const language = languageCode.startsWith('ko')
@@ -85,7 +88,9 @@
     },
   };
 
-  const copy = shellCopy[language][isQrOrderRoute ? 'qr' : 'staff'];
+  const copy = shellCopy[language][
+    isQrOrderRoute || isDigitalReceiptRoute ? 'qr' : 'staff'
+  ];
 
   const requestedRenderer = searchParams.get('renderer');
   const useCpuOnlyCanvasKit =

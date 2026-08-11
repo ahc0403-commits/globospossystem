@@ -398,6 +398,8 @@ preflight() {
       fail "Missing sepay-webhook Edge function."
     [[ -f "$ROOT_DIR/supabase/functions/emergency-fulfillment-dispatcher/index.ts" ]] ||
       fail "Missing emergency-fulfillment-dispatcher Edge function."
+    [[ -f "$ROOT_DIR/supabase/functions/public-receipt/index.ts" ]] ||
+      fail "Missing public-receipt Edge function."
   fi
   if [[ "$DB_ONLY" != "1" && "$SKIP_AUTH_CHECK" != "1" ]]; then
     [[ -f "$ROOT_DIR/scripts/check_pilot_auth_accounts.sh" ]] ||
@@ -491,6 +493,10 @@ run_checks() {
   run deno test \
     "$ROOT_DIR/supabase/functions/emergency-fulfillment-dispatcher/index_test.ts"
 
+  log "Public receipt Edge security tests"
+  run deno test \
+    "$ROOT_DIR/supabase/functions/public-receipt/index_test.ts"
+
   if [[ -z "$TEST_TARGETS" ]]; then
     log "Flutter tests skipped"
     return 0
@@ -526,7 +532,8 @@ verify_sepay_alert_secrets() {
   for required_secret in \
     SEPAY_WEBHOOK_SECRET \
     CRON_SECRET \
-    FIREBASE_SERVICE_ACCOUNT_JSON; do
+    FIREBASE_SERVICE_ACCOUNT_JSON \
+    DIGITAL_RECEIPT_RATE_LIMIT_SECRET; do
     grep -Fxq "$required_secret" <<<"$secret_names" ||
       fail "Missing required Supabase Edge secret: $required_secret"
   done
@@ -868,6 +875,8 @@ deploy_pos_edge_functions() {
     --project-ref "$POS_PROJECT_REF"
   run supabase functions deploy emergency-fulfillment-dispatcher \
     --no-verify-jwt --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy public-receipt \
+    --no-verify-jwt --project-ref "$POS_PROJECT_REF"
 }
 
 verify_emergency_dispatcher_readiness() {
@@ -892,7 +901,8 @@ verify_remote_allowed_origin() {
   local function_name headers allowed
   for function_name in \
     provision-fixed-pos-account \
-    complete-initial-password-change; do
+    complete-initial-password-change \
+    public-receipt; do
     if [[ "$DRY_RUN" == "1" ]]; then
       printf '+ OPTIONS %s with Origin %q; require exact access-control-allow-origin\n' \
         "$function_name" "$LIVE_URL"

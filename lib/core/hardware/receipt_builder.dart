@@ -23,6 +23,7 @@ class ReceiptBuilder {
     String? cashierCode,
     double? subtotalAmount,
     double discountAmount = 0,
+    double vatAmount = 0,
     double? receivedAmount,
     double changeAmount = 0,
   }) async {
@@ -155,16 +156,7 @@ class ReceiptBuilder {
         );
     bytes.addAll(_amountRow(generator, 'Tam tinh', subtotal));
     bytes.addAll(_amountRow(generator, 'Giam gia', discountAmount));
-    bytes.addAll(
-      generator.row([
-        PosColumn(text: 'VAT (da gom)', width: 7),
-        PosColumn(
-          text: '***',
-          width: 5,
-          styles: const PosStyles(align: PosAlign.right),
-        ),
-      ]),
-    );
+    bytes.addAll(_amountRow(generator, 'VAT (da gom)', vatAmount));
     bytes.addAll(
       generator.row([
         PosColumn(
@@ -847,6 +839,7 @@ class QueuedPaymentReceipt {
     required this.cashierCode,
     required this.subtotalAmount,
     required this.discountAmount,
+    required this.vatAmount,
     required this.receivedAmount,
     required this.changeAmount,
   });
@@ -865,6 +858,7 @@ class QueuedPaymentReceipt {
   final String? cashierCode;
   final double? subtotalAmount;
   final double discountAmount;
+  final double vatAmount;
   final double? receivedAmount;
   final double changeAmount;
 
@@ -922,6 +916,7 @@ class QueuedPaymentReceipt {
       cashierCode: payload['cashier_code']?.toString(),
       subtotalAmount: _payloadDouble(payload['subtotal_amount']),
       discountAmount: _payloadDouble(payload['discount_amount']) ?? 0,
+      vatAmount: _payloadDouble(payload['vat_amount']) ?? 0,
       receivedAmount: _payloadDouble(payload['received_amount']),
       changeAmount: _payloadDouble(payload['change_amount']) ?? 0,
     );

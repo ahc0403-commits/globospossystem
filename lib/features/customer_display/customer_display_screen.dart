@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/i18n/locale_extensions.dart';
 import '../../core/ui/pos_design_tokens.dart';
@@ -62,10 +63,110 @@ class _CustomerDisplayScreenState extends ConsumerState<CustomerDisplayScreen> {
                     key: const Key('customer_display_idle'),
                     onLogout: () => ref.read(authProvider.notifier).logout(),
                   )
+                : snapshot.isReceipt
+                ? CustomerReceiptContent(
+                    key: ValueKey('receipt_${snapshot.displayRevision}'),
+                    snapshot: snapshot,
+                  )
                 : CustomerPaymentContent(
                     key: ValueKey(snapshot.orderId),
                     snapshot: snapshot,
                   ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class CustomerReceiptContent extends StatelessWidget {
+  const CustomerReceiptContent({super.key, required this.snapshot});
+
+  final CustomerDisplaySnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final currency = NumberFormat('#,###', 'vi_VN');
+    final url = snapshot.receiptUrl;
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: Container(
+            key: const Key('customer_display_receipt_qr'),
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: PosColors.surface,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: PosColors.border),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.receipt_long_rounded,
+                  size: 44,
+                  color: PosColors.accent,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Thanh toán thành công',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: PosColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '₫${currency.format(snapshot.total)}',
+                  key: const Key('customer_display_receipt_total'),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: PosColors.accent,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                SizedBox.square(
+                  dimension: 280,
+                  child: url == null
+                      ? const Center(child: CircularProgressIndicator())
+                      : url.isEmpty
+                      ? const Center(
+                          child: Icon(
+                            Icons.qr_code_2_rounded,
+                            size: 88,
+                            color: PosColors.textSecondary,
+                          ),
+                        )
+                      : QrImageView(
+                          data: url,
+                          version: QrVersions.auto,
+                          backgroundColor: Colors.white,
+                          semanticsLabel: 'Mã QR biên lai điện tử',
+                        ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  url == null
+                      ? 'Đang chuẩn bị mã QR biên lai…'
+                      : url.isEmpty
+                      ? 'Không thể tạo mã QR. Vui lòng yêu cầu biên lai giấy.'
+                      : 'Quét mã QR để xem, lưu PDF hoặc tự in biên lai',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Nếu cần biên lai giấy, vui lòng báo nhân viên.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: PosColors.textSecondary),
+                ),
+              ],
+            ),
           ),
         ),
       ),

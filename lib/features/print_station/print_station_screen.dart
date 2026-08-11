@@ -171,6 +171,7 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
 
     final wiredEndpoint = endpointOf('wired');
     final wirelessEndpoint = endpointOf('wireless');
+    final usbEndpoint = endpointOf('usb');
     final wiredIpController = TextEditingController(
       text: wiredEndpoint?.ip ?? '',
     );
@@ -191,6 +192,9 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
                       : null) ??
                   9100)
               .toString(),
+    );
+    final usbPrinterNameController = TextEditingController(
+      text: usbEndpoint?.deviceName ?? '',
     );
     final floorController = TextEditingController(
       text: destination == null
@@ -267,6 +271,15 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('print_station_destination_usb_name'),
+                    controller: usbPrinterNameController,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      labelText: l10n.settingsPrinterUsbName,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     key: const Key('print_station_destination_purpose'),
                     initialValue: purpose,
@@ -332,9 +345,12 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
                 final wiredPort = parseIntInput(wiredPortController.text);
                 final wirelessIp = wirelessIpController.text.trim();
                 final wirelessPort = parseIntInput(wirelessPortController.text);
+                final usbPrinterName = usbPrinterNameController.text.trim();
                 final floorLabel = storedFloorLabel(floorController.text);
                 if (name.isEmpty ||
-                    (wiredIp.isEmpty && wirelessIp.isEmpty) ||
+                    (wiredIp.isEmpty &&
+                        wirelessIp.isEmpty &&
+                        usbPrinterName.isEmpty) ||
                     (wiredIp.isNotEmpty &&
                         (!isValidPrinterIpv4Address(wiredIp) ||
                             wiredPort == null ||
@@ -363,6 +379,7 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
                         wiredPort: wiredPort ?? 9100,
                         wirelessIp: wirelessIp,
                         wirelessPort: wirelessPort ?? 9100,
+                        usbPrinterName: usbPrinterName,
                         purpose: purpose,
                         floorLabel: purpose == 'floor' ? floorLabel : null,
                         isActive: true,
@@ -390,6 +407,7 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
     wiredPortController.dispose();
     wirelessIpController.dispose();
     wirelessPortController.dispose();
+    usbPrinterNameController.dispose();
     floorController.dispose();
   }
 
@@ -761,8 +779,8 @@ class _PrintStationScreenState extends ConsumerState<PrintStationScreen> {
     return switch (code) {
       PrinterDestinationErrorCodes.nameRequired =>
         l10n.settingsPrintDestinationNameRequired,
-      PrinterDestinationErrorCodes.ipRequired =>
-        l10n.settingsPrintDestinationIpRequired,
+      PrinterDestinationErrorCodes.endpointRequired =>
+        l10n.settingsPrintDestinationInputError,
       PrinterDestinationErrorCodes.portInvalid =>
         l10n.settingsPrintDestinationPortInvalid,
       PrinterDestinationErrorCodes.purposeInvalid =>
@@ -875,8 +893,12 @@ class _DestinationTile extends StatelessWidget {
                     const SizedBox(height: 4),
                     for (final endpoint in destination.endpoints)
                       Text(
-                        '${endpoint.type == 'wired' ? l10n.settingsPrinterWired : l10n.settingsPrinterWireless}: '
-                        '${endpoint.ip}:${endpoint.port}',
+                        '${switch (endpoint.type) {
+                          'usb' => l10n.settingsPrinterUsb,
+                          'wired' => l10n.settingsPrinterWired,
+                          _ => l10n.settingsPrinterWireless,
+                        }}: '
+                        '${endpoint.type == 'usb' ? endpoint.deviceName : '${endpoint.ip}:${endpoint.port}'}',
                         style: AppFonts.system(
                           color: AppColors.textSecondary,
                           fontSize: 12,

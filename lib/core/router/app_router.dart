@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/layout/platform_info.dart';
+import '../../core/services/digital_receipt_token_handoff.dart';
 import '../../core/services/navigation_history_service.dart';
 import '../../core/utils/permission_utils.dart';
 import '../../core/utils/role_routes.dart';
@@ -13,6 +14,7 @@ import '../../features/auth/initial_password_change_screen.dart';
 import '../../features/auth/privacy_consent_screen.dart';
 import '../../features/cashier/cashier_screen.dart';
 import '../../features/customer_display/customer_display_screen.dart';
+import '../../features/digital_receipt/digital_receipt_screen.dart';
 import '../../features/emergency_fulfillment/emergency_fulfillment_screen.dart';
 import '../../features/kitchen/kitchen_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
@@ -58,6 +60,13 @@ GoRouter buildAppRouter(ProviderContainer container) {
 
       if (path.startsWith('/qr/')) {
         NavigationHistoryService.instance.push(fullLocation);
+        return null;
+      }
+
+      if (path == '/receipt') {
+        // The receipt secret is handed off from the URL fragment before
+        // Flutter boots. Never retain it in app navigation history.
+        NavigationHistoryService.instance.push('/receipt');
         return null;
       }
 
@@ -247,6 +256,11 @@ GoRouter buildAppRouter(ProviderContainer container) {
         path: '/qr/:token',
         builder: (_, state) =>
             QrOrderScreen(token: state.pathParameters['token'] ?? ''),
+      ),
+      GoRoute(
+        path: '/receipt',
+        builder: (_, __) =>
+            DigitalReceiptScreen(token: DigitalReceiptTokenHandoff.take()),
       ),
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
       GoRoute(

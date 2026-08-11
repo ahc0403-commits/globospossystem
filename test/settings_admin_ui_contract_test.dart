@@ -91,7 +91,7 @@ void main() {
     expect(provider, contains('Future<bool> upsertDestination'));
     expect(provider, contains('Future<bool> deleteDestination'));
     expect(provider, contains('Future<bool> enqueueTestPrintJob'));
-    expect(service, contains("'admin_upsert_printer_destination_v2'"));
+    expect(service, contains("'admin_upsert_printer_destination_v3'"));
     expect(service, contains(".from('printer_endpoints')"));
     expect(service, contains("'admin_delete_printer_destination'"));
     expect(service, contains(".eq('is_active', true)"));

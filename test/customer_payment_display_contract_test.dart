@@ -76,16 +76,19 @@ void main() {
     );
   });
 
-  test('customer display polls within one second only while disconnected', () {
-    expect(
-      CustomerDisplayNotifier.fallbackIntervalForConnection(connected: false),
-      const Duration(seconds: 1),
-    );
-    expect(
-      CustomerDisplayNotifier.fallbackIntervalForConnection(connected: true),
-      const Duration(seconds: 15),
-    );
-  });
+  test(
+    'customer display polls within one second regardless of socket state',
+    () {
+      expect(
+        CustomerDisplayNotifier.fallbackIntervalForConnection(connected: false),
+        const Duration(seconds: 1),
+      );
+      expect(
+        CustomerDisplayNotifier.fallbackIntervalForConnection(connected: true),
+        const Duration(seconds: 1),
+      );
+    },
+  );
 
   test('order item exposes the Vietnamese name for customer display', () {
     final item = OrderItem(

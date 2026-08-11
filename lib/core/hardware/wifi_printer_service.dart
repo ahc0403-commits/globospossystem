@@ -2,10 +2,12 @@ import 'dart:io';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import 'printer_service.dart';
 
-class WifiPrinterService implements PrinterService {
+class WifiPrinterService implements PrinterService, UsbPrinterService {
+  static const _usbPrinterChannel = MethodChannel('globos/usb_printer');
   static const connectionTimeout = Duration(seconds: 5);
   static const sourceAddressTimeout = Duration(seconds: 2);
   static const printFlushTimeout = Duration(seconds: 5);
@@ -73,6 +75,27 @@ class WifiPrinterService implements PrinterService {
       return PrintResult.printFailed;
     } finally {
       socket?.destroy();
+    }
+  }
+
+  @override
+  Future<PrintResult> printUsbReceipt(
+    String printerName,
+    List<int> bytes,
+  ) async {
+    if (!Platform.isWindows || printerName.trim().isEmpty || bytes.isEmpty) {
+      return PrintResult.notSupported;
+    }
+    try {
+      final printed = await _usbPrinterChannel.invokeMethod<bool>('printRaw', {
+        'printerName': printerName.trim(),
+        'bytes': Uint8List.fromList(bytes),
+      });
+      return printed == true ? PrintResult.success : PrintResult.printFailed;
+    } on PlatformException {
+      return PrintResult.printFailed;
+    } catch (_) {
+      return PrintResult.printFailed;
     }
   }
 
