@@ -1,6 +1,8 @@
 import {
+  createProjectRpcCaller,
   createPublicReceiptHandler,
   type PublicReceiptDependencies,
+  resolveProjectSecretKey,
 } from "./index.ts";
 
 const origin = "https://globospossystem.vercel.app";
@@ -126,4 +128,71 @@ Deno.test("fails closed without exposing backend errors", async () => {
     { error: "RECEIPT_TEMPORARILY_UNAVAILABLE" },
     "sanitized body",
   );
+});
+
+Deno.test("uses a named new secret key only in the apikey header", async () => {
+  const secretKey = `sb_secret_${"x".repeat(48)}`;
+  const resolved = resolveProjectSecretKey(
+    JSON.stringify({ receipt_edge: secretKey }),
+    "receipt_edge",
+  );
+  let capturedUrl = "";
+  let capturedHeaders = new Headers();
+  const callRpc = createProjectRpcCaller(
+    "https://project.test",
+    resolved,
+    (input, init) => {
+      capturedUrl = input.toString();
+      capturedHeaders = new Headers(init?.headers);
+      return Promise.resolve(
+        new Response("true", {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    },
+  );
+
+  assertEquals(
+    await callRpc("consume_digital_receipt_rate_limit", {
+      p_request_key: "a".repeat(64),
+    }),
+    true,
+    "RPC response",
+  );
+  assertEquals(
+    capturedUrl,
+    "https://project.test/rest/v1/rpc/consume_digital_receipt_rate_limit",
+    "RPC URL",
+  );
+  assertEquals(capturedHeaders.get("apikey"), secretKey, "project API key");
+  assertEquals(
+    capturedHeaders.get("authorization"),
+    null,
+    "opaque secret key must not be sent as a bearer token",
+  );
+});
+
+Deno.test("rejects legacy or unnamed project keys", () => {
+  let rejectedLegacy = false;
+  try {
+    resolveProjectSecretKey(
+      JSON.stringify({ receipt_edge: "legacy-service-role-jwt" }),
+      "receipt_edge",
+    );
+  } catch (_) {
+    rejectedLegacy = true;
+  }
+  assertEquals(rejectedLegacy, true, "legacy key rejection");
+
+  let rejectedMissing = false;
+  try {
+    resolveProjectSecretKey(
+      JSON.stringify({ other: `sb_secret_${"x".repeat(48)}` }),
+      "receipt_edge",
+    );
+  } catch (_) {
+    rejectedMissing = true;
+  }
+  assertEquals(rejectedMissing, true, "missing named key rejection");
 });

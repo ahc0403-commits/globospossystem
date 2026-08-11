@@ -1,7 +1,11 @@
 import { serve } from "@std/http/server";
-import { createClient } from "@supabase/supabase-js";
 
 type JsonObject = Record<string, unknown>;
+type Fetcher = (
+  input: string | URL | Request,
+  init?: globalThis.RequestInit,
+) => Promise<Response>;
+type RpcCaller = (name: string, payload: JsonObject) => Promise<unknown>;
 
 export type PublicReceiptDependencies = {
   allowedOrigins: readonly string[];
@@ -10,6 +14,65 @@ export type PublicReceiptDependencies = {
 };
 
 const tokenPattern = /^[A-Za-z0-9_-]{32}$/;
+const rpcNamePattern = /^[a-z][a-z0-9_]*$/;
+
+export function resolveProjectSecretKey(
+  rawSecretKeys: string,
+  configuredName: string,
+): string {
+  const keyName = configuredName.trim();
+  if (!keyName || keyName.length > 128) {
+    throw new Error("PROJECT_SECRET_KEY_NAME_INVALID");
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawSecretKeys);
+  } catch (_) {
+    throw new Error("PROJECT_SECRET_KEYS_INVALID");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("PROJECT_SECRET_KEYS_INVALID");
+  }
+
+  const key = (parsed as Record<string, unknown>)[keyName];
+  if (
+    typeof key !== "string" || !key.startsWith("sb_secret_") ||
+    key.length < 32
+  ) {
+    throw new Error("PROJECT_SECRET_KEY_MISSING");
+  }
+  return key;
+}
+
+export function createProjectRpcCaller(
+  supabaseUrl: string,
+  projectSecretKey: string,
+  fetcher: Fetcher = fetch,
+): RpcCaller {
+  const baseUrl = new URL(supabaseUrl);
+  if (baseUrl.protocol !== "https:") {
+    throw new Error("SUPABASE_URL_INVALID");
+  }
+
+  return async (name, payload) => {
+    if (!rpcNamePattern.test(name)) throw new Error("RPC_NAME_INVALID");
+    const endpoint = new URL(`/rest/v1/rpc/${name}`, baseUrl);
+    const response = await fetcher(endpoint, {
+      method: "POST",
+      headers: {
+        // New Supabase secret keys are opaque, not JWTs. Sending one as a
+        // Bearer token makes the gateway reject it, so it must be carried only
+        // in the apikey header.
+        apikey: projectSecretKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error("RPC_REQUEST_FAILED");
+    return await response.json();
+  };
+}
 
 function originIsAllowed(
   request: Request,
@@ -178,20 +241,23 @@ async function hmacSha256Hex(value: string, secret: string): Promise<string> {
 
 function productionDependencies(): PublicReceiptDependencies {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const secretKeyName = Deno.env.get(
+    "PUBLIC_RECEIPT_SUPABASE_SECRET_KEY_NAME",
+  ) ?? "";
+  const projectSecretKey = resolveProjectSecretKey(
+    Deno.env.get("SUPABASE_SECRET_KEYS") ?? "",
+    secretKeyName,
+  );
   const rateLimitSecret = Deno.env.get("DIGITAL_RECEIPT_RATE_LIMIT_SECRET") ??
     "";
   const allowedOrigins = configuredOrigins();
   if (
-    !supabaseUrl || !serviceRoleKey || rateLimitSecret.length < 32 ||
+    !supabaseUrl || rateLimitSecret.length < 32 ||
     allowedOrigins.length === 0
   ) {
     throw new Error("SERVER_CONFIGURATION_MISSING");
   }
-
-  const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const callRpc = createProjectRpcCaller(supabaseUrl, projectSecretKey);
 
   return {
     allowedOrigins,
@@ -199,18 +265,15 @@ function productionDependencies(): PublicReceiptDependencies {
       const address = clientAddress(request);
       if (!address) return false;
       const requestKey = await hmacSha256Hex(address, rateLimitSecret);
-      const { data, error } = await serviceClient.rpc(
-        "consume_digital_receipt_rate_limit",
-        { p_request_key: requestKey },
-      );
-      if (error) throw new Error("RATE_LIMIT_CHECK_FAILED");
+      const data = await callRpc("consume_digital_receipt_rate_limit", {
+        p_request_key: requestKey,
+      });
       return data === true;
     },
     loadReceipt: async (token) => {
-      const { data, error } = await serviceClient.rpc("get_public_receipt", {
+      const data = await callRpc("get_public_receipt", {
         p_token: token,
       });
-      if (error) throw new Error("RECEIPT_LOOKUP_FAILED");
       return data && typeof data === "object" ? data as JsonObject : null;
     },
   };
