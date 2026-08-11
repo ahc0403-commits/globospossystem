@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -25,6 +27,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 const _captureRoot =
     '../.design/2026-08-pos-print-paperless-receipts/screenshots';
+const _linuxGoldenRoot =
+    '../.design/2026-08-pos-print-paperless-receipts/goldens/linux';
+
+String get _goldenRoot => Platform.isLinux ? _linuxGoldenRoot : _captureRoot;
 
 class _VisualEmergencyNotifier extends EmergencyFulfillmentNotifier {
   _VisualEmergencyNotifier(EmergencyFulfillmentState value) {
@@ -99,13 +105,13 @@ void main() {
       await _pumpKds(tester, station: station, size: const Size(1024, 768));
       await expectLater(
         find.byKey(const Key('emergency_fulfillment_screen')),
-        matchesGoldenFile('$_captureRoot/${station}_tablet_8_slots.png'),
+        matchesGoldenFile('$_goldenRoot/${station}_tablet_8_slots.png'),
       );
       await tester.tap(find.byKey(const Key('emergency_order_order-0')));
       await tester.pumpAndSettle();
       await expectLater(
         find.byKey(const Key('emergency_fulfillment_screen')),
-        matchesGoldenFile('$_captureRoot/${station}_tablet_menu_detail.png'),
+        matchesGoldenFile('$_goldenRoot/${station}_tablet_menu_detail.png'),
       );
     });
   }
@@ -132,7 +138,7 @@ void main() {
     await tester.pumpAndSettle();
     await expectLater(
       find.byType(Scaffold),
-      matchesGoldenFile('$_captureRoot/operation_mode_admin.png'),
+      matchesGoldenFile('$_goldenRoot/operation_mode_admin.png'),
     );
 
     await tester.tap(find.byKey(const Key('emergency_toggle_store-q7')));
@@ -140,7 +146,7 @@ void main() {
     expect(find.byType(AlertDialog), findsOneWidget);
     await expectLater(
       find.byType(AlertDialog),
-      matchesGoldenFile('$_captureRoot/operation_mode_confirm.png'),
+      matchesGoldenFile('$_goldenRoot/operation_mode_confirm.png'),
     );
   });
 
@@ -148,7 +154,7 @@ void main() {
     await _pumpKds(tester, station: 'tray', size: const Size(390, 844));
     await expectLater(
       find.byKey(const Key('emergency_fulfillment_screen')),
-      matchesGoldenFile('$_captureRoot/tray_phone_4_slots.png'),
+      matchesGoldenFile('$_goldenRoot/tray_phone_4_slots.png'),
     );
   });
 
@@ -170,7 +176,7 @@ void main() {
     await tester.pumpAndSettle();
     await expectLater(
       find.byKey(const Key('cashier_payment_completion_dialog')),
-      matchesGoldenFile('$_captureRoot/cashier_paperless_completion.png'),
+      matchesGoldenFile('$_goldenRoot/cashier_paperless_completion.png'),
     );
   });
 
@@ -190,7 +196,7 @@ void main() {
     await tester.pumpAndSettle();
     await expectLater(
       find.byKey(const Key('customer_display_receipt_qr')),
-      matchesGoldenFile('$_captureRoot/customer_display_receipt_qr.png'),
+      matchesGoldenFile('$_goldenRoot/customer_display_receipt_qr.png'),
     );
   });
 
@@ -207,7 +213,7 @@ void main() {
     await tester.pumpAndSettle();
     await expectLater(
       find.byKey(const Key('digital_receipt_root')),
-      matchesGoldenFile('$_captureRoot/public_receipt_phone.png'),
+      matchesGoldenFile('$_goldenRoot/public_receipt_phone.png'),
     );
   });
 }
