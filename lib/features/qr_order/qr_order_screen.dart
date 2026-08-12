@@ -38,6 +38,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
   String? _clientOrderId;
   bool _isLoading = true;
   bool _isSubmitting = false;
+  bool _submittedOrderObserved = false;
   String _languageCode = 'vi';
   final Map<String, int> _cart = <String, int>{};
   final Map<String, List<String>> _comboDrinkChoices = <String, List<String>>{};
@@ -132,6 +133,12 @@ class _QrOrderScreenState extends State<QrOrderScreen>
       setState(() {
         _menu = menu;
         _activeOrder = activeOrder;
+        if (_result != null &&
+            _submittedOrderObserved &&
+            !activeOrder.isActive) {
+          _result = null;
+          _submittedOrderObserved = false;
+        }
         final categoryStillExists = menu.categories.any(
           (category) => category.id == _selectedCategoryId,
         );
@@ -321,6 +328,7 @@ class _QrOrderScreenState extends State<QrOrderScreen>
         _clientOrderId = null;
         _isSubmitting = false;
       });
+      unawaited(_refreshActiveOrderAfterSubmit());
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -330,9 +338,24 @@ class _QrOrderScreenState extends State<QrOrderScreen>
     }
   }
 
+  Future<void> _refreshActiveOrderAfterSubmit() async {
+    try {
+      final activeOrder = await _service.fetchActiveOrder(widget.token);
+      if (!mounted || _result == null) return;
+      setState(() {
+        _activeOrder = activeOrder;
+        _submittedOrderObserved = activeOrder.isActive;
+      });
+    } catch (_) {
+      // The success snapshot remains available and the regular refresh loop
+      // retries without making a successful order look like a failure.
+    }
+  }
+
   void _startAnotherOrder() {
     setState(() {
       _result = null;
+      _submittedOrderObserved = false;
       _failure = null;
       _clientOrderId = null;
     });
@@ -402,6 +425,8 @@ class _QrOrderScreenState extends State<QrOrderScreen>
           child: _QrSuccessView(
             copy: _copy,
             result: result,
+            activeOrder: _activeOrder?.isActive == true ? _activeOrder : null,
+            languageCode: _languageCode,
             onAnotherOrder: _startAnotherOrder,
           ),
         ),
@@ -766,24 +791,33 @@ class _QrActiveOrderCard extends StatelessWidget {
                             fontFeatures: const [FontFeature.tabularFigures()],
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: ToastSpacingTokens.sm,
-                            vertical: ToastSpacingTokens.xs,
-                          ),
-                          decoration: BoxDecoration(
-                            color: ToastColorTokens.infoMuted,
-                            borderRadius: ToastRadiusTokens.pill,
-                          ),
-                          child: Text(
-                            copy.itemStatus(item.status),
-                            style: AppFonts.system(
-                              color: ToastColorTokens.info,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
+                        if (order.isPaperless)
+                          Container(
+                            key: Key('qr_delivery_progress_$index'),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: ToastSpacingTokens.sm,
+                              vertical: ToastSpacingTokens.xs,
+                            ),
+                            decoration: BoxDecoration(
+                              color: item.remainingQuantity == 0
+                                  ? ToastColorTokens.successMuted
+                                  : ToastColorTokens.infoMuted,
+                              borderRadius: ToastRadiusTokens.pill,
+                            ),
+                            child: Text(
+                              copy.deliveryProgress(
+                                item.servedQuantity,
+                                item.remainingQuantity,
+                              ),
+                              style: AppFonts.system(
+                                color: item.remainingQuantity == 0
+                                    ? ToastColorTokens.success
+                                    : ToastColorTokens.info,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ),
-                        ),
                       ],
                     );
                     final stacked =
@@ -1450,11 +1484,15 @@ class _QrSuccessView extends StatelessWidget {
   const _QrSuccessView({
     required this.copy,
     required this.result,
+    required this.activeOrder,
+    required this.languageCode,
     required this.onAnotherOrder,
   });
 
   final QrOrderCopy copy;
   final QrOrderResult result;
+  final QrActiveOrder? activeOrder;
+  final String languageCode;
   final VoidCallback onAnotherOrder;
 
   @override
@@ -1566,6 +1604,14 @@ class _QrSuccessView extends StatelessWidget {
                 ],
               ),
             ),
+            if (activeOrder != null) ...[
+              const SizedBox(height: ToastSpacingTokens.md),
+              _QrActiveOrderCard(
+                order: activeOrder!,
+                languageCode: languageCode,
+                copy: copy,
+              ),
+            ],
           ],
         ),
       ),
@@ -1797,6 +1843,12 @@ class QrOrderCopy {
       'Các món này đã được gửi. Chọn thêm món bên dưới nếu bạn muốn gọi thêm.',
     _ =>
       'These items have already been sent. Choose more items below to add an order.',
+  };
+
+  String deliveryProgress(int served, int remaining) => switch (code) {
+    'ko' => '전달 $served · 남음 $remaining',
+    'vi' => 'Đã giao $served · Còn $remaining',
+    _ => 'Delivered $served · Remaining $remaining',
   };
 
   String get addItemsTitle => switch (code) {

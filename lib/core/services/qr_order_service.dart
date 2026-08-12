@@ -227,13 +227,17 @@ class QrActiveOrder {
     required this.isActive,
     required this.orderCode,
     required this.status,
+    this.fulfillmentMode = 'pos_print',
     required this.items,
   });
 
   final bool isActive;
   final String orderCode;
   final String status;
+  final String fulfillmentMode;
   final List<QrActiveOrderItem> items;
+
+  bool get isPaperless => fulfillmentMode == 'paperless';
 
   factory QrActiveOrder.fromJson(Map<String, dynamic> json) {
     final itemsRaw = json['items'];
@@ -241,6 +245,7 @@ class QrActiveOrder {
       isActive: json['active'] == true,
       orderCode: json['order_code']?.toString() ?? '',
       status: json['status']?.toString() ?? 'pending',
+      fulfillmentMode: json['fulfillment_mode']?.toString() ?? 'pos_print',
       items: itemsRaw is List
           ? itemsRaw
                 .whereType<Map>()
@@ -263,6 +268,7 @@ class QrActiveOrderItem {
     this.nameEn = '',
     required this.quantity,
     required this.status,
+    this.servedQuantity = 0,
   });
 
   final String name;
@@ -271,6 +277,9 @@ class QrActiveOrderItem {
   final String nameEn;
   final int quantity;
   final String status;
+  final int servedQuantity;
+
+  int get remainingQuantity => (quantity - servedQuantity).clamp(0, quantity);
 
   String localizedName(String languageCode) => switch (languageCode) {
     'ko' => nameKo.isEmpty ? name : nameKo,
@@ -287,6 +296,7 @@ class QrActiveOrderItem {
       nameEn: json['name_en']?.toString() ?? fallback,
       quantity: _jsonInt(json['quantity']),
       status: json['status']?.toString() ?? 'pending',
+      servedQuantity: _jsonInt(json['served_quantity']),
     );
   }
 }

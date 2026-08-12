@@ -14,6 +14,10 @@ void main() {
       'supabase/migrations/20260808140000_qr_additional_order_print_delta.sql';
   const qrPrintDeltaVerification =
       'scripts/verify_qr_additional_order_print_delta.sql';
+  const qrPaperlessProgressMigration =
+      'supabase/migrations/20260812000000_qr_paperless_delivery_progress.sql';
+  const qrPaperlessProgressVerification =
+      'scripts/verify_qr_paperless_delivery_progress.sql';
 
   test('qr table ordering migration exposes only token-backed anon RPCs', () {
     final migration = readRepoFile(
@@ -173,6 +177,35 @@ void main() {
       contains('DROP FUNCTION IF EXISTS public.qr_get_active_order(text)'),
     );
   });
+
+  test(
+    'QR delivery progress is exposed only from token-backed paperless data',
+    () {
+      final migration = readRepoFile(qrPaperlessProgressMigration);
+      final verification = readRepoFile(qrPaperlessProgressVerification);
+
+      expect(
+        migration,
+        contains('CREATE OR REPLACE FUNCTION public.qr_get_active_order'),
+      );
+      expect(migration, contains('WHERE q.token = v_token'));
+      expect(migration, contains('AND q.is_active = true'));
+      expect(
+        migration,
+        contains("v_order.fulfillment_mode_snapshot = 'paperless'"),
+      );
+      expect(
+        migration,
+        contains("'fulfillment_mode', v_order.fulfillment_mode_snapshot"),
+      );
+      expect(migration, contains("'served_quantity'"));
+      expect(migration, contains('item.floor_served_quantity'));
+      expect(migration, contains('item.order_item_id = oi.id'));
+      expect(migration, isNot(contains('p_order_id')));
+      expect(migration, isNot(contains('p_table_id')));
+      expect(verification, contains('QR_PAPERLESS_PROGRESS_VERIFY_OK'));
+    },
+  );
 
   test('qr additions print only immutable rows inserted by that call', () {
     final migration = readRepoFile(qrPrintDeltaMigration);

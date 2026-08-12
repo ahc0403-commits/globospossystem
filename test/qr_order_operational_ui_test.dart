@@ -178,12 +178,13 @@ void main() {
   );
 
   testWidgets(
-    'active table order is visible and follows the selected language',
+    'paperless active order shows delivered and remaining quantities',
     (tester) async {
       const activeOrder = QrActiveOrder(
         isActive: true,
         orderCode: 'abcd1234',
         status: 'confirmed',
+        fulfillmentMode: 'paperless',
         items: [
           QrActiveOrderItem(
             name: '떡볶이',
@@ -192,6 +193,7 @@ void main() {
             nameEn: 'Spicy rice cakes',
             quantity: 2,
             status: 'preparing',
+            servedQuantity: 1,
           ),
         ],
       );
@@ -202,7 +204,7 @@ void main() {
       expect(find.byKey(const Key('qr_active_order_summary')), findsOneWidget);
       expect(find.text('Các món đã gọi'), findsOneWidget);
       expect(find.text('Bánh gạo cay'), findsOneWidget);
-      expect(find.text('Đang chuẩn bị'), findsOneWidget);
+      expect(find.text('Đã giao 1 · Còn 1'), findsOneWidget);
       expect(find.text('Chọn món gọi thêm'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('qr_language_selector')));
@@ -212,11 +214,42 @@ void main() {
 
       expect(find.text('현재 주문 내역'), findsOneWidget);
       expect(find.text('떡볶이'), findsOneWidget);
-      expect(find.text('준비 중'), findsOneWidget);
+      expect(find.text('전달 1 · 남음 1'), findsOneWidget);
       expect(find.text('추가 주문 메뉴'), findsOneWidget);
       _expectNoLayoutFailure(tester);
     },
   );
+
+  testWidgets('printed active order shows the full list without progress', (
+    tester,
+  ) async {
+    const activeOrder = QrActiveOrder(
+      isActive: true,
+      orderCode: 'printed123',
+      status: 'confirmed',
+      items: [
+        QrActiveOrderItem(
+          name: 'Tteokbokki',
+          nameVi: 'Bánh gạo cay',
+          quantity: 5,
+          status: 'served',
+          servedQuantity: 4,
+        ),
+      ],
+    );
+
+    await _pumpQr(
+      tester,
+      service: _service(fetchActive: (_) async => activeOrder),
+    );
+
+    expect(find.text('Bánh gạo cay'), findsOneWidget);
+    expect(find.text('× 5'), findsOneWidget);
+    expect(find.byKey(const Key('qr_delivery_progress_0')), findsNothing);
+    expect(find.textContaining('Đã giao'), findsNothing);
+    expect(find.textContaining('Còn'), findsNothing);
+    _expectNoLayoutFailure(tester);
+  });
 
   testWidgets('combo addition requires the exact configured drink count', (
     tester,
@@ -377,6 +410,55 @@ void main() {
       _expectNoLayoutFailure(tester);
     },
   );
+
+  testWidgets('submitted order stays visible until cashier payment', (
+    tester,
+  ) async {
+    var activeOrderReads = 0;
+    const activeOrder = QrActiveOrder(
+      isActive: true,
+      orderCode: 'paid-later',
+      status: 'confirmed',
+      fulfillmentMode: 'paperless',
+      items: [
+        QrActiveOrderItem(
+          name: 'Tteokbokki',
+          nameVi: 'Bánh gạo cay',
+          quantity: 5,
+          status: 'ready',
+          servedQuantity: 4,
+        ),
+      ],
+    );
+    await _pumpQr(
+      tester,
+      service: _service(
+        fetchActive: (_) async {
+          activeOrderReads += 1;
+          if (activeOrderReads == 1) return _noActiveOrder;
+          if (activeOrderReads == 2) return activeOrder;
+          return _noActiveOrder;
+        },
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('qr_add_food')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('qr_open_review')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('qr_confirm_submit')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('qr_state_success')), findsOneWidget);
+    expect(find.text('Đã giao 4 · Còn 1'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pump();
+
+    expect(find.byKey(const Key('qr_state_success')), findsNothing);
+    expect(find.byKey(const Key('qr_order_screen')), findsOneWidget);
+    _expectNoLayoutFailure(tester);
+  });
 
   testWidgets('rate-limit and offline retry reuse the same client order id', (
     tester,
