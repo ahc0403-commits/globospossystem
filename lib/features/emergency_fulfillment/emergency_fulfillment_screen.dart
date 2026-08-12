@@ -236,6 +236,7 @@ class _EmergencyFulfillmentScreenState
         error: state.error,
         onBack: () => setState(() => _selectedOrderId = null),
         onComplete: () => _completeOrder(selected),
+        onItemAction: (item) => _completeItem(item, stationType),
         onRevert: selected.lastActionId == null
             ? null
             : () => _revertOrder(selected),
@@ -312,6 +313,34 @@ class _EmergencyFulfillmentScreenState
         _page = 0;
       }
     });
+  }
+
+  Future<void> _completeItem(
+    EmergencyFulfillmentItem item,
+    String stationType,
+  ) async {
+    if (_actionBusy) return;
+    setState(() => _actionBusy = true);
+    final notifier = ref.read(emergencyFulfillmentProvider.notifier);
+    try {
+      switch (stationType) {
+        case 'kitchen':
+          await notifier.recordProgress(itemId: item.id, stage: 'kitchen_done');
+        case 'tray':
+          await notifier.recordProgress(
+            itemId: item.id,
+            stage: 'tray_received',
+          );
+          await notifier.recordProgress(
+            itemId: item.id,
+            stage: 'tray_dispatched',
+          );
+        case 'floor':
+          await notifier.recordProgress(itemId: item.id, stage: 'floor_served');
+      }
+    } finally {
+      if (mounted) setState(() => _actionBusy = false);
+    }
   }
 
   Future<void> _revertOrder(EmergencyFulfillmentOrder order) async {
@@ -798,6 +827,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
     required this.error,
     required this.onBack,
     required this.onComplete,
+    required this.onItemAction,
     required this.onRevert,
   });
 
@@ -809,6 +839,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
   final String? error;
   final VoidCallback onBack;
   final VoidCallback onComplete;
+  final ValueChanged<EmergencyFulfillmentItem> onItemAction;
   final VoidCallback? onRevert;
 
   @override
@@ -887,6 +918,8 @@ class _EmergencyOrderDetails extends StatelessWidget {
                   item: order.items[index],
                   stationType: stationType,
                   copy: copy,
+                  busy: busy || pending,
+                  onTap: () => onItemAction(order.items[index]),
                 ),
               ),
             ),
@@ -911,11 +944,15 @@ class _EmergencyMenuRow extends StatelessWidget {
     required this.item,
     required this.stationType,
     required this.copy,
+    required this.busy,
+    required this.onTap,
   });
 
   final EmergencyFulfillmentItem item;
   final String stationType;
   final _EmergencyCopy copy;
+  final bool busy;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -927,68 +964,81 @@ class _EmergencyMenuRow extends StatelessWidget {
       _ => (0, item.orderedQuantity),
     };
     final done = limit > 0 && value >= limit;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: PosSurfaceRole.background.fill,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: item.needsReview ? PosColors.danger : PosColors.border,
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.localizedName(languageCode),
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+    final canAdvance = !busy && limit > 0 && value < limit;
+    return Semantics(
+      button: true,
+      enabled: canAdvance,
+      label:
+          '${item.localizedName(languageCode)}, $value / $limit, '
+          '${done ? copy.completed : copy.waitingForAction}',
+      child: GestureDetector(
+        key: ValueKey('emergency_menu_item_${item.id}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: canAdvance ? onTap : null,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: PosSurfaceRole.background.fill,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: item.needsReview ? PosColors.danger : PosColors.border,
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.localizedName(languageCode),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${copy.orderedQuantity} ${item.orderedQuantity}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.textSecondary,
+                      ),
+                    ),
+                    if (item.needsReview) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        copy.quantityReview,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: PosColors.danger,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  '${copy.orderedQuantity} ${item.orderedQuantity}',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: PosColors.textSecondary,
-                  ),
-                ),
-                if (item.needsReview) ...[
-                  const SizedBox(height: 4),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
                   Text(
-                    copy.quantityReview,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: PosColors.danger,
+                    '$value / $limit',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: done ? PosColors.success : PosColors.textPrimary,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Text(
+                    done ? copy.completed : copy.waitingForAction,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: done ? PosColors.success : PosColors.warning,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '$value / $limit',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: done ? PosColors.success : PosColors.textPrimary,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              Text(
-                done ? copy.completed : copy.waitingForAction,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: done ? PosColors.success : PosColors.warning,
-                  fontWeight: FontWeight.w700,
-                ),
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }

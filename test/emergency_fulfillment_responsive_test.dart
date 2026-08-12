@@ -141,6 +141,13 @@ void main() {
     expect(find.byKey(const Key('emergency_complete_order')), findsOne);
     expect(tester.takeException(), isNull);
 
+    await tester.tap(find.byKey(const Key('emergency_menu_item_item-1')));
+    await tester.pumpAndSettle();
+    expect(fixture.recordedProgress, [
+      ('item-1', 'tray_received', 1),
+      ('item-1', 'tray_dispatched', 1),
+    ]);
+
     await tester.tap(find.byKey(const Key('emergency_complete_order')));
     await tester.pump();
     expect(fixture.completedQueues, ['queue-1']);
@@ -168,6 +175,9 @@ void main() {
     expect(find.text('떡볶이'), findsOne);
     expect(find.text('Bánh gạo cay'), findsNothing);
     expect(find.text('0 / 2'), findsOne);
+    await tester.tap(find.byKey(const Key('emergency_menu_item_item-1')));
+    await tester.pumpAndSettle();
+    expect(fixture.recordedProgress, [('item-1', 'kitchen_done', 1)]);
     expect(tester.takeException(), isNull);
   });
 
@@ -187,6 +197,9 @@ void main() {
     await tester.tap(find.byKey(const Key('emergency_order_order-1')));
     await tester.pump();
     expect(find.text('0 / 1'), findsOne);
+    await tester.tap(find.byKey(const Key('emergency_menu_item_item-1')));
+    await tester.pumpAndSettle();
+    expect(fixture.recordedProgress, [('item-1', 'floor_served', 1)]);
     expect(find.textContaining('G층'), findsNothing);
     expect(find.textContaining('GF'), findsNothing);
     expect(tester.takeException(), isNull);
