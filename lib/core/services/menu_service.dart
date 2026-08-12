@@ -240,6 +240,19 @@ class MenuService {
     );
   }
 
+  Future<void> setMenuFulfillmentRoute({
+    required String itemId,
+    required bool floorDirect,
+  }) async {
+    await supabase.rpc(
+      'admin_set_menu_fulfillment_route',
+      params: {
+        'p_item_id': itemId,
+        'p_route': floorDirect ? 'floor_direct' : 'kitchen_tray_floor',
+      },
+    );
+  }
+
   Future<void> deleteMenuItem(String itemId) async {
     await supabase.rpc('admin_delete_menu_item', params: {'p_item_id': itemId});
   }

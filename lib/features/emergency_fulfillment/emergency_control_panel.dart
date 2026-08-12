@@ -16,6 +16,7 @@ class EmergencyStoreStatus {
     bool? active,
     this.draining = false,
     this.kdsReady = false,
+    this.floorDirectBeveragesEnabled = false,
     this.reason,
   }) : mode =
            mode ??
@@ -30,6 +31,7 @@ class EmergencyStoreStatus {
   final int orderCount;
   final bool draining;
   final bool kdsReady;
+  final bool floorDirectBeveragesEnabled;
   final String? reason;
 
   bool get active => mode.isPaperless;
@@ -43,6 +45,8 @@ class EmergencyStoreStatus {
         orderCount: _intValue(json['order_count']),
         draining: json['draining'] == true,
         kdsReady: json['kds_ready'] == true,
+        floorDirectBeveragesEnabled:
+            json['floor_direct_beverages_enabled'] == true,
         reason: json['reason']?.toString(),
       );
 }
@@ -136,6 +140,34 @@ class EmergencyControlNotifier extends StateNotifier<EmergencyControlState> {
       state = state.copyWith(
         clearProcessing: true,
         error: 'EMERGENCY_CONTROL_UPDATE_FAILED: $error',
+      );
+      return false;
+    }
+  }
+
+  Future<bool> setFloorDirectBeverages({
+    required String storeId,
+    required bool enabled,
+    required String reason,
+  }) async {
+    state = state.copyWith(processingStoreId: storeId, clearError: true);
+    try {
+      await supabase.rpc(
+        'super_admin_set_floor_direct_beverages',
+        params: {
+          'p_store_id': storeId,
+          'p_enabled': enabled,
+          'p_reason': reason,
+          'p_request_id': const Uuid().v4(),
+        },
+      );
+      await load();
+      state = state.copyWith(clearProcessing: true);
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        clearProcessing: true,
+        error: 'FLOOR_DIRECT_CONTROL_UPDATE_FAILED: $error',
       );
       return false;
     }
@@ -250,6 +282,7 @@ class _EmergencyControlPanelState extends ConsumerState<EmergencyControlPanel> {
                       busy: state.processingStoreId == store.restaurantId,
                       copy: copy,
                       onToggle: () => _showModeDialog(store, copy),
+                      onDirectToggle: () => _showFloorDirectDialog(store, copy),
                     );
                   },
                 ),
@@ -321,6 +354,60 @@ class _EmergencyControlPanelState extends ConsumerState<EmergencyControlPanel> {
           reason: reason.trim(),
         );
   }
+
+  Future<void> _showFloorDirectDialog(
+    EmergencyStoreStatus store,
+    _ControlCopy copy,
+  ) async {
+    var reason = '';
+    final enable = !store.floorDirectBeveragesEnabled;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(enable ? copy.directOpenTitle : copy.directCloseTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(store.restaurantName),
+            const SizedBox(height: 8),
+            Text(copy.directNewOrdersOnly),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('floor_direct_reason'),
+              minLines: 2,
+              maxLines: 4,
+              onChanged: (value) => reason = value,
+              decoration: InputDecoration(labelText: copy.reason),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(copy.cancel),
+          ),
+          FilledButton(
+            key: const Key('floor_direct_confirm'),
+            onPressed: () {
+              if (reason.trim().isEmpty) return;
+              Navigator.of(dialogContext).pop(true);
+            },
+            child: Text(enable ? copy.directEnable : copy.directDisable),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await ref
+        .read(emergencyControlProvider.notifier)
+        .setFloorDirectBeverages(
+          storeId: store.restaurantId,
+          enabled: enable,
+          reason: reason.trim(),
+        );
+  }
 }
 
 class _ModeChangeNotice extends StatelessWidget {
@@ -358,12 +445,14 @@ class _EmergencyStoreCard extends StatelessWidget {
     required this.busy,
     required this.copy,
     required this.onToggle,
+    required this.onDirectToggle,
   });
 
   final EmergencyStoreStatus store;
   final bool busy;
   final _ControlCopy copy;
   final VoidCallback onToggle;
+  final VoidCallback onDirectToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -377,85 +466,104 @@ class _EmergencyStoreCard extends StatelessWidget {
           width: store.active ? 2 : 1,
         ),
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final info = Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final info = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Flexible(
-                    child: Text(
-                      store.restaurantName,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w900,
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          store.restaurantName,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      Chip(
+                        avatar: Icon(
+                          store.active
+                              ? Icons.tablet_mac_rounded
+                              : Icons.print_rounded,
+                          size: 16,
+                        ),
+                        label: Text(store.active ? copy.active : copy.inactive),
+                        backgroundColor: store.active
+                            ? const Color(0xFFFFE5E5)
+                            : PosSurfaceRole.background.fill,
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Chip(
-                    avatar: Icon(
-                      store.active
-                          ? Icons.tablet_mac_rounded
-                          : Icons.print_rounded,
-                      size: 16,
-                    ),
-                    label: Text(store.active ? copy.active : copy.inactive),
-                    backgroundColor: store.active
-                        ? const Color(0xFFFFE5E5)
-                        : PosSurfaceRole.background.fill,
-                  ),
+                  if (store.active || store.draining) ...[
+                    Text('${copy.orders}: ${store.orderCount}'),
+                    Text('${copy.unserved}: ${store.unresolvedQuantity}'),
+                    if (store.draining) Text(copy.draining),
+                    if ((store.reason ?? '').isNotEmpty)
+                      Text(
+                        store.reason!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: PosColors.textSecondary,
+                        ),
+                      ),
+                  ],
                 ],
-              ),
-              if (store.active || store.draining) ...[
-                Text('${copy.orders}: ${store.orderCount}'),
-                Text('${copy.unserved}: ${store.unresolvedQuantity}'),
-                if (store.draining) Text(copy.draining),
-                if ((store.reason ?? '').isNotEmpty)
-                  Text(
-                    store.reason!,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: PosColors.textSecondary,
-                    ),
-                  ),
-              ],
-            ],
-          );
-          final button = FilledButton.icon(
-            key: ValueKey('emergency_toggle_${store.restaurantId}'),
-            onPressed: busy ? null : onToggle,
-            icon: busy
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Icon(store.active ? Icons.stop_circle_outlined : Icons.bolt),
-            label: Text(store.active ? copy.close : copy.activate),
-            style: FilledButton.styleFrom(
-              backgroundColor: store.active
-                  ? PosColors.textSecondary
-                  : PosColors.accent,
+              );
+              final button = FilledButton.icon(
+                key: ValueKey('emergency_toggle_${store.restaurantId}'),
+                onPressed: busy ? null : onToggle,
+                icon: busy
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        store.active ? Icons.stop_circle_outlined : Icons.bolt,
+                      ),
+                label: Text(store.active ? copy.close : copy.activate),
+                style: FilledButton.styleFrom(
+                  backgroundColor: store.active
+                      ? PosColors.textSecondary
+                      : PosColors.accent,
+                ),
+              );
+              if (constraints.maxWidth < 640) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [info, const SizedBox(height: 12), button],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: info),
+                  const SizedBox(width: 16),
+                  button,
+                ],
+              );
+            },
+          ),
+          const Divider(height: 24),
+          SwitchListTile.adaptive(
+            key: ValueKey('floor_direct_toggle_${store.restaurantId}'),
+            contentPadding: EdgeInsets.zero,
+            value: store.floorDirectBeveragesEnabled,
+            onChanged: busy ? null : (_) => onDirectToggle(),
+            secondary: const Icon(Icons.local_drink_outlined),
+            title: Text(
+              copy.directBeverages,
+              style: const TextStyle(fontWeight: FontWeight.w800),
             ),
-          );
-          if (constraints.maxWidth < 640) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [info, const SizedBox(height: 12), button],
-            );
-          }
-          return Row(
-            children: [
-              Expanded(child: info),
-              const SizedBox(width: 16),
-              button,
-            ],
-          );
-        },
+            subtitle: Text(copy.directBeveragesDescription),
+          ),
+        ],
       ),
     );
   }
@@ -527,6 +635,30 @@ class _ControlCopy {
     'Draining existing paperless orders',
   );
   String get cancel => pick('취소', 'Hủy', 'Cancel');
+  String get directBeverages =>
+      pick('음료 층 직접 제공', 'Đồ uống phục vụ tại tầng', 'Floor-direct drinks');
+  String get directBeveragesDescription => pick(
+    '켜면 새 페이퍼리스 음료 주문은 주방·트레이에서 확인만 하고 층에서 완료합니다.',
+    'Khi bật, đơn đồ uống không giấy mới chỉ hiển thị ở bếp/khay và được hoàn tất tại tầng.',
+    'New paperless drinks stay read-only in kitchen/tray and are completed by the floor.',
+  );
+  String get directOpenTitle => pick(
+    '음료 층 직접 제공 켜기',
+    'Bật phục vụ đồ uống tại tầng',
+    'Enable floor-direct drinks',
+  );
+  String get directCloseTitle => pick(
+    '음료 층 직접 제공 끄기',
+    'Tắt phục vụ đồ uống tại tầng',
+    'Disable floor-direct drinks',
+  );
+  String get directNewOrdersOnly => pick(
+    '기존 주문 경로는 바뀌지 않으며, 변경 후 생성되는 새 주문부터 적용됩니다.',
+    'Đường đi của đơn hiện tại không đổi; chỉ áp dụng cho đơn mới.',
+    'Existing order routes stay unchanged; this applies only to new orders.',
+  );
+  String get directEnable => pick('켜기', 'Bật', 'Enable');
+  String get directDisable => pick('끄기', 'Tắt', 'Disable');
 }
 
 int _intValue(Object? value) => switch (value) {

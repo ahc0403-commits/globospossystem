@@ -203,6 +203,8 @@ class _EmergencyFulfillmentScreenState
         .where(
           (order) =>
               order.hasActionableQuantity(stationType) ||
+              ((stationType == 'kitchen' || stationType == 'tray') &&
+                  order.hasPendingFloorDirect) ||
               state.pendingQueueIds.contains(order.queueId),
         )
         .toList(growable: false);
@@ -703,10 +705,16 @@ class _EmergencyOrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final actionable = order.hasActionableQuantity(stationType);
+    final readOnlyDirect =
+        !actionable &&
+        (stationType == 'kitchen' || stationType == 'tray') &&
+        order.hasPendingFloorDirect;
     final tone = pending
         ? PosColors.warning
         : actionable
         ? _stationColor(stationType)
+        : readOnlyDirect
+        ? PosColors.info
         : PosColors.success;
     final elapsed = DateTime.now().difference(order.createdAt.toLocal());
     final elapsedMinutes = math.max(0, elapsed.inMinutes);
@@ -755,6 +763,8 @@ class _EmergencyOrderCard extends StatelessWidget {
                           ? Icons.cloud_upload_outlined
                           : actionable
                           ? Icons.schedule_rounded
+                          : readOnlyDirect
+                          ? Icons.visibility_outlined
                           : Icons.check_circle_rounded,
                       color: Colors.white,
                       size: 20,
@@ -791,6 +801,8 @@ class _EmergencyOrderCard extends StatelessWidget {
                             ? copy.pendingSync
                             : actionable
                             ? copy.waitingForAction
+                            : readOnlyDirect
+                            ? copy.floorDirectOnly
                             : copy.completed,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -992,17 +1004,28 @@ class _EmergencyMenuRow extends StatelessWidget {
     final (value, limit) = switch (stationType) {
       'kitchen' => (item.kitchenDoneQuantity, item.orderedQuantity),
       'tray' => (item.trayDispatchedQuantity, item.kitchenDoneQuantity),
-      'floor' => (item.floorServedQuantity, item.trayDispatchedQuantity),
+      'floor' => (
+        item.floorServedQuantity,
+        item.isFloorDirect ? item.orderedQuantity : item.trayDispatchedQuantity,
+      ),
       _ => (0, item.orderedQuantity),
     };
     final done = limit > 0 && value >= limit;
-    final canAdvance = !busy && limit > 0 && value < limit;
+    final disabledAtStation =
+        item.isFloorDirect &&
+        (stationType == 'kitchen' || stationType == 'tray');
+    final canAdvance =
+        !busy && !disabledAtStation && limit > 0 && value < limit;
     return Semantics(
       button: true,
       enabled: canAdvance,
       label:
           '${item.localizedName(languageCode)}, $value / $limit, '
-          '${done ? copy.completed : copy.waitingForAction}',
+          '${disabledAtStation
+              ? copy.floorDirectOnly
+              : done
+              ? copy.completed
+              : copy.waitingForAction}',
       child: GestureDetector(
         key: ValueKey('emergency_menu_item_${item.id}'),
         behavior: HitTestBehavior.opaque,
@@ -1051,18 +1074,28 @@ class _EmergencyMenuRow extends StatelessWidget {
               ),
             );
             final progressLabel = Text(
-              done ? copy.completed : copy.waitingForAction,
+              disabledAtStation
+                  ? copy.floorDirectOnly
+                  : done
+                  ? copy.completed
+                  : copy.waitingForAction,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: done ? PosColors.success : PosColors.warning,
+                color: disabledAtStation
+                    ? PosColors.textSecondary
+                    : done
+                    ? PosColors.success
+                    : PosColors.warning,
                 fontWeight: FontWeight.w700,
               ),
             );
             return Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: PosSurfaceRole.background.fill,
+                color: disabledAtStation
+                    ? PosColors.border.withValues(alpha: 0.35)
+                    : PosSurfaceRole.background.fill,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: item.needsReview ? PosColors.danger : PosColors.border,
@@ -1347,6 +1380,11 @@ class _EmergencyCopy {
   String get orderedQuantity => _pick('주문 수량', 'Số lượng', 'Ordered');
   String get completed => _pick('완료', 'Hoàn tất', 'Completed');
   String get waitingForAction => _pick('처리 대기', 'Chờ xử lý', 'Action required');
+  String get floorDirectOnly => _pick(
+    '층에서 직접 제공',
+    'Phục vụ trực tiếp tại tầng',
+    'Served directly by floor',
+  );
   String get totalOrders => _pick('총 주문', 'Tổng đơn', 'Total');
   String get previousPage => _pick('이전 페이지', 'Trang trước', 'Previous page');
   String get nextPage => _pick('다음 페이지', 'Trang sau', 'Next page');

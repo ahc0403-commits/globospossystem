@@ -280,9 +280,9 @@ const _coverage = <_OperationalCoverage>[
   ),
   _OperationalCoverage(
     source: 'lib/features/emergency_fulfillment/emergency_control_panel.dart',
-    directCalls: 1,
+    directCalls: 2,
     test: 'test/emergency_fulfillment_responsive_test.dart',
-    markers: ['emergency_mode_confirm'],
+    markers: ['emergency_mode_confirm', 'floor_direct_confirm'],
   ),
 ];
 
@@ -296,7 +296,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 102 dialog and sheet entrypoints map to operational tests', () {
+  test('all 103 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -308,10 +308,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 101);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 102);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      102,
+      103,
     );
 
     final settings = File(

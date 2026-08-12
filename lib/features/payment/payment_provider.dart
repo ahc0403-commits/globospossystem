@@ -39,6 +39,7 @@ class CashierOrder {
     this.emergencyModeActive = false,
     this.unservedQuantity = 0,
     this.floorServedQuantityByItemId = const {},
+    this.fulfillmentProgressByItemId = const {},
   });
 
   final String orderId;
@@ -65,6 +66,8 @@ class CashierOrder {
   final bool emergencyModeActive;
   final int unservedQuantity;
   final Map<String, int> floorServedQuantityByItemId;
+  final Map<String, List<CashierFulfillmentProgress>>
+  fulfillmentProgressByItemId;
 
   bool get isStaffMeal => orderPurpose == 'staff_meal';
   bool get isQrOrder => orderSource == 'qr';
@@ -81,6 +84,55 @@ class CashierOrder {
             item.status.toLowerCase() != 'cancelled',
       )
       .fold(0, (total, item) => total + item.quantity);
+}
+
+class CashierFulfillmentProgress {
+  const CashierFulfillmentProgress({
+    required this.fulfillmentItemId,
+    required this.orderItemId,
+    required this.lineKey,
+    required this.sourceKind,
+    required this.fulfillmentRoute,
+    required this.nameKo,
+    required this.nameVi,
+    required this.nameEn,
+    required this.orderedQuantity,
+    required this.floorServedQuantity,
+  });
+
+  final String fulfillmentItemId;
+  final String orderItemId;
+  final String lineKey;
+  final String sourceKind;
+  final String fulfillmentRoute;
+  final String nameKo;
+  final String nameVi;
+  final String nameEn;
+  final int orderedQuantity;
+  final int floorServedQuantity;
+
+  bool get isComplete => floorServedQuantity >= orderedQuantity;
+
+  String localizedName(String languageCode) => switch (languageCode) {
+    'vi' => nameVi.isEmpty ? nameEn : nameVi,
+    'en' => nameEn.isEmpty ? nameKo : nameEn,
+    _ => nameKo.isEmpty ? nameEn : nameKo,
+  };
+
+  factory CashierFulfillmentProgress.fromJson(Map<String, dynamic> json) =>
+      CashierFulfillmentProgress(
+        fulfillmentItemId: json['fulfillment_item_id']?.toString() ?? '',
+        orderItemId: json['order_item_id']?.toString() ?? '',
+        lineKey: json['line_key']?.toString() ?? 'base',
+        sourceKind: json['source_kind']?.toString() ?? 'order_item',
+        fulfillmentRoute:
+            json['fulfillment_route']?.toString() ?? 'kitchen_tray_floor',
+        nameKo: json['name_ko']?.toString() ?? '메뉴',
+        nameVi: json['name_vi']?.toString() ?? 'Món',
+        nameEn: json['name_en']?.toString() ?? 'Item',
+        orderedQuantity: _toIntValue(json['ordered_quantity']),
+        floorServedQuantity: _toIntValue(json['floor_served_quantity']),
+      );
 }
 
 class ActiveOrderDiscount {
@@ -416,7 +468,17 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
               ),
               emergencyModeActive: emergencySummary != null,
               unservedQuantity: emergencySummary ?? 0,
-              floorServedQuantityByItemId:
+              floorServedQuantityByItemId: {
+                for (final entry
+                    in (emergencyItemProgress[data['id'].toString()] ??
+                            const {})
+                        .entries)
+                  if (entry.value.any((line) => line.lineKey == 'base'))
+                    entry.key: entry.value
+                        .firstWhere((line) => line.lineKey == 'base')
+                        .floorServedQuantity,
+              },
+              fulfillmentProgressByItemId:
                   emergencyItemProgress[data['id'].toString()] ?? const {},
             );
           })
@@ -480,34 +542,34 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     }
   }
 
-  Future<Map<String, Map<String, int>>> _loadEmergencyItemProgress(
-    List<String> orderIds,
-  ) async {
+  Future<Map<String, Map<String, List<CashierFulfillmentProgress>>>>
+  _loadEmergencyItemProgress(List<String> orderIds) async {
     if (orderIds.isEmpty) return const {};
     try {
-      final raw = await supabase
-          .from('emergency_fulfillment_items')
-          .select(
-            'order_id, order_item_id, floor_served_quantity, '
-            'emergency_fulfillment_sessions!inner(status)',
-          )
-          .inFilter('order_id', orderIds)
-          .eq('is_cancelled', false)
-          .eq('emergency_fulfillment_sessions.status', 'active');
-      final result = <String, Map<String, int>>{};
-      for (final row in raw) {
+      // The RPC applies the same active-session scope previously expressed as
+      // emergency_fulfillment_sessions!inner(status), and also unions direct
+      // beverage component lines without exposing either ledger for writes.
+      final raw = await supabase.rpc(
+        'get_emergency_order_item_progress',
+        params: {'p_order_ids': orderIds},
+      );
+      if (raw is! List) return const {};
+      final result = <String, Map<String, List<CashierFulfillmentProgress>>>{};
+      for (final row in raw.whereType<Map>()) {
         final orderId = row['order_id']?.toString() ?? '';
         final orderItemId = row['order_item_id']?.toString() ?? '';
         if (orderId.isEmpty || orderItemId.isEmpty) continue;
-        result.putIfAbsent(
-          orderId,
-          () => <String, int>{},
-        )[orderItemId] = switch (row['floor_served_quantity']) {
-          int value => value,
-          num value => value.toInt(),
-          String value => int.tryParse(value) ?? 0,
-          _ => 0,
-        };
+        result
+            .putIfAbsent(
+              orderId,
+              () => <String, List<CashierFulfillmentProgress>>{},
+            )
+            .putIfAbsent(orderItemId, () => <CashierFulfillmentProgress>[])
+            .add(
+              CashierFulfillmentProgress.fromJson(
+                Map<String, dynamic>.from(row),
+              ),
+            );
       }
       return result;
     } catch (_) {
@@ -1284,6 +1346,13 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'emergency_fulfillment_items',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshPaymentOrdersFromRealtime(storeId),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'emergency_floor_direct_items',
           filter: LiveSyncScope.storeFilter(storeId),
           callback: (_) => _refreshPaymentOrdersFromRealtime(storeId),
         )

@@ -412,6 +412,29 @@ class MenuNotifier extends StateNotifier<MenuState> {
     }
   }
 
+  Future<bool> setMenuFulfillmentRoute({
+    required String itemId,
+    required bool floorDirect,
+  }) async {
+    try {
+      await menuService.setMenuFulfillmentRoute(
+        itemId: itemId,
+        floorDirect: floorDirect,
+      );
+      await fetchItems();
+      state = state.copyWith(clearError: true);
+      return true;
+    } catch (error, _) {
+      state = state.copyWith(
+        error: _mapMenuError(
+          error,
+          'Failed to change the paperless fulfillment route.',
+        ),
+      );
+      return false;
+    }
+  }
+
   Future<bool> setMenuCombo({
     required String itemId,
     required bool isCombo,

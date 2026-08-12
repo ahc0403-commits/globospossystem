@@ -868,15 +868,34 @@ class _QrActiveOrderCard extends StatelessWidget {
                             alignment: Alignment.centerRight,
                             child: details,
                           ),
+                          if (order.isPaperless &&
+                              item.fulfillmentParts.isNotEmpty)
+                            _QrFulfillmentParts(
+                              parts: item.fulfillmentParts,
+                              languageCode: languageCode,
+                              copy: copy,
+                            ),
                         ],
                       );
                     }
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Expanded(child: name),
-                        const SizedBox(width: ToastSpacingTokens.sm),
-                        details,
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(child: name),
+                            const SizedBox(width: ToastSpacingTokens.sm),
+                            details,
+                          ],
+                        ),
+                        if (order.isPaperless &&
+                            item.fulfillmentParts.isNotEmpty)
+                          _QrFulfillmentParts(
+                            parts: item.fulfillmentParts,
+                            languageCode: languageCode,
+                            copy: copy,
+                          ),
                       ],
                     );
                   },
@@ -889,6 +908,55 @@ class _QrActiveOrderCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _QrFulfillmentParts extends StatelessWidget {
+  const _QrFulfillmentParts({
+    required this.parts,
+    required this.languageCode,
+    required this.copy,
+  });
+
+  final List<QrFulfillmentPart> parts;
+  final String languageCode;
+  final QrOrderCopy copy;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    key: const Key('qr_fulfillment_parts'),
+    padding: const EdgeInsets.only(top: ToastSpacingTokens.sm),
+    child: Wrap(
+      spacing: ToastSpacingTokens.sm,
+      runSpacing: ToastSpacingTokens.xs,
+      children: [
+        for (final part in parts)
+          Container(
+            key: ValueKey('qr_fulfillment_part_${part.lineKey}'),
+            padding: const EdgeInsets.symmetric(
+              horizontal: ToastSpacingTokens.sm,
+              vertical: ToastSpacingTokens.xs,
+            ),
+            decoration: BoxDecoration(
+              color: part.remainingQuantity == 0
+                  ? ToastColorTokens.successMuted
+                  : ToastColorTokens.mutedSurface,
+              borderRadius: ToastRadiusTokens.pill,
+            ),
+            child: Text(
+              '${part.localizedName(languageCode)} '
+              '${copy.deliveryProgress(part.servedQuantity, part.remainingQuantity)}',
+              style: AppFonts.system(
+                color: part.remainingQuantity == 0
+                    ? ToastColorTokens.success
+                    : ToastColorTokens.textSecondary,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
 }
 
 class _QrMenuItemTile extends StatelessWidget {

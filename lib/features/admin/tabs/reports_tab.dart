@@ -19,6 +19,7 @@ import '../../report/report_provider.dart';
 import '../providers/admin_audit_provider.dart';
 import '../providers/daily_closing_provider.dart';
 import '../widgets/admin_audit_trace_panel.dart';
+import '../widgets/paperless_operations_dashboard.dart';
 
 class ReportsTab extends ConsumerStatefulWidget {
   const ReportsTab({super.key, this.overrideStoreId});
@@ -277,6 +278,14 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
           children: [
             compactHeader,
             const SizedBox(height: 8),
+            if (storeId != null) ...[
+              PaperlessOperationsDashboard(
+                storeId: storeId,
+                startDate: reportState.startDate,
+                endDate: reportState.endDate,
+              ),
+              const SizedBox(height: 8),
+            ],
             compactReportBody(),
             if (storeId != null) ...[
               const SizedBox(height: 8),
@@ -305,6 +314,14 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
               dateFormat: dateFormat,
             ),
             const SizedBox(height: 8),
+            if (storeId != null) ...[
+              PaperlessOperationsDashboard(
+                storeId: storeId,
+                startDate: reportState.startDate,
+                endDate: reportState.endDate,
+              ),
+              const SizedBox(height: 8),
+            ],
             if (!hasOperationalData && storeId != null) ...[
               _DailyClosingSection(storeId: storeId),
               const SizedBox(height: 8),

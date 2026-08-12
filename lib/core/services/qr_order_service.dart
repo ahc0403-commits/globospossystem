@@ -269,6 +269,7 @@ class QrActiveOrderItem {
     required this.quantity,
     required this.status,
     this.servedQuantity = 0,
+    this.fulfillmentParts = const [],
   });
 
   final String name;
@@ -278,6 +279,7 @@ class QrActiveOrderItem {
   final int quantity;
   final String status;
   final int servedQuantity;
+  final List<QrFulfillmentPart> fulfillmentParts;
 
   int get remainingQuantity => (quantity - servedQuantity).clamp(0, quantity);
 
@@ -297,6 +299,62 @@ class QrActiveOrderItem {
       quantity: _jsonInt(json['quantity']),
       status: json['status']?.toString() ?? 'pending',
       servedQuantity: _jsonInt(json['served_quantity']),
+      fulfillmentParts: switch (json['fulfillment_parts']) {
+        final List values =>
+          values
+              .whereType<Map>()
+              .map(
+                (part) =>
+                    QrFulfillmentPart.fromJson(Map<String, dynamic>.from(part)),
+              )
+              .toList(growable: false),
+        _ => const <QrFulfillmentPart>[],
+      },
+    );
+  }
+}
+
+class QrFulfillmentPart {
+  const QrFulfillmentPart({
+    required this.lineKey,
+    required this.name,
+    this.nameKo = '',
+    this.nameVi = '',
+    this.nameEn = '',
+    required this.quantity,
+    required this.servedQuantity,
+    required this.fulfillmentRoute,
+  });
+
+  final String lineKey;
+  final String name;
+  final String nameKo;
+  final String nameVi;
+  final String nameEn;
+  final int quantity;
+  final int servedQuantity;
+  final String fulfillmentRoute;
+
+  int get remainingQuantity => (quantity - servedQuantity).clamp(0, quantity);
+
+  String localizedName(String languageCode) => switch (languageCode) {
+    'ko' => nameKo.isEmpty ? name : nameKo,
+    'vi' => nameVi.isEmpty ? name : nameVi,
+    _ => nameEn.isEmpty ? name : nameEn,
+  };
+
+  factory QrFulfillmentPart.fromJson(Map<String, dynamic> json) {
+    final fallback = json['name']?.toString() ?? '';
+    return QrFulfillmentPart(
+      lineKey: json['line_key']?.toString() ?? 'base',
+      name: fallback,
+      nameKo: json['name_ko']?.toString() ?? fallback,
+      nameVi: json['name_vi']?.toString() ?? fallback,
+      nameEn: json['name_en']?.toString() ?? fallback,
+      quantity: _jsonInt(json['quantity']),
+      servedQuantity: _jsonInt(json['served_quantity']),
+      fulfillmentRoute:
+          json['fulfillment_route']?.toString() ?? 'kitchen_tray_floor',
     );
   }
 }
