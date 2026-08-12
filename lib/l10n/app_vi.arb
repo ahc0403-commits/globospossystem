@@ -965,6 +965,7 @@
   "customerDisplayScanQr": "Quét mã QR để thanh toán",
   "customerDisplayQrSemanticLabel": "Mã QR thanh toán chuyển khoản ngân hàng",
   "customerDisplayLoadFailed": "Không thể tải màn hình thanh toán cho khách.",
+  "customerEnvironmentalNotice": "Chúng tôi chung tay bảo vệ môi trường. Hãy hạn chế sử dụng hóa đơn giấy để cùng góp phần bảo vệ môi trường.",
   "cashierQueuedProofUploaded": "Đã tải lên {count} ảnh chứng từ đang chờ.",
   "@cashierQueuedProofUploaded": {"placeholders": {"count": {"type": "int"}}},
   "cashierOrderCancelled": "Đơn đã được hủy",

@@ -499,6 +499,35 @@ class _CustomerQrPanel extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          Container(
+            key: const Key('customer_display_environmental_notice'),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: PosColors.successMuted,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.eco_rounded,
+                  size: 22,
+                  color: PosColors.success,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    context.l10n.customerEnvironmentalNotice,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: PosColors.textPrimary,
+                      fontWeight: FontWeight.w700,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

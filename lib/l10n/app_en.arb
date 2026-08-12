@@ -966,6 +966,7 @@
   "customerDisplayScanQr": "Scan to pay",
   "customerDisplayQrSemanticLabel": "Bank account payment QR code",
   "customerDisplayLoadFailed": "Could not load the customer display.",
+  "customerEnvironmentalNotice": "We are committed to protecting the environment. Please help by reducing the use of paper receipts.",
   "cashierQueuedProofUploaded": "{count} queued proof photo(s) uploaded.",
   "@cashierQueuedProofUploaded": {"placeholders": {"count": {"type": "int"}}},
   "cashierOrderCancelled": "Order cancelled",

@@ -143,39 +143,47 @@ void _expectNoLayoutFailure(WidgetTester tester) {
 }
 
 void main() {
-  testWidgets(
-    'promotion slot always shows VAT and uses welcome copy when idle',
-    (tester) async {
-      await _pumpQr(tester, service: _service());
+  testWidgets('promotion slot always shows VAT and uses welcome copy when idle', (
+    tester,
+  ) async {
+    await _pumpQr(tester, service: _service());
 
-      expect(find.byKey(const Key('qr_welcome_message')), findsOneWidget);
-      expect(
-        find.text('Món ăn được chuẩn bị tận tâm. Chúc quý khách ngon miệng.'),
-        findsOneWidget,
-      );
-      expect(find.text('Chưa bao gồm 8% VAT.'), findsOneWidget);
+    expect(find.byKey(const Key('qr_welcome_message')), findsOneWidget);
+    expect(
+      find.text('Món ăn được chuẩn bị tận tâm. Chúc quý khách ngon miệng.'),
+      findsOneWidget,
+    );
+    expect(find.text('Chưa bao gồm 8% VAT.'), findsOneWidget);
+    await tester.drag(
+      find.byKey(const Key('qr_menu_scroll')),
+      const Offset(0, -600),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('qr_environmental_notice')), findsOneWidget);
+    expect(
+      find.text(
+        'Chúng tôi chung tay bảo vệ môi trường. Hãy hạn chế sử dụng hóa đơn giấy để cùng góp phần bảo vệ môi trường.',
+      ),
+      findsOneWidget,
+    );
 
-      const promotedMenu = QrOrderMenu(
-        storeName: 'BunsikClub',
-        tableNumber: '8',
-        floorLabel: '1F',
-        promotionName: 'Grand opening',
-        promotionDiscountPercent: 30,
-        categories: [],
-        items: [],
-      );
-      await _pumpQr(
-        tester,
-        service: _service(fetch: (_) async => promotedMenu),
-      );
+    const promotedMenu = QrOrderMenu(
+      storeName: 'BunsikClub',
+      tableNumber: '8',
+      floorLabel: '1F',
+      promotionName: 'Grand opening',
+      promotionDiscountPercent: 30,
+      categories: [],
+      items: [],
+    );
+    await _pumpQr(tester, service: _service(fetch: (_) async => promotedMenu));
 
-      expect(find.byKey(const Key('qr_active_promotion')), findsOneWidget);
-      expect(find.textContaining('30%'), findsOneWidget);
-      expect(find.text('Chưa bao gồm 8% VAT.'), findsOneWidget);
-      expect(find.byKey(const Key('qr_welcome_message')), findsNothing);
-      _expectNoLayoutFailure(tester);
-    },
-  );
+    expect(find.byKey(const Key('qr_active_promotion')), findsOneWidget);
+    expect(find.textContaining('30%'), findsOneWidget);
+    expect(find.text('Chưa bao gồm 8% VAT.'), findsOneWidget);
+    expect(find.byKey(const Key('qr_welcome_message')), findsNothing);
+    _expectNoLayoutFailure(tester);
+  });
 
   testWidgets(
     'paperless active order shows delivered and remaining quantities',

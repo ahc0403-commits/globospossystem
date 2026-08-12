@@ -909,18 +909,50 @@ class _EmergencyOrderDetails extends StatelessWidget {
                 ),
               ),
             Expanded(
-              child: ListView.separated(
-                key: const Key('emergency_detail_menu_list'),
-                padding: const EdgeInsets.all(12),
-                itemCount: order.items.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 8),
-                itemBuilder: (context, index) => _EmergencyMenuRow(
-                  item: order.items[index],
-                  stationType: stationType,
-                  copy: copy,
-                  busy: busy || pending,
-                  onTap: () => onItemAction(order.items[index]),
-                ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final columns = order.items.length >= 5
+                      ? switch (constraints.maxWidth) {
+                          >= 900 => 5,
+                          >= 600 => 3,
+                          >= 420 => 2,
+                          _ => 1,
+                        }
+                      : 1;
+                  if (columns == 1) {
+                    return ListView.separated(
+                      key: const Key('emergency_detail_menu_list'),
+                      padding: const EdgeInsets.all(12),
+                      itemCount: order.items.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) => _EmergencyMenuRow(
+                        item: order.items[index],
+                        stationType: stationType,
+                        copy: copy,
+                        busy: busy || pending,
+                        onTap: () => onItemAction(order.items[index]),
+                      ),
+                    );
+                  }
+                  return GridView.builder(
+                    key: Key('emergency_detail_menu_grid_${columns}_columns'),
+                    padding: const EdgeInsets.all(12),
+                    itemCount: order.items.length,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: columns,
+                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 8,
+                      mainAxisExtent: 150,
+                    ),
+                    itemBuilder: (context, index) => _EmergencyMenuRow(
+                      item: order.items[index],
+                      stationType: stationType,
+                      copy: copy,
+                      busy: busy || pending,
+                      onTap: () => onItemAction(order.items[index]),
+                    ),
+                  );
+                },
               ),
             ),
             const Divider(height: 1),
@@ -975,69 +1007,96 @@ class _EmergencyMenuRow extends StatelessWidget {
         key: ValueKey('emergency_menu_item_${item.id}'),
         behavior: HitTestBehavior.opaque,
         onTap: canAdvance ? onTap : null,
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: PosSurfaceRole.background.fill,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: item.needsReview ? PosColors.danger : PosColors.border,
-            ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.localizedName(languageCode),
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '${copy.orderedQuantity} ${item.orderedQuantity}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: PosColors.textSecondary,
-                      ),
-                    ),
-                    if (item.needsReview) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        copy.quantityReview,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: PosColors.danger,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '$value / $limit',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: done ? PosColors.success : PosColors.textPrimary,
-                      fontWeight: FontWeight.w900,
-                    ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 240;
+            final itemInfo = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  item.localizedName(languageCode),
+                  maxLines: compact ? 3 : 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
                   ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${copy.orderedQuantity} ${item.orderedQuantity}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: PosColors.textSecondary,
+                  ),
+                ),
+                if (item.needsReview) ...[
+                  const SizedBox(height: 4),
                   Text(
-                    done ? copy.completed : copy.waitingForAction,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: done ? PosColors.success : PosColors.warning,
+                    copy.quantityReview,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: PosColors.danger,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
+              ],
+            );
+            final progressValue = Text(
+              '$value / $limit',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: done ? PosColors.success : PosColors.textPrimary,
+                fontWeight: FontWeight.w900,
               ),
-            ],
-          ),
+            );
+            final progressLabel = Text(
+              done ? copy.completed : copy.waitingForAction,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: done ? PosColors.success : PosColors.warning,
+                fontWeight: FontWeight.w700,
+              ),
+            );
+            return Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: PosSurfaceRole.background.fill,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: item.needsReview ? PosColors.danger : PosColors.border,
+                ),
+              ),
+              child: compact
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        itemInfo,
+                        const Spacer(),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Expanded(child: progressLabel),
+                            const SizedBox(width: 6),
+                            progressValue,
+                          ],
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(child: itemInfo),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [progressValue, progressLabel],
+                        ),
+                      ],
+                    ),
+            );
+          },
         ),
       ),
     );

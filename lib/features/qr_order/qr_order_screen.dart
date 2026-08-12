@@ -538,6 +538,41 @@ class _QrOrderScreenState extends State<QrOrderScreen>
                         },
                       ),
                     ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                      child: Container(
+                        key: const Key('qr_environmental_notice'),
+                        padding: const EdgeInsets.all(ToastSpacingTokens.md),
+                        decoration: BoxDecoration(
+                          color: ToastColorTokens.successMuted,
+                          borderRadius: ToastRadiusTokens.sm,
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.eco_rounded,
+                              size: 20,
+                              color: ToastColorTokens.success,
+                            ),
+                            const SizedBox(width: ToastSpacingTokens.sm),
+                            Expanded(
+                              child: Text(
+                                _copy.environmentalNotice,
+                                style: AppFonts.system(
+                                  color: ToastColorTokens.textPrimary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1829,6 +1864,14 @@ class QrOrderCopy {
     'ko' => '주문 전 테이블 번호를 확인해 주세요.',
     'vi' => 'Vui lòng kiểm tra đúng số bàn trước khi gọi món.',
     _ => 'Please confirm the table number before ordering.',
+  };
+
+  String get environmentalNotice => switch (code) {
+    'ko' => '우리 회사는 환경 보호를 실천합니다. 종이 영수증 사용을 줄여 환경 보호에 동참해 주세요.',
+    'vi' =>
+      'Chúng tôi chung tay bảo vệ môi trường. Hãy hạn chế sử dụng hóa đơn giấy để cùng góp phần bảo vệ môi trường.',
+    _ =>
+      'We are committed to protecting the environment. Please help by reducing the use of paper receipts.',
   };
 
   String get activeOrderTitle => switch (code) {
