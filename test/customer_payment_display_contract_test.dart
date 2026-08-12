@@ -170,6 +170,7 @@ void main() {
       'Chi tiết đơn hàng',
       'Tổng thanh toán',
       'Quét mã QR để thanh toán',
+      'Chúng tôi chung tay bảo vệ môi trường. Hãy hạn chế sử dụng hóa đơn giấy để cùng góp phần bảo vệ môi trường.',
       'Bàn 12',
       'Phí dịch vụ',
       'Giảm giá',
@@ -250,6 +251,10 @@ void main() {
     expect(find.text('₫12.593'), findsOneWidget);
     expect(find.byKey(const Key('customer_display_vat')), findsOneWidget);
     expect(find.byKey(const Key('customer_display_fixed_qr')), findsOneWidget);
+    expect(
+      find.byKey(const Key('customer_display_environmental_notice')),
+      findsOneWidget,
+    );
     expect(find.byType(Image), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

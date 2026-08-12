@@ -181,6 +181,50 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'tablet detail shows ten menu items in five columns and two rows',
+    (tester) async {
+      final fixture = _FixtureEmergencyNotifier(
+        _activeStateWithMenuItems('kitchen', 10),
+      );
+      await _pumpEmergency(
+        tester,
+        fixture: fixture,
+        size: const Size(1024, 768),
+        locale: const Locale('ko'),
+        expectedStationType: 'kitchen',
+      );
+
+      await tester.tap(find.byKey(const Key('emergency_order_order-1')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('emergency_detail_menu_grid_5_columns')),
+        findsOne,
+      );
+      final itemFinders = List.generate(
+        10,
+        (index) => find.byKey(Key('emergency_menu_item_menu-${index + 1}')),
+      );
+      for (final finder in itemFinders) {
+        expect(finder, findsOne);
+      }
+      final firstRowY = tester.getCenter(itemFinders.first).dy;
+      for (final finder in itemFinders.take(5)) {
+        expect(tester.getCenter(finder).dy, closeTo(firstRowY, 0.1));
+      }
+      expect(tester.getCenter(itemFinders[5]).dy, greaterThan(firstRowY));
+      expect(
+        tester.getCenter(itemFinders[5]).dx,
+        closeTo(tester.getCenter(itemFinders.first).dx, 0.1),
+      );
+      await tester.tap(itemFinders[5]);
+      await tester.pumpAndSettle();
+      expect(fixture.recordedProgress, [('menu-6', 'kitchen_done', 1)]);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('floor workflow has no G-floor surface and renders on mobile', (
     tester,
   ) async {
@@ -341,6 +385,36 @@ EmergencyFulfillmentState _completedState(String stationType) {
         lastActionId: 'action-1',
         lastActionAt: DateTime.utc(2026, 8, 11, 10),
         items: [item.withStage('floor_served', item.trayDispatchedQuantity)],
+      ),
+    ],
+  );
+}
+
+EmergencyFulfillmentState _activeStateWithMenuItems(
+  String stationType,
+  int itemCount,
+) {
+  final active = _activeState(stationType);
+  final order = active.orders.single;
+  return active.copyWith(
+    orders: [
+      order.copyWith(
+        items: List.generate(
+          itemCount,
+          (index) => EmergencyFulfillmentItem(
+            id: 'menu-${index + 1}',
+            orderItemId: 'order-item-${index + 1}',
+            nameKo: index == 1 ? '제육쌈 김밥\n[쌈야채 제공]' : '메뉴 ${index + 1}',
+            nameVi: 'Món ${index + 1}',
+            nameEn: 'Menu ${index + 1}',
+            orderedQuantity: 1,
+            kitchenDoneQuantity: 0,
+            trayReceivedQuantity: 0,
+            trayDispatchedQuantity: 0,
+            floorServedQuantity: 0,
+            needsReview: false,
+          ),
+        ),
       ),
     ],
   );

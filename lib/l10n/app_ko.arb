@@ -965,6 +965,7 @@
   "customerDisplayScanQr": "QR 코드를 스캔하여 결제하세요",
   "customerDisplayQrSemanticLabel": "계좌이체 결제 QR 코드",
   "customerDisplayLoadFailed": "고객 결제 화면을 불러올 수 없습니다.",
+  "customerEnvironmentalNotice": "우리 회사는 환경 보호를 실천합니다. 종이 영수증 사용을 줄여 환경 보호에 동참해 주세요.",
   "cashierQueuedProofUploaded": "대기 중이던 결제 증빙 사진 {count}건을 업로드했습니다.",
   "@cashierQueuedProofUploaded": {"placeholders": {"count": {"type": "int"}}},
   "cashierOrderCancelled": "주문이 취소되었습니다",
