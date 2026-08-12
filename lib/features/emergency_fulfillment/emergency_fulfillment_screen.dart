@@ -971,80 +971,72 @@ class _EmergencyMenuRow extends StatelessWidget {
       label:
           '${item.localizedName(languageCode)}, $value / $limit, '
           '${done ? copy.completed : copy.waitingForAction}',
-      child: Material(
-        color: PosSurfaceRole.background.fill,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: BorderSide(
-            color: item.needsReview ? PosColors.danger : PosColors.border,
+      child: GestureDetector(
+        key: ValueKey('emergency_menu_item_${item.id}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: canAdvance ? onTap : null,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: PosSurfaceRole.background.fill,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: item.needsReview ? PosColors.danger : PosColors.border,
+            ),
           ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          key: ValueKey('emergency_menu_item_${item.id}'),
-          onTap: canAdvance ? onTap : null,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.localizedName(languageCode),
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '${copy.orderedQuantity} ${item.orderedQuantity}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: PosColors.textSecondary,
-                        ),
-                      ),
-                      if (item.needsReview) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          copy.quantityReview,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: PosColors.danger,
-                                fontWeight: FontWeight.w700,
-                              ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '$value / $limit',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: done ? PosColors.success : PosColors.textPrimary,
-                        fontWeight: FontWeight.w900,
+                      item.localizedName(languageCode),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
+                    const SizedBox(height: 3),
                     Text(
-                      done ? copy.completed : copy.waitingForAction,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: done ? PosColors.success : PosColors.warning,
-                        fontWeight: FontWeight.w700,
+                      '${copy.orderedQuantity} ${item.orderedQuantity}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.textSecondary,
                       ),
                     ),
+                    if (item.needsReview) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        copy.quantityReview,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: PosColors.danger,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
-                const SizedBox(width: 8),
-                Icon(
-                  done ? Icons.check_circle_rounded : Icons.touch_app_rounded,
-                  color: done ? PosColors.success : _stationColor(stationType),
-                  size: 22,
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '$value / $limit',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: done ? PosColors.success : PosColors.textPrimary,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Text(
+                    done ? copy.completed : copy.waitingForAction,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: done ? PosColors.success : PosColors.warning,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
