@@ -123,6 +123,34 @@ final _paperlessCashierOrder = CashierOrder(
     'cashier-item-pho': 1,
     'cashier-item-coffee': 0,
   },
+  fulfillmentProgressByItemId: const {
+    'cashier-item-coffee': [
+      CashierFulfillmentProgress(
+        fulfillmentItemId: 'progress-coffee-base',
+        orderItemId: 'cashier-item-coffee',
+        lineKey: 'base',
+        sourceKind: 'order_item',
+        fulfillmentRoute: 'kitchen_tray_floor',
+        nameKo: '커피 세트',
+        nameVi: 'Bộ cà phê',
+        nameEn: 'Coffee set',
+        orderedQuantity: 1,
+        floorServedQuantity: 1,
+      ),
+      CashierFulfillmentProgress(
+        fulfillmentItemId: 'progress-cola',
+        orderItemId: 'cashier-item-coffee',
+        lineKey: 'combo:cola',
+        sourceKind: 'combo_component',
+        fulfillmentRoute: 'floor_direct',
+        nameKo: '콜라',
+        nameVi: 'Coca-Cola',
+        nameEn: 'Cola',
+        orderedQuantity: 1,
+        floorServedQuantity: 0,
+      ),
+    ],
+  },
   items: const [
     OrderItem(
       id: 'cashier-item-pho',
@@ -446,6 +474,11 @@ void main() {
     );
     expect(find.text('Đã phục vụ 1 / 1'), findsOneWidget);
     expect(find.text('Đã phục vụ 0 / 1'), findsOneWidget);
+    expect(
+      find.byKey(const Key('cashier_fulfillment_part_progress-cola')),
+      findsOneWidget,
+    );
+    expect(find.text('Coca-Cola'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

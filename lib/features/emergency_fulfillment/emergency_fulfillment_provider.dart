@@ -23,6 +23,9 @@ class EmergencyFulfillmentItem {
     required this.trayDispatchedQuantity,
     required this.floorServedQuantity,
     required this.needsReview,
+    this.fulfillmentRoute = 'kitchen_tray_floor',
+    this.lineKey = 'base',
+    this.sourceKind = 'order_item',
   });
 
   final String id;
@@ -36,6 +39,23 @@ class EmergencyFulfillmentItem {
   final int trayDispatchedQuantity;
   final int floorServedQuantity;
   final bool needsReview;
+  final String fulfillmentRoute;
+  final String lineKey;
+  final String sourceKind;
+
+  bool get isFloorDirect => fulfillmentRoute == 'floor_direct';
+
+  bool isActionableAt(String stationType) => switch (stationType) {
+    'kitchen' => !isFloorDirect && kitchenDoneQuantity < orderedQuantity,
+    'tray' =>
+      !isFloorDirect &&
+          (trayReceivedQuantity < kitchenDoneQuantity ||
+              trayDispatchedQuantity < kitchenDoneQuantity),
+    'floor' =>
+      floorServedQuantity <
+          (isFloorDirect ? orderedQuantity : trayDispatchedQuantity),
+    _ => false,
+  };
 
   String localizedName(String languageCode) => switch (languageCode) {
     'vi' => nameVi.trim().isEmpty ? 'Món' : nameVi,
@@ -72,6 +92,9 @@ class EmergencyFulfillmentItem {
             ? quantity
             : floorServedQuantity,
         needsReview: needsReview,
+        fulfillmentRoute: fulfillmentRoute,
+        lineKey: lineKey,
+        sourceKind: sourceKind,
       );
 
   factory EmergencyFulfillmentItem.fromJson(Map<String, dynamic> json) =>
@@ -87,6 +110,10 @@ class EmergencyFulfillmentItem {
         trayDispatchedQuantity: _asInt(json['tray_dispatched_quantity']),
         floorServedQuantity: _asInt(json['floor_served_quantity']),
         needsReview: json['needs_review'] == true,
+        fulfillmentRoute:
+            json['fulfillment_route']?.toString() ?? 'kitchen_tray_floor',
+        lineKey: json['line_key']?.toString() ?? 'base',
+        sourceKind: json['source_kind']?.toString() ?? 'order_item',
       );
 }
 
@@ -113,15 +140,12 @@ class EmergencyFulfillmentOrder {
   final String? lastActionId;
   final DateTime? lastActionAt;
 
-  bool hasActionableQuantity(String stationType) => items.any(
-    (item) => switch (stationType) {
-      'kitchen' => item.kitchenDoneQuantity < item.orderedQuantity,
-      'tray' =>
-        item.trayReceivedQuantity < item.kitchenDoneQuantity ||
-            item.trayDispatchedQuantity < item.kitchenDoneQuantity,
-      'floor' => item.floorServedQuantity < item.trayDispatchedQuantity,
-      _ => false,
-    },
+  bool hasActionableQuantity(String stationType) =>
+      items.any((item) => item.isActionableAt(stationType));
+
+  bool get hasPendingFloorDirect => items.any(
+    (item) =>
+        item.isFloorDirect && item.floorServedQuantity < item.orderedQuantity,
   );
 
   EmergencyFulfillmentOrder copyWith({
@@ -144,7 +168,10 @@ class EmergencyFulfillmentOrder {
   bool isCompleteForStage(String stage) =>
       items.isNotEmpty &&
       items.every(
-        (item) => item.quantityForStage(stage) >= item.orderedQuantity,
+        (item) => stage == 'floor_served'
+            ? item.floorServedQuantity >= item.orderedQuantity
+            : item.isFloorDirect ||
+                  item.quantityForStage(stage) >= item.orderedQuantity,
       );
 
   factory EmergencyFulfillmentOrder.fromJson(Map<String, dynamic> json) {
@@ -341,6 +368,13 @@ class EmergencyFulfillmentNotifier
           filter: LiveSyncScope.storeFilter(storeId),
           callback: refresh,
         )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'emergency_floor_direct_items',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: refresh,
+        )
         .subscribe();
     _startPolling();
   }
@@ -357,12 +391,16 @@ class EmergencyFulfillmentNotifier
     required String stage,
     int delta = 1,
   }) async {
+    final floorDirect = state.orders
+        .expand((order) => order.items)
+        .any((item) => item.id == itemId && item.isFloorDirect);
     final eventId = _uuid.v4();
     final payload = <String, dynamic>{
       'event_id': eventId,
       'item_id': itemId,
       'stage': stage,
       'delta': delta,
+      'floor_direct': floorDirect,
     };
     final previous = state;
     _applyOptimistic(itemId: itemId, stage: stage, delta: delta);
@@ -485,6 +523,17 @@ class EmergencyFulfillmentNotifier
   }
 
   Future<void> _sendProgress(Map<String, dynamic> payload) async {
+    if (payload['floor_direct'] == true) {
+      await supabase.rpc(
+        'emergency_record_floor_direct_progress',
+        params: {
+          'p_floor_direct_item_id': payload['item_id'],
+          'p_delta': payload['delta'],
+          'p_event_id': payload['event_id'],
+        },
+      );
+      return;
+    }
     await supabase.rpc(
       'emergency_record_progress',
       params: {
@@ -497,10 +546,13 @@ class EmergencyFulfillmentNotifier
   }
 
   Future<void> _sendOutboxPayload(Map<String, dynamic> payload) async {
+    // The route-aware wrappers delegate food work to the legacy
+    // 'emergency_complete_order_stage' / 'emergency_revert_order_action'
+    // contracts, then atomically include floor-direct beverage lines.
     switch (payload['kind']) {
       case 'complete_order':
         await supabase.rpc(
-          'emergency_complete_order_stage',
+          'emergency_complete_route_order_stage',
           params: {
             'p_queue_id': payload['queue_id'],
             'p_action_id': payload['action_id'],
@@ -508,7 +560,7 @@ class EmergencyFulfillmentNotifier
         );
       case 'revert_order':
         await supabase.rpc(
-          'emergency_revert_order_action',
+          'emergency_revert_route_order_action',
           params: {
             'p_queue_id': payload['queue_id'],
             'p_action_id': payload['action_id'],
@@ -551,7 +603,9 @@ class EmergencyFulfillmentNotifier
                             ),
                       'floor' => item.withStage(
                         'floor_served',
-                        item.trayDispatchedQuantity,
+                        item.isFloorDirect
+                            ? item.orderedQuantity
+                            : item.trayDispatchedQuantity,
                       ),
                       _ => item,
                     };

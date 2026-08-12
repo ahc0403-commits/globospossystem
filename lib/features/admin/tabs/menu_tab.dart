@@ -1153,6 +1153,8 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     var removeExistingPhoto = false;
     final originalIsCombo = item['is_combo'] == true;
     var isCombo = originalIsCombo;
+    final originalFloorDirect = item['fulfillment_route'] == 'floor_direct';
+    var floorDirect = originalFloorDirect;
     final originalComboQuantities = _comboQuantitiesFromItem(item);
     final comboQuantities = Map<String, int>.from(originalComboQuantities);
     final originalComboDrinkChoiceCount =
@@ -1224,6 +1226,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     drinkChoiceCount: comboDrinkChoiceCount,
                     onComboChanged: (value) => setDialogState(() {
                       isCombo = value;
+                      if (value) floorDirect = false;
                       if (!value) {
                         comboQuantities.clear();
                         comboDrinkChoiceCount = 0;
@@ -1239,6 +1242,32 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                         }),
                     onDrinkChoiceCountChanged: (value) =>
                         setDialogState(() => comboDrinkChoiceCount = value),
+                  ),
+                  const SizedBox(height: 12),
+                  SwitchListTile.adaptive(
+                    key: const Key('admin_menu_floor_direct'),
+                    contentPadding: EdgeInsets.zero,
+                    value: floorDirect,
+                    onChanged: isCombo
+                        ? null
+                        : (value) => setDialogState(() => floorDirect = value),
+                    secondary: const Icon(Icons.local_drink_outlined),
+                    title: Text(switch (Localizations.localeOf(
+                      context,
+                    ).languageCode) {
+                      'vi' => 'Phục vụ trực tiếp tại tầng',
+                      'en' => 'Serve directly by floor',
+                      _ => '층에서 직접 제공',
+                    }),
+                    subtitle: Text(switch (Localizations.localeOf(
+                      context,
+                    ).languageCode) {
+                      'vi' =>
+                        'Bếp và khay chỉ hiển thị; tầng chịu trách nhiệm hoàn tất.',
+                      'en' =>
+                        'Kitchen and tray are read-only; the floor completes it.',
+                      _ => '주방·트레이에서는 확인만 하고 담당 층에서 완료합니다.',
+                    }),
                   ),
                   const SizedBox(height: 16),
                   _MenuPhotoPicker(
@@ -1314,7 +1343,11 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                         comboQuantities,
                         originalComboQuantities,
                       );
-                  if (!detailsChanged && !photoChanged && !comboChanged) {
+                  final routeChanged = floorDirect != originalFloorDirect;
+                  if (!detailsChanged &&
+                      !photoChanged &&
+                      !comboChanged &&
+                      !routeChanged) {
                     showErrorToast(context, l10n.noChanges);
                     return;
                   }
@@ -1338,6 +1371,15 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                       drinkChoiceCount: comboDrinkChoiceCount,
                     );
                     if (!comboSaved) return;
+                  }
+
+                  if (routeChanged) {
+                    final routeSaved = await menuNotifier
+                        .setMenuFulfillmentRoute(
+                          itemId: itemId,
+                          floorDirect: floorDirect,
+                        );
+                    if (!routeSaved) return;
                   }
 
                   final photo = selectedPhoto;

@@ -3183,6 +3183,11 @@ class _CashierOrderItemsPanel extends StatelessWidget {
                 final isMenuItem = itemType == 'menu_item';
                 final servedQuantity =
                     order.floorServedQuantityByItemId[item.id];
+                final fulfillmentParts =
+                    order.fulfillmentProgressByItemId[item.id] ?? const [];
+                final showFulfillmentParts = fulfillmentParts.any(
+                  (part) => part.sourceKind == 'combo_component',
+                );
                 final canCancelItem =
                     canCancelItems &&
                     !isProcessing &&
@@ -3300,6 +3305,60 @@ class _CashierOrderItemsPanel extends StatelessWidget {
                                       compact: true,
                                     ),
                                   ),
+                                ],
+                                if (isMenuItem && showFulfillmentParts) ...[
+                                  const SizedBox(height: 6),
+                                  for (final part in fulfillmentParts)
+                                    Padding(
+                                      key: ValueKey(
+                                        'cashier_fulfillment_part_${part.fulfillmentItemId}',
+                                      ),
+                                      padding: const EdgeInsets.only(bottom: 4),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            part.fulfillmentRoute ==
+                                                    'floor_direct'
+                                                ? Icons.local_drink_outlined
+                                                : Icons.restaurant_outlined,
+                                            size: 14,
+                                            color: PosColors.textSecondary,
+                                          ),
+                                          const SizedBox(width: 5),
+                                          Expanded(
+                                            child: Text(
+                                              part.localizedName(
+                                                Localizations.localeOf(
+                                                  context,
+                                                ).languageCode,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall
+                                                  ?.copyWith(
+                                                    color:
+                                                        PosColors.textSecondary,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                            ),
+                                          ),
+                                          Text(
+                                            '${part.floorServedQuantity}/${part.orderedQuantity}',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall
+                                                ?.copyWith(
+                                                  color: part.isComplete
+                                                      ? PosColors.success
+                                                      : PosColors.warning,
+                                                  fontWeight: FontWeight.w900,
+                                                ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                 ],
                               ],
                             ),

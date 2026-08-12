@@ -83,6 +83,7 @@ class _FixtureEmergencyControlNotifier extends EmergencyControlNotifier {
   }
 
   final List<(String, bool, String)> changes = [];
+  final List<(String, bool, String)> floorDirectChanges = [];
 
   @override
   Future<void> load() async {}
@@ -96,6 +97,16 @@ class _FixtureEmergencyControlNotifier extends EmergencyControlNotifier {
     bool force = false,
   }) async {
     changes.add((storeId, enabled, reason));
+    return true;
+  }
+
+  @override
+  Future<bool> setFloorDirectBeverages({
+    required String storeId,
+    required bool enabled,
+    required String reason,
+  }) async {
+    floorDirectChanges.add((storeId, enabled, reason));
     return true;
   }
 }
@@ -335,7 +346,127 @@ void main() {
     expect(fixture.changes, [('store-bt', true, '프린터 장애')]);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('Super Admin floor-direct dialog confirms new-order routing', (
+    tester,
+  ) async {
+    final fixture = _FixtureEmergencyControlNotifier();
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1024, 768);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [emergencyControlProvider.overrideWith((ref) => fixture)],
+        child: MaterialApp(
+          theme: AppTheme.build(),
+          locale: const Locale('ko'),
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const Scaffold(body: EmergencyControlPanel()),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('floor_direct_toggle_store-bt')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('floor_direct_reason')), findsOne);
+    expect(find.byKey(const Key('floor_direct_confirm')), findsOne);
+    expect(find.text('기존 주문 경로는 바뀌지 않으며, 변경 후 생성되는 새 주문부터 적용됩니다.'), findsOne);
+
+    await tester.enterText(
+      find.byKey(const Key('floor_direct_reason')),
+      '층 음료 운영 시작',
+    );
+    await tester.tap(find.byKey(const Key('floor_direct_confirm')));
+    await tester.pumpAndSettle();
+    expect(fixture.floorDirectChanges, [('store-bt', true, '층 음료 운영 시작')]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('floor-direct drink is visible but disabled in kitchen', (
+    tester,
+  ) async {
+    final fixture = _FixtureEmergencyNotifier(_floorDirectState('kitchen'));
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(1024, 768),
+      locale: const Locale('ko'),
+    );
+
+    expect(find.byKey(const Key('emergency_order_order-direct')), findsOne);
+    await tester.tap(find.byKey(const Key('emergency_order_order-direct')));
+    await tester.pump();
+    expect(find.text('층에서 직접 제공'), findsWidgets);
+    await tester.tap(find.byKey(const ValueKey('emergency_menu_item_drink-1')));
+    await tester.pump();
+    expect(fixture.recordedProgress, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('floor-direct drink is actionable on the assigned floor', (
+    tester,
+  ) async {
+    final fixture = _FixtureEmergencyNotifier(_floorDirectState('floor'));
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(1024, 768),
+      locale: const Locale('ko'),
+    );
+
+    await tester.tap(find.byKey(const Key('emergency_order_order-direct')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('emergency_menu_item_drink-1')));
+    await tester.pump();
+    expect(fixture.recordedProgress, [('drink-1', 'floor_served', 1)]);
+    expect(tester.takeException(), isNull);
+  });
 }
+
+EmergencyFulfillmentState _floorDirectState(String stationType) =>
+    EmergencyFulfillmentState(
+      assigned: true,
+      active: true,
+      restaurantId: 'store-bt',
+      sessionId: 'session-1',
+      stationType: stationType,
+      floorLabel: stationType == 'floor' ? '2F' : null,
+      orders: [
+        EmergencyFulfillmentOrder(
+          queueId: 'queue-direct',
+          orderId: 'order-direct',
+          queueNo: 201,
+          tableNumber: 'T20',
+          floorLabel: '2F',
+          createdAt: DateTime.utc(2026, 8, 12, 10),
+          items: const [
+            EmergencyFulfillmentItem(
+              id: 'drink-1',
+              orderItemId: 'order-item-drink-1',
+              nameKo: '콜라',
+              nameVi: 'Coca-Cola',
+              nameEn: 'Cola',
+              orderedQuantity: 1,
+              kitchenDoneQuantity: 0,
+              trayReceivedQuantity: 0,
+              trayDispatchedQuantity: 0,
+              floorServedQuantity: 0,
+              needsReview: false,
+              fulfillmentRoute: 'floor_direct',
+            ),
+          ],
+        ),
+      ],
+    );
 
 EmergencyFulfillmentState _activeState(
   String stationType, {
