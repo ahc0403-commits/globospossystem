@@ -11,6 +11,7 @@ import 'package:globos_pos_system/core/services/payment_proof_service.dart';
 import 'package:globos_pos_system/core/services/payment_service.dart';
 import 'package:globos_pos_system/core/services/restaurant_cutoff_service.dart';
 import 'package:globos_pos_system/core/models/pos_table.dart';
+import 'package:globos_pos_system/core/models/fulfillment_mode.dart';
 import 'package:globos_pos_system/core/ui/app_theme.dart';
 import 'package:globos_pos_system/features/auth/auth_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_state.dart';
@@ -108,6 +109,54 @@ final _cashierOrderB = CashierOrder(
   createdAt: DateTime(2026, 7, 18, 12, 5),
 );
 
+final _paperlessCashierOrder = CashierOrder(
+  orderId: _orderId,
+  tableNumber: 'A1',
+  tableId: 'table-a1',
+  status: 'serving',
+  orderPurpose: 'customer',
+  orderSource: 'qr',
+  fulfillmentMode: FulfillmentMode.paperless,
+  emergencyModeActive: true,
+  unservedQuantity: 1,
+  floorServedQuantityByItemId: const {
+    'cashier-item-pho': 1,
+    'cashier-item-coffee': 0,
+  },
+  items: const [
+    OrderItem(
+      id: 'cashier-item-pho',
+      menuItemId: 'menu-pho',
+      label: '소고기 쌀국수',
+      nameVi: 'Phở bò đặc biệt',
+      unitPrice: 100000,
+      quantity: 1,
+      status: 'ready',
+      itemType: 'menu_item',
+    ),
+    OrderItem(
+      id: 'cashier-item-coffee',
+      menuItemId: 'menu-coffee',
+      label: 'Cà phê sữa đá',
+      unitPrice: 40000,
+      quantity: 1,
+      status: 'ready',
+      itemType: 'menu_item',
+    ),
+  ],
+  menuSubtotal: 140000,
+  serviceChargeTotal: 0,
+  serviceItemTotal: 0,
+  fixedChargeTotal: 0,
+  discountTotal: 0,
+  vatTotal: 10370.37,
+  totalAmount: 140000,
+  paidTotal: 0,
+  paymentCount: 0,
+  remainingDue: 140000,
+  createdAt: DateTime(2026, 8, 12, 8),
+);
+
 class _AuthNotifier extends AuthNotifier {
   _AuthNotifier([PosAuthState initialState = _authState]) : super() {
     state = initialState;
@@ -121,9 +170,13 @@ class _PaymentNotifier extends PaymentNotifier {
   _PaymentNotifier({
     bool includeSecondOrder = false,
     this.completeOrdersOnPayment = false,
+    CashierOrder? initialOrder,
   }) {
     state = PaymentState(
-      orders: [_cashierOrder, if (includeSecondOrder) _cashierOrderB],
+      orders: [
+        initialOrder ?? _cashierOrder,
+        if (includeSecondOrder) _cashierOrderB,
+      ],
     );
   }
 
@@ -378,6 +431,21 @@ void main() {
     expect(find.text('Phở bò đặc biệt'), findsOneWidget);
     expect(find.text('소고기 쌀국수'), findsNothing);
     expect(find.text('Special beef pho'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('paperless cashier shows which menu items were served', (
+    tester,
+  ) async {
+    await _pumpCashier(tester, initialOrder: _paperlessCashierOrder);
+    await _selectOrder(tester);
+
+    expect(
+      find.byKey(const Key('cashier_item_fulfillment_cashier-item-pho')),
+      findsOneWidget,
+    );
+    expect(find.text('Đã phục vụ 1 / 1'), findsOneWidget);
+    expect(find.text('Đã phục vụ 0 / 1'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -1051,6 +1119,7 @@ Future<_CashierHarness> _pumpCashier(
   PosAuthState authState = _authState,
   bool includeSecondOrder = false,
   bool completeOrdersOnPayment = false,
+  CashierOrder? initialOrder,
   int? tableCount,
   Size physicalSize = const Size(1440, 1000),
   BankTransferAlertService? bankTransferAlertService,
@@ -1065,6 +1134,7 @@ Future<_CashierHarness> _pumpCashier(
   final notifier = _PaymentNotifier(
     includeSecondOrder: includeSecondOrder,
     completeOrdersOnPayment: completeOrdersOnPayment,
+    initialOrder: initialOrder,
   );
   final proofService = _PaymentProofService();
   final paymentService = _PaymentService();

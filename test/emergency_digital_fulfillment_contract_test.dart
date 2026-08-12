@@ -162,8 +162,11 @@ void main() {
       'lib/features/payment/payment_provider.dart',
     ).readAsStringSync();
     expect(cashier, contains("Key('cashier_unserved_warning')"));
+    expect(cashier, contains('cashier_item_fulfillment_'));
     expect(cashier, contains('미제공'));
     expect(payment, contains("'get_emergency_order_summaries'"));
+    expect(payment, contains('_loadEmergencyItemProgress'));
+    expect(payment, contains('emergency_fulfillment_sessions!inner(status)'));
     expect(
       cashier,
       isNot(contains('unservedQuantity == 0 && canCompletePayment')),

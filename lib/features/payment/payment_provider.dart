@@ -38,6 +38,7 @@ class CashierOrder {
     this.fulfillmentMode = FulfillmentMode.posPrint,
     this.emergencyModeActive = false,
     this.unservedQuantity = 0,
+    this.floorServedQuantityByItemId = const {},
   });
 
   final String orderId;
@@ -63,6 +64,7 @@ class CashierOrder {
   final FulfillmentMode fulfillmentMode;
   final bool emergencyModeActive;
   final int unservedQuantity;
+  final Map<String, int> floorServedQuantityByItemId;
 
   bool get isStaffMeal => orderPurpose == 'staff_meal';
   bool get isQrOrder => orderSource == 'qr';
@@ -346,6 +348,9 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       final emergencySummaries = await _loadEmergencySummaries(
         response.map((row) => row['id'].toString()).toList(growable: false),
       );
+      final emergencyItemProgress = await _loadEmergencyItemProgress(
+        response.map((row) => row['id'].toString()).toList(growable: false),
+      );
 
       final orders = response
           .map<CashierOrder?>((row) {
@@ -411,6 +416,8 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
               ),
               emergencyModeActive: emergencySummary != null,
               unservedQuantity: emergencySummary ?? 0,
+              floorServedQuantityByItemId:
+                  emergencyItemProgress[data['id'].toString()] ?? const {},
             );
           })
           .whereType<CashierOrder>()
@@ -469,6 +476,42 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     } catch (_) {
       // The payment surface must remain usable while a migration is pending or
       // the emergency summary service is temporarily unavailable.
+      return const {};
+    }
+  }
+
+  Future<Map<String, Map<String, int>>> _loadEmergencyItemProgress(
+    List<String> orderIds,
+  ) async {
+    if (orderIds.isEmpty) return const {};
+    try {
+      final raw = await supabase
+          .from('emergency_fulfillment_items')
+          .select(
+            'order_id, order_item_id, floor_served_quantity, '
+            'emergency_fulfillment_sessions!inner(status)',
+          )
+          .inFilter('order_id', orderIds)
+          .eq('is_cancelled', false)
+          .eq('emergency_fulfillment_sessions.status', 'active');
+      final result = <String, Map<String, int>>{};
+      for (final row in raw) {
+        final orderId = row['order_id']?.toString() ?? '';
+        final orderItemId = row['order_item_id']?.toString() ?? '';
+        if (orderId.isEmpty || orderItemId.isEmpty) continue;
+        result.putIfAbsent(
+          orderId,
+          () => <String, int>{},
+        )[orderItemId] = switch (row['floor_served_quantity']) {
+          int value => value,
+          num value => value.toInt(),
+          String value => int.tryParse(value) ?? 0,
+          _ => 0,
+        };
+      }
+      return result;
+    } catch (_) {
+      // Keep cashier payment available while item-level progress is unavailable.
       return const {};
     }
   }

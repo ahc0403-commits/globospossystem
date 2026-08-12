@@ -53,6 +53,16 @@ String _cashierUnservedLabel(BuildContext context, int quantity) =>
       _ => '미제공 $quantity',
     };
 
+String _cashierItemProgressLabel(
+  BuildContext context,
+  int served,
+  int ordered,
+) => switch (Localizations.localeOf(context).languageCode) {
+  'vi' => 'Đã phục vụ $served / $ordered',
+  'en' => 'Served $served / $ordered',
+  _ => '제공 $served / $ordered',
+};
+
 String _digitalReceiptFailureCopy(
   BuildContext context,
 ) => switch (Localizations.localeOf(context).languageCode) {
@@ -3171,6 +3181,8 @@ class _CashierOrderItemsPanel extends StatelessWidget {
                 final itemType = item.itemType.toLowerCase();
                 final isCancelled = item.status.toLowerCase() == 'cancelled';
                 final isMenuItem = itemType == 'menu_item';
+                final servedQuantity =
+                    order.floorServedQuantityByItemId[item.id];
                 final canCancelItem =
                     canCancelItems &&
                     !isProcessing &&
@@ -3268,6 +3280,26 @@ class _CashierOrderItemsPanel extends StatelessWidget {
                                           ),
                                     ),
                                   ],
+                                ],
+                                if (isMenuItem && servedQuantity != null) ...[
+                                  const SizedBox(height: 6),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: ToastStatusBadge(
+                                      key: ValueKey(
+                                        'cashier_item_fulfillment_${item.id}',
+                                      ),
+                                      label: _cashierItemProgressLabel(
+                                        context,
+                                        servedQuantity,
+                                        item.quantity,
+                                      ),
+                                      color: servedQuantity >= item.quantity
+                                          ? PosColors.success
+                                          : PosColors.info,
+                                      compact: true,
+                                    ),
+                                  ),
                                 ],
                               ],
                             ),
