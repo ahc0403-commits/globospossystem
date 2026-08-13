@@ -84,6 +84,15 @@ void main() {
     expect(source, contains('.loadSettings(liveStoreId, auth.user!.id)'));
   });
 
+  test('reports remain a stable snapshot across live POS events', () {
+    final source = File(
+      'lib/features/admin/admin_screen.dart',
+    ).readAsStringSync();
+
+    expect(source, contains('ReportsTab() => 0'));
+    expect(source, isNot(contains('ReportsTab() => _allLiveRevision')));
+  });
+
   test('anonymous QR menu subscribes by store with a silent fallback', () {
     final source = File(
       'lib/features/qr_order/qr_order_screen.dart',

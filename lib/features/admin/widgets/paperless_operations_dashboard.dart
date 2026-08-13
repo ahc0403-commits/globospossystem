@@ -4,6 +4,12 @@ import '../../../core/ui/pos_design_tokens.dart';
 import '../../../main.dart';
 import '../../report/report_provider.dart';
 
+String paperlessOperationsTitle(BuildContext context) =>
+    _PaperlessCopy.of(context).title;
+
+String paperlessOperationsSubtitle(BuildContext context) =>
+    _PaperlessCopy.of(context).subtitle;
+
 class PaperlessOperationsDashboard extends StatefulWidget {
   const PaperlessOperationsDashboard({
     super.key,

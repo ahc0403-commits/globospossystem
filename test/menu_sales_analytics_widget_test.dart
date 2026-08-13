@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:globos_pos_system/features/admin/tabs/reports_tab.dart';
 import 'package:globos_pos_system/features/report/menu_sales_analytics.dart';
 import 'package:globos_pos_system/features/report/menu_sales_analytics_panel.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
@@ -106,6 +107,29 @@ Widget _app({
   );
 }
 
+Widget _launcherApp() {
+  return ProviderScope(
+    overrides: [
+      menuSalesAnalyticsProvider.overrideWith(
+        (ref, params) => Future.value(_analytics()),
+      ),
+    ],
+    child: MaterialApp(
+      locale: const Locale('ko'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+        body: ReportAnalysisLaunchers(
+          storeId: _params.storeId,
+          startDate: _params.startDate,
+          endDate: _params.endDate,
+          menuSalesParams: _params,
+        ),
+      ),
+    ),
+  );
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -191,6 +215,36 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('메뉴 판매 현황을 불러오지 못했습니다.'), findsOneWidget);
     expect(find.text('다시 시도'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('analysis launchers open both dedicated screens', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(_launcherApp());
+
+    await tester.tap(find.byKey(const Key('menu_sales_analytics_launcher')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('menu_sales_analytics_screen')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('menu_sales_ranking')), findsOneWidget);
+
+    Navigator.of(
+      tester.element(find.byKey(const Key('menu_sales_analytics_screen'))),
+    ).pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('paperless_operations_launcher')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('paperless_operations_analytics_screen')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('paperless_operations_dashboard')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 }
