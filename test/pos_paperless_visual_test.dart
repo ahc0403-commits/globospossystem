@@ -168,6 +168,7 @@ void main() {
             paymentMethod: 'cash',
             receiptAccess: _receiptAccess,
             onPaperReceipt: () async {},
+            onShowCustomerReceipt: () async => true,
             onReprint: () async {},
           ),
         ),

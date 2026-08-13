@@ -18,6 +18,7 @@ class PaymentCompletionDialog extends StatefulWidget {
     required this.onReprint,
     this.receiptAccess,
     this.onPaperReceipt,
+    this.onShowCustomerReceipt,
   });
 
   final CashierOrder order;
@@ -26,6 +27,7 @@ class PaymentCompletionDialog extends StatefulWidget {
   final Future<void> Function() onReprint;
   final DigitalReceiptAccess? receiptAccess;
   final Future<void> Function()? onPaperReceipt;
+  final Future<bool> Function()? onShowCustomerReceipt;
 
   @override
   State<PaymentCompletionDialog> createState() =>
@@ -35,6 +37,8 @@ class PaymentCompletionDialog extends StatefulWidget {
 class _PaymentCompletionDialogState extends State<PaymentCompletionDialog> {
   bool _isReprinting = false;
   bool _isPrintingPaper = false;
+  bool _isShowingCustomerReceipt = false;
+  bool? _customerReceiptShown;
 
   Future<void> _reprint() async {
     if (_isReprinting) return;
@@ -53,6 +57,22 @@ class _PaymentCompletionDialogState extends State<PaymentCompletionDialog> {
       await widget.onPaperReceipt!();
     } finally {
       if (mounted) setState(() => _isPrintingPaper = false);
+    }
+  }
+
+  Future<void> _showCustomerReceipt() async {
+    if (_isShowingCustomerReceipt || widget.onShowCustomerReceipt == null) {
+      return;
+    }
+    setState(() {
+      _isShowingCustomerReceipt = true;
+      _customerReceiptShown = null;
+    });
+    try {
+      final shown = await widget.onShowCustomerReceipt!();
+      if (mounted) setState(() => _customerReceiptShown = shown);
+    } finally {
+      if (mounted) setState(() => _isShowingCustomerReceipt = false);
     }
   }
 
@@ -213,7 +233,7 @@ class _PaymentCompletionDialogState extends State<PaymentCompletionDialog> {
                   child: Row(
                     children: [
                       SizedBox.square(
-                        dimension: 132,
+                        dimension: 112,
                         child: widget.receiptAccess == null
                             ? const Center(
                                 child: Icon(Icons.qr_code_2_rounded, size: 54),
@@ -245,6 +265,39 @@ class _PaymentCompletionDialogState extends State<PaymentCompletionDialog> {
                                 color: PosColors.textSecondary,
                               ),
                             ),
+                            if (widget.onShowCustomerReceipt != null) ...[
+                              const SizedBox(height: 10),
+                              OutlinedButton.icon(
+                                key: const Key(
+                                  'cashier_show_customer_receipt_again',
+                                ),
+                                onPressed: _isShowingCustomerReceipt
+                                    ? null
+                                    : _showCustomerReceipt,
+                                icon: _isShowingCustomerReceipt
+                                    ? const SizedBox.square(
+                                        dimension: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : Icon(
+                                        _customerReceiptShown == true
+                                            ? Icons.check_circle_rounded
+                                            : _customerReceiptShown == false
+                                            ? Icons.error_outline_rounded
+                                            : Icons.monitor_rounded,
+                                        size: 18,
+                                      ),
+                                label: Text(
+                                  _customerReceiptShown == true
+                                      ? copy.customerReceiptShown
+                                      : _customerReceiptShown == false
+                                      ? copy.customerReceiptFailed
+                                      : copy.showCustomerReceiptAgain,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -425,6 +478,21 @@ class _CompletionCopy {
   );
   String get paperReceipt =>
       pick('종이 영수증 출력', 'In biên lai giấy', 'Print paper receipt');
+  String get showCustomerReceiptAgain => pick(
+    '고객 화면에 영수증 다시 표시',
+    'Hiển thị lại biên lai cho khách',
+    'Show receipt again for customer',
+  );
+  String get customerReceiptShown => pick(
+    '고객 화면에 다시 표시했습니다',
+    'Đã hiển thị lại cho khách',
+    'Shown again for the customer',
+  );
+  String get customerReceiptFailed => pick(
+    '다시 표시하지 못했습니다',
+    'Không thể hiển thị lại',
+    'Could not show it again',
+  );
 }
 
 class _CompletionMetric extends StatelessWidget {

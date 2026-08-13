@@ -134,9 +134,11 @@ void main() {
     tester,
   ) async {
     var paperPrints = 0;
+    var customerReceiptReplays = 0;
     final order = _fixtureOrder(FulfillmentMode.paperless);
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('ko'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
@@ -150,6 +152,10 @@ void main() {
               publicUrl: 'https://pos.globos.world/receipt#token=token',
             ),
             onPaperReceipt: () async => paperPrints += 1,
+            onShowCustomerReceipt: () async {
+              customerReceiptReplays += 1;
+              return true;
+            },
             onReprint: () async {},
           ),
         ),
@@ -166,6 +172,14 @@ void main() {
       find.byKey(const Key('cashier_payment_completion_reprint')),
       findsNothing,
     );
+    final replayButton = find.byKey(
+      const Key('cashier_show_customer_receipt_again'),
+    );
+    expect(replayButton, findsOne);
+    await tester.tap(replayButton);
+    await tester.pumpAndSettle();
+    expect(customerReceiptReplays, 1);
+    expect(find.text('고객 화면에 다시 표시했습니다'), findsOne);
     await tester.tap(
       find.byKey(const Key('cashier_payment_completion_paper_receipt')),
     );
