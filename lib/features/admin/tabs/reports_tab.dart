@@ -289,7 +289,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
             compactReportBody(),
             if (storeId != null) ...[
               const SizedBox(height: 8),
-              _DailyClosingSection(storeId: storeId),
+              DailyClosingLauncher(storeId: storeId),
             ],
           ],
         ),
@@ -323,7 +323,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
               const SizedBox(height: 8),
             ],
             if (!hasOperationalData && storeId != null) ...[
-              _DailyClosingSection(storeId: storeId),
+              DailyClosingSection(storeId: storeId),
               const SizedBox(height: 8),
             ],
             Expanded(
@@ -553,7 +553,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                   ),
                                   if (storeId != null) ...[
                                     const SizedBox(height: 12),
-                                    _DailyClosingSection(storeId: storeId),
+                                    DailyClosingSection(storeId: storeId),
                                   ],
                                 ],
                               );
@@ -2580,17 +2580,137 @@ class _HourlyRevenueSection extends StatelessWidget {
   }
 }
 
-class _DailyClosingSection extends ConsumerStatefulWidget {
-  const _DailyClosingSection({required this.storeId});
+enum DailyClosingPresentation { table, cards }
+
+class DailyClosingLauncher extends ConsumerWidget {
+  const DailyClosingLauncher({super.key, required this.storeId});
+
+  final String storeId;
+
+  void _openDailyClosing(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => DailyClosingScreen(storeId: storeId),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final historyAsync = ref.watch(dailyClosingHistoryProvider(storeId));
+
+    return PosActionCard(
+      key: const Key('daily_closing_launcher'),
+      title: context.l10n.reportsDailyClose,
+      subtitle: context.l10n.reportsDailyCloseSubtitle,
+      action: PosPrimaryButton(
+        key: const Key('daily_closing_open_screen'),
+        label: context.l10n.reportsDailyCloseOpen,
+        icon: Icons.open_in_new_rounded,
+        onPressed: () => _openDailyClosing(context),
+      ),
+      child: historyAsync.when(
+        data: (records) {
+          if (records.isEmpty) {
+            return Text(
+              context.l10n.reportsNoClosingHistory,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: PosColors.textSecondary),
+            );
+          }
+          final latest = records.first;
+          return Row(
+            children: [
+              const Icon(
+                Icons.calendar_today_outlined,
+                size: 18,
+                color: PosColors.textSecondary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${latest.closingDate} · '
+                  '${latest.isClosed ? context.l10n.reportsClosed : context.l10n.reportsClose}',
+                  key: const Key('daily_closing_latest_status'),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: PosColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+        loading: () => const LinearProgressIndicator(
+          minHeight: 3,
+          color: AppColors.amber500,
+        ),
+        error: (error, _) => Text(
+          mapDailyClosingError(error),
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: AppColors.statusCancelled),
+        ),
+      ),
+    );
+  }
+}
+
+class DailyClosingScreen extends StatelessWidget {
+  const DailyClosingScreen({super.key, required this.storeId});
 
   final String storeId;
 
   @override
-  ConsumerState<_DailyClosingSection> createState() =>
+  Widget build(BuildContext context) {
+    return Scaffold(
+      key: const Key('daily_closing_screen'),
+      backgroundColor: AppColors.surface0,
+      appBar: AppBar(
+        title: Text(context.l10n.reportsDailyClose),
+        backgroundColor: AppColors.surface0,
+        surfaceTintColor: Colors.transparent,
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          key: const Key('daily_closing_screen_scroll'),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: const EdgeInsets.all(16),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1040),
+              child: DailyClosingSection(
+                storeId: storeId,
+                presentation: DailyClosingPresentation.cards,
+                showHeading: false,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class DailyClosingSection extends ConsumerStatefulWidget {
+  const DailyClosingSection({
+    super.key,
+    required this.storeId,
+    this.presentation = DailyClosingPresentation.table,
+    this.showHeading = true,
+  });
+
+  final String storeId;
+  final DailyClosingPresentation presentation;
+  final bool showHeading;
+
+  @override
+  ConsumerState<DailyClosingSection> createState() =>
       _DailyClosingSectionState();
 }
 
-class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
+class _DailyClosingSectionState extends ConsumerState<DailyClosingSection> {
   String? _closingDate;
   bool _closingSucceeded = false;
   bool _closingAlreadyClosed = false;
@@ -2665,20 +2785,22 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
       key: const Key('daily_closing_root'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          key: const Key('nav_daily_closing'),
-          children: [
-            Text(
-              context.l10n.reportsDailyClose,
-              style: AppFonts.system(
-                color: AppColors.textPrimary,
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
+        if (widget.showHeading) ...[
+          Row(
+            key: const Key('nav_daily_closing'),
+            children: [
+              Text(
+                context.l10n.reportsDailyClose,
+                style: AppFonts.system(
+                  color: AppColors.textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
         if (_closingSucceeded)
           Container(
             key: const Key('daily_closing_success_banner'),
@@ -2732,6 +2854,8 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
                     ),
                   ),
                 )
+              : widget.presentation == DailyClosingPresentation.cards
+              ? _closingCards(records: records, currency: currency)
               : Container(
                   height: 220,
                   decoration: BoxDecoration(
@@ -2792,6 +2916,191 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _closingCards({
+    required List<DailyClosingRecord> records,
+    required NumberFormat currency,
+  }) {
+    return Column(
+      key: const Key('daily_closing_cards'),
+      children: records
+          .take(10)
+          .map(
+            (record) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _closingRecordCard(record: record, currency: currency),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Widget _closingRecordCard({
+    required DailyClosingRecord record,
+    required NumberFormat currency,
+  }) {
+    final statusColor = record.isClosed ? PosColors.success : PosColors.warning;
+
+    return Container(
+      key: ValueKey('daily_closing_card_${record.closingDate}'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.surface3),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      record.closingDate,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: PosColors.textPrimary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${context.l10n.reportsAssignee}: ${record.closedByName}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              ToastStatusBadge(
+                label: record.isClosed
+                    ? context.l10n.reportsClosed
+                    : context.l10n.reportsClose,
+                color: statusColor,
+                compact: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final useTwoColumns = constraints.maxWidth >= 680;
+              final groupWidth = useTwoColumns
+                  ? (constraints.maxWidth - 12) / 2
+                  : constraints.maxWidth;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  SizedBox(
+                    width: groupWidth,
+                    child: _DailyClosingMetricGroup(
+                      title: context.l10n.reportsOrder,
+                      metrics: [
+                        _DailyClosingMetric(
+                          label: context.l10n.reportsOrder,
+                          value: '${record.ordersTotal}',
+                        ),
+                        _DailyClosingMetric(
+                          label: context.l10n.reportsDone,
+                          value: '${record.ordersCompleted}',
+                        ),
+                        _DailyClosingMetric(
+                          label: context.l10n.reportsCancel,
+                          value: '${record.ordersCancelled}',
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(
+                    width: groupWidth,
+                    child: _DailyClosingMetricGroup(
+                      title: context.l10n.reportsRevenue,
+                      metrics: [
+                        _DailyClosingMetric(
+                          label: context.l10n.reportsRevenue,
+                          value: _formatVnd(currency, record.paymentsTotal),
+                        ),
+                        _DailyClosingMetric(
+                          label: context.l10n.reportsCash,
+                          value: _formatVnd(currency, record.paymentsCash),
+                        ),
+                        _DailyClosingMetric(
+                          label: context.l10n.reportsPay,
+                          value: _formatVnd(currency, record.paymentsPay),
+                        ),
+                        _DailyClosingMetric(
+                          label: context.l10n.reportsCard,
+                          value: _formatVnd(currency, record.paymentsCard),
+                        ),
+                        _DailyClosingMetric(
+                          label: context.l10n.reportsBankTransfer,
+                          value: _formatVnd(
+                            currency,
+                            record.paymentsBankTransfer,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(
+                    width: groupWidth,
+                    child: _DailyClosingMetricGroup(
+                      title: context.l10n.reportsCashClosingTitle,
+                      metrics: [
+                        _DailyClosingMetric(
+                          label: context.l10n.reportsCountedCash,
+                          value: _formatVnd(currency, record.countedCashAmount),
+                        ),
+                        _DailyClosingMetric(
+                          label: context.l10n.reportsCashVariance,
+                          value: _formatVnd(currency, record.cashVariance),
+                          valueColor: record.cashVariance == 0
+                              ? PosColors.textPrimary
+                              : AppColors.statusCancelled,
+                        ),
+                        _DailyClosingMetric(
+                          label: context.l10n.reportsCashFloat,
+                          value: _formatVnd(currency, record.openingCashAmount),
+                        ),
+                        _DailyClosingMetric(
+                          label: context.l10n.reportsDepositTotal,
+                          value: _formatVnd(currency, record.depositTotal),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 14),
+          PosActionButton(
+            key: ValueKey('daily_closing_action_${record.closingDate}'),
+            label: record.isClosed
+                ? context.l10n.reportsClosed
+                : context.l10n.reportsClose,
+            tone: record.isClosed
+                ? PosActionTone.secondary
+                : PosActionTone.primary,
+            icon: record.isClosed ? Icons.lock : Icons.lock_clock,
+            loading: _closingDate == record.closingDate,
+            onPressed: record.isClosed || _closingDate != null
+                ? null
+                : () => _createClosing(record),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2911,6 +3220,94 @@ class _DailyClosingSectionState extends ConsumerState<_DailyClosingSection> {
   }
 }
 
+class _DailyClosingMetricGroup extends StatelessWidget {
+  const _DailyClosingMetricGroup({required this.title, required this.metrics});
+
+  final String title;
+  final List<_DailyClosingMetric> metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface0,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.surface3),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            title,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: PosColors.textPrimary,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 10),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final singleColumn =
+                  constraints.maxWidth < 300 ||
+                  MediaQuery.textScalerOf(context).scale(1) > 1.3;
+              final metricWidth = singleColumn
+                  ? constraints.maxWidth
+                  : (constraints.maxWidth - 8) / 2;
+              return Wrap(
+                spacing: 8,
+                runSpacing: 12,
+                children: metrics
+                    .map(
+                      (metric) => SizedBox(width: metricWidth, child: metric),
+                    )
+                    .toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DailyClosingMetric extends StatelessWidget {
+  const _DailyClosingMetric({
+    required this.label,
+    required this.value,
+    this.valueColor = PosColors.textPrimary,
+  });
+
+  final String label;
+  final String value;
+  final Color valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          style: AppFonts.system(
+            color: valueColor,
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _DailyClosingCashInput {
   const _DailyClosingCashInput({
     required this.openingCashAmount,
@@ -2989,6 +3386,7 @@ class _DailyClosingCashDialogState extends State<_DailyClosingCashDialog> {
     final variance = _countedCash - _expectedCash;
     return AlertDialog(
       key: const Key('daily_closing_cash_dialog'),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
       title: Text(l10n.reportsCashClosingTitle),
       content: SizedBox(
         width: 620,
@@ -3030,45 +3428,66 @@ class _DailyClosingCashDialogState extends State<_DailyClosingCashDialog> {
               for (final denomination in _denominations)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '${_currency.format(denomination)} VND',
-                          style: AppFonts.system(
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.w600,
-                          ),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final compact = constraints.maxWidth < 430;
+                      final denominationLabel = Text(
+                        '${_currency.format(denomination)} VND',
+                        style: AppFonts.system(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w600,
                         ),
-                      ),
-                      SizedBox(
-                        width: 100,
-                        child: TextField(
-                          key: Key('daily_closing_note_$denomination'),
-                          controller: _controllers[denomination],
-                          keyboardType: TextInputType.number,
-                          textAlign: TextAlign.right,
-                          decoration: InputDecoration(
-                            isDense: true,
-                            suffixText: l10n.reportsBanknoteUnit,
-                          ),
+                      );
+                      final countField = TextField(
+                        key: Key('daily_closing_note_$denomination'),
+                        controller: _controllers[denomination],
+                        keyboardType: TextInputType.number,
+                        textAlign: TextAlign.right,
+                        decoration: InputDecoration(
+                          isDense: true,
+                          suffixText: l10n.reportsBanknoteUnit,
                         ),
-                      ),
-                      SizedBox(
-                        width: 140,
-                        child: Text(
-                          _formatVnd(
-                            _currency,
-                            denomination * _countFor(denomination),
-                          ),
-                          textAlign: TextAlign.right,
-                          style: AppFonts.system(
-                            color: AppColors.textSecondary,
-                            fontFeatures: const [FontFeature.tabularFigures()],
-                          ),
+                      );
+                      final amount = Text(
+                        _formatVnd(
+                          _currency,
+                          denomination * _countFor(denomination),
                         ),
-                      ),
-                    ],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right,
+                        style: AppFonts.system(
+                          color: AppColors.textSecondary,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      );
+
+                      if (compact) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(child: denominationLabel),
+                                const SizedBox(width: 12),
+                                SizedBox(width: 112, child: countField),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            amount,
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        children: [
+                          Expanded(child: denominationLabel),
+                          SizedBox(width: 100, child: countField),
+                          const SizedBox(width: 12),
+                          SizedBox(width: 140, child: amount),
+                        ],
+                      );
+                    },
                   ),
                 ),
               const Divider(height: 24),
@@ -3110,6 +3529,7 @@ class _DailyClosingCashDialogState extends State<_DailyClosingCashDialog> {
           label: Text(l10n.reportsCloseToday),
         ),
       ],
+      actionsOverflowButtonSpacing: 8,
     );
   }
 }

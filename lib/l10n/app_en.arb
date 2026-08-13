@@ -467,6 +467,8 @@
   "reportsAssignee": "Assignee",
   "reportsRevenueByHour": "Revenue by Hour",
   "reportsDailyClose": "Daily Close",
+  "reportsDailyCloseSubtitle": "Review closing history and cash reconciliation on a dedicated screen.",
+  "reportsDailyCloseOpen": "Open Daily Close",
   "reportsClosingStatus": "Closing Status",
   "reportsClose": "Close",
   "reportsClosed": "Closed",

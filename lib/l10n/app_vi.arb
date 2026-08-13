@@ -466,6 +466,8 @@
   "reportsAssignee": "Người phụ trách",
   "reportsRevenueByHour": "Doanh thu theo giờ",
   "reportsDailyClose": "Chốt ngày",
+  "reportsDailyCloseSubtitle": "Xem lịch sử chốt ngày và đối soát tiền mặt trên màn hình riêng.",
+  "reportsDailyCloseOpen": "Mở màn hình chốt ngày",
   "reportsClosingStatus": "Trạng thái chốt",
   "reportsClose": "Chốt ngày",
   "reportsClosed": "Đã chốt",

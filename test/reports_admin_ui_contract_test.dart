@@ -26,6 +26,10 @@ void main() {
       final source = readRepoFile('lib/features/admin/tabs/reports_tab.dart');
 
       expect(source, contains("Key('reports_compact_scroll')"));
+      expect(source, contains('DailyClosingLauncher(storeId: storeId)'));
+      expect(source, contains("Key('daily_closing_open_screen')"));
+      expect(source, contains('DailyClosingScreen(storeId: storeId)'));
+      expect(source, contains('DailyClosingPresentation.cards'));
       expect(source, contains('compactReportHeight'));
       expect(source, contains('maxColumns: 4'));
       expect(source, contains('520.0 + 12.0 + 240.0 + 260.0'));
