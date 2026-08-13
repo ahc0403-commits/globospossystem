@@ -97,6 +97,7 @@ class PayrollService {
       from: normalizedPeriodStart,
       to: periodEnd,
     );
+    final staff = await _attendanceService.fetchStaffList(storeId);
     final allowanceByEmployeeDate = <String, Map<String, dynamic>>{
       for (final allowance in allowances)
         '${allowance['employee_id']}|${allowance['work_date']}': allowance,
@@ -105,6 +106,17 @@ class PayrollService {
     final groupedByUser = <String, List<Map<String, dynamic>>>{};
     final userNames = <String, String>{};
     final userRoles = <String, String>{};
+
+    for (final employee in staff) {
+      final userId = employee['user_id']?.toString() ?? '';
+      final role = employee['role']?.toString().trim().toLowerCase() ?? '';
+      if (userId.isEmpty || (role != 'part_timer' && role != 'full_time')) {
+        continue;
+      }
+      groupedByUser.putIfAbsent(userId, () => []);
+      userNames[userId] = employee['full_name']?.toString() ?? 'Unknown';
+      userRoles[userId] = role;
+    }
 
     for (final row in logs) {
       final userId = row['user_id']?.toString() ?? '';
@@ -232,7 +244,7 @@ class PayrollService {
       final hasPayableAllowance = records.any(
         (record) => record.mealAllowance > 0 || record.parkingAllowance > 0,
       );
-      if (records.isNotEmpty && (role == 'part_timer' || hasPayableAllowance)) {
+      if (role == 'part_timer' || (records.isNotEmpty && hasPayableAllowance)) {
         final lateReviewAmount =
             hourlyRule != null &&
                 lateMinutes >= lateThreshold &&

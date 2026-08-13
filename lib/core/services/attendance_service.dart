@@ -175,6 +175,26 @@ class AttendanceService {
         .toList(growable: false);
   }
 
+  Future<Map<String, dynamic>> recordManualAttendance({
+    required String storeId,
+    required String employeeId,
+    required String type,
+    required DateTime loggedAt,
+    required String reason,
+  }) async {
+    final result = await supabase.rpc(
+      'admin_record_employee_attendance',
+      params: {
+        'p_store_id': storeId,
+        'p_employee_id': employeeId,
+        'p_type': type,
+        'p_logged_at': loggedAt.toUtc().toIso8601String(),
+        'p_reason': reason.trim(),
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
   Future<Map<String, dynamic>?> fetchWageConfig({
     required String storeId,
     required String userId,
