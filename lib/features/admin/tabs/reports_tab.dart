@@ -16,8 +16,8 @@ import '../../../core/ui/toast/toast.dart';
 import '../../../main.dart';
 import '../../auth/auth_provider.dart';
 import '../../report/menu_sales_analytics.dart';
-import '../../report/menu_sales_analytics_panel.dart';
 import '../../report/report_provider.dart';
+import '../report_analysis_screens.dart';
 import '../providers/admin_audit_provider.dart';
 import '../providers/daily_closing_provider.dart';
 import '../widgets/admin_audit_trace_panel.dart';
@@ -79,7 +79,6 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
         ? null
         : ref.watch(menuSalesAnalyticsProvider(menuSalesParams));
     final menuSalesAnalytics = menuSalesAsync?.asData?.value;
-    const desktopMenuSalesPanelHeight = 820.0;
 
     if (_pendingStart == null || _pendingEnd == null) {
       _pendingStart ??= reportState.startDate;
@@ -187,13 +186,6 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (menuSalesParams != null) ...[
-              MenuSalesAnalyticsPanel(
-                params: menuSalesParams,
-                currency: currency,
-              ),
-              const SizedBox(height: 12),
-            ],
             ToastWorkSurface(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -228,13 +220,6 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (menuSalesParams != null) ...[
-              MenuSalesAnalyticsPanel(
-                params: menuSalesParams,
-                currency: currency,
-              ),
-              const SizedBox(height: 12),
-            ],
             PosActionCard(
               title: l10n.reportsNoDataTitle,
               subtitle: l10n.reportsNoDataSubtitle,
@@ -266,13 +251,6 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (menuSalesParams != null) ...[
-            MenuSalesAnalyticsPanel(
-              params: menuSalesParams,
-              currency: currency,
-            ),
-            const SizedBox(height: 12),
-          ],
           PosDataPanel(
             title: l10n.reportsHourlyOrderFocus,
             subtitle: l10n.reportsHourlyOrderFocusSubtitle,
@@ -332,11 +310,12 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
           children: [
             compactHeader,
             const SizedBox(height: 8),
-            if (storeId != null) ...[
-              PaperlessOperationsDashboard(
+            if (storeId != null && menuSalesParams != null) ...[
+              ReportAnalysisLaunchers(
                 storeId: storeId,
                 startDate: reportState.startDate,
                 endDate: reportState.endDate,
+                menuSalesParams: menuSalesParams,
               ),
               const SizedBox(height: 8),
             ],
@@ -369,11 +348,12 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
               menuSalesAnalytics: menuSalesAnalytics,
             ),
             const SizedBox(height: 8),
-            if (storeId != null) ...[
-              PaperlessOperationsDashboard(
+            if (storeId != null && menuSalesParams != null) ...[
+              ReportAnalysisLaunchers(
                 storeId: storeId,
                 startDate: reportState.startDate,
                 endDate: reportState.endDate,
+                menuSalesParams: menuSalesParams,
               ),
               const SizedBox(height: 8),
             ],
@@ -391,16 +371,6 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
                       children: [
-                        if (menuSalesParams != null) ...[
-                          SizedBox(
-                            height: desktopMenuSalesPanelHeight,
-                            child: MenuSalesAnalyticsPanel(
-                              params: menuSalesParams,
-                              currency: currency,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                        ],
                         SizedBox(
                           height: 240,
                           child: Center(
@@ -441,22 +411,9 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                   ? 520.0 + 12.0 + 520.0 + 12.0 + 240.0 + 260.0
                                   : 520.0 + 12.0 + 240.0 + 260.0;
                               final compactReportHeight =
-                                  (menuSalesParams == null
-                                      ? 0.0
-                                      : desktopMenuSalesPanelHeight + 12.0) +
                                   operationalReportHeight;
                               final content = Column(
                                 children: [
-                                  if (menuSalesParams != null) ...[
-                                    SizedBox(
-                                      height: desktopMenuSalesPanelHeight,
-                                      child: MenuSalesAnalyticsPanel(
-                                        params: menuSalesParams,
-                                        currency: currency,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                  ],
                                   Expanded(
                                     child: PosSplitContent(
                                       primary: PosDataPanel(
@@ -667,16 +624,6 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                             keyboardDismissBehavior:
                                 ScrollViewKeyboardDismissBehavior.onDrag,
                             children: [
-                              if (menuSalesParams != null) ...[
-                                SizedBox(
-                                  height: desktopMenuSalesPanelHeight,
-                                  child: MenuSalesAnalyticsPanel(
-                                    params: menuSalesParams,
-                                    currency: currency,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                              ],
                               SizedBox(
                                 height: 620,
                                 child: _ReportsEmptyWorkspace(
@@ -925,6 +872,173 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
             color: AppColors.textPrimary,
             fontSize: 12,
             fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class ReportAnalysisLaunchers extends StatelessWidget {
+  const ReportAnalysisLaunchers({
+    super.key,
+    required this.storeId,
+    required this.startDate,
+    required this.endDate,
+    required this.menuSalesParams,
+  });
+
+  final String storeId;
+  final DateTime startDate;
+  final DateTime endDate;
+  final MenuSalesAnalyticsParams menuSalesParams;
+
+  void _openPaperlessOperations(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PaperlessOperationsAnalyticsScreen(
+          storeId: storeId,
+          startDate: startDate,
+          endDate: endDate,
+        ),
+      ),
+    );
+  }
+
+  void _openMenuSales(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MenuSalesAnalyticsScreen(params: menuSalesParams),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final range =
+        '${DateFormat('dd/MM/yyyy').format(startDate)} – '
+        '${DateFormat('dd/MM/yyyy').format(endDate)}';
+    final cards = [
+      _ReportAnalysisLauncherCard(
+        key: const Key('paperless_operations_launcher'),
+        title: paperlessOperationsTitle(context),
+        subtitle: paperlessOperationsSubtitle(context),
+        range: range,
+        icon: Icons.query_stats_rounded,
+        onTap: () => _openPaperlessOperations(context),
+      ),
+      _ReportAnalysisLauncherCard(
+        key: const Key('menu_sales_analytics_launcher'),
+        title: context.l10n.menuSalesAnalyticsTitle,
+        subtitle: context.l10n.menuSalesAnalyticsSubtitle,
+        range: range,
+        icon: Icons.restaurant_menu_rounded,
+        onTap: () => _openMenuSales(context),
+      ),
+    ];
+
+    return LayoutBuilder(
+      key: const Key('report_analysis_launchers'),
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 760) {
+          return Column(
+            children: [cards.first, const SizedBox(height: 8), cards.last],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: cards.first),
+            const SizedBox(width: 8),
+            Expanded(child: cards.last),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ReportAnalysisLauncherCard extends StatelessWidget {
+  const _ReportAnalysisLauncherCard({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.range,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final String range;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: title,
+      child: ToastWorkSurface(
+        padding: EdgeInsets.zero,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 112),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: PosColors.accentMuted,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(icon, color: PosColors.accent),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w900),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: PosColors.textSecondary),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            range,
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                                  color: PosColors.textSecondary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(
+                      Icons.open_in_new_rounded,
+                      color: PosColors.accent,
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),

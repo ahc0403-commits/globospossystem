@@ -86,13 +86,18 @@ void main() {
   test('reports export and UI include menu sales slices', () {
     final provider = readRepoFile('lib/features/report/report_provider.dart');
     final reports = readRepoFile('lib/features/admin/tabs/reports_tab.dart');
+    final screens = readRepoFile(
+      'lib/features/admin/report_analysis_screens.dart',
+    );
     final panel = readRepoFile(
       'lib/features/report/menu_sales_analytics_panel.dart',
     );
 
     expect(provider, contains("excel['Menu Sales']"));
     expect(provider, contains("excel['Menu by Hour']"));
-    expect(reports, contains('MenuSalesAnalyticsPanel('));
+    expect(reports, contains('MenuSalesAnalyticsScreen('));
+    expect(reports, isNot(contains('MenuSalesAnalyticsPanel(')));
+    expect(screens, contains('MenuSalesAnalyticsPanel('));
     expect(reports, isNot(contains('summary == null || !menuSalesReady')));
     expect(panel, contains("Key('menu_sales_ranking')"));
     expect(panel, contains("Key('menu_sales_hourly')"));

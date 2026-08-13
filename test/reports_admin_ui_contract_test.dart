@@ -32,8 +32,13 @@ void main() {
       expect(source, contains('DailyClosingPresentation.cards'));
       expect(source, contains('compactReportHeight'));
       expect(source, contains('maxColumns: 4'));
-      expect(source, contains('desktopMenuSalesPanelHeight = 820.0'));
-      expect(source, contains('MenuSalesAnalyticsPanel('));
+      expect(source, contains('ReportAnalysisLaunchers('));
+      expect(source, contains("Key('paperless_operations_launcher')"));
+      expect(source, contains("Key('menu_sales_analytics_launcher')"));
+      expect(source, contains('PaperlessOperationsAnalyticsScreen('));
+      expect(source, contains('MenuSalesAnalyticsScreen('));
+      expect(source, isNot(contains('MenuSalesAnalyticsPanel(')));
+      expect(source, isNot(contains('PaperlessOperationsDashboard(')));
       expect(source, contains('operationalReportHeight'));
       expect(source, contains('520.0 + 12.0 + 240.0 + 260.0'));
       expect(source, contains('height: 240'));
@@ -57,5 +62,17 @@ void main() {
     expect(reports, contains('l10n.reportsPaymentVariance'));
     expect(reports, contains('row.bankTransferAmount'));
     expect(reports, contains('data.bankTransferTotal'));
+  });
+
+  test('report analyses render on dedicated screens', () {
+    final screens = readRepoFile(
+      'lib/features/admin/report_analysis_screens.dart',
+    );
+
+    expect(screens, contains("Key('paperless_operations_analytics_screen')"));
+    expect(screens, contains("Key('menu_sales_analytics_screen')"));
+    expect(screens, contains('PaperlessOperationsDashboard('));
+    expect(screens, contains('MenuSalesAnalyticsPanel('));
+    expect(screens, contains('ToastResponsiveScrollBody('));
   });
 }
