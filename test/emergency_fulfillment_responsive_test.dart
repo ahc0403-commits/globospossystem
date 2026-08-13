@@ -431,10 +431,53 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('floor-direct drink is visible but disabled in kitchen', (
+  for (final stationType in ['kitchen', 'tray']) {
+    testWidgets('floor-direct-only order is hidden in $stationType', (
+      tester,
+    ) async {
+      final fixture = _FixtureEmergencyNotifier(_floorDirectState(stationType));
+      await _pumpEmergency(
+        tester,
+        fixture: fixture,
+        size: const Size(1024, 768),
+        locale: const Locale('ko'),
+        expectedStationType: stationType,
+      );
+
+      expect(
+        find.byKey(const Key('emergency_order_order-direct')),
+        findsNothing,
+      );
+      expect(find.text('콜라'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('mixed order hides its drink in $stationType', (tester) async {
+      final fixture = _FixtureEmergencyNotifier(_mixedRouteState(stationType));
+      await _pumpEmergency(
+        tester,
+        fixture: fixture,
+        size: const Size(1024, 768),
+        locale: const Locale('ko'),
+        expectedStationType: stationType,
+      );
+
+      await tester.tap(find.byKey(const Key('emergency_order_order-mixed')));
+      await tester.pump();
+      expect(find.text('떡볶이'), findsOne);
+      expect(find.text('콜라'), findsNothing);
+      expect(
+        find.byKey(const Key('emergency_floor_beverage_section')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('floor separates direct drinks above kitchen and tray food', (
     tester,
   ) async {
-    final fixture = _FixtureEmergencyNotifier(_floorDirectState('kitchen'));
+    final fixture = _FixtureEmergencyNotifier(_mixedRouteState('floor'));
     await _pumpEmergency(
       tester,
       fixture: fixture,
@@ -442,32 +485,55 @@ void main() {
       locale: const Locale('ko'),
     );
 
-    expect(find.byKey(const Key('emergency_order_order-direct')), findsOne);
-    await tester.tap(find.byKey(const Key('emergency_order_order-direct')));
+    await tester.tap(find.byKey(const Key('emergency_order_order-mixed')));
     await tester.pump();
-    expect(find.text('층에서 직접 제공'), findsWidgets);
-    await tester.tap(find.byKey(const ValueKey('emergency_menu_item_drink-1')));
-    await tester.pump();
-    expect(fixture.recordedProgress, isEmpty);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('floor-direct drink is actionable on the assigned floor', (
-    tester,
-  ) async {
-    final fixture = _FixtureEmergencyNotifier(_floorDirectState('floor'));
-    await _pumpEmergency(
-      tester,
-      fixture: fixture,
-      size: const Size(1024, 768),
-      locale: const Locale('ko'),
+    final beverageSection = find.byKey(
+      const Key('emergency_floor_beverage_section'),
+    );
+    final foodSection = find.byKey(const Key('emergency_floor_food_section'));
+    expect(beverageSection, findsOne);
+    expect(foodSection, findsOne);
+    expect(find.text('먼저 제공할 음료'), findsOne);
+    expect(find.text('주방·트레이 음식'), findsOne);
+    expect(find.text('콜라'), findsOne);
+    expect(find.text('떡볶이'), findsOne);
+    expect(
+      tester.getTopLeft(beverageSection).dy,
+      lessThan(tester.getTopLeft(foodSection).dy),
     );
 
-    await tester.tap(find.byKey(const Key('emergency_order_order-direct')));
-    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('emergency_menu_item_drink-1')));
     await tester.pump();
     expect(fixture.recordedProgress, [('drink-1', 'floor_served', 1)]);
+
+    await tester.tap(find.byKey(const ValueKey('emergency_menu_item_food-1')));
+    await tester.pump();
+    expect(fixture.recordedProgress, [
+      ('drink-1', 'floor_served', 1),
+      ('food-1', 'floor_served', 1),
+    ]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('floor can undo a directly served drink', (tester) async {
+    final fixture = _FixtureEmergencyNotifier(
+      _mixedRouteState('floor', directServedQuantity: 1),
+    );
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(1024, 768),
+      locale: const Locale('ko'),
+      expectedStationType: 'floor',
+    );
+
+    await tester.tap(find.byKey(const Key('emergency_order_order-mixed')));
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const Key('emergency_menu_item_cancel_drink-1')),
+    );
+    await tester.pump();
+    expect(fixture.recordedProgress, [('drink-1', 'floor_served', -1)]);
     expect(tester.takeException(), isNull);
   });
 }
@@ -507,6 +573,57 @@ EmergencyFulfillmentState _floorDirectState(String stationType) =>
         ),
       ],
     );
+
+EmergencyFulfillmentState _mixedRouteState(
+  String stationType, {
+  int directServedQuantity = 0,
+}) => EmergencyFulfillmentState(
+  assigned: true,
+  active: true,
+  restaurantId: 'store-bt',
+  sessionId: 'session-1',
+  stationType: stationType,
+  floorLabel: stationType == 'floor' ? '2F' : null,
+  orders: [
+    EmergencyFulfillmentOrder(
+      queueId: 'queue-mixed',
+      orderId: 'order-mixed',
+      queueNo: 202,
+      tableNumber: 'T21',
+      floorLabel: '2F',
+      createdAt: DateTime.utc(2026, 8, 12, 10),
+      items: [
+        EmergencyFulfillmentItem(
+          id: 'drink-1',
+          orderItemId: 'order-item-drink-1',
+          nameKo: '콜라',
+          nameVi: 'Coca-Cola',
+          nameEn: 'Cola',
+          orderedQuantity: 1,
+          kitchenDoneQuantity: 0,
+          trayReceivedQuantity: 0,
+          trayDispatchedQuantity: 0,
+          floorServedQuantity: directServedQuantity,
+          needsReview: false,
+          fulfillmentRoute: 'floor_direct',
+        ),
+        EmergencyFulfillmentItem(
+          id: 'food-1',
+          orderItemId: 'order-item-food-1',
+          nameKo: '떡볶이',
+          nameVi: 'Bánh gạo cay',
+          nameEn: 'Spicy rice cake',
+          orderedQuantity: 1,
+          kitchenDoneQuantity: stationType == 'kitchen' ? 0 : 1,
+          trayReceivedQuantity: stationType == 'tray' ? 0 : 1,
+          trayDispatchedQuantity: stationType == 'floor' ? 1 : 0,
+          floorServedQuantity: 0,
+          needsReview: false,
+        ),
+      ],
+    ),
+  ],
+);
 
 EmergencyFulfillmentState _activeState(
   String stationType, {

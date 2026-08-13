@@ -202,16 +202,16 @@ class _EmergencyFulfillmentScreenState
     final activeOrders = state.orders
         .where(
           (order) =>
-              order.hasActionableQuantity(stationType) ||
-              ((stationType == 'kitchen' || stationType == 'tray') &&
-                  order.hasPendingFloorDirect) ||
-              state.pendingQueueIds.contains(order.queueId),
+              order.visibleItemsAt(stationType).isNotEmpty &&
+              (order.hasActionableQuantity(stationType) ||
+                  state.pendingQueueIds.contains(order.queueId)),
         )
         .toList(growable: false);
     final recentOrders =
         state.orders
             .where(
               (order) =>
+                  order.visibleItemsAt(stationType).isNotEmpty &&
                   !order.hasActionableQuantity(stationType) &&
                   order.lastActionId != null,
             )
@@ -743,23 +743,18 @@ class _EmergencyOrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final visibleItems = order.visibleItemsAt(stationType);
     final actionable = order.hasActionableQuantity(stationType);
-    final readOnlyDirect =
-        !actionable &&
-        (stationType == 'kitchen' || stationType == 'tray') &&
-        order.hasPendingFloorDirect;
     final tone = pending
         ? PosColors.warning
         : actionable
         ? _stationColor(stationType)
-        : readOnlyDirect
-        ? PosColors.info
         : PosColors.success;
     final elapsed = DateTime.now().difference(order.createdAt.toLocal());
     final elapsedMinutes = math.max(0, elapsed.inMinutes);
     final semantics =
         '${copy.order} ${order.queueNo}, ${copy.table} ${order.tableNumber}, '
-        '${order.floorLabel}, ${order.items.length} ${copy.items}';
+        '${order.floorLabel}, ${visibleItems.length} ${copy.items}';
 
     return Semantics(
       button: true,
@@ -802,8 +797,6 @@ class _EmergencyOrderCard extends StatelessWidget {
                           ? Icons.cloud_upload_outlined
                           : actionable
                           ? Icons.schedule_rounded
-                          : readOnlyDirect
-                          ? Icons.visibility_outlined
                           : Icons.check_circle_rounded,
                       color: Colors.white,
                       size: 20,
@@ -827,7 +820,7 @@ class _EmergencyOrderCard extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '${order.floorLabel} · ${order.items.length} ${copy.items}',
+                        '${order.floorLabel} · ${visibleItems.length} ${copy.items}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -840,8 +833,6 @@ class _EmergencyOrderCard extends StatelessWidget {
                             ? copy.pendingSync
                             : actionable
                             ? copy.waitingForAction
-                            : readOnlyDirect
-                            ? copy.floorDirectOnly
                             : copy.completed,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -898,6 +889,13 @@ class _EmergencyOrderDetails extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final canComplete = order.hasActionableQuantity(stationType) && !pending;
+    final visibleItems = order.visibleItemsAt(stationType);
+    final directBeverages = visibleItems
+        .where((item) => item.isFloorDirect)
+        .toList(growable: false);
+    final foodItems = visibleItems
+        .where((item) => !item.isFloorDirect)
+        .toList(growable: false);
     return Padding(
       key: Key('emergency_order_detail_${order.orderId}'),
       padding: const EdgeInsets.all(12),
@@ -962,53 +960,24 @@ class _EmergencyOrderDetails extends StatelessWidget {
                 ),
               ),
             Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final columns = order.items.length >= 5
-                      ? switch (constraints.maxWidth) {
-                          >= 900 => 5,
-                          >= 600 => 3,
-                          >= 420 => 2,
-                          _ => 1,
-                        }
-                      : 1;
-                  if (columns == 1) {
-                    return ListView.separated(
-                      key: const Key('emergency_detail_menu_list'),
-                      padding: const EdgeInsets.all(12),
-                      itemCount: order.items.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) => _EmergencyMenuRow(
-                        item: order.items[index],
-                        stationType: stationType,
-                        copy: copy,
-                        busy: busy || pending,
-                        onTap: () => onItemAction(order.items[index]),
-                        onRevert: () => onItemRevert(order.items[index]),
-                      ),
-                    );
-                  }
-                  return GridView.builder(
-                    key: Key('emergency_detail_menu_grid_${columns}_columns'),
-                    padding: const EdgeInsets.all(12),
-                    itemCount: order.items.length,
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: columns,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
-                      mainAxisExtent: 188,
-                    ),
-                    itemBuilder: (context, index) => _EmergencyMenuRow(
-                      item: order.items[index],
+              child: stationType == 'floor'
+                  ? _EmergencyFloorItemSections(
+                      beverages: directBeverages,
+                      foods: foodItems,
+                      copy: copy,
+                      busy: busy || pending,
+                      onItemAction: onItemAction,
+                      onItemRevert: onItemRevert,
+                    )
+                  : _EmergencyMenuCollection(
+                      items: visibleItems,
                       stationType: stationType,
                       copy: copy,
                       busy: busy || pending,
-                      onTap: () => onItemAction(order.items[index]),
-                      onRevert: () => onItemRevert(order.items[index]),
+                      keyPrefix: 'emergency_detail_menu',
+                      onItemAction: onItemAction,
+                      onItemRevert: onItemRevert,
                     ),
-                  );
-                },
-              ),
             ),
             const Divider(height: 1),
             _EmergencyDetailActions(
@@ -1022,6 +991,225 @@ class _EmergencyOrderDetails extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _EmergencyFloorItemSections extends StatelessWidget {
+  const _EmergencyFloorItemSections({
+    required this.beverages,
+    required this.foods,
+    required this.copy,
+    required this.busy,
+    required this.onItemAction,
+    required this.onItemRevert,
+  });
+
+  final List<EmergencyFulfillmentItem> beverages;
+  final List<EmergencyFulfillmentItem> foods;
+  final _EmergencyCopy copy;
+  final bool busy;
+  final ValueChanged<EmergencyFulfillmentItem> onItemAction;
+  final ValueChanged<EmergencyFulfillmentItem> onItemRevert;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      key: const Key('emergency_floor_item_sections'),
+      padding: const EdgeInsets.all(12),
+      children: [
+        if (beverages.isNotEmpty)
+          _EmergencyItemSection(
+            key: const Key('emergency_floor_beverage_section'),
+            icon: Icons.local_drink_rounded,
+            title: copy.floorBeveragesTitle,
+            body: copy.floorBeveragesBody,
+            color: PosColors.warning,
+            items: beverages,
+            copy: copy,
+            busy: busy,
+            keyPrefix: 'emergency_floor_beverage',
+            onItemAction: onItemAction,
+            onItemRevert: onItemRevert,
+          ),
+        if (beverages.isNotEmpty && foods.isNotEmpty)
+          const SizedBox(height: 12),
+        if (foods.isNotEmpty)
+          _EmergencyItemSection(
+            key: const Key('emergency_floor_food_section'),
+            icon: Icons.restaurant_rounded,
+            title: copy.floorFoodsTitle,
+            body: copy.floorFoodsBody,
+            color: PosColors.info,
+            items: foods,
+            copy: copy,
+            busy: busy,
+            keyPrefix: 'emergency_floor_food',
+            onItemAction: onItemAction,
+            onItemRevert: onItemRevert,
+          ),
+      ],
+    );
+  }
+}
+
+class _EmergencyItemSection extends StatelessWidget {
+  const _EmergencyItemSection({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.body,
+    required this.color,
+    required this.items,
+    required this.copy,
+    required this.busy,
+    required this.keyPrefix,
+    required this.onItemAction,
+    required this.onItemRevert,
+  });
+
+  final IconData icon;
+  final String title;
+  final String body;
+  final Color color;
+  final List<EmergencyFulfillmentItem> items;
+  final _EmergencyCopy copy;
+  final bool busy;
+  final String keyPrefix;
+  final ValueChanged<EmergencyFulfillmentItem> onItemAction;
+  final ValueChanged<EmergencyFulfillmentItem> onItemRevert;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.45), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: color, size: 24),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      body,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _EmergencyMenuCollection(
+            items: items,
+            stationType: 'floor',
+            copy: copy,
+            busy: busy,
+            keyPrefix: keyPrefix,
+            embedded: true,
+            onItemAction: onItemAction,
+            onItemRevert: onItemRevert,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmergencyMenuCollection extends StatelessWidget {
+  const _EmergencyMenuCollection({
+    required this.items,
+    required this.stationType,
+    required this.copy,
+    required this.busy,
+    required this.keyPrefix,
+    required this.onItemAction,
+    required this.onItemRevert,
+    this.embedded = false,
+  });
+
+  final List<EmergencyFulfillmentItem> items;
+  final String stationType;
+  final _EmergencyCopy copy;
+  final bool busy;
+  final String keyPrefix;
+  final ValueChanged<EmergencyFulfillmentItem> onItemAction;
+  final ValueChanged<EmergencyFulfillmentItem> onItemRevert;
+  final bool embedded;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = items.length >= 5
+            ? switch (constraints.maxWidth) {
+                >= 900 => 5,
+                >= 600 => 3,
+                >= 420 => 2,
+                _ => 1,
+              }
+            : 1;
+        if (columns == 1) {
+          return ListView.separated(
+            key: Key('${keyPrefix}_list'),
+            padding: embedded ? EdgeInsets.zero : const EdgeInsets.all(12),
+            shrinkWrap: embedded,
+            physics: embedded ? const NeverScrollableScrollPhysics() : null,
+            itemCount: items.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemBuilder: (context, index) => _EmergencyMenuRow(
+              item: items[index],
+              stationType: stationType,
+              copy: copy,
+              busy: busy,
+              onTap: () => onItemAction(items[index]),
+              onRevert: () => onItemRevert(items[index]),
+            ),
+          );
+        }
+        return GridView.builder(
+          key: Key('${keyPrefix}_grid_${columns}_columns'),
+          padding: embedded ? EdgeInsets.zero : const EdgeInsets.all(12),
+          shrinkWrap: embedded,
+          physics: embedded ? const NeverScrollableScrollPhysics() : null,
+          itemCount: items.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+            mainAxisExtent: 188,
+          ),
+          itemBuilder: (context, index) => _EmergencyMenuRow(
+            item: items[index],
+            stationType: stationType,
+            copy: copy,
+            busy: busy,
+            onTap: () => onItemAction(items[index]),
+            onRevert: () => onItemRevert(items[index]),
+          ),
+        );
+      },
     );
   }
 }
@@ -1459,6 +1647,20 @@ class _EmergencyCopy {
     '층에서 직접 제공',
     'Phục vụ trực tiếp tại tầng',
     'Served directly by floor',
+  );
+  String get floorBeveragesTitle =>
+      _pick('먼저 제공할 음료', 'Đồ uống phục vụ trước', 'Beverages to serve first');
+  String get floorBeveragesBody => _pick(
+    '층에서 직접 준비하고 제공하는 음료입니다.',
+    'Đồ uống được tầng trực tiếp chuẩn bị và phục vụ.',
+    'Prepare and serve these beverages directly from the floor.',
+  );
+  String get floorFoodsTitle =>
+      _pick('주방·트레이 음식', 'Món từ bếp và khay', 'Food from kitchen and tray');
+  String get floorFoodsBody => _pick(
+    '주방 조리와 트레이 인계를 마친 음식입니다.',
+    'Món đã hoàn tất tại bếp và được bàn giao qua khay.',
+    'Food completed by the kitchen and handed off through the tray.',
   );
   String get totalOrders => _pick('총 주문', 'Tổng đơn', 'Total');
   String get previousPage => _pick('이전 페이지', 'Trang trước', 'Previous page');
