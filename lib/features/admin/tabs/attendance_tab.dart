@@ -23,6 +23,20 @@ String _formatVnd(NumberFormat currency, num amount) {
   return '${currency.format(amount)} VND';
 }
 
+class _ManualAttendanceDraft {
+  const _ManualAttendanceDraft({
+    required this.employeeId,
+    required this.type,
+    required this.loggedAt,
+    required this.reason,
+  });
+
+  final String employeeId;
+  final String type;
+  final DateTime loggedAt;
+  final String reason;
+}
+
 class AttendanceTab extends ConsumerStatefulWidget {
   const AttendanceTab({
     super.key,
@@ -51,6 +65,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
   List<StaffPayroll> _payrolls = const [];
   bool _isLogsLoading = false;
   bool _isPayrollLoading = false;
+  bool _isManualAttendanceSaving = false;
   bool _payrollUnlocked = false;
   String? _logsError;
   String? _payrollError;
@@ -201,6 +216,246 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(context.l10n.attendancePayrollSaved)),
     );
+  }
+
+  Future<void> _downloadAllPayroll(String storeId) async {
+    if (_isPayrollLoading || !_payrollUnlocked) return;
+    setState(() {
+      _isPayrollLoading = true;
+      _payrollError = null;
+    });
+    try {
+      final payrolls = await _payrollService.calculatePayroll(
+        storeId: storeId,
+        periodStart: _logFrom,
+        periodEnd: _logTo,
+      );
+      if (!mounted) return;
+      setState(() {
+        _payrolls = payrolls;
+        _isPayrollLoading = false;
+      });
+      await _exportPayrollPreview(payrolls);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isPayrollLoading = false;
+        _payrollError = _mapPayrollError(
+          error,
+          context.l10n.attendancePayrollLoadFailed,
+        );
+      });
+      showErrorToast(context, context.l10n.attendancePayrollCalculateFailed);
+    }
+  }
+
+  Future<void> _showManualAttendanceDialog(String storeId) async {
+    if (_staffList.isEmpty || _isManualAttendanceSaving) return;
+    final now = TimeUtils.nowVietnam();
+    var selectedEmployeeId =
+        _staffList.any(
+          (staff) => staff['user_id']?.toString() == _selectedAttendanceUserId,
+        )
+        ? _selectedAttendanceUserId!
+        : _staffList.first['user_id']!.toString();
+    var selectedType = 'clock_in';
+    var selectedDate = DateTime(now.year, now.month, now.day);
+    var selectedTime = TimeOfDay.fromDateTime(now);
+    var reason = '';
+    String? validationError;
+
+    final draft = await showDialog<_ManualAttendanceDraft>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          key: const Key('attendance_manual_entry_dialog'),
+          title: Text(context.l10n.attendanceManualEntryTitle),
+          content: SizedBox(
+            width: 440,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(context.l10n.attendanceManualEntryDescription),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    key: const Key('attendance_manual_employee'),
+                    initialValue: selectedEmployeeId,
+                    decoration: InputDecoration(
+                      labelText: context.l10n.staff,
+                      border: const OutlineInputBorder(),
+                    ),
+                    items: _staffList
+                        .map(
+                          (staff) => DropdownMenuItem(
+                            value: staff['user_id']!.toString(),
+                            child: Text(
+                              staff['full_name']?.toString() ?? '-',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(growable: false),
+                    onChanged: (value) {
+                      if (value != null) selectedEmployeeId = value;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    key: const Key('attendance_manual_type'),
+                    initialValue: selectedType,
+                    decoration: InputDecoration(
+                      labelText: context.l10n.attendanceManualEventType,
+                      border: const OutlineInputBorder(),
+                    ),
+                    items: [
+                      DropdownMenuItem(
+                        value: 'clock_in',
+                        child: Text(context.l10n.clockIn),
+                      ),
+                      DropdownMenuItem(
+                        value: 'clock_out',
+                        child: Text(context.l10n.clockOut),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) selectedType = value;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          key: const Key('attendance_manual_date'),
+                          onPressed: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: selectedDate,
+                              firstDate: DateTime(2020),
+                              lastDate: now,
+                            );
+                            if (picked != null) {
+                              setDialogState(() => selectedDate = picked);
+                            }
+                          },
+                          icon: const Icon(Icons.calendar_today_outlined),
+                          label: Text(
+                            DateFormat('yyyy-MM-dd').format(selectedDate),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          key: const Key('attendance_manual_time'),
+                          onPressed: () async {
+                            final picked = await showTimePicker(
+                              context: context,
+                              initialTime: selectedTime,
+                            );
+                            if (picked != null) {
+                              setDialogState(() => selectedTime = picked);
+                            }
+                          },
+                          icon: const Icon(Icons.schedule_outlined),
+                          label: Text(selectedTime.format(context)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('attendance_manual_reason'),
+                    onChanged: (value) => reason = value,
+                    maxLength: 500,
+                    decoration: InputDecoration(
+                      labelText: context.l10n.attendanceManualReason,
+                      hintText: context.l10n.attendanceManualReasonHint,
+                      border: const OutlineInputBorder(),
+                      errorText: validationError,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(context.l10n.cancel),
+            ),
+            FilledButton(
+              key: const Key('attendance_manual_save'),
+              onPressed: () {
+                if (reason.trim().length < 3) {
+                  setDialogState(
+                    () => validationError =
+                        context.l10n.attendanceManualReasonRequired,
+                  );
+                  return;
+                }
+                final wallTime = DateTime(
+                  selectedDate.year,
+                  selectedDate.month,
+                  selectedDate.day,
+                  selectedTime.hour,
+                  selectedTime.minute,
+                );
+                Navigator.of(dialogContext).pop(
+                  _ManualAttendanceDraft(
+                    employeeId: selectedEmployeeId,
+                    type: selectedType,
+                    loggedAt: TimeUtils.vietnamWallTimeToUtc(wallTime),
+                    reason: reason.trim(),
+                  ),
+                );
+              },
+              child: Text(context.l10n.save),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (draft == null || !mounted) return;
+
+    setState(() => _isManualAttendanceSaving = true);
+    try {
+      await _attendanceService.recordManualAttendance(
+        storeId: storeId,
+        employeeId: draft.employeeId,
+        type: draft.type,
+        loggedAt: draft.loggedAt,
+        reason: draft.reason,
+      );
+      if (!mounted) return;
+      await _reloadLogs(storeId);
+      if (!mounted) return;
+      showSuccessToast(context, context.l10n.attendanceManualEntrySaved);
+    } catch (error) {
+      if (!mounted) return;
+      showErrorToast(context, _mapManualAttendanceError(error));
+    } finally {
+      if (mounted) setState(() => _isManualAttendanceSaving = false);
+    }
+  }
+
+  String _mapManualAttendanceError(Object error) {
+    final message = error.toString();
+    if (message.contains('ATTENDANCE_MANUAL_SEQUENCE_INVALID')) {
+      return context.l10n.attendanceManualSequenceInvalid;
+    }
+    if (message.contains('ATTENDANCE_MANUAL_TIME_DUPLICATE')) {
+      return context.l10n.attendanceManualTimeDuplicate;
+    }
+    if (message.contains('ATTENDANCE_MANUAL_TIME_INVALID')) {
+      return context.l10n.attendanceManualTimeInvalid;
+    }
+    if (message.contains('ATTENDANCE_MANUAL_ENTRY_FORBIDDEN')) {
+      return context.l10n.attendanceManualEntryForbidden;
+    }
+    return context.l10n.attendanceManualEntryFailed;
   }
 
   Future<void> _unlockPayroll(String storeId) async {
@@ -670,6 +925,12 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final storeId = auth.storeId;
+    final canManageAttendance = const {
+      'admin',
+      'store_admin',
+      'brand_admin',
+      'super_admin',
+    }.contains(auth.role);
 
     if (storeId != null && _initializedRestaurantId != storeId) {
       _initializedRestaurantId = storeId;
@@ -709,7 +970,9 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         .length;
     final payrollTargetCount = filteredPayrolls.isNotEmpty
         ? filteredPayrolls.length
-        : attendanceRows.length;
+        : _staffList
+              .where((staff) => staff['role']?.toString() == 'part_timer')
+              .length;
     final totalHours = filteredPayrolls.fold<double>(
       0,
       (sum, payroll) => sum + payroll.totalHours,
@@ -738,6 +1001,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
       attendanceRate: attendanceRate,
       reviewCount: reviewCount,
       payrollTargetCount: payrollTargetCount,
+      canManageAttendance: canManageAttendance,
     );
 
     Widget compactAttendanceList() {
@@ -919,6 +1183,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
               attendanceRate: attendanceRate,
               reviewCount: reviewCount,
               payrollTargetCount: payrollTargetCount,
+              canManageAttendance: canManageAttendance,
             ),
             if (_logsError != null) ...[
               const SizedBox(height: 12),
@@ -1091,6 +1356,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     required int attendanceRate,
     required int reviewCount,
     required int payrollTargetCount,
+    required bool canManageAttendance,
   }) {
     // Contract anchor: title: context.l10n.attendanceManagementTitle; label: context.l10n.payrollPreview; label: context.l10n.download; title: context.l10n.attendancePayrollSummaryTitle.
     final attendanceMetrics = [
@@ -1268,9 +1534,34 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                 icon: const Icon(Icons.search, size: 16),
                 label: Text(context.l10n.search),
               ),
+              if (canManageAttendance)
+                OutlinedButton.icon(
+                  key: const Key('attendance_manual_entry_action'),
+                  onPressed: storeId == null || _isManualAttendanceSaving
+                      ? null
+                      : () => _showManualAttendanceDialog(storeId),
+                  icon: const Icon(Icons.more_time_rounded, size: 18),
+                  label: Text(context.l10n.attendanceManualEntryAction),
+                ),
+              FilledButton.tonalIcon(
+                key: const Key('attendance_export_all_payroll'),
+                onPressed:
+                    storeId == null || !_payrollUnlocked || _isPayrollLoading
+                    ? null
+                    : () => _downloadAllPayroll(storeId),
+                icon: const Icon(Icons.download_rounded, size: 18),
+                label: Text(context.l10n.attendanceExportAllPayroll),
+              ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
+          Text(
+            context.l10n.attendancePeriodUsageHint,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
+          ),
+          const SizedBox(height: 4),
           Text(
             context.l10n.attendanceRate(attendanceRate),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -1310,7 +1601,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         ? context.l10n.attendanceUnlockPayrollAction
         : filteredPayrolls.isEmpty
         ? context.l10n.attendanceRunPayrollPreview
-        : context.l10n.download;
+        : context.l10n.attendanceExportAllPayroll;
     final VoidCallback? payrollAction = payrollRequiresUnlock
         ? storeId == null
               ? null
@@ -1319,7 +1610,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         ? storeId == null
               ? null
               : () => _loadPayrollPreview(storeId)
-        : () => _exportPayrollPreview(filteredPayrolls);
+        : () => _exportPayrollPreview(_payrolls);
 
     return ToastWorkSurface(
       padding: const EdgeInsets.all(18),
