@@ -466,6 +466,8 @@
   "reportsAssignee": "담당자",
   "reportsRevenueByHour": "시간대별 매출",
   "reportsDailyClose": "일일 마감",
+  "reportsDailyCloseSubtitle": "마감 기록과 현금 시재를 전용 화면에서 확인합니다.",
+  "reportsDailyCloseOpen": "일일 마감 열기",
   "reportsClosingStatus": "마감 상태",
   "reportsClose": "마감",
   "reportsClosed": "마감 완료",
