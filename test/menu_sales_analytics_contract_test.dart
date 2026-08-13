@@ -117,7 +117,6 @@ void main() {
     final rollback = readRepoFile(
       'scripts/rollback_menu_sales_combo_filter.sql',
     );
-    final model = readRepoFile('lib/features/report/menu_sales_analytics.dart');
     final panel = readRepoFile(
       'lib/features/report/menu_sales_analytics_panel.dart',
     );
@@ -127,12 +126,46 @@ void main() {
     expect(migration, contains('jsonb_array_length'));
     expect(migration, contains("'is_combo', menu.is_combo"));
     expect(migration, contains("'combo_identity_basis'"));
-    expect(model, contains("'p_include_combos': params.includeCombos"));
-    expect(panel, contains("Key('menu_sales_include_combos')"));
-    expect(panel, contains("Key('menu_sales_exclude_combos')"));
     expect(panel, contains("Key('menu_sales_combo_badge_\${row.menuKey}')"));
     expect(preflight, contains('MENU_SALES_COMBO_FILTER_PREFLIGHT_OK'));
     expect(verification, contains('MENU_SALES_COMBO_FILTER_VERIFY_OK'));
     expect(rollback, contains('MENU_SALES_COMBO_FILTER_ROLLBACK_OK'));
+  });
+
+  test('combo sales are a first-class scoped revenue analysis', () {
+    final migration = readRepoFile(
+      'supabase/migrations/20260813144500_menu_sales_scope_and_combo_revenue.sql',
+    );
+    final preflight = readRepoFile(
+      'scripts/preflight_menu_sales_scope_and_combo_revenue.sql',
+    );
+    final verification = readRepoFile(
+      'scripts/verify_menu_sales_scope_and_combo_revenue.sql',
+    );
+    final rollback = readRepoFile(
+      'scripts/rollback_menu_sales_scope_and_combo_revenue.sql',
+    );
+    final model = readRepoFile('lib/features/report/menu_sales_analytics.dart');
+    final panel = readRepoFile(
+      'lib/features/report/menu_sales_analytics_panel.dart',
+    );
+    final export = readRepoFile('lib/features/report/report_provider.dart');
+
+    expect(migration, contains('p_menu_scope text'));
+    expect(migration, contains("('all', 'regular', 'combo')"));
+    expect(migration, contains("WHEN 'combo' THEN jsonb_array_length"));
+    expect(migration, contains("'combo_menu_sales_amount'"));
+    expect(migration, contains("'menu_scope', v_menu_scope"));
+    expect(model, contains("'p_menu_scope': params.scope.rpcValue"));
+    expect(model, contains('MenuSalesRow? get topCombo'));
+    expect(panel, contains("Key('menu_sales_scope_all')"));
+    expect(panel, contains("Key('menu_sales_scope_regular')"));
+    expect(panel, contains("Key('menu_sales_scope_combo')"));
+    expect(panel, contains("Key('menu_sales_combo_revenue')"));
+    expect(panel, contains("Key('menu_sales_top_combo')"));
+    expect(export, contains("TextCellValue('Combo Menu Sales Amount')"));
+    expect(preflight, contains('MENU_SALES_SCOPE_COMBO_REVENUE_PREFLIGHT_OK'));
+    expect(verification, contains('MENU_SALES_SCOPE_COMBO_REVENUE_VERIFY_OK'));
+    expect(rollback, contains('MENU_SALES_SCOPE_COMBO_REVENUE_ROLLBACK_OK'));
   });
 }

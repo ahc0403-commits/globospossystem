@@ -62,6 +62,7 @@ MenuSalesAnalytics _analytics() {
       'sold_menu_count': 12,
       'combo_sold_quantity': 20,
       'combo_sold_menu_count': 1,
+      'combo_menu_sales_amount': 100000,
       'menu_sales_amount': 7800000,
       'unallocated_adjustment_count': 1,
       'unallocated_adjustment_amount': 50000,
@@ -168,6 +169,8 @@ void main() {
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('판매금액순'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('판매금액순'));
     await tester.pump();
     await tester.ensureVisible(find.byKey(const Key('menu_sales_show_all')));
@@ -179,32 +182,40 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('combo segment reloads every statistic without combo rows', (
+  testWidgets('menu scope reloads all, regular, and combo statistics', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final requestedScopes = <bool>[];
+    final requestedScopes = <MenuSalesScope>[];
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           menuSalesAnalyticsProvider.overrideWith((ref, params) async {
-            requestedScopes.add(params.includeCombos);
+            requestedScopes.add(params.scope);
             final analytics = _analytics();
-            if (params.includeCombos) return analytics;
+            if (params.scope == MenuSalesScope.all) return analytics;
+            final comboOnly = params.scope == MenuSalesScope.combo;
+            final scopedRows = analytics.menuRows
+                .where((row) => row.isCombo == comboOnly)
+                .toList(growable: false);
             return MenuSalesAnalytics.fromJson({
               'summary': {
-                'order_count': analytics.summary.orderCount,
-                'sold_quantity': analytics.summary.soldQuantity - 20,
-                'sold_menu_count': analytics.summary.soldMenuCount - 1,
-                'combo_sold_quantity': 0,
-                'combo_sold_menu_count': 0,
-                'menu_sales_amount': analytics.summary.menuSalesAmount - 100000,
+                'order_count': comboOnly ? 12 : 40,
+                'sold_quantity': comboOnly
+                    ? 20
+                    : analytics.summary.soldQuantity - 20,
+                'sold_menu_count': scopedRows.length,
+                'combo_sold_quantity': comboOnly ? 20 : 0,
+                'combo_sold_menu_count': comboOnly ? 1 : 0,
+                'combo_menu_sales_amount': comboOnly ? 100000 : 0,
+                'menu_sales_amount': comboOnly
+                    ? 100000
+                    : analytics.summary.menuSalesAmount - 100000,
                 'unallocated_adjustment_count': 0,
                 'unallocated_adjustment_amount': 0,
               },
-              'menu_rows': analytics.menuRows
-                  .where((row) => !row.isCombo)
+              'menu_rows': scopedRows
                   .map(
                     (row) => {
                       'rank': row.rank,
@@ -221,7 +232,7 @@ void main() {
                       'dine_in_quantity': row.dineInQuantity,
                       'takeaway_quantity': row.takeawayQuantity,
                       'delivery_quantity': row.deliveryQuantity,
-                      'is_combo': false,
+                      'is_combo': row.isCombo,
                     },
                   )
                   .toList(),
@@ -247,19 +258,30 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(requestedScopes, contains(true));
+    expect(requestedScopes, contains(MenuSalesScope.all));
     expect(find.text('콤보'), findsWidgets);
-    expect(find.byKey(const Key('menu_sales_combo_summary')), findsOneWidget);
+    expect(find.byKey(const Key('menu_sales_combo_revenue')), findsOneWidget);
+    expect(find.byKey(const Key('menu_sales_top_combo')), findsOneWidget);
+    expect(find.text('100.000 VND'), findsWidgets);
 
-    await tester.tap(find.byKey(const Key('menu_sales_exclude_combos')));
+    await tester.tap(find.byKey(const Key('menu_sales_scope_regular')));
     await tester.pumpAndSettle();
 
-    expect(requestedScopes.last, isFalse);
-    expect(find.byKey(const Key('menu_sales_combo_summary')), findsNothing);
+    expect(requestedScopes.last, MenuSalesScope.regular);
+    expect(find.byKey(const Key('menu_sales_combo_revenue')), findsNothing);
     expect(
       find.byKey(const Key('menu_sales_combo_badge_menu-1')),
       findsNothing,
     );
+
+    await tester.tap(find.byKey(const Key('menu_sales_scope_combo')));
+    await tester.pumpAndSettle();
+
+    expect(requestedScopes.last, MenuSalesScope.combo);
+    expect(find.text('콤보 판매 순위'), findsOneWidget);
+    expect(find.text('쌀국수 스페셜'), findsWidgets);
+    expect(find.text('메뉴 2'), findsNothing);
+    expect(find.byKey(const Key('menu_sales_total_revenue')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
