@@ -537,11 +537,29 @@ class _AttendanceService extends AttendanceService {
 
   final String role;
   int allowanceUpserts = 0;
+  int manualEntries = 0;
 
   @override
   Future<List<Map<String, dynamic>>> fetchStaffList(String storeId) async => [
-    {'id': 'attendance-staff-1', 'full_name': 'Nguyễn Minh Anh', 'role': role},
+    {
+      'user_id': 'attendance-staff-1',
+      'employee_number': 'BT1',
+      'full_name': 'Nguyễn Minh Anh',
+      'role': role,
+    },
   ];
+
+  @override
+  Future<Map<String, dynamic>> recordManualAttendance({
+    required String storeId,
+    required String employeeId,
+    required String type,
+    required DateTime loggedAt,
+    required String reason,
+  }) async {
+    manualEntries += 1;
+    return {'id': 'manual-attendance-log'};
+  }
 
   @override
   Future<List<Map<String, dynamic>>> fetchLogs({
@@ -1392,16 +1410,35 @@ void main() {
   ) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    final attendance = _AttendanceService();
     await _pump(
       tester,
       child: AttendanceTab(
-        attendanceServiceOverride: _AttendanceService(),
+        attendanceServiceOverride: attendance,
         pinServiceOverride: _PinService(),
       ),
       overrides: const [],
     );
     await tester.pumpAndSettle();
     expect(find.text('Nguyễn Minh Anh'), findsWidgets);
+    final manualAction = find.byKey(
+      const Key('attendance_manual_entry_action'),
+    );
+    await tester.ensureVisible(manualAction);
+    await tester.tap(manualAction);
+    await tester.pumpAndSettle();
+    final manualDialog = find.byKey(
+      const Key('attendance_manual_entry_dialog'),
+    );
+    expect(manualDialog, findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('attendance_manual_reason')),
+      'Forgot to clock in',
+    );
+    await tester.tap(find.byKey(const Key('attendance_manual_save')));
+    await tester.pumpAndSettle();
+    expect(manualDialog, findsNothing);
+    expect(attendance.manualEntries, 1);
     expect(
       find.byKey(const Key('attendance_photo_evidence_panel')),
       findsOneWidget,

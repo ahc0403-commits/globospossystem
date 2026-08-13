@@ -17,13 +17,32 @@ class TimeUtils {
     final location = tz.getLocation('Asia/Ho_Chi_Minh');
     final tzDt = tz.TZDateTime.from(utc.toUtc(), location);
     return DateTime(
-      tzDt.year, tzDt.month, tzDt.day,
-      tzDt.hour, tzDt.minute, tzDt.second,
+      tzDt.year,
+      tzDt.month,
+      tzDt.day,
+      tzDt.hour,
+      tzDt.minute,
+      tzDt.second,
     );
   }
 
   /// 현재 베트남 시간
   static DateTime nowVietnam() => toVietnam(DateTime.now().toUtc());
+
+  /// Vietnam wall-clock value → UTC for database writes.
+  static DateTime vietnamWallTimeToUtc(DateTime value) {
+    init();
+    final location = tz.getLocation('Asia/Ho_Chi_Minh');
+    return tz.TZDateTime(
+      location,
+      value.year,
+      value.month,
+      value.day,
+      value.hour,
+      value.minute,
+      value.second,
+    ).toUtc();
+  }
 
   /// 날짜 문자열
   static String formatDate(DateTime utc) {
@@ -38,5 +57,6 @@ class TimeUtils {
   }
 
   /// 날짜+시간
-  static String formatDateTime(DateTime utc) => '${formatDate(utc)} ${formatTime(utc)}';
+  static String formatDateTime(DateTime utc) =>
+      '${formatDate(utc)} ${formatTime(utc)}';
 }

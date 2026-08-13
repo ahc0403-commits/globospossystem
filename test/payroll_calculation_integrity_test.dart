@@ -24,6 +24,22 @@ class _AttendanceServiceFake extends AttendanceService {
   }
 
   @override
+  Future<List<Map<String, dynamic>>> fetchStaffList(String storeId) async {
+    final staffById = <String, Map<String, dynamic>>{};
+    for (final log in logs) {
+      final id = log['user_id']?.toString() ?? '';
+      final user = log['users'];
+      if (id.isEmpty || user is! Map) continue;
+      staffById[id] = {
+        'user_id': id,
+        'full_name': user['full_name'],
+        'role': user['role'],
+      };
+    }
+    return staffById.values.toList(growable: false);
+  }
+
+  @override
   Future<Map<String, dynamic>?> fetchHourlyPayRule({
     required String storeId,
     required String employeeId,
