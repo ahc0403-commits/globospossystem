@@ -103,4 +103,36 @@ void main() {
     expect(panel, contains("Key('menu_sales_hourly')"));
     expect(panel, contains("Key('menu_sales_scope_banner')"));
   });
+
+  test('combo menu analytics uses immutable snapshots and explicit scope', () {
+    final migration = readRepoFile(
+      'supabase/migrations/20260813132500_menu_sales_combo_filter.sql',
+    );
+    final preflight = readRepoFile(
+      'scripts/preflight_menu_sales_combo_filter.sql',
+    );
+    final verification = readRepoFile(
+      'scripts/verify_menu_sales_combo_filter.sql',
+    );
+    final rollback = readRepoFile(
+      'scripts/rollback_menu_sales_combo_filter.sql',
+    );
+    final model = readRepoFile('lib/features/report/menu_sales_analytics.dart');
+    final panel = readRepoFile(
+      'lib/features/report/menu_sales_analytics_panel.dart',
+    );
+
+    expect(migration, contains('p_include_combos boolean'));
+    expect(migration, contains('item.combo_components'));
+    expect(migration, contains('jsonb_array_length'));
+    expect(migration, contains("'is_combo', menu.is_combo"));
+    expect(migration, contains("'combo_identity_basis'"));
+    expect(model, contains("'p_include_combos': params.includeCombos"));
+    expect(panel, contains("Key('menu_sales_include_combos')"));
+    expect(panel, contains("Key('menu_sales_exclude_combos')"));
+    expect(panel, contains("Key('menu_sales_combo_badge_\${row.menuKey}')"));
+    expect(preflight, contains('MENU_SALES_COMBO_FILTER_PREFLIGHT_OK'));
+    expect(verification, contains('MENU_SALES_COMBO_FILTER_VERIFY_OK'));
+    expect(rollback, contains('MENU_SALES_COMBO_FILTER_ROLLBACK_OK'));
+  });
 }

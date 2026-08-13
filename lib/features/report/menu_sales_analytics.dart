@@ -9,22 +9,34 @@ class MenuSalesAnalyticsParams {
     required this.storeId,
     required this.startDate,
     required this.endDate,
+    this.includeCombos = true,
   });
 
   final String storeId;
   final DateTime startDate;
   final DateTime endDate;
+  final bool includeCombos;
+
+  MenuSalesAnalyticsParams copyWith({bool? includeCombos}) {
+    return MenuSalesAnalyticsParams(
+      storeId: storeId,
+      startDate: startDate,
+      endDate: endDate,
+      includeCombos: includeCombos ?? this.includeCombos,
+    );
+  }
 
   @override
   bool operator ==(Object other) {
     return other is MenuSalesAnalyticsParams &&
         other.storeId == storeId &&
         other.startDate == startDate &&
-        other.endDate == endDate;
+        other.endDate == endDate &&
+        other.includeCombos == includeCombos;
   }
 
   @override
-  int get hashCode => Object.hash(storeId, startDate, endDate);
+  int get hashCode => Object.hash(storeId, startDate, endDate, includeCombos);
 }
 
 class MenuSalesSummary {
@@ -32,6 +44,8 @@ class MenuSalesSummary {
     required this.orderCount,
     required this.soldQuantity,
     required this.soldMenuCount,
+    required this.comboSoldQuantity,
+    required this.comboSoldMenuCount,
     required this.menuSalesAmount,
     required this.unallocatedAdjustmentCount,
     required this.unallocatedAdjustmentAmount,
@@ -40,6 +54,8 @@ class MenuSalesSummary {
   final int orderCount;
   final int soldQuantity;
   final int soldMenuCount;
+  final int comboSoldQuantity;
+  final int comboSoldMenuCount;
   final double menuSalesAmount;
   final int unallocatedAdjustmentCount;
   final double unallocatedAdjustmentAmount;
@@ -49,6 +65,8 @@ class MenuSalesSummary {
       orderCount: menuSalesInt(json['order_count']),
       soldQuantity: menuSalesInt(json['sold_quantity']),
       soldMenuCount: menuSalesInt(json['sold_menu_count']),
+      comboSoldQuantity: menuSalesInt(json['combo_sold_quantity']),
+      comboSoldMenuCount: menuSalesInt(json['combo_sold_menu_count']),
       menuSalesAmount: menuSalesDouble(json['menu_sales_amount']),
       unallocatedAdjustmentCount: menuSalesInt(
         json['unallocated_adjustment_count'],
@@ -76,6 +94,7 @@ class MenuSalesRow {
     required this.dineInQuantity,
     required this.takeawayQuantity,
     required this.deliveryQuantity,
+    required this.isCombo,
   });
 
   final int rank;
@@ -92,6 +111,7 @@ class MenuSalesRow {
   final int dineInQuantity;
   final int takeawayQuantity;
   final int deliveryQuantity;
+  final bool isCombo;
 
   bool get usesNameFallback => identityQuality == 'name_fallback';
 
@@ -111,6 +131,7 @@ class MenuSalesRow {
       dineInQuantity: menuSalesInt(json['dine_in_quantity']),
       takeawayQuantity: menuSalesInt(json['takeaway_quantity']),
       deliveryQuantity: menuSalesInt(json['delivery_quantity']),
+      isCombo: json['is_combo'] == true,
     );
   }
 }
@@ -298,6 +319,7 @@ final menuSalesAnalyticsProvider = FutureProvider.autoDispose
           'p_store_id': params.storeId,
           'p_start_at': range.startUtc.toIso8601String(),
           'p_end_at': range.endExclusiveUtc.toIso8601String(),
+          'p_include_combos': params.includeCombos,
         },
       );
       return MenuSalesAnalytics.fromJson(menuSalesMap(response));

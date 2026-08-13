@@ -8,6 +8,7 @@ Map<String, dynamic> _menuRow({
   required dynamic quantity,
   required dynamic revenue,
   required dynamic orders,
+  bool isCombo = false,
 }) {
   return {
     'rank': rank,
@@ -24,6 +25,7 @@ Map<String, dynamic> _menuRow({
     'dine_in_quantity': quantity,
     'takeaway_quantity': 0,
     'delivery_quantity': 0,
+    'is_combo': isCombo,
   };
 }
 
@@ -72,6 +74,7 @@ void main() {
     expect(analytics.summary.menuSalesAmount, 225000.50);
     expect(analytics.menuRows, hasLength(2));
     expect(analytics.menuRows.last.usesNameFallback, isTrue);
+    expect(analytics.menuRows.first.isCombo, isFalse);
     expect(analytics.hourRows, hasLength(24));
     expect(analytics.hourRows[11].soldQuantity, 0);
     expect(analytics.hourRows[12].soldQuantity, 7);
@@ -136,5 +139,40 @@ void main() {
 
     expect(range.startUtc, DateTime.utc(2026, 8, 12, 17));
     expect(range.endExclusiveUtc, DateTime.utc(2026, 8, 13, 17));
+  });
+
+  test('combo scope participates in provider identity and copies safely', () {
+    final included = MenuSalesAnalyticsParams(
+      storeId: 'store-a',
+      startDate: DateTime(2026, 8, 13),
+      endDate: DateTime(2026, 8, 13),
+    );
+    final excluded = included.copyWith(includeCombos: false);
+
+    expect(included.includeCombos, isTrue);
+    expect(excluded.includeCombos, isFalse);
+    expect(included, isNot(excluded));
+    expect(included.hashCode, isNot(excluded.hashCode));
+  });
+
+  test('parses combo identity and combo summary separately', () {
+    final analytics = MenuSalesAnalytics.fromJson({
+      'summary': const {'combo_sold_quantity': 4, 'combo_sold_menu_count': 2},
+      'menu_rows': [
+        _menuRow(
+          rank: 1,
+          key: 'combo-a',
+          name: 'Lunch Combo',
+          quantity: 4,
+          revenue: 300000,
+          orders: 3,
+          isCombo: true,
+        ),
+      ],
+    });
+
+    expect(analytics.summary.comboSoldQuantity, 4);
+    expect(analytics.summary.comboSoldMenuCount, 2);
+    expect(analytics.menuRows.single.isCombo, isTrue);
   });
 }

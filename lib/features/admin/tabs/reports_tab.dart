@@ -308,8 +308,6 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
           maxWidth: 1460,
           padding: const EdgeInsets.all(12),
           children: [
-            compactHeader,
-            const SizedBox(height: 8),
             if (storeId != null && menuSalesParams != null) ...[
               ReportAnalysisLaunchers(
                 storeId: storeId,
@@ -319,6 +317,8 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
               ),
               const SizedBox(height: 8),
             ],
+            compactHeader,
+            const SizedBox(height: 8),
             compactReportBody(),
             if (storeId != null) ...[
               const SizedBox(height: 8),
@@ -918,31 +918,39 @@ class ReportAnalysisLaunchers extends StatelessWidget {
     final range =
         '${DateFormat('dd/MM/yyyy').format(startDate)} – '
         '${DateFormat('dd/MM/yyyy').format(endDate)}';
-    final cards = [
-      _ReportAnalysisLauncherCard(
-        key: const Key('paperless_operations_launcher'),
-        title: paperlessOperationsTitle(context),
-        subtitle: paperlessOperationsSubtitle(context),
-        range: range,
-        icon: Icons.query_stats_rounded,
-        onTap: () => _openPaperlessOperations(context),
-      ),
-      _ReportAnalysisLauncherCard(
-        key: const Key('menu_sales_analytics_launcher'),
-        title: context.l10n.menuSalesAnalyticsTitle,
-        subtitle: context.l10n.menuSalesAnalyticsSubtitle,
-        range: range,
-        icon: Icons.restaurant_menu_rounded,
-        onTap: () => _openMenuSales(context),
-      ),
-    ];
 
     return LayoutBuilder(
       key: const Key('report_analysis_launchers'),
       builder: (context, constraints) {
-        if (constraints.maxWidth < 760) {
-          return Column(
-            children: [cards.first, const SizedBox(height: 8), cards.last],
+        final compact = constraints.maxWidth < 760;
+        final cards = [
+          _ReportAnalysisLauncherCard(
+            key: const Key('paperless_operations_launcher'),
+            title: paperlessOperationsTitle(context),
+            subtitle: paperlessOperationsSubtitle(context),
+            range: range,
+            icon: Icons.query_stats_rounded,
+            compact: compact,
+            onTap: () => _openPaperlessOperations(context),
+          ),
+          _ReportAnalysisLauncherCard(
+            key: const Key('menu_sales_analytics_launcher'),
+            title: context.l10n.menuSalesAnalyticsTitle,
+            subtitle: context.l10n.menuSalesAnalyticsSubtitle,
+            range: range,
+            icon: Icons.restaurant_menu_rounded,
+            compact: compact,
+            onTap: () => _openMenuSales(context),
+          ),
+        ];
+        if (compact) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: cards.first),
+              const SizedBox(width: 8),
+              Expanded(child: cards.last),
+            ],
           );
         }
         return Row(
@@ -965,6 +973,7 @@ class _ReportAnalysisLauncherCard extends StatelessWidget {
     required this.subtitle,
     required this.range,
     required this.icon,
+    required this.compact,
     required this.onTap,
   });
 
@@ -972,6 +981,7 @@ class _ReportAnalysisLauncherCard extends StatelessWidget {
   final String subtitle;
   final String range;
   final IconData icon;
+  final bool compact;
   final VoidCallback onTap;
 
   @override
@@ -986,41 +996,44 @@ class _ReportAnalysisLauncherCard extends StatelessWidget {
           child: InkWell(
             onTap: onTap,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 112),
+              constraints: BoxConstraints(minHeight: compact ? 124 : 112),
               child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: PosColors.accentMuted,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(icon, color: PosColors.accent),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                padding: EdgeInsets.all(compact ? 12 : 16),
+                child: compact
+                    ? Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: PosColors.accentMuted,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(icon, color: PosColors.accent),
+                              ),
+                              const Spacer(),
+                              const Icon(
+                                Icons.open_in_new_rounded,
+                                size: 19,
+                                color: PosColors.accent,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
                           Text(
                             title,
-                            style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w900),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            subtitle,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: PosColors.textSecondary),
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w900),
                           ),
                           const SizedBox(height: 6),
                           Text(
                             range,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(
                                   color: PosColors.textSecondary,
@@ -1028,15 +1041,57 @@ class _ReportAnalysisLauncherCard extends StatelessWidget {
                                 ),
                           ),
                         ],
+                      )
+                    : Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: PosColors.accentMuted,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(icon, color: PosColors.accent),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(fontWeight: FontWeight.w900),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  subtitle,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: PosColors.textSecondary,
+                                      ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  range,
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(
+                                        color: PosColors.textSecondary,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Icon(
+                            Icons.open_in_new_rounded,
+                            color: PosColors.accent,
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Icon(
-                      Icons.open_in_new_rounded,
-                      color: PosColors.accent,
-                    ),
-                  ],
-                ),
               ),
             ),
           ),
