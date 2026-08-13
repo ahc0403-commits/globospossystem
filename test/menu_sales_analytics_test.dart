@@ -37,6 +37,7 @@ void main() {
         'sold_quantity': 7,
         'sold_menu_count': 2,
         'menu_sales_amount': '225000.50',
+        'combo_menu_sales_amount': '0',
         'unallocated_adjustment_count': 1,
         'unallocated_adjustment_amount': '10000',
       },
@@ -141,23 +142,30 @@ void main() {
     expect(range.endExclusiveUtc, DateTime.utc(2026, 8, 13, 17));
   });
 
-  test('combo scope participates in provider identity and copies safely', () {
-    final included = MenuSalesAnalyticsParams(
+  test('menu scope participates in provider identity and copies safely', () {
+    final allMenus = MenuSalesAnalyticsParams(
       storeId: 'store-a',
       startDate: DateTime(2026, 8, 13),
       endDate: DateTime(2026, 8, 13),
     );
-    final excluded = included.copyWith(includeCombos: false);
+    final regular = allMenus.copyWith(scope: MenuSalesScope.regular);
+    final combo = allMenus.copyWith(scope: MenuSalesScope.combo);
 
-    expect(included.includeCombos, isTrue);
-    expect(excluded.includeCombos, isFalse);
-    expect(included, isNot(excluded));
-    expect(included.hashCode, isNot(excluded.hashCode));
+    expect(allMenus.scope, MenuSalesScope.all);
+    expect(regular.scope, MenuSalesScope.regular);
+    expect(combo.scope.rpcValue, 'combo');
+    expect(allMenus, isNot(regular));
+    expect(regular, isNot(combo));
+    expect(allMenus.hashCode, isNot(combo.hashCode));
   });
 
-  test('parses combo identity and combo summary separately', () {
+  test('parses combo revenue and finds the top-selling combo', () {
     final analytics = MenuSalesAnalytics.fromJson({
-      'summary': const {'combo_sold_quantity': 4, 'combo_sold_menu_count': 2},
+      'summary': const {
+        'combo_sold_quantity': 7,
+        'combo_sold_menu_count': 2,
+        'combo_menu_sales_amount': 510000,
+      },
       'menu_rows': [
         _menuRow(
           rank: 1,
@@ -168,11 +176,22 @@ void main() {
           orders: 3,
           isCombo: true,
         ),
+        _menuRow(
+          rank: 2,
+          key: 'combo-b',
+          name: 'Dinner Combo',
+          quantity: 3,
+          revenue: 210000,
+          orders: 2,
+          isCombo: true,
+        ),
       ],
     });
 
-    expect(analytics.summary.comboSoldQuantity, 4);
+    expect(analytics.summary.comboSoldQuantity, 7);
     expect(analytics.summary.comboSoldMenuCount, 2);
-    expect(analytics.menuRows.single.isCombo, isTrue);
+    expect(analytics.summary.comboMenuSalesAmount, 510000);
+    expect(analytics.topCombo?.displayName, 'Lunch Combo');
+    expect(analytics.topCombo?.menuSalesAmount, 300000);
   });
 }

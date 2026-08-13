@@ -31,20 +31,18 @@ class _MenuSalesAnalyticsPanelState
   MenuSalesSort _sort = MenuSalesSort.quantity;
   _MenuSalesMetric _metric = _MenuSalesMetric.quantity;
   bool _showAll = false;
-  bool _includeCombos = true;
+  MenuSalesScope _scope = MenuSalesScope.all;
   String? _selectedMenuKey;
 
   @override
   void initState() {
     super.initState();
-    _includeCombos = widget.params.includeCombos;
+    _scope = widget.params.scope;
   }
 
   @override
   Widget build(BuildContext context) {
-    final effectiveParams = widget.params.copyWith(
-      includeCombos: _includeCombos,
-    );
+    final effectiveParams = widget.params.copyWith(scope: _scope);
     final analyticsAsync = ref.watch(
       menuSalesAnalyticsProvider(effectiveParams),
     );
@@ -52,46 +50,58 @@ class _MenuSalesAnalyticsPanelState
     return PosDataPanel(
       title: context.l10n.menuSalesAnalyticsTitle,
       subtitle: context.l10n.menuSalesAnalyticsSubtitle,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _MenuSalesComboFilter(
-            includeCombos: _includeCombos,
-            onChanged: (includeCombos) {
-              if (_includeCombos == includeCombos) return;
-              setState(() {
-                _includeCombos = includeCombos;
-                _showAll = false;
-                _selectedMenuKey = null;
-              });
-            },
-          ),
-          const SizedBox(height: 12),
-          analyticsAsync.when(
-            loading: () => SizedBox(
-              height: 360,
-              child: ToastOperationalLoadingState(
-                label: PosLoadingCopy.loadingReport(context.l10n),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final content = Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _MenuSalesScopeFilter(
+                scope: _scope,
+                onChanged: (scope) {
+                  if (_scope == scope) return;
+                  setState(() {
+                    _scope = scope;
+                    _showAll = false;
+                    _selectedMenuKey = null;
+                  });
+                },
               ),
-            ),
-            error: (error, stackTrace) => _MenuSalesErrorState(
-              onRetry: () =>
-                  ref.invalidate(menuSalesAnalyticsProvider(effectiveParams)),
-            ),
-            data: (analytics) {
-              if (analytics.menuRows.isEmpty) {
-                return _MenuSalesEmptyState(summary: analytics.summary);
-              }
-              return _buildAnalytics(context, analytics);
-            },
-          ),
-        ],
+              const SizedBox(height: 12),
+              analyticsAsync.when(
+                loading: () => SizedBox(
+                  height: 360,
+                  child: ToastOperationalLoadingState(
+                    label: PosLoadingCopy.loadingReport(context.l10n),
+                  ),
+                ),
+                error: (error, stackTrace) => _MenuSalesErrorState(
+                  onRetry: () => ref.invalidate(
+                    menuSalesAnalyticsProvider(effectiveParams),
+                  ),
+                ),
+                data: (analytics) {
+                  if (analytics.menuRows.isEmpty) {
+                    return _MenuSalesEmptyState(
+                      summary: analytics.summary,
+                      scope: _scope,
+                    );
+                  }
+                  return _buildAnalytics(context, analytics);
+                },
+              ),
+            ],
+          );
+          return constraints.hasBoundedHeight
+              ? SingleChildScrollView(child: content)
+              : content;
+        },
       ),
     );
   }
 
   Widget _buildAnalytics(BuildContext context, MenuSalesAnalytics analytics) {
     final topMenu = analytics.topMenu!;
+    final topCombo = analytics.topCombo;
     final summary = analytics.summary;
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -106,6 +116,7 @@ class _MenuSalesAnalyticsPanelState
           bounded: wide,
           onSortChanged: (sort) => setState(() => _sort = sort),
           onShowAllChanged: () => setState(() => _showAll = !_showAll),
+          scope: _scope,
         );
         final hourly = _MenuSalesHourly(
           analytics: analytics,
@@ -117,6 +128,7 @@ class _MenuSalesAnalyticsPanelState
           onSelectedMenuChanged: (key) {
             setState(() => _selectedMenuKey = key);
           },
+          scope: _scope,
         );
 
         return Column(
@@ -128,7 +140,9 @@ class _MenuSalesAnalyticsPanelState
               children: [
                 _MenuSalesMetricCard(
                   key: const Key('menu_sales_top_menu'),
-                  label: context.l10n.menuSalesTopMenu,
+                  label: _scope == MenuSalesScope.combo
+                      ? context.l10n.menuSalesTopCombo
+                      : context.l10n.menuSalesTopMenu,
                   value: topMenu.displayName,
                   detail:
                       '${context.l10n.menuSalesUnits(topMenu.soldQuantity)} · '
@@ -140,10 +154,21 @@ class _MenuSalesAnalyticsPanelState
                   minWidth: phone ? constraints.maxWidth : 250,
                 ),
                 _MenuSalesMetricCard(
-                  label: context.l10n.menuSalesTotalQuantity,
-                  value: '${summary.soldQuantity}',
+                  key: const Key('menu_sales_total_revenue'),
+                  label: _scope == MenuSalesScope.combo
+                      ? context.l10n.menuSalesComboRevenue
+                      : context.l10n.menuSalesTotalRevenue,
+                  value:
+                      '${widget.currency.format(summary.menuSalesAmount)} VND',
                   detail: context.l10n.menuSalesRevenue,
                   tone: PosColors.success,
+                  minWidth: phone ? constraints.maxWidth : 230,
+                ),
+                _MenuSalesMetricCard(
+                  label: context.l10n.menuSalesTotalQuantity,
+                  value: '${summary.soldQuantity}',
+                  detail: context.l10n.menuSalesPosOnly,
+                  tone: PosColors.info,
                   minWidth: phone
                       ? math.max(150, (constraints.maxWidth - 8) / 2)
                       : 180,
@@ -157,18 +182,31 @@ class _MenuSalesAnalyticsPanelState
                       ? math.max(150, (constraints.maxWidth - 8) / 2)
                       : 180,
                 ),
-                if (_includeCombos)
+                if (_scope == MenuSalesScope.all)
                   _MenuSalesMetricCard(
-                    key: const Key('menu_sales_combo_summary'),
-                    label: context.l10n.menuSalesComboSummary,
-                    value: '${summary.comboSoldQuantity}',
-                    detail: context.l10n.menuSalesComboMenuCount(
-                      summary.comboSoldMenuCount,
-                    ),
+                    key: const Key('menu_sales_combo_revenue'),
+                    label: context.l10n.menuSalesComboRevenue,
+                    value:
+                        '${widget.currency.format(summary.comboMenuSalesAmount)} VND',
+                    detail:
+                        '${context.l10n.menuSalesUnits(summary.comboSoldQuantity)} · '
+                        '${context.l10n.menuSalesComboMenuCount(summary.comboSoldMenuCount)}',
                     tone: PosColors.warning,
                     minWidth: phone
                         ? math.max(150, (constraints.maxWidth - 8) / 2)
                         : 180,
+                  ),
+                if (_scope == MenuSalesScope.all)
+                  _MenuSalesMetricCard(
+                    key: const Key('menu_sales_top_combo'),
+                    label: context.l10n.menuSalesTopCombo,
+                    value: topCombo?.displayName ?? '—',
+                    detail: topCombo == null
+                        ? context.l10n.menuSalesNoComboDataTitle
+                        : '${context.l10n.menuSalesUnits(topCombo.soldQuantity)} · '
+                              '${widget.currency.format(topCombo.menuSalesAmount)} VND',
+                    tone: PosColors.warning,
+                    minWidth: phone ? constraints.maxWidth : 250,
                   ),
                 _MenuSalesMetricCard(
                   label: context.l10n.menuSalesPosOrders,
@@ -209,19 +247,16 @@ class _MenuSalesAnalyticsPanelState
   }
 }
 
-class _MenuSalesComboFilter extends StatelessWidget {
-  const _MenuSalesComboFilter({
-    required this.includeCombos,
-    required this.onChanged,
-  });
+class _MenuSalesScopeFilter extends StatelessWidget {
+  const _MenuSalesScopeFilter({required this.scope, required this.onChanged});
 
-  final bool includeCombos;
-  final ValueChanged<bool> onChanged;
+  final MenuSalesScope scope;
+  final ValueChanged<MenuSalesScope> onChanged;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      key: const Key('menu_sales_combo_filter'),
+      key: const Key('menu_sales_scope_filter'),
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: PosColors.mutedSurface,
@@ -231,20 +266,29 @@ class _MenuSalesComboFilter extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: _MenuSalesComboFilterButton(
-              key: const Key('menu_sales_include_combos'),
-              label: context.l10n.menuSalesIncludeCombos,
-              selected: includeCombos,
-              onPressed: () => onChanged(true),
+            child: _MenuSalesScopeFilterButton(
+              key: const Key('menu_sales_scope_all'),
+              label: context.l10n.menuSalesScopeAll,
+              selected: scope == MenuSalesScope.all,
+              onPressed: () => onChanged(MenuSalesScope.all),
             ),
           ),
           const SizedBox(width: 4),
           Expanded(
-            child: _MenuSalesComboFilterButton(
-              key: const Key('menu_sales_exclude_combos'),
-              label: context.l10n.menuSalesExcludeCombos,
-              selected: !includeCombos,
-              onPressed: () => onChanged(false),
+            child: _MenuSalesScopeFilterButton(
+              key: const Key('menu_sales_scope_regular'),
+              label: context.l10n.menuSalesScopeRegular,
+              selected: scope == MenuSalesScope.regular,
+              onPressed: () => onChanged(MenuSalesScope.regular),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: _MenuSalesScopeFilterButton(
+              key: const Key('menu_sales_scope_combo'),
+              label: context.l10n.menuSalesScopeCombo,
+              selected: scope == MenuSalesScope.combo,
+              onPressed: () => onChanged(MenuSalesScope.combo),
             ),
           ),
         ],
@@ -253,8 +297,8 @@ class _MenuSalesComboFilter extends StatelessWidget {
   }
 }
 
-class _MenuSalesComboFilterButton extends StatelessWidget {
-  const _MenuSalesComboFilterButton({
+class _MenuSalesScopeFilterButton extends StatelessWidget {
+  const _MenuSalesScopeFilterButton({
     super.key,
     required this.label,
     required this.selected,
@@ -426,6 +470,7 @@ class _MenuSalesRanking extends StatelessWidget {
     required this.bounded,
     required this.onSortChanged,
     required this.onShowAllChanged,
+    required this.scope,
   });
 
   final MenuSalesAnalytics analytics;
@@ -436,6 +481,7 @@ class _MenuSalesRanking extends StatelessWidget {
   final bool bounded;
   final ValueChanged<MenuSalesSort> onSortChanged;
   final VoidCallback onShowAllChanged;
+  final MenuSalesScope scope;
 
   @override
   Widget build(BuildContext context) {
@@ -479,7 +525,12 @@ class _MenuSalesRanking extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text(
-                context.l10n.menuSalesTopMenu,
+                switch (scope) {
+                  MenuSalesScope.all => context.l10n.menuSalesTopMenu,
+                  MenuSalesScope.regular =>
+                    context.l10n.menuSalesRegularRanking,
+                  MenuSalesScope.combo => context.l10n.menuSalesComboRanking,
+                },
                 style: Theme.of(
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
@@ -833,6 +884,7 @@ class _MenuSalesHourly extends StatelessWidget {
     required this.selectedMenuKey,
     required this.onMetricChanged,
     required this.onSelectedMenuChanged,
+    required this.scope,
   });
 
   final MenuSalesAnalytics analytics;
@@ -842,6 +894,7 @@ class _MenuSalesHourly extends StatelessWidget {
   final String? selectedMenuKey;
   final ValueChanged<_MenuSalesMetric> onMetricChanged;
   final ValueChanged<String?> onSelectedMenuChanged;
+  final MenuSalesScope scope;
 
   @override
   Widget build(BuildContext context) {
@@ -870,7 +923,13 @@ class _MenuSalesHourly extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text(
-                context.l10n.menuSalesHourlyTitle,
+                switch (scope) {
+                  MenuSalesScope.all => context.l10n.menuSalesHourlyTitle,
+                  MenuSalesScope.regular =>
+                    context.l10n.menuSalesRegularHourlyTitle,
+                  MenuSalesScope.combo =>
+                    context.l10n.menuSalesComboHourlyTitle,
+                },
                 style: Theme.of(
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
@@ -907,7 +966,9 @@ class _MenuSalesHourly extends StatelessWidget {
               isExpanded: true,
               decoration: InputDecoration(
                 border: const OutlineInputBorder(),
-                labelText: context.l10n.menuSalesTopMenu,
+                labelText: scope == MenuSalesScope.combo
+                    ? context.l10n.menuSalesTopCombo
+                    : context.l10n.menuSalesTopMenu,
               ),
               items: [
                 for (final entry in topMenus.entries)
@@ -1175,9 +1236,10 @@ class _MenuSalesErrorState extends StatelessWidget {
 }
 
 class _MenuSalesEmptyState extends StatelessWidget {
-  const _MenuSalesEmptyState({required this.summary});
+  const _MenuSalesEmptyState({required this.summary, required this.scope});
 
   final MenuSalesSummary summary;
+  final MenuSalesScope scope;
 
   @override
   Widget build(BuildContext context) {
@@ -1188,9 +1250,15 @@ class _MenuSalesEmptyState extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 24),
             child: PosEmptyState(
-              title: context.l10n.menuSalesNoDataTitle,
-              subtitle: context.l10n.menuSalesNoDataSubtitle,
-              icon: Icons.restaurant_menu_rounded,
+              title: scope == MenuSalesScope.combo
+                  ? context.l10n.menuSalesNoComboDataTitle
+                  : context.l10n.menuSalesNoDataTitle,
+              subtitle: scope == MenuSalesScope.combo
+                  ? context.l10n.menuSalesNoComboDataSubtitle
+                  : context.l10n.menuSalesNoDataSubtitle,
+              icon: scope == MenuSalesScope.combo
+                  ? Icons.fastfood_rounded
+                  : Icons.restaurant_menu_rounded,
             ),
           ),
           if (summary.unallocatedAdjustmentCount > 0)

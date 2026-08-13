@@ -871,6 +871,19 @@ class ReportNotifier extends StateNotifier<ReportState> {
         TextCellValue('Unallocated refund/void amount'),
         DoubleCellValue(menuSalesAnalytics.summary.unallocatedAdjustmentAmount),
       ]);
+      menuSheet.appendRow([
+        TextCellValue('Combo Quantity Sold'),
+        IntCellValue(menuSalesAnalytics.summary.comboSoldQuantity),
+        TextCellValue('Combo Menu Sales Amount'),
+        DoubleCellValue(menuSalesAnalytics.summary.comboMenuSalesAmount),
+      ]);
+      final topCombo = menuSalesAnalytics.topCombo;
+      menuSheet.appendRow([
+        TextCellValue('Top Combo'),
+        TextCellValue(topCombo?.displayName ?? ''),
+        TextCellValue('Top Combo Sales Amount'),
+        DoubleCellValue(topCombo?.menuSalesAmount ?? 0),
+      ]);
       menuSheet.appendRow([TextCellValue('')]);
       menuSheet.appendRow([
         TextCellValue('Rank'),

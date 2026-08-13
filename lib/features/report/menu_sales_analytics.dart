@@ -4,25 +4,35 @@ import '../../main.dart';
 
 enum MenuSalesSort { quantity, revenue, orders }
 
+enum MenuSalesScope {
+  all('all'),
+  regular('regular'),
+  combo('combo');
+
+  const MenuSalesScope(this.rpcValue);
+
+  final String rpcValue;
+}
+
 class MenuSalesAnalyticsParams {
   const MenuSalesAnalyticsParams({
     required this.storeId,
     required this.startDate,
     required this.endDate,
-    this.includeCombos = true,
+    this.scope = MenuSalesScope.all,
   });
 
   final String storeId;
   final DateTime startDate;
   final DateTime endDate;
-  final bool includeCombos;
+  final MenuSalesScope scope;
 
-  MenuSalesAnalyticsParams copyWith({bool? includeCombos}) {
+  MenuSalesAnalyticsParams copyWith({MenuSalesScope? scope}) {
     return MenuSalesAnalyticsParams(
       storeId: storeId,
       startDate: startDate,
       endDate: endDate,
-      includeCombos: includeCombos ?? this.includeCombos,
+      scope: scope ?? this.scope,
     );
   }
 
@@ -32,11 +42,11 @@ class MenuSalesAnalyticsParams {
         other.storeId == storeId &&
         other.startDate == startDate &&
         other.endDate == endDate &&
-        other.includeCombos == includeCombos;
+        other.scope == scope;
   }
 
   @override
-  int get hashCode => Object.hash(storeId, startDate, endDate, includeCombos);
+  int get hashCode => Object.hash(storeId, startDate, endDate, scope);
 }
 
 class MenuSalesSummary {
@@ -46,6 +56,7 @@ class MenuSalesSummary {
     required this.soldMenuCount,
     required this.comboSoldQuantity,
     required this.comboSoldMenuCount,
+    required this.comboMenuSalesAmount,
     required this.menuSalesAmount,
     required this.unallocatedAdjustmentCount,
     required this.unallocatedAdjustmentAmount,
@@ -56,6 +67,7 @@ class MenuSalesSummary {
   final int soldMenuCount;
   final int comboSoldQuantity;
   final int comboSoldMenuCount;
+  final double comboMenuSalesAmount;
   final double menuSalesAmount;
   final int unallocatedAdjustmentCount;
   final double unallocatedAdjustmentAmount;
@@ -67,6 +79,7 @@ class MenuSalesSummary {
       soldMenuCount: menuSalesInt(json['sold_menu_count']),
       comboSoldQuantity: menuSalesInt(json['combo_sold_quantity']),
       comboSoldMenuCount: menuSalesInt(json['combo_sold_menu_count']),
+      comboMenuSalesAmount: menuSalesDouble(json['combo_menu_sales_amount']),
       menuSalesAmount: menuSalesDouble(json['menu_sales_amount']),
       unallocatedAdjustmentCount: menuSalesInt(
         json['unallocated_adjustment_count'],
@@ -205,6 +218,19 @@ class MenuSalesAnalytics {
 
   MenuSalesRow? get topMenu => menuRows.isEmpty ? null : menuRows.first;
 
+  MenuSalesRow? get topCombo {
+    MenuSalesRow? result;
+    for (final row in menuRows.where((row) => row.isCombo)) {
+      if (result == null ||
+          row.soldQuantity > result.soldQuantity ||
+          (row.soldQuantity == result.soldQuantity &&
+              row.menuSalesAmount > result.menuSalesAmount)) {
+        result = row;
+      }
+    }
+    return result;
+  }
+
   List<MenuSalesRow> sortedRows(MenuSalesSort sort) {
     final rows = List<MenuSalesRow>.from(menuRows);
     rows.sort((left, right) {
@@ -319,7 +345,7 @@ final menuSalesAnalyticsProvider = FutureProvider.autoDispose
           'p_store_id': params.storeId,
           'p_start_at': range.startUtc.toIso8601String(),
           'p_end_at': range.endExclusiveUtc.toIso8601String(),
-          'p_include_combos': params.includeCombos,
+          'p_menu_scope': params.scope.rpcValue,
         },
       );
       return MenuSalesAnalytics.fromJson(menuSalesMap(response));
