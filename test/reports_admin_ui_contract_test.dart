@@ -33,6 +33,10 @@ void main() {
       expect(source, contains('compactReportHeight'));
       expect(source, contains('maxColumns: 4'));
       expect(source, contains('ReportAnalysisLaunchers('));
+      expect(
+        source.indexOf('ReportAnalysisLaunchers('),
+        lessThan(source.indexOf('compactHeader,')),
+      );
       expect(source, contains("Key('paperless_operations_launcher')"));
       expect(source, contains("Key('menu_sales_analytics_launcher')"));
       expect(source, contains('PaperlessOperationsAnalyticsScreen('));

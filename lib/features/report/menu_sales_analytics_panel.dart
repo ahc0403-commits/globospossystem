@@ -31,32 +31,61 @@ class _MenuSalesAnalyticsPanelState
   MenuSalesSort _sort = MenuSalesSort.quantity;
   _MenuSalesMetric _metric = _MenuSalesMetric.quantity;
   bool _showAll = false;
+  bool _includeCombos = true;
   String? _selectedMenuKey;
 
   @override
+  void initState() {
+    super.initState();
+    _includeCombos = widget.params.includeCombos;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final analyticsAsync = ref.watch(menuSalesAnalyticsProvider(widget.params));
+    final effectiveParams = widget.params.copyWith(
+      includeCombos: _includeCombos,
+    );
+    final analyticsAsync = ref.watch(
+      menuSalesAnalyticsProvider(effectiveParams),
+    );
 
     return PosDataPanel(
       title: context.l10n.menuSalesAnalyticsTitle,
       subtitle: context.l10n.menuSalesAnalyticsSubtitle,
-      child: analyticsAsync.when(
-        loading: () => SizedBox(
-          height: 360,
-          child: ToastOperationalLoadingState(
-            label: PosLoadingCopy.loadingReport(context.l10n),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _MenuSalesComboFilter(
+            includeCombos: _includeCombos,
+            onChanged: (includeCombos) {
+              if (_includeCombos == includeCombos) return;
+              setState(() {
+                _includeCombos = includeCombos;
+                _showAll = false;
+                _selectedMenuKey = null;
+              });
+            },
           ),
-        ),
-        error: (error, stackTrace) => _MenuSalesErrorState(
-          onRetry: () =>
-              ref.invalidate(menuSalesAnalyticsProvider(widget.params)),
-        ),
-        data: (analytics) {
-          if (analytics.menuRows.isEmpty) {
-            return _MenuSalesEmptyState(summary: analytics.summary);
-          }
-          return _buildAnalytics(context, analytics);
-        },
+          const SizedBox(height: 12),
+          analyticsAsync.when(
+            loading: () => SizedBox(
+              height: 360,
+              child: ToastOperationalLoadingState(
+                label: PosLoadingCopy.loadingReport(context.l10n),
+              ),
+            ),
+            error: (error, stackTrace) => _MenuSalesErrorState(
+              onRetry: () =>
+                  ref.invalidate(menuSalesAnalyticsProvider(effectiveParams)),
+            ),
+            data: (analytics) {
+              if (analytics.menuRows.isEmpty) {
+                return _MenuSalesEmptyState(summary: analytics.summary);
+              }
+              return _buildAnalytics(context, analytics);
+            },
+          ),
+        ],
       ),
     );
   }
@@ -128,6 +157,19 @@ class _MenuSalesAnalyticsPanelState
                       ? math.max(150, (constraints.maxWidth - 8) / 2)
                       : 180,
                 ),
+                if (_includeCombos)
+                  _MenuSalesMetricCard(
+                    key: const Key('menu_sales_combo_summary'),
+                    label: context.l10n.menuSalesComboSummary,
+                    value: '${summary.comboSoldQuantity}',
+                    detail: context.l10n.menuSalesComboMenuCount(
+                      summary.comboSoldMenuCount,
+                    ),
+                    tone: PosColors.warning,
+                    minWidth: phone
+                        ? math.max(150, (constraints.maxWidth - 8) / 2)
+                        : 180,
+                  ),
                 _MenuSalesMetricCard(
                   label: context.l10n.menuSalesPosOrders,
                   value: '${summary.orderCount}',
@@ -167,6 +209,98 @@ class _MenuSalesAnalyticsPanelState
   }
 }
 
+class _MenuSalesComboFilter extends StatelessWidget {
+  const _MenuSalesComboFilter({
+    required this.includeCombos,
+    required this.onChanged,
+  });
+
+  final bool includeCombos;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('menu_sales_combo_filter'),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: PosColors.mutedSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: PosColors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _MenuSalesComboFilterButton(
+              key: const Key('menu_sales_include_combos'),
+              label: context.l10n.menuSalesIncludeCombos,
+              selected: includeCombos,
+              onPressed: () => onChanged(true),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: _MenuSalesComboFilterButton(
+              key: const Key('menu_sales_exclude_combos'),
+              label: context.l10n.menuSalesExcludeCombos,
+              selected: !includeCombos,
+              onPressed: () => onChanged(false),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MenuSalesComboFilterButton extends StatelessWidget {
+  const _MenuSalesComboFilterButton({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: selected ? PosColors.surface : Colors.transparent,
+        borderRadius: BorderRadius.circular(9),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(9),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 48),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: selected ? PosColors.accent : Colors.transparent,
+              ),
+            ),
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: selected ? PosColors.accent : PosColors.textSecondary,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _MenuSalesMetricCard extends StatelessWidget {
   const _MenuSalesMetricCard({
     super.key,
@@ -186,7 +320,10 @@ class _MenuSalesMetricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ConstrainedBox(
-      constraints: BoxConstraints(minWidth: minWidth, maxWidth: 330),
+      constraints: BoxConstraints(
+        minWidth: minWidth,
+        maxWidth: math.max(330, minWidth),
+      ),
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -637,6 +774,26 @@ class _MenuSalesName extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
+        if (row.isCombo)
+          Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: Container(
+              key: Key('menu_sales_combo_badge_${row.menuKey}'),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: PosColors.warningMuted,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: PosColors.warning),
+              ),
+              child: Text(
+                context.l10n.menuSalesComboBadge,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: PosColors.warning,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ),
         if (warnings.isNotEmpty)
           Tooltip(
             message: warnings.join('\n'),

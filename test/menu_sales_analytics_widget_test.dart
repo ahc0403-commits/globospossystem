@@ -31,6 +31,7 @@ MenuSalesAnalytics _analytics() {
       'dine_in_quantity': 10,
       'takeaway_quantity': 5,
       'delivery_quantity': 5 - index.clamp(0, 5),
+      'is_combo': rank == 1,
     };
   });
   final hours = List.generate(24, (hour) {
@@ -59,6 +60,8 @@ MenuSalesAnalytics _analytics() {
       'order_count': 42,
       'sold_quantity': 174,
       'sold_menu_count': 12,
+      'combo_sold_quantity': 20,
+      'combo_sold_menu_count': 1,
       'menu_sales_amount': 7800000,
       'unallocated_adjustment_count': 1,
       'unallocated_adjustment_amount': 50000,
@@ -119,11 +122,14 @@ Widget _launcherApp() {
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
-        body: ReportAnalysisLaunchers(
-          storeId: _params.storeId,
-          startDate: _params.startDate,
-          endDate: _params.endDate,
-          menuSalesParams: _params,
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(12),
+          child: ReportAnalysisLaunchers(
+            storeId: _params.storeId,
+            startDate: _params.startDate,
+            endDate: _params.endDate,
+            menuSalesParams: _params,
+          ),
         ),
       ),
     ),
@@ -170,6 +176,90 @@ void main() {
     await tester.pump();
 
     expect(find.text('메뉴 12'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('combo segment reloads every statistic without combo rows', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final requestedScopes = <bool>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          menuSalesAnalyticsProvider.overrideWith((ref, params) async {
+            requestedScopes.add(params.includeCombos);
+            final analytics = _analytics();
+            if (params.includeCombos) return analytics;
+            return MenuSalesAnalytics.fromJson({
+              'summary': {
+                'order_count': analytics.summary.orderCount,
+                'sold_quantity': analytics.summary.soldQuantity - 20,
+                'sold_menu_count': analytics.summary.soldMenuCount - 1,
+                'combo_sold_quantity': 0,
+                'combo_sold_menu_count': 0,
+                'menu_sales_amount': analytics.summary.menuSalesAmount - 100000,
+                'unallocated_adjustment_count': 0,
+                'unallocated_adjustment_amount': 0,
+              },
+              'menu_rows': analytics.menuRows
+                  .where((row) => !row.isCombo)
+                  .map(
+                    (row) => {
+                      'rank': row.rank,
+                      'menu_key': row.menuKey,
+                      'display_name': row.displayName,
+                      'identity_quality': row.identityQuality,
+                      'name_changed_in_period': row.nameChangedInPeriod,
+                      'sold_quantity': row.soldQuantity,
+                      'order_count': row.orderCount,
+                      'menu_sales_amount': row.menuSalesAmount,
+                      'quantity_share': row.quantityShare,
+                      'revenue_share': row.revenueShare,
+                      'peak_hour': row.peakHour,
+                      'dine_in_quantity': row.dineInQuantity,
+                      'takeaway_quantity': row.takeawayQuantity,
+                      'delivery_quantity': row.deliveryQuantity,
+                      'is_combo': false,
+                    },
+                  )
+                  .toList(),
+              'hour_rows': const [],
+              'top_menu_hour_rows': const [],
+            });
+          }),
+        ],
+        child: MaterialApp(
+          locale: const Locale('ko'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: MenuSalesAnalyticsPanel(
+                params: _params,
+                currency: NumberFormat('#,###', 'vi_VN'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(requestedScopes, contains(true));
+    expect(find.text('콤보'), findsWidgets);
+    expect(find.byKey(const Key('menu_sales_combo_summary')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('menu_sales_exclude_combos')));
+    await tester.pumpAndSettle();
+
+    expect(requestedScopes.last, isFalse);
+    expect(find.byKey(const Key('menu_sales_combo_summary')), findsNothing);
+    expect(
+      find.byKey(const Key('menu_sales_combo_badge_menu-1')),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -247,4 +337,29 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'both report analysis launchers are visible on first phone view',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(_launcherApp());
+      await tester.pump();
+
+      final paperless = find.byKey(const Key('paperless_operations_launcher'));
+      final menuSales = find.byKey(const Key('menu_sales_analytics_launcher'));
+      expect(paperless, findsOneWidget);
+      expect(menuSales, findsOneWidget);
+      expect(tester.getTopLeft(paperless).dy, lessThan(250));
+      expect(tester.getTopLeft(menuSales).dy, lessThan(250));
+
+      await tester.tap(menuSales);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('menu_sales_analytics_screen')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

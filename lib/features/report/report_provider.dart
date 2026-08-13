@@ -886,6 +886,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
         TextCellValue('POS Delivery Qty'),
         TextCellValue('Identity Quality'),
         TextCellValue('Name Changed In Period'),
+        TextCellValue('Combo'),
       ]);
       final menuRows = menuSalesAnalytics.sortedRows(MenuSalesSort.quantity);
       for (var index = 0; index < menuRows.length; index++) {
@@ -904,6 +905,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
           IntCellValue(row.deliveryQuantity),
           TextCellValue(row.identityQuality),
           BoolCellValue(row.nameChangedInPeriod),
+          BoolCellValue(row.isCombo),
         ]);
       }
 
