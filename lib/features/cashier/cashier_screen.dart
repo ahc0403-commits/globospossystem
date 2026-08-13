@@ -747,6 +747,13 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
         paymentMethod: method,
         cashTender: cashTender,
         receiptAccessByOrderId: receiptAccessByOrderId,
+        onShowCustomerReceipt: (order, access) => ref
+            .read(paymentProvider.notifier)
+            .showReceiptOnCustomerDisplay(
+              storeId: storeId,
+              orderId: order.orderId,
+              receiptId: access.receiptId,
+            ),
         onPaperReceipt: (order) => _printReceipt(order: order, method: method),
         onReprint: () async {
           for (final order in paymentOrders.where(
@@ -767,6 +774,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   }
 
   Future<void> _showPaymentCompletion({
+    required String storeId,
     required CashierOrder order,
     required String paymentMethod,
     CashTender? cashTender,
@@ -780,6 +788,16 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
         paymentMethod: paymentMethod,
         cashTender: cashTender,
         receiptAccess: receiptAccess,
+        onShowCustomerReceipt:
+            order.fulfillmentMode.isPaperless && receiptAccess != null
+            ? () => ref
+                  .read(paymentProvider.notifier)
+                  .showReceiptOnCustomerDisplay(
+                    storeId: storeId,
+                    orderId: order.orderId,
+                    receiptId: receiptAccess.receiptId,
+                  )
+            : null,
         onPaperReceipt: () => _printReceipt(
           order: order,
           method: paymentMethod,
@@ -1653,6 +1671,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
 
                       if (context.mounted) {
                         await _showPaymentCompletion(
+                          storeId: storeId,
                           order: selectedOrder,
                           paymentMethod: method,
                           cashTender: cashTender,
@@ -1769,6 +1788,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
 
                       if (context.mounted) {
                         await _showPaymentCompletion(
+                          storeId: storeId,
                           order: selectedOrder,
                           paymentMethod: 'SPLIT',
                           receiptAccess: receiptAccess,
@@ -5444,6 +5464,7 @@ class _CombinedPaymentCompletionDialog extends StatelessWidget {
     required this.paymentMethod,
     required this.cashTender,
     required this.receiptAccessByOrderId,
+    required this.onShowCustomerReceipt,
     required this.onPaperReceipt,
     required this.onReprint,
   });
@@ -5453,6 +5474,8 @@ class _CombinedPaymentCompletionDialog extends StatelessWidget {
   final String paymentMethod;
   final CashTender? cashTender;
   final Map<String, DigitalReceiptAccess?> receiptAccessByOrderId;
+  final Future<bool> Function(CashierOrder order, DigitalReceiptAccess access)
+  onShowCustomerReceipt;
   final Future<void> Function(CashierOrder order) onPaperReceipt;
   final Future<void> Function() onReprint;
 
@@ -5503,7 +5526,7 @@ class _CombinedPaymentCompletionDialog extends StatelessWidget {
             if (paperlessOrders.isNotEmpty) ...[
               const SizedBox(height: 14),
               SizedBox(
-                height: 210,
+                height: 252,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: paperlessOrders.length,
@@ -5536,6 +5559,24 @@ class _CombinedPaymentCompletionDialog extends StatelessWidget {
                                     data: access.publicUrl,
                                     backgroundColor: Colors.white,
                                   ),
+                          ),
+                          TextButton.icon(
+                            key: ValueKey(
+                              'cashier_combined_show_customer_receipt_${order.orderId}',
+                            ),
+                            onPressed: access == null
+                                ? null
+                                : () => unawaited(
+                                    onShowCustomerReceipt(order, access),
+                                  ),
+                            icon: const Icon(Icons.monitor_rounded, size: 16),
+                            label: Text(switch (Localizations.localeOf(
+                              context,
+                            ).languageCode) {
+                              'vi' => 'Màn hình khách',
+                              'en' => 'Customer screen',
+                              _ => '고객 화면',
+                            }),
                           ),
                           TextButton.icon(
                             key: ValueKey(

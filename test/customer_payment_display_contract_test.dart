@@ -90,6 +90,45 @@ void main() {
     },
   );
 
+  test(
+    'receipt returns home after ten seconds and a new revision replays',
+    () async {
+      expect(
+        CustomerDisplayNotifier.receiptDisplayDuration,
+        const Duration(seconds: 10),
+      );
+      final notifier = CustomerDisplayNotifier(
+        receiptDuration: const Duration(milliseconds: 20),
+      );
+      addTearDown(notifier.dispose);
+
+      Map<String, dynamic> receiptRow(String revision) => {
+        'store_id': 'store-1',
+        'status': 'showing',
+        'payload': {
+          'phase': 'receipt',
+          'display_revision': revision,
+          'order_id': 'order-1',
+          'table_number': '12',
+          'total': 99000,
+        },
+      };
+
+      notifier.applyRowForTesting('store-1', receiptRow('revision-1'));
+      expect(notifier.state.snapshot?.isReceipt, isTrue);
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(notifier.state.snapshot, isNull);
+
+      notifier.applyRowForTesting('store-1', receiptRow('revision-1'));
+      expect(notifier.state.snapshot, isNull);
+
+      notifier.applyRowForTesting('store-1', receiptRow('revision-2'));
+      expect(notifier.state.snapshot?.displayRevision, 'revision-2');
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(notifier.state.snapshot, isNull);
+    },
+  );
+
   test('order item exposes the Vietnamese name for customer display', () {
     final item = OrderItem(
       id: 'item-1',

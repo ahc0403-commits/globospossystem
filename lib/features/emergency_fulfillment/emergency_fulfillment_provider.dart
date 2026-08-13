@@ -153,10 +153,10 @@ class EmergencyFulfillmentOrder {
   bool hasActionableQuantity(String stationType) =>
       items.any((item) => item.isActionableAt(stationType));
 
-  bool get hasPendingFloorDirect => items.any(
-    (item) =>
-        item.isFloorDirect && item.floorServedQuantity < item.orderedQuantity,
-  );
+  List<EmergencyFulfillmentItem> visibleItemsAt(String stationType) =>
+      (stationType == 'kitchen' || stationType == 'tray')
+      ? items.where((item) => !item.isFloorDirect).toList(growable: false)
+      : items;
 
   EmergencyFulfillmentOrder copyWith({
     List<EmergencyFulfillmentItem>? items,

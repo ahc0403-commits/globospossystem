@@ -123,14 +123,18 @@ class CustomerDisplayState {
 }
 
 class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
-  CustomerDisplayNotifier() : super(const CustomerDisplayState());
+  CustomerDisplayNotifier({Duration receiptDuration = receiptDisplayDuration})
+    : _receiptDuration = receiptDuration,
+      super(const CustomerDisplayState());
 
   // A subscribed socket does not guarantee that Postgres change events are
   // actually reaching this device. Keep the indexed single-row fallback fast
   // even while Realtime reports a healthy connection.
   static const _connectedHealthRefreshInterval = Duration(seconds: 1);
   static const _disconnectedRefreshInterval = Duration(seconds: 1);
-  static const receiptDisplayDuration = Duration(seconds: 90);
+  static const receiptDisplayDuration = Duration(seconds: 10);
+
+  final Duration _receiptDuration;
 
   RealtimeChannel? _channel;
   Timer? _pollTimer;
@@ -259,7 +263,7 @@ class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
       if (revision != null && revision != _visibleReceiptRevision) {
         _visibleReceiptRevision = revision;
         _receiptTimer?.cancel();
-        _receiptTimer = Timer(receiptDisplayDuration, () {
+        _receiptTimer = Timer(_receiptDuration, () {
           if (!mounted || _storeId != storeId) return;
           _hiddenReceiptRevision = revision;
           state = const CustomerDisplayState();
@@ -271,6 +275,12 @@ class CustomerDisplayNotifier extends StateNotifier<CustomerDisplayState> {
       _hiddenReceiptRevision = null;
     }
     state = CustomerDisplayState(snapshot: snapshot);
+  }
+
+  @visibleForTesting
+  void applyRowForTesting(String storeId, Map<String, dynamic>? row) {
+    _storeId = storeId;
+    _applyRow(storeId, row);
   }
 
   Future<void> _resolveReceiptLink(
