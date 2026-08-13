@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/payments/payment_method_contract.dart';
 import '../../main.dart';
+import 'menu_sales_analytics.dart';
 
 class DailyRevenue {
   const DailyRevenue({
@@ -700,7 +701,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
     }
   }
 
-  List<int> exportToExcel() {
+  List<int> exportToExcel({MenuSalesAnalytics? menuSalesAnalytics}) {
     final summary = state.summary;
     if (summary == null) return <int>[];
 
@@ -850,6 +851,101 @@ class ReportNotifier extends StateNotifier<ReportState> {
       DoubleCellValue(summary.payTotal),
       DoubleCellValue(summary.paymentVariance),
     ]);
+
+    if (menuSalesAnalytics != null) {
+      final menuSheet = excel['Menu Sales'];
+      menuSheet.appendRow([
+        TextCellValue(
+          'POS menu details only. External delivery, Photo sales, service charges, and non-menu amounts are excluded.',
+        ),
+      ]);
+      menuSheet.appendRow([
+        TextCellValue('Period'),
+        TextCellValue(
+          '${dateFormat.format(state.startDate)} ~ ${dateFormat.format(state.endDate)}',
+        ),
+      ]);
+      menuSheet.appendRow([
+        TextCellValue('Unallocated refund/void count'),
+        IntCellValue(menuSalesAnalytics.summary.unallocatedAdjustmentCount),
+        TextCellValue('Unallocated refund/void amount'),
+        DoubleCellValue(menuSalesAnalytics.summary.unallocatedAdjustmentAmount),
+      ]);
+      menuSheet.appendRow([TextCellValue('')]);
+      menuSheet.appendRow([
+        TextCellValue('Rank'),
+        TextCellValue('Menu'),
+        TextCellValue('Quantity Sold'),
+        TextCellValue('Orders'),
+        TextCellValue('Menu Sales Amount'),
+        TextCellValue('Quantity Share (%)'),
+        TextCellValue('Revenue Share (%)'),
+        TextCellValue('Peak Hour (HCM)'),
+        TextCellValue('Dine-in Qty'),
+        TextCellValue('Takeaway Qty'),
+        TextCellValue('POS Delivery Qty'),
+        TextCellValue('Identity Quality'),
+        TextCellValue('Name Changed In Period'),
+      ]);
+      final menuRows = menuSalesAnalytics.sortedRows(MenuSalesSort.quantity);
+      for (var index = 0; index < menuRows.length; index++) {
+        final row = menuRows[index];
+        menuSheet.appendRow([
+          IntCellValue(index + 1),
+          TextCellValue(row.displayName),
+          IntCellValue(row.soldQuantity),
+          IntCellValue(row.orderCount),
+          DoubleCellValue(row.menuSalesAmount),
+          DoubleCellValue(row.quantityShare),
+          DoubleCellValue(row.revenueShare),
+          TextCellValue('${row.peakHour.toString().padLeft(2, '0')}:00'),
+          IntCellValue(row.dineInQuantity),
+          IntCellValue(row.takeawayQuantity),
+          IntCellValue(row.deliveryQuantity),
+          TextCellValue(row.identityQuality),
+          BoolCellValue(row.nameChangedInPeriod),
+        ]);
+      }
+
+      final hourlySheet = excel['Menu by Hour'];
+      hourlySheet.appendRow([
+        TextCellValue('Timezone'),
+        TextCellValue('Asia/Ho_Chi_Minh'),
+        TextCellValue('Time basis'),
+        TextCellValue('Last revenue payment per completed POS order'),
+      ]);
+      hourlySheet.appendRow([
+        TextCellValue('Hour'),
+        TextCellValue('Quantity Sold'),
+        TextCellValue('Menu Sales Amount'),
+        TextCellValue('POS Orders'),
+      ]);
+      for (final hour in menuSalesAnalytics.hourRows) {
+        hourlySheet.appendRow([
+          TextCellValue('${hour.hour.toString().padLeft(2, '0')}:00'),
+          IntCellValue(hour.soldQuantity),
+          DoubleCellValue(hour.menuSalesAmount),
+          IntCellValue(hour.orderCount),
+        ]);
+      }
+      hourlySheet.appendRow([TextCellValue('')]);
+      hourlySheet.appendRow([
+        TextCellValue('Top Menu Rank'),
+        TextCellValue('Menu'),
+        TextCellValue('Hour'),
+        TextCellValue('Quantity Sold'),
+        TextCellValue('Menu Sales Amount'),
+      ]);
+      for (final row in menuSalesAnalytics.topMenuHourRows) {
+        hourlySheet.appendRow([
+          IntCellValue(row.rank),
+          TextCellValue(row.displayName),
+          TextCellValue('${row.hour.toString().padLeft(2, '0')}:00'),
+          IntCellValue(row.soldQuantity),
+          DoubleCellValue(row.menuSalesAmount),
+        ]);
+      }
+    }
 
     final bytes = excel.encode();
     return bytes ?? <int>[];

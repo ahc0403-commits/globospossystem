@@ -32,6 +32,9 @@ void main() {
       expect(source, contains('DailyClosingPresentation.cards'));
       expect(source, contains('compactReportHeight'));
       expect(source, contains('maxColumns: 4'));
+      expect(source, contains('desktopMenuSalesPanelHeight = 820.0'));
+      expect(source, contains('MenuSalesAnalyticsPanel('));
+      expect(source, contains('operationalReportHeight'));
       expect(source, contains('520.0 + 12.0 + 240.0 + 260.0'));
       expect(source, contains('height: 240'));
       expect(source, contains('reportConstraints.maxWidth < 1080'));
