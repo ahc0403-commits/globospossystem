@@ -57,6 +57,16 @@ class EmergencyFulfillmentItem {
     _ => false,
   };
 
+  bool isRevertibleAt(String stationType) => switch (stationType) {
+    'kitchen' => !isFloorDirect && kitchenDoneQuantity > trayReceivedQuantity,
+    'tray' =>
+      !isFloorDirect &&
+          trayDispatchedQuantity > floorServedQuantity &&
+          trayReceivedQuantity > 0,
+    'floor' => floorServedQuantity > 0,
+    _ => false,
+  };
+
   String localizedName(String languageCode) => switch (languageCode) {
     'vi' => nameVi.trim().isEmpty ? 'Món' : nameVi,
     'en' => nameEn.trim().isEmpty ? 'Item' : nameEn,
@@ -408,6 +418,10 @@ class EmergencyFulfillmentNotifier
       await _sendProgress(payload);
       await load(showLoading: false);
     } catch (error) {
+      if (error is PostgrestException) {
+        state = previous.copyWith(error: error.message);
+        return;
+      }
       try {
         await EmergencyWebBridge.putOutbox(eventId, jsonEncode(payload));
         state = state.copyWith(

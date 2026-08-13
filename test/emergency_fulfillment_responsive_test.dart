@@ -260,6 +260,46 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  for (final scenario
+      in <({String stationType, List<(String, String, int)> expected})>[
+        (stationType: 'kitchen', expected: [('item-1', 'kitchen_done', -1)]),
+        (
+          stationType: 'tray',
+          expected: [
+            ('item-1', 'tray_dispatched', -1),
+            ('item-1', 'tray_received', -1),
+          ],
+        ),
+        (stationType: 'floor', expected: [('item-1', 'floor_served', -1)]),
+      ]) {
+    testWidgets('${scenario.stationType} can cancel one completed menu item', (
+      tester,
+    ) async {
+      final fixture = _FixtureEmergencyNotifier(
+        _revertibleState(scenario.stationType),
+      );
+      await _pumpEmergency(
+        tester,
+        fixture: fixture,
+        size: const Size(1024, 768),
+        locale: const Locale('ko'),
+        expectedStationType: scenario.stationType,
+      );
+
+      await tester.tap(find.byKey(const Key('emergency_order_order-1')));
+      await tester.pump();
+      final cancelButton = find.byKey(
+        const Key('emergency_menu_item_cancel_item-1'),
+      );
+      expect(cancelButton, findsOne);
+      await tester.tap(cancelButton);
+      await tester.pumpAndSettle();
+
+      expect(fixture.recordedProgress, scenario.expected);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('ninth tablet order is placed on the next eight-slot page', (
     tester,
   ) async {
@@ -517,6 +557,25 @@ EmergencyFulfillmentState _completedState(String stationType) {
         lastActionAt: DateTime.utc(2026, 8, 11, 10),
         items: [item.withStage('floor_served', item.trayDispatchedQuantity)],
       ),
+    ],
+  );
+}
+
+EmergencyFulfillmentState _revertibleState(String stationType) {
+  final active = _activeState(stationType);
+  final order = active.orders.single;
+  final item = order.items.single;
+  final revertibleItem = switch (stationType) {
+    'kitchen' => item.withStage('kitchen_done', 1),
+    'tray' =>
+      item.withStage('tray_received', 1).withStage('tray_dispatched', 1),
+    'floor' =>
+      item.withStage('tray_dispatched', 2).withStage('floor_served', 1),
+    _ => item,
+  };
+  return active.copyWith(
+    orders: [
+      order.copyWith(items: [revertibleItem]),
     ],
   );
 }
