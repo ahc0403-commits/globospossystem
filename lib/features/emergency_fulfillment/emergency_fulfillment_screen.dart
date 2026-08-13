@@ -239,6 +239,7 @@ class _EmergencyFulfillmentScreenState
         onBack: () => setState(() => _selectedOrderId = null),
         onComplete: () => _completeOrder(selected),
         onItemAction: (item) => _completeItem(item, stationType),
+        onItemRevert: (item) => _revertItem(item, stationType),
         onRevert: selected.lastActionId == null
             ? null
             : () => _revertOrder(selected),
@@ -361,6 +362,44 @@ class _EmergencyFulfillmentScreenState
         _page = 0;
       }
     });
+  }
+
+  Future<void> _revertItem(
+    EmergencyFulfillmentItem item,
+    String stationType,
+  ) async {
+    if (_actionBusy || !item.isRevertibleAt(stationType)) return;
+    setState(() => _actionBusy = true);
+    final notifier = ref.read(emergencyFulfillmentProvider.notifier);
+    try {
+      switch (stationType) {
+        case 'kitchen':
+          await notifier.recordProgress(
+            itemId: item.id,
+            stage: 'kitchen_done',
+            delta: -1,
+          );
+        case 'tray':
+          await notifier.recordProgress(
+            itemId: item.id,
+            stage: 'tray_dispatched',
+            delta: -1,
+          );
+          await notifier.recordProgress(
+            itemId: item.id,
+            stage: 'tray_received',
+            delta: -1,
+          );
+        case 'floor':
+          await notifier.recordProgress(
+            itemId: item.id,
+            stage: 'floor_served',
+            delta: -1,
+          );
+      }
+    } finally {
+      if (mounted) setState(() => _actionBusy = false);
+    }
   }
 }
 
@@ -840,6 +879,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
     required this.onBack,
     required this.onComplete,
     required this.onItemAction,
+    required this.onItemRevert,
     required this.onRevert,
   });
 
@@ -852,6 +892,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onComplete;
   final ValueChanged<EmergencyFulfillmentItem> onItemAction;
+  final ValueChanged<EmergencyFulfillmentItem> onItemRevert;
   final VoidCallback? onRevert;
 
   @override
@@ -943,6 +984,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
                         copy: copy,
                         busy: busy || pending,
                         onTap: () => onItemAction(order.items[index]),
+                        onRevert: () => onItemRevert(order.items[index]),
                       ),
                     );
                   }
@@ -954,7 +996,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
                       crossAxisCount: columns,
                       crossAxisSpacing: 8,
                       mainAxisSpacing: 8,
-                      mainAxisExtent: 150,
+                      mainAxisExtent: 188,
                     ),
                     itemBuilder: (context, index) => _EmergencyMenuRow(
                       item: order.items[index],
@@ -962,6 +1004,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
                       copy: copy,
                       busy: busy || pending,
                       onTap: () => onItemAction(order.items[index]),
+                      onRevert: () => onItemRevert(order.items[index]),
                     ),
                   );
                 },
@@ -990,6 +1033,7 @@ class _EmergencyMenuRow extends StatelessWidget {
     required this.copy,
     required this.busy,
     required this.onTap,
+    required this.onRevert,
   });
 
   final EmergencyFulfillmentItem item;
@@ -997,6 +1041,7 @@ class _EmergencyMenuRow extends StatelessWidget {
   final _EmergencyCopy copy;
   final bool busy;
   final VoidCallback onTap;
+  final VoidCallback onRevert;
 
   @override
   Widget build(BuildContext context) {
@@ -1016,9 +1061,10 @@ class _EmergencyMenuRow extends StatelessWidget {
         (stationType == 'kitchen' || stationType == 'tray');
     final canAdvance =
         !busy && !disabledAtStation && limit > 0 && value < limit;
+    final canRevert = !busy && item.isRevertibleAt(stationType);
     return Semantics(
       button: true,
-      enabled: canAdvance,
+      enabled: canAdvance || canRevert,
       label:
           '${item.localizedName(languageCode)}, $value / $limit, '
           '${disabledAtStation
@@ -1090,6 +1136,25 @@ class _EmergencyMenuRow extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
             );
+            final itemActions = Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton.outlined(
+                  key: ValueKey('emergency_menu_item_cancel_${item.id}'),
+                  tooltip: copy.cancelOne,
+                  onPressed: canRevert ? onRevert : null,
+                  color: PosColors.danger,
+                  icon: const Icon(Icons.undo_rounded, size: 20),
+                ),
+                const SizedBox(width: 6),
+                IconButton.filled(
+                  key: ValueKey('emergency_menu_item_complete_${item.id}'),
+                  tooltip: copy.completeOne,
+                  onPressed: canAdvance ? onTap : null,
+                  icon: const Icon(Icons.check_rounded, size: 20),
+                ),
+              ],
+            );
             return Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -1115,6 +1180,11 @@ class _EmergencyMenuRow extends StatelessWidget {
                             progressValue,
                           ],
                         ),
+                        const SizedBox(height: 6),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: itemActions,
+                        ),
                       ],
                     )
                   : Row(
@@ -1124,7 +1194,12 @@ class _EmergencyMenuRow extends StatelessWidget {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           mainAxisSize: MainAxisSize.min,
-                          children: [progressValue, progressLabel],
+                          children: [
+                            progressValue,
+                            progressLabel,
+                            const SizedBox(height: 6),
+                            itemActions,
+                          ],
                         ),
                       ],
                     ),
@@ -1391,6 +1466,8 @@ class _EmergencyCopy {
   String get backToBoard => _pick('주문 보드로', 'Về bảng đơn', 'Back to board');
   String get cancelAndRevert =>
       _pick('취소 (원복)', 'Hủy (hoàn tác)', 'Cancel (undo)');
+  String get cancelOne => _pick('1개 취소', 'Hủy 1 món', 'Undo one');
+  String get completeOne => _pick('1개 완료', 'Hoàn tất 1 món', 'Complete one');
   String get completeAndNext =>
       _pick('완료 (다음 단계)', 'Hoàn tất (bước tiếp theo)', 'Complete (next stage)');
 
