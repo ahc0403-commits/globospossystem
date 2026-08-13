@@ -15,6 +15,8 @@ import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/toast/toast.dart';
 import '../../../main.dart';
 import '../../auth/auth_provider.dart';
+import '../../report/menu_sales_analytics.dart';
+import '../../report/menu_sales_analytics_panel.dart';
 import '../../report/report_provider.dart';
 import '../providers/admin_audit_provider.dart';
 import '../providers/daily_closing_provider.dart';
@@ -66,6 +68,18 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     final dateFormat = DateFormat('dd/MM/yyyy');
     final summary = reportState.summary;
     final hasOperationalData = summary != null && summary.totalOrders > 0;
+    final menuSalesParams = storeId == null
+        ? null
+        : MenuSalesAnalyticsParams(
+            storeId: storeId,
+            startDate: reportState.startDate,
+            endDate: reportState.endDate,
+          );
+    final menuSalesAsync = menuSalesParams == null
+        ? null
+        : ref.watch(menuSalesAnalyticsProvider(menuSalesParams));
+    final menuSalesAnalytics = menuSalesAsync?.asData?.value;
+    const desktopMenuSalesPanelHeight = 820.0;
 
     if (_pendingStart == null || _pendingEnd == null) {
       _pendingStart ??= reportState.startDate;
@@ -84,7 +98,16 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       summary: summary,
       currency: currency,
       dateFormat: dateFormat,
+      menuSalesAnalytics: menuSalesAnalytics,
     );
+
+    void refreshReports() {
+      if (storeId == null) return;
+      reportNotifier.loadReport(storeId);
+      if (menuSalesParams != null) {
+        ref.invalidate(menuSalesAnalyticsProvider(menuSalesParams));
+      }
+    }
 
     void applyQuickRange(DateTime start, DateTime end) {
       if (storeId == null) return;
@@ -104,7 +127,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
             : PosSecondaryButton(
                 label: l10n.refresh,
                 icon: Icons.refresh_rounded,
-                onPressed: () => reportNotifier.loadReport(storeId),
+                onPressed: refreshReports,
               ),
         child: Wrap(
           spacing: 8,
@@ -161,64 +184,95 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       }
 
       if (reportState.error != null) {
-        return ToastWorkSurface(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                reportState.error!,
-                style: AppFonts.system(
-                  color: AppColors.statusCancelled,
-                  fontSize: 14,
-                ),
-                textAlign: TextAlign.center,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (menuSalesParams != null) ...[
+              MenuSalesAnalyticsPanel(
+                params: menuSalesParams,
+                currency: currency,
               ),
               const SizedBox(height: 12),
-              ElevatedButton(
-                onPressed: storeId == null
-                    ? null
-                    : () => reportNotifier.loadReport(storeId),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.amber500,
-                  foregroundColor: AppColors.surface0,
-                ),
-                child: Text(l10n.retry),
-              ),
             ],
-          ),
+            ToastWorkSurface(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    reportState.error!,
+                    style: AppFonts.system(
+                      color: AppColors.statusCancelled,
+                      fontSize: 14,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: storeId == null
+                        ? null
+                        : () => reportNotifier.loadReport(storeId),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.amber500,
+                      foregroundColor: AppColors.surface0,
+                    ),
+                    child: Text(l10n.retry),
+                  ),
+                ],
+              ),
+            ),
+          ],
         );
       }
 
       if (!hasOperationalData) {
-        return PosActionCard(
-          title: l10n.reportsNoDataTitle,
-          subtitle: l10n.reportsNoDataSubtitle,
-          action: storeId == null
-              ? null
-              : PosPrimaryButton(
-                  label: l10n.reportsReloadToday,
-                  icon: Icons.play_arrow_rounded,
-                  onPressed: () {
-                    final now = DateTime.now();
-                    applyQuickRange(
-                      DateTime(now.year, now.month, now.day),
-                      now,
-                    );
-                  },
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (menuSalesParams != null) ...[
+              MenuSalesAnalyticsPanel(
+                params: menuSalesParams,
+                currency: currency,
+              ),
+              const SizedBox(height: 12),
+            ],
+            PosActionCard(
+              title: l10n.reportsNoDataTitle,
+              subtitle: l10n.reportsNoDataSubtitle,
+              action: storeId == null
+                  ? null
+                  : PosPrimaryButton(
+                      label: l10n.reportsReloadToday,
+                      icon: Icons.play_arrow_rounded,
+                      onPressed: () {
+                        final now = DateTime.now();
+                        applyQuickRange(
+                          DateTime(now.year, now.month, now.day),
+                          now,
+                        );
+                      },
+                    ),
+              child: Text(
+                l10n.reportsNoDataBody,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: PosColors.textSecondary,
+                  height: 1.45,
                 ),
-          child: Text(
-            l10n.reportsNoDataBody,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: PosColors.textSecondary,
-              height: 1.45,
+              ),
             ),
-          ),
+          ],
         );
       }
 
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (menuSalesParams != null) ...[
+            MenuSalesAnalyticsPanel(
+              params: menuSalesParams,
+              currency: currency,
+            ),
+            const SizedBox(height: 12),
+          ],
           PosDataPanel(
             title: l10n.reportsHourlyOrderFocus,
             subtitle: l10n.reportsHourlyOrderFocusSubtitle,
@@ -312,6 +366,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
               summary: summary,
               currency: currency,
               dateFormat: dateFormat,
+              menuSalesAnalytics: menuSalesAnalytics,
             ),
             const SizedBox(height: 8),
             if (storeId != null) ...[
@@ -332,41 +387,76 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                       label: PosLoadingCopy.loadingReport(context.l10n),
                     )
                   : reportState.error != null
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            reportState.error!,
-                            style: AppFonts.system(
-                              color: AppColors.statusCancelled,
-                              fontSize: 14,
+                  ? ListView(
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      children: [
+                        if (menuSalesParams != null) ...[
+                          SizedBox(
+                            height: desktopMenuSalesPanelHeight,
+                            child: MenuSalesAnalyticsPanel(
+                              params: menuSalesParams,
+                              currency: currency,
                             ),
-                            textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 12),
-                          ElevatedButton(
-                            onPressed: storeId == null
-                                ? null
-                                : () => reportNotifier.loadReport(storeId),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.amber500,
-                              foregroundColor: AppColors.surface0,
-                            ),
-                            child: Text(l10n.retry),
-                          ),
                         ],
-                      ),
+                        SizedBox(
+                          height: 240,
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  reportState.error!,
+                                  style: AppFonts.system(
+                                    color: AppColors.statusCancelled,
+                                    fontSize: 14,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 12),
+                                ElevatedButton(
+                                  onPressed: storeId == null
+                                      ? null
+                                      : () =>
+                                            reportNotifier.loadReport(storeId),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.amber500,
+                                    foregroundColor: AppColors.surface0,
+                                  ),
+                                  child: Text(l10n.retry),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     )
                   : (hasOperationalData
                         ? LayoutBuilder(
                             builder: (context, reportConstraints) {
-                              final compactReportHeight =
+                              final operationalReportHeight =
                                   reportConstraints.maxWidth < 1080
                                   ? 520.0 + 12.0 + 520.0 + 12.0 + 240.0 + 260.0
                                   : 520.0 + 12.0 + 240.0 + 260.0;
+                              final compactReportHeight =
+                                  (menuSalesParams == null
+                                      ? 0.0
+                                      : desktopMenuSalesPanelHeight + 12.0) +
+                                  operationalReportHeight;
                               final content = Column(
                                 children: [
+                                  if (menuSalesParams != null) ...[
+                                    SizedBox(
+                                      height: desktopMenuSalesPanelHeight,
+                                      child: MenuSalesAnalyticsPanel(
+                                        params: menuSalesParams,
+                                        currency: currency,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                  ],
                                   Expanded(
                                     child: PosSplitContent(
                                       primary: PosDataPanel(
@@ -432,11 +522,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                                 : PosSecondaryButton(
                                                     label: l10n.refresh,
                                                     icon: Icons.refresh_rounded,
-                                                    onPressed: () {
-                                                      reportNotifier.loadReport(
-                                                        storeId,
-                                                      );
-                                                    },
+                                                    onPressed: refreshReports,
                                                   ),
                                             child: Wrap(
                                               spacing: 8,
@@ -577,26 +663,45 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                               return content;
                             },
                           )
-                        : _ReportsEmptyWorkspace(
-                            onReloadToday: storeId == null
-                                ? null
-                                : () {
-                                    final now = DateTime.now();
-                                    final start = DateTime(
-                                      now.year,
-                                      now.month,
-                                      now.day,
-                                    );
-                                    setState(() {
-                                      _pendingStart = start;
-                                      _pendingEnd = now;
-                                    });
-                                    reportNotifier.setDateRange(
-                                      start,
-                                      now,
-                                      storeId,
-                                    );
-                                  },
+                        : ListView(
+                            keyboardDismissBehavior:
+                                ScrollViewKeyboardDismissBehavior.onDrag,
+                            children: [
+                              if (menuSalesParams != null) ...[
+                                SizedBox(
+                                  height: desktopMenuSalesPanelHeight,
+                                  child: MenuSalesAnalyticsPanel(
+                                    params: menuSalesParams,
+                                    currency: currency,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                              ],
+                              SizedBox(
+                                height: 620,
+                                child: _ReportsEmptyWorkspace(
+                                  onReloadToday: storeId == null
+                                      ? null
+                                      : () {
+                                          final now = DateTime.now();
+                                          final start = DateTime(
+                                            now.year,
+                                            now.month,
+                                            now.day,
+                                          );
+                                          setState(() {
+                                            _pendingStart = start;
+                                            _pendingEnd = now;
+                                          });
+                                          reportNotifier.setDateRange(
+                                            start,
+                                            now,
+                                            storeId,
+                                          );
+                                        },
+                                ),
+                              ),
+                            ],
                           )),
             ),
           ],
@@ -612,6 +717,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     required ReportSummary? summary,
     required NumberFormat currency,
     required DateFormat dateFormat,
+    required MenuSalesAnalytics? menuSalesAnalytics,
   }) {
     final l10n = context.l10n;
     final totalRevenue = summary == null
@@ -763,7 +869,7 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
               OutlinedButton.icon(
                 onPressed: summary == null
                     ? null
-                    : () => _exportReport(reportNotifier),
+                    : () => _exportReport(reportNotifier, menuSalesAnalytics),
                 icon: const Icon(Icons.download_rounded, size: 16),
                 label: Text(l10n.reportsDownload),
               ),
@@ -774,9 +880,14 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     );
   }
 
-  Future<void> _exportReport(ReportNotifier notifier) async {
+  Future<void> _exportReport(
+    ReportNotifier notifier,
+    MenuSalesAnalytics? menuSalesAnalytics,
+  ) async {
     final reportState = ref.read(reportProvider);
-    final bytes = notifier.exportToExcel();
+    final bytes = notifier.exportToExcel(
+      menuSalesAnalytics: menuSalesAnalytics,
+    );
     if (bytes.isEmpty) return;
 
     final dateFormat = DateFormat('yyyyMMdd');
