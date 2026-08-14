@@ -12,8 +12,10 @@ void main() {
     expect(source, contains('ToastMetricStrip('));
     expect(source, contains('label: l10n.reportsPaidOrders'));
     expect(source, contains('summary.paidOrders'));
-    expect(source, contains("Key('reports_operational_signals_detail')"));
-    expect(source, contains('initiallyExpanded: false'));
+    expect(source, contains("Key('reports_actionable_issues')"));
+    expect(source, contains("Key('reports_missing_proof_issue')"));
+    expect(source, contains("Key('reports_einvoice_issue')"));
+    expect(source, contains("Key('reports_date_filter_status')"));
     expect(source, isNot(contains('PosPageHeader(')));
     expect(source, isNot(contains('PosToolbar(')));
     expect(source, isNot(contains('PosStatCard(')));
@@ -46,7 +48,7 @@ void main() {
       expect(source, isNot(contains('MenuSalesAnalyticsPanel(')));
       expect(source, isNot(contains('PaperlessOperationsDashboard(')));
       expect(source, contains('operationalReportHeight'));
-      expect(source, contains('520.0 + 12.0 + 240.0 + 260.0'));
+      expect(source, contains('520.0 + 12.0 + 320.0 + 12.0 + 240.0 + 260.0'));
       expect(source, contains('height: 240'));
       expect(source, contains('reportConstraints.maxWidth < 1080'));
       expect(source, contains('compactSecondaryHeight: 520'));
@@ -92,6 +94,8 @@ void main() {
       );
 
       expect(dashboard, contains("Key('sales_daily_line_chart')"));
+      expect(dashboard, contains("Key('sales_daily_team_chart')"));
+      expect(dashboard, contains("Key('sales_daily_average_chart')"));
       expect(dashboard, contains('LineChart('));
       expect(dashboard, contains("Key('sales_hourly_bar_chart')"));
       expect(dashboard, contains('BarChart('));

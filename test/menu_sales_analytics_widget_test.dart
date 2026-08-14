@@ -377,7 +377,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('all report analysis launchers are visible on first phone view', (
+  testWidgets('all report analysis launchers are readable on phone', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
@@ -393,10 +393,17 @@ void main() {
     expect(paperless, findsOneWidget);
     expect(menuSales, findsOneWidget);
     expect(salesRevenue, findsOneWidget);
-    expect(tester.getTopLeft(paperless).dy, lessThan(250));
-    expect(tester.getTopLeft(menuSales).dy, lessThan(250));
-    expect(tester.getTopLeft(salesRevenue).dy, lessThan(250));
+    expect(
+      tester.getTopLeft(paperless).dy,
+      lessThan(tester.getTopLeft(menuSales).dy),
+    );
+    expect(
+      tester.getTopLeft(menuSales).dy,
+      lessThan(tester.getTopLeft(salesRevenue).dy),
+    );
 
+    await tester.ensureVisible(menuSales);
+    await tester.pumpAndSettle();
     await tester.tap(menuSales);
     await tester.pumpAndSettle();
     expect(

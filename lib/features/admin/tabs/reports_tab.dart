@@ -1,5 +1,6 @@
 // ignore_for_file: unused_element
 
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:file_saver/file_saver.dart';
@@ -58,6 +59,8 @@ String _reportPaymentMethodLabel(BuildContext context, String method) {
 class _ReportsTabState extends ConsumerState<ReportsTab> {
   DateTime? _pendingStart;
   DateTime? _pendingEnd;
+  DateTime? _lastAppliedStart;
+  DateTime? _lastAppliedEnd;
   String? _initializedRestaurantId;
 
   @override
@@ -82,9 +85,21 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
         : ref.watch(menuSalesAnalyticsProvider(menuSalesParams));
     final menuSalesAnalytics = menuSalesAsync?.asData?.value;
 
-    if (_pendingStart == null || _pendingEnd == null) {
-      _pendingStart ??= reportState.startDate;
-      _pendingEnd ??= reportState.endDate;
+    final appliedStart = DateTime(
+      reportState.startDate.year,
+      reportState.startDate.month,
+      reportState.startDate.day,
+    );
+    final appliedEnd = DateTime(
+      reportState.endDate.year,
+      reportState.endDate.month,
+      reportState.endDate.day,
+    );
+    if (_lastAppliedStart != appliedStart || _lastAppliedEnd != appliedEnd) {
+      _pendingStart = appliedStart;
+      _pendingEnd = appliedEnd;
+      _lastAppliedStart = appliedStart;
+      _lastAppliedEnd = appliedEnd;
     }
 
     if (storeId != null && _initializedRestaurantId != storeId) {
@@ -259,33 +274,31 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
             child: _ReportsHourlyOverview(summary: summary, currency: currency),
           ),
           const SizedBox(height: 12),
-          PosActionCard(
-            title: l10n.reportsImmediateSignals,
-            subtitle: l10n.reportsImmediateSignalsSubtitle,
-            badge: ToastStatusBadge(
-              label:
-                  summary.failedEinvoiceJobsCount > 0 ||
-                      summary.missingProofPhotosCount > 0
-                  ? l10n.reportsNeedsReviewShort
-                  : l10n.reportsHealthyShort,
-              color:
-                  summary.failedEinvoiceJobsCount > 0 ||
-                      summary.missingProofPhotosCount > 0
-                  ? PosColors.warning
-                  : PosColors.success,
-              compact: true,
+          ReportsIssuePanel(
+            summary: summary,
+            startDate: reportState.startDate,
+            endDate: reportState.endDate,
+            onMissingProofPressed: () => _showReportIssueDetails(
+              summary: summary,
+              kind: _ReportIssueKind.missingProof,
+              startDate: reportState.startDate,
+              endDate: reportState.endDate,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _ReportsOperationalSignalsDetail(summary: summary),
-                const SizedBox(height: 12),
-                _ReportsBreakdownPanel(
-                  summary: summary,
-                  currency: currency,
-                  scrollable: false,
-                ),
-              ],
+            onEinvoicePressed: () => _showReportIssueDetails(
+              summary: summary,
+              kind: _ReportIssueKind.einvoice,
+              startDate: reportState.startDate,
+              endDate: reportState.endDate,
+            ),
+          ),
+          const SizedBox(height: 12),
+          PosDataPanel(
+            title: l10n.reportsPaymentMethod,
+            subtitle: l10n.reportsNoPaymentMethodDataSubtitle,
+            child: _ReportsBreakdownPanel(
+              summary: summary,
+              currency: currency,
+              scrollable: false,
             ),
           ),
           const SizedBox(height: 12),
@@ -410,8 +423,15 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                             builder: (context, reportConstraints) {
                               final operationalReportHeight =
                                   reportConstraints.maxWidth < 1080
-                                  ? 520.0 + 12.0 + 520.0 + 12.0 + 240.0 + 260.0
-                                  : 520.0 + 12.0 + 240.0 + 260.0;
+                                  ? 520.0 +
+                                        12.0 +
+                                        520.0 +
+                                        12.0 +
+                                        320.0 +
+                                        12.0 +
+                                        240.0 +
+                                        260.0
+                                  : 520.0 + 12.0 + 320.0 + 12.0 + 240.0 + 260.0;
                               final compactReportHeight =
                                   operationalReportHeight;
                               final content = Column(
@@ -430,45 +450,30 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                       secondary: Column(
                                         children: [
                                           Expanded(
-                                            child: PosActionCard(
-                                              title:
-                                                  l10n.reportsImmediateSignals,
-                                              subtitle: l10n
-                                                  .reportsImmediateSignalsSubtitle,
-                                              badge: ToastStatusBadge(
-                                                label:
-                                                    summary.failedEinvoiceJobsCount >
-                                                            0 ||
-                                                        summary.missingProofPhotosCount >
-                                                            0
-                                                    ? l10n.reportsNeedsReviewShort
-                                                    : l10n.reportsHealthyShort,
-                                                color:
-                                                    summary.failedEinvoiceJobsCount >
-                                                            0 ||
-                                                        summary.missingProofPhotosCount >
-                                                            0
-                                                    ? PosColors.warning
-                                                    : PosColors.success,
-                                                compact: true,
-                                              ),
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.stretch,
-                                                children: [
-                                                  _ReportsOperationalSignalsDetail(
+                                            child: ReportsIssuePanel(
+                                              summary: summary,
+                                              startDate: reportState.startDate,
+                                              endDate: reportState.endDate,
+                                              onMissingProofPressed: () =>
+                                                  _showReportIssueDetails(
                                                     summary: summary,
+                                                    kind: _ReportIssueKind
+                                                        .missingProof,
+                                                    startDate:
+                                                        reportState.startDate,
+                                                    endDate:
+                                                        reportState.endDate,
                                                   ),
-                                                  const SizedBox(height: 12),
-                                                  Expanded(
-                                                    child:
-                                                        _ReportsBreakdownPanel(
-                                                          summary: summary,
-                                                          currency: currency,
-                                                        ),
+                                              onEinvoicePressed: () =>
+                                                  _showReportIssueDetails(
+                                                    summary: summary,
+                                                    kind: _ReportIssueKind
+                                                        .einvoice,
+                                                    startDate:
+                                                        reportState.startDate,
+                                                    endDate:
+                                                        reportState.endDate,
                                                   ),
-                                                ],
-                                              ),
                                             ),
                                           ),
                                           const SizedBox(height: 12),
@@ -583,6 +588,20 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                                   ),
                                   const SizedBox(height: 12),
                                   SizedBox(
+                                    height: 320,
+                                    child: PosDataPanel(
+                                      title: context.l10n.reportsPaymentMethod,
+                                      subtitle: context
+                                          .l10n
+                                          .reportsNoPaymentMethodDataSubtitle,
+                                      child: _ReportsBreakdownPanel(
+                                        summary: summary,
+                                        currency: currency,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  SizedBox(
                                     height: 240,
                                     child: PosDataPanel(
                                       title:
@@ -678,6 +697,15 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
     final cancellationTone = summary == null || summary.cancelledAmount == 0
         ? PosColors.textSecondary
         : PosColors.warning;
+    final selectedStart = DateUtils.dateOnly(
+      _pendingStart ?? reportState.startDate,
+    );
+    final selectedEnd = DateUtils.dateOnly(_pendingEnd ?? reportState.endDate);
+    final appliedStart = DateUtils.dateOnly(reportState.startDate);
+    final appliedEnd = DateUtils.dateOnly(reportState.endDate);
+    final hasPendingDateChanges =
+        selectedStart != appliedStart || selectedEnd != appliedEnd;
+    final localeCode = Localizations.localeOf(context).languageCode;
     final hasException =
         (summary?.failedEinvoiceJobsCount ?? 0) > 0 ||
         (summary?.missingProofPhotosCount ?? 0) > 0 ||
@@ -815,6 +843,24 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                 icon: const Icon(Icons.search, size: 16),
                 label: Text(l10n.lookup),
               ),
+              ToastStatusBadge(
+                key: const Key('reports_date_filter_status'),
+                label: hasPendingDateChanges
+                    ? switch (localeCode) {
+                        'vi' => 'Chưa áp dụng',
+                        'en' => 'Not applied',
+                        _ => '조회 전',
+                      }
+                    : switch (localeCode) {
+                        'vi' => 'Đã áp dụng',
+                        'en' => 'Applied',
+                        _ => '적용됨',
+                      },
+                color: hasPendingDateChanges
+                    ? PosColors.warning
+                    : PosColors.success,
+                compact: true,
+              ),
               OutlinedButton.icon(
                 onPressed: summary == null
                     ? null
@@ -841,6 +887,48 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _showReportIssueDetails({
+    required ReportSummary summary,
+    required _ReportIssueKind kind,
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => FractionallySizedBox(
+        heightFactor: 0.84,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: Material(
+              color: AppColors.surface0,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: _ReportIssueDetailsView(
+                kind: kind,
+                summary: summary,
+                startDate: startDate,
+                endDate: endDate,
+                onOpenPayment: (paymentId) {
+                  Navigator.of(sheetContext).pop();
+                  if (mounted) {
+                    context.push('/payments/${Uri.encodeComponent(paymentId)}');
+                  }
+                },
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -895,6 +983,408 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
       ),
     );
   }
+}
+
+enum _ReportIssueKind { missingProof, einvoice }
+
+class ReportsIssuePanel extends StatelessWidget {
+  const ReportsIssuePanel({
+    super.key,
+    required this.summary,
+    required this.startDate,
+    required this.endDate,
+    required this.onMissingProofPressed,
+    required this.onEinvoicePressed,
+  });
+
+  final ReportSummary summary;
+  final DateTime startDate;
+  final DateTime endDate;
+  final VoidCallback onMissingProofPressed;
+  final VoidCallback onEinvoicePressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final copy = _ReportIssueCopy.of(context);
+    final issueCount =
+        summary.missingProofPhotosCount + summary.failedEinvoiceJobsCount;
+    final range = copy.range(startDate, endDate);
+    return PosActionCard(
+      key: const Key('reports_actionable_issues'),
+      title: copy.title,
+      subtitle: range,
+      badge: ToastStatusBadge(
+        label: issueCount > 0 ? copy.reviewCount(issueCount) : copy.healthy,
+        color: issueCount > 0 ? PosColors.warning : PosColors.success,
+        compact: true,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _ReportIssueActionRow(
+            key: const Key('reports_missing_proof_issue'),
+            icon: Icons.image_not_supported_outlined,
+            title: copy.missingProof,
+            subtitle: copy.proofSummary(
+              summary.missingProofPhotosCount,
+              summary.proofCompletePercent,
+            ),
+            count: summary.missingProofPhotosCount,
+            tone: summary.missingProofPhotosCount > 0
+                ? PosColors.warning
+                : PosColors.success,
+            onPressed: summary.missingProofPhotosCount > 0
+                ? onMissingProofPressed
+                : null,
+          ),
+          const SizedBox(height: 8),
+          _ReportIssueActionRow(
+            key: const Key('reports_einvoice_issue'),
+            icon: Icons.receipt_long_outlined,
+            title: copy.einvoice,
+            subtitle: copy.einvoiceSummary(summary.failedEinvoiceJobsCount),
+            count: summary.failedEinvoiceJobsCount,
+            tone: summary.failedEinvoiceJobsCount > 0
+                ? PosColors.danger
+                : PosColors.success,
+            onPressed: summary.failedEinvoiceJobsCount > 0
+                ? onEinvoicePressed
+                : null,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReportIssueActionRow extends StatelessWidget {
+  const _ReportIssueActionRow({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.count,
+    required this.tone,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final int count;
+  final Color tone;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: onPressed != null,
+      enabled: onPressed != null,
+      label: '$title, $subtitle',
+      child: Material(
+        color: tone.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(12),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 72),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  Icon(icon, color: tone, size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          subtitle,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: PosColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$count',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: tone,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  if (onPressed != null) ...[
+                    const SizedBox(width: 4),
+                    Icon(Icons.chevron_right_rounded, color: tone),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReportIssueDetailsView extends StatelessWidget {
+  const _ReportIssueDetailsView({
+    required this.kind,
+    required this.summary,
+    required this.startDate,
+    required this.endDate,
+    required this.onOpenPayment,
+  });
+
+  final _ReportIssueKind kind;
+  final ReportSummary summary;
+  final DateTime startDate;
+  final DateTime endDate;
+  final ValueChanged<String> onOpenPayment;
+
+  @override
+  Widget build(BuildContext context) {
+    final copy = _ReportIssueCopy.of(context);
+    final missing = summary.missingProofIssues;
+    final einvoice = summary.einvoiceReviewIssues;
+    final itemCount = kind == _ReportIssueKind.missingProof
+        ? missing.length
+        : einvoice.length;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(18, 14, 10, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      kind == _ReportIssueKind.missingProof
+                          ? copy.missingProofDetails
+                          : copy.einvoiceDetails,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      copy.range(startDate, endDate),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: copy.close,
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: itemCount == 0
+              ? Center(child: Text(copy.noIssueDetails))
+              : ListView.separated(
+                  key: const Key('reports_issue_detail_list'),
+                  padding: const EdgeInsets.all(12),
+                  itemCount: itemCount,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    if (kind == _ReportIssueKind.missingProof) {
+                      final issue = missing[index];
+                      return _ReportIssueDetailRow(
+                        title:
+                            '${_reportPaymentMethodLabel(context, issue.method)} · '
+                            '${NumberFormat('#,###', 'vi_VN').format(issue.amount)} VND',
+                        subtitle: copy.issueMeta(
+                          issue.orderId,
+                          issue.createdAt,
+                        ),
+                        detail: copy.missingProofReason,
+                        onPressed: () => onOpenPayment(issue.paymentId),
+                      );
+                    }
+                    final issue = einvoice[index];
+                    return _ReportIssueDetailRow(
+                      title: copy.einvoiceStatus(issue.status),
+                      subtitle: copy.issueMeta(issue.orderId, issue.createdAt),
+                      detail: issue.detail.isEmpty
+                          ? copy.noErrorDetail
+                          : issue.detail,
+                      onPressed: issue.paymentId == null
+                          ? null
+                          : () => onOpenPayment(issue.paymentId!),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ReportIssueDetailRow extends StatelessWidget {
+  const _ReportIssueDetailRow({
+    required this.title,
+    required this.subtitle,
+    required this.detail,
+    required this.onPressed,
+  });
+
+  final String title;
+  final String subtitle;
+  final String detail;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: PosColors.mutedSurface,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: PosColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    Text(detail, style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                ),
+              ),
+              if (onPressed != null)
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Icon(Icons.open_in_new_rounded, size: 19),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReportIssueCopy {
+  const _ReportIssueCopy(this.code);
+
+  final String code;
+
+  static _ReportIssueCopy of(BuildContext context) =>
+      _ReportIssueCopy(Localizations.localeOf(context).languageCode);
+
+  String pick(String ko, String vi, String en) => switch (code) {
+    'vi' => vi,
+    'en' => en,
+    _ => ko,
+  };
+
+  String get title => pick('확인 필요', 'Cần kiểm tra', 'Needs review');
+  String get healthy => pick('이슈 없음', 'Không có vấn đề', 'No issues');
+  String reviewCount(int count) =>
+      pick('$count건 확인', 'Kiểm tra $count mục', '$count to review');
+  String range(DateTime start, DateTime end) {
+    final formatter = DateFormat('dd/MM/yyyy');
+    return pick(
+      '적용 기간 ${formatter.format(start)} – ${formatter.format(end)}',
+      'Kỳ áp dụng ${formatter.format(start)} – ${formatter.format(end)}',
+      'Applied period ${formatter.format(start)} – ${formatter.format(end)}',
+    );
+  }
+
+  String get missingProof => pick('증빙 누락', 'Thiếu chứng từ', 'Missing proof');
+  String proofSummary(int count, double percent) => pick(
+    '$count건 누락 · 완료율 ${percent.toStringAsFixed(0)}% · 눌러서 확인',
+    'Thiếu $count · Hoàn tất ${percent.toStringAsFixed(0)}% · Nhấn để xem',
+    '$count missing · ${percent.toStringAsFixed(0)}% complete · Open details',
+  );
+  String get einvoice => pick(
+    'MISA 전자세금계산서 확인 필요',
+    'Hóa đơn điện tử MISA cần kiểm tra',
+    'MISA e-invoices needing review',
+  );
+  String einvoiceSummary(int count) => pick(
+    '$count건 · 실패 및 수동 확인 항목',
+    '$count mục · Lỗi hoặc cần kiểm tra thủ công',
+    '$count · Failed or manual-review items',
+  );
+  String get missingProofDetails =>
+      pick('증빙 누락 상세', 'Chi tiết thiếu chứng từ', 'Missing proof details');
+  String get einvoiceDetails => pick(
+    'MISA 전자세금계산서 상세',
+    'Chi tiết hóa đơn MISA',
+    'MISA e-invoice details',
+  );
+  String get close => pick('닫기', 'Đóng', 'Close');
+  String get noIssueDetails =>
+      pick('표시할 이슈가 없습니다.', 'Không có vấn đề.', 'No issues to display.');
+  String get missingProofReason => pick(
+    '증빙 필수 결제이지만 증빙 사진이 등록되지 않았습니다.',
+    'Thanh toán yêu cầu chứng từ nhưng chưa có ảnh.',
+    'This payment requires proof, but no proof image is attached.',
+  );
+  String get noErrorDetail => pick(
+    '상세 오류 메시지가 없습니다.',
+    'Không có thông báo lỗi chi tiết.',
+    'No detailed error message is available.',
+  );
+  String issueMeta(String orderId, DateTime? createdAt) {
+    final shortOrder = orderId.isEmpty
+        ? '-'
+        : orderId.substring(0, math.min(8, orderId.length));
+    final time = createdAt == null
+        ? '-'
+        : DateFormat('dd/MM/yyyy HH:mm').format(createdAt);
+    return pick(
+      '주문 $shortOrder · $time',
+      'Đơn $shortOrder · $time',
+      'Order $shortOrder · $time',
+    );
+  }
+
+  String einvoiceStatus(String status) => switch (status) {
+    'failed' => pick('발행 실패', 'Phát hành thất bại', 'Issuance failed'),
+    'manual_action_required' => pick(
+      '수동 확인 필요',
+      'Cần kiểm tra thủ công',
+      'Manual review required',
+    ),
+    _ => status,
+  };
 }
 
 class ReportAnalysisLaunchers extends StatelessWidget {
@@ -952,7 +1442,8 @@ class ReportAnalysisLaunchers extends StatelessWidget {
     return LayoutBuilder(
       key: const Key('report_analysis_launchers'),
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 760;
+        final stacked = constraints.maxWidth < 560;
+        final compact = !stacked && constraints.maxWidth < 760;
         final cards = [
           _ReportAnalysisLauncherCard(
             key: const Key('paperless_operations_launcher'),
@@ -982,6 +1473,18 @@ class ReportAnalysisLaunchers extends StatelessWidget {
             onTap: () => _openSalesRevenue(context),
           ),
         ];
+        if (stacked) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              cards[0],
+              const SizedBox(height: 8),
+              cards[1],
+              const SizedBox(height: 8),
+              cards[2],
+            ],
+          );
+        }
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1677,42 +2180,6 @@ class _ReportsBreakdownPanel extends StatelessWidget {
               ),
             ),
           ),
-        const SizedBox(height: 16),
-        _ReportsSectionTitle(title: context.l10n.reportsOperationalExceptions),
-        const SizedBox(height: 10),
-        _ReportsExceptionRow(
-          label: context.l10n.reportsMissingProof,
-          value: context.l10n.reportsOrderCount(
-            summary.missingProofPhotosCount,
-          ),
-          tone: summary.missingProofPhotosCount > 0
-              ? PosColors.warning
-              : PosColors.success,
-        ),
-        const SizedBox(height: 6),
-        _ReportsExceptionRow(
-          label: context.l10n.reportsFailedEinvoice,
-          value: context.l10n.reportsOrderCount(
-            summary.failedEinvoiceJobsCount,
-          ),
-          tone: summary.failedEinvoiceJobsCount > 0
-              ? PosColors.danger
-              : PosColors.success,
-        ),
-        const SizedBox(height: 8),
-        _ReportsExceptionRow(
-          label: context.l10n.reportsProofCompletion,
-          value: '${summary.proofCompletePercent.toStringAsFixed(0)}%',
-          tone: summary.proofCompletePercent < 100
-              ? PosColors.warning
-              : PosColors.success,
-        ),
-        const SizedBox(height: 8),
-        _ReportsExceptionRow(
-          label: context.l10n.reportsWt08Reported,
-          value: context.l10n.reportsOrderCount(summary.wetaxReportedCount),
-          tone: PosColors.info,
-        ),
       ],
     );
 
@@ -2129,497 +2596,6 @@ class _PaymentMethodRow extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-class _ReportsOperationalSignalsDetail extends StatelessWidget {
-  const _ReportsOperationalSignalsDetail({required this.summary});
-
-  final ReportSummary summary;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final hasExceptions =
-        summary.failedEinvoiceJobsCount > 0 ||
-        summary.missingProofPhotosCount > 0;
-
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        key: const Key('reports_operational_signals_detail'),
-        initiallyExpanded: false,
-        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-        childrenPadding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
-        leading: Icon(
-          Icons.rule_folder_outlined,
-          color: hasExceptions ? PosColors.warning : PosColors.success,
-        ),
-        title: Text(
-          l10n.reportsOperationalAttentionTitle,
-          style: AppFonts.system(
-            color: AppColors.textPrimary,
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        subtitle: Text(
-          l10n.reportsOperationalBoundary,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: AppFonts.system(
-            color: AppColors.textSecondary,
-            fontSize: 11.5,
-          ),
-        ),
-        trailing: ToastStatusBadge(
-          label: hasExceptions
-              ? l10n.reportsNeedsReviewShort
-              : l10n.reportsHealthyShort,
-          color: hasExceptions ? PosColors.warning : PosColors.success,
-          compact: true,
-        ),
-        children: [_OperationalAttentionSection(summary: summary)],
-      ),
-    );
-  }
-}
-
-class _OperationalAttentionSection extends StatelessWidget {
-  const _OperationalAttentionSection({required this.summary});
-
-  final ReportSummary summary;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final wt08CoverageText = summary.wt08ComparablePosCount == 0
-        ? l10n.reportsOperationalWt08ComparableNone
-        : l10n.reportsOperationalWt08ComparableReported(
-            summary.wetaxReportedCount,
-            summary.wt08ComparablePosCount,
-          );
-    final proofRate = summary.proofCompletePercent.toStringAsFixed(0);
-    final healthySignals = _healthySignalCount();
-    final followUpSignals = _followUpSignalCount();
-    final proofAttentionColor = summary.missingProofPhotosCount > 0
-        ? AppColors.statusCancelled
-        : summary.proofCompletePercent < 100
-        ? AppColors.amber500
-        : AppColors.statusAvailable;
-    final einvoiceAttentionColor = summary.failedEinvoiceJobsCount > 0
-        ? AppColors.statusCancelled
-        : AppColors.statusAvailable;
-    final wt08AttentionColor =
-        summary.wetaxReportedCount < summary.wt08ComparablePosCount
-        ? AppColors.amber500
-        : AppColors.statusAvailable;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface1,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            l10n.reportsOperationalAttentionTitle,
-            style: AppFonts.system(
-              color: AppColors.textPrimary,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            l10n.reportsOperationalAttentionSubtitle,
-            style: AppFonts.system(
-              color: AppColors.textSecondary,
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _supportMetric(
-                l10n.reportsOperationalFollowUpNow,
-                '$followUpSignals',
-                followUpSignals > 0
-                    ? AppColors.statusCancelled
-                    : AppColors.statusAvailable,
-              ),
-              _supportMetric(
-                l10n.reportsOperationalHealthySignals,
-                '$healthySignals/4',
-                healthySignals == 4
-                    ? AppColors.statusAvailable
-                    : AppColors.amber500,
-              ),
-              _supportMetric(
-                l10n.reportsOperationalWt08Readiness,
-                summary.wt08ComparablePosCount == 0
-                    ? l10n.reportsOperationalNotApplicable
-                    : wt08CoverageText,
-                summary.wetaxReportedCount < summary.wt08ComparablePosCount
-                    ? AppColors.amber500
-                    : AppColors.textPrimary,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _signalCard(
-                title: l10n.reportsOperationalProofCompletion(proofRate),
-                headline: l10n.reportsOperationalMissingProof(
-                  summary.missingProofPhotosCount,
-                ),
-                body: summary.missingProofPhotosCount > 0
-                    ? l10n.reportsOperationalFocusMissingProof
-                    : l10n.reportsOperationalHealthyAligned,
-                color: proofAttentionColor,
-              ),
-              _signalCard(
-                title: l10n.reportsOperationalFailedEInvoice(
-                  summary.failedEinvoiceJobsCount,
-                ),
-                headline: l10n.reportsOperationalFollowUpFocus,
-                body: summary.failedEinvoiceJobsCount > 0
-                    ? l10n.reportsOperationalFocusFailedEinvoice
-                    : l10n.reportsOperationalFocusNone,
-                color: einvoiceAttentionColor,
-              ),
-              _signalCard(
-                title: l10n.reportsOperationalWt08Readiness,
-                headline: wt08CoverageText,
-                body: summary.wt08ComparablePosCount == 0
-                    ? l10n.reportsOperationalNotApplicable
-                    : summary.wetaxReportedCount <
-                          summary.wt08ComparablePosCount
-                    ? l10n.reportsOperationalFocusWt08
-                    : l10n.reportsOperationalHealthyAligned,
-                color: wt08AttentionColor,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _attentionChip(
-                l10n.reportsOperationalMissingProof(
-                  summary.missingProofPhotosCount,
-                ),
-                summary.missingProofPhotosCount > 0
-                    ? AppColors.statusCancelled
-                    : AppColors.statusAvailable,
-              ),
-              _attentionChip(
-                l10n.reportsOperationalFailedEInvoice(
-                  summary.failedEinvoiceJobsCount,
-                ),
-                summary.failedEinvoiceJobsCount > 0
-                    ? AppColors.statusCancelled
-                    : AppColors.statusAvailable,
-              ),
-              _attentionChip(
-                l10n.reportsOperationalProofCompletion(proofRate),
-                summary.proofCompletePercent < 100
-                    ? AppColors.amber500
-                    : AppColors.statusAvailable,
-              ),
-              _attentionChip(
-                wt08CoverageText,
-                summary.wetaxReportedCount < summary.wt08ComparablePosCount
-                    ? AppColors.amber500
-                    : AppColors.textPrimary,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _statusStrip(
-            children: [
-              _statusStripBadge(
-                label: l10n.reportsOperationalFollowUpNow,
-                value: '$followUpSignals',
-                color: followUpSignals > 0
-                    ? AppColors.statusCancelled
-                    : AppColors.statusAvailable,
-              ),
-              _statusStripBadge(
-                label: l10n.reportsOperationalHealthySignals,
-                value: '$healthySignals/4',
-                color: healthySignals == 4
-                    ? AppColors.statusAvailable
-                    : AppColors.amber500,
-              ),
-              _statusStripBadge(
-                label: l10n.reportsOperationalBoundary,
-                value: summary.totalOrders == 0
-                    ? l10n.reportsOperationalNotApplicable
-                    : '${summary.completedOrders}/${summary.totalOrders}',
-                color: AppColors.textPrimary,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _attentionSupportRow(
-            l10n.reportsOperationalFollowUpFocus,
-            _followUpFocusCopy(context),
-          ),
-          const SizedBox(height: 8),
-          _attentionSupportRow(
-            l10n.reportsOperationalHealthyBaseline,
-            _healthyBaselineCopy(context),
-          ),
-          const SizedBox(height: 8),
-          _attentionSupportRow(
-            l10n.reportsOperationalBoundary,
-            l10n.reportsOperationalBoundaryBody,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            _attentionNarrative(context),
-            style: AppFonts.system(
-              color: AppColors.textPrimary,
-              fontSize: 12,
-              height: 1.45,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _supportMetric(String label, String value, Color color) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 132, maxWidth: 220),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.surface0,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.surface2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: AppFonts.system(
-              color: AppColors.textSecondary,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: AppFonts.system(
-              color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              height: 1.35,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _attentionChip(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.24)),
-      ),
-      child: Text(
-        label,
-        style: AppFonts.system(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-
-  Widget _signalCard({
-    required String title,
-    required String headline,
-    required String body,
-    required Color color,
-  }) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 180, maxWidth: 260),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.surface2,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.surface3),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: AppFonts.system(
-              color: AppColors.textSecondary,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            headline,
-            style: AppFonts.system(
-              color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              height: 1.35,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            body,
-            style: AppFonts.system(
-              color: AppColors.textPrimary,
-              fontSize: 12,
-              height: 1.4,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _statusStrip({required List<Widget> children}) {
-    return Wrap(spacing: 10, runSpacing: 10, children: children);
-  }
-
-  Widget _statusStripBadge({
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.surface0,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.surface2),
-      ),
-      child: RichText(
-        text: TextSpan(
-          style: AppFonts.system(
-            color: AppColors.textSecondary,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-          ),
-          children: [
-            TextSpan(text: '$label '),
-            TextSpan(
-              text: value,
-              style: AppFonts.system(
-                color: color,
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _attentionSupportRow(String label, String body) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 108,
-          child: Text(
-            label,
-            style: AppFonts.system(
-              color: AppColors.textSecondary,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            body,
-            style: AppFonts.system(
-              color: AppColors.textPrimary,
-              fontSize: 12,
-              height: 1.45,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  int _followUpSignalCount() {
-    var count = 0;
-    if (summary.failedEinvoiceJobsCount > 0) count += 1;
-    if (summary.missingProofPhotosCount > 0) count += 1;
-    if (summary.wetaxReportedCount < summary.wt08ComparablePosCount) count += 1;
-    if (summary.proofCompletePercent < 100) count += 1;
-    return count;
-  }
-
-  int _healthySignalCount() => 4 - _followUpSignalCount();
-
-  String _followUpFocusCopy(BuildContext context) {
-    final l10n = context.l10n;
-    if (summary.failedEinvoiceJobsCount > 0) {
-      return l10n.reportsOperationalFocusFailedEinvoice;
-    }
-    if (summary.missingProofPhotosCount > 0) {
-      return l10n.reportsOperationalFocusMissingProof;
-    }
-    if (summary.wetaxReportedCount < summary.wt08ComparablePosCount) {
-      return l10n.reportsOperationalFocusWt08;
-    }
-    if (summary.proofCompletePercent < 100) {
-      return l10n.reportsOperationalFocusProofCompletion;
-    }
-    return l10n.reportsOperationalFocusNone;
-  }
-
-  String _healthyBaselineCopy(BuildContext context) {
-    final l10n = context.l10n;
-    if (_healthySignalCount() == 4) {
-      return l10n.reportsOperationalHealthyAligned;
-    }
-    return l10n.reportsOperationalHealthyMixed;
-  }
-
-  String _attentionNarrative(BuildContext context) {
-    final l10n = context.l10n;
-    if (summary.failedEinvoiceJobsCount > 0) {
-      return l10n.reportsOperationalNarrativeFailedEinvoice;
-    }
-    if (summary.missingProofPhotosCount > 0) {
-      return l10n.reportsOperationalNarrativeMissingProof;
-    }
-    if (summary.wetaxReportedCount < summary.wt08ComparablePosCount) {
-      return l10n.reportsOperationalNarrativeWt08;
-    }
-    if (summary.proofCompletePercent < 100) {
-      return l10n.reportsOperationalNarrativeProofCompletion;
-    }
-    return l10n.reportsOperationalNarrativeHealthy;
   }
 }
 

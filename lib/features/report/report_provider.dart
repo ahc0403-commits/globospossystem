@@ -54,6 +54,98 @@ class PaymentMethodBreakdown {
   final double proofCompletePct;
 }
 
+class MissingProofIssue {
+  const MissingProofIssue({
+    required this.paymentId,
+    required this.orderId,
+    required this.amount,
+    required this.method,
+    required this.createdAt,
+  });
+
+  final String paymentId;
+  final String orderId;
+  final double amount;
+  final String method;
+  final DateTime? createdAt;
+}
+
+class EinvoiceReviewIssue {
+  const EinvoiceReviewIssue({
+    required this.jobId,
+    required this.orderId,
+    required this.paymentId,
+    required this.status,
+    required this.detail,
+    required this.createdAt,
+  });
+
+  final String jobId;
+  final String orderId;
+  final String? paymentId;
+  final String status;
+  final String detail;
+  final DateTime? createdAt;
+}
+
+List<MissingProofIssue> collectMissingProofIssues(
+  Iterable<Map<String, dynamic>> payments,
+) {
+  return payments
+      .where((payment) {
+        if (payment['proof_required'] != true) return false;
+        final proofUrl = payment['proof_photo_url']?.toString() ?? '';
+        return proofUrl.trim().isEmpty;
+      })
+      .map((payment) {
+        final createdAt = _parseDateTime(payment['created_at']);
+        return MissingProofIssue(
+          paymentId: payment['id']?.toString() ?? '',
+          orderId: payment['order_id']?.toString() ?? '',
+          amount: _toDouble(payment['amount']),
+          method: normalizePaymentMethodInput(
+            payment['method']?.toString() ?? '',
+          ),
+          createdAt: createdAt == null
+              ? null
+              : toHoChiMinhBusinessTime(createdAt),
+        );
+      })
+      .where((issue) => issue.paymentId.isNotEmpty)
+      .toList(growable: false);
+}
+
+List<EinvoiceReviewIssue> collectEinvoiceReviewIssues(
+  Iterable<Map<String, dynamic>> jobs, {
+  required Map<String, String> paymentIdByOrderId,
+}) {
+  return jobs
+      .where((job) {
+        final status = job['status']?.toString() ?? '';
+        return status == 'failed' || status == 'manual_action_required';
+      })
+      .map((job) {
+        final orderId = job['order_id']?.toString() ?? '';
+        final createdAt = _parseDateTime(job['created_at']);
+        final detail =
+            job['error_message']?.toString().trim().isNotEmpty == true
+            ? job['error_message'].toString().trim()
+            : job['manual_action_type']?.toString().trim() ?? '';
+        return EinvoiceReviewIssue(
+          jobId: job['id']?.toString() ?? '',
+          orderId: orderId,
+          paymentId: paymentIdByOrderId[orderId],
+          status: job['status']?.toString() ?? 'unknown',
+          detail: detail,
+          createdAt: createdAt == null
+              ? null
+              : toHoChiMinhBusinessTime(createdAt),
+        );
+      })
+      .where((issue) => issue.jobId.isNotEmpty)
+      .toList(growable: false);
+}
+
 class PaymentMethodTotals {
   const PaymentMethodTotals({
     required this.cash,
@@ -219,10 +311,10 @@ class ReportSummary {
     this.hourlyBreakdown = const [],
     this.missingProofPhotosCount = 0,
     this.failedEinvoiceJobsCount = 0,
-    this.wetaxReportedCount = 0,
-    this.wt08ComparablePosCount = 0,
     this.proofCompletePercent = 100,
     this.paymentMethodBreakdown = const [],
+    this.missingProofIssues = const [],
+    this.einvoiceReviewIssues = const [],
   });
 
   final double dineInRevenue;
@@ -247,10 +339,10 @@ class ReportSummary {
   final List<HourlyRevenue> hourlyBreakdown;
   final int missingProofPhotosCount;
   final int failedEinvoiceJobsCount;
-  final int wetaxReportedCount;
-  final int wt08ComparablePosCount;
   final double proofCompletePercent;
   final List<PaymentMethodBreakdown> paymentMethodBreakdown;
+  final List<MissingProofIssue> missingProofIssues;
+  final List<EinvoiceReviewIssue> einvoiceReviewIssues;
 }
 
 class ReportState {
@@ -333,8 +425,6 @@ class ReportNotifier extends StateNotifier<ReportState> {
       final endInclusiveIso = reportRange.endExclusiveUtc
           .subtract(const Duration(microseconds: 1))
           .toIso8601String();
-      final startClosingDate = DateFormat('yyyyMMdd').format(state.startDate);
-      final endClosingDate = DateFormat('yyyyMMdd').format(state.endDate);
       final startSaleDate = DateFormat('yyyy-MM-dd').format(state.startDate);
       final endSaleDate = DateFormat('yyyy-MM-dd').format(state.endDate);
 
@@ -400,21 +490,13 @@ class ReportNotifier extends StateNotifier<ReportState> {
           .lt('orders.created_at', endExclusiveIso);
 
       final einvoiceJobsResponse = await supabase
-          .from('einvoice_jobs')
+          .from('meinvoice_jobs')
           .select(
-            'id, status, error_classification, created_at, orders!inner(restaurant_id)',
+            'id, order_id, status, error_message, manual_action_type, created_at',
           )
-          .eq('orders.restaurant_id', storeId)
+          .eq('store_id', storeId)
           .gte('created_at', startIso)
           .lt('created_at', endExclusiveIso);
-
-      final wt08AuditResponse = await supabase
-          .from('audit_logs')
-          .select('created_at, entity_id, details')
-          .eq('action', 'wetax_daily_close')
-          .eq('entity_type', 'restaurants')
-          .eq('entity_id', storeId)
-          .order('created_at', ascending: false);
 
       double dineInRevenue = 0;
       final revenuePayments = List<Map<String, dynamic>>.from(
@@ -582,58 +664,19 @@ class ReportNotifier extends StateNotifier<ReportState> {
         return status != 'completed' && status != 'cancelled';
       }).length;
       final cancelledItems = cancelledItemsResponse.length;
-      final failedEinvoiceJobsCount = einvoiceJobsResponse.where((row) {
-        final job = Map<String, dynamic>.from(row);
-        final status = job['status']?.toString();
-        final errClass = job['error_classification']?.toString() ?? '';
-        return (status == 'failed_terminal' || status == 'stale') &&
-            errClass != 'manual_resolved' &&
-            errClass != 'duplicate_resolved';
-      }).length;
-      final wt08LogsByCloseKey = <String, Map<String, dynamic>>{};
-      final successfulClosingDates = <String>{};
-      for (final row in wt08AuditResponse) {
-        final log = Map<String, dynamic>.from(row);
-        final detailsRaw = log['details'];
-        if (detailsRaw is! Map) continue;
-        final details = Map<String, dynamic>.from(detailsRaw);
-        if (details['success'] != true) continue;
-        final closingDate = details['closing_date']?.toString() ?? '';
-        if (closingDate.isEmpty) continue;
-        if (closingDate.compareTo(startClosingDate) < 0 ||
-            closingDate.compareTo(endClosingDate) > 0) {
-          continue;
-        }
-        final logStoreId =
-            details['store_id']?.toString() ??
-            log['entity_id']?.toString() ??
-            '';
-        final closeKey = '$logStoreId:$closingDate';
-        if (!wt08LogsByCloseKey.containsKey(closeKey)) {
-          wt08LogsByCloseKey[closeKey] = log;
-          successfulClosingDates.add(closingDate);
-        }
-      }
-      final wetaxReportedCount = wt08LogsByCloseKey.values.fold<int>(0, (
-        sum,
-        log,
-      ) {
-        final details = Map<String, dynamic>.from(
-          log['details'] as Map<String, dynamic>,
-        );
-        return sum + _toDouble(details['total_order_count']).round();
-      });
-      final wt08ComparablePosCount = ordersResponse.where((order) {
-        if (order['status']?.toString().toLowerCase() != 'completed') {
-          return false;
-        }
-        final createdAt = _parseDateTime(order['created_at']);
-        if (createdAt == null) return false;
-        final orderDate = DateFormat(
-          'yyyyMMdd',
-        ).format(toHoChiMinhBusinessTime(createdAt));
-        return successfulClosingDates.contains(orderDate);
-      }).length;
+      final missingProofIssues = collectMissingProofIssues(revenuePayments);
+      missingProofPhotosCount = missingProofIssues.length;
+      final paymentIdByOrderId = <String, String>{
+        for (final payment in revenuePayments)
+          if ((payment['order_id']?.toString() ?? '').isNotEmpty &&
+              (payment['id']?.toString() ?? '').isNotEmpty)
+            payment['order_id'].toString(): payment['id'].toString(),
+      };
+      final einvoiceReviewIssues = collectEinvoiceReviewIssues(
+        List<Map<String, dynamic>>.from(einvoiceJobsResponse),
+        paymentIdByOrderId: paymentIdByOrderId,
+      );
+      final failedEinvoiceJobsCount = einvoiceReviewIssues.length;
       final proofCompletePercent = proofRequiredCount == 0
           ? 100.0
           : ((proofRequiredCount - missingProofPhotosCount) /
@@ -690,10 +733,10 @@ class ReportNotifier extends StateNotifier<ReportState> {
         hourlyBreakdown: hourlyBreakdown,
         missingProofPhotosCount: missingProofPhotosCount,
         failedEinvoiceJobsCount: failedEinvoiceJobsCount,
-        wetaxReportedCount: wetaxReportedCount,
-        wt08ComparablePosCount: wt08ComparablePosCount,
         proofCompletePercent: proofCompletePercent,
         paymentMethodBreakdown: paymentMethodBreakdown,
+        missingProofIssues: missingProofIssues,
+        einvoiceReviewIssues: einvoiceReviewIssues,
       );
 
       state = state.copyWith(
@@ -766,14 +809,6 @@ class ReportNotifier extends StateNotifier<ReportState> {
     sheet.appendRow([
       TextCellValue('Failed E-Invoice Jobs'),
       IntCellValue(summary.failedEinvoiceJobsCount),
-    ]);
-    sheet.appendRow([
-      TextCellValue('WT08 Reported'),
-      IntCellValue(summary.wetaxReportedCount),
-    ]);
-    sheet.appendRow([
-      TextCellValue('WT08 Comparable POS Orders'),
-      IntCellValue(summary.wt08ComparablePosCount),
     ]);
     sheet.appendRow([TextCellValue('')]);
 

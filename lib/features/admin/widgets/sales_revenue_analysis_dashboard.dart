@@ -185,17 +185,18 @@ class SalesRevenueAnalysisDashboard extends StatelessWidget {
         );
 
         if (constraints.maxWidth < 900) {
+          final dailyHeight = constraints.maxWidth < 520 ? 650.0 : 540.0;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(height: 400, child: dailyPanel),
+              SizedBox(height: dailyHeight, child: dailyPanel),
               const SizedBox(height: 12),
               SizedBox(height: 400, child: hourlyPanel),
             ],
           );
         }
         return SizedBox(
-          height: 430,
+          height: 540,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -456,86 +457,269 @@ class _DailyRevenuePanelContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Expanded(
+    final copy = _SalesAnalysisCopy.of(context);
+    final latest = rows.last;
+    final teamChart = _DailyMetricSurface(
+      key: const Key('sales_daily_team_chart'),
+      title: copy.teamLabel,
+      value: copy.teamCount(latest.teamCount),
+      color: PosColors.warning,
+      child: _DailyMetricLineChart(
+        rows: rows,
+        valueOf: (row) => row.teamCount.toDouble(),
+        color: PosColors.warning,
+        valueLabel: (value) => copy.teamCount(value.round()),
+        axisLabel: (value) => value.round().toString(),
+      ),
+    );
+    final averageChart = _DailyMetricSurface(
+      key: const Key('sales_daily_average_chart'),
+      title: copy.averageTableLabel,
+      value: '${_compactCurrency(latest.averageTableAmount)} VND',
+      color: PosColors.success,
+      child: _DailyMetricLineChart(
+        rows: rows,
+        valueOf: (row) => row.averageTableAmount,
+        color: PosColors.success,
+        valueLabel: (value) => '${_compactCurrency(value)} VND',
+        axisLabel: _compactCurrency,
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final revenueChart = _DailyMetricSurface(
+          key: const Key('sales_daily_revenue_chart'),
+          title: copy.revenueLabel,
+          value: '${_compactCurrency(latest.total)} VND',
+          color: PosColors.accent,
           child: _DailyRevenueLineChart(rows: rows, currency: currency),
-        ),
-        const SizedBox(height: 8),
-        _DailyMetricsStrip(rows: rows),
-      ],
+        );
+        if (constraints.maxWidth < 520) {
+          return Column(
+            children: [
+              Expanded(child: revenueChart),
+              const SizedBox(height: 8),
+              SizedBox(height: 150, child: teamChart),
+              const SizedBox(height: 8),
+              SizedBox(height: 150, child: averageChart),
+            ],
+          );
+        }
+        return Column(
+          children: [
+            Expanded(child: revenueChart),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 168,
+              child: Row(
+                children: [
+                  Expanded(child: teamChart),
+                  const SizedBox(width: 8),
+                  Expanded(child: averageChart),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
 
-class _DailyMetricsStrip extends StatelessWidget {
-  const _DailyMetricsStrip({required this.rows});
+class _DailyMetricSurface extends StatelessWidget {
+  const _DailyMetricSurface({
+    super.key,
+    required this.title,
+    required this.value,
+    required this.color,
+    required this.child,
+  });
 
-  final List<DailyRevenue> rows;
+  final String title;
+  final String value;
+  final Color color;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final copy = _SalesAnalysisCopy.of(context);
     return Container(
-      key: const Key('sales_daily_metrics_strip'),
-      height: 66,
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: PosColors.border)),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+      decoration: BoxDecoration(
+        color: PosColors.mutedSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: PosColors.border),
       ),
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.only(top: 9),
-        itemCount: rows.length,
-        separatorBuilder: (context, index) => const VerticalDivider(
-          width: 8,
-          thickness: 1,
-          indent: 4,
-          endIndent: 4,
-          color: PosColors.border,
-        ),
-        itemBuilder: (context, index) {
-          final row = rows[index];
-          return SizedBox(
-            key: Key(
-              'sales_daily_metric_${DateFormat('yyyyMMdd').format(row.date)}',
-            ),
-            width: 64,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  DateFormat('dd/MM').format(row.date),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 9,
+                height: 9,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  title,
                   style: AppFonts.system(
                     color: PosColors.textSecondary,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  copy.teamCount(row.teamCount),
-                  style: AppFonts.system(
-                    color: PosColors.textPrimary,
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                Text(
-                  copy.averageTableShort(
-                    _compactCurrency(row.averageTableAmount),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppFonts.system(
-                    color: PosColors.textSecondary,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
+              ),
+              Text(
+                value,
+                style: AppFonts.system(
+                  color: color,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
                 ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Expanded(child: child),
+        ],
+      ),
+    );
+  }
+}
+
+class _DailyMetricLineChart extends StatelessWidget {
+  const _DailyMetricLineChart({
+    required this.rows,
+    required this.valueOf,
+    required this.color,
+    required this.valueLabel,
+    required this.axisLabel,
+  });
+
+  final List<DailyRevenue> rows;
+  final double Function(DailyRevenue row) valueOf;
+  final Color color;
+  final String Function(double value) valueLabel;
+  final String Function(double value) axisLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxValue = rows.fold<double>(
+      0,
+      (current, row) => math.max(current, valueOf(row)),
+    );
+    final maxY = maxValue <= 0 ? 1.0 : maxValue * 1.2;
+    final interval = maxY / 3;
+    final labelStep = math.max(1, (rows.length / 4).ceil());
+    return LineChart(
+      LineChartData(
+        minX: -0.35,
+        maxX: math.max(1, rows.length - 1).toDouble() + 0.35,
+        minY: 0,
+        maxY: maxY,
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: interval,
+          getDrawingHorizontalLine: (_) =>
+              const FlLine(color: PosColors.border, strokeWidth: 1),
+        ),
+        borderData: FlBorderData(show: false),
+        titlesData: FlTitlesData(
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 42,
+              interval: interval,
+              getTitlesWidget: (value, meta) {
+                if (value >= meta.max) return const SizedBox.shrink();
+                return SideTitleWidget(
+                  axisSide: meta.axisSide,
+                  space: 5,
+                  child: Text(
+                    axisLabel(value),
+                    style: AppFonts.system(
+                      color: PosColors.textSecondary,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                );
+              },
             ),
-          );
-        },
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 24,
+              getTitlesWidget: (value, meta) {
+                final index = value.toInt();
+                if (index < 0 ||
+                    index >= rows.length ||
+                    value != index.toDouble() ||
+                    (index % labelStep != 0 && index != rows.length - 1)) {
+                  return const SizedBox.shrink();
+                }
+                return SideTitleWidget(
+                  axisSide: meta.axisSide,
+                  space: 5,
+                  child: Text(
+                    DateFormat('dd/MM').format(rows[index].date),
+                    style: AppFonts.system(
+                      color: PosColors.textSecondary,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        lineTouchData: LineTouchData(
+          touchTooltipData: LineTouchTooltipData(
+            fitInsideHorizontally: true,
+            fitInsideVertically: true,
+            getTooltipItems: (spots) => spots.map((spot) {
+              final row = rows[spot.x.toInt()];
+              return LineTooltipItem(
+                '${DateFormat('dd/MM').format(row.date)}\n'
+                '${valueLabel(spot.y)}',
+                AppFonts.system(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        lineBarsData: [
+          LineChartBarData(
+            spots: [
+              for (var index = 0; index < rows.length; index++)
+                FlSpot(index.toDouble(), valueOf(rows[index])),
+            ],
+            color: color,
+            barWidth: 2.5,
+            isCurved: rows.length > 2,
+            curveSmoothness: 0.22,
+            isStrokeCapRound: true,
+            dotData: FlDotData(show: rows.length <= 14),
+            belowBarData: BarAreaData(
+              show: true,
+              color: color.withValues(alpha: 0.08),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -730,6 +914,7 @@ class _SalesAnalysisCopy {
     'Xem doanh thu, số nhóm và giá trị trung bình mỗi bàn theo ngày.',
     'See daily revenue, teams, and average table value.',
   );
+  String get revenueLabel => pick('매출', 'Doanh thu', 'Revenue');
   String get teamLabel => pick('매출 팀수', 'Số nhóm', 'Sales teams');
   String get averageTableLabel =>
       pick('테이블 평균 단가', 'Giá trị TB mỗi bàn', 'Average table value');

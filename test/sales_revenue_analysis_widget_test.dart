@@ -73,12 +73,18 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('sales_daily_line_chart')), findsOneWidget);
-      expect(find.byKey(const Key('sales_hourly_bar_chart')), findsOneWidget);
       expect(
-        find.byKey(const Key('sales_daily_metrics_strip')),
+        find.byKey(const Key('sales_daily_revenue_chart')),
         findsOneWidget,
       );
-      expect(find.text('7팀'), findsOneWidget);
+      expect(find.byKey(const Key('sales_daily_team_chart')), findsOneWidget);
+      expect(
+        find.byKey(const Key('sales_daily_average_chart')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('sales_hourly_bar_chart')), findsOneWidget);
+      expect(find.text('매출 팀수'), findsOneWidget);
+      expect(find.text('테이블 평균 단가'), findsOneWidget);
       final hourlyChart = tester.widget<BarChart>(find.byType(BarChart));
       expect(
         hourlyChart.data.barGroups.map((group) => group.x),
@@ -122,5 +128,15 @@ void main() {
 
     expect(firstDay.teamCount, 7);
     expect(firstDay.averageTableAmount, closeTo(800000 / 7, 0.001));
+  });
+
+  test('daily metrics use independent truthful units', () {
+    final rows = _summary().dailyBreakdown;
+
+    expect(
+      rows.map((row) => row.teamCount),
+      orderedEquals([7, 8, 9, 10, 11, 12, 13]),
+    );
+    expect(rows.first.averageTableAmount, isNot(rows.first.total));
   });
 }
