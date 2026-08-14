@@ -7,6 +7,7 @@ import 'package:globos_pos_system/features/customer_display/customer_display_pro
 import 'package:globos_pos_system/features/customer_display/customer_display_screen.dart';
 import 'package:globos_pos_system/features/order/order_model.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 void main() {
   test('customer display role is isolated to its dedicated route', () {
@@ -170,18 +171,15 @@ void main() {
     );
   });
 
-  test('customer display UI uses the existing fixed bank QR asset', () {
+  test('customer display UI builds a dynamic VietQR with the order total', () {
     final screen = File(
       'lib/features/customer_display/customer_display_screen.dart',
     ).readAsStringSync();
-    expect(screen, contains('assets/images/woori_bank_account_qr.jpg'));
-    expect(screen, contains("Key('customer_display_fixed_qr')"));
+    expect(screen, contains('VietQrPayload.bankTransfer'));
+    expect(screen, contains('amount: snapshot.total.round()'));
+    expect(screen, contains("Key('customer_display_payment_qr')"));
+    expect(screen, contains("Key('customer_display_dynamic_qr_image')"));
     expect(screen, contains("Key('customer_display_total')"));
-    expect(
-      File('assets/images/woori_bank_account_qr.jpg').existsSync(),
-      isTrue,
-    );
-
     final cashier = File(
       'lib/features/cashier/cashier_screen.dart',
     ).readAsStringSync();
@@ -248,7 +246,7 @@ void main() {
     }
   });
 
-  testWidgets('tablet payment view renders items, total and fixed QR', (
+  testWidgets('tablet payment view renders items, total and dynamic QR', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1024, 768);
@@ -289,12 +287,19 @@ void main() {
     expect(find.text('VAT'), findsOneWidget);
     expect(find.text('₫12.593'), findsOneWidget);
     expect(find.byKey(const Key('customer_display_vat')), findsOneWidget);
-    expect(find.byKey(const Key('customer_display_fixed_qr')), findsOneWidget);
+    expect(
+      find.byKey(const Key('customer_display_payment_qr')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('customer_display_dynamic_qr_image')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const Key('customer_display_environmental_notice')),
       findsOneWidget,
     );
-    expect(find.byType(Image), findsOneWidget);
+    expect(find.byType(QrImageView), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

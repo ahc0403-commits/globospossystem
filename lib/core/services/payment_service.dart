@@ -159,6 +159,22 @@ class PaymentService {
     return Map<String, dynamic>.from(result as Map);
   }
 
+  Future<Map<String, dynamic>> enqueueCombinedReceiptPrintJob({
+    required String combinedPaymentGroupId,
+    double? receivedAmount,
+    bool reprint = false,
+  }) async {
+    final result = await supabase.rpc(
+      'enqueue_combined_receipt_print_job',
+      params: {
+        'p_group_id': combinedPaymentGroupId,
+        'p_received_amount': receivedAmount,
+        'p_reprint': reprint,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
   Future<Map<String, dynamic>> printFirstReceiptCopy({
     required String orderId,
     double? receivedAmount,

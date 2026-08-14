@@ -839,6 +839,75 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     }
   }
 
+  Future<bool> showCombinedOnCustomerDisplay({
+    required String storeId,
+    required List<CashierOrder> orders,
+  }) async {
+    if (orders.length < 2) return false;
+    final l10n = lookupAppLocalizations(const Locale('vi'));
+    final primaryOrder = orders.first;
+    final items = <Map<String, dynamic>>[
+      for (final order in orders)
+        for (final item in order.items.where(
+          (item) => item.status.toLowerCase() != 'cancelled',
+        ))
+          <String, dynamic>{
+            'name':
+                '[${order.tableNumber}] ${item.itemType == 'wet_tissue_charge' ? l10n.cashierWetTissueCharge : item.localizedName('vi')}',
+            'quantity': item.quantity,
+            'amount': item.isServiceItem
+                ? 0
+                : item.payingAmountIncTax != null &&
+                      item.payingAmountIncTax! > 0
+                ? item.payingAmountIncTax
+                : item.unitPrice * item.quantity,
+          },
+    ];
+
+    try {
+      await supabase.rpc(
+        'show_customer_payment_display',
+        params: {
+          'p_store_id': storeId,
+          'p_order_id': primaryOrder.orderId,
+          'p_payload': {
+            'phase': 'payment',
+            'display_revision': DateTime.now().microsecondsSinceEpoch
+                .toString(),
+            'order_id': primaryOrder.orderId,
+            'is_combined': true,
+            'locale_code': 'vi',
+            'table_number': orders.map((order) => order.tableNumber).join(', '),
+            'items': items,
+            'subtotal': orders.fold<double>(
+              0,
+              (sum, order) => sum + order.menuSubtotal,
+            ),
+            'service_charge': orders.fold<double>(
+              0,
+              (sum, order) => sum + order.serviceChargeTotal,
+            ),
+            'discount': orders.fold<double>(
+              0,
+              (sum, order) => sum + order.discountTotal,
+            ),
+            'vat': orders.fold<double>(0, (sum, order) => sum + order.vatTotal),
+            'total': orders.fold<double>(
+              0,
+              (sum, order) => sum + order.remainingDue,
+            ),
+          },
+        },
+      );
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        error: 'Failed to show combined customer display: $error',
+      );
+      return false;
+    }
+  }
+
   Future<bool> showReceiptOnCustomerDisplay({
     required String storeId,
     required String orderId,

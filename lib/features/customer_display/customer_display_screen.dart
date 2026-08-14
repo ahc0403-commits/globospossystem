@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/payments/vietqr_payload.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../auth/auth_provider.dart';
 import 'customer_display_provider.dart';
@@ -250,7 +251,10 @@ class CustomerPaymentContent extends StatelessWidget {
         builder: (context, constraints) {
           final landscape = constraints.maxWidth >= 760;
           final orderPanel = _CustomerOrderPanel(snapshot: snapshot);
-          const qrPanel = _CustomerQrPanel();
+          final qrPanel = _CustomerQrPanel(
+            amount: snapshot.total.round(),
+            orderId: snapshot.orderId,
+          );
 
           return Padding(
             padding: EdgeInsets.all(landscape ? 18 : 12),
@@ -260,14 +264,14 @@ class CustomerPaymentContent extends StatelessWidget {
                     children: [
                       Expanded(flex: 3, child: orderPanel),
                       const SizedBox(width: 14),
-                      const Expanded(flex: 2, child: qrPanel),
+                      Expanded(flex: 2, child: qrPanel),
                     ],
                   )
                 : Column(
                     children: [
                       Expanded(flex: 3, child: orderPanel),
                       const SizedBox(height: 12),
-                      const Expanded(flex: 2, child: qrPanel),
+                      Expanded(flex: 2, child: qrPanel),
                     ],
                   ),
           );
@@ -465,12 +469,24 @@ class _AmountRow extends StatelessWidget {
 }
 
 class _CustomerQrPanel extends StatelessWidget {
-  const _CustomerQrPanel();
+  const _CustomerQrPanel({required this.amount, required this.orderId});
+
+  static const _wooriBankBin = '970457';
+  static const _wooriAccountNumber = '100202042976';
+
+  final int amount;
+  final String orderId;
 
   @override
   Widget build(BuildContext context) {
+    final qrPayload = VietQrPayload.bankTransfer(
+      bankBin: _wooriBankBin,
+      accountNumber: _wooriAccountNumber,
+      amount: amount > 0 ? amount : null,
+      purpose: VietQrPayload.paymentPurpose(orderId),
+    );
     return Container(
-      key: const Key('customer_display_fixed_qr'),
+      key: const Key('customer_display_payment_qr'),
       decoration: BoxDecoration(
         color: PosColors.surface,
         borderRadius: BorderRadius.circular(18),
@@ -492,12 +508,28 @@ class _CustomerQrPanel extends StatelessWidget {
           Flexible(
             child: AspectRatio(
               aspectRatio: 1,
-              child: Image.asset(
-                'assets/images/woori_bank_account_qr.jpg',
-                fit: BoxFit.contain,
-                semanticLabel: context.l10n.customerDisplayQrSemanticLabel,
+              child: QrImageView(
+                key: const Key('customer_display_dynamic_qr_image'),
+                data: qrPayload,
+                version: QrVersions.auto,
+                backgroundColor: Colors.white,
+                semanticsLabel: context.l10n.customerDisplayQrSemanticLabel,
               ),
             ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'WOORI BANK · 100202042976',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: PosColors.textPrimary,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const Text(
+            'AHN HYOCHANG',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: PosColors.textSecondary),
           ),
           const SizedBox(height: 12),
           Container(

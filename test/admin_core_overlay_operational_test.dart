@@ -517,7 +517,7 @@ class _PinService extends PinService {
   int clearCalls = 0;
 
   @override
-  Future<String?> fetchPinHash(String storeId) async => hashPin('2468');
+  Future<bool> hasPayrollPin(String storeId) async => true;
 
   @override
   Future<bool> hasDiscountManagerPin(String storeId) async => true;
@@ -799,7 +799,10 @@ void main() {
 
     await _pump(
       tester,
-      child: AttendanceTab(attendanceServiceOverride: _AttendanceService()),
+      child: AttendanceTab(
+        attendanceServiceOverride: _AttendanceService(),
+        pinServiceOverride: _PinService(),
+      ),
       physicalSize: phone,
       textScale: 1.3,
       overrides: const [],
@@ -1519,7 +1522,10 @@ void main() {
       final attendance = _AttendanceService(role: 'part_timer');
       await _pump(
         tester,
-        child: AttendanceTab(attendanceServiceOverride: attendance),
+        child: AttendanceTab(
+          attendanceServiceOverride: attendance,
+          pinServiceOverride: _PinService(),
+        ),
         overrides: const [],
       );
       await tester.pumpAndSettle();
@@ -1558,6 +1564,7 @@ void main() {
       child: AttendanceTab(
         isPhotoObjetContext: true,
         attendanceServiceOverride: attendance,
+        pinServiceOverride: _PinService(),
       ),
       overrides: const [],
     );

@@ -137,7 +137,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         to: _attendanceDate.add(const Duration(days: 1)),
         limit: attendanceManagementRecordLimit,
       );
-      final pinHash = await _pinService.fetchPinHash(storeId);
+      final hasPayrollPin = await _pinService.hasPayrollPin(storeId);
 
       if (!mounted) return;
       setState(() {
@@ -146,8 +146,8 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         _dailyLogs = dailyLogs;
         _isLogsLoading = false;
         _isDailyLogsLoading = false;
-        _hasPayrollPin = pinHash != null && pinHash.isNotEmpty;
-        _payrollUnlocked = pinHash == null || pinHash.isEmpty;
+        _hasPayrollPin = hasPayrollPin;
+        _payrollUnlocked = !hasPayrollPin;
       });
     } catch (e) {
       if (!mounted) return;

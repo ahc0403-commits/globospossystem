@@ -80,6 +80,34 @@ void main() {
     expect(receipt.vatAmount, 3703.70);
   });
 
+  test('queued combined receipt prefers group totals over trigger fields', () {
+    final receipt = QueuedPaymentReceipt.fromPayload({
+      'is_combined': true,
+      'restaurant_name': 'GLOBOS POS',
+      'table_number': 'A1, B2',
+      'items': const [],
+      'total_amount': 150000,
+      'payment_method': 'other',
+      'receipt_number': 'SINGLE-ORDER-VALUE',
+      'subtotal_amount': 50000,
+      'vat_amount': 4000,
+      'received_amount': 50000,
+      'combined_receipt_number': 'COMBINED-GROUP-VALUE',
+      'combined_subtotal_amount': 140000,
+      'combined_discount_amount': 5000,
+      'combined_vat_amount': 11000,
+      'combined_received_amount': 150000,
+      'combined_change_amount': 0,
+    });
+
+    expect(receipt.tableNumber, 'A1, B2');
+    expect(receipt.receiptNumber, 'COMBINED-GROUP-VALUE');
+    expect(receipt.subtotalAmount, 140000);
+    expect(receipt.discountAmount, 5000);
+    expect(receipt.vatAmount, 11000);
+    expect(receipt.receivedAmount, 150000);
+  });
+
   test('service receipts include non-revenue service note', () async {
     final bytes = await ReceiptBuilder.buildPaymentReceipt(
       restaurantName: 'GLOBOS POS',
