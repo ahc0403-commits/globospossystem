@@ -12,6 +12,7 @@ class DailyRevenue {
     required this.dineIn,
     required this.delivery,
     required this.total,
+    this.teamCount = 0,
     this.cashAmount = 0,
     this.cardAmount = 0,
     this.bankTransferAmount = 0,
@@ -23,6 +24,8 @@ class DailyRevenue {
   final double dineIn;
   final double delivery;
   final double total;
+  final int teamCount;
+  double get averageTableAmount => teamCount == 0 ? 0 : dineIn / teamCount;
   final double cashAmount;
   final double cardAmount;
   final double bankTransferAmount;
@@ -165,6 +168,7 @@ PhotoObjetReportTotals aggregatePhotoObjetReportRows(
     );
 
     accumulator.revenue += salesRevenue;
+    accumulator.teamCount += transactions;
     totalRevenue += salesRevenue;
     serviceTotal += serviceAmount;
     transactionCount += transactions;
@@ -178,6 +182,7 @@ PhotoObjetReportTotals aggregatePhotoObjetReportRows(
               dineIn: day.revenue,
               delivery: 0,
               total: day.revenue,
+              teamCount: day.teamCount,
             ),
           )
           .toList()
@@ -498,6 +503,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
         if (normalized == 'delivery') {
           accumulator.delivery += salesAmount;
         } else {
+          accumulator.teamKeys.add(transactionKey);
           accumulator.dineIn += salesAmount;
           dineInRevenue += salesAmount;
         }
@@ -539,6 +545,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
           () => _DailyAccumulator(date: day.date),
         );
         accumulator.dineIn += day.total;
+        accumulator.supplementalTeamCount += day.teamCount;
       }
 
       double serviceTotal = 0;
@@ -650,6 +657,7 @@ class ReportNotifier extends StateNotifier<ReportState> {
                   dineIn: day.dineIn,
                   delivery: day.delivery,
                   total: day.dineIn + day.delivery,
+                  teamCount: day.teamKeys.length + day.supplementalTeamCount,
                   cashAmount: day.cash,
                   cardAmount: day.card,
                   bankTransferAmount: day.bankTransfer,
@@ -1031,6 +1039,8 @@ class _DailyAccumulator {
   double pay = 0;
   double paymentSales = 0;
   double paymentReceived = 0;
+  final Set<String> teamKeys = <String>{};
+  int supplementalTeamCount = 0;
 }
 
 class _PhotoObjetDailyAccumulator {
@@ -1038,6 +1048,7 @@ class _PhotoObjetDailyAccumulator {
 
   final DateTime date;
   double revenue = 0;
+  int teamCount = 0;
 }
 
 class _PaymentMethodAccumulator {

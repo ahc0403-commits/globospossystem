@@ -1,3 +1,4 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/admin/widgets/sales_revenue_analysis_dashboard.dart';
@@ -21,6 +22,7 @@ ReportSummary _summary() {
           dineIn: day * 100000,
           delivery: day * 20000,
           total: day * 120000,
+          teamCount: day - 1,
         ),
     ],
     hourlyBreakdown: [
@@ -72,6 +74,16 @@ void main() {
 
       expect(find.byKey(const Key('sales_daily_line_chart')), findsOneWidget);
       expect(find.byKey(const Key('sales_hourly_bar_chart')), findsOneWidget);
+      expect(
+        find.byKey(const Key('sales_daily_metrics_strip')),
+        findsOneWidget,
+      );
+      expect(find.text('7팀'), findsOneWidget);
+      final hourlyChart = tester.widget<BarChart>(find.byType(BarChart));
+      expect(
+        hourlyChart.data.barGroups.map((group) => group.x),
+        orderedEquals([for (var hour = 11; hour <= 22; hour++) hour]),
+      );
       expect(find.byKey(const Key('sales_daily_trend_badge')), findsOneWidget);
       expect(
         find.byKey(const Key('sales_revenue_analysis_filters')),
@@ -103,5 +115,12 @@ void main() {
     expect(find.text('2주'), findsOneWidget);
     expect(find.text('한 달'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  test('daily table average uses dine-in revenue per team', () {
+    final firstDay = _summary().dailyBreakdown.first;
+
+    expect(firstDay.teamCount, 7);
+    expect(firstDay.averageTableAmount, closeTo(800000 / 7, 0.001));
   });
 }
