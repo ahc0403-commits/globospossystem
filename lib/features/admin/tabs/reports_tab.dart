@@ -23,6 +23,7 @@ import '../providers/admin_audit_provider.dart';
 import '../providers/daily_closing_provider.dart';
 import '../widgets/admin_audit_trace_panel.dart';
 import '../widgets/paperless_operations_dashboard.dart';
+import '../widgets/sales_revenue_analysis_dashboard.dart';
 
 class ReportsTab extends ConsumerStatefulWidget {
   const ReportsTab({super.key, this.overrideStoreId});
@@ -930,6 +931,18 @@ class ReportAnalysisLaunchers extends StatelessWidget {
     );
   }
 
+  void _openSalesRevenue(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SalesRevenueAnalyticsScreen(
+          storeId: storeId,
+          startDate: startDate,
+          endDate: endDate,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final range =
@@ -959,23 +972,24 @@ class ReportAnalysisLaunchers extends StatelessWidget {
             compact: compact,
             onTap: () => _openMenuSales(context),
           ),
+          _ReportAnalysisLauncherCard(
+            key: const Key('sales_revenue_analytics_launcher'),
+            title: salesRevenueAnalysisTitle(context),
+            subtitle: salesRevenueAnalysisSubtitle(context),
+            range: range,
+            icon: Icons.show_chart_rounded,
+            compact: compact,
+            onTap: () => _openSalesRevenue(context),
+          ),
         ];
-        if (compact) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: cards.first),
-              const SizedBox(width: 8),
-              Expanded(child: cards.last),
-            ],
-          );
-        }
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(child: cards.first),
+            Expanded(child: cards[0]),
             const SizedBox(width: 8),
-            Expanded(child: cards.last),
+            Expanded(child: cards[1]),
+            const SizedBox(width: 8),
+            Expanded(child: cards[2]),
           ],
         );
       },
