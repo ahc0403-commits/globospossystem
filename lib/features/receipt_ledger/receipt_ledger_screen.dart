@@ -31,10 +31,13 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
   String? _error;
   String? _status;
   String? _printingOrderId;
+  late String _businessDate;
 
   @override
   void initState() {
     super.initState();
+    final hcmToday = DateTime.now().toUtc().add(const Duration(hours: 7));
+    _businessDate = DateFormat('yyyy-MM-dd').format(hcmToday);
     Future.microtask(_reload);
   }
 
@@ -56,7 +59,8 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
       _error = null;
     });
     try {
-      final page = await receiptLedgerService.loadToday(
+      final page = await receiptLedgerService.load(
+        businessDate: _businessDate,
         storeId: _storeId,
         query: _searchController.text.trim(),
         status: _status,
@@ -77,7 +81,8 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
     if (current == null || !current.hasMore || _loadingMore) return;
     setState(() => _loadingMore = true);
     try {
-      final next = await receiptLedgerService.loadToday(
+      final next = await receiptLedgerService.load(
+        businessDate: _businessDate,
         storeId: _storeId,
         query: _searchController.text.trim(),
         status: _status,
@@ -99,6 +104,25 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
     } finally {
       if (mounted) setState(() => _loadingMore = false);
     }
+  }
+
+  Future<void> _chooseBusinessDate() async {
+    final hcmToday = DateTime.now().toUtc().add(const Duration(hours: 7));
+    final lastDate = DateTime(hcmToday.year, hcmToday.month, hcmToday.day);
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: DateTime.parse(_businessDate),
+      firstDate: DateTime(2020),
+      lastDate: lastDate,
+    );
+    if (selected == null || !mounted) return;
+    final businessDate = DateFormat('yyyy-MM-dd').format(selected);
+    if (businessDate == _businessDate) return;
+    setState(() {
+      _businessDate = businessDate;
+      _page = null;
+    });
+    await _reload();
   }
 
   Future<void> _reprint(ReceiptLedgerEntry entry) async {
@@ -201,12 +225,13 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
                 copy.title,
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
-              ToastStatusBadge(
-                label: page == null
-                    ? copy.today
-                    : copy.businessDate(page.businessDate),
-                color: PosColors.accent,
-                compact: true,
+              OutlinedButton.icon(
+                key: const Key('receipt_ledger_business_date_picker'),
+                onPressed: _loading ? null : _chooseBusinessDate,
+                icon: const Icon(Icons.calendar_month_rounded, size: 18),
+                label: Text(
+                  copy.businessDate(page?.businessDate ?? _businessDate),
+                ),
               ),
               if (widget.overrideStoreId == null &&
                   ref.watch(authProvider).role == 'super_admin')
@@ -335,7 +360,7 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
           ? SizedBox(
               height: 260,
               child: ToastOperationalEmptyState(
-                headline: copy.empty,
+                headline: copy.empty(_businessDate),
                 helper: copy.emptyHelp,
                 icon: Icons.receipt_long_outlined,
               ),
@@ -588,14 +613,12 @@ class _ReceiptLedgerCopy {
     _ => ko,
   };
 
-  String get title =>
-      _pick('오늘의 영수증 원장', 'Sổ biên lai hôm nay', "Today's receipt ledger");
+  String get title => _pick('영수증 원장', 'Sổ biên lai', 'Receipt ledger');
   String get subtitle => _pick(
-    '오늘 결제된 전체 매출 영수증과 조정 내역을 확인합니다.',
-    'Xem toàn bộ biên lai bán hàng và điều chỉnh đã thanh toán hôm nay.',
-    'Review all sales receipts and adjustments paid today.',
+    '선택한 영업일의 전체 매출 영수증과 조정 내역을 확인합니다.',
+    'Xem toàn bộ biên lai bán hàng và điều chỉnh của ngày kinh doanh đã chọn.',
+    'Review all sales receipts and adjustments for the selected business date.',
   );
-  String get today => _pick('오늘', 'Hôm nay', 'Today');
   String businessDate(String date) =>
       _pick('영업일 $date', 'Ngày kinh doanh $date', 'Business date $date');
   String get allStores => _pick('전체 매장', 'Tất cả cửa hàng', 'All stores');
@@ -615,11 +638,8 @@ class _ReceiptLedgerCopy {
       _pick('부분 환불', 'Hoàn tiền một phần', 'Partially refunded');
   String get refunded => _pick('환불 완료', 'Đã hoàn tiền', 'Refunded');
   String get search => _pick('조회', 'Tìm kiếm', 'Search');
-  String get loading => _pick(
-    '오늘 영수증 원장을 불러오는 중',
-    'Đang tải sổ biên lai hôm nay',
-    "Loading today's receipt ledger",
-  );
+  String get loading =>
+      _pick('영수증 원장을 불러오는 중', 'Đang tải sổ biên lai', 'Loading receipt ledger');
   String get loadFailed => _pick(
     '영수증 원장을 불러오지 못했습니다.',
     'Không thể tải sổ biên lai.',
@@ -633,10 +653,10 @@ class _ReceiptLedgerCopy {
   );
   String lastUpdated(String time) =>
       _pick('갱신 $time', 'Cập nhật $time', 'Updated $time');
-  String get empty => _pick(
-    '오늘 발행된 영수증이 없습니다.',
-    'Chưa có biên lai hôm nay.',
-    'No receipts have been issued today.',
+  String empty(String date) => _pick(
+    '$date에 발행된 영수증이 없습니다.',
+    'Không có biên lai vào ngày $date.',
+    'No receipts were issued on $date.',
   );
   String get emptyHelp => _pick(
     '결제가 완료되면 이 원장에 자동으로 표시됩니다.',

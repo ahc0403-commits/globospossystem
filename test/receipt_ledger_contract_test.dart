@@ -5,7 +5,7 @@ import 'package:globos_pos_system/core/utils/role_routes.dart';
 import 'package:globos_pos_system/features/receipt_ledger/receipt_ledger_model.dart';
 
 void main() {
-  test('today receipt ledger route is limited to sales operators', () {
+  test('receipt ledger route is limited to sales operators', () {
     for (final role in const [
       'cashier',
       'admin',
@@ -85,6 +85,27 @@ void main() {
       sql,
       contains('REVOKE ALL ON FUNCTION public.get_today_receipt_ledger'),
     );
+  });
+
+  test('date-selectable ledger sends the selected HCM business date', () {
+    final screen = File(
+      'lib/features/receipt_ledger/receipt_ledger_screen.dart',
+    ).readAsStringSync();
+    final service = File(
+      'lib/features/receipt_ledger/receipt_ledger_service.dart',
+    ).readAsStringSync();
+    final sql = File(
+      'supabase/migrations/20260814151000_receipt_ledger_business_date.sql',
+    ).readAsStringSync();
+
+    expect(screen, contains("Key('receipt_ledger_business_date_picker')"));
+    expect(screen, contains('showDatePicker('));
+    expect(screen, contains('lastDate: lastDate'));
+    expect(service, contains("'get_receipt_ledger'"));
+    expect(service, contains("'p_business_date': businessDate"));
+    expect(sql, contains('p_business_date date'));
+    expect(sql, contains('v_business_date date := p_business_date'));
+    expect(sql, contains("AT TIME ZONE 'Asia/Ho_Chi_Minh'"));
   });
 
   test('all three role surfaces expose the common ledger', () {
