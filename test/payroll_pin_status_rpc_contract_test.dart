@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('payroll PIN status and verification use protected RPCs', () {
     final migration = File(
-      'supabase/migrations/20260814090000_payroll_pin_status_verification_rpc.sql',
+      'supabase/migrations/20260814173000_payroll_pin_status_verification_rpc.sql',
     ).readAsStringSync();
     final service = File(
       'lib/core/services/pin_service.dart',
