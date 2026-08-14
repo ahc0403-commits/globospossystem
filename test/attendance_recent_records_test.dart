@@ -1,9 +1,20 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/services/attendance_service.dart';
 
 void main() {
   test('attendance screens keep only the latest ten records', () {
     expect(attendanceScreenRecordLimit, 10);
+  });
+
+  test('attendance management can load the full selected period', () {
+    expect(attendanceManagementRecordLimit, 500);
+    final source = File(
+      'lib/features/admin/tabs/attendance_tab.dart',
+    ).readAsStringSync();
+    expect('attendanceManagementRecordLimit'.allMatches(source), hasLength(2));
+    expect(source, isNot(contains('limit: attendanceScreenRecordLimit')));
   });
 
   test('employee attendance row exposes the store employee name', () {
