@@ -59,15 +59,21 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
   String? _initializedRestaurantId;
   DateTime _logFrom = _startOfWeek(TimeUtils.nowVietnam());
   DateTime _logTo = TimeUtils.nowVietnam();
-  String _selectedStaffFilter = 'all';
+  DateTime _attendanceDate = _startOfDay(TimeUtils.nowVietnam());
   List<Map<String, dynamic>> _staffList = const [];
   List<Map<String, dynamic>> _logs = const [];
+  List<Map<String, dynamic>> _dailyLogs = const [];
+  List<Map<String, dynamic>> _selectedEmployeeMonthLogs = const [];
   List<StaffPayroll> _payrolls = const [];
   bool _isLogsLoading = false;
+  bool _isDailyLogsLoading = false;
+  bool _isEmployeeMonthLoading = false;
   bool _isPayrollLoading = false;
   bool _isManualAttendanceSaving = false;
   bool _payrollUnlocked = false;
   String? _logsError;
+  String? _dailyLogsError;
+  String? _employeeMonthError;
   String? _payrollError;
   bool? _hasPayrollPin;
   String? _selectedAttendanceUserId;
@@ -87,6 +93,17 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     ).subtract(Duration(days: weekday - 1));
   }
 
+  static DateTime _startOfDay(DateTime value) =>
+      DateTime(value.year, value.month, value.day);
+
+  static DateTime _startOfMonth(DateTime value) =>
+      DateTime(value.year, value.month);
+
+  static bool _isSameDay(DateTime first, DateTime second) =>
+      first.year == second.year &&
+      first.month == second.month &&
+      first.day == second.day;
+
   void _clearPayrollPreview() {
     _payrolls = const [];
     _payrollError = null;
@@ -96,8 +113,11 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
   Future<void> _initialize(String storeId) async {
     setState(() {
       _isLogsLoading = true;
+      _isDailyLogsLoading = true;
       _logsError = null;
+      _dailyLogsError = null;
       _selectedAttendanceUserId = null;
+      _selectedEmployeeMonthLogs = const [];
       _clearPayrollPreview();
     });
 
@@ -109,13 +129,21 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         to: _logTo,
         limit: attendanceManagementRecordLimit,
       );
+      final dailyLogs = await _attendanceService.fetchLogs(
+        storeId: storeId,
+        from: _attendanceDate,
+        to: _attendanceDate.add(const Duration(days: 1)),
+        limit: attendanceManagementRecordLimit,
+      );
       final pinHash = await _pinService.fetchPinHash(storeId);
 
       if (!mounted) return;
       setState(() {
         _staffList = staff;
         _logs = logs;
+        _dailyLogs = dailyLogs;
         _isLogsLoading = false;
+        _isDailyLogsLoading = false;
         _hasPayrollPin = pinHash != null && pinHash.isNotEmpty;
         _payrollUnlocked = pinHash == null || pinHash.isEmpty;
       });
@@ -123,6 +151,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
       if (!mounted) return;
       setState(() {
         _isLogsLoading = false;
+        _isDailyLogsLoading = false;
         _logsError = _mapAttendanceError(e, context.l10n.attendanceLoadFailed);
       });
     }
@@ -157,6 +186,92 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         );
       });
       showErrorToast(context, context.l10n.attendanceQueryFailed);
+    }
+  }
+
+  Future<void> _reloadDailyLogs(
+    String storeId,
+    DateTime date, {
+    bool preserveSelection = false,
+  }) async {
+    final day = _startOfDay(date);
+    final selectedEmployeeId = preserveSelection
+        ? _selectedAttendanceUserId
+        : null;
+    setState(() {
+      _attendanceDate = day;
+      _isDailyLogsLoading = true;
+      _dailyLogsError = null;
+      if (!preserveSelection) {
+        _selectedAttendanceUserId = null;
+        _selectedEmployeeMonthLogs = const [];
+        _employeeMonthError = null;
+      }
+    });
+
+    try {
+      final logs = await _attendanceService.fetchLogs(
+        storeId: storeId,
+        from: day,
+        to: day.add(const Duration(days: 1)),
+        limit: attendanceManagementRecordLimit,
+      );
+      if (!mounted || _attendanceDate != day) return;
+      setState(() {
+        _dailyLogs = logs;
+        _isDailyLogsLoading = false;
+      });
+      if (selectedEmployeeId != null && mounted) {
+        await _selectAttendanceEmployee(storeId, selectedEmployeeId);
+      }
+    } catch (error) {
+      if (!mounted || _attendanceDate != day) return;
+      setState(() {
+        _isDailyLogsLoading = false;
+        _dailyLogsError = _mapAttendanceError(
+          error,
+          context.l10n.attendanceReloadFailed,
+        );
+      });
+      showErrorToast(context, context.l10n.attendanceQueryFailed);
+    }
+  }
+
+  Future<void> _selectAttendanceEmployee(
+    String storeId,
+    String employeeId,
+  ) async {
+    final monthStart = _startOfMonth(_attendanceDate);
+    final monthEnd = DateTime(monthStart.year, monthStart.month + 1);
+    setState(() {
+      _selectedAttendanceUserId = employeeId;
+      _selectedEmployeeMonthLogs = const [];
+      _isEmployeeMonthLoading = true;
+      _employeeMonthError = null;
+    });
+
+    try {
+      final logs = await _attendanceService.fetchEmployeeLogs(
+        storeId: storeId,
+        employeeId: employeeId,
+        from: monthStart,
+        to: monthEnd,
+        limit: attendanceManagementRecordLimit,
+      );
+      if (!mounted || _selectedAttendanceUserId != employeeId) return;
+      setState(() {
+        _selectedEmployeeMonthLogs = logs;
+        _isEmployeeMonthLoading = false;
+      });
+    } catch (error) {
+      if (!mounted || _selectedAttendanceUserId != employeeId) return;
+      setState(() {
+        _isEmployeeMonthLoading = false;
+        _employeeMonthError = _mapAttendanceError(
+          error,
+          context.l10n.attendanceLoadFailed,
+        );
+      });
     }
   }
 
@@ -259,7 +374,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         ? _selectedAttendanceUserId!
         : _staffList.first['user_id']!.toString();
     var selectedType = 'clock_in';
-    var selectedDate = DateTime(now.year, now.month, now.day);
+    var selectedDate = _attendanceDate;
     var selectedTime = TimeOfDay.fromDateTime(now);
     var reason = '';
     String? validationError;
@@ -431,6 +546,8 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
       );
       if (!mounted) return;
       await _reloadLogs(storeId);
+      if (!mounted) return;
+      await _reloadDailyLogs(storeId, _attendanceDate, preserveSelection: true);
       if (!mounted) return;
       showSuccessToast(context, context.l10n.attendanceManualEntrySaved);
     } catch (error) {
@@ -891,18 +1008,127 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     return rows;
   }
 
+  List<Map<String, dynamic>> _buildMonthlyAttendanceRows(
+    List<Map<String, dynamic>> logs,
+  ) {
+    final grouped = <DateTime, List<Map<String, dynamic>>>{};
+    for (final log in logs) {
+      final parsed = DateTime.tryParse(log['logged_at']?.toString() ?? '');
+      if (parsed == null) continue;
+      final local = TimeUtils.toVietnam(parsed);
+      final day = DateTime(local.year, local.month, local.day);
+      grouped.putIfAbsent(day, () => []).add(log);
+    }
+
+    final rows = grouped.entries.map((entry) {
+      final dayLogs = [...entry.value]
+        ..sort((first, second) {
+          final firstTime = DateTime.tryParse(
+            first['logged_at']?.toString() ?? '',
+          );
+          final secondTime = DateTime.tryParse(
+            second['logged_at']?.toString() ?? '',
+          );
+          return (firstTime ?? DateTime.fromMillisecondsSinceEpoch(0))
+              .compareTo(secondTime ?? DateTime.fromMillisecondsSinceEpoch(0));
+        });
+      DateTime? firstClockIn;
+      DateTime? lastClockOut;
+      DateTime? openClockIn;
+      var workedMinutes = 0;
+      var needsReview = false;
+
+      for (final log in dayLogs) {
+        final parsed = DateTime.tryParse(log['logged_at']?.toString() ?? '');
+        if (parsed == null) continue;
+        final local = TimeUtils.toVietnam(parsed);
+        if (log['type']?.toString() == 'clock_in') {
+          firstClockIn ??= local;
+          if (openClockIn != null) {
+            needsReview = true;
+          } else {
+            openClockIn = local;
+          }
+        } else if (log['type']?.toString() == 'clock_out') {
+          lastClockOut = local;
+          if (openClockIn == null || local.isBefore(openClockIn)) {
+            needsReview = true;
+          } else {
+            workedMinutes += local.difference(openClockIn).inMinutes;
+            openClockIn = null;
+          }
+        }
+      }
+      if (openClockIn != null) needsReview = true;
+
+      return <String, dynamic>{
+        'date': entry.key,
+        'clockIn': firstClockIn,
+        'clockOut': lastClockOut,
+        'hours': workedMinutes / 60,
+        'needsReview': needsReview,
+      };
+    }).toList();
+
+    rows.sort(
+      (first, second) =>
+          (second['date'] as DateTime).compareTo(first['date'] as DateTime),
+    );
+    return rows;
+  }
+
+  Widget _monthlyAttendanceRow(Map<String, dynamic> row) {
+    final needsReview = row['needsReview'] == true;
+    return Row(
+      children: [
+        SizedBox(
+          width: 82,
+          child: Text(
+            DateFormat('MM-dd').format(row['date'] as DateTime),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            '${_formatClock(row['clockIn'] as DateTime?)} – ${_formatClock(row['clockOut'] as DateTime?)}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          context.l10n.attendanceHoursValue(
+            (row['hours'] as double).toStringAsFixed(1),
+          ),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(width: 8),
+        ToastStatusBadge(
+          label: needsReview
+              ? context.l10n.attendanceNeedsCheck
+              : context.l10n.inventoryStatusNormal,
+          color: needsReview ? PosColors.warning : PosColors.success,
+          compact: true,
+        ),
+      ],
+    );
+  }
+
   Map<String, dynamic>? _resolveSelectedAttendanceRow(
     List<Map<String, dynamic>> rows,
   ) {
     if (rows.isEmpty) return null;
     final selectedId = _selectedAttendanceUserId;
-    if (selectedId == null) return rows.first;
+    if (selectedId == null) return null;
     for (final row in rows) {
       if (row['userId'] == selectedId) {
         return row;
       }
     }
-    return rows.first;
+    return null;
   }
 
   String _formatClock(DateTime? value) {
@@ -937,36 +1163,22 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
       Future.microtask(() => _initialize(storeId));
     }
 
-    final filteredLogs = _logs.where((row) {
-      if (_selectedStaffFilter == 'all') return true;
-      return row['user_id']?.toString() == _selectedStaffFilter;
-    }).toList();
-    final filteredPayrolls = _payrolls.where((payroll) {
-      if (_selectedStaffFilter == 'all') return true;
-      return payroll.userId == _selectedStaffFilter;
-    }).toList();
+    final filteredLogs = _dailyLogs;
+    final filteredPayrolls = _payrolls;
     final payrollRequiresUnlock = _hasPayrollPin == true && !_payrollUnlocked;
-    final attendanceRows = _buildAttendanceRows(filteredLogs, filteredPayrolls);
+    final attendanceRows = _buildAttendanceRows(filteredLogs, const []);
     final selectedAttendanceRow = _resolveSelectedAttendanceRow(attendanceRows);
     final today = TimeUtils.nowVietnam();
-    final todayPresentCount = _logs
-        .where((row) {
-          final raw = DateTime.tryParse(row['logged_at']?.toString() ?? '');
-          if (raw == null) return false;
-          final local = TimeUtils.toVietnam(raw);
-          return local.year == today.year &&
-              local.month == today.month &&
-              local.day == today.day;
-        })
-        .map((row) => row['user_id']?.toString() ?? '')
-        .where((id) => id.isNotEmpty)
+    final dailyRecordsTitle = _isSameDay(_attendanceDate, today)
+        ? context.l10n.attendanceRecordsTitle
+        : context.l10n.attendanceDateRecordsTitle(
+            DateFormat('yyyy-MM-dd').format(_attendanceDate),
+          );
+    final periodStaffCount = _logs
+        .map((log) => log['user_id']?.toString())
+        .whereType<String>()
+        .where((userId) => userId.isNotEmpty)
         .toSet()
-        .length;
-    final attendanceRate = _staffList.isEmpty
-        ? 0
-        : ((todayPresentCount / _staffList.length) * 100).round();
-    final reviewCount = attendanceRows
-        .where((row) => row['needsReview'])
         .length;
     final payrollTargetCount = filteredPayrolls.isNotEmpty
         ? filteredPayrolls.length
@@ -990,30 +1202,83 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
       0,
       (sum, payroll) => sum + payroll.totalAmount,
     );
-    final selectedPayroll = selectedAttendanceRow?['payroll'] as StaffPayroll?;
+    StaffPayroll? selectedPayroll;
+    final selectedUserId = selectedAttendanceRow?['userId']?.toString();
+    if (selectedUserId != null) {
+      for (final payroll in filteredPayrolls) {
+        if (payroll.userId == selectedUserId) {
+          selectedPayroll = payroll;
+          break;
+        }
+      }
+    }
     final photoCaptureCount = filteredLogs
         .where((row) => (row['photo_url']?.toString() ?? '').isNotEmpty)
         .length;
     final currency = NumberFormat('#,###', 'vi_VN');
     final attendanceHeader = _buildAttendanceCommandHeader(
       storeId: storeId,
-      todayPresentCount: todayPresentCount,
-      attendanceRate: attendanceRate,
-      reviewCount: reviewCount,
+      periodLogCount: _logs.length,
+      periodStaffCount: periodStaffCount,
       payrollTargetCount: payrollTargetCount,
-      canManageAttendance: canManageAttendance,
     );
+
+    Widget dailyRecordActions() {
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          KeyedSubtree(
+            key: const Key('attendance_daily_date_filter'),
+            child: _DateButton(
+              label: context.l10n.attendanceRecordDateFilter,
+              value: _attendanceDate,
+              onTap: storeId == null
+                  ? () {}
+                  : () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _attendanceDate,
+                        firstDate: DateTime(2020),
+                        lastDate: TimeUtils.nowVietnam(),
+                      );
+                      if (picked != null && mounted) {
+                        await _reloadDailyLogs(storeId, picked);
+                      }
+                    },
+            ),
+          ),
+          if (canManageAttendance)
+            OutlinedButton.icon(
+              key: const Key('attendance_manual_entry_action'),
+              onPressed: storeId == null || _isManualAttendanceSaving
+                  ? null
+                  : () => _showManualAttendanceDialog(storeId),
+              icon: const Icon(Icons.more_time_rounded, size: 18),
+              label: Text(context.l10n.attendanceManualEntryAction),
+            ),
+        ],
+      );
+    }
 
     Widget compactAttendanceList() {
       return PosDataPanel(
-        title: context.l10n.attendanceRecordsTitle,
-        subtitle: context.l10n.attendanceRecordsSubtitle,
-        trailing: ToastStatusBadge(
-          label: context.l10n.attendanceShowingStaff(attendanceRows.length),
-          color: PosColors.info,
-          compact: true,
+        title: dailyRecordsTitle,
+        subtitle: context.l10n.attendanceDailyRecordsSubtitle,
+        trailing: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            ToastStatusBadge(
+              label: context.l10n.attendanceShowingStaff(attendanceRows.length),
+              color: PosColors.info,
+              compact: true,
+            ),
+            const SizedBox(height: 8),
+            dailyRecordActions(),
+          ],
         ),
-        child: _isLogsLoading
+        child: _isDailyLogsLoading
             ? const SizedBox(
                 height: 260,
                 child: Center(
@@ -1039,10 +1304,12 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                         final selected =
                             selectedAttendanceRow?['userId'] == row['userId'];
                         return InkWell(
-                          onTap: () => setState(
-                            () => _selectedAttendanceUserId =
-                                row['userId'] as String,
-                          ),
+                          onTap: storeId == null
+                              ? null
+                              : () => _selectAttendanceEmployee(
+                                  storeId,
+                                  row['userId'] as String,
+                                ),
                           borderRadius: BorderRadius.circular(12),
                           child: Container(
                             width: double.infinity,
@@ -1131,6 +1398,10 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
           overtimeHours: overtimeHours,
           estimatedPayroll: estimatedPayroll,
           currency: currency,
+          employeeMonthLogs: _selectedEmployeeMonthLogs,
+          isEmployeeMonthLoading: _isEmployeeMonthLoading,
+          employeeMonthError: _employeeMonthError,
+          attendanceDate: _attendanceDate,
           scrollable: scrollable,
         );
 
@@ -1147,6 +1418,13 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
             if (_logsError != null) ...[
               const SizedBox(height: 12),
               PosExceptionAlert(label: _logsError!, color: PosColors.danger),
+            ],
+            if (_dailyLogsError != null) ...[
+              const SizedBox(height: 12),
+              PosExceptionAlert(
+                label: _dailyLogsError!,
+                color: PosColors.danger,
+              ),
             ],
             if (_payrollError != null) ...[
               const SizedBox(height: 12),
@@ -1177,17 +1455,17 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildAttendanceCommandHeader(
-              storeId: storeId,
-              todayPresentCount: todayPresentCount,
-              attendanceRate: attendanceRate,
-              reviewCount: reviewCount,
-              payrollTargetCount: payrollTargetCount,
-              canManageAttendance: canManageAttendance,
-            ),
+            attendanceHeader,
             if (_logsError != null) ...[
               const SizedBox(height: 12),
               PosExceptionAlert(label: _logsError!, color: PosColors.danger),
+            ],
+            if (_dailyLogsError != null) ...[
+              const SizedBox(height: 12),
+              PosExceptionAlert(
+                label: _dailyLogsError!,
+                color: PosColors.danger,
+              ),
             ],
             if (_payrollError != null) ...[
               const SizedBox(height: 12),
@@ -1200,16 +1478,23 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
             Expanded(
               child: PosSplitContent(
                 primary: PosDataPanel(
-                  title: context.l10n.attendanceRecordsTitle,
-                  subtitle: context.l10n.attendanceRecordsSubtitle,
-                  trailing: ToastStatusBadge(
-                    label: context.l10n.attendanceShowingStaff(
-                      attendanceRows.length,
-                    ),
-                    color: PosColors.info,
-                    compact: true,
+                  title: dailyRecordsTitle,
+                  subtitle: context.l10n.attendanceDailyRecordsSubtitle,
+                  trailing: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      ToastStatusBadge(
+                        label: context.l10n.attendanceShowingStaff(
+                          attendanceRows.length,
+                        ),
+                        color: PosColors.info,
+                        compact: true,
+                      ),
+                      const SizedBox(height: 8),
+                      dailyRecordActions(),
+                    ],
                   ),
-                  child: _isLogsLoading
+                  child: _isDailyLogsLoading
                       ? const Center(
                           child: CircularProgressIndicator(
                             color: AppColors.amber500,
@@ -1323,7 +1608,9 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                           selectedId:
                               selectedAttendanceRow?['userId'] as String?,
                           onSelect: (userId) {
-                            setState(() => _selectedAttendanceUserId = userId);
+                            if (storeId != null) {
+                              _selectAttendanceEmployee(storeId, userId);
+                            }
                           },
                         ),
                 ),
@@ -1337,6 +1624,10 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                   overtimeHours: overtimeHours,
                   estimatedPayroll: estimatedPayroll,
                   currency: currency,
+                  employeeMonthLogs: _selectedEmployeeMonthLogs,
+                  isEmployeeMonthLoading: _isEmployeeMonthLoading,
+                  employeeMonthError: _employeeMonthError,
+                  attendanceDate: _attendanceDate,
                 ),
               ),
             ),
@@ -1352,11 +1643,9 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
 
   Widget _buildAttendanceCommandHeader({
     required String? storeId,
-    required int todayPresentCount,
-    required int attendanceRate,
-    required int reviewCount,
+    required int periodLogCount,
+    required int periodStaffCount,
     required int payrollTargetCount,
-    required bool canManageAttendance,
   }) {
     // Contract anchor: title: context.l10n.attendanceManagementTitle; label: context.l10n.payrollPreview; label: context.l10n.download; title: context.l10n.attendancePayrollSummaryTitle.
     final attendanceMetrics = [
@@ -1365,14 +1654,14 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         value: context.l10n.staffCount(_staffList.length),
       ),
       ToastMetric(
-        label: context.l10n.attendanceTodayPresent,
-        value: context.l10n.staffCount(todayPresentCount),
-        tone: PosColors.success,
+        label: context.l10n.attendancePeriodLogs,
+        value: context.l10n.countCases(periodLogCount),
+        tone: PosColors.info,
       ),
       ToastMetric(
-        label: context.l10n.attendanceUnreviewedLogs,
-        value: context.l10n.countCases(reviewCount),
-        tone: reviewCount > 0 ? PosColors.warning : PosColors.textSecondary,
+        label: context.l10n.attendancePeriodStaff,
+        value: context.l10n.staffCount(periodStaffCount),
+        tone: PosColors.textSecondary,
       ),
       ToastMetric(
         label: context.l10n.attendancePayrollTargets,
@@ -1389,11 +1678,26 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         children: [
           LayoutBuilder(
             builder: (context, constraints) {
-              final title = Text(
-                context.l10n.attendanceManagementTitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleLarge,
+              final title = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    context.l10n.attendanceManagementTitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    context.l10n.attendanceManagementSubtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: PosColors.textSecondary,
+                    ),
+                  ),
+                ],
               );
               final metrics = ToastMetricStrip(
                 dense: true,
@@ -1487,62 +1791,11 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                   }
                 },
               ),
-              SizedBox(
-                width: 220,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedStaffFilter,
-                  isExpanded: true,
-                  dropdownColor: AppColors.surface1,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                  decoration: InputDecoration(
-                    isDense: true,
-                    border: const OutlineInputBorder(),
-                    labelText: context.l10n.attendanceStaffFilter,
-                  ),
-                  items: [
-                    DropdownMenuItem(
-                      value: 'all',
-                      child: Text(
-                        context.l10n.attendanceAllStaff,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    ..._staffList.map(
-                      (staff) => DropdownMenuItem(
-                        value: staff['user_id']?.toString() ?? '',
-                        child: Text(
-                          staff['full_name']?.toString() ?? '-',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() {
-                        _selectedStaffFilter = value;
-                        _selectedAttendanceUserId = null;
-                      });
-                    }
-                  },
-                ),
-              ),
               FilledButton.icon(
                 onPressed: storeId == null ? null : () => _reloadLogs(storeId),
                 icon: const Icon(Icons.search, size: 16),
                 label: Text(context.l10n.search),
               ),
-              if (canManageAttendance)
-                OutlinedButton.icon(
-                  key: const Key('attendance_manual_entry_action'),
-                  onPressed: storeId == null || _isManualAttendanceSaving
-                      ? null
-                      : () => _showManualAttendanceDialog(storeId),
-                  icon: const Icon(Icons.more_time_rounded, size: 18),
-                  label: Text(context.l10n.attendanceManualEntryAction),
-                ),
               FilledButton.tonalIcon(
                 key: const Key('attendance_export_all_payroll'),
                 onPressed:
@@ -1561,14 +1814,6 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
               context,
             ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
           ),
-          const SizedBox(height: 4),
-          Text(
-            context.l10n.attendanceRate(attendanceRate),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: PosColors.textSecondary,
-              fontSize: 12,
-            ),
-          ),
         ],
       ),
     );
@@ -1584,6 +1829,10 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     required double overtimeHours,
     required double estimatedPayroll,
     required NumberFormat currency,
+    required List<Map<String, dynamic>> employeeMonthLogs,
+    required bool isEmployeeMonthLoading,
+    required String? employeeMonthError,
+    required DateTime attendanceDate,
     bool scrollable = true,
   }) {
     final hasUnpairedLogs =
@@ -1597,6 +1846,8 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
             selectedAttendanceRow!['logs'] as List,
           )
         : const <Map<String, dynamic>>[];
+    final monthlyRows = _buildMonthlyAttendanceRows(employeeMonthLogs);
+    final selectedMonth = DateFormat('yyyy-MM').format(attendanceDate);
     final payrollActionLabel = payrollRequiresUnlock
         ? context.l10n.attendanceUnlockPayrollAction
         : filteredPayrolls.isEmpty
@@ -1635,11 +1886,8 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                     const SizedBox(height: 4),
                     Text(
                       selectedAttendanceRow == null
-                          ? context.l10n.attendanceRecordsSubtitle
-                          : context.l10n.attendanceLogCountRole(
-                              selectedAttendanceRow['logCount'] as int,
-                              selectedAttendanceRow['role'] as String,
-                            ),
+                          ? context.l10n.attendanceEmployeeSelectionHint
+                          : '${context.l10n.attendanceMonthlyRecordsTitle(selectedMonth)} · ${selectedAttendanceRow['role'] as String}',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall,
@@ -1663,7 +1911,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
             child: selectedAttendanceRow == null
                 ? PosEmptyState(
                     title: context.l10n.staffNoSelection,
-                    subtitle: context.l10n.attendanceRecordsSubtitle,
+                    subtitle: context.l10n.attendanceEmployeeSelectionHint,
                     icon: Icons.person_search_outlined,
                   )
                 : Column(
@@ -1709,6 +1957,75 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                                     context.l10n.attendanceUnpairedLogsDetail,
                               ),
                             ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        key: const Key('attendance_employee_monthly_records'),
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface1,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.surface2),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              context.l10n.attendanceMonthlyRecordsTitle(
+                                selectedMonth,
+                              ),
+                              style: AppFonts.system(
+                                color: AppColors.textPrimary,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              context.l10n.attendanceMonthlyRecordsSubtitle,
+                              style: AppFonts.system(
+                                color: AppColors.textSecondary,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            if (isEmployeeMonthLoading)
+                              const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(16),
+                                  child: CircularProgressIndicator(
+                                    color: AppColors.amber500,
+                                  ),
+                                ),
+                              )
+                            else if (employeeMonthError != null)
+                              PosExceptionAlert(
+                                label: employeeMonthError,
+                                color: PosColors.danger,
+                              )
+                            else if (monthlyRows.isEmpty)
+                              Text(
+                                context.l10n.attendanceMonthlyNoRecords,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: PosColors.textSecondary),
+                              )
+                            else
+                              Column(
+                                children: [
+                                  for (
+                                    var index = 0;
+                                    index < monthlyRows.length;
+                                    index++
+                                  ) ...[
+                                    _monthlyAttendanceRow(monthlyRows[index]),
+                                    if (index != monthlyRows.length - 1)
+                                      const Divider(height: 18),
+                                  ],
+                                ],
+                              ),
                           ],
                         ),
                       ),
