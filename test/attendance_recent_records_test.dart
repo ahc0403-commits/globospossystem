@@ -13,7 +13,10 @@ void main() {
     final source = File(
       'lib/features/admin/tabs/attendance_tab.dart',
     ).readAsStringSync();
-    expect('attendanceManagementRecordLimit'.allMatches(source), hasLength(2));
+    expect(
+      'attendanceManagementRecordLimit'.allMatches(source).length,
+      greaterThanOrEqualTo(2),
+    );
     expect(source, isNot(contains('limit: attendanceScreenRecordLimit')));
   });
 

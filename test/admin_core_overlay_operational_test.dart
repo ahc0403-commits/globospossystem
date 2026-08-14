@@ -538,6 +538,7 @@ class _AttendanceService extends AttendanceService {
   final String role;
   int allowanceUpserts = 0;
   int manualEntries = 0;
+  int employeeLogFetches = 0;
 
   @override
   Future<List<Map<String, dynamic>>> fetchStaffList(String storeId) async => [
@@ -599,6 +600,18 @@ class _AttendanceService extends AttendanceService {
       },
     },
   ];
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchEmployeeLogs({
+    required String storeId,
+    required String employeeId,
+    required DateTime from,
+    required DateTime to,
+    int limit = 500,
+  }) async {
+    employeeLogFetches += 1;
+    return fetchLogs(storeId: storeId, from: from, to: to, limit: limit);
+  }
 
   @override
   Future<Map<String, dynamic>?> fetchDailyAllowance({
@@ -1421,6 +1434,13 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Nguyễn Minh Anh'), findsWidgets);
+    await tester.tap(find.text('Nguyễn Minh Anh').first);
+    await tester.pumpAndSettle();
+    expect(attendance.employeeLogFetches, 1);
+    expect(
+      find.byKey(const Key('attendance_employee_monthly_records')),
+      findsOneWidget,
+    );
     final manualAction = find.byKey(
       const Key('attendance_manual_entry_action'),
     );
@@ -1491,6 +1511,8 @@ void main() {
         overrides: const [],
       );
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Nguyễn Minh Anh').first);
+      await tester.pumpAndSettle();
 
       final manage = find.byKey(const Key('attendance_manage_daily_allowance'));
       await tester.ensureVisible(manage);
@@ -1527,6 +1549,8 @@ void main() {
       ),
       overrides: const [],
     );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Nguyễn Minh Anh').first);
     await tester.pumpAndSettle();
 
     final manage = find.byKey(const Key('attendance_manage_daily_allowance'));

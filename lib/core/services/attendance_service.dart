@@ -176,6 +176,32 @@ class AttendanceService {
         .toList(growable: false);
   }
 
+  Future<List<Map<String, dynamic>>> fetchEmployeeLogs({
+    required String storeId,
+    required String employeeId,
+    required DateTime from,
+    required DateTime to,
+    int limit = 500,
+  }) async {
+    if (limit < 1) {
+      throw ArgumentError.value(limit, 'limit', 'must be at least 1');
+    }
+    final result = await supabase.rpc(
+      'get_employee_attendance_logs',
+      params: {
+        'p_store_id': storeId,
+        'p_employee_id': employeeId,
+        'p_from': from.toUtc().toIso8601String(),
+        'p_to': to.toUtc().toIso8601String(),
+        'p_limit': limit,
+      },
+    );
+
+    return List<Map<String, dynamic>>.from(
+      result,
+    ).map(normalizeAttendanceLogRow).toList(growable: false);
+  }
+
   Future<Map<String, dynamic>> recordManualAttendance({
     required String storeId,
     required String employeeId,

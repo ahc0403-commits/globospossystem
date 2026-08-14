@@ -64,6 +64,22 @@ void main() {
     expect(attendance, contains('attendancePeriodUsageHint'));
   });
 
+  test('monthly employee attendance is scoped by store and employee', () {
+    final migration = File(
+      'supabase/migrations/20260814090000_employee_monthly_attendance.sql',
+    ).readAsStringSync();
+    final service = File(
+      'lib/core/services/attendance_service.dart',
+    ).readAsStringSync();
+
+    expect(migration, contains('get_employee_attendance_logs'));
+    expect(migration, contains('log.employee_id = p_employee_id'));
+    expect(migration, contains('public.user_accessible_stores(auth.uid())'));
+    expect(migration, contains('ATTENDANCE_VIEW_FORBIDDEN'));
+    expect(service, contains("'get_employee_attendance_logs'"));
+    expect(service, contains("'p_employee_id': employeeId"));
+  });
+
   test(
     'payroll export includes active part-timer with no attendance logs',
     () async {
