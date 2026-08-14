@@ -175,7 +175,7 @@ class SalesRevenueAnalysisDashboard extends StatelessWidget {
           title: copy.dailyTitle,
           subtitle: copy.dailySubtitle,
           trailing: _RevenueTrendBadge(rows: daily, currency: currency),
-          child: _DailyRevenueLineChart(rows: daily, currency: currency),
+          child: _DailyRevenuePanelContent(rows: daily, currency: currency),
         );
         final hourlyPanel = PosDataPanel(
           key: const Key('sales_hourly_bar_panel'),
@@ -237,7 +237,7 @@ List<DailyRevenue> _fillDailyRange(
 List<HourlyRevenue> _fillHourlyRange(List<HourlyRevenue> rows) {
   final byHour = <int, double>{for (final row in rows) row.hour: row.amount};
   return [
-    for (var hour = 0; hour < 24; hour++)
+    for (var hour = 11; hour <= 22; hour++)
       HourlyRevenue(hour: hour, amount: byHour[hour] ?? 0),
   ];
 }
@@ -306,6 +306,7 @@ class _DailyRevenueLineChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final copy = _SalesAnalysisCopy.of(context);
     final maxAmount = rows.fold<double>(
       0,
       (max, row) => math.max(max, row.total),
@@ -400,19 +401,23 @@ class _DailyRevenueLineChart extends StatelessWidget {
                   ),
                   lineTouchData: LineTouchData(
                     touchTooltipData: LineTouchTooltipData(
-                      getTooltipItems: (spots) => spots
-                          .map(
-                            (spot) => LineTooltipItem(
-                              '${DateFormat('dd/MM').format(rows[spot.x.toInt()].date)}\n'
-                              '${currency.format(spot.y)} VND',
-                              AppFonts.system(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          )
-                          .toList(),
+                      fitInsideHorizontally: true,
+                      fitInsideVertically: true,
+                      getTooltipItems: (spots) => spots.map((spot) {
+                        final row = rows[spot.x.toInt()];
+                        return LineTooltipItem(
+                          '${DateFormat('dd/MM').format(row.date)}\n'
+                          '${currency.format(spot.y)} VND\n'
+                          '${copy.teamLabel} ${row.teamCount}\n'
+                          '${copy.averageTableLabel} '
+                          '${currency.format(row.averageTableAmount)} VND',
+                          AppFonts.system(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        );
+                      }).toList(),
                     ),
                   ),
                   lineBarsData: [
@@ -443,6 +448,99 @@ class _DailyRevenueLineChart extends StatelessWidget {
   }
 }
 
+class _DailyRevenuePanelContent extends StatelessWidget {
+  const _DailyRevenuePanelContent({required this.rows, required this.currency});
+
+  final List<DailyRevenue> rows;
+  final NumberFormat currency;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Expanded(
+          child: _DailyRevenueLineChart(rows: rows, currency: currency),
+        ),
+        const SizedBox(height: 8),
+        _DailyMetricsStrip(rows: rows),
+      ],
+    );
+  }
+}
+
+class _DailyMetricsStrip extends StatelessWidget {
+  const _DailyMetricsStrip({required this.rows});
+
+  final List<DailyRevenue> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final copy = _SalesAnalysisCopy.of(context);
+    return Container(
+      key: const Key('sales_daily_metrics_strip'),
+      height: 66,
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: PosColors.border)),
+      ),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.only(top: 9),
+        itemCount: rows.length,
+        separatorBuilder: (context, index) => const VerticalDivider(
+          width: 8,
+          thickness: 1,
+          indent: 4,
+          endIndent: 4,
+          color: PosColors.border,
+        ),
+        itemBuilder: (context, index) {
+          final row = rows[index];
+          return SizedBox(
+            key: Key(
+              'sales_daily_metric_${DateFormat('yyyyMMdd').format(row.date)}',
+            ),
+            width: 64,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  DateFormat('dd/MM').format(row.date),
+                  style: AppFonts.system(
+                    color: PosColors.textSecondary,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  copy.teamCount(row.teamCount),
+                  style: AppFonts.system(
+                    color: PosColors.textPrimary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  copy.averageTableShort(
+                    _compactCurrency(row.averageTableAmount),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppFonts.system(
+                    color: PosColors.textSecondary,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _HourlyRevenueBarChart extends StatelessWidget {
   const _HourlyRevenueBarChart({required this.rows, required this.currency});
 
@@ -458,111 +556,109 @@ class _HourlyRevenueBarChart extends StatelessWidget {
     final maxY = maxAmount <= 0 ? 1.0 : maxAmount * 1.2;
     final interval = maxY / 4;
 
-    return ClipRect(
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: SizedBox(
-          key: const Key('sales_hourly_bar_chart'),
-          width: 780,
-          child: BarChart(
-            BarChartData(
-              minY: 0,
-              maxY: maxY,
-              alignment: BarChartAlignment.spaceAround,
-              gridData: FlGridData(
-                show: true,
-                drawVerticalLine: false,
-                horizontalInterval: interval,
-                getDrawingHorizontalLine: (_) =>
-                    const FlLine(color: PosColors.border, strokeWidth: 1),
-              ),
-              borderData: FlBorderData(show: false),
-              titlesData: FlTitlesData(
-                topTitles: const AxisTitles(
-                  sideTitles: SideTitles(showTitles: false),
-                ),
-                rightTitles: const AxisTitles(
-                  sideTitles: SideTitles(showTitles: false),
-                ),
-                leftTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 54,
-                    interval: interval,
-                    getTitlesWidget: (value, meta) {
-                      if (value >= meta.max) return const SizedBox.shrink();
-                      return SideTitleWidget(
-                        axisSide: meta.axisSide,
-                        space: 6,
-                        child: Text(
-                          _compactCurrency(value),
-                          style: AppFonts.system(
-                            color: PosColors.textSecondary,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 30,
-                    getTitlesWidget: (value, meta) {
-                      final hour = value.toInt();
-                      if (hour < 0 || hour >= 24 || hour.isOdd) {
-                        return const SizedBox.shrink();
-                      }
-                      return SideTitleWidget(
-                        axisSide: meta.axisSide,
-                        space: 7,
-                        child: Text(
-                          hour.toString().padLeft(2, '0'),
-                          style: AppFonts.system(
-                            color: PosColors.textSecondary,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              barTouchData: BarTouchData(
-                touchTooltipData: BarTouchTooltipData(
-                  getTooltipItem: (group, groupIndex, rod, rodIndex) =>
-                      BarTooltipItem(
-                        '${group.x.toString().padLeft(2, '0')}:00\n'
-                        '${currency.format(rod.toY)} VND',
-                        AppFonts.system(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
+    return SizedBox(
+      key: const Key('sales_hourly_bar_chart'),
+      width: double.infinity,
+      child: BarChart(
+        BarChartData(
+          minY: 0,
+          maxY: maxY,
+          alignment: BarChartAlignment.spaceAround,
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            horizontalInterval: interval,
+            getDrawingHorizontalLine: (_) =>
+                const FlLine(color: PosColors.border, strokeWidth: 1),
+          ),
+          borderData: FlBorderData(show: false),
+          titlesData: FlTitlesData(
+            topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            rightTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 54,
+                interval: interval,
+                getTitlesWidget: (value, meta) {
+                  if (value >= meta.max) return const SizedBox.shrink();
+                  return SideTitleWidget(
+                    axisSide: meta.axisSide,
+                    space: 6,
+                    child: Text(
+                      _compactCurrency(value),
+                      style: AppFonts.system(
+                        color: PosColors.textSecondary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
                       ),
-                ),
+                    ),
+                  );
+                },
               ),
-              barGroups: [
-                for (final row in rows)
-                  BarChartGroupData(
-                    x: row.hour,
-                    barRods: [
-                      BarChartRodData(
-                        toY: row.amount,
-                        width: 17,
-                        color: PosColors.accent,
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(5),
-                        ),
+            ),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 30,
+                interval: 1,
+                getTitlesWidget: (value, meta) {
+                  final hour = value.toInt();
+                  if (rows.isEmpty ||
+                      hour < rows.first.hour ||
+                      hour > rows.last.hour) {
+                    return const SizedBox.shrink();
+                  }
+                  return SideTitleWidget(
+                    axisSide: meta.axisSide,
+                    space: 7,
+                    child: Text(
+                      hour.toString().padLeft(2, '0'),
+                      style: AppFonts.system(
+                        color: PosColors.textSecondary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
                       ),
-                    ],
-                  ),
-              ],
+                    ),
+                  );
+                },
+              ),
             ),
           ),
+          barTouchData: BarTouchData(
+            touchTooltipData: BarTouchTooltipData(
+              getTooltipItem: (group, groupIndex, rod, rodIndex) =>
+                  BarTooltipItem(
+                    '${group.x.toString().padLeft(2, '0')}:00\n'
+                    '${currency.format(rod.toY)} VND',
+                    AppFonts.system(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+            ),
+          ),
+          barGroups: [
+            for (final row in rows)
+              BarChartGroupData(
+                x: row.hour,
+                barRods: [
+                  BarChartRodData(
+                    toY: row.amount,
+                    width: 17,
+                    color: PosColors.accent,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(5),
+                    ),
+                  ),
+                ],
+              ),
+          ],
         ),
       ),
     );
@@ -630,10 +726,16 @@ class _SalesAnalysisCopy {
   String get dailyTitle =>
       pick('일자별 매출 추이', 'Xu hướng doanh thu theo ngày', 'Daily revenue trend');
   String get dailySubtitle => pick(
-    '선택 기간의 매출 증감을 선 그래프로 확인합니다.',
-    'Xem biến động doanh thu trong kỳ bằng biểu đồ đường.',
-    'See revenue movement across the selected period.',
+    '일자별 매출 증감과 팀수·테이블 평균 단가를 확인합니다.',
+    'Xem doanh thu, số nhóm và giá trị trung bình mỗi bàn theo ngày.',
+    'See daily revenue, teams, and average table value.',
   );
+  String get teamLabel => pick('매출 팀수', 'Số nhóm', 'Sales teams');
+  String get averageTableLabel =>
+      pick('테이블 평균 단가', 'Giá trị TB mỗi bàn', 'Average table value');
+  String teamCount(int count) => pick('$count팀', '$count nhóm', '$count teams');
+  String averageTableShort(String amount) =>
+      pick('평균 $amount', 'TB $amount', 'Avg $amount');
   String get hourlyTitle =>
       pick('시간대별 매출', 'Doanh thu theo giờ', 'Revenue by hour');
   String get hourlySubtitle => pick(

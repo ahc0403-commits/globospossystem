@@ -28,7 +28,13 @@ void main() {
     expect(totals.dailyBreakdown, hasLength(2));
     expect(totals.dailyBreakdown.first.date, DateTime(2026, 7, 18));
     expect(totals.dailyBreakdown.first.total, 3130000);
+    expect(totals.dailyBreakdown.first.teamCount, 36);
+    expect(
+      totals.dailyBreakdown.first.averageTableAmount,
+      closeTo(3130000 / 36, 0.001),
+    );
     expect(totals.dailyBreakdown.last.total, 5060000);
+    expect(totals.dailyBreakdown.last.teamCount, 59);
   });
 
   test('Photo Objet service revenue cannot make sales revenue negative', () {
