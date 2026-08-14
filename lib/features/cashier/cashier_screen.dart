@@ -12,6 +12,7 @@ import '../../core/i18n/restaurant_cutoff_localization.dart';
 import '../../core/models/pos_table.dart';
 import '../../core/payments/cash_tender.dart';
 import '../../core/payments/payment_method_contract.dart';
+import '../../core/payments/vietqr_payload.dart';
 import '../../core/services/bank_transfer_alert_service.dart';
 import '../../core/services/bank_transfer_alert_sound.dart';
 import '../../core/services/bank_transfer_alert_coordinator.dart';
@@ -650,7 +651,25 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       (sum, order) => sum + order.remainingDue,
     );
     CashTender? cashTender;
-    if (method == paymentMethodCash) {
+    if (method == paymentMethodOther) {
+      await notifier.showCombinedOnCustomerDisplay(
+        storeId: storeId,
+        orders: paymentOrders,
+      );
+      if (!mounted) return;
+      final qrConfirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _CombinedQrPaymentDialog(
+          key: const Key('cashier_combined_qr_payment_dialog'),
+          orders: paymentOrders,
+          totalAmount: combinedTotal,
+        ),
+      );
+      if (qrConfirmed != true || !mounted) {
+        return;
+      }
+    } else if (method == paymentMethodCash) {
       cashTender = await showDialog<CashTender>(
         context: context,
         barrierDismissible: false,
@@ -675,10 +694,15 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       return;
     }
 
-    for (final order in paymentOrders) {
-      if (!order.fulfillmentMode.isPaperless) {
-        await _printReceipt(order: order, method: method);
-      }
+    final combinedPaymentGroupId = result['group_id']?.toString();
+    final hasPrintedOrders = paymentOrders.any(
+      (order) => !order.fulfillmentMode.isPaperless,
+    );
+    if (combinedPaymentGroupId != null && hasPrintedOrders) {
+      await _printCombinedReceipt(
+        combinedPaymentGroupId: combinedPaymentGroupId,
+        cashTender: cashTender,
+      );
     }
 
     final rawPayments = result['payments'];
@@ -754,14 +778,19 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
               orderId: order.orderId,
               receiptId: access.receiptId,
             ),
-        onPaperReceipt: (order) => _printReceipt(order: order, method: method),
-        onReprint: () async {
-          for (final order in paymentOrders.where(
-            (order) => !order.fulfillmentMode.isPaperless,
-          )) {
-            await _printReceipt(order: order, method: method, reprint: true);
-          }
-        },
+        onPaperReceipt: combinedPaymentGroupId == null
+            ? null
+            : () => _printCombinedReceipt(
+                combinedPaymentGroupId: combinedPaymentGroupId,
+                cashTender: cashTender,
+              ),
+        onReprint: combinedPaymentGroupId == null
+            ? null
+            : () => _printCombinedReceipt(
+                combinedPaymentGroupId: combinedPaymentGroupId,
+                cashTender: cashTender,
+                reprint: true,
+              ),
       ),
     );
     if (mounted) {
@@ -916,6 +945,32 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     try {
       final job = await _paymentService.enqueueReceiptPrintJob(
         orderId: order.orderId,
+        receivedAmount: cashTender?.receivedAmount,
+        reprint: reprint,
+      );
+      if (!mounted) return;
+      final status = job['status']?.toString();
+      if (status == 'pending' || status == 'printing' || status == 'done') {
+        showSuccessToast(context, l10n.cashierReceiptQueued);
+      } else {
+        showErrorToast(context, l10n.cashierReceiptPrintFailed);
+      }
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(context, l10n.cashierReceiptPrintFailed);
+      }
+    }
+  }
+
+  Future<void> _printCombinedReceipt({
+    required String combinedPaymentGroupId,
+    CashTender? cashTender,
+    bool reprint = false,
+  }) async {
+    final l10n = context.l10n;
+    try {
+      final job = await _paymentService.enqueueCombinedReceiptPrintJob(
+        combinedPaymentGroupId: combinedPaymentGroupId,
         receivedAmount: cashTender?.receivedAmount,
         reprint: reprint,
       );
@@ -5481,6 +5536,109 @@ class _CombinedTablePaymentDialogState
   }
 }
 
+class _CombinedQrPaymentDialog extends StatelessWidget {
+  const _CombinedQrPaymentDialog({
+    super.key,
+    required this.orders,
+    required this.totalAmount,
+  });
+
+  static const _wooriBankBin = '970457';
+  static const _wooriAccountNumber = '100202042976';
+
+  final List<CashierOrder> orders;
+  final double totalAmount;
+
+  @override
+  Widget build(BuildContext context) {
+    final locale = Localizations.localeOf(context).languageCode;
+    final currency = NumberFormat('#,###', 'vi_VN');
+    final tableNumbers = orders.map((order) => order.tableNumber).join(', ');
+    final reference = 'CB${orders.length}${orders.first.orderId}';
+    final qrPayload = VietQrPayload.bankTransfer(
+      bankBin: _wooriBankBin,
+      accountNumber: _wooriAccountNumber,
+      amount: totalAmount.round(),
+      purpose: VietQrPayload.paymentPurpose(reference),
+    );
+    String copy({required String ko, required String vi, required String en}) =>
+        switch (locale) {
+          'vi' => vi,
+          'en' => en,
+          _ => ko,
+        };
+
+    return AlertDialog(
+      title: Text(
+        copy(
+          ko: '합산 QR 결제',
+          vi: 'Thanh toán QR gộp',
+          en: 'Combined QR payment',
+        ),
+      ),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              copy(
+                ko: '테이블 $tableNumbers · QR 1개로 결제합니다.',
+                vi: 'Bàn $tableNumbers · Thanh toán bằng một mã QR.',
+                en: 'Tables $tableNumbers · Pay with one QR code.',
+              ),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 12),
+            SizedBox.square(
+              dimension: 260,
+              child: QrImageView(
+                key: const Key('cashier_combined_qr_image'),
+                data: qrPayload,
+                version: QrVersions.auto,
+                backgroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              '₫${currency.format(totalAmount)}',
+              key: const Key('cashier_combined_qr_total'),
+              style: PosNumericText.amountHero,
+            ),
+            const Text(
+              'WOORI BANK · 100202042976 · AHN HYOCHANG',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: PosColors.textSecondary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: Text(context.l10n.cancel),
+        ),
+        FilledButton.icon(
+          key: const Key('cashier_combined_qr_confirm'),
+          onPressed: () => Navigator.of(context).pop(true),
+          icon: const Icon(Icons.check_circle_rounded, size: 18),
+          label: Text(
+            copy(
+              ko: '입금 확인',
+              vi: 'Xác nhận đã nhận tiền',
+              en: 'Confirm payment',
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _CombinedPaymentCompletionDialog extends StatelessWidget {
   const _CombinedPaymentCompletionDialog({
     super.key,
@@ -5501,8 +5659,8 @@ class _CombinedPaymentCompletionDialog extends StatelessWidget {
   final Map<String, DigitalReceiptAccess?> receiptAccessByOrderId;
   final Future<bool> Function(CashierOrder order, DigitalReceiptAccess access)
   onShowCustomerReceipt;
-  final Future<void> Function(CashierOrder order) onPaperReceipt;
-  final Future<void> Function() onReprint;
+  final Future<void> Function()? onPaperReceipt;
+  final Future<void> Function()? onReprint;
 
   @override
   Widget build(BuildContext context) {
@@ -5603,14 +5761,6 @@ class _CombinedPaymentCompletionDialog extends StatelessWidget {
                               _ => '고객 화면',
                             }),
                           ),
-                          TextButton.icon(
-                            key: ValueKey(
-                              'cashier_combined_paper_receipt_${order.orderId}',
-                            ),
-                            onPressed: () => unawaited(onPaperReceipt(order)),
-                            icon: const Icon(Icons.print_outlined, size: 16),
-                            label: const Text('종이 출력'),
-                          ),
                         ],
                       ),
                     );
@@ -5622,10 +5772,17 @@ class _CombinedPaymentCompletionDialog extends StatelessWidget {
         ),
       ),
       actions: [
-        if (hasPrintedOrders)
+        if (!hasPrintedOrders && onPaperReceipt != null)
+          TextButton.icon(
+            key: const Key('cashier_combined_paper_receipt'),
+            onPressed: () => unawaited(onPaperReceipt!()),
+            icon: const Icon(Icons.print_outlined, size: 18),
+            label: const Text('종이 출력'),
+          ),
+        if (hasPrintedOrders && onReprint != null)
           TextButton.icon(
             key: const Key('cashier_combined_payment_reprint'),
-            onPressed: () => unawaited(onReprint()),
+            onPressed: () => unawaited(onReprint!()),
             icon: const Icon(Icons.print_rounded, size: 18),
             label: Text(l10n.cashierReprint),
           ),

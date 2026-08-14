@@ -296,6 +296,12 @@ class _PaymentNotifier extends PaymentNotifier {
   }
 
   @override
+  Future<bool> showCombinedOnCustomerDisplay({
+    required String storeId,
+    required List<CashierOrder> orders,
+  }) async => true;
+
+  @override
   Future<bool> prepareCombinedTablePayment({
     required String storeId,
     required Map<String, int> wetTissueQuantities,
@@ -399,6 +405,8 @@ class _PaymentProofService extends PaymentProofService {
 
 class _PaymentService extends PaymentService {
   double? receivedAmount;
+  int combinedReceiptCalls = 0;
+  String? combinedPaymentGroupId;
 
   @override
   Future<Map<String, dynamic>> enqueueReceiptPrintJob({
@@ -406,6 +414,18 @@ class _PaymentService extends PaymentService {
     double? receivedAmount,
     bool reprint = false,
   }) async {
+    this.receivedAmount = receivedAmount;
+    return {'status': 'done'};
+  }
+
+  @override
+  Future<Map<String, dynamic>> enqueueCombinedReceiptPrintJob({
+    required String combinedPaymentGroupId,
+    double? receivedAmount,
+    bool reprint = false,
+  }) async {
+    combinedReceiptCalls += 1;
+    this.combinedPaymentGroupId = combinedPaymentGroupId;
     this.receivedAmount = receivedAmount;
     return {'status': 'done'};
   }
@@ -1057,10 +1077,58 @@ void main() {
 
     expect(harness.notifier.processedMethod, paymentMethodCreditCard);
     expect(harness.proofService.markRequiredCalls, 1);
+    expect(harness.paymentService.combinedReceiptCalls, 1);
+    expect(harness.paymentService.combinedPaymentGroupId, 'combined-group');
     _dismiss(tester, const Key('cashier_combined_payment_completion_dialog'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'combined QR shows one QR for the combined total before payment',
+    (tester) async {
+      await _pumpCashier(
+        tester,
+        includeSecondOrder: true,
+        physicalSize: const Size(1440, 1600),
+      );
+      await tester.tap(find.byKey(const Key('cashier_combined_payment_mode')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('cashier_combined_order_$_orderId')),
+      );
+      await tester.tap(
+        find.byKey(const Key('cashier_combined_order_cashier-order-b2')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('cashier_combined_payment_start')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('cashier_combined_payment_confirm')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('cashier_method_dialog_$paymentMethodOther')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('cashier_combined_qr_payment_dialog')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('cashier_combined_qr_image')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('cashier_combined_qr_total')),
+        findsOneWidget,
+      );
+      _dismiss(tester, const Key('cashier_combined_qr_payment_dialog'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('polling fallback shows one bank transfer toast and sound', (
     tester,

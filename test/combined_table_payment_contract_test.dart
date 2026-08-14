@@ -25,7 +25,30 @@ void main() {
     expect(source, contains('prepareCombinedTablePayment('));
     expect(source, contains('processCombinedTablePayment('));
     expect(source, contains('amountDue: combinedTotal'));
+    expect(source, contains("Key('cashier_combined_qr_payment_dialog')"));
+    expect(source, contains('showCombinedOnCustomerDisplay('));
+    expect(source, contains('enqueueCombinedReceiptPrintJob('));
     expect(source, contains('fitAllTables: true'));
+  });
+
+  test('combined checkout queues one group receipt with combined totals', () {
+    final migration = File(
+      'supabase/migrations/20260814170000_combined_payment_single_receipt.sql',
+    ).readAsStringSync();
+
+    expect(
+      migration,
+      contains(
+        'CREATE OR REPLACE FUNCTION public.enqueue_combined_receipt_print_job',
+      ),
+    );
+    expect(migration, contains("'is_combined', true"));
+    expect(migration, contains("'combined_received_amount', v_received"));
+    expect(migration, contains('combined_payment_group_id = v_group.id'));
+    expect(
+      migration,
+      contains("auth.uid(), 'enqueue_combined_receipt_print_job'"),
+    );
   });
 
   test('database checkout is atomic and keeps source payments auditable', () {

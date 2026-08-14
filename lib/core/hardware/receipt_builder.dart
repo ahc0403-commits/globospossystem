@@ -866,6 +866,12 @@ class QueuedPaymentReceipt {
     final rawItems = payload['items'];
     final itemRows = rawItems is List ? rawItems : const <Object?>[];
     final method = payload['payment_method']?.toString() ?? 'other';
+    final isCombined =
+        payload['is_combined'] == true ||
+        payload['is_combined']?.toString().toLowerCase() == 'true';
+    Object? receiptValue(String standardKey, String combinedKey) => isCombined
+        ? payload[combinedKey] ?? payload[standardKey]
+        : payload[standardKey];
     return QueuedPaymentReceipt(
       restaurantName: payload['restaurant_name']?.toString() ?? 'GLOBOS POS',
       tableNumber: payload['table_number']?.toString() ?? '-',
@@ -912,13 +918,37 @@ class QueuedPaymentReceipt {
                   : const [])
               .map((value) => value.toString())
               .toList(),
-      receiptNumber: payload['receipt_number']?.toString(),
-      cashierCode: payload['cashier_code']?.toString(),
-      subtotalAmount: _payloadDouble(payload['subtotal_amount']),
-      discountAmount: _payloadDouble(payload['discount_amount']) ?? 0,
-      vatAmount: _payloadDouble(payload['vat_amount']) ?? 0,
-      receivedAmount: _payloadDouble(payload['received_amount']),
-      changeAmount: _payloadDouble(payload['change_amount']) ?? 0,
+      receiptNumber: receiptValue(
+        'receipt_number',
+        'combined_receipt_number',
+      )?.toString(),
+      cashierCode: receiptValue(
+        'cashier_code',
+        'combined_cashier_code',
+      )?.toString(),
+      subtotalAmount: _payloadDouble(
+        receiptValue('subtotal_amount', 'combined_subtotal_amount'),
+      ),
+      discountAmount:
+          _payloadDouble(
+            receiptValue('discount_amount', 'combined_discount_amount'),
+          ) ??
+          0,
+      vatAmount:
+          _payloadDouble(
+            isCombined
+                ? payload['combined_vat_amount'] ?? payload['vat_amount']
+                : payload['vat_amount'],
+          ) ??
+          0,
+      receivedAmount: _payloadDouble(
+        receiptValue('received_amount', 'combined_received_amount'),
+      ),
+      changeAmount:
+          _payloadDouble(
+            receiptValue('change_amount', 'combined_change_amount'),
+          ) ??
+          0,
     );
   }
 

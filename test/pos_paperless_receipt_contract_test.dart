@@ -208,7 +208,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('customer_display_receipt_qr')), findsOne);
-    expect(find.byKey(const Key('customer_display_fixed_qr')), findsNothing);
+    expect(find.byKey(const Key('customer_display_payment_qr')), findsNothing);
     expect(find.text('Thanh toán thành công'), findsOne);
     expect(tester.takeException(), isNull);
   });

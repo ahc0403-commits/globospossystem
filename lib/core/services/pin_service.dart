@@ -10,17 +10,12 @@ class PinService {
     return sha256.convert(bytes).toString();
   }
 
-  Future<String?> fetchPinHash(String storeId) async {
-    try {
-      final r = await supabase
-          .from('restaurant_settings')
-          .select('payroll_pin')
-          .eq('restaurant_id', storeId)
-          .maybeSingle();
-      return r?['payroll_pin'] as String?;
-    } catch (_) {
-      return null;
-    }
+  Future<bool> hasPayrollPin(String storeId) async {
+    final result = await supabase.rpc(
+      'has_payroll_pin',
+      params: {'p_store_id': storeId},
+    );
+    return result == true;
   }
 
   Future<bool> hasDiscountManagerPin(String storeId) async {
@@ -36,9 +31,11 @@ class PinService {
   }
 
   Future<bool> verifyPin(String storeId, String enteredPin) async {
-    final stored = await fetchPinHash(storeId);
-    if (stored == null) return true;
-    return hashPin(enteredPin) == stored;
+    final result = await supabase.rpc(
+      'verify_payroll_pin',
+      params: {'p_store_id': storeId, 'p_payroll_pin': hashPin(enteredPin)},
+    );
+    return result == true;
   }
 
   Future<void> setPin(String storeId, String pin) async {

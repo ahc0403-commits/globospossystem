@@ -66,12 +66,12 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
 
   Future<void> _loadPayrollPinStatus(String storeId) async {
     try {
-      final hash = await _pinService.fetchPinHash(storeId);
+      final hasPin = await _pinService.hasPayrollPin(storeId);
       if (!mounted) return;
-      setState(() => _hasPayrollPin = hash != null && hash.isNotEmpty);
+      setState(() => _hasPayrollPin = hasPin);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _hasPayrollPin = false);
+      setState(() => _hasPayrollPin = null);
     }
   }
 
@@ -169,7 +169,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                             await _pinService.setPin(storeId, pin);
                             if (!pageContext.mounted) return;
                             Navigator.of(pageContext).pop();
-                            await _loadPayrollPinStatus(storeId);
+                            setState(() => _hasPayrollPin = true);
                             if (!pageContext.mounted) return;
                             showSuccessToast(
                               pageContext,
@@ -363,7 +363,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
         return;
       }
       await _pinService.clearPin(storeId);
-      await _loadPayrollPinStatus(storeId);
+      if (mounted) setState(() => _hasPayrollPin = false);
       if (mounted) {
         showSuccessToast(context, context.l10n.settingsPayrollPinDeleted);
       }
