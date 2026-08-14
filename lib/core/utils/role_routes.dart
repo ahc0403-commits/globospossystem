@@ -87,6 +87,16 @@ bool canAccessRouteForRole(
   if (path == '/qc-review') {
     return PermissionUtils.canDoQcVisitReview(role, extraPermissions);
   }
+  if (path == '/receipts/today') {
+    return switch (role) {
+      'super_admin' ||
+      'brand_admin' ||
+      'store_admin' ||
+      'admin' ||
+      'cashier' => true,
+      _ => false,
+    };
+  }
 
   return switch (role) {
     'super_admin' =>
@@ -96,9 +106,11 @@ bool canAccessRouteForRole(
           path == '/photo-ops' ||
           path.startsWith('/store-setup/') ||
           path.startsWith('/admin/') ||
+          path == '/receipts/today' ||
           path.startsWith('/payments/'),
     'brand_admin' || 'store_admin' || 'admin' =>
       path == '/admin' ||
+          path == '/receipts/today' ||
           path.startsWith('/store-setup/') ||
           path.startsWith('/payments/'),
     'photo_objet_master' =>
@@ -110,6 +122,7 @@ bool canAccessRouteForRole(
     'kitchen' => path == '/kitchen',
     'cashier' =>
       path == '/cashier' ||
+          path == '/receipts/today' ||
           path == '/print-station' ||
           path.startsWith('/payments/'),
     'print_station' => path == '/print-station',
