@@ -9,6 +9,7 @@ import '../../main.dart';
 import 'rpc_compat.dart';
 
 const attendanceScreenRecordLimit = 10;
+const attendanceManagementRecordLimit = 500;
 
 class AttendanceService {
   Future<Map<String, dynamic>> recordEmployeeAttendance({
