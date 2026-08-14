@@ -330,7 +330,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('analysis launchers open both dedicated screens', (tester) async {
+  testWidgets('analysis launchers open all dedicated screens', (tester) async {
     await tester.binding.setSurfaceSize(const Size(900, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(_launcherApp());
@@ -357,31 +357,52 @@ void main() {
       find.byKey(const Key('paperless_operations_dashboard')),
       findsOneWidget,
     );
+
+    Navigator.of(
+      tester.element(
+        find.byKey(const Key('paperless_operations_analytics_screen')),
+      ),
+    ).pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sales_revenue_analytics_launcher')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('sales_revenue_analytics_screen')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('sales_revenue_analysis_filters')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'both report analysis launchers are visible on first phone view',
-    (tester) async {
-      await tester.binding.setSurfaceSize(const Size(390, 844));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      await tester.pumpWidget(_launcherApp());
-      await tester.pump();
+  testWidgets('all report analysis launchers are visible on first phone view', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(_launcherApp());
+    await tester.pump();
 
-      final paperless = find.byKey(const Key('paperless_operations_launcher'));
-      final menuSales = find.byKey(const Key('menu_sales_analytics_launcher'));
-      expect(paperless, findsOneWidget);
-      expect(menuSales, findsOneWidget);
-      expect(tester.getTopLeft(paperless).dy, lessThan(250));
-      expect(tester.getTopLeft(menuSales).dy, lessThan(250));
+    final paperless = find.byKey(const Key('paperless_operations_launcher'));
+    final menuSales = find.byKey(const Key('menu_sales_analytics_launcher'));
+    final salesRevenue = find.byKey(
+      const Key('sales_revenue_analytics_launcher'),
+    );
+    expect(paperless, findsOneWidget);
+    expect(menuSales, findsOneWidget);
+    expect(salesRevenue, findsOneWidget);
+    expect(tester.getTopLeft(paperless).dy, lessThan(250));
+    expect(tester.getTopLeft(menuSales).dy, lessThan(250));
+    expect(tester.getTopLeft(salesRevenue).dy, lessThan(250));
 
-      await tester.tap(menuSales);
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const Key('menu_sales_analytics_screen')),
-        findsOneWidget,
-      );
-      expect(tester.takeException(), isNull);
-    },
-  );
+    await tester.tap(menuSales);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('menu_sales_analytics_screen')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
 }

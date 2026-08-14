@@ -39,8 +39,10 @@ void main() {
       );
       expect(source, contains("Key('paperless_operations_launcher')"));
       expect(source, contains("Key('menu_sales_analytics_launcher')"));
+      expect(source, contains("Key('sales_revenue_analytics_launcher')"));
       expect(source, contains('PaperlessOperationsAnalyticsScreen('));
       expect(source, contains('MenuSalesAnalyticsScreen('));
+      expect(source, contains('SalesRevenueAnalyticsScreen('));
       expect(source, isNot(contains('MenuSalesAnalyticsPanel(')));
       expect(source, isNot(contains('PaperlessOperationsDashboard(')));
       expect(source, contains('operationalReportHeight'));
@@ -75,8 +77,28 @@ void main() {
 
     expect(screens, contains("Key('paperless_operations_analytics_screen')"));
     expect(screens, contains("Key('menu_sales_analytics_screen')"));
+    expect(screens, contains("Key('sales_revenue_analytics_screen')"));
     expect(screens, contains('PaperlessOperationsDashboard('));
     expect(screens, contains('MenuSalesAnalyticsPanel('));
+    expect(screens, contains('SalesRevenueAnalysisDashboard('));
     expect(screens, contains('ToastResponsiveScrollBody('));
   });
+
+  test(
+    'sales revenue analysis includes daily, hourly, and period controls',
+    () {
+      final dashboard = readRepoFile(
+        'lib/features/admin/widgets/sales_revenue_analysis_dashboard.dart',
+      );
+
+      expect(dashboard, contains("Key('sales_daily_line_chart')"));
+      expect(dashboard, contains('LineChart('));
+      expect(dashboard, contains("Key('sales_hourly_bar_chart')"));
+      expect(dashboard, contains('BarChart('));
+      expect(dashboard, contains("Key('sales_range_7_days')"));
+      expect(dashboard, contains("Key('sales_range_14_days')"));
+      expect(dashboard, contains("Key('sales_range_30_days')"));
+      expect(dashboard, contains("Key('sales_analysis_apply_range')"));
+    },
+  );
 }
