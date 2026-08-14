@@ -2284,6 +2284,25 @@ class _AllReportsTabState extends State<_AllReportsTab> {
                   label: Text(l10n.restaurantSalesExportDownload),
                 ),
                 OutlinedButton.icon(
+                  key: const Key('super_admin_today_receipt_ledger_entry'),
+                  onPressed: () {
+                    final storeId = state.selectedRestaurant?.id;
+                    context.go(
+                      storeId == null
+                          ? '/receipts/today'
+                          : '/receipts/today?storeId=$storeId',
+                    );
+                  },
+                  icon: const Icon(Icons.receipt_long_outlined),
+                  label: Text(switch (Localizations.localeOf(
+                    context,
+                  ).languageCode) {
+                    'vi' => 'Sổ biên lai hôm nay',
+                    'en' => "Today's receipts",
+                    _ => '오늘 영수증 원장',
+                  }),
+                ),
+                OutlinedButton.icon(
                   key: const Key('super_admin_red_invoice_export_link'),
                   onPressed: () => context.go('/red-invoice-export'),
                   icon: const Icon(Icons.receipt_long_outlined),

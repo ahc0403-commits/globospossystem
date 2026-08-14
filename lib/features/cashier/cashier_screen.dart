@@ -2066,6 +2066,16 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
         icon: const Icon(Icons.remove_shopping_cart_outlined, size: 20),
         label: Text(l10n.menuSoldOut),
       ),
+      IconButton.outlined(
+        key: const Key('cashier_today_receipt_ledger_entry'),
+        onPressed: () => context.go('/receipts/today'),
+        icon: const Icon(Icons.receipt_long_outlined, size: 20),
+        tooltip: switch (Localizations.localeOf(context).languageCode) {
+          'vi' => 'Biên lai hôm nay',
+          'en' => "Today's receipts",
+          _ => '오늘 영수증',
+        },
+      ),
       if (PlatformInfo.isKioskSupported)
         FilledButton.icon(
           key: const Key('cashier_attendance_kiosk_entry'),
@@ -2201,6 +2211,21 @@ class _CashierCompactCommandBar extends ConsumerWidget {
                         : l10n.cashierTerminalOffline,
                     color: isOnline ? PosColors.success : PosColors.warning,
                     compact: true,
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    key: const Key(
+                      'cashier_compact_today_receipt_ledger_entry',
+                    ),
+                    onPressed: () => context.go('/receipts/today'),
+                    icon: const Icon(Icons.receipt_long_outlined),
+                    tooltip: switch (Localizations.localeOf(
+                      context,
+                    ).languageCode) {
+                      'vi' => 'Biên lai hôm nay',
+                      'en' => "Today's receipts",
+                      _ => '오늘 영수증',
+                    },
                   ),
                 ],
               ),

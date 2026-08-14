@@ -6,6 +6,7 @@ import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/i18n/locale_extensions.dart';
@@ -819,6 +820,22 @@ class _ReportsTabState extends ConsumerState<ReportsTab> {
                     : () => _exportReport(reportNotifier, menuSalesAnalytics),
                 icon: const Icon(Icons.download_rounded, size: 16),
                 label: Text(l10n.reportsDownload),
+              ),
+              OutlinedButton.icon(
+                key: const Key('admin_today_receipt_ledger_entry'),
+                onPressed: () => context.go(
+                  storeId == null
+                      ? '/receipts/today'
+                      : '/receipts/today?storeId=$storeId',
+                ),
+                icon: const Icon(Icons.receipt_long_outlined, size: 16),
+                label: Text(switch (Localizations.localeOf(
+                  context,
+                ).languageCode) {
+                  'vi' => 'Sổ biên lai hôm nay',
+                  'en' => "Today's receipts",
+                  _ => '오늘 영수증 원장',
+                }),
               ),
             ],
           ),

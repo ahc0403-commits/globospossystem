@@ -24,6 +24,7 @@ import '../../features/print_station/print_station_screen.dart';
 import '../../features/qr_order/qr_order_screen.dart';
 import '../../features/restaurant_sales_export/restaurant_sales_export_screen.dart';
 import '../../features/red_invoice_intake/red_invoice_intake_screen.dart';
+import '../../features/receipt_ledger/receipt_ledger_screen.dart';
 import '../../features/attendance/attendance_kiosk_screen.dart';
 import '../../features/qc/qc_check_screen.dart';
 import '../../features/qc/qc_review_screen.dart';
@@ -306,6 +307,12 @@ GoRouter buildAppRouter(ProviderContainer container) {
         path: '/payments/:paymentId',
         builder: (_, state) => PaymentDetailScreen(
           paymentId: state.pathParameters['paymentId'] ?? '',
+        ),
+      ),
+      GoRoute(
+        path: '/receipts/today',
+        builder: (_, state) => ReceiptLedgerScreen(
+          overrideStoreId: state.uri.queryParameters['storeId'],
         ),
       ),
       GoRoute(
