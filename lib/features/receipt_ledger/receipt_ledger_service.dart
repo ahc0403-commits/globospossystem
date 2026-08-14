@@ -5,7 +5,8 @@ import 'receipt_ledger_model.dart';
 class ReceiptLedgerService {
   const ReceiptLedgerService();
 
-  Future<ReceiptLedgerPage> loadToday({
+  Future<ReceiptLedgerPage> load({
+    required String businessDate,
     String? storeId,
     String? query,
     String? status,
@@ -13,8 +14,9 @@ class ReceiptLedgerService {
     int offset = 0,
   }) async {
     final response = await supabase.rpc(
-      'get_today_receipt_ledger',
+      'get_receipt_ledger',
       params: {
+        'p_business_date': businessDate,
         'p_store_id': storeId,
         'p_query': query,
         'p_status': status,
@@ -23,7 +25,7 @@ class ReceiptLedgerService {
       },
     );
     if (response is! Map) {
-      throw const FormatException('TODAY_RECEIPT_LEDGER_INVALID_RESPONSE');
+      throw const FormatException('RECEIPT_LEDGER_INVALID_RESPONSE');
     }
     return ReceiptLedgerPage.fromJson(Map<String, dynamic>.from(response));
   }
