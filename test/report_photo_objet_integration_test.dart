@@ -86,4 +86,63 @@ void main() {
       contains('widget.overrideStoreId ?? ref.watch(authProvider).storeId'),
     );
   });
+
+  test('missing proof details and headline count use the same rows', () {
+    final issues = collectMissingProofIssues([
+      {
+        'id': 'pay-missing',
+        'order_id': 'order-1',
+        'amount': 120000,
+        'method': 'BANK_TRANSFER',
+        'created_at': '2026-08-14T05:00:00Z',
+        'proof_required': true,
+        'proof_photo_url': '',
+      },
+      {
+        'id': 'pay-complete',
+        'order_id': 'order-2',
+        'amount': 80000,
+        'method': 'CASH',
+        'created_at': '2026-08-14T06:00:00Z',
+        'proof_required': true,
+        'proof_photo_url': 'https://example.test/proof.jpg',
+      },
+    ]);
+
+    expect(issues, hasLength(1));
+    expect(issues.single.paymentId, 'pay-missing');
+    expect(issues.single.orderId, 'order-1');
+  });
+
+  test('MISA review details include only failed and manual jobs', () {
+    final issues = collectEinvoiceReviewIssues(
+      [
+        {
+          'id': 'job-failed',
+          'order_id': 'order-1',
+          'status': 'failed',
+          'error_message': 'buyer tax code invalid',
+          'created_at': '2026-08-14T05:00:00Z',
+        },
+        {
+          'id': 'job-manual',
+          'order_id': 'order-2',
+          'status': 'manual_action_required',
+          'manual_action_type': 'buyer_review',
+          'created_at': '2026-08-14T06:00:00Z',
+        },
+        {
+          'id': 'job-issued',
+          'order_id': 'order-3',
+          'status': 'issued',
+          'created_at': '2026-08-14T07:00:00Z',
+        },
+      ],
+      paymentIdByOrderId: const {'order-1': 'pay-1', 'order-2': 'pay-2'},
+    );
+
+    expect(issues.map((issue) => issue.jobId), ['job-failed', 'job-manual']);
+    expect(issues.first.paymentId, 'pay-1');
+    expect(issues.last.detail, 'buyer_review');
+  });
 }

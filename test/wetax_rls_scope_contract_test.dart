@@ -31,28 +31,26 @@ void main() {
     },
   );
 
-  test(
-    'active Flutter reads use meInvoice while reports keep legacy audit',
-    () {
-      final einvoiceTab = readRepoFile(
-        'lib/features/admin/tabs/einvoice_tab.dart',
-      );
-      final reportProvider = readRepoFile(
-        'lib/features/report/report_provider.dart',
-      );
-      final paymentService = readRepoFile(
-        'lib/core/services/payment_service.dart',
-      );
-      final statusProvider = readRepoFile(
-        'lib/features/payment/einvoice_provider.dart',
-      );
+  test('active Flutter reads and reports use meInvoice', () {
+    final einvoiceTab = readRepoFile(
+      'lib/features/admin/tabs/einvoice_tab.dart',
+    );
+    final reportProvider = readRepoFile(
+      'lib/features/report/report_provider.dart',
+    );
+    final paymentService = readRepoFile(
+      'lib/core/services/payment_service.dart',
+    );
+    final statusProvider = readRepoFile(
+      'lib/features/payment/einvoice_provider.dart',
+    );
 
-      expect(einvoiceTab, contains(".from('meinvoice_jobs')"));
-      expect(paymentService, contains(".from('meinvoice_jobs')"));
-      expect(statusProvider, contains(".from('meinvoice_jobs')"));
-      expect(reportProvider, contains(".from('einvoice_jobs')"));
-    },
-  );
+    expect(einvoiceTab, contains(".from('meinvoice_jobs')"));
+    expect(paymentService, contains(".from('meinvoice_jobs')"));
+    expect(statusProvider, contains(".from('meinvoice_jobs')"));
+    expect(reportProvider, contains(".from('meinvoice_jobs')"));
+    expect(reportProvider, isNot(contains(".from('einvoice_jobs')")));
+  });
 
   test(
     'sql smoke test covers sibling-store denial and multi-store allowance',

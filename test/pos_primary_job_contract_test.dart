@@ -77,11 +77,11 @@ void main() {
     expect(kitchen, isNot(contains('class _KitchenExecutionItemRow')));
     expect(kitchen, isNot(contains('_executionOpen')));
 
+    expect(orderWorkspace, contains('order_sent_items_always_visible_detail'));
     expect(
       orderWorkspace,
-      contains('order_sent_items_always_visible_detail'),
+      isNot(contains('order_sent_items_secondary_detail')),
     );
-    expect(orderWorkspace, isNot(contains('order_sent_items_secondary_detail')));
     expect(orderWorkspace, contains('initiallyExpanded: true'));
   });
 
@@ -103,12 +103,10 @@ void main() {
         'lib/features/payment/payment_detail_screen.dart',
       );
 
-      expect(reports, contains('class _ReportsOperationalSignalsDetail'));
-      expect(
-        reports,
-        contains("key: const Key('reports_operational_signals_detail')"),
-      );
-      expect(reports, contains('initiallyExpanded: false'));
+      expect(reports, contains('class ReportsIssuePanel'));
+      expect(reports, contains("key: const Key('reports_actionable_issues')"));
+      expect(reports, contains('class _ReportIssueDetailsView'));
+      expect(reports, contains('showModalBottomSheet<void>'));
 
       expect(einvoice, contains("Key('einvoice_job_secondary_detail')"));
       expect(einvoice, contains('initiallyExpanded: false'));
