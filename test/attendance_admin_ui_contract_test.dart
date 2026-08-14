@@ -12,6 +12,7 @@ void main() {
     expect(source, contains('_buildSelectedAttendanceDetailPanel'));
     expect(source, contains("Key('attendance_daily_date_filter')"));
     expect(source, contains("Key('attendance_employee_monthly_records')"));
+    expect(source, contains("Key('attendance_manual_manager_pin')"));
     expect(source, contains('_selectAttendanceEmployee'));
     expect(source, contains('attendanceDailyRecordsSubtitle'));
     expect(source, contains('attendanceMonthlyRecordsTitle'));

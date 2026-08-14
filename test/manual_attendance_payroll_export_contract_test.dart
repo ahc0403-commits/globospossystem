@@ -80,6 +80,34 @@ void main() {
     expect(service, contains("'p_employee_id': employeeId"));
   });
 
+  test('manual attendance requires server-side manager PIN verification', () {
+    final migration = File(
+      'supabase/migrations/20260814110000_manual_attendance_manager_pin.sql',
+    ).readAsStringSync();
+    final preflight = File(
+      'scripts/preflight_manual_attendance_manager_pin.sql',
+    ).readAsStringSync();
+    final verification = File(
+      'scripts/verify_manual_attendance_manager_pin.sql',
+    ).readAsStringSync();
+    final service = File(
+      'lib/core/services/attendance_service.dart',
+    ).readAsStringSync();
+    final attendance = File(
+      'lib/features/admin/tabs/attendance_tab.dart',
+    ).readAsStringSync();
+
+    expect(migration, contains('p_manager_pin text'));
+    expect(migration, contains('verify_discount_manager_pin_or_raise'));
+    expect(migration, contains("'attendance_manual_entry'"));
+    expect(migration, contains('DROP FUNCTION IF EXISTS'));
+    expect(preflight, contains('verify_discount_manager_pin_or_raise'));
+    expect(verification, contains('legacy manual attendance RPC still exists'));
+    expect(service, contains("'p_manager_pin': managerPin"));
+    expect(attendance, contains("Key('attendance_manual_manager_pin')"));
+    expect(attendance, contains("RegExp(r'^\\d{4,8}\$')"));
+  });
+
   test(
     'payroll export includes active part-timer with no attendance logs',
     () async {

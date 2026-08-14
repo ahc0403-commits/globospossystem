@@ -208,6 +208,7 @@ class AttendanceService {
     required String type,
     required DateTime loggedAt,
     required String reason,
+    required String managerPin,
   }) async {
     final result = await supabase.rpc(
       'admin_record_employee_attendance',
@@ -217,6 +218,7 @@ class AttendanceService {
         'p_type': type,
         'p_logged_at': loggedAt.toUtc().toIso8601String(),
         'p_reason': reason.trim(),
+        'p_manager_pin': managerPin,
       },
     );
     return Map<String, dynamic>.from(result as Map);

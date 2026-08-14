@@ -29,12 +29,14 @@ class _ManualAttendanceDraft {
     required this.type,
     required this.loggedAt,
     required this.reason,
+    required this.managerPin,
   });
 
   final String employeeId;
   final String type;
   final DateTime loggedAt;
   final String reason;
+  final String managerPin;
 }
 
 class AttendanceTab extends ConsumerStatefulWidget {
@@ -377,7 +379,9 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     var selectedDate = _attendanceDate;
     var selectedTime = TimeOfDay.fromDateTime(now);
     var reason = '';
+    var managerPin = '';
     String? validationError;
+    String? pinValidationError;
 
     final draft = await showDialog<_ManualAttendanceDraft>(
       context: context,
@@ -482,6 +486,25 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                   ),
                   const SizedBox(height: 12),
                   TextField(
+                    key: const Key('attendance_manual_manager_pin'),
+                    onChanged: (value) {
+                      managerPin = value;
+                      if (pinValidationError != null) {
+                        setDialogState(() => pinValidationError = null);
+                      }
+                    },
+                    keyboardType: TextInputType.number,
+                    obscureText: true,
+                    maxLength: 8,
+                    decoration: InputDecoration(
+                      labelText: context.l10n.attendanceManualManagerPin,
+                      hintText: context.l10n.attendanceManualManagerPinHint,
+                      border: const OutlineInputBorder(),
+                      errorText: pinValidationError,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
                     key: const Key('attendance_manual_reason'),
                     onChanged: (value) => reason = value,
                     maxLength: 500,
@@ -504,6 +527,13 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
             FilledButton(
               key: const Key('attendance_manual_save'),
               onPressed: () {
+                if (!RegExp(r'^\d{4,8}$').hasMatch(managerPin)) {
+                  setDialogState(
+                    () => pinValidationError =
+                        context.l10n.attendanceManualManagerPinRequired,
+                  );
+                  return;
+                }
                 if (reason.trim().length < 3) {
                   setDialogState(
                     () => validationError =
@@ -524,6 +554,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                     type: selectedType,
                     loggedAt: TimeUtils.vietnamWallTimeToUtc(wallTime),
                     reason: reason.trim(),
+                    managerPin: managerPin,
                   ),
                 );
               },
@@ -543,6 +574,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         type: draft.type,
         loggedAt: draft.loggedAt,
         reason: draft.reason,
+        managerPin: draft.managerPin,
       );
       if (!mounted) return;
       await _reloadLogs(storeId);
@@ -560,6 +592,12 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
 
   String _mapManualAttendanceError(Object error) {
     final message = error.toString();
+    if (message.contains('DISCOUNT_PIN_NOT_CONFIGURED')) {
+      return context.l10n.attendanceManualManagerPinNotConfigured;
+    }
+    if (message.contains('DISCOUNT_PIN_REJECTED')) {
+      return context.l10n.attendanceManualManagerPinIncorrect;
+    }
     if (message.contains('ATTENDANCE_MANUAL_SEQUENCE_INVALID')) {
       return context.l10n.attendanceManualSequenceInvalid;
     }

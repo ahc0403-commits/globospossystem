@@ -539,6 +539,7 @@ class _AttendanceService extends AttendanceService {
   int allowanceUpserts = 0;
   int manualEntries = 0;
   int employeeLogFetches = 0;
+  String? lastManualManagerPin;
 
   @override
   Future<List<Map<String, dynamic>>> fetchStaffList(String storeId) async => [
@@ -557,8 +558,10 @@ class _AttendanceService extends AttendanceService {
     required String type,
     required DateTime loggedAt,
     required String reason,
+    required String managerPin,
   }) async {
     manualEntries += 1;
+    lastManualManagerPin = managerPin;
     return {'id': 'manual-attendance-log'};
   }
 
@@ -1457,8 +1460,17 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('attendance_manual_save')));
     await tester.pumpAndSettle();
+    expect(manualDialog, findsOneWidget);
+    expect(attendance.manualEntries, 0);
+    await tester.enterText(
+      find.byKey(const Key('attendance_manual_manager_pin')),
+      '2468',
+    );
+    await tester.tap(find.byKey(const Key('attendance_manual_save')));
+    await tester.pumpAndSettle();
     expect(manualDialog, findsNothing);
     expect(attendance.manualEntries, 1);
+    expect(attendance.lastManualManagerPin, '2468');
     expect(
       find.byKey(const Key('attendance_photo_evidence_panel')),
       findsOneWidget,
