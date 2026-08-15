@@ -15,6 +15,7 @@ const menuRoundTripHeaders = <String>[
   '메뉴ID',
   '메뉴명(KO)',
   '메뉴명(VI)',
+  '페이퍼리스 메뉴명(VI)',
   '메뉴명(EN)',
   '설명',
   '가격(VND)',
@@ -22,6 +23,8 @@ const menuRoundTripHeaders = <String>[
   'QR메뉴노출',
   '메뉴순서',
 ];
+
+const _paperlessNameViHeader = '페이퍼리스 메뉴명(VI)';
 
 const _roundTripMarkers = <String>{'카테고리ID', '카테고리명(VI)', '메뉴ID', '메뉴명(VI)'};
 
@@ -63,6 +66,7 @@ class MenuRoundTripItem {
     required this.itemId,
     required this.nameKo,
     required this.nameVi,
+    required this.paperlessNameVi,
     required this.nameEn,
     required this.description,
     required this.price,
@@ -77,6 +81,9 @@ class MenuRoundTripItem {
   final String itemId;
   final String nameKo;
   final String nameVi;
+
+  /// `null` means the workbook predates the paperless-name column.
+  final String? paperlessNameVi;
   final String nameEn;
   final String? description;
   final double price;
@@ -91,6 +98,7 @@ class MenuRoundTripItem {
     'item_id': itemId,
     'name_ko': nameKo,
     'name_vi': nameVi,
+    if (paperlessNameVi != null) 'paperless_name_vi': paperlessNameVi,
     'name_en': nameEn,
     'description': description,
     'price': price,
@@ -176,7 +184,7 @@ List<int> buildMenuRoundTripWorkbook({
         TextCellValue(categoryNameVi),
         TextCellValue(categoryNameEn),
         IntCellValue(categorySortOrder),
-        ...List<CellValue>.generate(9, (_) => TextCellValue('')),
+        ...List<CellValue>.generate(10, (_) => TextCellValue('')),
       ]);
       continue;
     }
@@ -195,6 +203,7 @@ List<int> buildMenuRoundTripWorkbook({
         TextCellValue(_requiredMapText(item, 'id')),
         TextCellValue(_localizedMapText(item, 'name_ko')),
         TextCellValue(_localizedMapText(item, 'name_vi')),
+        TextCellValue(_mapText(item['paperless_name_vi'])),
         TextCellValue(_localizedMapText(item, 'name_en')),
         TextCellValue(description),
         DoubleCellValue(_mapDouble(item['price'])),
@@ -210,6 +219,7 @@ List<int> buildMenuRoundTripWorkbook({
     38,
     24,
     24,
+    30,
     24,
     14,
     38,
@@ -251,6 +261,7 @@ MenuRoundTripWorkbook? tryParseMenuRoundTripWorkbook(Uint8List bytes) {
     return null;
   }
   final missing = menuRoundTripHeaders
+      .where((header) => header != _paperlessNameViHeader)
       .where((header) => !headerIndexes.containsKey(header))
       .toList();
   if (missing.isNotEmpty) {
@@ -279,6 +290,9 @@ MenuRoundTripWorkbook? tryParseMenuRoundTripWorkbook(Uint8List bytes) {
     final itemId = text('메뉴ID');
     final itemNameKo = text('메뉴명(KO)');
     final itemNameVi = text('메뉴명(VI)');
+    final paperlessNameVi = headerIndexes.containsKey(_paperlessNameViHeader)
+        ? text(_paperlessNameViHeader)
+        : null;
     final itemNameEn = text('메뉴명(EN)');
     final description = text('설명');
     final rawPrice = text('가격(VND)');
@@ -295,6 +309,7 @@ MenuRoundTripWorkbook? tryParseMenuRoundTripWorkbook(Uint8List bytes) {
       itemId,
       itemNameKo,
       itemNameVi,
+      paperlessNameVi ?? '',
       itemNameEn,
       description,
       rawPrice,
@@ -372,6 +387,9 @@ MenuRoundTripWorkbook? tryParseMenuRoundTripWorkbook(Uint8List bytes) {
     }
     _validateName(itemNameKo, sourceRow, '메뉴명(KO)', issues);
     _validateName(itemNameVi, sourceRow, '메뉴명(VI)', issues);
+    if (paperlessNameVi != null && paperlessNameVi.length > 200) {
+      issues.add('$sourceRow행: $_paperlessNameViHeader은 200자 이하여야 합니다.');
+    }
     _validateName(itemNameEn, sourceRow, '메뉴명(EN)', issues);
     if (description.length > 1000) {
       issues.add('$sourceRow행: 설명은 1000자 이하여야 합니다.');
@@ -415,6 +433,7 @@ MenuRoundTripWorkbook? tryParseMenuRoundTripWorkbook(Uint8List bytes) {
           itemId: itemId,
           nameKo: itemNameKo,
           nameVi: itemNameVi,
+          paperlessNameVi: paperlessNameVi,
           nameEn: itemNameEn,
           description: description.isEmpty ? null : description,
           price: price,

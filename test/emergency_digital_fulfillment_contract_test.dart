@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:globos_pos_system/core/services/emergency_order_voice_message.dart';
 import 'package:globos_pos_system/core/utils/role_routes.dart';
 import 'package:globos_pos_system/features/emergency_fulfillment/emergency_fulfillment_provider.dart';
 
@@ -9,6 +10,15 @@ class _TestEmergencyNotifier extends EmergencyFulfillmentNotifier {
 }
 
 void main() {
+  test('new-order voice message is Vietnamese and reads table digits', () {
+    expect(
+      vietnameseNewOrderMessage('1101'),
+      'Bàn một một không một, có đơn hàng mới.',
+    );
+    expect(vietnameseNewOrderMessage('T12'), 'Bàn một hai, có đơn hàng mới.');
+    expect(vietnameseNewOrderMessage(''), 'Có đơn hàng mới.');
+  });
+
   test('emergency station role is isolated to its web route', () {
     expect(homeRouteForRole('emergency_station'), '/emergency');
     expect(canAccessRouteForRole('emergency_station', '/emergency'), isTrue);
@@ -214,7 +224,7 @@ void main() {
     expect(migration, contains("floor_label IN ('1F', '2F')"));
   });
 
-  test('web fallback includes foreground alarm, push worker and IndexedDB', () {
+  test('web fallback includes Vietnamese voice, push worker and IndexedDB', () {
     final screen = File(
       'lib/features/emergency_fulfillment/emergency_fulfillment_screen.dart',
     ).readAsStringSync();
@@ -229,7 +239,10 @@ void main() {
     expect(screen, isNot(contains("Key('emergency_complete_order')")));
     expect(screen, contains("Key('emergency_revert_order')"));
     expect(index, contains('indexedDB.open'));
-    expect(index, contains('AudioContext'));
+    expect(index, contains('speechSynthesis'));
+    expect(index, contains("utterance.lang = 'vi-VN'"));
+    expect(index, isNot(contains('createOscillator')));
+    expect(screen, isNot(contains('SystemSound.play')));
     expect(worker, contains('emergency_fulfillment'));
     expect(provider, contains('EmergencyWebBridge.putOutbox'));
     expect(provider, contains("'p_event_id': payload['event_id']"));

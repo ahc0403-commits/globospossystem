@@ -236,12 +236,12 @@ void main() {
 
     expect(find.byKey(const Key('emergency_order_grid_8_slots')), findsOne);
     expect(find.text('#101'), findsOne);
-    expect(find.text('떡볶이'), findsOne);
+    expect(find.text('Bánh gạo cay'), findsOne);
 
     await tester.tap(find.byKey(const Key('emergency_order_order-1')));
     await tester.pump();
-    expect(find.text('떡볶이'), findsOne);
-    expect(find.text('Bánh gạo cay'), findsNothing);
+    expect(find.text('Bánh gạo cay'), findsOne);
+    expect(find.text('떡볶이'), findsNothing);
     expect(find.text('0 / 2'), findsOne);
     await tester.tap(find.byKey(const Key('emergency_menu_item_item-1')));
     await tester.pumpAndSettle();
@@ -499,7 +499,7 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('emergency_order_detail_order-1')), findsOne);
-    expect(find.text('떡볶이'), findsWidgets);
+    expect(find.text('Bánh gạo cay'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
@@ -608,6 +608,7 @@ void main() {
         findsNothing,
       );
       expect(find.text('콜라'), findsNothing);
+      expect(find.text('Coca-Cola'), findsNothing);
       expect(find.text('대기 주문 없음'), findsOne);
       expect(tester.takeException(), isNull);
     });
@@ -626,8 +627,9 @@ void main() {
 
       await tester.tap(find.byKey(const Key('emergency_order_order-mixed')));
       await tester.pump();
-      expect(find.text('떡볶이'), findsOne);
+      expect(find.text('Bánh gạo cay'), findsOne);
       expect(find.text('콜라'), findsNothing);
+      expect(find.text('Coca-Cola'), findsNothing);
       expect(
         find.byKey(const Key('emergency_floor_beverage_section')),
         findsNothing,
@@ -657,8 +659,8 @@ void main() {
     expect(foodSection, findsOne);
     expect(find.text('먼저 제공할 음료'), findsOne);
     expect(find.text('주방·트레이 음식'), findsOne);
-    expect(find.text('콜라'), findsOne);
-    expect(find.text('떡볶이'), findsOne);
+    expect(find.text('Coca-Cola'), findsOne);
+    expect(find.text('Bánh gạo cay'), findsOne);
     expect(
       tester.getTopLeft(beverageSection).dy,
       lessThan(tester.getTopLeft(foodSection).dy),
@@ -746,6 +748,20 @@ void main() {
     expect(completed.style?.color, PosColors.success);
     expect(pending.style?.color, PosColors.textPrimary);
     expect(find.byKey(const Key('emergency_order_elapsed_order-1')), findsOne);
+
+    final orderNumber = tester.widget<Text>(
+      find.byKey(const Key('emergency_order_number_order-1')),
+    );
+    final tableNumber = tester.widget<Text>(
+      find.byKey(const Key('emergency_order_table_order-1')),
+    );
+    expect(tableNumber.data, 'T12');
+    expect(
+      tableNumber.style?.fontSize,
+      closeTo((orderNumber.style?.fontSize ?? 0) * 1.4, 0.001),
+    );
+    expect(find.text('Bàn T12'), findsNothing);
+    expect(find.text('2F · 2 món'), findsNothing);
   });
 
   for (final stationType in ['tray', 'floor']) {

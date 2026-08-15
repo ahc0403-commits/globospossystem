@@ -98,7 +98,7 @@ class MenuService {
           'id, component_menu_item_id, quantity, sort_order, '
           'component:menu_items!'
           'menu_combo_components_component_menu_item_id_fkey('
-          'id, name, name_ko, name_vi, name_en, is_available'
+          'id, name, name_ko, name_vi, name_en, paperless_name_vi, is_available'
           '))',
         )
         .eq('restaurant_id', storeId)
@@ -134,17 +134,19 @@ class MenuService {
     required String nameKo,
     required String nameVi,
     required String nameEn,
+    String? paperlessNameVi,
     required double price,
     required int sortOrder,
   }) async {
     final response = await supabase.rpc(
-      'admin_create_menu_item_i18n',
+      'admin_create_menu_item_i18n_paperless',
       params: {
         'p_store_id': storeId,
         'p_category_id': categoryId,
         'p_name_ko': nameKo,
         'p_name_vi': nameVi,
         'p_name_en': nameEn,
+        'p_paperless_name_vi': paperlessNameVi,
         'p_price': price,
         'p_sort_order': sortOrder,
         'p_is_available': true,
@@ -226,15 +228,17 @@ class MenuService {
     required String nameKo,
     required String nameVi,
     required String nameEn,
+    String? paperlessNameVi,
     required double price,
   }) async {
     await supabase.rpc(
-      'admin_update_menu_item_i18n',
+      'admin_update_menu_item_i18n_paperless',
       params: {
         'p_item_id': itemId,
         'p_name_ko': nameKo,
         'p_name_vi': nameVi,
         'p_name_en': nameEn,
+        'p_paperless_name_vi': paperlessNameVi,
         'p_price': price,
       },
     );

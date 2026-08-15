@@ -38,6 +38,7 @@ void main() {
       expect(sheet.rows[1][3]?.value.toString(), 'Món ăn vặt Hàn Quốc');
       expect(sheet.rows[1][4]?.value.toString(), 'Korean snacks');
       expect(sheet.rows[1][6]?.value.toString(), firstItemId);
+      expect(sheet.rows[1][9]?.value.toString(), 'Bánh gạo cay');
       expect(sheet.rows[3][1]?.value.toString(), emptyCategoryId);
       expect(sheet.rows[3][6]?.value.toString(), '');
     },
@@ -73,6 +74,7 @@ void main() {
       expect(parsed.storeIds, {storeId});
       expect(parsed.categories.first.nameVi, 'Đồ ăn đường phố');
       expect(parsed.items.first.nameVi, 'Bánh gạo cay');
+      expect(parsed.items.first.paperlessNameVi, 'Bánh gạo cay');
       expect(parsed.items.first.itemId, firstItemId);
     },
   );
@@ -86,7 +88,7 @@ void main() {
       ),
     );
     excel[menuImportSheetName]
-        .cell(CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: 1))
+        .cell(CellIndex.indexByColumnRow(columnIndex: 10, rowIndex: 1))
         .value = TextCellValue(
       '',
     );
@@ -134,6 +136,25 @@ void main() {
 
     expect(tryParseMenuRoundTripWorkbook(bytes), isNull);
     expect(parseMenuImportWorkbook(bytes).itemCount, 1);
+  });
+
+  test('older multilingual workbook preserves existing paperless names', () {
+    final excel = Excel.decodeBytes(
+      buildMenuRoundTripWorkbook(
+        storeId: storeId,
+        categories: _categories,
+        items: _items,
+      ),
+    );
+    final sheet = excel[menuImportSheetName];
+    sheet.removeColumn(menuRoundTripHeaders.indexOf(_paperlessHeader));
+
+    final parsed = tryParseMenuRoundTripWorkbook(
+      Uint8List.fromList(excel.encode()!),
+    )!;
+
+    expect(parsed.items.first.paperlessNameVi, isNull);
+    expect(parsed.items.first.toJson(), isNot(contains('paperless_name_vi')));
   });
 
   test('imports workbooks with absolute worksheet relationship targets', () {
@@ -225,6 +246,7 @@ final _items = <Map<String, dynamic>>[
     'name': '떡볶이',
     'name_ko': '떡볶이',
     'name_vi': 'Tokbokki',
+    'paperless_name_vi': 'Bánh gạo cay',
     'name_en': 'Spicy rice cakes',
     'description': '매운맛',
     'price': 50000,
@@ -247,3 +269,5 @@ final _items = <Map<String, dynamic>>[
     'sort_order': 1,
   },
 ];
+
+const _paperlessHeader = '페이퍼리스 메뉴명(VI)';
