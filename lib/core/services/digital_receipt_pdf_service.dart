@@ -6,6 +6,10 @@ import 'package:printing/printing.dart';
 
 import '../../features/digital_receipt/digital_receipt_model.dart';
 
+const digitalReceiptFooterThanksVi = 'Cảm ơn quý khách!';
+const digitalReceiptFooterNoticeVi =
+    'Biên lai này dùng làm chứng từ thanh toán, không phải hóa đơn đỏ.';
+
 String digitalReceiptPaymentMethodVi(String method) {
   return switch (method.trim().toUpperCase()) {
     'CASH' => 'Tiền mặt',
@@ -122,13 +126,13 @@ class DigitalReceiptPdfService {
           _line('Tiền thừa', '${currency.format(receipt.changeAmount)} VND'),
           pw.SizedBox(height: 24),
           pw.Text(
-            'Cảm ơn quý khách!',
+            digitalReceiptFooterThanksVi,
             textAlign: pw.TextAlign.center,
             style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
           ),
           pw.SizedBox(height: 6),
           pw.Text(
-            'Biên lai này dùng làm chứng từ thanh toán, không phải hóa đơn đỏ.',
+            digitalReceiptFooterNoticeVi,
             textAlign: pw.TextAlign.center,
             style: const pw.TextStyle(fontSize: 9),
           ),

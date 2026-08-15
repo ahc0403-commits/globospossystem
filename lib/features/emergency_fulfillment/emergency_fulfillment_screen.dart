@@ -235,9 +235,8 @@ class _EmergencyFulfillmentScreenState
     };
     final recentOrders = recentByOrderId.values.toList(growable: false)
       ..sort(
-        (a, b) => (b.lastActionAt ?? b.createdAt).compareTo(
-          a.lastActionAt ?? a.createdAt,
-        ),
+        (a, b) => (b.stationCompletedAt ?? b.lastActionAt ?? b.createdAt)
+            .compareTo(a.stationCompletedAt ?? a.lastActionAt ?? a.createdAt),
       );
 
     final selected = _selectedOrderId == null
@@ -258,7 +257,6 @@ class _EmergencyFulfillmentScreenState
         pending: state.pendingQueueIds.contains(selected.queueId),
         error: state.error,
         onBack: () => setState(() => _selectedOrderId = null),
-        onComplete: () => _completeOrder(selected),
         onItemAction: (item) => _completeItem(item, stationType),
         onItemRevert: (item) => _revertItem(item, stationType),
         onRevert: selected.lastActionId == null
@@ -283,6 +281,8 @@ class _EmergencyFulfillmentScreenState
               _page = 0;
             }),
           ),
+          const SizedBox(height: 8),
+          _EmergencyMenuStatusLegend(stationType: stationType, copy: copy),
           if (state.error != null) ...[
             const SizedBox(height: 8),
             _EmergencyStatusBanner(message: copy.errorMessage(state.error!)),
@@ -312,23 +312,6 @@ class _EmergencyFulfillmentScreenState
         ],
       ),
     );
-  }
-
-  Future<void> _completeOrder(EmergencyFulfillmentOrder order) async {
-    if (_actionBusy) return;
-    setState(() => _actionBusy = true);
-    final success = await ref
-        .read(emergencyFulfillmentProvider.notifier)
-        .completeOrder(queueId: order.queueId);
-    if (!mounted) return;
-    setState(() {
-      _actionBusy = false;
-      if (success) {
-        _showRecent = false;
-        _selectedOrderId = null;
-        _page = 0;
-      }
-    });
   }
 
   Future<void> _completeItem(
@@ -689,6 +672,90 @@ class _EmergencyOrderBoard extends StatelessWidget {
   }
 }
 
+class _EmergencyMenuStatusLegend extends StatelessWidget {
+  const _EmergencyMenuStatusLegend({
+    required this.stationType,
+    required this.copy,
+  });
+
+  final String stationType;
+  final _EmergencyCopy copy;
+
+  @override
+  Widget build(BuildContext context) {
+    final showPreviousStage = stationType == 'tray' || stationType == 'floor';
+    return Semantics(
+      container: true,
+      label: copy.menuStatusGuide,
+      child: Container(
+        key: Key('emergency_menu_status_legend_$stationType'),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: PosColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: PosColors.border),
+        ),
+        child: Wrap(
+          spacing: 18,
+          runSpacing: 6,
+          children: [
+            _EmergencyMenuStatusLegendItem(
+              color: PosColors.success,
+              label: copy.menuStatusCompleted,
+            ),
+            _EmergencyMenuStatusLegendItem(
+              color: PosColors.textPrimary,
+              label: copy.menuStatusInProgress,
+            ),
+            if (showPreviousStage)
+              _EmergencyMenuStatusLegendItem(
+                color: PosColors.info,
+                label: copy.menuStatusPreviousStageReady,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EmergencyMenuStatusLegendItem extends StatelessWidget {
+  const _EmergencyMenuStatusLegendItem({
+    required this.color,
+    required this.label,
+  });
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: BoxConstraints(
+      maxWidth: math.max(1, MediaQuery.sizeOf(context).width - 48),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 class _BoardPager extends StatelessWidget {
   const _BoardPager({
     required this.page,
@@ -782,7 +849,7 @@ class _EmergencyOrderCard extends StatelessWidget {
         : completed
         ? PosColors.success
         : _stationColor(stationType);
-    final elapsed = now.difference(order.createdAt.toLocal());
+    final elapsed = order.stationElapsedAt(now, stationType);
     final semantics =
         '${copy.order} ${order.queueNo}, ${copy.table} ${order.tableNumber}, '
         '${order.floorLabel}, ${visibleItems.length} ${copy.items}';
@@ -936,6 +1003,7 @@ class _EmergencyCardMenuList extends StatelessWidget {
             nameEn: '+$hiddenCount items',
             quantity: 1,
             completed: false,
+            readyFromPreviousStage: false,
             readOnly: true,
           );
         }
@@ -971,6 +1039,8 @@ class _EmergencyCardMenuList extends StatelessWidget {
                               ?.copyWith(
                                 color: item.completed
                                     ? PosColors.success
+                                    : item.readyFromPreviousStage
+                                    ? PosColors.info
                                     : PosColors.textPrimary,
                                 fontWeight: item.completed
                                     ? FontWeight.w800
@@ -998,7 +1068,6 @@ class _EmergencyOrderDetails extends StatelessWidget {
     required this.pending,
     required this.error,
     required this.onBack,
-    required this.onComplete,
     required this.onItemAction,
     required this.onItemRevert,
     required this.onRevert,
@@ -1011,14 +1080,12 @@ class _EmergencyOrderDetails extends StatelessWidget {
   final bool pending;
   final String? error;
   final VoidCallback onBack;
-  final VoidCallback onComplete;
   final ValueChanged<EmergencyFulfillmentItem> onItemAction;
   final ValueChanged<EmergencyFulfillmentItem> onItemRevert;
   final VoidCallback? onRevert;
 
   @override
   Widget build(BuildContext context) {
-    final canComplete = order.hasActionableQuantity(stationType) && !pending;
     final visibleItems = order.visibleItemsAt(stationType);
     final directBeverages = visibleItems
         .where((item) => item.isFloorDirect)
@@ -1112,11 +1179,9 @@ class _EmergencyOrderDetails extends StatelessWidget {
             const Divider(height: 1),
             _EmergencyDetailActions(
               busy: busy,
-              canComplete: canComplete,
               canRevert: onRevert != null && !pending,
               copy: copy,
               onHome: onBack,
-              onComplete: onComplete,
               onRevert: onRevert,
             ),
           ],
@@ -1375,6 +1440,12 @@ class _EmergencyMenuRow extends StatelessWidget {
       _ => (0, item.orderedQuantity),
     };
     final done = limit > 0 && value >= limit;
+    final readyFromPreviousStage = item.isReadyFromPreviousStageAt(stationType);
+    final menuColor = item.isCompletedAt(stationType)
+        ? PosColors.success
+        : readyFromPreviousStage
+        ? PosColors.info
+        : PosColors.textPrimary;
     final disabledAtStation =
         item.isFloorDirect &&
         (stationType == 'kitchen' || stationType == 'tray');
@@ -1411,6 +1482,7 @@ class _EmergencyMenuRow extends StatelessWidget {
                     maxLines: compact ? 3 : 2,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: menuColor,
                       fontWeight: FontWeight.w800,
                     ),
                   )
@@ -1421,6 +1493,7 @@ class _EmergencyMenuRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: menuColor,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -1448,7 +1521,11 @@ class _EmergencyMenuRow extends StatelessWidget {
             final progressValue = Text(
               '$value / $limit',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: done ? PosColors.success : PosColors.textPrimary,
+                color: done
+                    ? PosColors.success
+                    : readyFromPreviousStage
+                    ? PosColors.info
+                    : PosColors.textPrimary,
                 fontWeight: FontWeight.w900,
               ),
             );
@@ -1457,6 +1534,8 @@ class _EmergencyMenuRow extends StatelessWidget {
                   ? copy.floorDirectOnly
                   : done
                   ? copy.completed
+                  : readyFromPreviousStage
+                  ? copy.menuStatusPreviousStageReady
                   : copy.waitingForAction,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -1465,6 +1544,8 @@ class _EmergencyMenuRow extends StatelessWidget {
                     ? PosColors.textSecondary
                     : done
                     ? PosColors.success
+                    : readyFromPreviousStage
+                    ? PosColors.info
                     : PosColors.warning,
                 fontWeight: FontWeight.w700,
               ),
@@ -1524,15 +1605,18 @@ class _EmergencyMenuRow extends StatelessWidget {
                       children: [
                         Expanded(child: itemInfo),
                         const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            progressValue,
-                            progressLabel,
-                            const SizedBox(height: 6),
-                            itemActions,
-                          ],
+                        SizedBox(
+                          width: math.min(160, constraints.maxWidth * 0.45),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              progressValue,
+                              progressLabel,
+                              const SizedBox(height: 6),
+                              itemActions,
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -1547,20 +1631,16 @@ class _EmergencyMenuRow extends StatelessWidget {
 class _EmergencyDetailActions extends StatelessWidget {
   const _EmergencyDetailActions({
     required this.busy,
-    required this.canComplete,
     required this.canRevert,
     required this.copy,
     required this.onHome,
-    required this.onComplete,
     required this.onRevert,
   });
 
   final bool busy;
-  final bool canComplete;
   final bool canRevert;
   final _EmergencyCopy copy;
   final VoidCallback onHome;
-  final VoidCallback onComplete;
   final VoidCallback? onRevert;
 
   @override
@@ -1582,21 +1662,6 @@ class _EmergencyDetailActions extends StatelessWidget {
         foregroundColor: PosColors.danger,
       ),
     );
-    final complete = FilledButton.icon(
-      key: const Key('emergency_complete_order'),
-      onPressed: !busy && canComplete ? onComplete : null,
-      icon: busy
-          ? const SizedBox.square(
-              dimension: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : const Icon(Icons.arrow_forward_rounded),
-      label: Text(copy.completeAndNext),
-      style: FilledButton.styleFrom(
-        minimumSize: const Size.fromHeight(56),
-        backgroundColor: PosColors.success,
-      ),
-    );
     return Padding(
       padding: const EdgeInsets.all(12),
       child: LayoutBuilder(
@@ -1604,13 +1669,7 @@ class _EmergencyDetailActions extends StatelessWidget {
           if (constraints.maxWidth < 520) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                home,
-                const SizedBox(height: 8),
-                revert,
-                const SizedBox(height: 8),
-                complete,
-              ],
+              children: [home, const SizedBox(height: 8), revert],
             );
           }
           return Row(
@@ -1618,8 +1677,6 @@ class _EmergencyDetailActions extends StatelessWidget {
               Expanded(child: home),
               const SizedBox(width: 10),
               Expanded(child: revert),
-              const SizedBox(width: 10),
-              Expanded(child: complete),
             ],
           );
         },
@@ -1804,6 +1861,17 @@ class _EmergencyCopy {
   String get order => _pick('주문', 'Đơn', 'Order');
   String get orderedQuantity => _pick('주문 수량', 'Số lượng', 'Ordered');
   String get completed => _pick('완료', 'Hoàn tất', 'Completed');
+  String get menuStatusGuide =>
+      _pick('메뉴 상태 안내', 'Hướng dẫn trạng thái món', 'Menu status guide');
+  String get menuStatusCompleted =>
+      _pick('녹색 - 완료', 'Xanh lá - Hoàn tất', 'Green - Completed');
+  String get menuStatusInProgress =>
+      _pick('검은색 - 진행중', 'Đen - Đang xử lý', 'Black - In progress');
+  String get menuStatusPreviousStageReady => _pick(
+    '파란색 - 전 단계 완료·다음 단계 인계 전',
+    'Xanh dương - Bước trước đã xong·chưa bàn giao',
+    'Blue - Previous stage complete·not handed off',
+  );
   String get waitingForAction => _pick('처리 대기', 'Chờ xử lý', 'Action required');
   String get waitingForPrevious =>
       _pick('이전 단계 대기', 'Chờ công đoạn trước', 'Waiting for previous stage');
@@ -1835,12 +1903,6 @@ class _EmergencyCopy {
       _pick('취소 (원복)', 'Hủy (hoàn tác)', 'Cancel (undo)');
   String get cancelOne => _pick('1개 취소', 'Hủy 1 món', 'Undo one');
   String get completeOne => _pick('1개 완료', 'Hoàn tất 1 món', 'Complete one');
-  String get completeAndNext => _pick(
-    '완료 후 홈으로',
-    'Hoàn tất và về trang chính',
-    'Complete and return home',
-  );
-
   String elapsedMinutes(int minutes) =>
       _pick('$minutes분 경과', 'Đã chờ $minutes phút', '$minutes min elapsed');
 

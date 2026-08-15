@@ -19,6 +19,31 @@ String formatEmergencyElapsed(Duration elapsed) {
       '${seconds.toString().padLeft(2, '0')}';
 }
 
+void _mergeStationTimings(Map<String, dynamic> snapshot, dynamic rawTimings) {
+  if (rawTimings is! List) return;
+  final timingsByQueue = <String, Map<String, dynamic>>{
+    for (final timing in rawTimings.whereType<Map>())
+      if (timing['queue_id'] != null)
+        timing['queue_id'].toString(): Map<String, dynamic>.from(timing),
+  };
+  for (final key in ['orders', 'completed_orders']) {
+    final rawOrders = snapshot[key];
+    if (rawOrders is! List) continue;
+    snapshot[key] = rawOrders
+        .map((rawOrder) {
+          if (rawOrder is! Map) return rawOrder;
+          final order = Map<String, dynamic>.from(rawOrder);
+          final timing = timingsByQueue[order['queue_id']?.toString()];
+          if (timing != null) {
+            order['station_started_at'] = timing['station_started_at'];
+            order['station_completed_at'] = timing['station_completed_at'];
+          }
+          return order;
+        })
+        .toList(growable: false);
+  }
+}
+
 class EmergencyComboComponent {
   const EmergencyComboComponent({
     required this.menuItemId,
@@ -71,6 +96,7 @@ class EmergencyFulfillmentDisplayItem {
     required this.nameEn,
     required this.quantity,
     required this.completed,
+    required this.readyFromPreviousStage,
     required this.readOnly,
   });
 
@@ -80,6 +106,7 @@ class EmergencyFulfillmentDisplayItem {
   final String nameEn;
   final int quantity;
   final bool completed;
+  final bool readyFromPreviousStage;
   final bool readOnly;
 
   String localizedName(String languageCode) => switch (languageCode) {
@@ -155,6 +182,12 @@ class EmergencyFulfillmentItem {
           trayReceivedQuantity >= orderedQuantity &&
           trayDispatchedQuantity >= orderedQuantity,
     'floor' => floorServedQuantity >= orderedQuantity,
+    _ => false,
+  };
+
+  bool isReadyFromPreviousStageAt(String stationType) => switch (stationType) {
+    'tray' => !isFloorDirect && kitchenDoneQuantity > trayDispatchedQuantity,
+    'floor' => !isFloorDirect && trayDispatchedQuantity > floorServedQuantity,
     _ => false,
   };
 
@@ -242,6 +275,8 @@ class EmergencyFulfillmentOrder {
     required this.items,
     this.lastActionId,
     this.lastActionAt,
+    this.stationStartedAt,
+    this.stationCompletedAt,
   });
 
   final String queueId;
@@ -253,11 +288,16 @@ class EmergencyFulfillmentOrder {
   final List<EmergencyFulfillmentItem> items;
   final String? lastActionId;
   final DateTime? lastActionAt;
+  final DateTime? stationStartedAt;
+  final DateTime? stationCompletedAt;
 
   bool hasActionableQuantity(String stationType) =>
       items.any((item) => item.isActionableAt(stationType));
 
-  List<EmergencyFulfillmentItem> visibleItemsAt(String stationType) => items;
+  List<EmergencyFulfillmentItem> visibleItemsAt(String stationType) =>
+      stationType == 'floor'
+      ? items
+      : items.where((item) => !item.isFloorDirect).toList(growable: false);
 
   bool isCompleteAt(String stationType) {
     final relevant = stationType == 'floor'
@@ -270,6 +310,16 @@ class EmergencyFulfillmentOrder {
   bool isRecentlyCompleteAt(String stationType) =>
       isCompleteAt(stationType) ||
       (lastActionId != null && !hasActionableQuantity(stationType));
+
+  Duration stationElapsedAt(DateTime now, String stationType) {
+    final startedAt =
+        stationStartedAt ?? (stationType == 'kitchen' ? createdAt : null);
+    if (startedAt == null) return Duration.zero;
+    final completedAt = isRecentlyCompleteAt(stationType)
+        ? stationCompletedAt ?? lastActionAt
+        : null;
+    return (completedAt ?? now).difference(startedAt);
+  }
 
   List<EmergencyFulfillmentDisplayItem> displayItemsAt(String stationType) {
     final directByLineKey = <String, EmergencyFulfillmentItem>{
@@ -288,6 +338,7 @@ class EmergencyFulfillmentOrder {
     final result = <EmergencyFulfillmentDisplayItem>[];
     for (final item in items) {
       if (referencedDirectIds.contains(item.id)) continue;
+      if (item.isFloorDirect && stationType != 'floor') continue;
       if (item.comboComponents.isEmpty) {
         result.add(
           EmergencyFulfillmentDisplayItem(
@@ -297,9 +348,10 @@ class EmergencyFulfillmentOrder {
             nameEn: item.nameEn,
             quantity: item.orderedQuantity,
             completed: item.isCompletedAt(stationType),
-            readOnly:
-                item.isFloorDirect &&
-                (stationType == 'kitchen' || stationType == 'tray'),
+            readyFromPreviousStage: item.isReadyFromPreviousStageAt(
+              stationType,
+            ),
+            readOnly: false,
           ),
         );
         continue;
@@ -307,6 +359,7 @@ class EmergencyFulfillmentOrder {
 
       for (var index = 0; index < item.comboComponents.length; index += 1) {
         final component = item.comboComponents[index];
+        if (component.isFloorDirect && stationType != 'floor') continue;
         final direct = component.menuItemId.isEmpty
             ? null
             : directByLineKey['combo:${component.menuItemId}'];
@@ -319,9 +372,10 @@ class EmergencyFulfillmentOrder {
             nameEn: component.nameEn,
             quantity: component.displayQuantity(item.orderedQuantity),
             completed: statusItem.isCompletedAt(stationType),
-            readOnly:
-                component.isFloorDirect &&
-                (stationType == 'kitchen' || stationType == 'tray'),
+            readyFromPreviousStage: statusItem.isReadyFromPreviousStageAt(
+              stationType,
+            ),
+            readOnly: false,
           ),
         );
       }
@@ -333,7 +387,10 @@ class EmergencyFulfillmentOrder {
     List<EmergencyFulfillmentItem>? items,
     String? lastActionId,
     DateTime? lastActionAt,
+    DateTime? stationStartedAt,
+    DateTime? stationCompletedAt,
     bool clearLastAction = false,
+    bool clearStationCompletedAt = false,
   }) => EmergencyFulfillmentOrder(
     queueId: queueId,
     orderId: orderId,
@@ -344,6 +401,10 @@ class EmergencyFulfillmentOrder {
     items: items ?? this.items,
     lastActionId: clearLastAction ? null : (lastActionId ?? this.lastActionId),
     lastActionAt: clearLastAction ? null : (lastActionAt ?? this.lastActionAt),
+    stationStartedAt: stationStartedAt ?? this.stationStartedAt,
+    stationCompletedAt: clearLastAction || clearStationCompletedAt
+        ? null
+        : (stationCompletedAt ?? this.stationCompletedAt),
   );
 
   bool isCompleteForStage(String stage) =>
@@ -368,6 +429,12 @@ class EmergencyFulfillmentOrder {
           DateTime.now().toUtc(),
       lastActionId: json['last_action_id']?.toString(),
       lastActionAt: DateTime.tryParse(json['last_action_at']?.toString() ?? ''),
+      stationStartedAt: DateTime.tryParse(
+        json['station_started_at']?.toString() ?? '',
+      ),
+      stationCompletedAt: DateTime.tryParse(
+        json['station_completed_at']?.toString() ?? '',
+      ),
       items: rawItems is List
           ? rawItems
                 .whereType<Map>()
@@ -511,14 +578,13 @@ class EmergencyFulfillmentNotifier
           ? Map<String, dynamic>.from(raw)
           : <String, dynamic>{};
       final storeId = json['restaurant_id']?.toString();
-      try {
-        final completed = await supabase.rpc(
-          'get_emergency_station_today_completed',
-        );
-        json['completed_orders'] = completed is List ? completed : const [];
-      } catch (_) {
-        // Compatibility while the additive completed-history RPC rolls out.
-      }
+      final stationData = await Future.wait([
+        _optionalRpc('get_emergency_station_today_completed'),
+        _optionalRpc('get_emergency_station_timings'),
+      ]);
+      final completed = stationData[0];
+      json['completed_orders'] = completed is List ? completed : const [];
+      _mergeStationTimings(json, stationData[1]);
       if (storeId != null && storeId.isNotEmpty) {
         try {
           json['fulfillment_mode'] = await supabase.rpc(
@@ -554,6 +620,15 @@ class EmergencyFulfillmentNotifier
         _refreshRequested = false;
         unawaited(load(showLoading: false));
       }
+    }
+  }
+
+  Future<dynamic> _optionalRpc(String functionName) async {
+    try {
+      return await supabase.rpc(functionName);
+    } catch (_) {
+      // Compatibility while additive station RPCs roll out.
+      return null;
     }
   }
 
@@ -789,18 +864,11 @@ class EmergencyFulfillmentNotifier
     required String stage,
     required int delta,
   }) {
+    final actionAt = DateTime.now().toUtc();
     state = state.copyWith(
       orders: state.orders
           .map((order) {
-            return EmergencyFulfillmentOrder(
-              queueId: order.queueId,
-              orderId: order.orderId,
-              queueNo: order.queueNo,
-              tableNumber: order.tableNumber,
-              floorLabel: order.floorLabel,
-              createdAt: order.createdAt,
-              lastActionId: order.lastActionId,
-              lastActionAt: order.lastActionAt,
+            final nextOrder = order.copyWith(
               items: order.items
                   .map((item) {
                     if (item.id != itemId) return item;
@@ -811,6 +879,12 @@ class EmergencyFulfillmentNotifier
                     );
                   })
                   .toList(growable: false),
+            );
+            return nextOrder.copyWith(
+              stationCompletedAt: nextOrder.isCompleteForStage(stage)
+                  ? actionAt
+                  : null,
+              clearStationCompletedAt: delta < 0,
             );
           })
           .toList(growable: false),
@@ -880,6 +954,7 @@ class EmergencyFulfillmentNotifier
             return order.copyWith(
               lastActionId: actionId,
               lastActionAt: DateTime.now().toUtc(),
+              stationCompletedAt: DateTime.now().toUtc(),
               items: order.items
                   .map((item) {
                     if (item.isFloorDirect && stationType != 'floor') {

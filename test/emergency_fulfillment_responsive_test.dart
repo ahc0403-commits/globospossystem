@@ -208,7 +208,7 @@ void main() {
     expect(find.text('Bánh gạo cay'), findsOne);
     expect(find.text('떡볶이'), findsNothing);
     expect(find.text('0 / 2'), findsOne);
-    expect(find.byKey(const Key('emergency_complete_order')), findsOne);
+    expect(find.byKey(const Key('emergency_complete_order')), findsNothing);
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.byKey(const Key('emergency_menu_item_item-1')));
@@ -218,9 +218,7 @@ void main() {
       ('item-1', 'tray_dispatched', 1),
     ]);
 
-    await tester.tap(find.byKey(const Key('emergency_complete_order')));
-    await tester.pump();
-    expect(fixture.completedQueues, ['queue-1']);
+    expect(fixture.completedQueues, isEmpty);
     expect(tester.takeException(), isNull);
   });
 
@@ -304,7 +302,7 @@ void main() {
     expect(find.text('대기 주문 없음'), findsOne);
   });
 
-  testWidgets('whole-order completion returns home with work remaining', (
+  testWidgets('order detail omits the whole-order completion button', (
     tester,
   ) async {
     final fixture = _FixtureEmergencyNotifier(
@@ -319,14 +317,9 @@ void main() {
 
     await tester.tap(find.byKey(const Key('emergency_order_order-1')));
     await tester.pump();
-    await tester.tap(find.byKey(const Key('emergency_complete_order')));
-    await tester.pump();
-
-    expect(
-      find.byKey(const Key('emergency_order_detail_order-2')),
-      findsNothing,
-    );
-    expect(find.byKey(const Key('emergency_order_grid_8_slots')), findsOne);
+    expect(find.byKey(const Key('emergency_complete_order')), findsNothing);
+    expect(find.text('완료 후 홈으로'), findsNothing);
+    expect(find.byKey(const Key('emergency_detail_home')), findsOne);
   });
 
   testWidgets(
@@ -472,6 +465,9 @@ void main() {
 
     await tester.tap(find.text('최근 완료 1'));
     await tester.pump();
+    expect(find.text('05:00'), findsOne);
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.text('05:00'), findsOne);
     await tester.tap(find.byKey(const Key('emergency_order_order-1')));
     await tester.pump();
     expect(find.byKey(const Key('emergency_revert_order')), findsOne);
@@ -595,33 +591,28 @@ void main() {
   });
 
   for (final stationType in ['kitchen', 'tray']) {
-    testWidgets(
-      'floor-direct-only order is visible but read-only in $stationType',
-      (tester) async {
-        final fixture = _FixtureEmergencyNotifier(
-          _floorDirectState(stationType),
-        );
-        await _pumpEmergency(
-          tester,
-          fixture: fixture,
-          size: const Size(1024, 768),
-          locale: const Locale('ko'),
-          expectedStationType: stationType,
-        );
+    testWidgets('floor-direct-only order is hidden in $stationType', (
+      tester,
+    ) async {
+      final fixture = _FixtureEmergencyNotifier(_floorDirectState(stationType));
+      await _pumpEmergency(
+        tester,
+        fixture: fixture,
+        size: const Size(1024, 768),
+        locale: const Locale('ko'),
+        expectedStationType: stationType,
+      );
 
-        expect(find.byKey(const Key('emergency_order_order-direct')), findsOne);
-        expect(find.text('콜라'), findsOne);
-        await tester.tap(find.byKey(const Key('emergency_order_order-direct')));
-        await tester.pump();
-        final complete = tester.widget<FilledButton>(
-          find.byKey(const Key('emergency_complete_order')),
-        );
-        expect(complete.onPressed, isNull);
-        expect(tester.takeException(), isNull);
-      },
-    );
+      expect(
+        find.byKey(const Key('emergency_order_order-direct')),
+        findsNothing,
+      );
+      expect(find.text('콜라'), findsNothing);
+      expect(find.text('대기 주문 없음'), findsOne);
+      expect(tester.takeException(), isNull);
+    });
 
-    testWidgets('mixed order shows its read-only drink in $stationType', (
+    testWidgets('mixed order hides its floor drink in $stationType', (
       tester,
     ) async {
       final fixture = _FixtureEmergencyNotifier(_mixedRouteState(stationType));
@@ -636,7 +627,7 @@ void main() {
       await tester.tap(find.byKey(const Key('emergency_order_order-mixed')));
       await tester.pump();
       expect(find.text('떡볶이'), findsOne);
-      expect(find.text('콜라'), findsOne);
+      expect(find.text('콜라'), findsNothing);
       expect(
         find.byKey(const Key('emergency_floor_beverage_section')),
         findsNothing,
@@ -755,6 +746,54 @@ void main() {
     expect(completed.style?.color, PosColors.success);
     expect(pending.style?.color, PosColors.textPrimary);
     expect(find.byKey(const Key('emergency_order_elapsed_order-1')), findsOne);
+  });
+
+  for (final stationType in ['tray', 'floor']) {
+    testWidgets('$stationType shows previous-stage food in blue with legend', (
+      tester,
+    ) async {
+      final fixture = _FixtureEmergencyNotifier(_activeState(stationType));
+      await _pumpEmergency(
+        tester,
+        fixture: fixture,
+        size: const Size(1024, 768),
+        locale: const Locale('ko'),
+        expectedStationType: stationType,
+      );
+
+      final menu = tester.widget<Text>(
+        find.byKey(const Key('emergency_card_menu_item-1')),
+      );
+      expect(menu.style?.color, PosColors.info);
+      expect(
+        find.byKey(Key('emergency_menu_status_legend_$stationType')),
+        findsOne,
+      );
+      expect(find.text('녹색 - 완료'), findsOne);
+      expect(find.text('검은색 - 진행중'), findsOne);
+      expect(find.text('파란색 - 전 단계 완료·다음 단계 인계 전'), findsOne);
+    });
+  }
+
+  testWidgets('kitchen legend omits the previous-stage blue state', (
+    tester,
+  ) async {
+    final fixture = _FixtureEmergencyNotifier(_activeState('kitchen'));
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(1024, 768),
+      locale: const Locale('ko'),
+      expectedStationType: 'kitchen',
+    );
+
+    expect(
+      find.byKey(const Key('emergency_menu_status_legend_kitchen')),
+      findsOne,
+    );
+    expect(find.text('녹색 - 완료'), findsOne);
+    expect(find.text('검은색 - 진행중'), findsOne);
+    expect(find.textContaining('파란색 -'), findsNothing);
   });
 }
 
@@ -892,6 +931,8 @@ EmergencyFulfillmentState _completedState(String stationType) {
       order.copyWith(
         lastActionId: 'action-1',
         lastActionAt: DateTime.utc(2026, 8, 11, 10),
+        stationStartedAt: DateTime.utc(2026, 8, 11, 9, 55),
+        stationCompletedAt: DateTime.utc(2026, 8, 11, 10),
         items: [item.withStage('floor_served', item.trayDispatchedQuantity)],
       ),
     ],

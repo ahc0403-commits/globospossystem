@@ -226,7 +226,7 @@ void main() {
     expect(screen, contains("Key('emergency_enable_alarm')"));
     expect(screen, contains('final pageSize = isPhone ? 4 : 8;'));
     expect(screen, contains("'emergency_order_grid_\${pageSize}_slots'"));
-    expect(screen, contains("Key('emergency_complete_order')"));
+    expect(screen, isNot(contains("Key('emergency_complete_order')")));
     expect(screen, contains("Key('emergency_revert_order')"));
     expect(index, contains('indexedDB.open'));
     expect(index, contains('AudioContext'));
