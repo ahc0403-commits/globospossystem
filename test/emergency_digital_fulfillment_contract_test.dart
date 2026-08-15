@@ -4,6 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/utils/role_routes.dart';
 import 'package:globos_pos_system/features/emergency_fulfillment/emergency_fulfillment_provider.dart';
 
+class _TestEmergencyNotifier extends EmergencyFulfillmentNotifier {
+  void seed(EmergencyFulfillmentState value) => state = value;
+}
+
 void main() {
   test('emergency station role is isolated to its web route', () {
     expect(homeRouteForRole('emergency_station'), '/emergency');
@@ -40,6 +44,120 @@ void main() {
     expect(item.quantityForStage('floor_served'), 0);
     expect(item.localizedName('vi'), 'Tokbokki');
     expect(item.localizedName('ko'), '떡볶이');
+  });
+
+  test(
+    'handoff realtime rows become actionable without a snapshot roundtrip',
+    () {
+      final notifier = _TestEmergencyNotifier();
+      addTearDown(notifier.dispose);
+      notifier.seed(
+        EmergencyFulfillmentState(
+          assigned: true,
+          active: true,
+          restaurantId: 'store-1',
+          sessionId: 'session-1',
+          stationType: 'tray',
+          orders: [
+            EmergencyFulfillmentOrder(
+              queueId: 'queue-1',
+              orderId: 'order-1',
+              queueNo: 1,
+              tableNumber: 'T1',
+              floorLabel: '1F',
+              createdAt: DateTime.utc(2026, 8, 15),
+              items: const [
+                EmergencyFulfillmentItem(
+                  id: 'item-1',
+                  orderItemId: 'order-item-1',
+                  nameKo: '떡볶이',
+                  nameVi: 'Bánh gạo cay',
+                  nameEn: 'Spicy rice cake',
+                  orderedQuantity: 2,
+                  kitchenDoneQuantity: 0,
+                  trayReceivedQuantity: 0,
+                  trayDispatchedQuantity: 0,
+                  floorServedQuantity: 0,
+                  needsReview: false,
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+
+      expect(
+        notifier.state.orders.single.hasActionableQuantity('tray'),
+        isFalse,
+      );
+      expect(
+        notifier.applyRealtimeItemRowForTesting({
+          'id': 'item-1',
+          'kitchen_done_quantity': 2,
+          'tray_received_quantity': 0,
+          'tray_dispatched_quantity': 0,
+          'floor_served_quantity': 0,
+        }),
+        isTrue,
+      );
+      expect(
+        notifier.state.orders.single.hasActionableQuantity('tray'),
+        isTrue,
+      );
+
+      final trayOrder = notifier.state.orders.single;
+      notifier.seed(
+        notifier.state.copyWith(
+          stationType: 'floor',
+          orders: [
+            trayOrder.copyWith(
+              items: [
+                trayOrder.items.single
+                    .withStage('tray_received', 2)
+                    .withStage('tray_dispatched', 0),
+              ],
+            ),
+          ],
+        ),
+      );
+      expect(
+        notifier.state.orders.single.hasActionableQuantity('floor'),
+        isFalse,
+      );
+      expect(
+        notifier.applyRealtimeItemRowForTesting({
+          'id': 'item-1',
+          'kitchen_done_quantity': 2,
+          'tray_received_quantity': 2,
+          'tray_dispatched_quantity': 2,
+          'floor_served_quantity': 0,
+        }),
+        isTrue,
+      );
+      expect(
+        notifier.state.orders.single.hasActionableQuantity('floor'),
+        isTrue,
+      );
+      expect(
+        EmergencyFulfillmentNotifier.handoffRefreshInterval,
+        lessThanOrEqualTo(const Duration(seconds: 1)),
+      );
+    },
+  );
+
+  test('SAMPLE customer display identity is an active fixed requirement', () {
+    final migration = File(
+      'supabase/migrations/20260815160000_sample_customer_display_account.sql',
+    ).readAsStringSync();
+
+    expect(migration, contains("upper(btrim(short_code)) = 'SP'"));
+    expect(migration, contains("'sp_customer'"));
+    expect(migration, contains("'device_customer_display'"));
+    expect(migration, contains("'customer_display'"));
+    expect(
+      migration,
+      contains('SAMPLE_CUSTOMER_DISPLAY_ACCOUNT_VERIFICATION_FAILED'),
+    );
   });
 
   test('database contract is opt-in, quantity chained, and printer safe', () {

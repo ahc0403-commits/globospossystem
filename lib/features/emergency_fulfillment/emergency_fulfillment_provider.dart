@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -302,14 +303,21 @@ class EmergencyFulfillmentNotifier
   EmergencyFulfillmentNotifier() : super(const EmergencyFulfillmentState());
 
   static const _uuid = Uuid();
+  static const _handoffRefreshInterval = Duration(seconds: 1);
   RealtimeChannel? _channel;
   Timer? _pollTimer;
   bool _refreshing = false;
+  bool _refreshRequested = false;
   bool _flushing = false;
+  int _realtimeRevision = 0;
 
   Future<void> load({bool showLoading = true}) async {
-    if (_refreshing) return;
+    if (_refreshing) {
+      _refreshRequested = true;
+      return;
+    }
     _refreshing = true;
+    final refreshRevision = _realtimeRevision;
     if (showLoading) state = state.copyWith(isLoading: true, clearError: true);
     try {
       final outboxError = await _flushOutbox();
@@ -330,6 +338,10 @@ class EmergencyFulfillmentNotifier
       }
       final next = EmergencyFulfillmentState.fromJson(json);
       final pendingRecords = await EmergencyWebBridge.readOutbox();
+      if (refreshRevision != _realtimeRevision) {
+        _refreshRequested = true;
+        return;
+      }
       state = next.copyWith(
         isLoading: false,
         pendingOutboxCount: pendingRecords.length,
@@ -345,6 +357,10 @@ class EmergencyFulfillmentNotifier
       );
     } finally {
       _refreshing = false;
+      if (_refreshRequested && mounted) {
+        _refreshRequested = false;
+        unawaited(load(showLoading: false));
+      }
     }
   }
 
@@ -353,8 +369,7 @@ class EmergencyFulfillmentNotifier
       _startPolling();
       return;
     }
-    void refresh(PostgresChangePayload _) =>
-        unawaited(load(showLoading: false));
+    void refresh(PostgresChangePayload _) => _requestRealtimeRefresh();
     _channel = supabase
         .channel(LiveSyncScope.storeChannel('emergency_fulfillment', storeId))
         .onPostgresChanges(
@@ -376,7 +391,7 @@ class EmergencyFulfillmentNotifier
           schema: 'public',
           table: 'emergency_fulfillment_items',
           filter: LiveSyncScope.storeFilter(storeId),
-          callback: refresh,
+          callback: _applyRealtimeItemChange,
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
@@ -390,11 +405,71 @@ class EmergencyFulfillmentNotifier
   }
 
   void _startPolling() {
-    _pollTimer ??= Timer.periodic(
-      const Duration(seconds: 10),
-      (_) => unawaited(load(showLoading: false)),
-    );
+    _pollTimer ??= Timer.periodic(_handoffRefreshInterval, (_) {
+      if (!_refreshing) unawaited(load(showLoading: false));
+    });
   }
+
+  void _requestRealtimeRefresh() {
+    _realtimeRevision += 1;
+    unawaited(load(showLoading: false));
+  }
+
+  void _applyRealtimeItemChange(PostgresChangePayload payload) {
+    if (!_applyRealtimeItemRow(payload.newRecord)) {
+      _requestRealtimeRefresh();
+    }
+  }
+
+  bool _applyRealtimeItemRow(Map<String, dynamic> row) {
+    if (row.isEmpty || row['is_cancelled'] == true) return false;
+    final itemId = row['id']?.toString();
+    if (itemId == null || itemId.isEmpty) return false;
+
+    var found = false;
+    final nextOrders = state.orders
+        .map((order) {
+          var orderChanged = false;
+          final nextItems = order.items
+              .map((item) {
+                if (item.id != itemId) return item;
+                found = true;
+                orderChanged = true;
+                return item
+                    .withStage(
+                      'kitchen_done',
+                      _asInt(row['kitchen_done_quantity']),
+                    )
+                    .withStage(
+                      'tray_received',
+                      _asInt(row['tray_received_quantity']),
+                    )
+                    .withStage(
+                      'tray_dispatched',
+                      _asInt(row['tray_dispatched_quantity']),
+                    )
+                    .withStage(
+                      'floor_served',
+                      _asInt(row['floor_served_quantity']),
+                    );
+              })
+              .toList(growable: false);
+          return orderChanged ? order.copyWith(items: nextItems) : order;
+        })
+        .toList(growable: false);
+    if (!found) return false;
+
+    _realtimeRevision += 1;
+    state = state.copyWith(orders: nextOrders, clearError: true);
+    return true;
+  }
+
+  @visibleForTesting
+  static Duration get handoffRefreshInterval => _handoffRefreshInterval;
+
+  @visibleForTesting
+  bool applyRealtimeItemRowForTesting(Map<String, dynamic> row) =>
+      _applyRealtimeItemRow(row);
 
   Future<void> recordProgress({
     required String itemId,

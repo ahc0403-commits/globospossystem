@@ -33,11 +33,69 @@ class _FixtureEmergencyNotifier extends EmergencyFulfillmentNotifier {
     int delta = 1,
   }) async {
     recordedProgress.add((itemId, stage, delta));
+    state = state.copyWith(
+      orders: state.orders
+          .map(
+            (order) => order.copyWith(
+              items: order.items
+                  .map(
+                    (item) => item.id == itemId
+                        ? item.withStage(
+                            stage,
+                            (item.quantityForStage(stage) + delta).clamp(
+                              0,
+                              item.orderedQuantity,
+                            ),
+                          )
+                        : item,
+                  )
+                  .toList(growable: false),
+            ),
+          )
+          .toList(growable: false),
+    );
   }
 
   @override
   Future<bool> completeOrder({required String queueId}) async {
     completedQueues.add(queueId);
+    final stationType = state.stationType;
+    state = state.copyWith(
+      orders: state.orders
+          .map((order) {
+            if (order.queueId != queueId) return order;
+            return order.copyWith(
+              items: order.items
+                  .map(
+                    (item) => switch (stationType) {
+                      'kitchen' => item.withStage(
+                        'kitchen_done',
+                        item.orderedQuantity,
+                      ),
+                      'tray' =>
+                        item
+                            .withStage(
+                              'tray_received',
+                              item.kitchenDoneQuantity,
+                            )
+                            .withStage(
+                              'tray_dispatched',
+                              item.kitchenDoneQuantity,
+                            ),
+                      'floor' => item.withStage(
+                        'floor_served',
+                        item.isFloorDirect
+                            ? item.orderedQuantity
+                            : item.trayDispatchedQuantity,
+                      ),
+                      _ => item,
+                    },
+                  )
+                  .toList(growable: false),
+            );
+          })
+          .toList(growable: false),
+    );
     return true;
   }
 
@@ -190,6 +248,84 @@ void main() {
     await tester.pumpAndSettle();
     expect(fixture.recordedProgress, [('item-1', 'kitchen_done', 1)]);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('detail home button returns to the order board', (tester) async {
+    final fixture = _FixtureEmergencyNotifier(_activeState('kitchen'));
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(1024, 768),
+      locale: const Locale('ko'),
+    );
+
+    await tester.tap(find.byKey(const Key('emergency_order_order-1')));
+    await tester.pump();
+    expect(find.byKey(const Key('emergency_order_detail_order-1')), findsOne);
+
+    expect(find.byKey(const Key('emergency_detail_home')), findsOne);
+    await tester.tap(find.byKey(const Key('emergency_detail_home')));
+    await tester.pump();
+    expect(
+      find.byKey(const Key('emergency_order_detail_order-1')),
+      findsNothing,
+    );
+    expect(find.byKey(const Key('emergency_order_grid_8_slots')), findsOne);
+  });
+
+  testWidgets('finishing every item automatically returns home', (
+    tester,
+  ) async {
+    final fixture = _FixtureEmergencyNotifier(_activeState('kitchen'));
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(1024, 768),
+      locale: const Locale('ko'),
+    );
+
+    await tester.tap(find.byKey(const Key('emergency_order_order-1')));
+    await tester.pump();
+    final completeItem = find.byKey(
+      const Key('emergency_menu_item_complete_item-1'),
+    );
+    await tester.tap(completeItem);
+    await tester.pump();
+    expect(find.byKey(const Key('emergency_order_detail_order-1')), findsOne);
+
+    await tester.tap(completeItem);
+    await tester.pump();
+    expect(
+      find.byKey(const Key('emergency_order_detail_order-1')),
+      findsNothing,
+    );
+    expect(find.byKey(const Key('emergency_board_mode_selector')), findsOne);
+    expect(find.text('대기 주문 없음'), findsOne);
+  });
+
+  testWidgets('whole-order completion returns home with work remaining', (
+    tester,
+  ) async {
+    final fixture = _FixtureEmergencyNotifier(
+      _activeState('kitchen', orderCount: 2),
+    );
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(1024, 768),
+      locale: const Locale('ko'),
+    );
+
+    await tester.tap(find.byKey(const Key('emergency_order_order-1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('emergency_complete_order')));
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('emergency_order_detail_order-2')),
+      findsNothing,
+    );
+    expect(find.byKey(const Key('emergency_order_grid_8_slots')), findsOne);
   });
 
   testWidgets(
