@@ -26,7 +26,7 @@ const targetEmails = [
   'bunsik_sm1@globos.world',
   'bt_pos1@globos.world',
   'bt_tab1@globos.world',
-  'bt_kit1@globos.world',
+  'bt_kit@globos.world',
 ];
 const excludedEmails = new Set(['andre@globos.world']);
 const required = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'POS_INITIAL_PASSWORD'];

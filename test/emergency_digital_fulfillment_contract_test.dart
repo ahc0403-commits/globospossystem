@@ -68,18 +68,30 @@ void main() {
     expect(migration, contains('event_id uuid NOT NULL UNIQUE'));
   });
 
-  test('Binh Thanh emergency identities contain only 1F and 2F floors', () {
+  test('short emergency identities contain only 1F and 2F floors', () {
     final migration = File(
       'supabase/migrations/20260810170000_emergency_digital_fulfillment.sql',
+    ).readAsStringSync();
+    final shortCodeMigration = File(
+      'supabase/migrations/20260815110000_emergency_short_account_codes.sql',
     ).readAsStringSync();
     final requiredEmails = File(
       'docs/pos/pos_required_production_auth_emails.txt',
     ).readAsStringSync();
-    for (final code in ['bt_tray1', 'bt_floor_1f', 'bt_floor_2f']) {
-      expect(migration, contains("'$code'"));
+    for (final code in ['bt_tray', 'bt_1f', 'bt_2f']) {
       expect(requiredEmails, contains('$code@globos.world'));
     }
-    expect(migration, isNot(contains('bt_floor_g')));
+    for (final legacyCode in ['bt_tray1', 'bt_floor_1f', 'bt_floor_2f']) {
+      expect(requiredEmails, isNot(contains('$legacyCode@globos.world')));
+    }
+    for (final suffixPattern in [
+      r'_(tray1|tray)$',
+      r'_(floor_1f|1f)$',
+      r'_(floor_2f|2f)$',
+      r'_(kit1|kit)$',
+    ]) {
+      expect(shortCodeMigration, contains(suffixPattern));
+    }
     expect(requiredEmails, isNot(contains('bt_floor_g@globos.world')));
     expect(migration, contains("floor_label IN ('1F', '2F')"));
   });

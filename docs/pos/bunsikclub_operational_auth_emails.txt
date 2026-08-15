@@ -1,6 +1,6 @@
 # Approved BunsikClub fixed operational accounts.
 # Passwords must never be stored in this repository.
-bt_kit1@globos.world
+bt_kit@globos.world
 bt_pos1@globos.world
 bt_tab1@globos.world
 bunsik_bm1@globos.world

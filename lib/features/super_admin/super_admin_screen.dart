@@ -289,7 +289,12 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
       _RestaurantsTab(
         state: state,
         notifier: notifier,
-        onGoToAdmin: (storeId) => context.go('/admin/$storeId'),
+        onGoToAdmin: (storeId) async {
+          await ref.read(authProvider.notifier).setActiveStore(storeId);
+          if (!mounted) return;
+          final storeAdminRoute = '/admin/$storeId';
+          context.go(storeAdminRoute);
+        },
       ),
       _AllReportsTab(state: state, notifier: notifier),
       const EmergencyControlPanel(),

@@ -76,7 +76,7 @@ void main() {
         .toSet();
 
     expect(accounts, {
-      'bt_kit1@globos.world',
+      'bt_kit@globos.world',
       'bt_pos1@globos.world',
       'bt_tab1@globos.world',
       'bunsik_bm1@globos.world',
