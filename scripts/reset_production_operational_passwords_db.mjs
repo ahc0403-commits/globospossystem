@@ -18,6 +18,8 @@ const SUPPORTED_ROLES = new Set([
   "waiter",
   "kitchen",
   "cashier",
+  "print_station",
+  "emergency_station",
   "photo_objet_master",
   "photo_objet_store_admin",
   "photo_objet_store_operator",

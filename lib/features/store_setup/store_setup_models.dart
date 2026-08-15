@@ -104,7 +104,7 @@ abstract final class WorkforcePresetCatalog {
         scope: 'store',
       ),
       WorkforceAccountTemplate(
-        accountCode: '${prefix}_kit1',
+        accountCode: '${prefix}_kit',
         accountType: 'device_kitchen',
         role: 'kitchen',
         displayName: '${prefix.toUpperCase()} Kitchen',

@@ -77,7 +77,7 @@ void main() {
       'bunsik_sm1',
       'bt_pos1',
       'bt_tab1',
-      'bt_kit1',
+      'bt_kit',
       'bt_print',
       'bt_customer',
     ]);

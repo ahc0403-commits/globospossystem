@@ -126,8 +126,18 @@ class AppNavBar extends ConsumerWidget {
               _StoreSwitcher(
                 value: authState.storeId,
                 stores: authState.accessibleStores,
-                onChanged: (storeId) =>
-                    ref.read(authProvider.notifier).setActiveStore(storeId),
+                onChanged: (storeId) async {
+                  await ref.read(authProvider.notifier).setActiveStore(storeId);
+                  if (!context.mounted) return;
+
+                  final currentPath = GoRouterState.of(context).uri.path;
+                  if (role == 'super_admin' &&
+                      currentPath.startsWith('/admin/')) {
+                    final nextAdminRoute = '/admin/$storeId';
+                    nav.push(nextAdminRoute);
+                    context.go(nextAdminRoute);
+                  }
+                },
               ),
             ] else if (showStore && activeStore != null) ...[
               const SizedBox(width: 10),

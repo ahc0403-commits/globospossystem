@@ -93,6 +93,26 @@ void main() {
     expect(nav, contains('final logoutOnly = showLogout && veryCompact'));
   });
 
+  test('super admin store navigation keeps route and active scope aligned', () {
+    final nav = readRepoFile('lib/widgets/app_nav_bar.dart');
+    final superAdmin = readRepoFile(
+      'lib/features/super_admin/super_admin_screen.dart',
+    );
+
+    expectInOrder(nav, const [
+      '.setActiveStore(storeId)',
+      "currentPath.startsWith('/admin/')",
+      "final nextAdminRoute = '/admin/\$storeId'",
+      'context.go(nextAdminRoute)',
+    ]);
+    expectInOrder(superAdmin, const [
+      'onGoToAdmin: (storeId) async',
+      '.setActiveStore(storeId)',
+      "final storeAdminRoute = '/admin/\$storeId'",
+      'context.go(storeAdminRoute)',
+    ]);
+  });
+
   test('admin nav order stays aligned with tab body order and roots', () {
     final admin = readRepoFile('lib/features/admin/admin_screen.dart');
     final tables = readRepoFile('lib/features/admin/tabs/tables_tab.dart');

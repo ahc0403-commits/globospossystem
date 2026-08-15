@@ -93,7 +93,7 @@ BEGIN
     v_store, 'BT', 'store_managed', 1,
     '[
       {"account_code":"bt_pos1","account_type":"device_pos","role":"cashier","display_name":"BT POS 1","scope":"store"},
-      {"account_code":"bt_kit1","account_type":"device_kitchen","role":"kitchen","display_name":"BT Kitchen 1","scope":"store"},
+      {"account_code":"bt_kit","account_type":"device_kitchen","role":"kitchen","display_name":"BT Kitchen","scope":"store"},
       {"account_code":"bt_ops1","account_type":"store_operator","role":"photo_objet_store_operator","display_name":"BT Operator 1","scope":"store"}
     ]'::jsonb
   );
@@ -128,7 +128,7 @@ BEGIN
       {"account_code":"bunsik_sm1","account_type":"store_manager","role":"store_admin","display_name":"Bunsik SM 1","scope":"store"},
       {"account_code":"bt_pos1","account_type":"device_pos","role":"cashier","display_name":"BT POS 1","scope":"store"},
       {"account_code":"bt_tab1","account_type":"device_tablet","role":"cashier","display_name":"BT Tablet 1","scope":"store"},
-      {"account_code":"bt_kit1","account_type":"device_kitchen","role":"kitchen","display_name":"BT Kitchen 1","scope":"store"}
+      {"account_code":"bt_kit","account_type":"device_kitchen","role":"kitchen","display_name":"BT Kitchen","scope":"store"}
     ]'::jsonb
   );
   PERFORM public.admin_configure_store_workforce(
