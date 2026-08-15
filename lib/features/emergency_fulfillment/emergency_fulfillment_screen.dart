@@ -68,9 +68,23 @@ class _EmergencyFulfillmentScreenState
     if (newActionable.difference(oldActionable).isNotEmpty) {
       _triggerAlarm();
     }
-    if (_selectedOrderId != null &&
-        !next.orders.any((order) => order.orderId == _selectedOrderId)) {
-      setState(() => _selectedOrderId = null);
+    final selectedOrderId = _selectedOrderId;
+    if (selectedOrderId != null) {
+      final previousOrder = previous?.orders
+          .where((order) => order.orderId == selectedOrderId)
+          .cast<EmergencyFulfillmentOrder?>()
+          .firstWhere((_) => true, orElse: () => null);
+      final nextOrder = next.orders
+          .where((order) => order.orderId == selectedOrderId)
+          .cast<EmergencyFulfillmentOrder?>()
+          .firstWhere((_) => true, orElse: () => null);
+      final stationType = next.stationType ?? previous?.stationType ?? '';
+      final completedSelectedOrder =
+          previousOrder?.hasActionableQuantity(stationType) == true &&
+          nextOrder?.hasActionableQuantity(stationType) == false;
+      if (nextOrder == null || completedSelectedOrder) {
+        setState(() => _selectedOrderId = null);
+      }
     }
   }
 
@@ -156,6 +170,8 @@ class _EmergencyFulfillmentScreenState
                 onRefresh: () => ref
                     .read(emergencyFulfillmentProvider.notifier)
                     .load(showLoading: false),
+                showHomeButton: _selectedOrderId != null,
+                onHome: () => setState(() => _selectedOrderId = null),
               ),
               Expanded(
                 child: AnimatedSwitcher(
@@ -299,20 +315,11 @@ class _EmergencyFulfillmentScreenState
         .read(emergencyFulfillmentProvider.notifier)
         .completeOrder(queueId: order.queueId);
     if (!mounted) return;
-    final nextState = ref.read(emergencyFulfillmentProvider);
-    final nextOrder = nextState.orders
-        .where(
-          (candidate) =>
-              candidate.orderId != order.orderId &&
-              candidate.hasActionableQuantity(nextState.stationType ?? ''),
-        )
-        .cast<EmergencyFulfillmentOrder?>()
-        .firstWhere((_) => true, orElse: () => null);
     setState(() {
       _actionBusy = false;
       if (success) {
         _showRecent = false;
-        _selectedOrderId = nextOrder?.orderId;
+        _selectedOrderId = null;
         _page = 0;
       }
     });
@@ -412,6 +419,8 @@ class _EmergencyHeader extends StatelessWidget {
     required this.pendingOutboxCount,
     required this.onEnableAlarm,
     required this.onRefresh,
+    required this.showHomeButton,
+    required this.onHome,
   });
 
   final String title;
@@ -421,6 +430,8 @@ class _EmergencyHeader extends StatelessWidget {
   final int pendingOutboxCount;
   final VoidCallback? onEnableAlarm;
   final VoidCallback onRefresh;
+  final bool showHomeButton;
+  final VoidCallback onHome;
 
   @override
   Widget build(BuildContext context) {
@@ -493,7 +504,11 @@ class _EmergencyHeader extends StatelessWidget {
                       onPressed: onRefresh,
                       icon: const Icon(Icons.refresh_rounded),
                     ),
-                    const AppNavBar(showLogout: true),
+                    AppNavBar(
+                      forceHomeEnabled: showHomeButton,
+                      onHomePressed: onHome,
+                      showLogout: true,
+                    ),
                   ],
                 ),
                 if (pendingOutboxCount > 0)
@@ -529,7 +544,11 @@ class _EmergencyHeader extends StatelessWidget {
               ),
               alarmButton,
               const SizedBox(width: 6),
-              const AppNavBar(showLogout: true),
+              AppNavBar(
+                forceHomeEnabled: showHomeButton,
+                onHomePressed: onHome,
+                showLogout: true,
+              ),
             ],
           );
         },
@@ -985,6 +1004,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
               canComplete: canComplete,
               canRevert: onRevert != null && !pending,
               copy: copy,
+              onHome: onBack,
               onComplete: onComplete,
               onRevert: onRevert,
             ),
@@ -1405,6 +1425,7 @@ class _EmergencyDetailActions extends StatelessWidget {
     required this.canComplete,
     required this.canRevert,
     required this.copy,
+    required this.onHome,
     required this.onComplete,
     required this.onRevert,
   });
@@ -1413,11 +1434,19 @@ class _EmergencyDetailActions extends StatelessWidget {
   final bool canComplete;
   final bool canRevert;
   final _EmergencyCopy copy;
+  final VoidCallback onHome;
   final VoidCallback onComplete;
   final VoidCallback? onRevert;
 
   @override
   Widget build(BuildContext context) {
+    final home = OutlinedButton.icon(
+      key: const Key('emergency_detail_home'),
+      onPressed: busy ? null : onHome,
+      icon: const Icon(Icons.home_rounded),
+      label: Text(copy.backToBoard),
+      style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(56)),
+    );
     final revert = OutlinedButton.icon(
       key: const Key('emergency_revert_order'),
       onPressed: !busy && canRevert ? onRevert : null,
@@ -1450,11 +1479,19 @@ class _EmergencyDetailActions extends StatelessWidget {
           if (constraints.maxWidth < 520) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [revert, const SizedBox(height: 8), complete],
+              children: [
+                home,
+                const SizedBox(height: 8),
+                revert,
+                const SizedBox(height: 8),
+                complete,
+              ],
             );
           }
           return Row(
             children: [
+              Expanded(child: home),
+              const SizedBox(width: 10),
               Expanded(child: revert),
               const SizedBox(width: 10),
               Expanded(child: complete),
@@ -1665,13 +1702,17 @@ class _EmergencyCopy {
   String get totalOrders => _pick('총 주문', 'Tổng đơn', 'Total');
   String get previousPage => _pick('이전 페이지', 'Trang trước', 'Previous page');
   String get nextPage => _pick('다음 페이지', 'Trang sau', 'Next page');
-  String get backToBoard => _pick('주문 보드로', 'Về bảng đơn', 'Back to board');
+  String get backToBoard =>
+      _pick('홈화면 돌아가기', 'Về màn hình chính', 'Return home');
   String get cancelAndRevert =>
       _pick('취소 (원복)', 'Hủy (hoàn tác)', 'Cancel (undo)');
   String get cancelOne => _pick('1개 취소', 'Hủy 1 món', 'Undo one');
   String get completeOne => _pick('1개 완료', 'Hoàn tất 1 món', 'Complete one');
-  String get completeAndNext =>
-      _pick('완료 (다음 단계)', 'Hoàn tất (bước tiếp theo)', 'Complete (next stage)');
+  String get completeAndNext => _pick(
+    '완료 후 홈으로',
+    'Hoàn tất và về trang chính',
+    'Complete and return home',
+  );
 
   String elapsedMinutes(int minutes) =>
       _pick('$minutes분 경과', 'Đã chờ $minutes phút', '$minutes min elapsed');
