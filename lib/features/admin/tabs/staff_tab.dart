@@ -8,7 +8,7 @@ import '../../../core/ui/pos_design_tokens.dart';
 import '../../../core/ui/app_theme.dart';
 import '../../../core/ui/toast/toast.dart';
 import '../../../widgets/error_toast.dart';
-import '../../auth/auth_provider.dart';
+import '../providers/admin_scope_provider.dart';
 import '../providers/staff_provider.dart';
 
 class StaffTab extends ConsumerStatefulWidget {
@@ -35,7 +35,7 @@ class _StaffTabState extends ConsumerState<StaffTab> {
 
   @override
   Widget build(BuildContext context) {
-    final storeId = ref.watch(authProvider).storeId;
+    final storeId = ref.watch(adminScopedStoreIdProvider);
     final staffState = ref.watch(staffProvider);
     final attendanceState = ref.watch(attendanceProvider);
 

@@ -13,6 +13,7 @@ import '../../../core/utils/number_input_utils.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
+import '../providers/admin_scope_provider.dart';
 import '../../qc/qc_provider.dart';
 
 const _qcDefaultPageMinHeight = 720.0;
@@ -81,7 +82,7 @@ class _QcTabState extends ConsumerState<QcTab>
 
   @override
   Widget build(BuildContext context) {
-    final storeId = ref.watch(authProvider).storeId;
+    final storeId = ref.watch(adminScopedStoreIdProvider);
     final templateState = ref.watch(qcTemplateProvider);
     final checkState = ref.watch(qcCheckProvider);
     final followupState = ref.watch(qcFollowupProvider);

@@ -14,7 +14,7 @@ import '../../../core/utils/floor_label.dart';
 import '../../../main.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../widgets/error_toast.dart';
-import '../../auth/auth_provider.dart';
+import '../providers/admin_scope_provider.dart';
 import '../../order/order_provider.dart';
 import '../../table/floor_layout.dart';
 import '../../table/table_model.dart';
@@ -289,7 +289,7 @@ class _TablesTabState extends ConsumerState<TablesTab> {
 
   @override
   Widget build(BuildContext context) {
-    final storeId = ref.watch(authProvider).storeId;
+    final storeId = ref.watch(adminScopedStoreIdProvider);
     _ensureLoaded(storeId);
 
     if (storeId == null) {

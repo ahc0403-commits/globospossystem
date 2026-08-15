@@ -10,6 +10,7 @@ import '../../../main.dart';
 import '../delivery_models.dart';
 import '../delivery_settlement_provider.dart';
 import '../../auth/auth_provider.dart';
+import '../../admin/providers/admin_scope_provider.dart';
 import '../../../core/utils/permission_utils.dart';
 
 class DeliverySettlementTab extends ConsumerStatefulWidget {
@@ -30,7 +31,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
   }
 
   void _loadData() {
-    final rid = ref.read(authProvider).storeId;
+    final rid = ref.read(adminScopedStoreIdProvider);
     if (rid != null) {
       ref.read(deliverySettlementProvider.notifier).load(rid);
     }
@@ -768,10 +769,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
       children: [
         Text(
           label,
-          style: AppFonts.system(
-            color: AppColors.textSecondary,
-            fontSize: 11,
-          ),
+          style: AppFonts.system(color: AppColors.textSecondary, fontSize: 11),
         ),
         const SizedBox(height: 2),
         Text(
@@ -1191,7 +1189,7 @@ class _DeliverySettlementTabState extends ConsumerState<DeliverySettlementTab> {
   };
 
   Future<void> _confirmReceived(String settlementId) async {
-    final rid = ref.read(authProvider).storeId;
+    final rid = ref.read(adminScopedStoreIdProvider);
     if (rid == null) return;
 
     final confirmed = await ToastConfirmDialog.show(

@@ -18,6 +18,7 @@ import '../../../core/utils/number_input_utils.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
+import '../providers/admin_scope_provider.dart';
 
 String _formatVnd(NumberFormat currency, num amount) {
   return '${currency.format(amount)} VND';
@@ -1188,7 +1189,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
-    final storeId = auth.storeId;
+    final storeId = ref.watch(adminScopedStoreIdProvider);
     final canManageAttendance = const {
       'admin',
       'store_admin',

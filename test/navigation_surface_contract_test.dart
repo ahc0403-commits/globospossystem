@@ -113,6 +113,33 @@ void main() {
     ]);
   });
 
+  test('admin store route scopes every store-backed surface', () {
+    final router = readRepoFile('lib/core/router/app_router.dart');
+    final admin = readRepoFile('lib/features/admin/admin_screen.dart');
+    final scopedSurfaces = [
+      'lib/features/admin/tabs/tables_tab.dart',
+      'lib/features/admin/tabs/menu_tab.dart',
+      'lib/features/admin/tabs/staff_tab.dart',
+      'lib/features/admin/tabs/attendance_tab.dart',
+      'lib/features/admin/tabs/qc_tab.dart',
+      'lib/features/admin/tabs/settings_tab.dart',
+      'lib/features/inventory_purchase/inventory_purchase_screen.dart',
+      'lib/features/photo_inventory/photo_inventory_screen.dart',
+      'lib/features/delivery/screens/delivery_settlement_tab.dart',
+    ];
+
+    expect(router, contains('adminScopedStoreIdProvider.overrideWithValue'));
+    expect(admin, contains('ref.watch(adminScopedStoreIdProvider)'));
+    expect(admin, contains('overrideStoreId: widget.overrideRestaurantId'));
+    for (final path in scopedSurfaces) {
+      expect(
+        readRepoFile(path),
+        contains('adminScopedStoreIdProvider'),
+        reason: path,
+      );
+    }
+  });
+
   test('admin nav order stays aligned with tab body order and roots', () {
     final admin = readRepoFile('lib/features/admin/admin_screen.dart');
     final tables = readRepoFile('lib/features/admin/tabs/tables_tab.dart');

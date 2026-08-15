@@ -13,6 +13,7 @@ import 'package:globos_pos_system/core/services/printer_destination_service.dart
 import 'package:globos_pos_system/core/services/attendance_service.dart';
 import 'package:globos_pos_system/core/services/tables_service.dart';
 import 'package:globos_pos_system/features/admin/providers/admin_audit_provider.dart';
+import 'package:globos_pos_system/features/admin/providers/admin_scope_provider.dart';
 import 'package:globos_pos_system/features/admin/providers/menu_provider.dart';
 import 'package:globos_pos_system/features/admin/providers/printer_destinations_provider.dart';
 import 'package:globos_pos_system/features/admin/providers/settings_provider.dart';
@@ -810,6 +811,31 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Nguyễn Minh Anh'), findsWidgets);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('table tab uses the admin route store scope over auth store', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const routeStoreId = '3a268807-771f-4fd4-84fe-e1b0b00de40a';
+    String? requestedStoreId;
+
+    await _pump(
+      tester,
+      child: const TablesTab(),
+      overrides: [
+        adminScopedStoreIdProvider.overrideWithValue(routeStoreId),
+        tablesProvider.overrideWith((ref, storeId) {
+          requestedStoreId = storeId;
+          return _TablesNotifier();
+        }),
+      ],
+    );
+    await tester.pump();
+
+    expect(requestedStoreId, routeStoreId);
+    expect(requestedStoreId, isNot(_authState.storeId));
   });
 
   testWidgets('all six table dialog entrypoints execute real workflows', (

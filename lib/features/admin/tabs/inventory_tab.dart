@@ -11,6 +11,7 @@ import '../../../core/utils/permission_utils.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
+import '../providers/admin_scope_provider.dart';
 import '../../inventory/inventory_provider.dart';
 
 class InventoryTab extends ConsumerStatefulWidget {
@@ -177,7 +178,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
-    final storeId = auth.storeId;
+    final storeId = ref.watch(adminScopedStoreIdProvider);
     final ingredientState = ref.watch(ingredientProvider);
     final recipeState = ref.watch(recipeProvider);
     final physicalCountState = ref.watch(physicalCountProvider);
