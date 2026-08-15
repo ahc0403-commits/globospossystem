@@ -20,6 +20,7 @@ const {
   createRecoveryRunIdentity,
   inclusiveDateRange,
   isAutomaticRecoverySchedule,
+  isPhotoObjetServiceType,
   mapWithConcurrency,
   isZeroSalesInterval,
   parseArgs,
@@ -785,14 +786,14 @@ test('stable source identity ignores workbook order and preserves identical mult
 test('daily aggregate is recomputed from the canonical raw ledger', () => {
   const rows = [
     { device_name: 'M1', device_id: 'D1', amount: 0, raw_payload: { row: { id: 0 } } },
-    { device_name: 'M1', device_id: 'D1', amount: 100000, raw_payload: { row: { id: 1 } } },
-    { device_name: 'M1', device_id: 'D1', amount: 120000, raw_payload: { row: { id: 2 } } },
+    { device_name: 'M1', device_id: 'D1', amount: 2110000, raw_type: 'Sale', raw_payload: { row: { id: 1 } } },
+    { device_name: 'M1', device_id: 'D1', amount: 170000, raw_type: 'Service', raw_payload: { row: { id: 2 } } },
     { device_name: 'M2', device_id: 'D2', amount: 90000, raw_payload: { row: { id: 3 } } },
   ];
   assert.deepEqual(aggregateDailyRawRows(rows), [
     {
-      device_name: 'M1', device_id: 'D1', gross_sales: 220000,
-      service_amount: 0, transaction_count: 2, service_count: 0,
+      device_name: 'M1', device_id: 'D1', gross_sales: 2280000,
+      service_amount: 170000, transaction_count: 2, service_count: 1,
       raw_rows: [{ id: 1 }, { id: 2 }],
     },
     {
@@ -801,6 +802,14 @@ test('daily aggregate is recomputed from the canonical raw ledger', () => {
       raw_rows: [{ id: 3 }],
     },
   ]);
+});
+
+test('service classification accepts Moers service and coin labels only', () => {
+  assert.equal(isPhotoObjetServiceType('Service'), true);
+  assert.equal(isPhotoObjetServiceType('Coin Payment'), true);
+  assert.equal(isPhotoObjetServiceType('SERVICE - COIN'), true);
+  assert.equal(isPhotoObjetServiceType('Sale'), false);
+  assert.equal(isPhotoObjetServiceType(''), false);
 });
 
 test('partial aggregate snapshots never overwrite fuller totals', () => {
