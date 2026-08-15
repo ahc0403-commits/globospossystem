@@ -7,6 +7,7 @@ import '../../core/services/navigation_history_service.dart';
 import '../../core/utils/permission_utils.dart';
 import '../../core/utils/role_routes.dart';
 import '../../features/admin/admin_screen.dart';
+import '../../features/admin/providers/admin_scope_provider.dart';
 import '../../features/auth/auth_provider.dart';
 import '../../features/auth/auth_state.dart';
 import '../../features/auth/login_screen.dart';
@@ -341,10 +342,18 @@ GoRouter buildAppRouter(ProviderContainer container) {
       // super_admin이 특정 레스토랑 admin 화면으로 진입하는 경로
       GoRoute(
         path: '/admin/:storeId',
-        builder: (_, state) => AdminScreen(
-          overrideRestaurantId: state.pathParameters['storeId'],
-          initialTabIndex: _tabIndexFromQuery(state.uri.queryParameters['tab']),
-        ),
+        builder: (_, state) {
+          final storeId = state.pathParameters['storeId'] ?? '';
+          return ProviderScope(
+            overrides: [adminScopedStoreIdProvider.overrideWithValue(storeId)],
+            child: AdminScreen(
+              overrideRestaurantId: storeId,
+              initialTabIndex: _tabIndexFromQuery(
+                state.uri.queryParameters['tab'],
+              ),
+            ),
+          );
+        },
       ),
     ],
   );

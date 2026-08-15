@@ -8,7 +8,7 @@ import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../core/utils/number_input_utils.dart';
-import '../../features/auth/auth_provider.dart';
+import '../../features/admin/providers/admin_scope_provider.dart';
 import '../../features/inventory/inventory_provider.dart';
 
 class PhotoInventoryScreen extends ConsumerStatefulWidget {
@@ -28,8 +28,7 @@ class _PhotoInventoryScreenState extends ConsumerState<PhotoInventoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = ref.watch(authProvider);
-    final storeId = auth.storeId;
+    final storeId = ref.watch(adminScopedStoreIdProvider);
     final state = ref.watch(ingredientProvider);
 
     if (widget.autoLoad && storeId != null && storeId != _loadedStoreId) {

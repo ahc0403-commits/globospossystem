@@ -12,7 +12,7 @@ import '../../core/i18n/locale_extensions.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../core/utils/number_input_utils.dart';
-import '../auth/auth_provider.dart';
+import '../admin/providers/admin_scope_provider.dart';
 import '../inventory/ingredient_excel_import.dart';
 import '../inventory/inventory_provider.dart';
 import '../inventory/recipe_excel_import.dart';
@@ -121,8 +121,7 @@ class _InventoryPurchaseScreenState
 
   @override
   Widget build(BuildContext context) {
-    final auth = ref.watch(authProvider);
-    final storeId = auth.storeId;
+    final storeId = ref.watch(adminScopedStoreIdProvider);
     if (widget.autoLoad) {
       _scheduleStoreLoad(storeId);
     }

@@ -18,6 +18,8 @@ class AppNavBar extends ConsumerWidget {
     this.forceBackEnabled = false,
     this.forceHomeEnabled = false,
     this.showLogout = true,
+    this.overrideStoreId,
+    this.overrideStoreName,
     this.onBackPressed,
     this.onHomePressed,
   });
@@ -25,6 +27,8 @@ class AppNavBar extends ConsumerWidget {
   final bool forceBackEnabled;
   final bool forceHomeEnabled;
   final bool showLogout;
+  final String? overrideStoreId;
+  final String? overrideStoreName;
   final VoidCallback? onBackPressed;
   final VoidCallback? onHomePressed;
 
@@ -44,12 +48,19 @@ class AppNavBar extends ConsumerWidget {
         currentLocation.startsWith('$homeRoute/');
     final canGoBack = forceBackEnabled || nav.canGoBack;
     final canGoHome = forceHomeEnabled || !isHome;
+    final selectedStoreId = overrideStoreId ?? authState.storeId;
     AccessibleStore? activeStore;
     for (final store in authState.accessibleStores) {
-      if (store.id == authState.storeId) {
+      if (store.id == selectedStoreId) {
         activeStore = store;
         break;
       }
+    }
+    if (activeStore == null && overrideStoreId != null) {
+      activeStore = AccessibleStore(
+        id: overrideStoreId!,
+        name: overrideStoreName ?? overrideStoreId!,
+      );
     }
     final l10n = context.l10n;
     final viewportWidth = MediaQuery.sizeOf(context).width;
@@ -121,10 +132,12 @@ class AppNavBar extends ConsumerWidget {
                 },
               ),
             ],
-            if (showStore && authState.accessibleStores.length > 1) ...[
+            if (showStore &&
+                overrideStoreId == null &&
+                authState.accessibleStores.length > 1) ...[
               const SizedBox(width: 10),
               _StoreSwitcher(
-                value: authState.storeId,
+                value: selectedStoreId,
                 stores: authState.accessibleStores,
                 onChanged: (storeId) async {
                   await ref.read(authProvider.notifier).setActiveStore(storeId);

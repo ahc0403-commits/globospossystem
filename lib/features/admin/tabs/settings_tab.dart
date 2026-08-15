@@ -18,6 +18,7 @@ import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../../widgets/pin_dialog.dart';
 import '../../auth/auth_provider.dart';
+import '../providers/admin_scope_provider.dart';
 import '../../auth/auth_state.dart';
 import '../../settings/printer_provider.dart';
 import '../../settings/promotion_settings_card.dart';
@@ -402,7 +403,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
     final l10n = context.l10n;
     final authState = ref.watch(authProvider);
     final authUid = authState.user?.id;
-    final storeId = authState.storeId;
+    final storeId = ref.watch(adminScopedStoreIdProvider);
     final settingsState = ref.watch(settingsProvider);
     final notifier = ref.read(settingsProvider.notifier);
     final printerState = ref.watch(printerProvider);

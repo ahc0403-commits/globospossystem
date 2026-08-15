@@ -27,21 +27,31 @@ import 'tabs/einvoice_tab.dart';
 import '../inventory_purchase/inventory_purchase_screen.dart';
 import '../photo_inventory/photo_inventory_screen.dart';
 import 'providers/admin_audit_provider.dart';
+import 'providers/admin_scope_provider.dart';
 import 'providers/menu_provider.dart';
 import 'providers/printer_destinations_provider.dart';
 import 'providers/settings_provider.dart';
 
-final _adminStoreBrandIdProvider = FutureProvider.family<String?, String>((
-  ref,
-  storeId,
-) async {
-  final response = await supabase
-      .from('restaurants')
-      .select('brand_id')
-      .eq('id', storeId)
-      .maybeSingle();
-  return response?['brand_id']?.toString();
-});
+class _AdminStoreContext {
+  const _AdminStoreContext({required this.name, this.brandId});
+
+  final String name;
+  final String? brandId;
+}
+
+final _adminStoreContextProvider =
+    FutureProvider.family<_AdminStoreContext?, String>((ref, storeId) async {
+      final response = await supabase
+          .from('restaurants')
+          .select('name, brand_id')
+          .eq('id', storeId)
+          .maybeSingle();
+      if (response == null) return null;
+      return _AdminStoreContext(
+        name: response['name']?.toString() ?? storeId,
+        brandId: response['brand_id']?.toString(),
+      );
+    });
 
 class AdminScreen extends ConsumerStatefulWidget {
   const AdminScreen({
@@ -74,7 +84,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     final isSuperAdminView = widget.overrideRestaurantId != null;
     final auth = ref.watch(authProvider);
     final role = auth.role;
-    final liveStoreId = widget.overrideRestaurantId ?? auth.storeId;
+    final liveStoreId = ref.watch(adminScopedStoreIdProvider);
     if (liveStoreId != null) {
       ref.listen<AsyncValue<PosLiveEvent>>(
         posLiveEventsProvider(liveStoreId),
@@ -104,12 +114,12 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       );
     }
     final overrideStoreId = widget.overrideRestaurantId;
-    final overrideBrandId = overrideStoreId == null
+    final overrideStoreContext = overrideStoreId == null
         ? null
-        : ref.watch(_adminStoreBrandIdProvider(overrideStoreId)).valueOrNull;
+        : ref.watch(_adminStoreContextProvider(overrideStoreId)).valueOrNull;
     final isPhotoObjetContext = PermissionUtils.isPhotoObjetContext(
       role: role,
-      brandId: overrideBrandId,
+      brandId: overrideStoreContext?.brandId,
     );
     final viewport = MediaQuery.sizeOf(context);
     final useDesktopShell =
@@ -123,6 +133,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         isSuperAdminView,
         role,
         isPhotoObjetContext,
+        overrideStoreContext?.name,
       );
     }
 
@@ -131,6 +142,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       isSuperAdminView,
       role,
       isPhotoObjetContext,
+      overrideStoreContext?.name,
     );
   }
 
@@ -307,6 +319,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     bool isSuperAdminView,
     String? role,
     bool isPhotoObjetContext,
+    String? overrideStoreName,
   ) {
     final tabs = _tabsForRole(role, isPhotoObjetContext);
     final groups = _sidebarGroupsForRole(role, isPhotoObjetContext);
@@ -330,11 +343,19 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       topBarTrailing: isSuperAdminView
           ? MediaQuery.sizeOf(context).width < 600 ||
                     MediaQuery.textScalerOf(context).scale(1) > 1.5
-                ? AppNavBar(showLogout: isSuperAdminView)
+                ? AppNavBar(
+                    showLogout: isSuperAdminView,
+                    overrideStoreId: widget.overrideRestaurantId,
+                    overrideStoreName: overrideStoreName,
+                  )
                 : Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      AppNavBar(showLogout: isSuperAdminView),
+                      AppNavBar(
+                        showLogout: isSuperAdminView,
+                        overrideStoreId: widget.overrideRestaurantId,
+                        overrideStoreName: overrideStoreName,
+                      ),
                       const SizedBox(width: 10),
                       ToastStatusBadge(
                         label: context.l10n.superAdminMode,
@@ -374,6 +395,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
     bool isSuperAdminView,
     String? role,
     bool isPhotoObjetContext,
+    String? overrideStoreName,
   ) {
     final tabs = _tabsForRole(role, isPhotoObjetContext);
     final groups = _sidebarGroupsForRole(role, isPhotoObjetContext);
@@ -397,11 +419,19 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       topBarTrailing: isSuperAdminView
           ? MediaQuery.sizeOf(context).width < 600 ||
                     MediaQuery.textScalerOf(context).scale(1) > 1.5
-                ? AppNavBar(showLogout: isSuperAdminView)
+                ? AppNavBar(
+                    showLogout: isSuperAdminView,
+                    overrideStoreId: widget.overrideRestaurantId,
+                    overrideStoreName: overrideStoreName,
+                  )
                 : Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      AppNavBar(showLogout: isSuperAdminView),
+                      AppNavBar(
+                        showLogout: isSuperAdminView,
+                        overrideStoreId: widget.overrideRestaurantId,
+                        overrideStoreName: overrideStoreName,
+                      ),
                       const SizedBox(width: 8),
                       ToastStatusBadge(
                         label: context.l10n.superAdminMode,

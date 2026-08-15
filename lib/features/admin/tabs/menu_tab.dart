@@ -15,7 +15,7 @@ import '../../../core/ui/toast/toast.dart';
 import '../../../core/utils/number_input_utils.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
-import '../../auth/auth_provider.dart';
+import '../providers/admin_scope_provider.dart';
 import '../menu_import/menu_excel_import.dart';
 import '../menu_import/menu_excel_roundtrip.dart';
 import '../providers/admin_audit_provider.dart';
@@ -46,7 +46,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final storeId = ref.watch(authProvider).storeId;
+    final storeId = ref.watch(adminScopedStoreIdProvider);
     if (storeId == null) {
       return const _RestaurantMissingView(key: Key('admin_menu_root'));
     }
