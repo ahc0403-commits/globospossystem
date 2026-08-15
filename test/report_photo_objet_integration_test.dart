@@ -69,6 +69,7 @@ void main() {
     );
 
     expect(migration, contains('photo_objet_sales_raw'));
+    expect(migration, contains('-- production-gate: self-verifying'));
     expect(migration, contains('raw_type'));
     expect(migration, contains("raw_payload #>> '{row,Type}'"));
     expect(migration, contains('classified_raw.amount > 0'));
