@@ -8,11 +8,11 @@ class EmergencyOutboxRecord {
   final String payload;
 }
 
-@JS('globosEmergencyAlarmEnable')
-external JSBoolean _enableAlarm();
+@JS('globosEmergencyVoiceEnable')
+external JSBoolean _enableVoice();
 
-@JS('globosEmergencyAlarmPlay')
-external void _playAlarm();
+@JS('globosEmergencyVoiceSpeak')
+external JSBoolean _speakVoice(JSString message);
 
 @JS('globosEmergencyOutboxPut')
 external JSPromise<JSAny?> _putOutbox(JSString id, JSString payload);
@@ -27,9 +27,10 @@ external JSPromise<JSAny?> _deleteOutbox(JSString id);
 external JSPromise<JSBoolean> _configurePushWorker(JSString configJson);
 
 abstract final class EmergencyWebBridge {
-  static Future<bool> enableAlarm() async => _enableAlarm().toDart;
+  static Future<bool> enableVoice() async => _enableVoice().toDart;
 
-  static Future<void> playAlarm() async => _playAlarm();
+  static Future<bool> speak(String message) async =>
+      _speakVoice(message.toJS).toDart;
 
   static Future<void> putOutbox(String id, String payload) async {
     await _putOutbox(id.toJS, payload.toJS).toDart;

@@ -942,6 +942,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     final l10n = context.l10n;
     final nameKoController = TextEditingController();
     final nameViController = TextEditingController();
+    final paperlessNameViController = TextEditingController();
     final nameEnController = TextEditingController();
     final priceController = TextEditingController();
     XFile? selectedPhoto;
@@ -981,6 +982,17 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(
                       labelText: l10n.menuNameVietnamese,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('admin_menu_item_paperless_name_vi'),
+                    controller: paperlessNameViController,
+                    maxLength: 200,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      labelText: _paperlessNameViLabel(context),
+                      helperText: _paperlessNameViHelper(context),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -1060,6 +1072,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                 onPressed: () async {
                   final nameKo = nameKoController.text.trim();
                   final nameVi = nameViController.text.trim();
+                  final paperlessNameVi = paperlessNameViController.text.trim();
                   final nameEn = nameEnController.text.trim();
                   final price = parseDecimalInput(priceController.text);
                   if (nameKo.isEmpty ||
@@ -1082,6 +1095,9 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                           nameKo: nameKo,
                           nameVi: nameVi,
                           nameEn: nameEn,
+                          paperlessNameVi: paperlessNameVi.isEmpty
+                              ? null
+                              : paperlessNameVi,
                           price: price,
                           isCombo: isCombo,
                           comboComponents: comboComponents,
@@ -1092,6 +1108,9 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                           nameKo: nameKo,
                           nameVi: nameVi,
                           nameEn: nameEn,
+                          paperlessNameVi: paperlessNameVi.isEmpty
+                              ? null
+                              : paperlessNameVi,
                           price: price,
                           photo: photo,
                           isCombo: isCombo,
@@ -1115,6 +1134,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
 
     nameKoController.dispose();
     nameViController.dispose();
+    paperlessNameViController.dispose();
     nameEnController.dispose();
     priceController.dispose();
   }
@@ -1133,9 +1153,14 @@ class _MenuTabState extends ConsumerState<MenuTab> {
     final originalNameKo =
         item['name_ko']?.toString() ?? item['name']?.toString() ?? '';
     final originalNameVi = item['name_vi']?.toString() ?? originalNameKo;
+    final originalPaperlessNameVi =
+        item['paperless_name_vi']?.toString().trim() ?? '';
     final originalNameEn = item['name_en']?.toString() ?? originalNameKo;
     final nameKoController = TextEditingController(text: originalNameKo);
     final nameViController = TextEditingController(text: originalNameVi);
+    final paperlessNameViController = TextEditingController(
+      text: originalPaperlessNameVi,
+    );
     final nameEnController = TextEditingController(text: originalNameEn);
     final rawPrice = item['price'];
     final initialPrice = switch (rawPrice) {
@@ -1199,6 +1224,17 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                     style: AppFonts.system(color: AppColors.textPrimary),
                     decoration: InputDecoration(
                       labelText: l10n.menuNameVietnamese,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('admin_menu_edit_item_paperless_name_vi'),
+                    controller: paperlessNameViController,
+                    maxLength: 200,
+                    style: AppFonts.system(color: AppColors.textPrimary),
+                    decoration: InputDecoration(
+                      labelText: _paperlessNameViLabel(context),
+                      helperText: _paperlessNameViHelper(context),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -1315,6 +1351,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                 onPressed: () async {
                   final nameKo = nameKoController.text.trim();
                   final nameVi = nameViController.text.trim();
+                  final paperlessNameVi = paperlessNameViController.text.trim();
                   final nameEn = nameEnController.text.trim();
                   final price = parseDecimalInput(priceController.text);
                   if (nameKo.isEmpty ||
@@ -1332,6 +1369,7 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                   final detailsChanged =
                       nameKo != originalNameKo ||
                       nameVi != originalNameVi ||
+                      paperlessNameVi != originalPaperlessNameVi ||
                       nameEn != originalNameEn ||
                       price != initialPrice;
                   final photoChanged =
@@ -1358,6 +1396,9 @@ class _MenuTabState extends ConsumerState<MenuTab> {
                       nameKo: nameKo,
                       nameVi: nameVi,
                       nameEn: nameEn,
+                      paperlessNameVi: paperlessNameVi.isEmpty
+                          ? null
+                          : paperlessNameVi,
                       price: price,
                     );
                     if (!detailsSaved) return;
@@ -1415,10 +1456,25 @@ class _MenuTabState extends ConsumerState<MenuTab> {
 
     nameKoController.dispose();
     nameViController.dispose();
+    paperlessNameViController.dispose();
     nameEnController.dispose();
     priceController.dispose();
   }
 }
+
+String _paperlessNameViLabel(BuildContext context) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => 'Tên món Paperless (VI)',
+      'en' => 'Paperless menu name (VI)',
+      _ => '페이퍼리스 메뉴명(VI)',
+    };
+
+String _paperlessNameViHelper(BuildContext context) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => 'Để trống thì dùng tên tiếng Việt thông thường.',
+      'en' => 'Leave blank to use the regular Vietnamese name.',
+      _ => '비워두면 기존 베트남어 메뉴명을 사용합니다.',
+    };
 
 Map<String, int> _comboQuantitiesFromItem(Map<String, dynamic> item) {
   final rawComponents = item['menu_combo_components'];

@@ -233,6 +233,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     required String nameKo,
     required String nameVi,
     required String nameEn,
+    String? paperlessNameVi,
     required double price,
     bool isCombo = false,
     List<Map<String, dynamic>> comboComponents = const [],
@@ -251,6 +252,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
         nameKo: nameKo,
         nameVi: nameVi,
         nameEn: nameEn,
+        paperlessNameVi: paperlessNameVi,
         price: price,
         sortOrder: sortOrder,
       );
@@ -288,6 +290,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     required String nameKo,
     required String nameVi,
     required String nameEn,
+    String? paperlessNameVi,
     required double price,
     required XFile photo,
     bool isCombo = false,
@@ -307,6 +310,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
         nameKo: nameKo,
         nameVi: nameVi,
         nameEn: nameEn,
+        paperlessNameVi: paperlessNameVi,
         price: price,
         sortOrder: sortOrder,
       );
@@ -391,6 +395,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
     required String nameKo,
     required String nameVi,
     required String nameEn,
+    String? paperlessNameVi,
     required double price,
   }) async {
     try {
@@ -399,6 +404,7 @@ class MenuNotifier extends StateNotifier<MenuState> {
         nameKo: nameKo,
         nameVi: nameVi,
         nameEn: nameEn,
+        paperlessNameVi: paperlessNameVi,
         price: price,
       );
       await fetchItems();

@@ -6,8 +6,8 @@ class EmergencyOutboxRecord {
 }
 
 abstract final class EmergencyWebBridge {
-  static Future<bool> enableAlarm() async => true;
-  static Future<void> playAlarm() async {}
+  static Future<bool> enableVoice() async => false;
+  static Future<bool> speak(String message) async => false;
   static Future<void> putOutbox(String id, String payload) async {}
   static Future<List<EmergencyOutboxRecord>> readOutbox() async => const [];
   static Future<void> deleteOutbox(String id) async {}

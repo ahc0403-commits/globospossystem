@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/services/emergency_order_voice_message.dart';
 import '../../core/services/emergency_web_bridge.dart';
 import '../../core/services/emergency_web_push_service.dart';
 import '../../core/ui/pos_design_tokens.dart';
@@ -65,8 +65,19 @@ class _EmergencyFulfillmentScreenState
       previous ?? const EmergencyFulfillmentState(),
     );
     final newActionable = _actionableOrderIds(next);
-    if (newActionable.difference(oldActionable).isNotEmpty) {
-      _triggerAlarm();
+    final newOrderIds = newActionable.difference(oldActionable);
+    if (newOrderIds.isNotEmpty) {
+      final newOrders =
+          next.orders
+              .where((order) => newOrderIds.contains(order.orderId))
+              .toList(growable: false)
+            ..sort((left, right) {
+              final queueOrder = left.queueNo.compareTo(right.queueNo);
+              return queueOrder != 0
+                  ? queueOrder
+                  : left.createdAt.compareTo(right.createdAt);
+            });
+      _triggerAlarm(newOrders.map((order) => order.tableNumber));
     }
     final selectedOrderId = _selectedOrderId;
     if (selectedOrderId != null) {
@@ -99,7 +110,7 @@ class _EmergencyFulfillmentScreenState
       .map((order) => order.orderId)
       .toSet();
 
-  Future<void> _triggerAlarm() async {
+  Future<void> _triggerAlarm(Iterable<String> tableNumbers) async {
     if (!mounted) return;
     setState(() => _flashing = true);
     _flashTimer?.cancel();
@@ -107,24 +118,20 @@ class _EmergencyFulfillmentScreenState
       if (mounted) setState(() => _flashing = false);
     });
     if (_alarmEnabled) {
-      await EmergencyWebBridge.playAlarm();
-      try {
-        await SystemSound.play(SystemSoundType.alert);
-      } catch (_) {
-        // The Web Audio bridge is the browser path; SystemSound is fallback.
+      for (final tableNumber in tableNumbers) {
+        await EmergencyWebBridge.speak(vietnameseNewOrderMessage(tableNumber));
       }
     }
   }
 
   Future<void> _enableAlarm(EmergencyFulfillmentState state) async {
-    final foregroundReady = await EmergencyWebBridge.enableAlarm();
+    final foregroundReady = await EmergencyWebBridge.enableVoice();
     final storeId = state.restaurantId;
     if (storeId != null) {
       await EmergencyWebPushService.instance.enable(storeId: storeId);
     }
     if (!mounted) return;
     setState(() => _alarmEnabled = foregroundReady);
-    if (foregroundReady) await _triggerAlarm();
   }
 
   @override
@@ -840,7 +847,6 @@ class _EmergencyOrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final languageCode = Localizations.localeOf(context).languageCode;
     final visibleItems = order.displayItemsAt(stationType);
     final actionable = order.hasActionableQuantity(stationType);
     final completed = order.isRecentlyCompleteAt(stationType);
@@ -850,6 +856,13 @@ class _EmergencyOrderCard extends StatelessWidget {
         ? PosColors.success
         : _stationColor(stationType);
     final elapsed = order.stationElapsedAt(now, stationType);
+    final orderHeaderStyle =
+        (Theme.of(context).textTheme.titleMedium ??
+                const TextStyle(fontSize: 16))
+            .copyWith(color: Colors.white, fontWeight: FontWeight.w900);
+    final tableHeaderStyle = orderHeaderStyle.copyWith(
+      fontSize: (orderHeaderStyle.fontSize ?? 16) * 1.4,
+    );
     final semantics =
         '${copy.order} ${order.queueNo}, ${copy.table} ${order.tableNumber}, '
         '${order.floorLabel}, ${visibleItems.length} ${copy.items}';
@@ -871,23 +884,35 @@ class _EmergencyOrderCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 color: tone,
                 child: Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        '#${order.queueNo}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w900,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            '#${order.queueNo}',
+                            key: Key('emergency_order_number_${order.orderId}'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: orderHeaderStyle,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              order.tableNumber,
+                              key: Key(
+                                'emergency_order_table_${order.orderId}',
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: tableHeaderStyle,
                             ),
+                          ),
+                        ],
                       ),
                     ),
                     Row(
@@ -924,29 +949,8 @@ class _EmergencyOrderCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '${copy.table} ${order.tableNumber}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      Text(
-                        '${order.floorLabel} · ${visibleItems.length} ${copy.items}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: PosColors.textSecondary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
                       Expanded(
-                        child: _EmergencyCardMenuList(
-                          items: visibleItems,
-                          languageCode: languageCode,
-                        ),
+                        child: _EmergencyCardMenuList(items: visibleItems),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -977,13 +981,9 @@ class _EmergencyOrderCard extends StatelessWidget {
 }
 
 class _EmergencyCardMenuList extends StatelessWidget {
-  const _EmergencyCardMenuList({
-    required this.items,
-    required this.languageCode,
-  });
+  const _EmergencyCardMenuList({required this.items});
 
   final List<EmergencyFulfillmentDisplayItem> items;
-  final String languageCode;
 
   @override
   Widget build(BuildContext context) {
@@ -1031,7 +1031,7 @@ class _EmergencyCardMenuList extends StatelessWidget {
                       SizedBox(
                         height: rowHeight,
                         child: Text(
-                          item.localizedName(languageCode),
+                          item.paperlessName,
                           key: Key('emergency_card_menu_${item.id}'),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -1429,7 +1429,6 @@ class _EmergencyMenuRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final languageCode = Localizations.localeOf(context).languageCode;
     final (value, limit) = switch (stationType) {
       'kitchen' => (item.kitchenDoneQuantity, item.orderedQuantity),
       'tray' => (item.trayDispatchedQuantity, item.kitchenDoneQuantity),
@@ -1456,7 +1455,7 @@ class _EmergencyMenuRow extends StatelessWidget {
       button: true,
       enabled: canAdvance || canRevert,
       label:
-          '${item.localizedName(languageCode)}, $value / $limit, '
+          '${item.paperlessName}, $value / $limit, '
           '${disabledAtStation
               ? copy.floorDirectOnly
               : done
@@ -1478,7 +1477,7 @@ class _EmergencyMenuRow extends StatelessWidget {
               children: [
                 if (foodComponents.isEmpty)
                   Text(
-                    item.localizedName(languageCode),
+                    item.paperlessName,
                     maxLines: compact ? 3 : 2,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -1489,7 +1488,7 @@ class _EmergencyMenuRow extends StatelessWidget {
                 else
                   for (final component in foodComponents)
                     Text(
-                      component.localizedName(languageCode),
+                      component.paperlessName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -1838,9 +1837,9 @@ class _EmergencyCopy {
   String get noOrders =>
       _pick('대기 주문 없음', 'Không có đơn chờ', 'No waiting orders');
   String get noOrdersBody => _pick(
-    '새 주문이 들어오면 화면과 알람으로 알려드립니다.',
-    'Đơn mới sẽ hiển thị và phát cảnh báo.',
-    'New work will appear here with an alert.',
+    '새 주문이 들어오면 화면과 음성으로 알려드립니다.',
+    'Đơn mới sẽ hiển thị và được thông báo bằng giọng nói.',
+    'New work will appear here with a voice alert.',
   );
   String get noRecent =>
       _pick('최근 완료 없음', 'Chưa có đơn vừa xong', 'No recent completions');
@@ -1849,8 +1848,8 @@ class _EmergencyCopy {
     'Đơn hoàn tất tại màn hình này sẽ hiển thị ở đây.',
     'Orders completed at this station will appear here.',
   );
-  String get enableAlarm => _pick('알람 켜기', 'Bật cảnh báo', 'Enable alerts');
-  String get alarmOn => _pick('알람 켜짐', 'Đã bật cảnh báo', 'Alerts on');
+  String get enableAlarm => _pick('음성 켜기', 'Bật giọng nói', 'Enable voice');
+  String get alarmOn => _pick('음성 켜짐', 'Đã bật giọng nói', 'Voice on');
   String get pendingSync => _pick('전송 대기', 'Chờ đồng bộ', 'Pending sync');
   String get refresh => _pick('새로고침', 'Làm mới', 'Refresh');
   String get waiting => _pick('대기', 'Đang chờ', 'Waiting');

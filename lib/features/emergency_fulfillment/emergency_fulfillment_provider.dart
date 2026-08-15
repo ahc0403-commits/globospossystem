@@ -64,6 +64,7 @@ class EmergencyComboComponent {
   final String fulfillmentRoute;
 
   bool get isFloorDirect => fulfillmentRoute == 'floor_direct';
+  String get paperlessName => nameVi.trim().isEmpty ? 'Món' : nameVi;
 
   int displayQuantity(int parentQuantity) =>
       isTotalQuantity ? quantity : quantity * parentQuantity;
@@ -109,6 +110,8 @@ class EmergencyFulfillmentDisplayItem {
   final bool readyFromPreviousStage;
   final bool readOnly;
 
+  String get paperlessName => nameVi.trim().isEmpty ? 'Món' : nameVi;
+
   String localizedName(String languageCode) => switch (languageCode) {
     'vi' => nameVi.trim().isEmpty ? 'Món' : nameVi,
     'en' => nameEn.trim().isEmpty ? 'Item' : nameEn,
@@ -152,6 +155,7 @@ class EmergencyFulfillmentItem {
   final List<EmergencyComboComponent> comboComponents;
 
   bool get isFloorDirect => fulfillmentRoute == 'floor_direct';
+  String get paperlessName => nameVi.trim().isEmpty ? 'Món' : nameVi;
 
   bool isActionableAt(String stationType) => switch (stationType) {
     'kitchen' => !isFloorDirect && kitchenDoneQuantity < orderedQuantity,

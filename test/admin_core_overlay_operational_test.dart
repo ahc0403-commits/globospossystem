@@ -178,6 +178,7 @@ class _MenuNotifier extends MenuNotifier {
   bool lastAddedItemWasCombo = false;
   List<Map<String, dynamic>> lastComboComponents = const [];
   int lastComboDrinkChoiceCount = 0;
+  String? lastPaperlessNameVi;
 
   @override
   Future<void> fetchAll() async {}
@@ -228,12 +229,14 @@ class _MenuNotifier extends MenuNotifier {
     required String nameKo,
     required String nameVi,
     required String nameEn,
+    String? paperlessNameVi,
     required double price,
     bool isCombo = false,
     List<Map<String, dynamic>> comboComponents = const [],
     int comboDrinkChoiceCount = 0,
   }) async {
     addItemCalls += 1;
+    lastPaperlessNameVi = paperlessNameVi;
     lastAddedItemWasCombo = isCombo;
     lastComboComponents = comboComponents;
     lastComboDrinkChoiceCount = comboDrinkChoiceCount;
@@ -246,6 +249,7 @@ class _MenuNotifier extends MenuNotifier {
     required String nameKo,
     required String nameVi,
     required String nameEn,
+    String? paperlessNameVi,
     required double price,
   }) async {
     editItemCalls += 1;
@@ -1049,8 +1053,9 @@ void main() {
       );
       await tester.enterText(addFields.at(0), '연유 커피');
       await tester.enterText(addFields.at(1), 'Cà phê sữa');
-      await tester.enterText(addFields.at(2), 'Milk coffee');
-      await tester.enterText(addFields.at(3), '45000');
+      await tester.enterText(addFields.at(2), 'Cà phê sữa KDS');
+      await tester.enterText(addFields.at(3), 'Milk coffee');
+      await tester.enterText(addFields.at(4), '45000');
       await tester.tap(find.byKey(const Key('admin_menu_combo_toggle')));
       await tester.pumpAndSettle();
       await tester.tap(
@@ -1064,6 +1069,7 @@ void main() {
       await tester.tap(_dialogAction(addItemDialog, FilledButton));
       await tester.pumpAndSettle();
       expect(notifier.addItemCalls, 1);
+      expect(notifier.lastPaperlessNameVi, 'Cà phê sữa KDS');
       expect(notifier.lastAddedItemWasCombo, isTrue);
       expect(notifier.lastComboComponents, [
         {'menu_item_id': _menuItemId, 'quantity': 1},
