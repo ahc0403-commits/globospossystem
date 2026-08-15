@@ -63,6 +63,19 @@ void main() {
     expect(provider, isNot(contains("TextCellValue('Total Revenue')")));
   });
 
+  test('historical Photo Objet service amounts are repaired from raw types', () {
+    final migration = readRepoFile(
+      'supabase/migrations/20260815130000_photo_objet_service_revenue_backfill.sql',
+    );
+
+    expect(migration, contains('photo_objet_sales_raw'));
+    expect(migration, contains('raw_type'));
+    expect(migration, contains("raw_payload #>> '{row,Type}'"));
+    expect(migration, contains('classified_raw.amount > 0'));
+    expect(migration, contains('service_amount = totals.service_amount'));
+    expect(migration, contains('service_count = totals.service_count'));
+  });
+
   test('invalid Photo Objet rows do not create report activity', () {
     final totals = aggregatePhotoObjetReportRows([
       {'sale_date': null, 'total_gross_sales': 999, 'total_transactions': 1},

@@ -1114,12 +1114,21 @@ async function loadExistingIntervalSourceHashes(supabase, storeId, identity) {
 async function loadDailyRawSalesRows(supabase, storeId, targetDate) {
   const { data, error } = await supabase
     .from('photo_objet_sales_raw')
-    .select('device_name,device_id,amount,raw_payload')
+    .select('device_name,device_id,amount,raw_type,raw_payload')
     .eq('store_id', storeId)
     .eq('sale_date', targetDate)
     .eq('source_identity_version', SOURCE_IDENTITY_VERSION);
   if (error) throw new Error(`Daily raw sales lookup failed: ${error.message}`);
   return data || [];
+}
+
+function isPhotoObjetServiceType(rawType) {
+  const normalized = String(rawType || '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+  return /(^| )(service|coin)( |$)/.test(normalized);
 }
 
 function aggregateDailyRawRows(rows) {
@@ -1145,6 +1154,13 @@ function aggregateDailyRawRows(rows) {
     const device = devices.get(deviceName);
     device.gross_sales += amount;
     device.transaction_count += 1;
+    const rawType = String(row.raw_type || '').trim() !== ''
+      ? row.raw_type
+      : row.raw_payload?.row?.Type;
+    if (isPhotoObjetServiceType(rawType)) {
+      device.service_amount += amount;
+      device.service_count += 1;
+    }
     device.raw_rows.push(row.raw_payload?.row || {});
   }
   return [...devices.values()];
@@ -1764,6 +1780,7 @@ module.exports = {
   failScheduledExpectation,
   inclusiveDateRange,
   isAutomaticRecoverySchedule,
+  isPhotoObjetServiceType,
   isScheduledInvocation,
   isZeroSalesInterval,
   parseArgs,
