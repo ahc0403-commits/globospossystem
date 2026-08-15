@@ -1,3 +1,4 @@
+-- production-gate: self-verifying
 BEGIN;
 
 -- Moers gross sales include both ordinary sales and coin-service rows. The
