@@ -11,6 +11,84 @@ import '../../core/services/emergency_web_bridge.dart';
 import '../../core/utils/live_sync_scope.dart';
 import '../../main.dart';
 
+String formatEmergencyElapsed(Duration elapsed) {
+  final totalSeconds = elapsed.inSeconds < 0 ? 0 : elapsed.inSeconds;
+  final minutes = totalSeconds ~/ 60;
+  final seconds = totalSeconds % 60;
+  return '${minutes.toString().padLeft(2, '0')}:'
+      '${seconds.toString().padLeft(2, '0')}';
+}
+
+class EmergencyComboComponent {
+  const EmergencyComboComponent({
+    required this.menuItemId,
+    required this.nameKo,
+    required this.nameVi,
+    required this.nameEn,
+    required this.quantity,
+    required this.isTotalQuantity,
+    required this.fulfillmentRoute,
+  });
+
+  final String menuItemId;
+  final String nameKo;
+  final String nameVi;
+  final String nameEn;
+  final int quantity;
+  final bool isTotalQuantity;
+  final String fulfillmentRoute;
+
+  bool get isFloorDirect => fulfillmentRoute == 'floor_direct';
+
+  int displayQuantity(int parentQuantity) =>
+      isTotalQuantity ? quantity : quantity * parentQuantity;
+
+  String localizedName(String languageCode) => switch (languageCode) {
+    'vi' => nameVi.trim().isEmpty ? 'Món' : nameVi,
+    'en' => nameEn.trim().isEmpty ? 'Item' : nameEn,
+    _ => nameKo.trim().isEmpty ? '메뉴' : nameKo,
+  };
+
+  factory EmergencyComboComponent.fromJson(
+    Map<String, dynamic> json,
+  ) => EmergencyComboComponent(
+    menuItemId: json['menu_item_id']?.toString() ?? '',
+    nameKo: json['name_ko']?.toString() ?? json['label']?.toString() ?? '메뉴',
+    nameVi: json['name_vi']?.toString() ?? json['label']?.toString() ?? 'Món',
+    nameEn: json['name_en']?.toString() ?? json['label']?.toString() ?? 'Item',
+    quantity: _asInt(json['quantity']),
+    isTotalQuantity: json['is_total_quantity'] == true,
+    fulfillmentRoute:
+        json['fulfillment_route']?.toString() ?? 'kitchen_tray_floor',
+  );
+}
+
+class EmergencyFulfillmentDisplayItem {
+  const EmergencyFulfillmentDisplayItem({
+    required this.id,
+    required this.nameKo,
+    required this.nameVi,
+    required this.nameEn,
+    required this.quantity,
+    required this.completed,
+    required this.readOnly,
+  });
+
+  final String id;
+  final String nameKo;
+  final String nameVi;
+  final String nameEn;
+  final int quantity;
+  final bool completed;
+  final bool readOnly;
+
+  String localizedName(String languageCode) => switch (languageCode) {
+    'vi' => nameVi.trim().isEmpty ? 'Món' : nameVi,
+    'en' => nameEn.trim().isEmpty ? 'Item' : nameEn,
+    _ => nameKo.trim().isEmpty ? '메뉴' : nameKo,
+  };
+}
+
 class EmergencyFulfillmentItem {
   const EmergencyFulfillmentItem({
     required this.id,
@@ -27,6 +105,7 @@ class EmergencyFulfillmentItem {
     this.fulfillmentRoute = 'kitchen_tray_floor',
     this.lineKey = 'base',
     this.sourceKind = 'order_item',
+    this.comboComponents = const [],
   });
 
   final String id;
@@ -43,6 +122,7 @@ class EmergencyFulfillmentItem {
   final String fulfillmentRoute;
   final String lineKey;
   final String sourceKind;
+  final List<EmergencyComboComponent> comboComponents;
 
   bool get isFloorDirect => fulfillmentRoute == 'floor_direct';
 
@@ -65,6 +145,16 @@ class EmergencyFulfillmentItem {
           trayDispatchedQuantity > floorServedQuantity &&
           trayReceivedQuantity > 0,
     'floor' => floorServedQuantity > 0,
+    _ => false,
+  };
+
+  bool isCompletedAt(String stationType) => switch (stationType) {
+    'kitchen' => !isFloorDirect && kitchenDoneQuantity >= orderedQuantity,
+    'tray' =>
+      !isFloorDirect &&
+          trayReceivedQuantity >= orderedQuantity &&
+          trayDispatchedQuantity >= orderedQuantity,
+    'floor' => floorServedQuantity >= orderedQuantity,
     _ => false,
   };
 
@@ -106,26 +196,39 @@ class EmergencyFulfillmentItem {
         fulfillmentRoute: fulfillmentRoute,
         lineKey: lineKey,
         sourceKind: sourceKind,
+        comboComponents: comboComponents,
       );
 
-  factory EmergencyFulfillmentItem.fromJson(Map<String, dynamic> json) =>
-      EmergencyFulfillmentItem(
-        id: json['id']?.toString() ?? '',
-        orderItemId: json['order_item_id']?.toString() ?? '',
-        nameKo: json['name_ko']?.toString() ?? '메뉴',
-        nameVi: json['name_vi']?.toString() ?? 'Món',
-        nameEn: json['name_en']?.toString() ?? 'Item',
-        orderedQuantity: _asInt(json['ordered_quantity']),
-        kitchenDoneQuantity: _asInt(json['kitchen_done_quantity']),
-        trayReceivedQuantity: _asInt(json['tray_received_quantity']),
-        trayDispatchedQuantity: _asInt(json['tray_dispatched_quantity']),
-        floorServedQuantity: _asInt(json['floor_served_quantity']),
-        needsReview: json['needs_review'] == true,
-        fulfillmentRoute:
-            json['fulfillment_route']?.toString() ?? 'kitchen_tray_floor',
-        lineKey: json['line_key']?.toString() ?? 'base',
-        sourceKind: json['source_kind']?.toString() ?? 'order_item',
-      );
+  factory EmergencyFulfillmentItem.fromJson(Map<String, dynamic> json) {
+    final rawComponents = json['combo_components'];
+    return EmergencyFulfillmentItem(
+      id: json['id']?.toString() ?? '',
+      orderItemId: json['order_item_id']?.toString() ?? '',
+      nameKo: json['name_ko']?.toString() ?? '메뉴',
+      nameVi: json['name_vi']?.toString() ?? 'Món',
+      nameEn: json['name_en']?.toString() ?? 'Item',
+      orderedQuantity: _asInt(json['ordered_quantity']),
+      kitchenDoneQuantity: _asInt(json['kitchen_done_quantity']),
+      trayReceivedQuantity: _asInt(json['tray_received_quantity']),
+      trayDispatchedQuantity: _asInt(json['tray_dispatched_quantity']),
+      floorServedQuantity: _asInt(json['floor_served_quantity']),
+      needsReview: json['needs_review'] == true,
+      fulfillmentRoute:
+          json['fulfillment_route']?.toString() ?? 'kitchen_tray_floor',
+      lineKey: json['line_key']?.toString() ?? 'base',
+      sourceKind: json['source_kind']?.toString() ?? 'order_item',
+      comboComponents: rawComponents is List
+          ? rawComponents
+                .whereType<Map>()
+                .map(
+                  (component) => EmergencyComboComponent.fromJson(
+                    Map<String, dynamic>.from(component),
+                  ),
+                )
+                .toList(growable: false)
+          : const [],
+    );
+  }
 }
 
 class EmergencyFulfillmentOrder {
@@ -154,10 +257,77 @@ class EmergencyFulfillmentOrder {
   bool hasActionableQuantity(String stationType) =>
       items.any((item) => item.isActionableAt(stationType));
 
-  List<EmergencyFulfillmentItem> visibleItemsAt(String stationType) =>
-      (stationType == 'kitchen' || stationType == 'tray')
-      ? items.where((item) => !item.isFloorDirect).toList(growable: false)
-      : items;
+  List<EmergencyFulfillmentItem> visibleItemsAt(String stationType) => items;
+
+  bool isCompleteAt(String stationType) {
+    final relevant = stationType == 'floor'
+        ? items
+        : items.where((item) => !item.isFloorDirect).toList(growable: false);
+    return relevant.isNotEmpty &&
+        relevant.every((item) => item.isCompletedAt(stationType));
+  }
+
+  bool isRecentlyCompleteAt(String stationType) =>
+      isCompleteAt(stationType) ||
+      (lastActionId != null && !hasActionableQuantity(stationType));
+
+  List<EmergencyFulfillmentDisplayItem> displayItemsAt(String stationType) {
+    final directByLineKey = <String, EmergencyFulfillmentItem>{
+      for (final item in items)
+        if (item.sourceKind == 'combo_component') item.lineKey: item,
+    };
+    final referencedDirectIds = <String>{};
+    for (final item in items) {
+      for (final component in item.comboComponents) {
+        if (!component.isFloorDirect || component.menuItemId.isEmpty) continue;
+        final direct = directByLineKey['combo:${component.menuItemId}'];
+        if (direct != null) referencedDirectIds.add(direct.id);
+      }
+    }
+
+    final result = <EmergencyFulfillmentDisplayItem>[];
+    for (final item in items) {
+      if (referencedDirectIds.contains(item.id)) continue;
+      if (item.comboComponents.isEmpty) {
+        result.add(
+          EmergencyFulfillmentDisplayItem(
+            id: item.id,
+            nameKo: item.nameKo,
+            nameVi: item.nameVi,
+            nameEn: item.nameEn,
+            quantity: item.orderedQuantity,
+            completed: item.isCompletedAt(stationType),
+            readOnly:
+                item.isFloorDirect &&
+                (stationType == 'kitchen' || stationType == 'tray'),
+          ),
+        );
+        continue;
+      }
+
+      for (var index = 0; index < item.comboComponents.length; index += 1) {
+        final component = item.comboComponents[index];
+        final direct = component.menuItemId.isEmpty
+            ? null
+            : directByLineKey['combo:${component.menuItemId}'];
+        final statusItem = direct ?? item;
+        result.add(
+          EmergencyFulfillmentDisplayItem(
+            id: '${item.id}:combo:${component.menuItemId.isEmpty ? index : component.menuItemId}',
+            nameKo: component.nameKo,
+            nameVi: component.nameVi,
+            nameEn: component.nameEn,
+            quantity: component.displayQuantity(item.orderedQuantity),
+            completed: statusItem.isCompletedAt(stationType),
+            readOnly:
+                component.isFloorDirect &&
+                (stationType == 'kitchen' || stationType == 'tray'),
+          ),
+        );
+      }
+    }
+    return result;
+  }
 
   EmergencyFulfillmentOrder copyWith({
     List<EmergencyFulfillmentItem>? items,
@@ -223,6 +393,7 @@ class EmergencyFulfillmentState {
     this.floorLabel,
     this.fulfillmentMode = FulfillmentMode.paperless,
     this.orders = const [],
+    this.completedOrders = const [],
     this.pendingOutboxCount = 0,
     this.pendingQueueIds = const {},
     this.error,
@@ -237,6 +408,7 @@ class EmergencyFulfillmentState {
   final String? floorLabel;
   final FulfillmentMode fulfillmentMode;
   final List<EmergencyFulfillmentOrder> orders;
+  final List<EmergencyFulfillmentOrder> completedOrders;
   final int pendingOutboxCount;
   final Set<String> pendingQueueIds;
   final String? error;
@@ -253,6 +425,7 @@ class EmergencyFulfillmentState {
     String? floorLabel,
     FulfillmentMode? fulfillmentMode,
     List<EmergencyFulfillmentOrder>? orders,
+    List<EmergencyFulfillmentOrder>? completedOrders,
     int? pendingOutboxCount,
     Set<String>? pendingQueueIds,
     String? error,
@@ -267,6 +440,7 @@ class EmergencyFulfillmentState {
     floorLabel: floorLabel ?? this.floorLabel,
     fulfillmentMode: fulfillmentMode ?? this.fulfillmentMode,
     orders: orders ?? this.orders,
+    completedOrders: completedOrders ?? this.completedOrders,
     pendingOutboxCount: pendingOutboxCount ?? this.pendingOutboxCount,
     pendingQueueIds: pendingQueueIds ?? this.pendingQueueIds,
     error: clearError ? null : (error ?? this.error),
@@ -274,6 +448,7 @@ class EmergencyFulfillmentState {
 
   factory EmergencyFulfillmentState.fromJson(Map<String, dynamic> json) {
     final rawOrders = json['orders'];
+    final rawCompletedOrders = json['completed_orders'];
     return EmergencyFulfillmentState(
       assigned: json['assigned'] == true,
       active: json['active'] == true,
@@ -286,6 +461,16 @@ class EmergencyFulfillmentState {
       ),
       orders: rawOrders is List
           ? rawOrders
+                .whereType<Map>()
+                .map(
+                  (order) => EmergencyFulfillmentOrder.fromJson(
+                    Map<String, dynamic>.from(order),
+                  ),
+                )
+                .toList(growable: false)
+          : const [],
+      completedOrders: rawCompletedOrders is List
+          ? rawCompletedOrders
                 .whereType<Map>()
                 .map(
                   (order) => EmergencyFulfillmentOrder.fromJson(
@@ -326,6 +511,14 @@ class EmergencyFulfillmentNotifier
           ? Map<String, dynamic>.from(raw)
           : <String, dynamic>{};
       final storeId = json['restaurant_id']?.toString();
+      try {
+        final completed = await supabase.rpc(
+          'get_emergency_station_today_completed',
+        );
+        json['completed_orders'] = completed is List ? completed : const [];
+      } catch (_) {
+        // Compatibility while the additive completed-history RPC rolls out.
+      }
       if (storeId != null && storeId.isNotEmpty) {
         try {
           json['fulfillment_mode'] = await supabase.rpc(
@@ -397,6 +590,20 @@ class EmergencyFulfillmentNotifier
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'emergency_floor_direct_items',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: refresh,
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'emergency_fulfillment_actions',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: refresh,
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'emergency_fulfillment_events',
           filter: LiveSyncScope.storeFilter(storeId),
           callback: refresh,
         )
@@ -675,6 +882,9 @@ class EmergencyFulfillmentNotifier
               lastActionAt: DateTime.now().toUtc(),
               items: order.items
                   .map((item) {
+                    if (item.isFloorDirect && stationType != 'floor') {
+                      return item;
+                    }
                     return switch (stationType) {
                       'kitchen' => item.withStage(
                         'kitchen_done',

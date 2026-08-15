@@ -70,14 +70,19 @@ class _EmergencyFulfillmentScreenState
     }
     final selectedOrderId = _selectedOrderId;
     if (selectedOrderId != null) {
-      final previousOrder = previous?.orders
-          .where((order) => order.orderId == selectedOrderId)
-          .cast<EmergencyFulfillmentOrder?>()
-          .firstWhere((_) => true, orElse: () => null);
-      final nextOrder = next.orders
-          .where((order) => order.orderId == selectedOrderId)
-          .cast<EmergencyFulfillmentOrder?>()
-          .firstWhere((_) => true, orElse: () => null);
+      final previousOrder =
+          <EmergencyFulfillmentOrder>[
+                ...?previous?.orders,
+                ...?previous?.completedOrders,
+              ]
+              .where((order) => order.orderId == selectedOrderId)
+              .cast<EmergencyFulfillmentOrder?>()
+              .firstWhere((_) => true, orElse: () => null);
+      final nextOrder =
+          <EmergencyFulfillmentOrder>[...next.orders, ...next.completedOrders]
+              .where((order) => order.orderId == selectedOrderId)
+              .cast<EmergencyFulfillmentOrder?>()
+              .firstWhere((_) => true, orElse: () => null);
       final stationType = next.stationType ?? previous?.stationType ?? '';
       final completedSelectedOrder =
           previousOrder?.hasActionableQuantity(stationType) == true &&
@@ -218,29 +223,29 @@ class _EmergencyFulfillmentScreenState
     final activeOrders = state.orders
         .where(
           (order) =>
-              order.visibleItemsAt(stationType).isNotEmpty &&
-              (order.hasActionableQuantity(stationType) ||
+              order.displayItemsAt(stationType).isNotEmpty &&
+              (!order.isRecentlyCompleteAt(stationType) ||
                   state.pendingQueueIds.contains(order.queueId)),
         )
         .toList(growable: false);
-    final recentOrders =
-        state.orders
-            .where(
-              (order) =>
-                  order.visibleItemsAt(stationType).isNotEmpty &&
-                  !order.hasActionableQuantity(stationType) &&
-                  order.lastActionId != null,
-            )
-            .toList(growable: false)
-          ..sort(
-            (a, b) => (b.lastActionAt ?? b.createdAt).compareTo(
-              a.lastActionAt ?? a.createdAt,
-            ),
-          );
+    final recentByOrderId = <String, EmergencyFulfillmentOrder>{
+      for (final order in state.completedOrders) order.orderId: order,
+      for (final order in state.orders)
+        if (order.isRecentlyCompleteAt(stationType)) order.orderId: order,
+    };
+    final recentOrders = recentByOrderId.values.toList(growable: false)
+      ..sort(
+        (a, b) => (b.lastActionAt ?? b.createdAt).compareTo(
+          a.lastActionAt ?? a.createdAt,
+        ),
+      );
 
     final selected = _selectedOrderId == null
         ? null
-        : state.orders.cast<EmergencyFulfillmentOrder?>().firstWhere(
+        : <EmergencyFulfillmentOrder>[
+            ...state.orders,
+            ...state.completedOrders,
+          ].cast<EmergencyFulfillmentOrder?>().firstWhere(
             (order) => order?.orderId == _selectedOrderId,
             orElse: () => null,
           );
@@ -297,6 +302,7 @@ class _EmergencyFulfillmentScreenState
                     stationType: stationType,
                     pendingQueueIds: state.pendingQueueIds,
                     requestedPage: _page,
+                    now: DateTime.now(),
                     copy: copy,
                     onPageChanged: (page) => setState(() => _page = page),
                     onSelected: (orderId) =>
@@ -601,6 +607,7 @@ class _EmergencyOrderBoard extends StatelessWidget {
     required this.stationType,
     required this.pendingQueueIds,
     required this.requestedPage,
+    required this.now,
     required this.copy,
     required this.onPageChanged,
     required this.onSelected,
@@ -610,6 +617,7 @@ class _EmergencyOrderBoard extends StatelessWidget {
   final String stationType;
   final Set<String> pendingQueueIds;
   final int requestedPage;
+  final DateTime now;
   final _EmergencyCopy copy;
   final ValueChanged<int> onPageChanged;
   final ValueChanged<String> onSelected;
@@ -667,6 +675,7 @@ class _EmergencyOrderBoard extends StatelessWidget {
                     order: order,
                     stationType: stationType,
                     pending: pendingQueueIds.contains(order.queueId),
+                    now: now,
                     copy: copy,
                     onTap: () => onSelected(order.orderId),
                   );
@@ -750,6 +759,7 @@ class _EmergencyOrderCard extends StatelessWidget {
     required this.order,
     required this.stationType,
     required this.pending,
+    required this.now,
     required this.copy,
     required this.onTap,
   });
@@ -757,20 +767,22 @@ class _EmergencyOrderCard extends StatelessWidget {
   final EmergencyFulfillmentOrder order;
   final String stationType;
   final bool pending;
+  final DateTime now;
   final _EmergencyCopy copy;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final visibleItems = order.visibleItemsAt(stationType);
+    final languageCode = Localizations.localeOf(context).languageCode;
+    final visibleItems = order.displayItemsAt(stationType);
     final actionable = order.hasActionableQuantity(stationType);
+    final completed = order.isRecentlyCompleteAt(stationType);
     final tone = pending
         ? PosColors.warning
-        : actionable
-        ? _stationColor(stationType)
-        : PosColors.success;
-    final elapsed = DateTime.now().difference(order.createdAt.toLocal());
-    final elapsedMinutes = math.max(0, elapsed.inMinutes);
+        : completed
+        ? PosColors.success
+        : _stationColor(stationType);
+    final elapsed = now.difference(order.createdAt.toLocal());
     final semantics =
         '${copy.order} ${order.queueNo}, ${copy.table} ${order.tableNumber}, '
         '${order.floorLabel}, ${visibleItems.length} ${copy.items}';
@@ -811,14 +823,30 @@ class _EmergencyOrderCard extends StatelessWidget {
                             ),
                       ),
                     ),
-                    Icon(
-                      pending
-                          ? Icons.cloud_upload_outlined
-                          : actionable
-                          ? Icons.schedule_rounded
-                          : Icons.check_circle_rounded,
-                      color: Colors.white,
-                      size: 20,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          pending
+                              ? Icons.cloud_upload_outlined
+                              : Icons.schedule_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          formatEmergencyElapsed(elapsed),
+                          key: Key('emergency_order_elapsed_${order.orderId}'),
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -828,7 +856,6 @@ class _EmergencyOrderCard extends StatelessWidget {
                   padding: const EdgeInsets.all(10),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
                         '${copy.table} ${order.tableNumber}',
@@ -847,24 +874,28 @@ class _EmergencyOrderCard extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
+                      const SizedBox(height: 4),
+                      Expanded(
+                        child: _EmergencyCardMenuList(
+                          items: visibleItems,
+                          languageCode: languageCode,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
                       Text(
                         pending
                             ? copy.pendingSync
+                            : completed
+                            ? copy.completed
                             : actionable
                             ? copy.waitingForAction
-                            : copy.completed,
+                            : copy.waitingForPrevious,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: tone,
                           fontWeight: FontWeight.w800,
                         ),
-                      ),
-                      Text(
-                        copy.elapsedMinutes(elapsedMinutes),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.labelSmall,
                       ),
                     ],
                   ),
@@ -874,6 +905,86 @@ class _EmergencyOrderCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _EmergencyCardMenuList extends StatelessWidget {
+  const _EmergencyCardMenuList({
+    required this.items,
+    required this.languageCode,
+  });
+
+  final List<EmergencyFulfillmentDisplayItem> items;
+  final String languageCode;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const rowHeight = 18.0;
+        final rowsPerColumn = math.max(1, constraints.maxHeight ~/ rowHeight);
+        final columnCount = items.length > rowsPerColumn ? 2 : 1;
+        final capacity = rowsPerColumn * columnCount;
+        final hiddenCount = math.max(0, items.length - capacity);
+        final shown = items.take(capacity).toList(growable: false);
+        if (hiddenCount > 0 && shown.isNotEmpty) {
+          shown[shown.length - 1] = EmergencyFulfillmentDisplayItem(
+            id: 'remaining-$hiddenCount',
+            nameKo: '+$hiddenCount개 메뉴',
+            nameVi: '+$hiddenCount món',
+            nameEn: '+$hiddenCount items',
+            quantity: 1,
+            completed: false,
+            readOnly: true,
+          );
+        }
+        final split = columnCount == 1
+            ? shown.length
+            : (shown.length / 2).ceil();
+        final columns = <List<EmergencyFulfillmentDisplayItem>>[
+          shown.take(split).toList(growable: false),
+          if (columnCount == 2) shown.skip(split).toList(growable: false),
+        ];
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (
+              var columnIndex = 0;
+              columnIndex < columns.length;
+              columnIndex += 1
+            ) ...[
+              if (columnIndex > 0) const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final item in columns[columnIndex])
+                      SizedBox(
+                        height: rowHeight,
+                        child: Text(
+                          item.localizedName(languageCode),
+                          key: Key('emergency_card_menu_${item.id}'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: item.completed
+                                    ? PosColors.success
+                                    : PosColors.textPrimary,
+                                fontWeight: item.completed
+                                    ? FontWeight.w800
+                                    : FontWeight.w600,
+                              ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 }
@@ -1287,18 +1398,32 @@ class _EmergencyMenuRow extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final compact = constraints.maxWidth < 240;
+            final foodComponents = item.comboComponents
+                .where((component) => !component.isFloorDirect)
+                .toList(growable: false);
             final itemInfo = Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  item.localizedName(languageCode),
-                  maxLines: compact ? 3 : 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
+                if (foodComponents.isEmpty)
+                  Text(
+                    item.localizedName(languageCode),
+                    maxLines: compact ? 3 : 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  )
+                else
+                  for (final component in foodComponents)
+                    Text(
+                      component.localizedName(languageCode),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                 const SizedBox(height: 3),
                 Text(
                   '${copy.orderedQuantity} ${item.orderedQuantity}',
@@ -1680,6 +1805,8 @@ class _EmergencyCopy {
   String get orderedQuantity => _pick('주문 수량', 'Số lượng', 'Ordered');
   String get completed => _pick('완료', 'Hoàn tất', 'Completed');
   String get waitingForAction => _pick('처리 대기', 'Chờ xử lý', 'Action required');
+  String get waitingForPrevious =>
+      _pick('이전 단계 대기', 'Chờ công đoạn trước', 'Waiting for previous stage');
   String get floorDirectOnly => _pick(
     '층에서 직접 제공',
     'Phục vụ trực tiếp tại tầng',

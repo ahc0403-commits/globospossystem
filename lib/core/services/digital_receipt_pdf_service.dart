@@ -6,6 +6,31 @@ import 'package:printing/printing.dart';
 
 import '../../features/digital_receipt/digital_receipt_model.dart';
 
+String digitalReceiptPaymentMethodVi(String method) {
+  return switch (method.trim().toUpperCase()) {
+    'CASH' => 'Tiền mặt',
+    'CREDITCARD' || 'CARD' => 'Thẻ tín dụng',
+    'ATM' => 'Thẻ ATM',
+    'BANKTRANSFER' || 'BANK_TRANSFER' => 'Chuyển khoản',
+    'MOMO' => 'Ví MoMo',
+    'ZALOPAY' => 'Ví ZaloPay',
+    'VNPAY' => 'VNPay',
+    'SHOPEEPAY' => 'Ví ShopeePay',
+    'VOUCHER' => 'Phiếu thanh toán',
+    'CREDITSALE' => 'Bán chịu',
+    'SPLIT' => 'Thanh toán kết hợp',
+    'SERVICE' => 'Dịch vụ',
+    _ => 'Khác',
+  };
+}
+
+String digitalReceiptItemLabelVi(String label) {
+  final value = label.trim();
+  if (value.isEmpty || value.toUpperCase() == 'ITEM') return 'Món';
+  if (RegExp(r'[\uac00-\ud7af]').hasMatch(value)) return 'Món';
+  return value;
+}
+
 class DigitalReceiptPdfService {
   const DigitalReceiptPdfService();
 
@@ -56,7 +81,7 @@ class DigitalReceiptPdfService {
                 .where((item) => !item.isServiceItem)
                 .map(
                   (item) => [
-                    item.label,
+                    digitalReceiptItemLabelVi(item.label),
                     '${item.quantity}',
                     currency.format(item.unitPrice),
                     currency.format(item.lineTotal),
@@ -84,9 +109,15 @@ class DigitalReceiptPdfService {
             currency,
             bold: true,
           ),
-          _line('Phương thức', receipt.paymentMethod),
+          _line(
+            'Phương thức',
+            digitalReceiptPaymentMethodVi(receipt.paymentMethod),
+          ),
           for (final payment in receipt.payments)
-            _line(payment.method, '${currency.format(payment.amount)} VND'),
+            _line(
+              digitalReceiptPaymentMethodVi(payment.method),
+              '${currency.format(payment.amount)} VND',
+            ),
           _line('Khách trả', '${currency.format(receipt.receivedAmount)} VND'),
           _line('Tiền thừa', '${currency.format(receipt.changeAmount)} VND'),
           pw.SizedBox(height: 24),
