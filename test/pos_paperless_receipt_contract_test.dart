@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/models/fulfillment_mode.dart';
+import 'package:globos_pos_system/core/services/digital_receipt_pdf_service.dart';
 import 'package:globos_pos_system/core/services/digital_receipt_service.dart';
 import 'package:globos_pos_system/features/cashier/payment_completion_dialog.dart';
 import 'package:globos_pos_system/features/customer_display/customer_display_provider.dart';
@@ -231,7 +232,9 @@ void main() {
 
     expect(find.byKey(const Key('digital_receipt_paper')), findsOne);
     expect(find.byKey(const Key('digital_receipt_total')), findsOne);
-    expect(find.textContaining('적색 세금계산서가 아닙니다'), findsOne);
+    expect(find.text(digitalReceiptFooterThanksVi), findsOne);
+    expect(find.text(digitalReceiptFooterNoticeVi), findsOne);
+    expect(find.textContaining('적색 세금계산서가 아닙니다'), findsNothing);
     await tester.scrollUntilVisible(
       find.byKey(const Key('digital_receipt_save_pdf')),
       500,

@@ -284,76 +284,79 @@ Widget _localizedApp(Widget home) => MaterialApp(
   home: home,
 );
 
-EmergencyFulfillmentState _kdsState(String station) =>
-    EmergencyFulfillmentState(
-      assigned: true,
-      active: true,
-      restaurantId: 'store-bt',
-      sessionId: 'session-1',
-      stationType: station,
-      floorLabel: station == 'floor' ? '2F' : null,
-      fulfillmentMode: FulfillmentMode.paperless,
-      orders: List.generate(
-        5,
-        (index) => EmergencyFulfillmentOrder(
-          queueId: 'queue-$index',
-          orderId: 'order-$index',
-          queueNo: 101 + index,
-          tableNumber: 'T${12 + index}',
-          floorLabel: index.isEven ? '1F' : '2F',
-          createdAt: DateTime.now().subtract(
-            Duration(minutes: 5 + (index * 2)),
+EmergencyFulfillmentState _kdsState(String station) {
+  final now = DateTime.now();
+  return EmergencyFulfillmentState(
+    assigned: true,
+    active: true,
+    restaurantId: 'store-bt',
+    sessionId: 'session-1',
+    stationType: station,
+    floorLabel: station == 'floor' ? '2F' : null,
+    fulfillmentMode: FulfillmentMode.paperless,
+    orders: List.generate(
+      5,
+      (index) => EmergencyFulfillmentOrder(
+        queueId: 'queue-$index',
+        orderId: 'order-$index',
+        queueNo: 101 + index,
+        tableNumber: 'T${12 + index}',
+        floorLabel: index.isEven ? '1F' : '2F',
+        createdAt: now.subtract(Duration(minutes: 5 + (index * 2))),
+        stationStartedAt: station == 'kitchen'
+            ? now.subtract(Duration(minutes: 5 + (index * 2)))
+            : now.subtract(Duration(minutes: 3 + index)),
+        lastActionId: index == 0 ? 'action-previous' : null,
+        lastActionAt: index == 0
+            ? now.subtract(const Duration(minutes: 2))
+            : null,
+        items: [
+          EmergencyFulfillmentItem(
+            id: 'item-$index-a',
+            orderItemId: 'order-item-$index-a',
+            nameKo: index.isEven ? '즉석 떡볶이' : '불고기 김밥',
+            nameVi: index.isEven ? 'Tokbokki' : 'Kimbap bò',
+            nameEn: index.isEven ? 'Tteokbokki' : 'Bulgogi kimbap',
+            orderedQuantity: 2,
+            kitchenDoneQuantity: station == 'kitchen' ? 0 : 2,
+            trayReceivedQuantity: station == 'floor' ? 2 : 0,
+            trayDispatchedQuantity: station == 'floor' ? 1 : 0,
+            floorServedQuantity: 0,
+            needsReview: false,
           ),
-          lastActionId: index == 0 ? 'action-previous' : null,
-          lastActionAt: index == 0
-              ? DateTime.now().subtract(const Duration(minutes: 2))
-              : null,
-          items: [
-            EmergencyFulfillmentItem(
-              id: 'item-$index-a',
-              orderItemId: 'order-item-$index-a',
-              nameKo: index.isEven ? '즉석 떡볶이' : '불고기 김밥',
-              nameVi: index.isEven ? 'Tokbokki' : 'Kimbap bò',
-              nameEn: index.isEven ? 'Tteokbokki' : 'Bulgogi kimbap',
+          EmergencyFulfillmentItem(
+            id: 'item-$index-b',
+            orderItemId: 'order-item-$index-b',
+            nameKo: '치즈 라면',
+            nameVi: 'Mì phô mai',
+            nameEn: 'Cheese ramen',
+            orderedQuantity: 1,
+            kitchenDoneQuantity: station == 'kitchen' ? 0 : 1,
+            trayReceivedQuantity: station == 'floor' ? 1 : 0,
+            trayDispatchedQuantity: station == 'floor' ? 1 : 0,
+            floorServedQuantity: 0,
+            needsReview: false,
+          ),
+          if (index == 0)
+            const EmergencyFulfillmentItem(
+              id: 'item-0-drink',
+              orderItemId: 'order-item-0-drink',
+              nameKo: '콜라',
+              nameVi: 'Coca-Cola',
+              nameEn: 'Cola',
               orderedQuantity: 2,
-              kitchenDoneQuantity: station == 'kitchen' ? 0 : 2,
-              trayReceivedQuantity: station == 'floor' ? 2 : 0,
-              trayDispatchedQuantity: station == 'floor' ? 1 : 0,
+              kitchenDoneQuantity: 0,
+              trayReceivedQuantity: 0,
+              trayDispatchedQuantity: 0,
               floorServedQuantity: 0,
               needsReview: false,
+              fulfillmentRoute: 'floor_direct',
             ),
-            EmergencyFulfillmentItem(
-              id: 'item-$index-b',
-              orderItemId: 'order-item-$index-b',
-              nameKo: '치즈 라면',
-              nameVi: 'Mì phô mai',
-              nameEn: 'Cheese ramen',
-              orderedQuantity: 1,
-              kitchenDoneQuantity: station == 'kitchen' ? 0 : 1,
-              trayReceivedQuantity: station == 'floor' ? 1 : 0,
-              trayDispatchedQuantity: station == 'floor' ? 1 : 0,
-              floorServedQuantity: 0,
-              needsReview: false,
-            ),
-            if (index == 0)
-              const EmergencyFulfillmentItem(
-                id: 'item-0-drink',
-                orderItemId: 'order-item-0-drink',
-                nameKo: '콜라',
-                nameVi: 'Coca-Cola',
-                nameEn: 'Cola',
-                orderedQuantity: 2,
-                kitchenDoneQuantity: 0,
-                trayReceivedQuantity: 0,
-                trayDispatchedQuantity: 0,
-                floorServedQuantity: 0,
-                needsReview: false,
-                fulfillmentRoute: 'floor_direct',
-              ),
-          ],
-        ),
+        ],
       ),
-    );
+    ),
+  );
+}
 
 const _receiptAccess = DigitalReceiptAccess(
   receiptId: 'receipt-1',

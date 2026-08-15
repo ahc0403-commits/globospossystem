@@ -484,12 +484,8 @@ class _ReceiptCopy {
   String get paymentMethod => pick('결제수단', 'Phương thức', 'Payment method');
   String get received => pick('받은 금액', 'Khách trả', 'Received');
   String get change => pick('거스름돈', 'Tiền thừa', 'Change');
-  String get thanks => pick('감사합니다!', 'Cảm ơn quý khách!', 'Thank you!');
-  String get proofNotice => pick(
-    '결제 증빙용 영수증이며 적색 세금계산서가 아닙니다.',
-    'Biên lai này dùng làm chứng từ thanh toán, không phải hóa đơn đỏ.',
-    'This receipt is proof of payment, not a red invoice.',
-  );
+  String get thanks => digitalReceiptFooterThanksVi;
+  String get proofNotice => digitalReceiptFooterNoticeVi;
   String get savePdf => pick('PDF 저장/공유', 'Lưu/chia sẻ PDF', 'Save/share PDF');
   String get print => pick('직접 인쇄', 'Tự in', 'Print');
   String get loadFailed => pick(

@@ -114,9 +114,115 @@ void main() {
     });
 
     final kitchenLines = order.displayItemsAt('kitchen');
-    expect(kitchenLines.map((item) => item.nameVi), ['Cơm cuộn', 'Coca-Cola']);
-    expect(kitchenLines.map((item) => item.completed), [true, false]);
-    expect(kitchenLines.map((item) => item.readOnly), [false, true]);
+    expect(kitchenLines.map((item) => item.nameVi), ['Cơm cuộn']);
+    expect(kitchenLines.map((item) => item.completed), [true]);
+    expect(kitchenLines.map((item) => item.readyFromPreviousStage), [false]);
+    expect(kitchenLines.map((item) => item.readOnly), [false]);
+
+    final trayLines = order.displayItemsAt('tray');
+    expect(trayLines.map((item) => item.nameVi), ['Cơm cuộn']);
+
+    final floorLines = order.displayItemsAt('floor');
+    expect(floorLines.map((item) => item.nameVi), ['Cơm cuộn', 'Coca-Cola']);
+  });
+
+  test('completed station timer stops at that station completion', () {
+    final order = EmergencyFulfillmentOrder(
+      queueId: 'queue-1',
+      orderId: 'order-1',
+      queueNo: 1,
+      tableNumber: '102',
+      floorLabel: '1F',
+      createdAt: DateTime.utc(2026, 8, 15, 9),
+      stationStartedAt: DateTime.utc(2026, 8, 15, 10),
+      stationCompletedAt: DateTime.utc(2026, 8, 15, 10, 4, 32),
+      items: const [
+        EmergencyFulfillmentItem(
+          id: 'food-1',
+          orderItemId: 'order-item-1',
+          nameKo: '김밥',
+          nameVi: 'Cơm cuộn',
+          nameEn: 'Gimbap',
+          orderedQuantity: 1,
+          kitchenDoneQuantity: 1,
+          trayReceivedQuantity: 1,
+          trayDispatchedQuantity: 1,
+          floorServedQuantity: 0,
+          needsReview: false,
+        ),
+      ],
+    );
+
+    expect(
+      order.stationElapsedAt(DateTime.utc(2026, 8, 15, 11), 'tray'),
+      const Duration(minutes: 4, seconds: 32),
+    );
+    expect(
+      order.stationElapsedAt(DateTime.utc(2026, 8, 15, 12), 'tray'),
+      const Duration(minutes: 4, seconds: 32),
+    );
+  });
+
+  test('station timer waits at zero until work reaches tray or floor', () {
+    final order = EmergencyFulfillmentOrder(
+      queueId: 'queue-1',
+      orderId: 'order-1',
+      queueNo: 1,
+      tableNumber: '102',
+      floorLabel: '1F',
+      createdAt: DateTime.utc(2026, 8, 15, 9),
+      items: const [
+        EmergencyFulfillmentItem(
+          id: 'food-1',
+          orderItemId: 'order-item-1',
+          nameKo: '김밥',
+          nameVi: 'Cơm cuộn',
+          nameEn: 'Gimbap',
+          orderedQuantity: 1,
+          kitchenDoneQuantity: 0,
+          trayReceivedQuantity: 0,
+          trayDispatchedQuantity: 0,
+          floorServedQuantity: 0,
+          needsReview: false,
+        ),
+      ],
+    );
+
+    expect(
+      order.stationElapsedAt(DateTime.utc(2026, 8, 15, 12), 'tray'),
+      Duration.zero,
+    );
+    expect(
+      order.stationElapsedAt(DateTime.utc(2026, 8, 15, 12), 'floor'),
+      Duration.zero,
+    );
+  });
+
+  test('tray and floor identify food received from the previous stage', () {
+    const item = EmergencyFulfillmentItem(
+      id: 'food-1',
+      orderItemId: 'order-item-1',
+      nameKo: '떡볶이',
+      nameVi: 'Bánh gạo cay',
+      nameEn: 'Spicy rice cake',
+      orderedQuantity: 2,
+      kitchenDoneQuantity: 1,
+      trayReceivedQuantity: 1,
+      trayDispatchedQuantity: 0,
+      floorServedQuantity: 0,
+      needsReview: false,
+    );
+
+    expect(item.isReadyFromPreviousStageAt('kitchen'), isFalse);
+    expect(item.isReadyFromPreviousStageAt('tray'), isTrue);
+    expect(item.isReadyFromPreviousStageAt('floor'), isFalse);
+
+    final dispatched = item.withStage('tray_dispatched', 1);
+    expect(dispatched.isReadyFromPreviousStageAt('tray'), isFalse);
+    expect(dispatched.isReadyFromPreviousStageAt('floor'), isTrue);
+
+    final served = dispatched.withStage('floor_served', 1);
+    expect(served.isReadyFromPreviousStageAt('floor'), isFalse);
   });
 
   test('additive SQL exposes today completed orders and combo snapshots', () {
@@ -129,6 +235,19 @@ void main() {
     expect(migration, contains("'combo_components'"));
     expect(migration, contains('emergency_fulfillment_actions'));
     expect(migration, contains('emergency_fulfillment_events'));
+  });
+
+  test('additive SQL exposes per-station timer boundaries', () {
+    final migration = File(
+      'supabase/migrations/20260815172000_emergency_station_timers.sql',
+    ).readAsStringSync();
+
+    expect(migration, contains('get_emergency_station_timings'));
+    expect(migration, contains("WHEN 'tray' THEN 'kitchen_done'"));
+    expect(migration, contains("WHEN 'floor' THEN 'tray_dispatched'"));
+    expect(migration, contains("ELSE 'floor_served'"));
+    expect(migration, contains('station_started_at'));
+    expect(migration, contains('station_completed_at'));
   });
 
   test('digital receipt migration snapshots Vietnamese menu names', () {
@@ -149,5 +268,15 @@ void main() {
     expect(digitalReceiptItemLabelVi('Item'), 'Món');
     expect(digitalReceiptItemLabelVi('떡볶이'), 'Món');
     expect(digitalReceiptItemLabelVi('Bánh gạo cay'), 'Bánh gạo cay');
+    expect(digitalReceiptFooterThanksVi, 'Cảm ơn quý khách!');
+    expect(
+      digitalReceiptFooterNoticeVi,
+      'Biên lai này dùng làm chứng từ thanh toán, '
+      'không phải hóa đơn đỏ.',
+    );
+    final pdfSource = File(
+      'lib/core/services/digital_receipt_pdf_service.dart',
+    ).readAsStringSync();
+    expect(RegExp(r'[\uac00-\ud7af]').hasMatch(pdfSource), isFalse);
   });
 }
