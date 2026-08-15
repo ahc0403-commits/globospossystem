@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/core/services/connectivity_service.dart';
 import 'package:globos_pos_system/core/ui/app_theme.dart';
+import 'package:globos_pos_system/core/ui/pos_design_tokens.dart';
 import 'package:globos_pos_system/features/auth/auth_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_state.dart';
 import 'package:globos_pos_system/features/emergency_fulfillment/emergency_control_panel.dart';
@@ -200,7 +201,7 @@ void main() {
       findsNWidgets(3),
     );
     expect(find.byKey(const Key('emergency_order_order-1')), findsOne);
-    expect(find.text('Bánh gạo cay'), findsNothing);
+    expect(find.text('Bánh gạo cay'), findsOne);
 
     await tester.tap(find.byKey(const Key('emergency_order_order-1')));
     await tester.pump();
@@ -237,7 +238,7 @@ void main() {
 
     expect(find.byKey(const Key('emergency_order_grid_8_slots')), findsOne);
     expect(find.text('#101'), findsOne);
-    expect(find.text('떡볶이'), findsNothing);
+    expect(find.text('떡볶이'), findsOne);
 
     await tester.tap(find.byKey(const Key('emergency_order_order-1')));
     await tester.pump();
@@ -480,6 +481,32 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('today completed history opens orders outside active session', (
+    tester,
+  ) async {
+    final completed = _completedState('floor').orders.single;
+    final fixture = _FixtureEmergencyNotifier(
+      _activeState(
+        'floor',
+      ).copyWith(orders: const [], completedOrders: [completed]),
+    );
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(390, 844),
+      locale: const Locale('ko'),
+    );
+
+    await tester.tap(find.text('최근 완료 1'));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('emergency_order_order-1')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('emergency_order_detail_order-1')), findsOne);
+    expect(find.text('떡볶이'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Super Admin emergency dialog requires and submits a reason', (
     tester,
   ) async {
@@ -568,27 +595,35 @@ void main() {
   });
 
   for (final stationType in ['kitchen', 'tray']) {
-    testWidgets('floor-direct-only order is hidden in $stationType', (
+    testWidgets(
+      'floor-direct-only order is visible but read-only in $stationType',
+      (tester) async {
+        final fixture = _FixtureEmergencyNotifier(
+          _floorDirectState(stationType),
+        );
+        await _pumpEmergency(
+          tester,
+          fixture: fixture,
+          size: const Size(1024, 768),
+          locale: const Locale('ko'),
+          expectedStationType: stationType,
+        );
+
+        expect(find.byKey(const Key('emergency_order_order-direct')), findsOne);
+        expect(find.text('콜라'), findsOne);
+        await tester.tap(find.byKey(const Key('emergency_order_order-direct')));
+        await tester.pump();
+        final complete = tester.widget<FilledButton>(
+          find.byKey(const Key('emergency_complete_order')),
+        );
+        expect(complete.onPressed, isNull);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('mixed order shows its read-only drink in $stationType', (
       tester,
     ) async {
-      final fixture = _FixtureEmergencyNotifier(_floorDirectState(stationType));
-      await _pumpEmergency(
-        tester,
-        fixture: fixture,
-        size: const Size(1024, 768),
-        locale: const Locale('ko'),
-        expectedStationType: stationType,
-      );
-
-      expect(
-        find.byKey(const Key('emergency_order_order-direct')),
-        findsNothing,
-      );
-      expect(find.text('콜라'), findsNothing);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('mixed order hides its drink in $stationType', (tester) async {
       final fixture = _FixtureEmergencyNotifier(_mixedRouteState(stationType));
       await _pumpEmergency(
         tester,
@@ -601,7 +636,7 @@ void main() {
       await tester.tap(find.byKey(const Key('emergency_order_order-mixed')));
       await tester.pump();
       expect(find.text('떡볶이'), findsOne);
-      expect(find.text('콜라'), findsNothing);
+      expect(find.text('콜라'), findsOne);
       expect(
         find.byKey(const Key('emergency_floor_beverage_section')),
         findsNothing,
@@ -671,6 +706,55 @@ void main() {
     await tester.pump();
     expect(fixture.recordedProgress, [('drink-1', 'floor_served', -1)]);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('card shows menu completion colors and a digital clock', (
+    tester,
+  ) async {
+    final active = _activeState('kitchen');
+    final order = active.orders.single;
+    final item = order.items.single;
+    final fixture = _FixtureEmergencyNotifier(
+      active.copyWith(
+        orders: [
+          order.copyWith(
+            items: [
+              item.withStage('kitchen_done', item.orderedQuantity),
+              const EmergencyFulfillmentItem(
+                id: 'item-2',
+                orderItemId: 'order-item-2',
+                nameKo: '김밥',
+                nameVi: 'Cơm cuộn',
+                nameEn: 'Gimbap',
+                orderedQuantity: 1,
+                kitchenDoneQuantity: 0,
+                trayReceivedQuantity: 0,
+                trayDispatchedQuantity: 0,
+                floorServedQuantity: 0,
+                needsReview: false,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(1024, 768),
+      locale: const Locale('vi'),
+      expectedStationType: 'kitchen',
+    );
+
+    final completed = tester.widget<Text>(
+      find.byKey(const Key('emergency_card_menu_item-1')),
+    );
+    final pending = tester.widget<Text>(
+      find.byKey(const Key('emergency_card_menu_item-2')),
+    );
+    expect(completed.style?.color, PosColors.success);
+    expect(pending.style?.color, PosColors.textPrimary);
+    expect(find.byKey(const Key('emergency_order_elapsed_order-1')), findsOne);
   });
 }
 
