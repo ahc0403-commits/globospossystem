@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/services/store_service.dart';
 import '../../main.dart';
+import '../report/report_provider.dart';
 
 const kUnclassifiedBrandFilter = '__unclassified__';
 
@@ -152,6 +154,22 @@ class SuperAdminReportSummary {
   final double dineInRevenue;
   final double deliveryRevenue;
   final List<SuperAdminRestaurantReport> rows;
+}
+
+Map<String, double> aggregateSuperAdminPhotoObjetSalesByStore(
+  Iterable<Map<String, dynamic>> rows,
+) {
+  final rowsByStore = <String, List<Map<String, dynamic>>>{};
+  for (final row in rows) {
+    final storeId = row['store_id']?.toString().trim() ?? '';
+    if (storeId.isEmpty) continue;
+    rowsByStore.putIfAbsent(storeId, () => []).add(row);
+  }
+
+  return {
+    for (final entry in rowsByStore.entries)
+      entry.key: aggregatePhotoObjetReportRows(entry.value).totalRevenue,
+  };
 }
 
 class SuperAdminState {
@@ -619,6 +637,19 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
 
       final startIso = state.reportStart.toIso8601String();
       final endIso = state.reportEnd.toIso8601String();
+      final startSaleDate = DateFormat('yyyy-MM-dd').format(state.reportStart);
+      final endSaleDate = DateFormat('yyyy-MM-dd').format(state.reportEnd);
+      final photoObjetSales = await supabase
+          .from('v_photo_objet_daily_summary')
+          .select(
+            'store_id, sale_date, total_gross_sales, total_transactions, total_service_amount',
+          )
+          .inFilter(
+            'store_id',
+            sourceRestaurants.map((restaurant) => restaurant.id).toList(),
+          )
+          .gte('sale_date', startSaleDate)
+          .lte('sale_date', endSaleDate);
 
       for (final restaurant in sourceRestaurants) {
         final payments = await supabase
@@ -659,6 +690,13 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
           final sale = Map<String, dynamic>.from(row);
           accumulator.delivery += _toDouble(sale['net_amount']);
         }
+      }
+
+      final photoObjetSalesByStore = aggregateSuperAdminPhotoObjetSalesByStore(
+        List<Map<String, dynamic>>.from(photoObjetSales),
+      );
+      for (final entry in photoObjetSalesByStore.entries) {
+        accumulators[entry.key]?.dineIn += entry.value;
       }
 
       final reportRows =
