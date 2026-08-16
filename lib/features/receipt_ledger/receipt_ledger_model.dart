@@ -33,6 +33,27 @@ class ReceiptLedgerPayment {
   final double amount;
 }
 
+class ReceiptLedgerItem {
+  const ReceiptLedgerItem({
+    required this.name,
+    required this.quantity,
+    required this.unitPrice,
+  });
+
+  factory ReceiptLedgerItem.fromJson(Map<String, dynamic> json) =>
+      ReceiptLedgerItem(
+        name: json['name']?.toString() ?? 'Item',
+        quantity: _int(json['quantity']),
+        unitPrice: _double(json['unit_price']),
+      );
+
+  final String name;
+  final int quantity;
+  final double unitPrice;
+
+  double get lineTotal => unitPrice * quantity;
+}
+
 class ReceiptLedgerEntry {
   const ReceiptLedgerEntry({
     required this.receiptId,
@@ -45,6 +66,7 @@ class ReceiptLedgerEntry {
     required this.salesChannel,
     required this.cashierName,
     required this.payments,
+    required this.items,
     required this.grossAmount,
     required this.adjustedAmount,
     required this.netAmount,
@@ -56,6 +78,7 @@ class ReceiptLedgerEntry {
 
   factory ReceiptLedgerEntry.fromJson(Map<String, dynamic> json) {
     final rawPayments = json['payments'];
+    final rawItems = json['items'];
     return ReceiptLedgerEntry(
       receiptId: json['receipt_id']?.toString() ?? '',
       receiptNumber: json['receipt_number']?.toString() ?? '-',
@@ -72,6 +95,16 @@ class ReceiptLedgerEntry {
                 .map(
                   (payment) => ReceiptLedgerPayment.fromJson(
                     Map<String, dynamic>.from(payment),
+                  ),
+                )
+                .toList(growable: false)
+          : const [],
+      items: rawItems is List
+          ? rawItems
+                .whereType<Map>()
+                .map(
+                  (item) => ReceiptLedgerItem.fromJson(
+                    Map<String, dynamic>.from(item),
                   ),
                 )
                 .toList(growable: false)
@@ -96,6 +129,7 @@ class ReceiptLedgerEntry {
   final String salesChannel;
   final String cashierName;
   final List<ReceiptLedgerPayment> payments;
+  final List<ReceiptLedgerItem> items;
   final double grossAmount;
   final double adjustedAmount;
   final double netAmount;

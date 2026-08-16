@@ -45,6 +45,10 @@ void main() {
             {'method': 'CASH', 'amount': 50000},
             {'method': 'CREDITCARD', 'amount': 100000},
           ],
+          'items': [
+            {'name': 'Tteokbokki', 'quantity': 2, 'unit_price': 50000},
+            {'name': 'Kimbap', 'quantity': 1, 'unit_price': 50000},
+          ],
           'gross_amount': 150000,
           'adjusted_amount': 0,
           'net_amount': 150000,
@@ -59,6 +63,10 @@ void main() {
 
     expect(page.receipts, hasLength(1));
     expect(page.receipts.single.payments, hasLength(2));
+    expect(page.receipts.single.items, hasLength(2));
+    expect(page.receipts.single.items.first.name, 'Tteokbokki');
+    expect(page.receipts.single.items.first.quantity, 2);
+    expect(page.receipts.single.items.first.lineTotal, 100000);
     expect(page.receipts.single.printable, isTrue);
   });
 
@@ -108,6 +116,17 @@ void main() {
     expect(sql, contains("AT TIME ZONE 'Asia/Ho_Chi_Minh'"));
   });
 
+  test('receipt ledger includes non-cancelled ordered menu items', () {
+    final sql = File(
+      'supabase/migrations/20260816100000_receipt_ledger_menu_items.sql',
+    ).readAsStringSync();
+
+    expect(sql, contains('pos_order_items AS'));
+    expect(sql, contains("'name', COALESCE("));
+    expect(sql, contains("item.status <> 'cancelled'"));
+    expect(sql, contains("COALESCE(order_items.items, '[]'::jsonb) AS items"));
+  });
+
   test('all three role surfaces expose the common ledger', () {
     final cashier = File(
       'lib/features/cashier/cashier_screen.dart',
@@ -129,6 +148,7 @@ void main() {
       contains("Key('super_admin_today_receipt_ledger_entry')"),
     );
     expect(screen, contains("Key('receipt_ledger_detail_dialog')"));
+    expect(screen, contains("Key('receipt_ledger_ordered_items')"));
     expect(screen, contains("Key('receipt_ledger_reprint_confirm')"));
     expect(screen, contains('receiptLedgerService.reprint'));
   });

@@ -189,11 +189,33 @@ class EmergencyFulfillmentItem {
     _ => false,
   };
 
+  bool isDisplayCompletedAt(String stationType) => switch (stationType) {
+    'kitchen' => !isFloorDirect && kitchenDoneQuantity >= orderedQuantity,
+    'tray' =>
+      !isFloorDirect &&
+          kitchenDoneQuantity > 0 &&
+          trayReceivedQuantity >= kitchenDoneQuantity &&
+          trayDispatchedQuantity >= kitchenDoneQuantity,
+    'floor' => switch (isFloorDirect
+        ? orderedQuantity
+        : trayDispatchedQuantity) {
+      final limit when limit > 0 => floorServedQuantity >= limit,
+      _ => false,
+    },
+    _ => false,
+  };
+
   bool isReadyFromPreviousStageAt(String stationType) => switch (stationType) {
     'tray' => !isFloorDirect && kitchenDoneQuantity > trayDispatchedQuantity,
     'floor' => !isFloorDirect && trayDispatchedQuantity > floorServedQuantity,
     _ => false,
   };
+
+  int displayPriorityAt(String stationType) {
+    if (isReadyFromPreviousStageAt(stationType)) return 0;
+    if (isDisplayCompletedAt(stationType)) return 2;
+    return 1;
+  }
 
   String localizedName(String languageCode) => switch (languageCode) {
     'vi' => nameVi.trim().isEmpty ? 'Món' : nameVi,
@@ -298,10 +320,19 @@ class EmergencyFulfillmentOrder {
   bool hasActionableQuantity(String stationType) =>
       items.any((item) => item.isActionableAt(stationType));
 
-  List<EmergencyFulfillmentItem> visibleItemsAt(String stationType) =>
-      stationType == 'floor'
-      ? items
-      : items.where((item) => !item.isFloorDirect).toList(growable: false);
+  List<EmergencyFulfillmentItem> visibleItemsAt(String stationType) {
+    final visible = stationType == 'floor'
+        ? items
+        : items.where((item) => !item.isFloorDirect);
+    final indexed = visible.indexed.toList(growable: false)
+      ..sort((left, right) {
+        final priority = left.$2
+            .displayPriorityAt(stationType)
+            .compareTo(right.$2.displayPriorityAt(stationType));
+        return priority != 0 ? priority : left.$1.compareTo(right.$1);
+      });
+    return indexed.map((entry) => entry.$2).toList(growable: false);
+  }
 
   bool isCompleteAt(String stationType) {
     final relevant = stationType == 'floor'
@@ -351,7 +382,7 @@ class EmergencyFulfillmentOrder {
             nameVi: item.nameVi,
             nameEn: item.nameEn,
             quantity: item.orderedQuantity,
-            completed: item.isCompletedAt(stationType),
+            completed: item.isDisplayCompletedAt(stationType),
             readyFromPreviousStage: item.isReadyFromPreviousStageAt(
               stationType,
             ),
@@ -375,7 +406,7 @@ class EmergencyFulfillmentOrder {
             nameVi: component.nameVi,
             nameEn: component.nameEn,
             quantity: component.displayQuantity(item.orderedQuantity),
-            completed: statusItem.isCompletedAt(stationType),
+            completed: statusItem.isDisplayCompletedAt(stationType),
             readyFromPreviousStage: statusItem.isReadyFromPreviousStageAt(
               stationType,
             ),
@@ -384,7 +415,18 @@ class EmergencyFulfillmentOrder {
         );
       }
     }
-    return result;
+    final indexed = result.indexed.toList(growable: false)
+      ..sort((left, right) {
+        int priority(EmergencyFulfillmentDisplayItem item) {
+          if (item.readyFromPreviousStage) return 0;
+          if (item.completed) return 2;
+          return 1;
+        }
+
+        final statusOrder = priority(left.$2).compareTo(priority(right.$2));
+        return statusOrder != 0 ? statusOrder : left.$1.compareTo(right.$1);
+      });
+    return indexed.map((entry) => entry.$2).toList(growable: false);
   }
 
   EmergencyFulfillmentOrder copyWith({
