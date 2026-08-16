@@ -32,7 +32,9 @@ class _DigitalReceiptScreenState extends State<DigitalReceiptScreen> {
       digitalReceiptService.fetchPublic(widget.token);
 
   void _retry() {
-    setState(() => _receiptFuture = _load());
+    setState(() {
+      _receiptFuture = _load();
+    });
   }
 
   Future<void> _save(DigitalReceipt receipt) async {
@@ -57,7 +59,7 @@ class _DigitalReceiptScreenState extends State<DigitalReceiptScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final copy = _ReceiptCopy.of(context);
+    const copy = _ReceiptCopy();
     return Scaffold(
       key: const Key('digital_receipt_root'),
       backgroundColor: PosSurfaceRole.background.fill,
@@ -257,7 +259,7 @@ class _ReceiptPaper extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        item.label,
+                        digitalReceiptItemLabelVi(item.label),
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                     ),
@@ -329,10 +331,13 @@ class _ReceiptPaper extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            _MetaRow(label: copy.paymentMethod, value: receipt.paymentMethod),
+            _MetaRow(
+              label: copy.paymentMethod,
+              value: digitalReceiptPaymentMethodVi(receipt.paymentMethod),
+            ),
             for (final payment in receipt.payments)
               _MetaRow(
-                label: payment.method,
+                label: digitalReceiptPaymentMethodVi(payment.method),
                 value: '₫${currency.format(payment.amount)}',
               ),
             _MetaRow(
@@ -459,51 +464,27 @@ class _ReceiptMessage extends StatelessWidget {
 }
 
 class _ReceiptCopy {
-  const _ReceiptCopy(this.code);
+  const _ReceiptCopy();
 
-  final String code;
-
-  static _ReceiptCopy of(BuildContext context) =>
-      _ReceiptCopy(Localizations.localeOf(context).languageCode);
-
-  String pick(String ko, String vi, String en) => switch (code) {
-    'vi' => vi,
-    'en' => en,
-    _ => ko,
-  };
-
-  String get receiptNumber => pick('영수증 번호', 'Số phiếu', 'Receipt number');
-  String get paidAt => pick('결제 시각', 'Ngày/Giờ', 'Paid at');
-  String get cashier => pick('캐셔', 'Thu ngân', 'Cashier');
-  String get table => pick('테이블', 'Bàn', 'Table');
-  String get subtotal => pick('소계', 'Tạm tính', 'Subtotal');
-  String get serviceCharge => pick('봉사료', 'Phí dịch vụ', 'Service charge');
-  String get discount => pick('할인', 'Giảm giá', 'Discount');
-  String get vat => pick('VAT(포함)', 'VAT (đã gồm)', 'VAT included');
-  String get total => pick('총 결제금액', 'Tổng cộng', 'Total');
-  String get paymentMethod => pick('결제수단', 'Phương thức', 'Payment method');
-  String get received => pick('받은 금액', 'Khách trả', 'Received');
-  String get change => pick('거스름돈', 'Tiền thừa', 'Change');
+  String get receiptNumber => 'Số phiếu';
+  String get paidAt => 'Ngày/Giờ';
+  String get cashier => 'Thu ngân';
+  String get table => 'Bàn';
+  String get subtotal => 'Tạm tính';
+  String get serviceCharge => 'Phí dịch vụ';
+  String get discount => 'Giảm giá';
+  String get vat => 'VAT (đã gồm)';
+  String get total => 'Tổng cộng';
+  String get paymentMethod => 'Phương thức';
+  String get received => 'Khách trả';
+  String get change => 'Tiền thừa';
   String get thanks => digitalReceiptFooterThanksVi;
   String get proofNotice => digitalReceiptFooterNoticeVi;
-  String get savePdf => pick('PDF 저장/공유', 'Lưu/chia sẻ PDF', 'Save/share PDF');
-  String get print => pick('직접 인쇄', 'Tự in', 'Print');
-  String get loadFailed => pick(
-    '영수증을 불러오지 못했습니다',
-    'Không thể tải biên lai',
-    'Could not load receipt',
-  );
-  String get tryAgain => pick(
-    '연결을 확인하고 다시 시도하세요.',
-    'Kiểm tra kết nối rồi thử lại.',
-    'Check the connection and try again.',
-  );
-  String get retry => pick('다시 시도', 'Thử lại', 'Retry');
-  String get unavailable =>
-      pick('영수증을 사용할 수 없습니다', 'Biên lai không khả dụng', 'Receipt unavailable');
-  String get unavailableBody => pick(
-    '링크가 잘못되었거나 폐기되었습니다.',
-    'Liên kết không hợp lệ hoặc đã bị thu hồi.',
-    'The link is invalid or revoked.',
-  );
+  String get savePdf => 'Lưu/chia sẻ PDF';
+  String get print => 'Tự in';
+  String get loadFailed => 'Không thể tải biên lai';
+  String get tryAgain => 'Kiểm tra kết nối rồi thử lại.';
+  String get retry => 'Thử lại';
+  String get unavailable => 'Biên lai không khả dụng';
+  String get unavailableBody => 'Liên kết không hợp lệ hoặc đã bị thu hồi.';
 }

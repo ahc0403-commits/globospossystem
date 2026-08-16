@@ -1,4 +1,3 @@
-import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,7 +10,6 @@ import '../../../core/ui/toast/toast.dart';
 import '../../../main.dart';
 import '../../../widgets/error_toast.dart';
 import '../../auth/auth_provider.dart';
-import '../einvoice_misa_workbook.dart';
 
 class _EinvoiceOpsFlags {
   const _EinvoiceOpsFlags({required this.dispatchEnabled});
@@ -589,7 +587,6 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
   String? _retryingJobId;
   String? _resolvingJobId;
   bool _releasingReadyJobs = false;
-  bool _isExporting = false;
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -686,81 +683,20 @@ class _EinvoiceTabState extends ConsumerState<EinvoiceTab> {
       key: const Key('einvoice_compact_header'),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       backgroundColor: PosColors.surface,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final titleBlock = Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                l10n.eInvoice,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              Text(
-                '${l10n.einvoicePendingIssue} ${pendingJobs.length}',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
-              ),
-            ],
-          );
-          final action = PosSecondaryButton(
-            key: const Key('misa_pending_excel_download'),
-            label: l10n.reportsDownload,
-            icon: Icons.download_outlined,
-            onPressed: pendingJobs.isEmpty || _isExporting
-                ? null
-                : () => _downloadMisaWorkbook(pendingJobs),
-          );
-          if (constraints.maxWidth < 560 ||
-              MediaQuery.textScalerOf(context).scale(1) > 1.5) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [titleBlock, const SizedBox(height: 10), action],
-            );
-          }
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(child: titleBlock),
-              const SizedBox(width: 12),
-              action,
-            ],
-          );
-        },
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l10n.eInvoice, style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            '${l10n.einvoicePendingIssue} ${pendingJobs.length}',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
+          ),
+        ],
       ),
     );
-  }
-
-  Future<void> _downloadMisaWorkbook(
-    List<_EinvoiceQueueItem> pendingJobs,
-  ) async {
-    setState(() => _isExporting = true);
-    try {
-      final bytes = buildMisaPendingInvoiceWorkbook(
-        pendingJobs.map((job) => job.exportPayload).toList(growable: false),
-      );
-      final stamp = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
-      await FileSaver.instance.saveFile(
-        name: 'MISA_pending_invoices_$stamp',
-        bytes: Uint8List.fromList(bytes),
-        ext: 'xlsx',
-        mimeType: MimeType.microsoftExcel,
-      );
-      if (!mounted) return;
-      showSuccessToast(
-        context,
-        context.l10n.einvoiceDownloadPrepared(pendingJobs.length),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      showErrorToast(
-        context,
-        context.l10n.einvoiceDownloadFailedWithError('$error'),
-      );
-    } finally {
-      if (mounted) setState(() => _isExporting = false);
-    }
   }
 
   // ignore: unused_element

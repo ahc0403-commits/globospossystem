@@ -8,49 +8,101 @@ String readRepoFile(String path) => File(path).readAsStringSync();
 
 void main() {
   const migration =
-      'supabase/migrations/20260716210000_restaurant_sales_excel_export.sql';
+      'supabase/migrations/20260816120000_unified_restaurant_misa_sales_report.sql';
   const screen =
       'lib/features/restaurant_sales_export/restaurant_sales_export_screen.dart';
-  const router = 'lib/core/router/app_router.dart';
+  const superAdmin = 'lib/features/super_admin/super_admin_screen.dart';
 
-  test('export RPC is finalized-only, read-only, and super-admin-only', () {
+  test('unified RPC exports finalized Restaurant POS receipts only', () {
     final sql = readRepoFile(migration);
 
     expect(sql, contains('get_restaurant_daily_sales_export'));
     expect(sql, contains('public.is_super_admin()'));
-    expect(sql, contains('RESTAURANT_SALES_EXPORT_FORBIDDEN'));
     expect(sql, contains('restaurant_daily_sales_finalizations'));
-    expect(sql, contains('v_restaurant_sales_receipts'));
-    expect(sql, contains("'pending'"));
-    expect(sql, contains("v_finalization.status = 'finalized'"));
+    expect(sql, contains("v_finalization.status <> 'finalized'"));
+    expect(sql, contains('restaurant_cutoff_policies'));
+    expect(sql, contains('77000000-0000-0000-0000-000000000001'));
+    expect(sql, contains("'restaurant_pos'::text AS source_system"));
+    expect(sql, contains("candidate.source_system = 'restaurant_pos'"));
+    expect(sql, contains("'pos_payment'::text AS receipt_source"));
+    expect(sql, contains("issued_order.status = 'completed'"));
+    expect(sql, contains('HAVING max(payment.created_at) >= v_start'));
+    expect(sql, isNot(contains('external_sales_events')));
+    expect(sql, contains('line_items_snapshot'));
+    expect(sql, contains('red_invoice_intakes'));
+    expect(sql, contains('red_invoice_status'));
+    expect(sql, contains('buyer_tax_code'));
+    expect(sql, contains('buyer_legal_name'));
+    expect(sql, contains('buyer_address'));
     expect(sql, contains('REVOKE ALL'));
     expect(sql, contains('TO authenticated'));
-    expect(sql, isNot(contains('customer_name')));
-    expect(sql, isNot(contains('customer_email')));
-    expect(sql, isNot(contains('INSERT INTO public.restaurant_daily')));
-    expect(sql, isNot(contains('UPDATE public.restaurant_daily')));
   });
 
-  test('Windows automation has a stable protected download route', () {
-    final routerSource = readRepoFile(router);
+  test('Red Invoice intake requires only three buyer fields', () {
+    final sql = readRepoFile(migration);
+    final service = readRepoFile(
+      'lib/features/red_invoice_intake/red_invoice_intake_service.dart',
+    );
+
+    expect(sql, contains('upsert_red_invoice_intake_minimal'));
+    expect(sql, contains('p_buyer_tax_code text DEFAULT NULL'));
+    expect(sql, contains('p_buyer_legal_name text DEFAULT NULL'));
+    expect(sql, contains('p_buyer_address text DEFAULT NULL'));
+    final minimalStart = sql.indexOf(
+      'CREATE OR REPLACE FUNCTION public.upsert_red_invoice_intake_minimal',
+    );
+    final minimalSignatureEnd = sql.indexOf(') RETURNS jsonb', minimalStart);
+    final signature = sql.substring(minimalStart, minimalSignatureEnd);
+    expect(signature, isNot(contains('p_buyer_email')));
+    expect(signature, isNot(contains('p_buyer_phone')));
+    expect(signature, isNot(contains('p_buyer_id')));
+    expect(service, contains("'upsert_red_invoice_intake_minimal'"));
+    expect(service, isNot(contains("'p_buyer_email'")));
+  });
+
+  test('Super Admin exposes one MISA download surface', () {
     final screenSource = readRepoFile(screen);
+    final superAdminSource = readRepoFile(superAdmin);
+    final redScreen = readRepoFile(
+      'lib/features/red_invoice_intake/red_invoice_intake_screen.dart',
+    );
+    final queueScreen = readRepoFile(
+      'lib/features/admin/tabs/einvoice_tab.dart',
+    );
 
-    expect(routerSource, contains("path: '/restaurant-sales-export'"));
-    expect(routerSource, contains("location == '/restaurant-sales-export'"));
+    expect(superAdminSource, contains('super_admin_nav_sales_tax_report'));
+    expect(superAdminSource, contains('매출신고 하기'));
+    expect(
+      superAdminSource,
+      contains('RestaurantSalesExportScreen(embedded: true)'),
+    );
+    expect(
+      superAdminSource,
+      isNot(contains('super_admin_restaurant_sales_export_link')),
+    );
+    expect(
+      superAdminSource,
+      isNot(contains('super_admin_red_invoice_export_link')),
+    );
+    expect(screenSource, contains('restaurant_sales_export_preview'));
     expect(screenSource, contains('restaurant_sales_export_button'));
-    expect(screenSource, contains('restaurant_sales_'));
+    expect(screenSource, contains('MISA_restaurant_sales_'));
     expect(screenSource, contains("ext: 'xlsx'"));
-    expect(screenSource, contains('restaurantHcmBusinessDate'));
+    expect(redScreen, isNot(contains('red_invoice_export_button')));
+    expect(queueScreen, isNot(contains('misa_pending_excel_download')));
   });
 
-  test('production runner has explicit preflight and verification gates', () {
+  test('migration is discoverable by the self-verifying production gate', () {
     final deployment = readProductionGateContract();
 
     expect(
       deployment,
-      contains('20260716210000_restaurant_sales_excel_export.sql'),
+      contains('20260816120000_unified_restaurant_misa_sales_report.sql'),
     );
-    expect(deployment, contains('preflight_restaurant_sales_excel_export.sql'));
-    expect(deployment, contains('verify_restaurant_sales_excel_export.sql'));
+    expect(
+      readRepoFile(migration),
+      contains('-- production-gate: self-verifying'),
+    );
+    expect(deployment, contains('production-gate: self-verifying'));
   });
 }

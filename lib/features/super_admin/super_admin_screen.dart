@@ -22,6 +22,7 @@ import '../auth/auth_provider.dart';
 import '../auth/auth_state.dart';
 import '../emergency_fulfillment/emergency_control_panel.dart';
 import '../qc/qc_provider.dart';
+import '../restaurant_sales_export/restaurant_sales_export_screen.dart';
 import 'super_admin_provider.dart';
 
 const _superAdminScrollPadding = EdgeInsets.only(bottom: 96);
@@ -297,6 +298,7 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
         },
       ),
       _AllReportsTab(state: state, notifier: notifier),
+      const RestaurantSalesExportScreen(embedded: true),
       const EmergencyControlPanel(),
       const _QcOverviewTab(),
       const _QcGlobalTemplatesTab(),
@@ -323,6 +325,13 @@ class _SuperAdminScreenState extends ConsumerState<SuperAdminScreen> {
             urgency: ToastSidebarUrgency.backOffice,
             helperLabel: l10n.superAdminReportsHelper,
             itemKey: const Key('super_admin_nav_reports'),
+          ),
+          ToastSidebarItem(
+            icon: Icons.receipt_long_outlined,
+            label: _superAdminSalesReportLabel(context),
+            urgency: ToastSidebarUrgency.backOffice,
+            helperLabel: _superAdminSalesReportHelper(context),
+            itemKey: const Key('super_admin_nav_sales_tax_report'),
           ),
           ToastSidebarItem(
             icon: Icons.crisis_alert_rounded,
@@ -373,6 +382,20 @@ String _superAdminEmergencyLabel(BuildContext context) =>
       'vi' => 'Chế độ vận hành',
       'en' => 'Operation mode',
       _ => '매장 운영 방식',
+    };
+
+String _superAdminSalesReportLabel(BuildContext context) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => 'Khai báo doanh thu',
+      'en' => 'Sales tax report',
+      _ => '매출신고 하기',
+    };
+
+String _superAdminSalesReportHelper(BuildContext context) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => 'Tải toàn bộ biên lai Restaurant theo mẫu MISA',
+      'en' => 'Download all Restaurant receipts in the MISA format',
+      _ => 'Restaurant 전체 영수증을 MISA 양식으로 다운로드',
     };
 
 String _superAdminEmergencyHelper(BuildContext context) =>
@@ -2282,12 +2305,6 @@ class _AllReportsTabState extends State<_AllReportsTab> {
                   icon: const Icon(Icons.dashboard_customize),
                   label: Text(l10n.superAdminViewDetailedReports),
                 ),
-                FilledButton.icon(
-                  key: const Key('super_admin_restaurant_sales_export_link'),
-                  onPressed: () => context.go('/restaurant-sales-export'),
-                  icon: const Icon(Icons.download_outlined),
-                  label: Text(l10n.restaurantSalesExportDownload),
-                ),
                 OutlinedButton.icon(
                   key: const Key('super_admin_today_receipt_ledger_entry'),
                   onPressed: () {
@@ -2306,12 +2323,6 @@ class _AllReportsTabState extends State<_AllReportsTab> {
                     'en' => "Today's receipts",
                     _ => '오늘 영수증 원장',
                   }),
-                ),
-                OutlinedButton.icon(
-                  key: const Key('super_admin_red_invoice_export_link'),
-                  onPressed: () => context.go('/red-invoice-export'),
-                  icon: const Icon(Icons.receipt_long_outlined),
-                  label: Text(l10n.redInvoiceIntakeTitle),
                 ),
               ],
             ),

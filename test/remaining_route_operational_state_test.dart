@@ -676,49 +676,48 @@ void main() {
     },
   );
 
-  testWidgets(
-    'Sales export executes disabled loading and explicit error states',
-    (tester) async {
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      final pending = Completer<RestaurantSalesExport>();
-      await _pump(
-        tester,
-        child: RestaurantSalesExportScreen(loader: (_) => pending.future),
-      );
-      final exportAction = find.byKey(
-        const Key('restaurant_sales_export_button'),
-      );
-      await tester.tap(exportAction);
-      await tester.pump();
-      _expectButtonDisabled(tester, exportAction);
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  testWidgets('Sales report previews loading and explicit error states', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final pending = Completer<RestaurantSalesExport>();
+    await _pump(
+      tester,
+      child: RestaurantSalesExportScreen(loader: (_) => pending.future),
+    );
+    final exportAction = find.byKey(
+      const Key('restaurant_sales_export_button'),
+    );
+    await tester.pump();
+    _expectButtonDisabled(tester, exportAction);
+    expect(
+      find.byKey(const Key('restaurant_sales_export_loading')),
+      findsOneWidget,
+    );
 
-      await _pump(
-        tester,
-        child: RestaurantSalesExportScreen(
-          loader: (_) => Future.error(
-            const FormatException('RESTAURANT_EXPORT_NOT_READY'),
-          ),
-        ),
-      );
-      await tester.tap(find.byKey(const Key('restaurant_sales_export_button')));
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const Key('restaurant_sales_export_status')),
-        findsOneWidget,
-      );
-      expect(
-        tester
-            .widget<ButtonStyleButton>(
-              find.byKey(const Key('restaurant_sales_export_button')),
-            )
-            .onPressed,
-        isNotNull,
-      );
-      expect(tester.takeException(), isNull);
-    },
-  );
+    await _pump(
+      tester,
+      child: RestaurantSalesExportScreen(
+        loader: (_) =>
+            Future.error(const FormatException('RESTAURANT_EXPORT_NOT_READY')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('restaurant_sales_export_status')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<ButtonStyleButton>(
+            find.byKey(const Key('restaurant_sales_export_button')),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'Store setup executes loading, error, disabled, and selected states',

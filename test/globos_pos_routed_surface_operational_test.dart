@@ -318,7 +318,11 @@ final _routeSurfaces = <_RouteSurface>[
     pattern: '/restaurant-sales-export',
     widgetType: RestaurantSalesExportScreen,
     builder: () => const RestaurantSalesExportScreen(),
-    label: (l10n, _) => l10n.restaurantSalesExportTitle,
+    label: (_, locale) => switch (locale.languageCode) {
+      'vi' => 'Khai báo doanh thu',
+      'en' => 'Sales tax report',
+      _ => '매출신고 하기',
+    },
     authState: const PosAuthState(role: 'super_admin'),
   ),
   _RouteSurface(

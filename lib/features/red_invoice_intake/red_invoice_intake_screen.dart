@@ -1,10 +1,6 @@
-import 'dart:typed_data';
-
-import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:uuid/uuid.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/i18n/locale_extensions.dart';
@@ -29,7 +25,6 @@ class _RedInvoiceIntakeScreenState extends State<RedInvoiceIntakeScreen> {
   late String _businessDate;
   List<RedInvoiceIntake> _requests = const [];
   bool _isLoading = false;
-  bool _isExporting = false;
   String? _error;
 
   RedInvoiceIntakeService get _service =>
@@ -110,21 +105,6 @@ class _RedInvoiceIntakeScreenState extends State<RedInvoiceIntakeScreen> {
                               onPressed: _isLoading ? null : _reload,
                               icon: const Icon(Icons.refresh),
                               label: Text(l10n.refresh),
-                            ),
-                            FilledButton.icon(
-                              key: const Key('red_invoice_export_button'),
-                              onPressed: _isExporting || _isLoading
-                                  ? null
-                                  : _export,
-                              icon: _isExporting
-                                  ? const SizedBox.square(
-                                      dimension: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.download_outlined),
-                              label: Text(l10n.redInvoiceExportExcel),
                             ),
                           ],
                         ),
@@ -385,62 +365,6 @@ class _RedInvoiceIntakeScreenState extends State<RedInvoiceIntakeScreen> {
     }
   }
 
-  Future<void> _export() async {
-    setState(() {
-      _isExporting = true;
-      _error = null;
-    });
-    try {
-      final export = await _service.loadExport(_businessDate);
-      if (export.status != 'finalized') {
-        throw const FormatException('RED_INVOICE_EXPORT_NOT_READY');
-      }
-      if (export.requests.isEmpty) {
-        throw const FormatException('RED_INVOICE_EXPORT_EMPTY');
-      }
-      final batchId = const Uuid().v4();
-      final bytes = buildRedInvoiceWorkbook(
-        export: export,
-        exportBatchId: batchId,
-      );
-      await FileSaver.instance.saveFile(
-        name:
-            'red_invoice_${_businessDate.replaceAll('-', '')}_${batchId.substring(0, 8)}',
-        bytes: Uint8List.fromList(bytes),
-        ext: 'xlsx',
-        mimeType: MimeType.microsoftExcel,
-      );
-      final marked = await _service.markExported(
-        intakeIds: export.requests.map((request) => request.id).toList(),
-        exportBatchId: batchId,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.redInvoiceExportSaved(marked))),
-      );
-      await _reload();
-    } catch (error) {
-      if (!mounted) return;
-      final code = error is FormatException
-          ? error.message.toString()
-          : '$error';
-      final message = switch (code) {
-        'RED_INVOICE_EXPORT_NOT_READY' => context.l10n.redInvoiceExportNotReady,
-        'RED_INVOICE_EXPORT_EMPTY' => context.l10n.redInvoiceExportEmpty,
-        'RED_INVOICE_EXPORT_LINE_ITEMS_REQUIRED' =>
-          context.l10n.redInvoiceExportLineItemsRequired,
-        _ when code.contains('RED_INVOICE_MISA_CONFIG_REQUIRED') =>
-          context.l10n.redInvoiceMisaConfigRequired,
-        _ when code.contains('RED_INVOICE_EXPORT_STATE_CHANGED') =>
-          context.l10n.redInvoiceExportStateChanged,
-        _ => context.l10n.redInvoiceExportFailed('$error'),
-      };
-      setState(() => _error = message);
-    } finally {
-      if (mounted) setState(() => _isExporting = false);
-    }
-  }
-
   String _sourceLabel(String source) {
     return switch (source) {
       'business_card' => context.l10n.redInvoiceSourceBusinessCard,
@@ -480,14 +404,8 @@ class _RedInvoiceIntakeEditDialogState
     extends State<_RedInvoiceIntakeEditDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _taxCode;
-  late final TextEditingController _unitCode;
   late final TextEditingController _legalName;
-  late final TextEditingController _fullName;
   late final TextEditingController _address;
-  late final TextEditingController _email;
-  late final TextEditingController _emailCc;
-  late final TextEditingController _phone;
-  late final TextEditingController _buyerId;
   late final TextEditingController _note;
   late String _source;
   late String _status;
@@ -501,14 +419,8 @@ class _RedInvoiceIntakeEditDialogState
     super.initState();
     final request = widget.request;
     _taxCode = TextEditingController(text: request.buyerTaxCode);
-    _unitCode = TextEditingController(text: request.buyerUnitCode);
     _legalName = TextEditingController(text: request.buyerLegalName);
-    _fullName = TextEditingController(text: request.buyerFullName);
     _address = TextEditingController(text: request.buyerAddress);
-    _email = TextEditingController(text: request.buyerEmail);
-    _emailCc = TextEditingController(text: request.buyerEmailCc);
-    _phone = TextEditingController(text: request.buyerPhone);
-    _buyerId = TextEditingController(text: request.buyerId);
     _note = TextEditingController(text: request.sourceNote);
     _source = request.source;
     _status = request.status;
@@ -516,18 +428,7 @@ class _RedInvoiceIntakeEditDialogState
 
   @override
   void dispose() {
-    for (final controller in [
-      _taxCode,
-      _unitCode,
-      _legalName,
-      _fullName,
-      _address,
-      _email,
-      _emailCc,
-      _phone,
-      _buyerId,
-      _note,
-    ]) {
+    for (final controller in [_taxCode, _legalName, _address, _note]) {
       controller.dispose();
     }
     super.dispose();
@@ -597,27 +498,16 @@ class _RedInvoiceIntakeEditDialogState
                   l10n.redInvoiceTaxCode,
                   required: _requiresBuyerInformation,
                 ),
-                _field(_unitCode, l10n.redInvoiceUnitCode),
                 _field(
                   _legalName,
                   l10n.redInvoiceCompanyName,
                   required: _requiresBuyerInformation,
                 ),
-                _field(_fullName, l10n.redInvoiceBuyerFullName),
                 _field(
                   _address,
                   l10n.address,
                   required: _requiresBuyerInformation,
                 ),
-                _field(
-                  _email,
-                  l10n.redInvoiceEmailRequiredLabel,
-                  required: _requiresBuyerInformation,
-                  email: true,
-                ),
-                _field(_emailCc, l10n.redInvoiceCcEmailOptional, email: true),
-                _field(_phone, l10n.redInvoicePhone),
-                _field(_buyerId, l10n.redInvoiceBuyerId),
                 _field(_note, l10n.redInvoiceSourceNote, lines: 3),
                 const SizedBox(height: 8),
                 Align(
@@ -706,14 +596,8 @@ class _RedInvoiceIntakeEditDialogState
         source: _source,
         status: _status,
         buyerTaxCode: _taxCode.text,
-        buyerUnitCode: _unitCode.text,
         buyerLegalName: _legalName.text,
-        buyerFullName: _fullName.text,
         buyerAddress: _address.text,
-        buyerEmail: _email.text,
-        buyerEmailCc: _emailCc.text,
-        buyerPhone: _phone.text,
-        buyerId: _buyerId.text,
         sourceNote: _note.text,
       );
       final evidence = _evidence;
