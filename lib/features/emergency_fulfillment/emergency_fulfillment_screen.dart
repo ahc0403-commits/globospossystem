@@ -1532,8 +1532,9 @@ class _EmergencyMenuRow extends StatelessWidget {
         ? PosColors.info
         : PosColors.textPrimary;
     final disabledAtStation =
-        item.isFloorDirect &&
-        (stationType == 'kitchen' || stationType == 'tray');
+        displayItem.readOnly ||
+        (item.isFloorDirect &&
+            (stationType == 'kitchen' || stationType == 'tray'));
     final canAdvance =
         !busy && !disabledAtStation && limit > 0 && value < limit;
     final canRevert = !busy && item.isRevertibleAt(stationType);

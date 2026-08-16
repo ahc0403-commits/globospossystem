@@ -324,11 +324,20 @@ void main() {
     expect(index, contains('indexedDB.open'));
     expect(index, contains('speechSynthesis'));
     expect(index, contains("utterance.lang = 'vi-VN'"));
+    expect(index, contains("new SpeechSynthesisUtterance('\\u00a0')"));
+    expect(index, contains('window.speechSynthesis.resume()'));
+    expect(index, contains("document.addEventListener('visibilitychange'"));
     expect(index, isNot(contains('createOscillator')));
     expect(screen, isNot(contains('SystemSound.play')));
     expect(worker, contains('emergency_fulfillment'));
     expect(provider, contains('EmergencyWebBridge.putOutbox'));
     expect(provider, contains("'p_event_id': payload['event_id']"));
+    expect(provider, contains('emergency_combo_component_items'));
+    expect(provider, contains('emergency_record_combo_component_progress'));
+    expect(
+      provider,
+      contains('Publish the authoritative order rows before auxiliary'),
+    );
     expect(provider, contains("'emergency_complete_order_stage'"));
     expect(provider, contains("'emergency_revert_order_action'"));
   });
