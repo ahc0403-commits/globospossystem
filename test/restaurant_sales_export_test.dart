@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/restaurant_sales_export/restaurant_sales_export.dart';
 
 void main() {
-  test('builds one MISA sheet for general receipts and Red Invoices', () {
+  test('builds exactly one MISA row per general or Red receipt', () {
     final export = createRestaurantSalesExport(_validPayload());
 
     expect(export.businessDate, '2026-08-16');
@@ -19,6 +19,7 @@ void main() {
     final workbook = Excel.decodeBytes(buildRestaurantSalesWorkbook(export));
     expect(workbook.tables.keys, ['Hóa đơn GTGT']);
     final rows = workbook.tables['Hóa đơn GTGT']!.rows;
+    expect(rows, hasLength(10));
     expect(rows[7][0]!.value.toString(), 'Số thứ tự hóa đơn (*)');
     expect(rows[7][16]!.value.toString(), 'Tiền thuế GTGT');
 
@@ -29,20 +30,33 @@ void main() {
     expect(rows[8][3]!.value.toString(), '');
     expect(rows[8][5]!.value.toString(), 'Bán cho người tiêu dùng');
     expect(rows[8][9]!.value.toString(), 'TM');
-    expect(rows[8][10]!.value.toString(), 'Kimbap');
+    expect(rows[8][10]!.value.toString(), 'Dịch vụ ăn uống');
+    expect(rows[8][11]!.value.toString(), 'Lần');
+    expect(rows[8][12]!.value.toString(), '1');
+    expect(rows[8][13]!.value.toString(), '100000');
+    expect(rows[8][14]!.value.toString(), '100000');
+    expect(rows[8][15]!.value.toString(), '8');
+    expect(rows[8][16]!.value.toString(), '8000');
 
-    // Two item rows remain one receipt, then the Red Invoice starts at 2.
-    expect(rows[9][0]!.value.toString(), '1');
-    expect(rows[10][0]!.value.toString(), '2');
-    expect(rows[10][2]!.value.toString(), 'Công ty ABC');
-    expect(rows[10][3]!.value.toString(), '0312345678');
-    expect(rows[10][4]!.value.toString(), '1 Nguyễn Huệ, Quận 1');
-    expect(rows[10][5]!.value.toString(), '');
-    expect(rows[10][6]!.value.toString(), '');
-    expect(rows[10][7]!.value.toString(), '');
-    expect(rows[10][8]!.value.toString(), '');
-    expect(rows[10][9]!.value.toString(), 'CK');
-    expect(rows[10][13]!.value.toString(), '100000');
+    // The Red Invoice is the next row even though the first receipt has two items.
+    expect(rows[9][0]!.value.toString(), '2');
+    expect(rows[9][2]!.value.toString(), 'Công ty ABC');
+    expect(rows[9][3]!.value.toString(), '0312345678');
+    expect(rows[9][4]!.value.toString(), '1 Nguyễn Huệ, Quận 1');
+    expect(rows[9][5]!.value.toString(), '');
+    expect(rows[9][6]!.value.toString(), '');
+    expect(rows[9][7]!.value.toString(), '');
+    expect(rows[9][8]!.value.toString(), '');
+    expect(rows[9][9]!.value.toString(), 'CK');
+    expect(rows[9][10]!.value.toString(), 'Dịch vụ ăn uống');
+    expect(rows[9][13]!.value.toString(), '100000');
+
+    final exportedText = rows
+        .expand((row) => row)
+        .map((cell) => cell?.value.toString() ?? '')
+        .join('\n');
+    expect(exportedText, isNot(contains('Kimbap')));
+    expect(exportedText, isNot(contains('Ramen')));
   });
 
   test('refuses pending and integrity-failed finalizations', () {
@@ -131,6 +145,27 @@ void main() {
     final awaiting = createRestaurantSalesExport(awaitingPayload);
     expect(awaiting.isReadyForDownload, isFalse);
     expect(awaiting.receipts.last.issues, ['RED_INVOICE_NOT_READY']);
+  });
+
+  test('keeps one row when a receipt has taxable and zero-VAT items', () {
+    final payload = _validPayload();
+    final receipts = payload['receipts']! as List<Map<String, Object?>>;
+    final lines = receipts.first['line_items']! as List<Map<String, Object?>>;
+    lines.last['vat_rate'] = 0;
+    lines.last['vat_amount'] = 0;
+    receipts.first['gross_sales'] = 104800;
+    payload['gross_sales'] = 212800;
+
+    final export = createRestaurantSalesExport(payload);
+    expect(export.receipts.first.issues, isEmpty);
+
+    final workbook = Excel.decodeBytes(buildRestaurantSalesWorkbook(export));
+    final rows = workbook.tables['Hóa đơn GTGT']!.rows;
+    expect(rows, hasLength(10));
+    expect(rows[8][10]!.value.toString(), 'Dịch vụ ăn uống');
+    expect(rows[8][14]!.value.toString(), '100000');
+    expect(rows[8][15]!.value.toString(), '8');
+    expect(rows[8][16]!.value.toString(), '4800');
   });
 }
 
