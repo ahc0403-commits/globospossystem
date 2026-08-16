@@ -96,6 +96,21 @@ void main() {
           ],
         },
         {
+          'id': 'food-1-progress',
+          'order_item_id': 'order-item-1',
+          'name_ko': '김밥',
+          'name_vi': 'Cơm cuộn',
+          'name_en': 'Gimbap',
+          'ordered_quantity': 1,
+          'kitchen_done_quantity': 1,
+          'tray_received_quantity': 0,
+          'tray_dispatched_quantity': 0,
+          'floor_served_quantity': 0,
+          'fulfillment_route': 'kitchen_tray_floor',
+          'line_key': 'combo:food-1',
+          'source_kind': 'combo_component',
+        },
+        {
           'id': 'direct-1',
           'order_item_id': 'order-item-1',
           'name_ko': '콜라',
@@ -115,7 +130,9 @@ void main() {
 
     final kitchenLines = order.displayItemsAt('kitchen');
     expect(kitchenLines.map((item) => item.nameVi), ['Cơm cuộn']);
-    expect(kitchenLines.map((item) => item.fulfillmentItemId), ['base-1']);
+    expect(kitchenLines.map((item) => item.fulfillmentItemId), [
+      'food-1-progress',
+    ]);
     expect(kitchenLines.map((item) => item.completed), [true]);
     expect(kitchenLines.map((item) => item.readyFromPreviousStage), [false]);
     expect(kitchenLines.map((item) => item.readOnly), [false]);
@@ -127,9 +144,77 @@ void main() {
     final floorLines = order.displayItemsAt('floor');
     expect(floorLines.map((item) => item.nameVi), ['Cơm cuộn', 'Coca-Cola']);
     expect(floorLines.map((item) => item.fulfillmentItemId), [
-      'base-1',
+      'food-1-progress',
       'direct-1',
     ]);
+  });
+
+  test('combo components own independent completion and sorting state', () {
+    final order = EmergencyFulfillmentOrder.fromJson({
+      'queue_id': 'queue-independent',
+      'order_id': 'order-independent',
+      'queue_no': 2,
+      'table_number': '104',
+      'floor_label': '1F',
+      'created_at': '2026-08-16T02:00:00Z',
+      'items': [
+        {
+          'id': 'combo-parent',
+          'order_item_id': 'combo-order-item',
+          'ordered_quantity': 1,
+          'kitchen_done_quantity': 0,
+          'tray_received_quantity': 0,
+          'tray_dispatched_quantity': 0,
+          'floor_served_quantity': 0,
+          'combo_components': [
+            {
+              'menu_item_id': 'food-1',
+              'name_vi': 'Tteokbokki',
+              'quantity': 1,
+              'fulfillment_route': 'kitchen_tray_floor',
+            },
+            {
+              'menu_item_id': 'food-2',
+              'name_vi': 'Kimbap',
+              'quantity': 1,
+              'fulfillment_route': 'kitchen_tray_floor',
+            },
+          ],
+        },
+        {
+          'id': 'food-1-progress',
+          'order_item_id': 'combo-order-item',
+          'line_key': 'combo:food-1',
+          'source_kind': 'combo_component',
+          'ordered_quantity': 1,
+          'kitchen_done_quantity': 1,
+          'tray_received_quantity': 0,
+          'tray_dispatched_quantity': 0,
+          'floor_served_quantity': 0,
+        },
+        {
+          'id': 'food-2-progress',
+          'order_item_id': 'combo-order-item',
+          'line_key': 'combo:food-2',
+          'source_kind': 'combo_component',
+          'ordered_quantity': 1,
+          'kitchen_done_quantity': 0,
+          'tray_received_quantity': 0,
+          'tray_dispatched_quantity': 0,
+          'floor_served_quantity': 0,
+        },
+      ],
+    });
+
+    final lines = order.displayItemsAt('kitchen');
+    expect(lines.map((item) => item.nameVi), ['Kimbap', 'Tteokbokki']);
+    expect(lines.map((item) => item.fulfillmentItemId), [
+      'food-2-progress',
+      'food-1-progress',
+    ]);
+    expect(lines.map((item) => item.completed), [false, true]);
+    expect(order.hasActionableQuantity('kitchen'), isTrue);
+    expect(order.isCompleteAt('kitchen'), isFalse);
   });
 
   test(
@@ -382,6 +467,25 @@ void main() {
     expect(migration, contains('emergency_fulfillment_actions'));
     expect(migration, contains('emergency_fulfillment_events'));
   });
+
+  test(
+    'combo component progress migration is durable and independently keyed',
+    () {
+      final migration = File(
+        'supabase/migrations/20260816190000_kds_combo_component_progress.sql',
+      ).readAsStringSync();
+
+      expect(migration, contains('emergency_combo_component_items'));
+      expect(
+        migration,
+        contains('UNIQUE (session_id, order_item_id, line_key)'),
+      );
+      expect(migration, contains('emergency_record_combo_component_progress'));
+      expect(migration, contains('combo_component_item_id'));
+      expect(migration, contains('emergency_add_combo_component_progress'));
+      expect(migration, contains('production-gate: self-verifying'));
+    },
+  );
 
   test('additive SQL exposes per-station timer boundaries', () {
     final migration = File(

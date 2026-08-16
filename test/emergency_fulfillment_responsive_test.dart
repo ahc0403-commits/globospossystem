@@ -285,6 +285,56 @@ void main() {
     );
   }
 
+  testWidgets(
+    'one combo component completes independently and moves behind pending food',
+    (tester) async {
+      final fixture = _FixtureEmergencyNotifier(_comboState('kitchen'));
+      await _pumpEmergency(
+        tester,
+        fixture: fixture,
+        size: const Size(1024, 768),
+        locale: const Locale('vi'),
+        expectedStationType: 'kitchen',
+      );
+
+      await tester.tap(find.byKey(const Key('emergency_order_order-combo')));
+      await tester.pump();
+      const firstKey = ValueKey(
+        'emergency_menu_item_combo-parent:combo:food-1',
+      );
+      const secondKey = ValueKey(
+        'emergency_menu_item_combo-parent:combo:food-2',
+      );
+
+      await tester.tap(find.byKey(firstKey));
+      await tester.pump();
+
+      expect(fixture.recordedProgress, [('combo-food-1', 'kitchen_done', 1)]);
+      expect(find.text('1 / 1'), findsOne);
+      expect(find.text('0 / 1'), findsOne);
+      expect(
+        tester.getTopLeft(find.byKey(secondKey)).dy,
+        lessThan(tester.getTopLeft(find.byKey(firstKey)).dy),
+      );
+
+      await tester.tap(
+        find.byKey(
+          const ValueKey(
+            'emergency_menu_item_cancel_combo-parent:combo:food-1',
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(fixture.recordedProgress, [
+        ('combo-food-1', 'kitchen_done', 1),
+        ('combo-food-1', 'kitchen_done', -1),
+      ]);
+      expect(find.text('0 / 1'), findsNWidgets(2));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('detail home button returns to the order board', (tester) async {
     final fixture = _FixtureEmergencyNotifier(_activeState('kitchen'));
     await _pumpEmergency(
@@ -941,7 +991,7 @@ EmergencyFulfillmentState _comboState(String stationType) =>
               nameEn: 'Combo A',
               orderedQuantity: 1,
               kitchenDoneQuantity: stationType == 'kitchen' ? 0 : 1,
-              trayReceivedQuantity: stationType == 'tray' ? 0 : 1,
+              trayReceivedQuantity: stationType == 'floor' ? 1 : 0,
               trayDispatchedQuantity: stationType == 'floor' ? 1 : 0,
               floorServedQuantity: 0,
               needsReview: false,
@@ -965,6 +1015,36 @@ EmergencyFulfillmentState _comboState(String stationType) =>
                   fulfillmentRoute: 'kitchen_tray_floor',
                 ),
               ],
+            ),
+            EmergencyFulfillmentItem(
+              id: 'combo-food-1',
+              orderItemId: 'order-item-combo',
+              nameKo: '전통 떡볶이',
+              nameVi: 'Tteokbokki Truyền Thống',
+              nameEn: 'Traditional Tteokbokki',
+              orderedQuantity: 1,
+              kitchenDoneQuantity: stationType == 'kitchen' ? 0 : 1,
+              trayReceivedQuantity: stationType == 'floor' ? 1 : 0,
+              trayDispatchedQuantity: stationType == 'floor' ? 1 : 0,
+              floorServedQuantity: 0,
+              needsReview: false,
+              lineKey: 'combo:food-1',
+              sourceKind: 'combo_component',
+            ),
+            EmergencyFulfillmentItem(
+              id: 'combo-food-2',
+              orderItemId: 'order-item-combo',
+              nameKo: '참치 김밥',
+              nameVi: 'Kimbap Cá Ngừ',
+              nameEn: 'Tuna Kimbap',
+              orderedQuantity: 1,
+              kitchenDoneQuantity: stationType == 'kitchen' ? 0 : 1,
+              trayReceivedQuantity: stationType == 'floor' ? 1 : 0,
+              trayDispatchedQuantity: stationType == 'floor' ? 1 : 0,
+              floorServedQuantity: 0,
+              needsReview: false,
+              lineKey: 'combo:food-2',
+              sourceKind: 'combo_component',
             ),
           ],
         ),

@@ -344,10 +344,24 @@ class EmergencyFulfillmentOrder {
   final DateTime? stationStartedAt;
   final DateTime? stationCompletedAt;
 
-  bool hasActionableQuantity(String stationType) =>
-      items.any((item) => item.isActionableAt(stationType));
+  List<EmergencyFulfillmentItem> _operationalItems() {
+    final componentBackedOrderItemIds = items
+        .where((item) => item.sourceKind == 'combo_component')
+        .map((item) => item.orderItemId)
+        .toSet();
+    return items
+        .where(
+          (item) =>
+              item.sourceKind == 'combo_component' ||
+              !componentBackedOrderItemIds.contains(item.orderItemId),
+        )
+        .toList(growable: false);
+  }
 
-  int incomingHandoffQuantityAt(String stationType) => items
+  bool hasActionableQuantity(String stationType) =>
+      _operationalItems().any((item) => item.isActionableAt(stationType));
+
+  int incomingHandoffQuantityAt(String stationType) => _operationalItems()
       .where((item) => !item.isFloorDirect)
       .fold(
         0,
@@ -355,9 +369,10 @@ class EmergencyFulfillmentOrder {
       );
 
   List<EmergencyFulfillmentItem> visibleItemsAt(String stationType) {
+    final operationalItems = _operationalItems();
     final visible = stationType == 'floor'
-        ? items
-        : items.where((item) => !item.isFloorDirect);
+        ? operationalItems
+        : operationalItems.where((item) => !item.isFloorDirect);
     final indexed = visible.indexed.toList(growable: false)
       ..sort((left, right) {
         final priority = left.$2
@@ -369,9 +384,12 @@ class EmergencyFulfillmentOrder {
   }
 
   bool isCompleteAt(String stationType) {
+    final operationalItems = _operationalItems();
     final relevant = stationType == 'floor'
-        ? items
-        : items.where((item) => !item.isFloorDirect).toList(growable: false);
+        ? operationalItems
+        : operationalItems
+              .where((item) => !item.isFloorDirect)
+              .toList(growable: false);
     return relevant.isNotEmpty &&
         relevant.every((item) => item.isCompletedAt(stationType));
   }
@@ -391,22 +409,30 @@ class EmergencyFulfillmentOrder {
   }
 
   List<EmergencyFulfillmentDisplayItem> displayItemsAt(String stationType) {
-    final directByLineKey = <String, EmergencyFulfillmentItem>{
+    String componentKey(String orderItemId, String lineKey) =>
+        '$orderItemId\u0000$lineKey';
+
+    final componentsByParentAndLine = <String, EmergencyFulfillmentItem>{
       for (final item in items)
-        if (item.sourceKind == 'combo_component') item.lineKey: item,
+        if (item.sourceKind == 'combo_component')
+          componentKey(item.orderItemId, item.lineKey): item,
     };
-    final referencedDirectIds = <String>{};
+    final referencedComponentIds = <String>{};
     for (final item in items) {
       for (final component in item.comboComponents) {
-        if (!component.isFloorDirect || component.menuItemId.isEmpty) continue;
-        final direct = directByLineKey['combo:${component.menuItemId}'];
-        if (direct != null) referencedDirectIds.add(direct.id);
+        if (component.menuItemId.isEmpty) continue;
+        final componentItem =
+            componentsByParentAndLine[componentKey(
+              item.orderItemId,
+              'combo:${component.menuItemId}',
+            )];
+        if (componentItem != null) referencedComponentIds.add(componentItem.id);
       }
     }
 
     final result = <EmergencyFulfillmentDisplayItem>[];
     for (final item in items) {
-      if (referencedDirectIds.contains(item.id)) continue;
+      if (referencedComponentIds.contains(item.id)) continue;
       if (item.isFloorDirect && stationType != 'floor') continue;
       if (item.comboComponents.isEmpty) {
         result.add(
@@ -430,10 +456,13 @@ class EmergencyFulfillmentOrder {
       for (var index = 0; index < item.comboComponents.length; index += 1) {
         final component = item.comboComponents[index];
         if (component.isFloorDirect && stationType != 'floor') continue;
-        final direct = component.menuItemId.isEmpty
+        final componentItem = component.menuItemId.isEmpty
             ? null
-            : directByLineKey['combo:${component.menuItemId}'];
-        final statusItem = direct ?? item;
+            : componentsByParentAndLine[componentKey(
+                item.orderItemId,
+                'combo:${component.menuItemId}',
+              )];
+        final statusItem = componentItem ?? item;
         result.add(
           EmergencyFulfillmentDisplayItem(
             id: '${item.id}:combo:${component.menuItemId.isEmpty ? index : component.menuItemId}',
@@ -446,7 +475,7 @@ class EmergencyFulfillmentOrder {
             readyFromPreviousStage: statusItem.isReadyFromPreviousStageAt(
               stationType,
             ),
-            readOnly: false,
+            readOnly: componentItem == null,
           ),
         );
       }
@@ -489,14 +518,16 @@ class EmergencyFulfillmentOrder {
         : (stationCompletedAt ?? this.stationCompletedAt),
   );
 
-  bool isCompleteForStage(String stage) =>
-      items.isNotEmpty &&
-      items.every(
-        (item) => stage == 'floor_served'
-            ? item.floorServedQuantity >= item.orderedQuantity
-            : item.isFloorDirect ||
-                  item.quantityForStage(stage) >= item.orderedQuantity,
-      );
+  bool isCompleteForStage(String stage) {
+    final operationalItems = _operationalItems();
+    return operationalItems.isNotEmpty &&
+        operationalItems.every(
+          (item) => stage == 'floor_served'
+              ? item.floorServedQuantity >= item.orderedQuantity
+              : item.isFloorDirect ||
+                    item.quantityForStage(stage) >= item.orderedQuantity,
+        );
+  }
 
   factory EmergencyFulfillmentOrder.fromJson(Map<String, dynamic> json) {
     final rawItems = json['items'];
@@ -716,6 +747,25 @@ class EmergencyFulfillmentNotifier
           ? Map<String, dynamic>.from(raw)
           : <String, dynamic>{};
       final storeId = json['restaurant_id']?.toString();
+      if (refreshRevision != _realtimeRevision) {
+        _refreshRequested = true;
+        return;
+      }
+
+      // Publish the authoritative order rows before auxiliary history/timing
+      // calls finish. This keeps the foreground alarm aligned with the card
+      // appearing on slower tablet networks.
+      final immediate = EmergencyFulfillmentState.fromJson(json);
+      state = immediate.copyWith(
+        isLoading: false,
+        fulfillmentMode: state.fulfillmentMode,
+        completedOrders: state.completedOrders,
+        pendingOutboxCount: state.pendingOutboxCount,
+        pendingQueueIds: state.pendingQueueIds,
+        clearError: true,
+      );
+      await _subscribe(immediate.restaurantId);
+
       final stationData = await Future.wait([
         _optionalRpc('get_emergency_station_today_completed'),
         _optionalRpc('get_emergency_station_timings'),
@@ -746,7 +796,6 @@ class EmergencyFulfillmentNotifier
         error: outboxError,
         clearError: outboxError == null,
       );
-      await _subscribe(next.restaurantId);
     } catch (error) {
       state = state.copyWith(
         isLoading: false,
@@ -796,6 +845,13 @@ class EmergencyFulfillmentNotifier
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'emergency_fulfillment_items',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: _applyRealtimeItemChange,
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'emergency_combo_component_items',
           filter: LiveSyncScope.storeFilter(storeId),
           callback: _applyRealtimeItemChange,
         )
@@ -896,9 +952,14 @@ class EmergencyFulfillmentNotifier
     required String stage,
     int delta = 1,
   }) async {
-    final floorDirect = state.orders
+    final matchingItem = state.orders
         .expand((order) => order.items)
-        .any((item) => item.id == itemId && item.isFloorDirect);
+        .where((item) => item.id == itemId)
+        .cast<EmergencyFulfillmentItem?>()
+        .firstWhere((_) => true, orElse: () => null);
+    final floorDirect = matchingItem?.isFloorDirect == true;
+    final comboComponent =
+        matchingItem?.sourceKind == 'combo_component' && !floorDirect;
     final eventId = _uuid.v4();
     final payload = <String, dynamic>{
       'event_id': eventId,
@@ -906,6 +967,7 @@ class EmergencyFulfillmentNotifier
       'stage': stage,
       'delta': delta,
       'floor_direct': floorDirect,
+      'combo_component': comboComponent,
     };
     final previous = state;
     _applyOptimistic(itemId: itemId, stage: stage, delta: delta);
@@ -1036,6 +1098,18 @@ class EmergencyFulfillmentNotifier
         'emergency_record_floor_direct_progress',
         params: {
           'p_floor_direct_item_id': payload['item_id'],
+          'p_delta': payload['delta'],
+          'p_event_id': payload['event_id'],
+        },
+      );
+      return;
+    }
+    if (payload['combo_component'] == true) {
+      await supabase.rpc(
+        'emergency_record_combo_component_progress',
+        params: {
+          'p_component_item_id': payload['item_id'],
+          'p_stage': payload['stage'],
           'p_delta': payload['delta'],
           'p_event_id': payload['event_id'],
         },
