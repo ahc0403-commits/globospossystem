@@ -36,40 +36,47 @@ void main() {
     expect(sql, contains("'buyer_phone', v_row.buyer_phone"));
   });
 
-  test(
-    'service forwards only mandatory buyer fields to red-invoice intake',
-    () {
-      final source = readRepoFile('lib/core/services/einvoice_service.dart');
+  test('service forwards required invoice delivery contact fields', () {
+    final source = readRepoFile('lib/core/services/einvoice_service.dart');
 
-      expect(source, contains('required String buyerTaxCode'));
-      expect(source, contains('required String buyerLegalName'));
-      expect(source, contains('required String buyerAddress'));
-      expect(source, contains('redInvoiceIntakeService.save('));
-      expect(source, isNot(contains('buyerUnitCode:')));
-      expect(source, isNot(contains('buyerFullName:')));
-      expect(source, isNot(contains('buyerId:')));
-      expect(source, isNot(contains('receiverEmail:')));
-      expect(source, isNot(contains("'request_red_invoice'")));
+    expect(source, contains('required String buyerTaxCode'));
+    expect(source, contains('required String buyerLegalName'));
+    expect(source, contains('required String buyerAddress'));
+    expect(source, contains('required String buyerEmail'));
+    expect(source, contains('required String buyerPhone'));
+    expect(source, contains('redInvoiceIntakeService.save('));
+    expect(source, isNot(contains('buyerUnitCode:')));
+    expect(source, isNot(contains('buyerFullName:')));
+    expect(source, isNot(contains('buyerId:')));
+    expect(source, contains('buyerEmail:'));
+    expect(source, contains('buyerPhone:'));
+    expect(source, isNot(contains("'request_red_invoice'")));
+    expect(source, isNot(contains('lookupCompanyByTaxCode')));
+    expect(source, isNot(contains('wetax-onboarding')));
+  });
+
+  test(
+    'cashier red invoice modal captures delivery email and contact phone',
+    () {
+      final source = readRepoFile(
+        'lib/features/cashier/red_invoice_modal.dart',
+      );
+
+      expect(source, contains('_taxCodeCtrl'));
+      expect(source, contains('_companyCtrl'));
+      expect(source, contains('_addressCtrl'));
+      expect(source, isNot(contains('_unitCodeCtrl')));
+      expect(source, isNot(contains('_buyerFullNameCtrl')));
+      expect(source, contains('_phoneCtrl'));
+      expect(source, isNot(contains('_buyerIdCtrl')));
+      expect(source, contains('_emailCtrl'));
+      expect(source, contains('TextInputType.emailAddress'));
+      expect(source, contains('TextInputType.phone'));
+      expect(source, contains('SingleChildScrollView'));
       expect(source, isNot(contains('lookupCompanyByTaxCode')));
-      expect(source, isNot(contains('wetax-onboarding')));
+      expect(source, isNot(contains('_BuyerLookupState.wt09Hit')));
     },
   );
-
-  test('cashier red invoice modal captures only mandatory MISA fields', () {
-    final source = readRepoFile('lib/features/cashier/red_invoice_modal.dart');
-
-    expect(source, contains('_taxCodeCtrl'));
-    expect(source, contains('_companyCtrl'));
-    expect(source, contains('_addressCtrl'));
-    expect(source, isNot(contains('_unitCodeCtrl')));
-    expect(source, isNot(contains('_buyerFullNameCtrl')));
-    expect(source, isNot(contains('_phoneCtrl')));
-    expect(source, isNot(contains('_buyerIdCtrl')));
-    expect(source, isNot(contains('_emailCtrl')));
-    expect(source, contains('SingleChildScrollView'));
-    expect(source, isNot(contains('lookupCompanyByTaxCode')));
-    expect(source, isNot(contains('_BuyerLookupState.wt09Hit')));
-  });
 
   test('localized labels expose the extended MISA buyer fields', () {
     final en = readRepoFile('lib/l10n/app_en.arb');

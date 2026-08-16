@@ -35,6 +35,8 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
   final _taxCodeCtrl = TextEditingController();
   final _companyCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   final _deferredNoteCtrl = TextEditingController();
   String _deferredSource = 'business_card';
@@ -49,6 +51,8 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
     _taxCodeCtrl.dispose();
     _companyCtrl.dispose();
     _addressCtrl.dispose();
+    _emailCtrl.dispose();
+    _phoneCtrl.dispose();
     _deferredNoteCtrl.dispose();
     super.dispose();
   }
@@ -67,6 +71,8 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
       if (cached != null) {
         _companyCtrl.text = cached['tax_company_name'] ?? '';
         _addressCtrl.text = cached['tax_address'] ?? '';
+        _emailCtrl.text = cached['receiver_email'] ?? '';
+        _phoneCtrl.text = cached['buyer_phone'] ?? '';
         setState(() {
           _lookupState = _BuyerLookupState.cacheHit;
           _lookupNote = context.l10n.redInvoiceCacheHitNote;
@@ -98,6 +104,8 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
         buyerTaxCode: _taxCodeCtrl.text.trim(),
         buyerLegalName: _companyCtrl.text.trim(),
         buyerAddress: _addressCtrl.text.trim(),
+        buyerEmail: _emailCtrl.text.trim(),
+        buyerPhone: _phoneCtrl.text.trim(),
       );
       if (!mounted) return;
       Navigator.of(context).pop(true); // true = submitted
@@ -403,6 +411,30 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
             required: true,
             validator: (value) => value == null || value.trim().isEmpty
                 ? l10n.redInvoiceAddressRequired
+                : null,
+          ),
+          const SizedBox(height: 10),
+          _label(l10n.redInvoiceEmailRequiredLabel),
+          _field(
+            controller: _emailCtrl,
+            hint: l10n.redInvoiceEmailHint,
+            required: true,
+            keyboardType: TextInputType.emailAddress,
+            validator: (value) {
+              final email = value?.trim() ?? '';
+              if (email.isEmpty) return l10n.redInvoiceEmailRequired;
+              return email.contains('@') ? null : l10n.redInvoiceInvalidEmail;
+            },
+          ),
+          const SizedBox(height: 10),
+          _label('${l10n.redInvoicePhone} *'),
+          _field(
+            controller: _phoneCtrl,
+            hint: l10n.redInvoicePhoneHint,
+            required: true,
+            keyboardType: TextInputType.phone,
+            validator: (value) => value == null || value.trim().isEmpty
+                ? l10n.redInvoiceRequiredField
                 : null,
           ),
           const SizedBox(height: 16),

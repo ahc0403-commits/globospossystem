@@ -17,6 +17,89 @@ void main() {
     );
     expect(vietnameseNewOrderMessage('T12'), 'Bàn một hai, có đơn hàng mới.');
     expect(vietnameseNewOrderMessage(''), 'Có đơn hàng mới.');
+    expect(
+      vietnameseHandoffMessage('104', 2, 'tray'),
+      'Bàn một không bốn, bếp vừa chuyển 2 món.',
+    );
+    expect(
+      vietnameseHandoffMessage('104', 2, 'floor'),
+      'Bàn một không bốn, khay vừa chuyển 2 món.',
+    );
+    expect(
+      emergencyHandoffAlarmCoalesceDelay,
+      lessThan(const Duration(milliseconds: 100)),
+    );
+  });
+
+  test('handoff notices report only the newly delivered quantity', () {
+    EmergencyFulfillmentOrder order({
+      required int kitchenDone,
+      required int trayDispatched,
+    }) => EmergencyFulfillmentOrder(
+      queueId: 'queue-1',
+      orderId: 'order-1',
+      queueNo: 1,
+      tableNumber: '104',
+      floorLabel: '1F',
+      createdAt: DateTime.utc(2026, 8, 16),
+      items: [
+        EmergencyFulfillmentItem(
+          id: 'item-1',
+          orderItemId: 'order-item-1',
+          nameKo: '떡볶이',
+          nameVi: 'Bánh gạo cay',
+          nameEn: 'Spicy rice cake',
+          orderedQuantity: 3,
+          kitchenDoneQuantity: kitchenDone,
+          trayReceivedQuantity: 0,
+          trayDispatchedQuantity: trayDispatched,
+          floorServedQuantity: 0,
+          needsReview: false,
+        ),
+      ],
+    );
+
+    final trayPrevious = EmergencyFulfillmentState(
+      sessionId: 'session-1',
+      stationType: 'tray',
+      orders: [order(kitchenDone: 0, trayDispatched: 0)],
+    );
+    final trayNext = trayPrevious.copyWith(
+      orders: [order(kitchenDone: 2, trayDispatched: 0)],
+    );
+    expect(emergencyHandoffNotices(trayPrevious, trayNext).single.itemCount, 2);
+    expect(
+      emergencyHandoffNotices(trayPrevious, trayNext).single.stationType,
+      'tray',
+    );
+
+    final trayAdditional = trayNext.copyWith(
+      orders: [order(kitchenDone: 3, trayDispatched: 0)],
+    );
+    expect(
+      emergencyHandoffNotices(trayNext, trayAdditional).single.itemCount,
+      1,
+    );
+
+    final floorPrevious = trayNext.copyWith(
+      stationType: 'floor',
+      orders: [order(kitchenDone: 2, trayDispatched: 0)],
+    );
+    final floorNext = floorPrevious.copyWith(
+      orders: [order(kitchenDone: 2, trayDispatched: 2)],
+    );
+    final floorNotice = emergencyHandoffNotices(
+      floorPrevious,
+      floorNext,
+    ).single;
+    expect(floorNotice.tableNumber, '104');
+    expect(floorNotice.itemCount, 2);
+
+    expect(
+      emergencyHandoffNotices(trayAdditional, trayNext),
+      isEmpty,
+      reason: 'A revert must not produce a delivery alarm.',
+    );
   });
 
   test('emergency station role is isolated to its web route', () {

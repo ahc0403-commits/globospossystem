@@ -16,10 +16,29 @@ const _vietnameseDigits = <String, String>{
 /// Table digits are spoken individually so operational table codes such as
 /// 1101 cannot be mistaken for a cardinal number.
 String vietnameseNewOrderMessage(String tableNumber) {
-  final spokenDigits = RegExp(r'\d')
-      .allMatches(tableNumber)
-      .map((match) => _vietnameseDigits[match.group(0)]!)
-      .join(' ');
+  final spokenDigits = _spokenTableDigits(tableNumber);
   if (spokenDigits.isEmpty) return 'Có đơn hàng mới.';
   return 'Bàn $spokenDigits, có đơn hàng mới.';
 }
+
+/// Builds the handoff announcement played at the receiving station.
+String vietnameseHandoffMessage(
+  String tableNumber,
+  int itemCount,
+  String stationType,
+) {
+  final spokenDigits = _spokenTableDigits(tableNumber);
+  final count = itemCount < 0 ? 0 : itemCount;
+  final source = switch (stationType) {
+    'tray' => 'Bếp',
+    'floor' => 'Khay',
+    _ => 'Trạm trước',
+  };
+  if (spokenDigits.isEmpty) return '$source vừa chuyển $count món.';
+  return 'Bàn $spokenDigits, ${source.toLowerCase()} vừa chuyển $count món.';
+}
+
+String _spokenTableDigits(String tableNumber) => RegExp(r'\d')
+    .allMatches(tableNumber)
+    .map((match) => _vietnameseDigits[match.group(0)]!)
+    .join(' ');

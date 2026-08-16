@@ -10,6 +10,8 @@ class EinvoiceService {
     required String buyerTaxCode,
     required String buyerLegalName,
     required String buyerAddress,
+    required String buyerEmail,
+    required String buyerPhone,
   }) async {
     final intake = await redInvoiceIntakeService.save(
       orderId: orderId,
@@ -19,6 +21,8 @@ class EinvoiceService {
       buyerTaxCode: buyerTaxCode,
       buyerLegalName: buyerLegalName,
       buyerAddress: buyerAddress,
+      buyerEmail: buyerEmail,
+      buyerPhone: buyerPhone,
     );
     return intake.meInvoiceJobId ?? intake.id;
   }
@@ -38,6 +42,8 @@ class EinvoiceService {
     return {
       'tax_company_name': map['tax_company_name']?.toString(),
       'tax_address': map['tax_address']?.toString(),
+      'receiver_email': map['receiver_email']?.toString(),
+      'buyer_phone': map['buyer_phone']?.toString(),
     };
   }
 }

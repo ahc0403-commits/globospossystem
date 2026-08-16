@@ -11,6 +11,8 @@ import '../../core/services/emergency_web_bridge.dart';
 import '../../core/utils/live_sync_scope.dart';
 import '../../main.dart';
 
+const emergencyHandoffAlarmCoalesceDelay = Duration(milliseconds: 40);
+
 String formatEmergencyElapsed(Duration elapsed) {
   final totalSeconds = elapsed.inSeconds < 0 ? 0 : elapsed.inSeconds;
   final minutes = totalSeconds ~/ 60;
@@ -92,6 +94,7 @@ class EmergencyComboComponent {
 class EmergencyFulfillmentDisplayItem {
   const EmergencyFulfillmentDisplayItem({
     required this.id,
+    required this.fulfillmentItemId,
     required this.nameKo,
     required this.nameVi,
     required this.nameEn,
@@ -102,6 +105,7 @@ class EmergencyFulfillmentDisplayItem {
   });
 
   final String id;
+  final String fulfillmentItemId;
   final String nameKo;
   final String nameVi;
   final String nameEn;
@@ -231,6 +235,29 @@ class EmergencyFulfillmentItem {
     _ => 0,
   };
 
+  int incomingHandoffQuantityAt(String stationType) {
+    final parentQuantity = switch (stationType) {
+      'tray' => kitchenDoneQuantity,
+      'floor' => trayDispatchedQuantity,
+      _ => 0,
+    };
+    if (parentQuantity <= 0) return 0;
+    if (comboComponents.isEmpty) return parentQuantity;
+
+    return comboComponents.where((component) => !component.isFloorDirect).fold(
+      0,
+      (total, component) {
+        final componentQuantity = component.isTotalQuantity
+            ? orderedQuantity > 0
+                  ? (component.quantity * parentQuantity / orderedQuantity)
+                        .ceil()
+                  : 0
+            : component.quantity * parentQuantity;
+        return total + componentQuantity;
+      },
+    );
+  }
+
   EmergencyFulfillmentItem withStage(String stage, int quantity) =>
       EmergencyFulfillmentItem(
         id: id,
@@ -320,6 +347,13 @@ class EmergencyFulfillmentOrder {
   bool hasActionableQuantity(String stationType) =>
       items.any((item) => item.isActionableAt(stationType));
 
+  int incomingHandoffQuantityAt(String stationType) => items
+      .where((item) => !item.isFloorDirect)
+      .fold(
+        0,
+        (total, item) => total + item.incomingHandoffQuantityAt(stationType),
+      );
+
   List<EmergencyFulfillmentItem> visibleItemsAt(String stationType) {
     final visible = stationType == 'floor'
         ? items
@@ -378,6 +412,7 @@ class EmergencyFulfillmentOrder {
         result.add(
           EmergencyFulfillmentDisplayItem(
             id: item.id,
+            fulfillmentItemId: item.id,
             nameKo: item.nameKo,
             nameVi: item.nameVi,
             nameEn: item.nameEn,
@@ -402,6 +437,7 @@ class EmergencyFulfillmentOrder {
         result.add(
           EmergencyFulfillmentDisplayItem(
             id: '${item.id}:combo:${component.menuItemId.isEmpty ? index : component.menuItemId}',
+            fulfillmentItemId: statusItem.id,
             nameKo: component.nameKo,
             nameVi: component.nameVi,
             nameEn: component.nameEn,
@@ -594,6 +630,62 @@ class EmergencyFulfillmentState {
           : const [],
     );
   }
+}
+
+class EmergencyHandoffNotice {
+  const EmergencyHandoffNotice({
+    required this.orderId,
+    required this.queueNo,
+    required this.tableNumber,
+    required this.itemCount,
+    required this.stationType,
+  });
+
+  final String orderId;
+  final int queueNo;
+  final String tableNumber;
+  final int itemCount;
+  final String stationType;
+}
+
+/// Returns only positive kitchen-to-tray or tray-to-floor quantity changes.
+/// Completed orders are included in the baseline so undoing an action does not
+/// look like a fresh handoff when the order returns to the active board.
+List<EmergencyHandoffNotice> emergencyHandoffNotices(
+  EmergencyFulfillmentState previous,
+  EmergencyFulfillmentState next,
+) {
+  final stationType = next.stationType ?? '';
+  if ((stationType != 'tray' && stationType != 'floor') ||
+      previous.stationType != stationType ||
+      previous.sessionId != next.sessionId) {
+    return const [];
+  }
+
+  final previousOrders = <String, EmergencyFulfillmentOrder>{
+    for (final order in [...previous.orders, ...previous.completedOrders])
+      order.orderId: order,
+  };
+  final notices = <EmergencyHandoffNotice>[];
+  for (final order in next.orders) {
+    final currentQuantity = order.incomingHandoffQuantityAt(stationType);
+    final previousQuantity =
+        previousOrders[order.orderId]?.incomingHandoffQuantityAt(stationType) ??
+        0;
+    final deliveredQuantity = currentQuantity - previousQuantity;
+    if (deliveredQuantity <= 0) continue;
+    notices.add(
+      EmergencyHandoffNotice(
+        orderId: order.orderId,
+        queueNo: order.queueNo,
+        tableNumber: order.tableNumber,
+        itemCount: deliveredQuantity,
+        stationType: stationType,
+      ),
+    );
+  }
+  notices.sort((left, right) => left.queueNo.compareTo(right.queueNo));
+  return notices;
 }
 
 class EmergencyFulfillmentNotifier

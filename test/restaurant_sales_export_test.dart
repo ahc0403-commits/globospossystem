@@ -44,8 +44,8 @@ void main() {
     expect(rows[9][3]!.value.toString(), '0312345678');
     expect(rows[9][4]!.value.toString(), '1 Nguyễn Huệ, Quận 1');
     expect(rows[9][5]!.value.toString(), '');
-    expect(rows[9][6]!.value.toString(), '');
-    expect(rows[9][7]!.value.toString(), '');
+    expect(rows[9][6]!.value.toString(), 'invoice@abc.vn');
+    expect(rows[9][7]!.value.toString(), '0901234567');
     expect(rows[9][8]!.value.toString(), '');
     expect(rows[9][9]!.value.toString(), 'CK');
     expect(rows[9][10]!.value.toString(), 'Dịch vụ ăn uống');
@@ -147,6 +147,20 @@ void main() {
     expect(awaiting.receipts.last.issues, ['RED_INVOICE_NOT_READY']);
   });
 
+  test('blocks download when Red Invoice delivery contacts are missing', () {
+    final payload = _validPayload();
+    final receipts = payload['receipts']! as List<Map<String, Object?>>;
+    receipts.last['buyer_email'] = '';
+    receipts.last['buyer_phone'] = '';
+
+    final export = createRestaurantSalesExport(payload);
+    expect(export.isReadyForDownload, isFalse);
+    expect(export.receipts.last.issues, [
+      'MISSING_BUYER_EMAIL',
+      'MISSING_BUYER_PHONE',
+    ]);
+  });
+
   test('keeps one row when a receipt has taxable and zero-VAT items', () {
     final payload = _validPayload();
     final receipts = payload['receipts']! as List<Map<String, Object?>>;
@@ -225,6 +239,8 @@ Map<String, dynamic> _validPayload() => {
       'buyer_tax_code': '0312345678',
       'buyer_legal_name': 'Công ty ABC',
       'buyer_address': '1 Nguyễn Huệ, Quận 1',
+      'buyer_email': 'invoice@abc.vn',
+      'buyer_phone': '0901234567',
       'line_items': [
         {
           'display_name': 'Set menu',

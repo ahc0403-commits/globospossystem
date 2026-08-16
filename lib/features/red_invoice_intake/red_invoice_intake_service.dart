@@ -26,6 +26,8 @@ class RedInvoiceIntakeService {
     String? buyerTaxCode,
     String? buyerLegalName,
     String? buyerAddress,
+    String? buyerEmail,
+    String? buyerPhone,
     String? sourceNote,
   }) async {
     final result = await supabase.rpc(
@@ -38,6 +40,8 @@ class RedInvoiceIntakeService {
         'p_buyer_tax_code': _nullableText(buyerTaxCode),
         'p_buyer_legal_name': _nullableText(buyerLegalName),
         'p_buyer_address': _nullableText(buyerAddress),
+        'p_buyer_email': _nullableText(buyerEmail),
+        'p_buyer_phone': _nullableText(buyerPhone),
         'p_source_note': _nullableText(sourceNote),
       },
     );

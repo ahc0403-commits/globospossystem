@@ -35,6 +35,8 @@ class RestaurantSalesReceipt {
     required this.buyerTaxCode,
     required this.buyerLegalName,
     required this.buyerAddress,
+    required this.buyerEmail,
+    required this.buyerPhone,
     required this.lineItems,
     required this.issues,
   });
@@ -51,6 +53,8 @@ class RestaurantSalesReceipt {
   final String buyerTaxCode;
   final String buyerLegalName;
   final String buyerAddress;
+  final String buyerEmail;
+  final String buyerPhone;
   final List<RestaurantSalesLineItem> lineItems;
   final List<String> issues;
 
@@ -190,6 +194,8 @@ RestaurantSalesExport createRestaurantSalesExport(
         final buyerTaxCode = row['buyer_tax_code']?.toString().trim() ?? '';
         final buyerLegalName = row['buyer_legal_name']?.toString().trim() ?? '';
         final buyerAddress = row['buyer_address']?.toString().trim() ?? '';
+        final buyerEmail = row['buyer_email']?.toString().trim() ?? '';
+        final buyerPhone = row['buyer_phone']?.toString().trim() ?? '';
         final rawLines = row['line_items'];
         final lines = rawLines is List
             ? rawLines
@@ -236,6 +242,8 @@ RestaurantSalesExport createRestaurantSalesExport(
           if (isRedInvoice && buyerLegalName.isEmpty)
             'MISSING_BUYER_LEGAL_NAME',
           if (isRedInvoice && buyerAddress.isEmpty) 'MISSING_BUYER_ADDRESS',
+          if (isRedInvoice && buyerEmail.isEmpty) 'MISSING_BUYER_EMAIL',
+          if (isRedInvoice && buyerPhone.isEmpty) 'MISSING_BUYER_PHONE',
           if (isRedInvoice &&
               !const {
                 'ready',
@@ -274,6 +282,8 @@ RestaurantSalesExport createRestaurantSalesExport(
           buyerTaxCode: buyerTaxCode,
           buyerLegalName: buyerLegalName,
           buyerAddress: buyerAddress,
+          buyerEmail: buyerEmail,
+          buyerPhone: buyerPhone,
           lineItems: List.unmodifiable(lines),
           issues: List.unmodifiable(issues),
         );
@@ -339,8 +349,8 @@ List<int> buildRestaurantSalesWorkbook(RestaurantSalesExport export) {
       TextCellValue(receipt.isRedInvoice ? receipt.buyerTaxCode : ''),
       TextCellValue(receipt.isRedInvoice ? receipt.buyerAddress : ''),
       TextCellValue(receipt.isRedInvoice ? '' : 'Bán cho người tiêu dùng'),
-      TextCellValue(''),
-      TextCellValue(''),
+      TextCellValue(receipt.isRedInvoice ? receipt.buyerEmail : ''),
+      TextCellValue(receipt.isRedInvoice ? receipt.buyerPhone : ''),
       TextCellValue(''),
       TextCellValue(_misaPaymentCode(receipt.paymentMethod)),
       TextCellValue('Dịch vụ ăn uống'),

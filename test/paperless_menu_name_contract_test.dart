@@ -33,7 +33,7 @@ void main() {
     expect(menuUi, contains("Key('admin_menu_item_paperless_name_vi')"));
     expect(menuUi, contains("Key('admin_menu_edit_item_paperless_name_vi')"));
     expect(kds, contains('item.paperlessName'));
-    expect(kds, contains('component.paperlessName'));
+    expect(kds, contains('displayItem.paperlessName'));
   });
 
   test('Bunsik seed exactly contains the 71 spreadsheet menu mappings', () {

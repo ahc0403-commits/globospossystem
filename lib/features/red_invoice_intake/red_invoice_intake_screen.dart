@@ -406,6 +406,8 @@ class _RedInvoiceIntakeEditDialogState
   late final TextEditingController _taxCode;
   late final TextEditingController _legalName;
   late final TextEditingController _address;
+  late final TextEditingController _email;
+  late final TextEditingController _phone;
   late final TextEditingController _note;
   late String _source;
   late String _status;
@@ -421,6 +423,8 @@ class _RedInvoiceIntakeEditDialogState
     _taxCode = TextEditingController(text: request.buyerTaxCode);
     _legalName = TextEditingController(text: request.buyerLegalName);
     _address = TextEditingController(text: request.buyerAddress);
+    _email = TextEditingController(text: request.buyerEmail);
+    _phone = TextEditingController(text: request.buyerPhone);
     _note = TextEditingController(text: request.sourceNote);
     _source = request.source;
     _status = request.status;
@@ -428,7 +432,14 @@ class _RedInvoiceIntakeEditDialogState
 
   @override
   void dispose() {
-    for (final controller in [_taxCode, _legalName, _address, _note]) {
+    for (final controller in [
+      _taxCode,
+      _legalName,
+      _address,
+      _email,
+      _phone,
+      _note,
+    ]) {
       controller.dispose();
     }
     super.dispose();
@@ -506,6 +517,17 @@ class _RedInvoiceIntakeEditDialogState
                 _field(
                   _address,
                   l10n.address,
+                  required: _requiresBuyerInformation,
+                ),
+                _field(
+                  _email,
+                  l10n.redInvoiceEmailRequiredLabel,
+                  required: _requiresBuyerInformation,
+                  email: true,
+                ),
+                _field(
+                  _phone,
+                  '${l10n.redInvoicePhone} *',
                   required: _requiresBuyerInformation,
                 ),
                 _field(_note, l10n.redInvoiceSourceNote, lines: 3),
@@ -598,6 +620,8 @@ class _RedInvoiceIntakeEditDialogState
         buyerTaxCode: _taxCode.text,
         buyerLegalName: _legalName.text,
         buyerAddress: _address.text,
+        buyerEmail: _email.text,
+        buyerPhone: _phone.text,
         sourceNote: _note.text,
       );
       final evidence = _evidence;
