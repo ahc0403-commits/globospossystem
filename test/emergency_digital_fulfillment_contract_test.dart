@@ -19,16 +19,13 @@ void main() {
     expect(vietnameseNewOrderMessage(''), 'Có đơn hàng mới.');
     expect(
       vietnameseHandoffMessage('104', 2, 'tray'),
-      'Bàn một không bốn, bếp vừa chuyển 2 món.',
+      'Bàn một không bốn, hai món đã hoàn thành.',
     );
     expect(
       vietnameseHandoffMessage('104', 2, 'floor'),
-      'Bàn một không bốn, khay vừa chuyển 2 món.',
+      'Bàn một không bốn, hai món đã hoàn thành.',
     );
-    expect(
-      emergencyHandoffAlarmCoalesceDelay,
-      lessThan(const Duration(milliseconds: 100)),
-    );
+    expect(emergencyHandoffAlarmCoalesceDelay, const Duration(seconds: 2));
   });
 
   test('handoff notices report only the newly delivered quantity', () {

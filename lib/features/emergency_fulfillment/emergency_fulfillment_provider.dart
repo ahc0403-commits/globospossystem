@@ -11,7 +11,7 @@ import '../../core/services/emergency_web_bridge.dart';
 import '../../core/utils/live_sync_scope.dart';
 import '../../main.dart';
 
-const emergencyHandoffAlarmCoalesceDelay = Duration(milliseconds: 40);
+const emergencyHandoffAlarmCoalesceDelay = Duration(seconds: 2);
 
 String formatEmergencyElapsed(Duration elapsed) {
   final totalSeconds = elapsed.inSeconds < 0 ? 0 : elapsed.inSeconds;

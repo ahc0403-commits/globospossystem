@@ -29,13 +29,10 @@ String vietnameseHandoffMessage(
 ) {
   final spokenDigits = _spokenTableDigits(tableNumber);
   final count = itemCount < 0 ? 0 : itemCount;
-  final source = switch (stationType) {
-    'tray' => 'Bếp',
-    'floor' => 'Khay',
-    _ => 'Trạm trước',
-  };
-  if (spokenDigits.isEmpty) return '$source vừa chuyển $count món.';
-  return 'Bàn $spokenDigits, ${source.toLowerCase()} vừa chuyển $count món.';
+  final spokenCount = _vietnameseDigits['$count'] ?? '$count';
+  final completion = '$spokenCount món đã hoàn thành.';
+  if (spokenDigits.isEmpty) return completion;
+  return 'Bàn $spokenDigits, $completion';
 }
 
 String _spokenTableDigits(String tableNumber) => RegExp(r'\d')
