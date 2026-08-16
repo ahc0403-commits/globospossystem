@@ -332,27 +332,25 @@ List<int> buildRestaurantSalesWorkbook(RestaurantSalesExport export) {
     final buyerName = receipt.isRedInvoice
         ? receipt.buyerLegalName
         : 'Bán cho người tiêu dùng';
-    for (final line in receipt.lineItems) {
-      sheet.appendRow([
-        IntCellValue(receiptIndex + 1),
-        TextCellValue(_misaDate(receipt.soldAtHcm)),
-        TextCellValue(buyerName),
-        TextCellValue(receipt.isRedInvoice ? receipt.buyerTaxCode : ''),
-        TextCellValue(receipt.isRedInvoice ? receipt.buyerAddress : ''),
-        TextCellValue(receipt.isRedInvoice ? '' : 'Bán cho người tiêu dùng'),
-        TextCellValue(''),
-        TextCellValue(''),
-        TextCellValue(''),
-        TextCellValue(_misaPaymentCode(receipt.paymentMethod)),
-        TextCellValue(line.name),
-        TextCellValue('Phần'),
-        DoubleCellValue(line.quantity),
-        DoubleCellValue(line.misaUnitPrice),
-        DoubleCellValue(line.supplyAmount),
-        DoubleCellValue(line.vatRate),
-        DoubleCellValue(line.vatAmount),
-      ]);
-    }
+    sheet.appendRow([
+      IntCellValue(receiptIndex + 1),
+      TextCellValue(_misaDate(receipt.soldAtHcm)),
+      TextCellValue(buyerName),
+      TextCellValue(receipt.isRedInvoice ? receipt.buyerTaxCode : ''),
+      TextCellValue(receipt.isRedInvoice ? receipt.buyerAddress : ''),
+      TextCellValue(receipt.isRedInvoice ? '' : 'Bán cho người tiêu dùng'),
+      TextCellValue(''),
+      TextCellValue(''),
+      TextCellValue(''),
+      TextCellValue(_misaPaymentCode(receipt.paymentMethod)),
+      TextCellValue('Dịch vụ ăn uống'),
+      TextCellValue('Lần'),
+      DoubleCellValue(1.0),
+      DoubleCellValue(receipt.supplyAmount),
+      DoubleCellValue(receipt.supplyAmount),
+      DoubleCellValue(_misaReceiptVatRate(receipt)),
+      DoubleCellValue(receipt.vatAmount),
+    ]);
   }
 
   for (var index = 0; index < _misaHeaders.length; index += 1) {
@@ -414,6 +412,16 @@ String _misaPaymentCode(String value) {
     return 'CK';
   }
   return value.trim();
+}
+
+double _misaReceiptVatRate(RestaurantSalesReceipt receipt) {
+  final taxableRates = receipt.lineItems
+      .map((line) => line.vatRate)
+      .where((rate) => rate > 0)
+      .toSet();
+  if (taxableRates.length == 1) return taxableRates.single;
+  if (taxableRates.isEmpty || receipt.supplyAmount == 0) return 0;
+  return receipt.vatAmount / receipt.supplyAmount * 100;
 }
 
 String _requiredText(dynamic value, String error) {
