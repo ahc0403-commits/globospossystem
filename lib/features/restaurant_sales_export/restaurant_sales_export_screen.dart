@@ -17,12 +17,14 @@ class RestaurantSalesExportScreen extends StatefulWidget {
     super.key,
     this.loader,
     this.embedded = false,
+    this.todayOverride,
   });
 
   /// Optional deterministic loader for operational-state widget tests.
   /// Production continues to use [restaurantSalesExportService].
   final Future<RestaurantSalesExport> Function(String businessDate)? loader;
   final bool embedded;
+  final DateTime? todayOverride;
 
   @override
   State<RestaurantSalesExportScreen> createState() =>
@@ -41,7 +43,9 @@ class _RestaurantSalesExportScreenState
   @override
   void initState() {
     super.initState();
-    _businessDate = restaurantHcmBusinessDate(DateTime.now());
+    _businessDate = restaurantHcmBusinessDate(
+      widget.todayOverride ?? DateTime.now(),
+    );
     Future.microtask(_load);
   }
 
@@ -148,54 +152,79 @@ class _RestaurantSalesExportScreenState
   }
 
   Widget _dateControls(BuildContext context) {
-    final date = Semantics(
-      selected: true,
-      label: context.l10n.restaurantSalesExportDate(_businessDate),
-      child: Text(
+    final choose = OutlinedButton.icon(
+      key: const Key('restaurant_sales_export_date_picker'),
+      onPressed: _isLoading || _isDownloading ? null : _chooseDate,
+      icon: const Icon(Icons.calendar_month_outlined),
+      label: Text(
         context.l10n.restaurantSalesExportDate(_businessDate),
         key: const Key('restaurant_sales_export_business_date'),
         style: AppFonts.system(
           color: ToastColorTokens.textPrimary,
-          fontSize: 16,
           fontWeight: FontWeight.w700,
           fontFeatures: const [FontFeature.tabularFigures()],
         ),
       ),
     );
-    final choose = OutlinedButton.icon(
-      onPressed: _isLoading || _isDownloading ? null : _chooseDate,
-      icon: const Icon(Icons.calendar_month_outlined),
-      label: Text(context.l10n.restaurantSalesExportChooseDate),
-    );
-    final refresh = IconButton.outlined(
-      key: const Key('restaurant_sales_export_refresh'),
-      tooltip: context.l10n.refresh,
+    final search = FilledButton.icon(
+      key: const Key('restaurant_sales_export_search'),
       onPressed: _isLoading || _isDownloading ? null : _load,
-      icon: const Icon(Icons.refresh),
+      icon: const Icon(Icons.search),
+      label: Text(_searchLabel(context)),
     );
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 600) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              date,
-              const SizedBox(height: ToastSpacingTokens.sm),
-              choose,
-              const SizedBox(height: ToastSpacingTokens.sm),
-              refresh,
-            ],
-          );
-        }
-        return Row(
-          children: [
-            Expanded(child: date),
-            choose,
-            const SizedBox(width: ToastSpacingTokens.sm),
-            refresh,
-          ],
-        );
-      },
+    return Container(
+      key: const Key('restaurant_sales_export_date_search'),
+      padding: const EdgeInsets.all(ToastSpacingTokens.md),
+      decoration: BoxDecoration(
+        color: ToastColorTokens.infoMuted,
+        borderRadius: ToastRadiusTokens.sm,
+        border: Border.all(color: ToastColorTokens.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            _dateSearchTitle(context),
+            style: AppFonts.system(
+              color: ToastColorTokens.textPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: ToastSpacingTokens.sm),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 600) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    choose,
+                    const SizedBox(height: ToastSpacingTokens.sm),
+                    search,
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: choose),
+                  const SizedBox(width: ToastSpacingTokens.sm),
+                  search,
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: ToastSpacingTokens.sm),
+          Text(
+            _dateSearchGuidance(context),
+            key: const Key('restaurant_sales_export_past_date_guidance'),
+            style: AppFonts.system(
+              color: ToastColorTokens.textSecondary,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -291,7 +320,9 @@ class _RestaurantSalesExportScreenState
 
   Future<void> _chooseDate() async {
     final current = DateTime.parse(_businessDate);
-    final hcmToday = DateTime.parse(restaurantHcmBusinessDate(DateTime.now()));
+    final hcmToday = DateTime.parse(
+      restaurantHcmBusinessDate(widget.todayOverride ?? DateTime.now()),
+    );
     final selected = await showDatePicker(
       context: context,
       initialDate: current,
@@ -302,8 +333,8 @@ class _RestaurantSalesExportScreenState
     setState(() {
       _businessDate = DateFormat('yyyy-MM-dd').format(selected);
       _export = null;
+      _statusMessage = null;
     });
-    await _load();
   }
 
   Future<void> _load() async {
@@ -402,6 +433,30 @@ String _downloadLabel(BuildContext context) =>
       'en' => 'Download one MISA file',
       _ => 'MISA 엑셀 한 번에 다운로드',
     };
+
+String _dateSearchTitle(BuildContext context) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => 'Tra cứu theo ngày',
+      'en' => 'Search by business date',
+      _ => '날짜별 조회',
+    };
+
+String _searchLabel(BuildContext context) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => 'Tra cứu',
+      'en' => 'Search',
+      _ => '조회',
+    };
+
+String _dateSearchGuidance(
+  BuildContext context,
+) => switch (Localizations.localeOf(context).languageCode) {
+  'vi' =>
+    'Nguyên tắc là khai báo trong ngày. Có thể tra cứu và tải lại file Excel của ngày trước khi cần kiểm tra bổ sung.',
+  'en' =>
+    'Reports should be filed the same day. Past dates remain searchable and downloadable for later checks.',
+  _ => '당일 신고가 원칙입니다. 추가 확인이 필요하면 지난 날짜를 조회해 엑셀을 다시 다운로드할 수 있습니다.',
+};
 
 String _receiptLabel(BuildContext context) =>
     switch (Localizations.localeOf(context).languageCode) {

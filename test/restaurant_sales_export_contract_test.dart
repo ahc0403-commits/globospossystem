@@ -9,6 +9,9 @@ String readRepoFile(String path) => File(path).readAsStringSync();
 void main() {
   const migration =
       'supabase/migrations/20260816120000_unified_restaurant_misa_sales_report.sql';
+  const pilotMigration =
+      'supabase/migrations/20260816153000_sample_misa_sales_pilot.sql';
+  const pilotPreflight = 'scripts/preflight_sample_misa_sales_pilot.sql';
   const screen =
       'lib/features/restaurant_sales_export/restaurant_sales_export_screen.dart';
   const superAdmin = 'lib/features/super_admin/super_admin_screen.dart';
@@ -91,6 +94,44 @@ void main() {
     expect(redScreen, isNot(contains('red_invoice_export_button')));
     expect(queueScreen, isNot(contains('misa_pending_excel_download')));
   });
+
+  test('sales report supports explicit past-date search and download', () {
+    final screenSource = readRepoFile(screen);
+
+    expect(screenSource, contains('restaurant_sales_export_date_search'));
+    expect(screenSource, contains('restaurant_sales_export_date_picker'));
+    expect(screenSource, contains('restaurant_sales_export_search'));
+    expect(
+      screenSource,
+      contains('restaurant_sales_export_past_date_guidance'),
+    );
+    expect(screenSource, contains('firstDate: DateTime(2020)'));
+    expect(screenSource, contains('lastDate: hcmToday'));
+    expect(screenSource, contains("_businessDate.replaceAll('-', '')"));
+  });
+
+  test(
+    'sample pilot keeps one general receipt and prepares two Red Invoices',
+    () {
+      final sql = readRepoFile(pilotMigration);
+      final preflight = readRepoFile(pilotPreflight);
+
+      expect(sql, contains('BunsikClub SAMPLE'));
+      expect(sql, contains('2026-08-15'));
+      expect(sql, contains('dee5df02-b080-4a4a-a6b7-eefebdc5c4ba'));
+      expect(sql, contains('b80806b5-b496-472a-b250-ea83b90209b0'));
+      expect(sql, contains('a584f119-8bfd-4e79-842e-4e19574d1b3f'));
+      expect(sql, contains('SAMPLE_MISA_PILOT_GENERAL_RECEIPT_CHANGED'));
+      expect(sql, contains("'ready'"));
+      expect(sql, contains("status = 'dispatch_paused'"));
+      expect(sql, contains("'test_data_only', true"));
+      expect(sql, contains('buyer_email IS NULL'));
+      expect(sql, contains('buyer_phone IS NULL'));
+      expect(sql, contains('buyer_id IS NULL'));
+      expect(preflight, contains('SAMPLE_MISA_PILOT_SALES_CHANGED'));
+      expect(preflight, contains('SAMPLE_MISA_PILOT_ALREADY_CONFIGURED'));
+    },
+  );
 
   test('migration is discoverable by the self-verifying production gate', () {
     final deployment = readProductionGateContract();

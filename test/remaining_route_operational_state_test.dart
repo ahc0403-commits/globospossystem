@@ -719,6 +719,103 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Sales report searches and enables download for a past date', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final requestedDates = <String>[];
+    RestaurantSalesExport exportFor(String businessDate) {
+      return RestaurantSalesExport(
+        businessDate: businessDate,
+        storeCount: 1,
+        receiptCount: 1,
+        grossSales: 108000,
+        finalizedAt: DateTime.parse('${businessDate}T16:00:00+07:00'),
+        receipts: [
+          RestaurantSalesReceipt(
+            storeId: _storeId,
+            storeName: 'BunsikClub SAMPLE',
+            receiptId: 'sample-$businessDate',
+            receiptSource: 'pos_payment',
+            salesChannel: 'dine_in',
+            grossSales: 108000,
+            soldAt: DateTime.parse('${businessDate}T15:00:00+07:00'),
+            paymentMethod: 'TM/CK',
+            isRedInvoice: false,
+            buyerTaxCode: '',
+            buyerLegalName: '',
+            buyerAddress: '',
+            lineItems: const [
+              RestaurantSalesLineItem(
+                name: 'Món ăn',
+                quantity: 1,
+                unitPrice: 100000,
+                supplyAmount: 100000,
+                vatRate: 8,
+                vatAmount: 8000,
+              ),
+            ],
+            issues: const [],
+          ),
+        ],
+      );
+    }
+
+    await _pump(
+      tester,
+      child: RestaurantSalesExportScreen(
+        todayOverride: DateTime.utc(2026, 8, 15, 17),
+        loader: (businessDate) async {
+          requestedDates.add(businessDate);
+          return exportFor(businessDate);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(requestedDates, ['2026-08-16']);
+    expect(
+      find.byKey(const Key('restaurant_sales_export_date_search')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('restaurant_sales_export_past_date_guidance')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const Key('restaurant_sales_export_date_picker')),
+    );
+    await tester.pumpAndSettle();
+    final calendar = tester.widget<CalendarDatePicker>(
+      find.byType(CalendarDatePicker),
+    );
+    calendar.onDateChanged(DateTime(2026, 8, 15));
+    await tester.pump();
+    await tester.tap(find.byType(TextButton).last);
+    await tester.pumpAndSettle();
+
+    expect(requestedDates, ['2026-08-16']);
+    expect(find.textContaining('2026-08-15'), findsOneWidget);
+    _expectButtonDisabled(
+      tester,
+      find.byKey(const Key('restaurant_sales_export_button')),
+    );
+
+    await tester.tap(find.byKey(const Key('restaurant_sales_export_search')));
+    await tester.pumpAndSettle();
+    expect(requestedDates, ['2026-08-16', '2026-08-15']);
+    expect(
+      tester
+          .widget<ButtonStyleButton>(
+            find.byKey(const Key('restaurant_sales_export_button')),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'Store setup executes loading, error, disabled, and selected states',
     (tester) async {
