@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:globos_pos_system/features/report/report_provider.dart';
+import 'package:globos_pos_system/features/super_admin/super_admin_provider.dart';
 
 String readRepoFile(String path) => File(path).readAsStringSync();
 
@@ -50,6 +51,50 @@ void main() {
     expect(totals.totalRevenue, 0);
     expect(totals.serviceTotal, 100000);
     expect(totals.dailyBreakdown.single.total, 0);
+  });
+
+  test('Super Admin reports aggregate Photo Objet sales by store', () {
+    final totals = aggregateSuperAdminPhotoObjetSalesByStore([
+      {
+        'store_id': 'thao-dien',
+        'sale_date': '2026-08-14',
+        'total_gross_sales': 5160000,
+        'total_service_amount': 100000,
+        'total_transactions': 59,
+      },
+      {
+        'store_id': 'thao-dien',
+        'sale_date': '2026-08-15',
+        'total_gross_sales': 3130000,
+        'total_service_amount': 0,
+        'total_transactions': 36,
+      },
+      {
+        'store_id': 'bien-hoa',
+        'sale_date': '2026-08-15',
+        'total_gross_sales': 2000000,
+        'total_service_amount': 50000,
+        'total_transactions': 20,
+      },
+      {
+        'store_id': '',
+        'sale_date': '2026-08-15',
+        'total_gross_sales': 999999,
+        'total_service_amount': 0,
+        'total_transactions': 1,
+      },
+    ]);
+
+    expect(totals, {'thao-dien': 8190000, 'bien-hoa': 1950000});
+  });
+
+  test('Super Admin report loads the Photo Objet daily summary', () {
+    final provider = readRepoFile(
+      'lib/features/super_admin/super_admin_provider.dart',
+    );
+
+    expect(provider, contains(".from('v_photo_objet_daily_summary')"));
+    expect(provider, contains('aggregateSuperAdminPhotoObjetSalesByStore'));
   });
 
   test('report export keeps sales and service revenue separate', () {
