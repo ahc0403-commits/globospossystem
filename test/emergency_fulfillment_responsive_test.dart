@@ -249,6 +249,42 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  for (final stationType in ['kitchen', 'tray', 'floor']) {
+    testWidgets(
+      '$stationType renders combo components as separate menu cards in detail',
+      (tester) async {
+        final fixture = _FixtureEmergencyNotifier(_comboState(stationType));
+        await _pumpEmergency(
+          tester,
+          fixture: fixture,
+          size: const Size(1024, 768),
+          locale: const Locale('vi'),
+          expectedStationType: stationType,
+        );
+
+        await tester.tap(find.byKey(const Key('emergency_order_order-combo')));
+        await tester.pump();
+
+        expect(
+          find.byKey(
+            const ValueKey('emergency_menu_item_combo-parent:combo:food-1'),
+          ),
+          findsOne,
+        );
+        expect(
+          find.byKey(
+            const ValueKey('emergency_menu_item_combo-parent:combo:food-2'),
+          ),
+          findsOne,
+        );
+        expect(find.text('Tteokbokki Truyền Thống'), findsOne);
+        expect(find.text('Kimbap Cá Ngừ'), findsOne);
+        expect(find.text('Combo A'), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('detail home button returns to the order board', (tester) async {
     final fixture = _FixtureEmergencyNotifier(_activeState('kitchen'));
     await _pumpEmergency(
@@ -875,6 +911,60 @@ EmergencyFulfillmentState _floorDirectState(String stationType) =>
               floorServedQuantity: 0,
               needsReview: false,
               fulfillmentRoute: 'floor_direct',
+            ),
+          ],
+        ),
+      ],
+    );
+
+EmergencyFulfillmentState _comboState(String stationType) =>
+    EmergencyFulfillmentState(
+      assigned: true,
+      active: true,
+      restaurantId: 'store-bt',
+      sessionId: 'session-1',
+      stationType: stationType,
+      orders: [
+        EmergencyFulfillmentOrder(
+          queueId: 'queue-combo',
+          orderId: 'order-combo',
+          queueNo: 104,
+          tableNumber: '104',
+          floorLabel: '1F',
+          createdAt: DateTime.utc(2026, 8, 16, 9),
+          items: [
+            EmergencyFulfillmentItem(
+              id: 'combo-parent',
+              orderItemId: 'order-item-combo',
+              nameKo: '콤보 A',
+              nameVi: 'Combo A',
+              nameEn: 'Combo A',
+              orderedQuantity: 1,
+              kitchenDoneQuantity: stationType == 'kitchen' ? 0 : 1,
+              trayReceivedQuantity: stationType == 'tray' ? 0 : 1,
+              trayDispatchedQuantity: stationType == 'floor' ? 1 : 0,
+              floorServedQuantity: 0,
+              needsReview: false,
+              comboComponents: const [
+                EmergencyComboComponent(
+                  menuItemId: 'food-1',
+                  nameKo: '전통 떡볶이',
+                  nameVi: 'Tteokbokki Truyền Thống',
+                  nameEn: 'Traditional Tteokbokki',
+                  quantity: 1,
+                  isTotalQuantity: false,
+                  fulfillmentRoute: 'kitchen_tray_floor',
+                ),
+                EmergencyComboComponent(
+                  menuItemId: 'food-2',
+                  nameKo: '참치 김밥',
+                  nameVi: 'Kimbap Cá Ngừ',
+                  nameEn: 'Tuna Kimbap',
+                  quantity: 1,
+                  isTotalQuantity: false,
+                  fulfillmentRoute: 'kitchen_tray_floor',
+                ),
+              ],
             ),
           ],
         ),

@@ -160,7 +160,9 @@ class RedInvoiceIntake {
   bool get hasCompleteBuyerInformation =>
       buyerTaxCode.trim().isNotEmpty &&
       buyerLegalName.trim().isNotEmpty &&
-      buyerAddress.trim().isNotEmpty;
+      buyerAddress.trim().isNotEmpty &&
+      buyerEmail.trim().isNotEmpty &&
+      buyerPhone.trim().isNotEmpty;
 
   double get totalAmountWithoutVat =>
       lineItems.fold<double>(0, (total, item) => total + item.amountWithoutVat);

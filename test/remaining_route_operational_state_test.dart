@@ -746,6 +746,8 @@ void main() {
             buyerTaxCode: '',
             buyerLegalName: '',
             buyerAddress: '',
+            buyerEmail: '',
+            buyerPhone: '',
             lineItems: const [
               RestaurantSalesLineItem(
                 name: 'Món ăn',

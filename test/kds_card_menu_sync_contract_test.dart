@@ -115,16 +115,69 @@ void main() {
 
     final kitchenLines = order.displayItemsAt('kitchen');
     expect(kitchenLines.map((item) => item.nameVi), ['Cơm cuộn']);
+    expect(kitchenLines.map((item) => item.fulfillmentItemId), ['base-1']);
     expect(kitchenLines.map((item) => item.completed), [true]);
     expect(kitchenLines.map((item) => item.readyFromPreviousStage), [false]);
     expect(kitchenLines.map((item) => item.readOnly), [false]);
 
     final trayLines = order.displayItemsAt('tray');
     expect(trayLines.map((item) => item.nameVi), ['Cơm cuộn']);
+    expect(order.incomingHandoffQuantityAt('tray'), 1);
 
     final floorLines = order.displayItemsAt('floor');
     expect(floorLines.map((item) => item.nameVi), ['Cơm cuộn', 'Coca-Cola']);
+    expect(floorLines.map((item) => item.fulfillmentItemId), [
+      'base-1',
+      'direct-1',
+    ]);
   });
+
+  test(
+    'combo handoff count uses food components instead of the parent line',
+    () {
+      final order = EmergencyFulfillmentOrder.fromJson({
+        'queue_id': 'queue-combo',
+        'order_id': 'order-combo',
+        'queue_no': 1,
+        'table_number': '104',
+        'floor_label': '1F',
+        'created_at': '2026-08-16T02:00:00Z',
+        'items': [
+          {
+            'id': 'combo-parent',
+            'order_item_id': 'order-item-combo',
+            'ordered_quantity': 1,
+            'kitchen_done_quantity': 1,
+            'tray_received_quantity': 0,
+            'tray_dispatched_quantity': 0,
+            'floor_served_quantity': 0,
+            'combo_components': [
+              {
+                'menu_item_id': 'food-1',
+                'name_vi': 'Tteokbokki Truyền Thống',
+                'quantity': 1,
+                'fulfillment_route': 'kitchen_tray_floor',
+              },
+              {
+                'menu_item_id': 'food-2',
+                'name_vi': 'Kimbap Cá Ngừ',
+                'quantity': 1,
+                'fulfillment_route': 'kitchen_tray_floor',
+              },
+              {
+                'menu_item_id': 'drink-1',
+                'name_vi': 'Nước Suối',
+                'quantity': 1,
+                'fulfillment_route': 'floor_direct',
+              },
+            ],
+          },
+        ],
+      });
+
+      expect(order.incomingHandoffQuantityAt('tray'), 2);
+    },
+  );
 
   test('completed station timer stops at that station completion', () {
     final order = EmergencyFulfillmentOrder(

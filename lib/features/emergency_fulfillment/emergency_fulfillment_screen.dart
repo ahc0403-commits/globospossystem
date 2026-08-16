@@ -38,6 +38,8 @@ class _EmergencyFulfillmentScreenState
   String? _selectedOrderId;
   int _page = 0;
   Timer? _flashTimer;
+  Timer? _handoffAlarmTimer;
+  final Map<String, EmergencyHandoffNotice> _pendingHandoffNotices = {};
   late final ProviderSubscription<EmergencyFulfillmentState> _stateSub;
 
   @override
@@ -65,7 +67,24 @@ class _EmergencyFulfillmentScreenState
       previous ?? const EmergencyFulfillmentState(),
     );
     final newActionable = _actionableOrderIds(next);
-    final newOrderIds = newActionable.difference(oldActionable);
+    final handoffNotices = emergencyHandoffNotices(
+      previous ?? const EmergencyFulfillmentState(),
+      next,
+    );
+    if (handoffNotices.isNotEmpty) {
+      _queueHandoffAlarms(handoffNotices);
+    }
+    final handoffOrderIds = handoffNotices
+        .map((notice) => notice.orderId)
+        .toSet();
+    final previouslyKnownOrderIds = <String>{
+      ...?previous?.orders.map((order) => order.orderId),
+      ...?previous?.completedOrders.map((order) => order.orderId),
+    };
+    final newOrderIds = newActionable
+        .difference(oldActionable)
+        .difference(handoffOrderIds)
+        .difference(previouslyKnownOrderIds);
     if (newOrderIds.isNotEmpty) {
       final newOrders =
           next.orders
@@ -110,6 +129,26 @@ class _EmergencyFulfillmentScreenState
       .map((order) => order.orderId)
       .toSet();
 
+  void _queueHandoffAlarms(Iterable<EmergencyHandoffNotice> notices) {
+    for (final notice in notices) {
+      final pending = _pendingHandoffNotices[notice.orderId];
+      _pendingHandoffNotices[notice.orderId] = EmergencyHandoffNotice(
+        orderId: notice.orderId,
+        queueNo: notice.queueNo,
+        tableNumber: notice.tableNumber,
+        itemCount: (pending?.itemCount ?? 0) + notice.itemCount,
+        stationType: notice.stationType,
+      );
+    }
+    _handoffAlarmTimer?.cancel();
+    _handoffAlarmTimer = Timer(emergencyHandoffAlarmCoalesceDelay, () {
+      final pending = _pendingHandoffNotices.values.toList(growable: false)
+        ..sort((left, right) => left.queueNo.compareTo(right.queueNo));
+      _pendingHandoffNotices.clear();
+      _triggerHandoffAlarm(pending);
+    });
+  }
+
   Future<void> _triggerAlarm(Iterable<String> tableNumbers) async {
     if (!mounted) return;
     setState(() => _flashing = true);
@@ -120,6 +159,28 @@ class _EmergencyFulfillmentScreenState
     if (_alarmEnabled) {
       for (final tableNumber in tableNumbers) {
         await EmergencyWebBridge.speak(vietnameseNewOrderMessage(tableNumber));
+      }
+    }
+  }
+
+  Future<void> _triggerHandoffAlarm(
+    Iterable<EmergencyHandoffNotice> notices,
+  ) async {
+    if (!mounted) return;
+    setState(() => _flashing = true);
+    _flashTimer?.cancel();
+    _flashTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _flashing = false);
+    });
+    if (_alarmEnabled) {
+      for (final notice in notices) {
+        await EmergencyWebBridge.speak(
+          vietnameseHandoffMessage(
+            notice.tableNumber,
+            notice.itemCount,
+            notice.stationType,
+          ),
+        );
       }
     }
   }
@@ -137,6 +198,7 @@ class _EmergencyFulfillmentScreenState
   @override
   void dispose() {
     _flashTimer?.cancel();
+    _handoffAlarmTimer?.cancel();
     _stateSub.close();
     super.dispose();
   }
@@ -998,6 +1060,7 @@ class _EmergencyCardMenuList extends StatelessWidget {
         if (hiddenCount > 0 && shown.isNotEmpty) {
           shown[shown.length - 1] = EmergencyFulfillmentDisplayItem(
             id: 'remaining-$hiddenCount',
+            fulfillmentItemId: '',
             nameKo: '+$hiddenCount개 메뉴',
             nameVi: '+$hiddenCount món',
             nameEn: '+$hiddenCount items',
@@ -1086,12 +1149,23 @@ class _EmergencyOrderDetails extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visibleItems = order.visibleItemsAt(stationType);
+    final itemsById = <String, EmergencyFulfillmentItem>{
+      for (final item in order.items) item.id: item,
+    };
+    final visibleItems = order
+        .displayItemsAt(stationType)
+        .map(
+          (displayItem) => _EmergencyMenuEntry(
+            displayItem: displayItem,
+            fulfillmentItem: itemsById[displayItem.fulfillmentItemId]!,
+          ),
+        )
+        .toList(growable: false);
     final directBeverages = visibleItems
-        .where((item) => item.isFloorDirect)
+        .where((entry) => entry.fulfillmentItem.isFloorDirect)
         .toList(growable: false);
     final foodItems = visibleItems
-        .where((item) => !item.isFloorDirect)
+        .where((entry) => !entry.fulfillmentItem.isFloorDirect)
         .toList(growable: false);
     return Padding(
       key: Key('emergency_order_detail_${order.orderId}'),
@@ -1201,8 +1275,8 @@ class _EmergencyFloorItemSections extends StatelessWidget {
     required this.onItemRevert,
   });
 
-  final List<EmergencyFulfillmentItem> beverages;
-  final List<EmergencyFulfillmentItem> foods;
+  final List<_EmergencyMenuEntry> beverages;
+  final List<_EmergencyMenuEntry> foods;
   final _EmergencyCopy copy;
   final bool busy;
   final ValueChanged<EmergencyFulfillmentItem> onItemAction;
@@ -1268,7 +1342,7 @@ class _EmergencyItemSection extends StatelessWidget {
   final String title;
   final String body;
   final Color color;
-  final List<EmergencyFulfillmentItem> items;
+  final List<_EmergencyMenuEntry> items;
   final _EmergencyCopy copy;
   final bool busy;
   final String keyPrefix;
@@ -1345,7 +1419,7 @@ class _EmergencyMenuCollection extends StatelessWidget {
     this.embedded = false,
   });
 
-  final List<EmergencyFulfillmentItem> items;
+  final List<_EmergencyMenuEntry> items;
   final String stationType;
   final _EmergencyCopy copy;
   final bool busy;
@@ -1375,12 +1449,12 @@ class _EmergencyMenuCollection extends StatelessWidget {
             itemCount: items.length,
             separatorBuilder: (_, _) => const SizedBox(height: 8),
             itemBuilder: (context, index) => _EmergencyMenuRow(
-              item: items[index],
+              entry: items[index],
               stationType: stationType,
               copy: copy,
               busy: busy,
-              onTap: () => onItemAction(items[index]),
-              onRevert: () => onItemRevert(items[index]),
+              onTap: () => onItemAction(items[index].fulfillmentItem),
+              onRevert: () => onItemRevert(items[index].fulfillmentItem),
             ),
           );
         }
@@ -1397,12 +1471,12 @@ class _EmergencyMenuCollection extends StatelessWidget {
             mainAxisExtent: 188,
           ),
           itemBuilder: (context, index) => _EmergencyMenuRow(
-            item: items[index],
+            entry: items[index],
             stationType: stationType,
             copy: copy,
             busy: busy,
-            onTap: () => onItemAction(items[index]),
-            onRevert: () => onItemRevert(items[index]),
+            onTap: () => onItemAction(items[index].fulfillmentItem),
+            onRevert: () => onItemRevert(items[index].fulfillmentItem),
           ),
         );
       },
@@ -1410,9 +1484,19 @@ class _EmergencyMenuCollection extends StatelessWidget {
   }
 }
 
+class _EmergencyMenuEntry {
+  const _EmergencyMenuEntry({
+    required this.displayItem,
+    required this.fulfillmentItem,
+  });
+
+  final EmergencyFulfillmentDisplayItem displayItem;
+  final EmergencyFulfillmentItem fulfillmentItem;
+}
+
 class _EmergencyMenuRow extends StatelessWidget {
   const _EmergencyMenuRow({
-    required this.item,
+    required this.entry,
     required this.stationType,
     required this.copy,
     required this.busy,
@@ -1420,7 +1504,7 @@ class _EmergencyMenuRow extends StatelessWidget {
     required this.onRevert,
   });
 
-  final EmergencyFulfillmentItem item;
+  final _EmergencyMenuEntry entry;
   final String stationType;
   final _EmergencyCopy copy;
   final bool busy;
@@ -1429,6 +1513,8 @@ class _EmergencyMenuRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final item = entry.fulfillmentItem;
+    final displayItem = entry.displayItem;
     final (value, limit) = switch (stationType) {
       'kitchen' => (item.kitchenDoneQuantity, item.orderedQuantity),
       'tray' => (item.trayDispatchedQuantity, item.kitchenDoneQuantity),
@@ -1455,50 +1541,35 @@ class _EmergencyMenuRow extends StatelessWidget {
       button: true,
       enabled: canAdvance || canRevert,
       label:
-          '${item.paperlessName}, $value / $limit, '
+          '${displayItem.paperlessName}, $value / $limit, '
           '${disabledAtStation
               ? copy.floorDirectOnly
               : done
               ? copy.completed
               : copy.waitingForAction}',
       child: GestureDetector(
-        key: ValueKey('emergency_menu_item_${item.id}'),
+        key: ValueKey('emergency_menu_item_${displayItem.id}'),
         behavior: HitTestBehavior.opaque,
         onTap: canAdvance ? onTap : null,
         child: LayoutBuilder(
           builder: (context, constraints) {
             final compact = constraints.maxWidth < 240;
-            final foodComponents = item.comboComponents
-                .where((component) => !component.isFloorDirect)
-                .toList(growable: false);
             final itemInfo = Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (foodComponents.isEmpty)
-                  Text(
-                    item.paperlessName,
-                    maxLines: compact ? 3 : 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: menuColor,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  )
-                else
-                  for (final component in foodComponents)
-                    Text(
-                      component.paperlessName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: menuColor,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
+                Text(
+                  displayItem.paperlessName,
+                  maxLines: compact ? 3 : 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: menuColor,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
                 const SizedBox(height: 3),
                 Text(
-                  '${copy.orderedQuantity} ${item.orderedQuantity}',
+                  '${copy.orderedQuantity} ${displayItem.quantity}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: PosColors.textSecondary,
                   ),
@@ -1553,7 +1624,7 @@ class _EmergencyMenuRow extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton.outlined(
-                  key: ValueKey('emergency_menu_item_cancel_${item.id}'),
+                  key: ValueKey('emergency_menu_item_cancel_${displayItem.id}'),
                   tooltip: copy.cancelOne,
                   onPressed: canRevert ? onRevert : null,
                   color: PosColors.danger,
@@ -1561,7 +1632,9 @@ class _EmergencyMenuRow extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 IconButton.filled(
-                  key: ValueKey('emergency_menu_item_complete_${item.id}'),
+                  key: ValueKey(
+                    'emergency_menu_item_complete_${displayItem.id}',
+                  ),
                   tooltip: copy.completeOne,
                   onPressed: canAdvance ? onTap : null,
                   icon: const Icon(Icons.check_rounded, size: 20),

@@ -13,6 +13,8 @@ void main() {
       'supabase/migrations/20260816153000_sample_misa_sales_pilot.sql';
   const allStoresMigration =
       'supabase/migrations/20260816170000_restaurant_sales_export_all_stores.sql';
+  const contactMigration =
+      'supabase/migrations/20260816180000_red_invoice_contact_fields.sql';
   const pilotPreflight = 'scripts/preflight_sample_misa_sales_pilot.sql';
   const screen =
       'lib/features/restaurant_sales_export/restaurant_sales_export_screen.dart';
@@ -55,8 +57,8 @@ void main() {
     expect(sql, contains('TO authenticated'));
   });
 
-  test('Red Invoice intake requires only three buyer fields', () {
-    final sql = readRepoFile(migration);
+  test('Red Invoice intake and export require both contact fields', () {
+    final sql = readRepoFile(contactMigration);
     final service = readRepoFile(
       'lib/features/red_invoice_intake/red_invoice_intake_service.dart',
     );
@@ -65,16 +67,21 @@ void main() {
     expect(sql, contains('p_buyer_tax_code text DEFAULT NULL'));
     expect(sql, contains('p_buyer_legal_name text DEFAULT NULL'));
     expect(sql, contains('p_buyer_address text DEFAULT NULL'));
+    expect(sql, contains('p_buyer_email text DEFAULT NULL'));
+    expect(sql, contains('p_buyer_phone text DEFAULT NULL'));
+    expect(sql, contains("'buyer_email'"));
+    expect(sql, contains("'buyer_phone'"));
     final minimalStart = sql.indexOf(
-      'CREATE OR REPLACE FUNCTION public.upsert_red_invoice_intake_minimal',
+      'CREATE FUNCTION public.upsert_red_invoice_intake_minimal',
     );
     final minimalSignatureEnd = sql.indexOf(') RETURNS jsonb', minimalStart);
     final signature = sql.substring(minimalStart, minimalSignatureEnd);
-    expect(signature, isNot(contains('p_buyer_email')));
-    expect(signature, isNot(contains('p_buyer_phone')));
+    expect(signature, contains('p_buyer_email'));
+    expect(signature, contains('p_buyer_phone'));
     expect(signature, isNot(contains('p_buyer_id')));
     expect(service, contains("'upsert_red_invoice_intake_minimal'"));
-    expect(service, isNot(contains("'p_buyer_email'")));
+    expect(service, contains("'p_buyer_email'"));
+    expect(service, contains("'p_buyer_phone'"));
   });
 
   test('Super Admin exposes one MISA download surface', () {
