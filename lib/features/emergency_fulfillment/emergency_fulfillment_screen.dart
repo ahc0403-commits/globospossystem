@@ -1440,7 +1440,7 @@ class _EmergencyMenuRow extends StatelessWidget {
     };
     final done = limit > 0 && value >= limit;
     final readyFromPreviousStage = item.isReadyFromPreviousStageAt(stationType);
-    final menuColor = item.isCompletedAt(stationType)
+    final menuColor = done
         ? PosColors.success
         : readyFromPreviousStage
         ? PosColors.info

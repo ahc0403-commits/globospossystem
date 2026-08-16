@@ -421,6 +421,20 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
                   _detail(copy.cashier, entry.cashierName),
                   _detail(copy.status, copy.statusLabel(entry.status)),
                   _detail(copy.paymentMethod, _paymentLabel(entry)),
+                  if (entry.items.isNotEmpty) ...[
+                    const Divider(height: 28),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        copy.orderedItems,
+                        key: const Key('receipt_ledger_ordered_items'),
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    ...entry.items.map(_orderedItem),
+                    const Divider(height: 28),
+                  ],
                   _detail(copy.grossSales, _money(entry.grossAmount)),
                   if (entry.adjustedAmount > 0)
                     _detail(copy.adjustments, _money(entry.adjustedAmount)),
@@ -447,6 +461,27 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
           ],
         ),
       );
+
+  Widget _orderedItem(ReceiptLedgerItem item) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 5),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: Text(item.name)),
+        const SizedBox(width: 12),
+        Text('× ${item.quantity}'),
+        const SizedBox(width: 18),
+        SizedBox(
+          width: 120,
+          child: Text(
+            _money(item.lineTotal),
+            textAlign: TextAlign.right,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _detail(String label, String value) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 7),
@@ -695,6 +730,7 @@ class _ReceiptLedgerCopy {
   String get status => _pick('상태', 'Trạng thái', 'Status');
   String get paymentMethod =>
       _pick('결제수단', 'Phương thức thanh toán', 'Payment method');
+  String get orderedItems => _pick('주문 메뉴', 'Món đã gọi', 'Ordered items');
   String statusLabel(String status) => switch (status) {
     'paid' || 'completed' => paid,
     'partially_refunded' => partiallyRefunded,

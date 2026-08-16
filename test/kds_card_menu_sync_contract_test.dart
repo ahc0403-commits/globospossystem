@@ -225,6 +225,99 @@ void main() {
     expect(served.isReadyFromPreviousStageAt('floor'), isFalse);
   });
 
+  test('station menu ordering keeps handoffs first and handled items last', () {
+    const ready = EmergencyFulfillmentItem(
+      id: 'ready',
+      orderItemId: 'ready-order-item',
+      nameKo: '준비',
+      nameVi: 'Sẵn sàng',
+      nameEn: 'Ready',
+      orderedQuantity: 2,
+      kitchenDoneQuantity: 2,
+      trayReceivedQuantity: 2,
+      trayDispatchedQuantity: 1,
+      floorServedQuantity: 0,
+      needsReview: false,
+    );
+    const inProgress = EmergencyFulfillmentItem(
+      id: 'in-progress',
+      orderItemId: 'in-progress-order-item',
+      nameKo: '진행',
+      nameVi: 'Đang làm',
+      nameEn: 'In progress',
+      orderedQuantity: 2,
+      kitchenDoneQuantity: 2,
+      trayReceivedQuantity: 2,
+      trayDispatchedQuantity: 0,
+      floorServedQuantity: 0,
+      needsReview: false,
+    );
+    const handled = EmergencyFulfillmentItem(
+      id: 'handled',
+      orderItemId: 'handled-order-item',
+      nameKo: '완료',
+      nameVi: 'Hoàn tất',
+      nameEn: 'Handled',
+      orderedQuantity: 2,
+      kitchenDoneQuantity: 2,
+      trayReceivedQuantity: 2,
+      trayDispatchedQuantity: 1,
+      floorServedQuantity: 1,
+      needsReview: false,
+    );
+    final order = EmergencyFulfillmentOrder(
+      queueId: 'queue-sort',
+      orderId: 'order-sort',
+      queueNo: 1,
+      tableNumber: '101',
+      floorLabel: '1F',
+      createdAt: DateTime.utc(2026, 8, 16),
+      items: const [handled, inProgress, ready],
+    );
+
+    expect(order.visibleItemsAt('floor').map((item) => item.id), [
+      'ready',
+      'in-progress',
+      'handled',
+    ]);
+    final displayItems = order.displayItemsAt('floor');
+    expect(displayItems.map((item) => item.id), [
+      'ready',
+      'in-progress',
+      'handled',
+    ]);
+    expect(displayItems.first.readyFromPreviousStage, isTrue);
+    expect(displayItems.last.completed, isTrue);
+    expect(handled.isCompletedAt('floor'), isFalse);
+    expect(handled.isDisplayCompletedAt('floor'), isTrue);
+
+    final kitchenOrder = order.copyWith(
+      items: [
+        handled.withStage('kitchen_done', handled.orderedQuantity),
+        inProgress.withStage('kitchen_done', 0),
+      ],
+    );
+    expect(kitchenOrder.visibleItemsAt('kitchen').map((item) => item.id), [
+      'in-progress',
+      'handled',
+    ]);
+
+    final trayOrder = order.copyWith(
+      items: [
+        handled
+            .withStage('tray_received', handled.kitchenDoneQuantity)
+            .withStage('tray_dispatched', handled.kitchenDoneQuantity),
+        inProgress.withStage('kitchen_done', 0).withStage('tray_received', 0),
+        ready.withStage('tray_dispatched', 0),
+      ],
+    );
+    expect(trayOrder.visibleItemsAt('tray').map((item) => item.id), [
+      'ready',
+      'in-progress',
+      'handled',
+    ]);
+  });
+
   test('additive SQL exposes today completed orders and combo snapshots', () {
     final migration = File(
       'supabase/migrations/20260815170000_kds_card_menu_sync.sql',

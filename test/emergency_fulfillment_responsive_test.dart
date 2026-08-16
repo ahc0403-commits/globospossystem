@@ -764,6 +764,38 @@ void main() {
     expect(find.text('2F · 2 món'), findsNothing);
   });
 
+  testWidgets('floor marks every delivered quantity served as green', (
+    tester,
+  ) async {
+    final active = _activeState('floor');
+    final order = active.orders.single;
+    final item = order.items.single;
+    final fixture = _FixtureEmergencyNotifier(
+      active.copyWith(
+        orders: [
+          order.copyWith(
+            items: [
+              item.withStage('floor_served', item.trayDispatchedQuantity),
+            ],
+          ),
+        ],
+      ),
+    );
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(1024, 768),
+      locale: const Locale('ko'),
+      expectedStationType: 'floor',
+    );
+
+    final completed = tester.widget<Text>(
+      find.byKey(const Key('emergency_card_menu_item-1')),
+    );
+    expect(item.trayDispatchedQuantity, lessThan(item.orderedQuantity));
+    expect(completed.style?.color, PosColors.success);
+  });
+
   for (final stationType in ['tray', 'floor']) {
     testWidgets('$stationType shows previous-stage food in blue with legend', (
       tester,
