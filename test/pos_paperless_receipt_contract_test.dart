@@ -214,7 +214,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('public receipt renders proof notice and PDF/print actions', (
+  testWidgets('public receipt is Vietnamese even when app locale is Korean', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -232,16 +232,58 @@ void main() {
 
     expect(find.byKey(const Key('digital_receipt_paper')), findsOne);
     expect(find.byKey(const Key('digital_receipt_total')), findsOne);
+    expect(find.text('Tạm tính'), findsOne);
+    expect(find.text('VAT (đã gồm)'), findsOne);
+    expect(find.text('Tổng cộng'), findsOne);
+    expect(find.text('Phương thức'), findsOne);
+    expect(find.text('Chuyển khoản'), findsNWidgets(2));
+    expect(find.text('Khách trả'), findsOne);
+    expect(find.text('Tiền thừa'), findsOne);
+    expect(find.text('Món'), findsOne);
     expect(find.text(digitalReceiptFooterThanksVi), findsOne);
     expect(find.text(digitalReceiptFooterNoticeVi), findsOne);
-    expect(find.textContaining('적색 세금계산서가 아닙니다'), findsNothing);
     await tester.scrollUntilVisible(
       find.byKey(const Key('digital_receipt_save_pdf')),
       500,
       scrollable: find.byType(Scrollable).first,
     );
+    expect(find.text('Lưu/chia sẻ PDF'), findsOne);
+    expect(find.text('Tự in'), findsOne);
+    expect(find.textContaining(RegExp(r'[\uac00-\ud7af]')), findsNothing);
+    expect(find.text('BANKTRANSFER'), findsNothing);
     expect(find.byKey(const Key('digital_receipt_save_pdf')), findsOne);
     expect(find.byKey(const Key('digital_receipt_browser_print')), findsOne);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('public receipt retries after a Vietnamese load error', (
+    tester,
+  ) async {
+    var attempts = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('ko'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: DigitalReceiptScreen(
+          token: 'token',
+          loader: (_) async {
+            attempts += 1;
+            if (attempts == 1) throw StateError('temporary failure');
+            return _fixtureReceipt();
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Không thể tải biên lai'), findsOne);
+    expect(find.text('Kiểm tra kết nối rồi thử lại.'), findsOne);
+    await tester.tap(find.text('Thử lại'));
+    await tester.pumpAndSettle();
+
+    expect(attempts, 2);
+    expect(find.byKey(const Key('digital_receipt_paper')), findsOne);
     expect(tester.takeException(), isNull);
   });
 }
@@ -296,7 +338,9 @@ DigitalReceipt _fixtureReceipt() => DigitalReceipt(
       isServiceItem: false,
     ),
   ],
-  payments: const [DigitalReceiptPayment(method: 'CASH', amount: 99000)],
+  payments: const [
+    DigitalReceiptPayment(method: 'BANKTRANSFER', amount: 99000),
+  ],
   subtotalAmount: 99000,
   serviceChargeAmount: 0,
   discountAmount: 0,
@@ -304,6 +348,6 @@ DigitalReceipt _fixtureReceipt() => DigitalReceipt(
   totalAmount: 99000,
   receivedAmount: 100000,
   changeAmount: 1000,
-  paymentMethod: 'CASH',
+  paymentMethod: 'BANKTRANSFER',
   isService: false,
 );

@@ -18,7 +18,7 @@ void main() {
     );
   });
 
-  testWidgets('electronic invoice screen stays focused on pending export', (
+  testWidgets('electronic invoice screen stays focused on pending exceptions', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -71,10 +71,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('einvoice_compact_header')), findsOneWidget);
-    expect(
-      find.byKey(const Key('misa_pending_excel_download')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('misa_pending_excel_download')), findsNothing);
     expect(find.byKey(const Key('meinvoice_settings_action')), findsNothing);
     expect(find.byKey(const Key('meinvoice_settings_dialog')), findsNothing);
 

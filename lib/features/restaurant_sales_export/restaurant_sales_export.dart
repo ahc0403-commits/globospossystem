@@ -1,5 +1,26 @@
 import 'package:excel/excel.dart';
 
+class RestaurantSalesLineItem {
+  const RestaurantSalesLineItem({
+    required this.name,
+    required this.quantity,
+    required this.unitPrice,
+    required this.supplyAmount,
+    required this.vatRate,
+    required this.vatAmount,
+  });
+
+  final String name;
+  final double quantity;
+  final double unitPrice;
+  final double supplyAmount;
+  final double vatRate;
+  final double vatAmount;
+
+  double get grossAmount => supplyAmount + vatAmount;
+  double get misaUnitPrice => supplyAmount / quantity;
+}
+
 class RestaurantSalesReceipt {
   const RestaurantSalesReceipt({
     required this.storeId,
@@ -9,6 +30,13 @@ class RestaurantSalesReceipt {
     required this.salesChannel,
     required this.grossSales,
     required this.soldAt,
+    required this.paymentMethod,
+    required this.isRedInvoice,
+    required this.buyerTaxCode,
+    required this.buyerLegalName,
+    required this.buyerAddress,
+    required this.lineItems,
+    required this.issues,
   });
 
   final String storeId;
@@ -18,23 +46,19 @@ class RestaurantSalesReceipt {
   final String salesChannel;
   final double grossSales;
   final DateTime soldAt;
+  final String paymentMethod;
+  final bool isRedInvoice;
+  final String buyerTaxCode;
+  final String buyerLegalName;
+  final String buyerAddress;
+  final List<RestaurantSalesLineItem> lineItems;
+  final List<String> issues;
 
   DateTime get soldAtHcm => soldAt.toUtc().add(const Duration(hours: 7));
-
-  String get hourBucket {
-    final hour = soldAtHcm.hour.toString().padLeft(2, '0');
-    return '$hour:00-$hour:59';
-  }
-}
-
-class RestaurantSalesHourlyTotal {
-  const RestaurantSalesHourlyTotal({
-    required this.receiptCount,
-    required this.grossSales,
-  });
-
-  final int receiptCount;
-  final double grossSales;
+  double get supplyAmount =>
+      lineItems.fold(0, (total, item) => total + item.supplyAmount);
+  double get vatAmount =>
+      lineItems.fold(0, (total, item) => total + item.vatAmount);
 }
 
 class RestaurantSalesExport {
@@ -45,7 +69,6 @@ class RestaurantSalesExport {
     required this.grossSales,
     required this.finalizedAt,
     required this.receipts,
-    required this.hourlyTotals,
   });
 
   final String businessDate;
@@ -54,7 +77,19 @@ class RestaurantSalesExport {
   final double grossSales;
   final DateTime finalizedAt;
   final List<RestaurantSalesReceipt> receipts;
-  final Map<String, RestaurantSalesHourlyTotal> hourlyTotals;
+
+  int get redInvoiceCount =>
+      receipts.where((receipt) => receipt.isRedInvoice).length;
+  int get generalReceiptCount => receiptCount - redInvoiceCount;
+  int get lineCount =>
+      receipts.fold(0, (total, receipt) => total + receipt.lineItems.length);
+  double get supplyAmount =>
+      receipts.fold(0, (total, receipt) => total + receipt.supplyAmount);
+  double get vatAmount =>
+      receipts.fold(0, (total, receipt) => total + receipt.vatAmount);
+  int get blockingIssueCount =>
+      receipts.fold(0, (total, receipt) => total + receipt.issues.length);
+  bool get isReadyForDownload => receiptCount > 0 && blockingIssueCount == 0;
 }
 
 String restaurantHcmBusinessDate(DateTime value) {
@@ -123,6 +158,21 @@ RestaurantSalesExport createRestaurantSalesExport(
           row['receipt_id'],
           'RESTAURANT_EXPORT_INVALID_RECEIPT_ID',
         );
+        final sourceSystem =
+            row['source_system']?.toString() ?? 'restaurant_pos';
+        if (sourceSystem == 'photo_objet_moers') {
+          throw FormatException('RESTAURANT_EXPORT_PHOTO_SOURCE:$receiptId');
+        }
+        if (sourceSystem != 'restaurant_pos') {
+          throw FormatException('RESTAURANT_EXPORT_INVALID_SOURCE:$receiptId');
+        }
+        final receiptSource =
+            row['receipt_source']?.toString() ?? 'pos_payment';
+        if (receiptSource != 'pos_payment') {
+          throw FormatException(
+            'RESTAURANT_EXPORT_INVALID_RECEIPT_SOURCE:$receiptId',
+          );
+        }
         final soldAt = DateTime.tryParse(row['sold_at']?.toString() ?? '');
         if (soldAt == null) {
           throw FormatException('RESTAURANT_EXPORT_INVALID_SOLD_AT:$receiptId');
@@ -131,6 +181,75 @@ RestaurantSalesExport createRestaurantSalesExport(
           throw FormatException(
             'RESTAURANT_EXPORT_BUSINESS_DATE_MISMATCH:$receiptId',
           );
+        }
+
+        final isRedInvoice = row['is_red_invoice'] == true;
+        final redInvoiceStatus =
+            row['red_invoice_status']?.toString() ??
+            (isRedInvoice ? 'ready' : '');
+        final buyerTaxCode = row['buyer_tax_code']?.toString().trim() ?? '';
+        final buyerLegalName = row['buyer_legal_name']?.toString().trim() ?? '';
+        final buyerAddress = row['buyer_address']?.toString().trim() ?? '';
+        final rawLines = row['line_items'];
+        final lines = rawLines is List
+            ? rawLines
+                  .whereType<Map>()
+                  .map((rawLine) {
+                    final line = Map<String, dynamic>.from(rawLine);
+                    return RestaurantSalesLineItem(
+                      name: _requiredText(
+                        line['display_name'] ?? line['name'],
+                        'RESTAURANT_EXPORT_INVALID_LINE_NAME:$receiptId',
+                      ),
+                      quantity: _positiveDouble(
+                        line['quantity'],
+                        'RESTAURANT_EXPORT_INVALID_LINE_QUANTITY:$receiptId',
+                      ),
+                      unitPrice: _nonNegativeDouble(
+                        line['unit_price'],
+                        'RESTAURANT_EXPORT_INVALID_UNIT_PRICE:$receiptId',
+                      ),
+                      supplyAmount: _nonNegativeDouble(
+                        line['total_amount_ex_tax'] ?? line['supply_amount'],
+                        'RESTAURANT_EXPORT_INVALID_SUPPLY_AMOUNT:$receiptId',
+                      ),
+                      vatRate: _nonNegativeDouble(
+                        line['vat_rate'],
+                        'RESTAURANT_EXPORT_INVALID_VAT_RATE:$receiptId',
+                      ),
+                      vatAmount: _nonNegativeDouble(
+                        line['vat_amount'],
+                        'RESTAURANT_EXPORT_INVALID_VAT_AMOUNT:$receiptId',
+                      ),
+                    );
+                  })
+                  .toList(growable: false)
+            : const <RestaurantSalesLineItem>[];
+
+        final receiptGross = _nonNegativeDouble(
+          row['gross_sales'],
+          'RESTAURANT_EXPORT_INVALID_RECEIPT_AMOUNT:$receiptId',
+        );
+        final issues = <String>[
+          if (lines.isEmpty) 'MISSING_LINE_ITEMS',
+          if (isRedInvoice && buyerTaxCode.isEmpty) 'MISSING_BUYER_TAX_CODE',
+          if (isRedInvoice && buyerLegalName.isEmpty)
+            'MISSING_BUYER_LEGAL_NAME',
+          if (isRedInvoice && buyerAddress.isEmpty) 'MISSING_BUYER_ADDRESS',
+          if (isRedInvoice &&
+              !const {
+                'ready',
+                'exported',
+                'completed',
+              }.contains(redInvoiceStatus))
+            'RED_INVOICE_NOT_READY',
+        ];
+        final lineGross = lines.fold<double>(
+          0,
+          (total, line) => total + line.grossAmount,
+        );
+        if (lines.isNotEmpty && (lineGross - receiptGross).abs() > 1) {
+          issues.add('AMOUNT_MISMATCH');
         }
 
         return RestaurantSalesReceipt(
@@ -143,16 +262,20 @@ RestaurantSalesExport createRestaurantSalesExport(
             'RESTAURANT_EXPORT_INVALID_STORE_NAME:$receiptId',
           ),
           receiptId: receiptId,
-          receiptSource: _requiredText(
-            row['receipt_source'],
-            'RESTAURANT_EXPORT_INVALID_RECEIPT_SOURCE:$receiptId',
-          ),
-          salesChannel: row['sales_channel']?.toString().trim() ?? '',
-          grossSales: _nonNegativeDouble(
-            row['gross_sales'],
-            'RESTAURANT_EXPORT_INVALID_RECEIPT_AMOUNT:$receiptId',
-          ),
+          receiptSource: receiptSource,
+          salesChannel: row['sales_channel']?.toString() ?? '',
+          grossSales: receiptGross,
           soldAt: soldAt,
+          paymentMethod: _requiredText(
+            row['payment_method'],
+            'RESTAURANT_EXPORT_INVALID_PAYMENT_METHOD:$receiptId',
+          ),
+          isRedInvoice: isRedInvoice,
+          buyerTaxCode: buyerTaxCode,
+          buyerLegalName: buyerLegalName,
+          buyerAddress: buyerAddress,
+          lineItems: List.unmodifiable(lines),
+          issues: List.unmodifiable(issues),
         );
       }).toList()..sort((a, b) {
         final timeOrder = a.soldAt.compareTo(b.soldAt);
@@ -162,34 +285,16 @@ RestaurantSalesExport createRestaurantSalesExport(
   if (receipts.length != receiptCount) {
     throw const FormatException('RESTAURANT_EXPORT_RECEIPT_COUNT_MISMATCH');
   }
+  if (receipts.map((receipt) => receipt.receiptId).toSet().length !=
+      receiptCount) {
+    throw const FormatException('RESTAURANT_EXPORT_DUPLICATE_RECEIPT');
+  }
   final receiptGrossSales = receipts.fold<double>(
     0,
     (sum, receipt) => sum + receipt.grossSales,
   );
-  if ((receiptGrossSales - grossSales).abs() > 0.005) {
+  if ((receiptGrossSales - grossSales).abs() > 1) {
     throw const FormatException('RESTAURANT_EXPORT_GROSS_SALES_MISMATCH');
-  }
-
-  final hourlyCounts = <String, int>{};
-  final hourlySales = <String, double>{};
-  for (final receipt in receipts) {
-    hourlyCounts.update(
-      receipt.hourBucket,
-      (value) => value + 1,
-      ifAbsent: () => 1,
-    );
-    hourlySales.update(
-      receipt.hourBucket,
-      (value) => value + receipt.grossSales,
-      ifAbsent: () => receipt.grossSales,
-    );
-  }
-  final hourlyTotals = <String, RestaurantSalesHourlyTotal>{};
-  for (final hour in hourlyCounts.keys.toList()..sort()) {
-    hourlyTotals[hour] = RestaurantSalesHourlyTotal(
-      receiptCount: hourlyCounts[hour]!,
-      grossSales: hourlySales[hour]!,
-    );
   }
 
   return RestaurantSalesExport(
@@ -199,86 +304,116 @@ RestaurantSalesExport createRestaurantSalesExport(
     grossSales: grossSales,
     finalizedAt: finalizedAt,
     receipts: List.unmodifiable(receipts),
-    hourlyTotals: Map.unmodifiable(hourlyTotals),
   );
 }
 
 List<int> buildRestaurantSalesWorkbook(RestaurantSalesExport export) {
+  if (!export.isReadyForDownload) {
+    throw const FormatException('RESTAURANT_EXPORT_BLOCKING_ISSUES');
+  }
+
   final workbook = Excel.createExcel();
-  workbook.rename('Sheet1', 'Sales');
-  workbook.setDefaultSheet('Sales');
+  workbook.rename('Sheet1', 'Hóa đơn GTGT');
+  workbook.setDefaultSheet('Hóa đơn GTGT');
+  final sheet = workbook['Hóa đơn GTGT'];
 
-  final sales = workbook['Sales'];
-  sales.appendRow([
-    TextCellValue('Store'),
-    TextCellValue('Time'),
-    TextCellValue('Amount'),
-    TextCellValue('Source'),
-    TextCellValue('Sales Channel'),
-    TextCellValue('Receipt ID'),
-    TextCellValue('Hour'),
-    TextCellValue('Sold At (HCM)'),
-  ]);
-  for (final receipt in export.receipts) {
-    final hcm = receipt.soldAtHcm;
-    sales.appendRow([
-      TextCellValue(receipt.storeName),
-      TextCellValue(_hcmTime(hcm)),
-      DoubleCellValue(receipt.grossSales),
-      TextCellValue(receipt.receiptSource),
-      TextCellValue(receipt.salesChannel),
-      TextCellValue(receipt.receiptId),
-      TextCellValue(receipt.hourBucket),
-      TextCellValue('${export.businessDate} ${_hcmTime(hcm)}'),
-    ]);
+  for (final instruction in _misaInstructions) {
+    sheet.appendRow([TextCellValue(instruction)]);
   }
-  for (var index = 0; index < 8; index++) {
-    sales.setColumnWidth(index, index == 5 ? 36 : 20);
+  sheet.appendRow([TextCellValue('')]);
+  sheet.appendRow(_misaHeaders.map(TextCellValue.new).toList());
+
+  for (
+    var receiptIndex = 0;
+    receiptIndex < export.receipts.length;
+    receiptIndex += 1
+  ) {
+    final receipt = export.receipts[receiptIndex];
+    final buyerName = receipt.isRedInvoice
+        ? receipt.buyerLegalName
+        : 'Bán cho người tiêu dùng';
+    for (final line in receipt.lineItems) {
+      sheet.appendRow([
+        IntCellValue(receiptIndex + 1),
+        TextCellValue(_misaDate(receipt.soldAtHcm)),
+        TextCellValue(buyerName),
+        TextCellValue(receipt.isRedInvoice ? receipt.buyerTaxCode : ''),
+        TextCellValue(receipt.isRedInvoice ? receipt.buyerAddress : ''),
+        TextCellValue(receipt.isRedInvoice ? '' : 'Bán cho người tiêu dùng'),
+        TextCellValue(''),
+        TextCellValue(''),
+        TextCellValue(''),
+        TextCellValue(_misaPaymentCode(receipt.paymentMethod)),
+        TextCellValue(line.name),
+        TextCellValue('Phần'),
+        DoubleCellValue(line.quantity),
+        DoubleCellValue(line.misaUnitPrice),
+        DoubleCellValue(line.supplyAmount),
+        DoubleCellValue(line.vatRate),
+        DoubleCellValue(line.vatAmount),
+      ]);
+    }
   }
 
-  final hourly = workbook['Hourly Summary'];
-  hourly.appendRow([
-    TextCellValue('Hour'),
-    TextCellValue('Receipt Count'),
-    TextCellValue('Amount'),
-  ]);
-  for (final entry in export.hourlyTotals.entries) {
-    hourly.appendRow([
-      TextCellValue(entry.key),
-      IntCellValue(entry.value.receiptCount),
-      DoubleCellValue(entry.value.grossSales),
-    ]);
+  for (var index = 0; index < _misaHeaders.length; index += 1) {
+    sheet.setColumnWidth(index, switch (index) {
+      2 || 4 || 5 || 10 => 28,
+      _ => 18,
+    });
   }
-  hourly.appendRow([
-    TextCellValue('Total'),
-    IntCellValue(export.receiptCount),
-    DoubleCellValue(export.grossSales),
-  ]);
-
-  final summary = workbook['Summary'];
-  summary.appendRow([
-    TextCellValue('Business Date'),
-    TextCellValue(export.businessDate),
-  ]);
-  summary.appendRow([TextCellValue('Status'), TextCellValue('finalized')]);
-  summary.appendRow([
-    TextCellValue('Store Count'),
-    IntCellValue(export.storeCount),
-  ]);
-  summary.appendRow([
-    TextCellValue('Receipt Count'),
-    IntCellValue(export.receiptCount),
-  ]);
-  summary.appendRow([
-    TextCellValue('Gross Sales'),
-    DoubleCellValue(export.grossSales),
-  ]);
-  summary.appendRow([
-    TextCellValue('Finalized At'),
-    TextCellValue(export.finalizedAt.toIso8601String()),
-  ]);
-
   return workbook.encode() ?? <int>[];
+}
+
+const _misaInstructions = <String>[
+  'File mẫu danh sách hóa đơn để nhập vào phần mềm ',
+  'Hướng dẫn:',
+  '- Điền dữ liệu hóa đơn cần lập trên phần mềm vào các cột tương ứng trên file này',
+  '- Các cột có dấu (*) là những cột bắt buộc',
+  '- Nếu muốn nhập thêm thông tin khác, người dùng có thể tự thêm cột trên file này (VD: Mã khách hàng, Mã hàng, Tỷ lệ chiết khấu,...)',
+  '- Các dòng dữ liệu phía dưới chỉ là ví dụ minh họa',
+];
+
+const _misaHeaders = <String>[
+  'Số thứ tự hóa đơn (*)',
+  'Ngày hóa đơn',
+  'Tên đơn vị mua hàng',
+  'Mã số thuế',
+  'Địa chỉ',
+  'Người mua hàng',
+  'Email',
+  'Số điện thoại',
+  'Căn cước công dân',
+  'Hình thức thanh toán (*)',
+  'Tên hàng hóa/dịch vụ (*)',
+  'ĐVT',
+  'Số lượng',
+  'Đơn giá',
+  'Thành tiền',
+  'Thuế suất GTGT (%)',
+  'Tiền thuế GTGT',
+];
+
+String _misaDate(DateTime value) =>
+    '${value.day.toString().padLeft(2, '0')}/'
+    '${value.month.toString().padLeft(2, '0')}/'
+    '${value.year.toString().padLeft(4, '0')}';
+
+String _misaPaymentCode(String value) {
+  final normalized = value.trim().toLowerCase();
+  if (normalized == 'tm' ||
+      normalized.contains('cash') ||
+      normalized.contains('tiền mặt') ||
+      normalized.contains('tien mat')) {
+    return 'TM';
+  }
+  if (normalized == 'ck' ||
+      normalized.contains('card') ||
+      normalized.contains('transfer') ||
+      normalized.contains('thẻ') ||
+      normalized.contains('chuyển khoản')) {
+    return 'CK';
+  }
+  return value.trim();
 }
 
 String _requiredText(dynamic value, String error) {
@@ -310,7 +445,8 @@ double _nonNegativeDouble(dynamic value, String error) {
   return parsed;
 }
 
-String _hcmTime(DateTime value) =>
-    '${value.hour.toString().padLeft(2, '0')}:'
-    '${value.minute.toString().padLeft(2, '0')}:'
-    '${value.second.toString().padLeft(2, '0')}';
+double _positiveDouble(dynamic value, String error) {
+  final parsed = _nonNegativeDouble(value, error);
+  if (parsed <= 0) throw FormatException(error);
+  return parsed;
+}

@@ -33,14 +33,8 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
   bool _isSubmitting = false;
 
   final _taxCodeCtrl = TextEditingController();
-  final _unitCodeCtrl = TextEditingController();
   final _companyCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
-  final _buyerFullNameCtrl = TextEditingController();
-  final _emailCtrl = TextEditingController();
-  final _emailCcCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
-  final _buyerIdCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   final _deferredNoteCtrl = TextEditingController();
   String _deferredSource = 'business_card';
@@ -53,14 +47,8 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
   @override
   void dispose() {
     _taxCodeCtrl.dispose();
-    _unitCodeCtrl.dispose();
     _companyCtrl.dispose();
     _addressCtrl.dispose();
-    _buyerFullNameCtrl.dispose();
-    _emailCtrl.dispose();
-    _emailCcCtrl.dispose();
-    _phoneCtrl.dispose();
-    _buyerIdCtrl.dispose();
     _deferredNoteCtrl.dispose();
     super.dispose();
   }
@@ -77,15 +65,8 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
       );
       if (!mounted) return;
       if (cached != null) {
-        _unitCodeCtrl.text = cached['buyer_unit_code'] ?? '';
         _companyCtrl.text = cached['tax_company_name'] ?? '';
         _addressCtrl.text = cached['tax_address'] ?? '';
-        _buyerFullNameCtrl.text =
-            cached['buyer_full_name'] ?? cached['tax_buyer_name'] ?? '';
-        _phoneCtrl.text = cached['buyer_phone'] ?? '';
-        _buyerIdCtrl.text = cached['buyer_id'] ?? '';
-        _emailCtrl.text = cached['receiver_email'] ?? '';
-        _emailCcCtrl.text = cached['receiver_email_cc'] ?? '';
         setState(() {
           _lookupState = _BuyerLookupState.cacheHit;
           _lookupNote = context.l10n.redInvoiceCacheHitNote;
@@ -114,18 +95,9 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
       await einvoiceService.requestRedInvoice(
         orderId: widget.orderId,
         storeId: widget.storeId,
-        receiverEmail: _emailCtrl.text.trim(),
         buyerTaxCode: _taxCodeCtrl.text.trim(),
-        buyerName: _companyCtrl.text.trim(),
+        buyerLegalName: _companyCtrl.text.trim(),
         buyerAddress: _addressCtrl.text.trim(),
-        unitCode: _unitCodeCtrl.text.trim(),
-        unitName: _companyCtrl.text.trim(),
-        buyerFullName: _buyerFullNameCtrl.text.trim(),
-        buyerTel: _phoneCtrl.text.trim(),
-        buyerId: _buyerIdCtrl.text.trim(),
-        receiverEmailCc: _emailCcCtrl.text.trim().isEmpty
-            ? null
-            : _emailCcCtrl.text.trim(),
       );
       if (!mounted) return;
       Navigator.of(context).pop(true); // true = submitted
@@ -414,13 +386,6 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
           const SizedBox(height: 10),
           _lookupStatusPanel(),
           const SizedBox(height: 10),
-          _label(l10n.redInvoiceUnitCode),
-          _field(
-            controller: _unitCodeCtrl,
-            hint: l10n.redInvoiceUnitCodeHint,
-            required: false,
-          ),
-          const SizedBox(height: 10),
           _label(l10n.redInvoiceCompanyName),
           _field(
             controller: _companyCtrl,
@@ -439,51 +404,6 @@ class _RedInvoiceModalState extends State<RedInvoiceModal> {
             validator: (value) => value == null || value.trim().isEmpty
                 ? l10n.redInvoiceAddressRequired
                 : null,
-          ),
-          const SizedBox(height: 10),
-          _label(l10n.redInvoiceBuyerFullName),
-          _field(
-            controller: _buyerFullNameCtrl,
-            hint: l10n.redInvoiceBuyerFullNameHint,
-            required: false,
-          ),
-          const SizedBox(height: 10),
-          _label(l10n.redInvoicePhone),
-          _field(
-            controller: _phoneCtrl,
-            hint: l10n.redInvoicePhoneHint,
-            required: false,
-            keyboardType: TextInputType.phone,
-          ),
-          const SizedBox(height: 10),
-          _label(l10n.redInvoiceBuyerId),
-          _field(
-            controller: _buyerIdCtrl,
-            hint: l10n.redInvoiceBuyerIdHint,
-            required: false,
-          ),
-          const SizedBox(height: 10),
-          _label(l10n.redInvoiceEmailRequiredLabel),
-          _field(
-            controller: _emailCtrl,
-            hint: l10n.redInvoiceEmailHint,
-            required: true,
-            keyboardType: TextInputType.emailAddress,
-            validator: (v) {
-              if (v == null || v.trim().isEmpty) {
-                return l10n.redInvoiceEmailRequired;
-              }
-              if (!v.contains('@')) return l10n.redInvoiceInvalidEmail;
-              return null;
-            },
-          ),
-          const SizedBox(height: 10),
-          _label(l10n.redInvoiceCcEmailOptional),
-          _field(
-            controller: _emailCcCtrl,
-            hint: l10n.redInvoiceCcEmailHint,
-            required: false,
-            keyboardType: TextInputType.emailAddress,
           ),
           const SizedBox(height: 16),
         ],
