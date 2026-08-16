@@ -11,6 +11,8 @@ void main() {
       'supabase/migrations/20260816120000_unified_restaurant_misa_sales_report.sql';
   const pilotMigration =
       'supabase/migrations/20260816153000_sample_misa_sales_pilot.sql';
+  const allStoresMigration =
+      'supabase/migrations/20260816170000_restaurant_sales_export_all_stores.sql';
   const pilotPreflight = 'scripts/preflight_sample_misa_sales_pilot.sql';
   const screen =
       'lib/features/restaurant_sales_export/restaurant_sales_export_screen.dart';
@@ -18,12 +20,24 @@ void main() {
 
   test('unified RPC exports finalized Restaurant POS receipts only', () {
     final sql = readRepoFile(migration);
+    final finalSql = readRepoFile(allStoresMigration);
+    final finalFunction = finalSql.substring(
+      finalSql.indexOf(
+        'CREATE OR REPLACE FUNCTION public.get_restaurant_daily_sales_export',
+      ),
+      finalSql.indexOf(
+        'REVOKE ALL ON FUNCTION public.get_restaurant_daily_sales_export',
+      ),
+    );
 
     expect(sql, contains('get_restaurant_daily_sales_export'));
     expect(sql, contains('public.is_super_admin()'));
     expect(sql, contains('restaurant_daily_sales_finalizations'));
     expect(sql, contains("v_finalization.status <> 'finalized'"));
     expect(sql, contains('restaurant_cutoff_policies'));
+    expect(finalFunction, isNot(contains('restaurant_cutoff_policies')));
+    expect(finalSql, contains("AT TIME ZONE 'Asia/Ho_Chi_Minh'"));
+    expect(finalSql, contains('payment.is_revenue = true'));
     expect(sql, contains('77000000-0000-0000-0000-000000000001'));
     expect(sql, contains("'restaurant_pos'::text AS source_system"));
     expect(sql, contains("candidate.source_system = 'restaurant_pos'"));
