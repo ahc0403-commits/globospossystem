@@ -1538,6 +1538,21 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       );
                       return;
                     }
+                    final billableMenuItems = selectedOrder.items
+                        .where(
+                          (item) =>
+                              item.status.toLowerCase() != 'cancelled' &&
+                              item.itemType.toLowerCase() == 'menu_item' &&
+                              !item.isServiceItem,
+                        )
+                        .toList(growable: false);
+                    final serviceItems =
+                        canManageServiceItems &&
+                            !selectedOrder.isStaffMeal &&
+                            selectedOrder.paymentCount == 0 &&
+                            billableMenuItems.length > 1
+                        ? billableMenuItems
+                        : const <OrderItem>[];
                     final result = await showDialog<Map<String, dynamic>?>(
                       context: context,
                       barrierDismissible: false,
@@ -1547,14 +1562,30 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                         storeId: storeId,
                         menuSubtotal: selectedOrder.menuSubtotal,
                         serviceChargeTotal: selectedOrder.serviceChargeTotal,
+                        serviceItems: serviceItems,
+                        onProvideServiceItem: serviceItems.isEmpty
+                            ? null
+                            : (item, reason, managerPin) =>
+                                  notifier.markOrderItemService(
+                                    storeId: storeId,
+                                    itemId: item.id,
+                                    reason: reason,
+                                    managerPin: managerPin,
+                                  ),
                       ),
                     );
                     if (result != null && context.mounted) {
+                      final providedServiceItem =
+                          result['kind'] == 'service_item';
                       showSuccessToast(
                         context,
-                        context.l10n.cashierDiscountApplied,
+                        providedServiceItem
+                            ? context.l10n.cashierServiceItemMarked
+                            : context.l10n.cashierDiscountApplied,
                       );
-                      await notifier.loadOrders(storeId);
+                      if (!providedServiceItem) {
+                        await notifier.loadOrders(storeId);
+                      }
                     }
                   },
                   onVoidDiscount: () async {
