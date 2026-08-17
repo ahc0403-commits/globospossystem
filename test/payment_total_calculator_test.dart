@@ -225,4 +225,63 @@ void main() {
     expect(quote.vatTotal, 10400);
     expect(quote.payableTotal, 130400);
   });
+
+  test('menu-scoped promotion discounts only its allocated line', () {
+    final quote = calculatePaymentQuote(
+      vatPricingMode: vatPricingModeExclusive,
+      serviceChargeEnabled: false,
+      serviceChargeRate: 0,
+      lines: const [
+        PaymentQuoteLine(
+          id: 'promoted-food',
+          unitPrice: 59000,
+          quantity: 1,
+          status: 'served',
+          itemType: 'menu_item',
+          vatCategory: 'food',
+          discountAmount: 12744,
+        ),
+        PaymentQuoteLine(
+          id: 'regular-food',
+          unitPrice: 41000,
+          quantity: 1,
+          status: 'served',
+          itemType: 'menu_item',
+          vatCategory: 'food',
+        ),
+      ],
+    );
+
+    expect(quote.menuSubtotal, 108000);
+    expect(quote.discountTotal, 12744);
+    expect(quote.vatTotal, 7056);
+    expect(quote.payableTotal, 95256);
+  });
+
+  test(
+    'explicit line allocations override stale aggregate discount amount',
+    () {
+      final quote = calculatePaymentQuote(
+        vatPricingMode: vatPricingModeExclusive,
+        serviceChargeEnabled: false,
+        serviceChargeRate: 0,
+        discountTotal: 59000,
+        lines: const [
+          PaymentQuoteLine(
+            id: 'food-line',
+            unitPrice: 59000,
+            quantity: 1,
+            status: 'served',
+            itemType: 'menu_item',
+            vatCategory: 'food',
+            discountAmount: 12744,
+          ),
+        ],
+      );
+
+      expect(quote.menuSubtotal, 63720);
+      expect(quote.discountTotal, 12744);
+      expect(quote.payableTotal, 50976);
+    },
+  );
 }

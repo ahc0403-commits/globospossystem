@@ -13,7 +13,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap;
-SELECT plan(13);
+SELECT plan(14);
 
 CREATE TEMP TABLE _discount_staff_meal_results (
   scenario text,
@@ -37,10 +37,17 @@ $$;
 \set kitchen_auth  '''d5c00000-0000-4000-8000-0000000000a2'''
 \set cashier_auth  '''d5c00000-0000-4000-8000-0000000000a3'''
 \set menu_food     '''d5c00000-0000-4000-8000-0000000000f1'''
+\set menu_regular  '''d5c00000-0000-4000-8000-0000000000f3'''
 \set ingredient    '''d5c00000-0000-4000-8000-0000000000f2'''
 
 INSERT INTO public.tax_entity (id, tax_code, name, owner_type, einvoice_provider, data_source)
 VALUES (:tax_entity_id, '0318453299', 'Discount Staff Meal Test Entity', 'internal', 'meinvoice', 'VNPT_EPAY');
+
+INSERT INTO public.tax_entity_brands (tax_entity_id, brand_id)
+SELECT :tax_entity_id, b.id
+FROM public.brands b
+WHERE b.code = 'globos_default'
+LIMIT 1;
 
 INSERT INTO public.restaurants (id, name, address, is_active, brand_id, tax_entity_id, vat_pricing_mode)
 SELECT
@@ -80,7 +87,9 @@ FROM public.users u
 WHERE u.auth_id IN (:admin_auth, :waiter_auth, :kitchen_auth, :cashier_auth);
 
 INSERT INTO public.menu_items (id, restaurant_id, name, price, is_available, vat_category)
-VALUES (:menu_food, :store_id, 'DSM Food', 100000, true, 'food');
+VALUES
+  (:menu_food, :store_id, 'DSM Food', 100000, true, 'food'),
+  (:menu_regular, :store_id, 'DSM Regular Food', 41000, true, 'food');
 
 INSERT INTO public.inventory_items (id, restaurant_id, name, quantity, unit, current_stock, is_active)
 VALUES (:ingredient, :store_id, 'DSM Ingredient', 1000, 'g', 1000, true);
@@ -94,7 +103,8 @@ VALUES
   (:store_id, 'DSM2', 4, 'available'),
   (:store_id, 'DSM3', 4, 'available'),
   (:store_id, 'DSM4', 4, 'available'),
-  (:store_id, 'DSM5', 4, 'available');
+  (:store_id, 'DSM5', 4, 'available'),
+  (:store_id, 'DSM6', 4, 'available');
 
 DO $setup_pin$
 BEGIN
@@ -181,10 +191,20 @@ $$;
 
 DO $process_payment_contract$
 DECLARE
+  v_wrapper_def text;
   v_def text;
 BEGIN
   SELECT pg_get_functiondef('public.process_payment(uuid,uuid,numeric,text)'::regprocedure)
+  INTO v_wrapper_def;
+
+  SELECT pg_get_functiondef(
+    'public.process_payment_without_scoped_promotions(uuid,uuid,numeric,text)'::regprocedure
+  )
   INTO v_def;
+
+  IF v_wrapper_def !~ 'process_payment_without_scoped_promotions' THEN
+    RAISE EXCEPTION 'process_payment must delegate to the verified payment core';
+  END IF;
 
   IF v_def ~* 'INSERT\s+INTO\s+(public\.)?einvoice_jobs' THEN
     RAISE EXCEPTION 'process_payment must not insert legacy einvoice_jobs';
@@ -741,6 +761,114 @@ EXCEPTION WHEN OTHERS THEN
   VALUES ('runtime staff meal non-service rejected', false, SQLERRM);
 END;
 $runtime_staff_meal_non_service_rejected$;
+
+DO $runtime_selected_menu_promotion$
+DECLARE
+  v_order public.orders%ROWTYPE;
+  v_payment public.payments%ROWTYPE;
+  v_discount public.order_discounts%ROWTYPE;
+  v_allocation_count integer;
+  v_allocation_total numeric;
+  v_promoted_line_total numeric;
+  v_regular_line_total numeric;
+BEGIN
+  PERFORM pg_temp.act_as('d5c00000-0000-4000-8000-0000000000a0');
+  PERFORM public.upsert_store_promotion_v2(
+    'd5c00000-0000-4000-8000-000000000001',
+    NULL,
+    'Selected menu 20 percent',
+    20,
+    now() - interval '1 hour',
+    now() + interval '1 hour',
+    'selected_items',
+    ARRAY['d5c00000-0000-4000-8000-0000000000f1'::uuid],
+    true
+  );
+
+  PERFORM pg_temp.act_as('d5c00000-0000-4000-8000-0000000000a1');
+  v_order := public.create_order(
+    'd5c00000-0000-4000-8000-000000000001',
+    pg_temp.fixture_table('DSM6'),
+    jsonb_build_array(
+      jsonb_build_object(
+        'menu_item_id',
+        'd5c00000-0000-4000-8000-0000000000f1',
+        'quantity',
+        1
+      ),
+      jsonb_build_object(
+        'menu_item_id',
+        'd5c00000-0000-4000-8000-0000000000f3',
+        'quantity',
+        1
+      )
+    )
+  );
+  PERFORM pg_temp.ready_order(v_order.id);
+
+  SELECT * INTO v_discount
+  FROM public.order_discounts
+  WHERE order_id = v_order.id AND status = 'active';
+
+  SELECT count(*), COALESCE(sum(discount_amount), 0)
+  INTO v_allocation_count, v_allocation_total
+  FROM public.order_discount_lines
+  WHERE order_discount_id = v_discount.id;
+
+  IF v_discount.approved_via <> 'scheduled_promotion'
+     OR v_discount.discount_mode <> 'percent'
+     OR v_discount.discount_value <> 20
+     OR v_discount.discount_amount <> 21600
+     OR v_allocation_count <> 1
+     OR v_allocation_total <> 21600 THEN
+    RAISE EXCEPTION
+      'selected promotion quote mismatch: via %, mode %, value %, amount %, lines %, allocation %',
+      v_discount.approved_via,
+      v_discount.discount_mode,
+      v_discount.discount_value,
+      v_discount.discount_amount,
+      v_allocation_count,
+      v_allocation_total;
+  END IF;
+
+  PERFORM pg_temp.act_as('d5c00000-0000-4000-8000-0000000000a3');
+  v_payment := public.process_payment(
+    v_order.id,
+    'd5c00000-0000-4000-8000-000000000001',
+    130680,
+    'CASH'
+  );
+
+  SELECT paying_amount_inc_tax INTO v_promoted_line_total
+  FROM public.order_items
+  WHERE order_id = v_order.id
+    AND menu_item_id = 'd5c00000-0000-4000-8000-0000000000f1';
+  SELECT paying_amount_inc_tax INTO v_regular_line_total
+  FROM public.order_items
+  WHERE order_id = v_order.id
+    AND menu_item_id = 'd5c00000-0000-4000-8000-0000000000f3';
+
+  IF v_payment.amount <> 130680
+     OR v_promoted_line_total <> 86400
+     OR v_regular_line_total <> 44280 THEN
+    RAISE EXCEPTION
+      'selected promotion payment mismatch: payment %, promoted %, regular %',
+      v_payment.amount,
+      v_promoted_line_total,
+      v_regular_line_total;
+  END IF;
+
+  INSERT INTO _discount_staff_meal_results
+  VALUES (
+    'runtime selected-menu promotion',
+    true,
+    '20% allocation applies only to the selected VAT-inclusive menu line'
+  );
+EXCEPTION WHEN OTHERS THEN
+  INSERT INTO _discount_staff_meal_results
+  VALUES ('runtime selected-menu promotion', false, SQLERRM);
+END;
+$runtime_selected_menu_promotion$;
 
 SELECT ok(ok, scenario || ': ' || detail)
 FROM _discount_staff_meal_results

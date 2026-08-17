@@ -12,6 +12,7 @@ class PaymentQuoteLine {
     this.vatCategory,
     this.vatRate,
     this.payingAmountIncTax,
+    this.discountAmount = 0,
   });
 
   final String id;
@@ -23,6 +24,7 @@ class PaymentQuoteLine {
   final String? vatCategory;
   final double? vatRate;
   final double? payingAmountIncTax;
+  final double discountAmount;
 }
 
 class PaymentQuoteResult {
@@ -60,6 +62,7 @@ PaymentQuoteResult calculatePaymentQuote({
   var serviceItemTotal = 0.0;
   var fixedChargeTotal = 0.0;
   var hasExistingServiceCharge = false;
+  var explicitDiscountCents = 0;
   final menuVatLines = <_PaymentVatLine>[];
 
   for (final line in lines) {
@@ -116,8 +119,13 @@ PaymentQuoteResult calculatePaymentQuote({
         id: line.id,
         incTaxCents: (incTax * 100).round(),
         vatRate: vatRate,
+        explicitDiscountCents: (line.discountAmount * 100).round(),
       ),
     );
+    explicitDiscountCents += (line.discountAmount * 100)
+        .round()
+        .clamp(0, (incTax * 100).round())
+        .toInt();
     if (vatRate == 10.0) {
       alcoholPretaxSubtotal += pretax;
     } else {
@@ -135,12 +143,14 @@ PaymentQuoteResult calculatePaymentQuote({
       ? existingServiceChargeTotal
       : generatedServiceCharge.total;
 
-  final resolvedDiscount = _roundMoney(
-    discountTotal.clamp(0, menuSubtotal).toDouble(),
-  );
+  final hasExplicitDiscounts = explicitDiscountCents > 0;
+  final resolvedDiscount = hasExplicitDiscounts
+      ? _roundMoney(explicitDiscountCents / 100)
+      : _roundMoney(discountTotal.clamp(0, menuSubtotal).toDouble());
   final menuVatTotal = _calculateDiscountedMenuVat(
     menuVatLines,
     discountCents: (resolvedDiscount * 100).round(),
+    useExplicitDiscounts: hasExplicitDiscounts,
   );
   final serviceChargeVatTotal = hasExistingServiceCharge
       ? existingServiceChargeVatTotal
@@ -189,6 +199,7 @@ PaymentQuoteResult calculatePaymentQuote({
 double _calculateDiscountedMenuVat(
   List<_PaymentVatLine> lines, {
   required int discountCents,
+  bool useExplicitDiscounts = false,
 }) {
   final menuTotalCents = lines.fold<int>(
     0,
@@ -198,24 +209,36 @@ double _calculateDiscountedMenuVat(
 
   final cappedDiscountCents = discountCents.clamp(0, menuTotalCents).toInt();
   final allocations = <_DiscountAllocation>[];
-  var allocatedCents = 0;
-  for (final line in lines) {
-    final exact = cappedDiscountCents * line.incTaxCents / menuTotalCents;
-    final base = exact.floor();
-    allocatedCents += base;
-    allocations.add(
-      _DiscountAllocation(line: line, cents: base, fraction: exact - base),
-    );
-  }
+  if (useExplicitDiscounts) {
+    for (final line in lines) {
+      allocations.add(
+        _DiscountAllocation(
+          line: line,
+          cents: line.explicitDiscountCents.clamp(0, line.incTaxCents).toInt(),
+          fraction: 0,
+        ),
+      );
+    }
+  } else {
+    var allocatedCents = 0;
+    for (final line in lines) {
+      final exact = cappedDiscountCents * line.incTaxCents / menuTotalCents;
+      final base = exact.floor();
+      allocatedCents += base;
+      allocations.add(
+        _DiscountAllocation(line: line, cents: base, fraction: exact - base),
+      );
+    }
 
-  allocations.sort((left, right) {
-    final fractionOrder = right.fraction.compareTo(left.fraction);
-    if (fractionOrder != 0) return fractionOrder;
-    return left.line.id.compareTo(right.line.id);
-  });
-  final remainder = cappedDiscountCents - allocatedCents;
-  for (var index = 0; index < remainder; index++) {
-    allocations[index].cents += 1;
+    allocations.sort((left, right) {
+      final fractionOrder = right.fraction.compareTo(left.fraction);
+      if (fractionOrder != 0) return fractionOrder;
+      return left.line.id.compareTo(right.line.id);
+    });
+    final remainder = cappedDiscountCents - allocatedCents;
+    for (var index = 0; index < remainder; index++) {
+      allocations[index].cents += 1;
+    }
   }
 
   var vatTotal = 0.0;
@@ -233,11 +256,13 @@ class _PaymentVatLine {
     required this.id,
     required this.incTaxCents,
     required this.vatRate,
+    this.explicitDiscountCents = 0,
   });
 
   final String id;
   final int incTaxCents;
   final double vatRate;
+  final int explicitDiscountCents;
 }
 
 class _DiscountAllocation {

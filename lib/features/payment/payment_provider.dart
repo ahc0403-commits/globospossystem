@@ -143,6 +143,10 @@ class ActiveOrderDiscount {
     required this.value,
     required this.amount,
     required this.status,
+    required this.approvedVia,
+    this.reason,
+    this.couponCode,
+    this.lineDiscounts = const {},
   });
 
   final String id;
@@ -151,8 +155,29 @@ class ActiveOrderDiscount {
   final double value;
   final double amount;
   final String status;
+  final String approvedVia;
+  final String? reason;
+  final String? couponCode;
+  final Map<String, double> lineDiscounts;
+
+  bool get isScheduledPromotion => approvedVia == 'scheduled_promotion';
+  bool get hasLineDiscounts => lineDiscounts.isNotEmpty;
 
   factory ActiveOrderDiscount.fromJson(Map<String, dynamic> json) {
+    final lineDiscounts = <String, double>{};
+    final allocationsRaw = json['order_discount_lines'];
+    if (allocationsRaw is List) {
+      for (final allocationRaw in allocationsRaw) {
+        if (allocationRaw is! Map) continue;
+        final allocation = Map<String, dynamic>.from(allocationRaw);
+        final orderItemId = allocation['order_item_id']?.toString() ?? '';
+        if (orderItemId.isEmpty) continue;
+        lineDiscounts[orderItemId] = _toDoubleValue(
+          allocation['discount_amount'],
+        );
+      }
+    }
+
     return ActiveOrderDiscount(
       id: json['id'].toString(),
       type: json['discount_type']?.toString() ?? 'manual',
@@ -160,6 +185,10 @@ class ActiveOrderDiscount {
       value: _toDoubleValue(json['discount_value']),
       amount: _toDoubleValue(json['discount_amount']),
       status: json['status']?.toString() ?? 'active',
+      approvedVia: json['approved_via']?.toString() ?? 'manager_pin',
+      reason: json['reason']?.toString(),
+      couponCode: json['coupon_code']?.toString(),
+      lineDiscounts: lineDiscounts,
     );
   }
 }
@@ -386,7 +415,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
       final response = await supabase
           .from('orders')
           .select(
-            'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, paying_amount_inc_tax, combo_components, menu_items(name, name_vi, name_en, vat_category))',
+            'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status, approved_via, reason, coupon_code, order_discount_lines(order_item_id, discount_amount, discount_percent)), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, paying_amount_inc_tax, combo_components, menu_items(name, name_vi, name_en, vat_category))',
           )
           .eq('restaurant_id', storeId)
           // Payability is an order-status fact derived server-side by
@@ -421,11 +450,18 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
               data['order_discounts'],
             );
             final quote = calculatePaymentQuote(
-              lines: itemRows.map(_paymentQuoteLineFromRow),
+              lines: itemRows.map(
+                (row) => _paymentQuoteLineFromRow(
+                  row,
+                  lineDiscounts: activeDiscount?.lineDiscounts,
+                ),
+              ),
               vatPricingMode: storePricing.vatPricingMode,
               serviceChargeEnabled: storePricing.serviceChargeEnabled,
               serviceChargeRate: storePricing.serviceChargeRate,
-              discountTotal: activeDiscount?.amount ?? 0,
+              discountTotal: activeDiscount?.hasLineDiscounts == true
+                  ? 0
+                  : activeDiscount?.amount ?? 0,
             );
             final paidTotal = _paidTotalFromRaw(data['payments']);
             final paymentCount = _paymentCountFromRaw(data['payments']);
@@ -587,7 +623,7 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     final response = await supabase
         .from('orders')
         .select(
-          'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, paying_amount_inc_tax, combo_components, menu_items(name, name_vi, name_en, vat_category))',
+          'id, table_id, status, order_purpose, order_source, fulfillment_mode_snapshot, created_at, updated_at, tables(table_number), payments(amount_portion), order_discounts(id, discount_type, discount_mode, discount_value, discount_amount, status, approved_via, reason, coupon_code, order_discount_lines(order_item_id, discount_amount, discount_percent)), order_items(id, created_at, menu_item_id, label, display_name, unit_price, quantity, status, item_type, is_service_item, service_reason, vat_rate, paying_amount_inc_tax, combo_components, menu_items(name, name_vi, name_en, vat_category))',
         )
         .eq('restaurant_id', storeId)
         .eq('status', 'completed')
@@ -616,11 +652,18 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
         data['order_discounts'],
       );
       final quote = calculatePaymentQuote(
-        lines: itemRows.map(_paymentQuoteLineFromRow),
+        lines: itemRows.map(
+          (row) => _paymentQuoteLineFromRow(
+            row,
+            lineDiscounts: consumedDiscount?.lineDiscounts,
+          ),
+        ),
         vatPricingMode: storePricing.vatPricingMode,
         serviceChargeEnabled: storePricing.serviceChargeEnabled,
         serviceChargeRate: storePricing.serviceChargeRate,
-        discountTotal: consumedDiscount?.amount ?? 0,
+        discountTotal: consumedDiscount?.hasLineDiscounts == true
+            ? 0
+            : consumedDiscount?.amount ?? 0,
       );
       final paidTotal = _paidTotalFromRaw(data['payments']);
       final paymentCount = _paymentCountFromRaw(data['payments']);
@@ -1651,7 +1694,10 @@ int _compareOrderItemRowsByCreatedAt(
   );
 }
 
-PaymentQuoteLine _paymentQuoteLineFromRow(Map<String, dynamic> row) {
+PaymentQuoteLine _paymentQuoteLineFromRow(
+  Map<String, dynamic> row, {
+  Map<String, double>? lineDiscounts,
+}) {
   final menuItemRaw = row['menu_items'];
   String? vatCategory;
   if (menuItemRaw is Map) {
@@ -1672,6 +1718,7 @@ PaymentQuoteLine _paymentQuoteLineFromRow(Map<String, dynamic> row) {
     vatCategory: row['vat_category']?.toString() ?? vatCategory,
     vatRate: _nullableDoubleValue(row['vat_rate']),
     payingAmountIncTax: _nullableDoubleValue(row['paying_amount_inc_tax']),
+    discountAmount: lineDiscounts?[row['id']?.toString() ?? ''] ?? 0,
   );
 }
 
