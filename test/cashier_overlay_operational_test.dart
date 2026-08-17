@@ -503,7 +503,7 @@ void main() {
   });
 
   testWidgets(
-    'cashier without extra permissions can open discount but not service item controls',
+    'cashier can use manager-approved service item controls without extra permissions',
     (tester) async {
       await _pumpCashier(
         tester,
@@ -525,12 +525,22 @@ void main() {
       expect(serviceItemAction, findsOneWidget);
       expect(
         tester.widget<OutlinedButton>(serviceItemAction).onPressed,
-        isNull,
+        isNotNull,
       );
-      await _openAndDismiss(
-        tester,
-        action: find.byKey(const Key('cashier_discount_button')),
-        surface: find.byKey(const Key('cashier_discount_dialog')),
+
+      await tester.ensureVisible(
+        find.byKey(const Key('cashier_discount_button')),
+      );
+      await tester.tap(find.byKey(const Key('cashier_discount_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('cashier_discount_mode_select')));
+      await tester.pumpAndSettle();
+      expect(find.text('Tặng miễn phí món đã chọn'), findsOneWidget);
+      await tester.tap(find.text('Tặng miễn phí món đã chọn'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('cashier_discount_service_item_select')),
+        findsOneWidget,
       );
       expect(tester.takeException(), isNull);
     },

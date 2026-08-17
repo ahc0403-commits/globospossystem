@@ -1099,11 +1099,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       role,
       authState.extraPermissions,
     );
-    final canManageServiceItems = PermissionUtils.hasPermission(
-      role,
-      authState.extraPermissions,
-      'discount_apply',
-    );
+    final canManageServiceItems = canApplyDiscount;
     _ensureLoaded(storeId);
     final cutoffState = storeId == null
         ? const RestaurantCutoffState.unrestricted()
