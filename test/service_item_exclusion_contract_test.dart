@@ -7,6 +7,8 @@ String readRepoFile(String path) => File(path).readAsStringSync();
 void main() {
   const migrationPath =
       'supabase/migrations/20260707010000_service_item_exclusion_v1.sql';
+  const cashierAccessMigrationPath =
+      'supabase/migrations/20260817130000_cashier_service_item_manager_pin_access.sql';
   const dbContractPath =
       'supabase/tests/service_item_exclusion_contract_test.sql';
   const planPath = 'docs/pos/SERVICE_ITEM_EXCLUSION_V1_PLAN_2026_07_07.md';
@@ -40,6 +42,29 @@ void main() {
     expect(sql, contains('FULL_SERVICE_NOT_ALLOWED'));
     expect(sql, contains('void_active_order_discount_for_item_change'));
   });
+
+  test(
+    'cashier service-item correction relies on manager PIN instead of extra permission',
+    () {
+      final sql = readRepoFile(cashierAccessMigrationPath);
+
+      expect(sql, contains('-- production-gate: self-verifying'));
+      expect(
+        sql,
+        contains("v_actor.role NOT IN (\n       'cashier',\n       'admin',"),
+      );
+      expect(sql, isNot(contains("ARRAY['discount_apply']")));
+      expect(
+        sql.split('DO \$verify\$').first,
+        isNot(contains('SERVICE_MARK_ITEM_NOT_PROVIDED')),
+      );
+      expect(sql, contains('verify_discount_manager_pin_or_raise'));
+      expect(sql, contains('user_accessible_stores(auth.uid())'));
+      expect(sql, contains('SERVICE_MARK_AFTER_PAYMENT'));
+      expect(sql, contains('FULL_SERVICE_NOT_ALLOWED'));
+      expect(sql, contains('INSERT INTO public.audit_logs'));
+    },
+  );
 
   test('payment math excludes service items and zeros VAT residues', () {
     final sql = readRepoFile(migrationPath);
@@ -129,11 +154,8 @@ void main() {
       expect(provider, contains('final int paymentCount;'));
       expect(
         cashier,
-        contains(
-          'final canManageServiceItems = PermissionUtils.hasPermission(',
-        ),
+        contains('final canManageServiceItems = canApplyDiscount;'),
       );
-      expect(cashier, contains("'discount_apply',"));
       expect(cashier, contains('order.paymentCount == 0'));
       expect(cashier, contains('cashier_service_item_badge'));
       expect(cashier, contains('cashier_service_item_action_'));
@@ -179,7 +201,14 @@ void main() {
     expect(dbContract, contains('public.unmark_order_item_service'));
     expect(dbContract, contains('SERVICE_MARK_AFTER_PAYMENT'));
     expect(dbContract, contains('SERVICE_MARK_PURPOSE_UNSUPPORTED'));
-    expect(dbContract, contains('SERVICE_MARK_ITEM_NOT_PROVIDED'));
+    expect(dbContract, contains('runtime pending item manager approval'));
+    expect(
+      dbContract,
+      contains(
+        'cashier may mark a scoped menu only after manager PIN approval',
+      ),
+    );
+    expect(dbContract, isNot(contains('SERVICE_MARK_ITEM_NOT_PROVIDED')));
     expect(dbContract, contains('FULL_SERVICE_NOT_ALLOWED'));
     expect(dbContract, contains('SERVICE_MARK_ITEM_TYPE'));
     expect(dbContract, contains('line_items_snapshot'));

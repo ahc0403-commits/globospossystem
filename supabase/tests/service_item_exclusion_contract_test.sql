@@ -474,37 +474,34 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $runtime_split_payment_blocks_mark$;
 
-DO $runtime_unprovided_item_guard$
+DO $runtime_pending_item_manager_approval$
 DECLARE
   v_order_id uuid;
   v_item_id uuid;
+  v_item public.order_items%ROWTYPE;
 BEGIN
   v_order_id := pg_temp.new_customer_order('SIE7');
   v_item_id := pg_temp.service_candidate(v_order_id);
 
   PERFORM pg_temp.act_as('5e710000-0000-4000-8000-0000000000a3');
-  BEGIN
-    PERFORM public.mark_order_item_service(
-      v_item_id,
-      '5e710000-0000-4000-8000-000000000001',
-      'not cooked yet',
-      '2468'
-    );
-    RAISE EXCEPTION 'pending item accepted service mark';
-  EXCEPTION
-    WHEN OTHERS THEN
-      IF SQLERRM NOT LIKE '%SERVICE_MARK_ITEM_NOT_PROVIDED%' THEN
-        RAISE;
-      END IF;
-  END;
+  v_item := public.mark_order_item_service(
+    v_item_id,
+    '5e710000-0000-4000-8000-000000000001',
+    'manager approved before fulfilment',
+    '2468'
+  );
+
+  IF v_item.is_service_item IS NOT TRUE THEN
+    RAISE EXCEPTION 'pending item was not marked as manager-approved service';
+  END IF;
 
   INSERT INTO _service_item_results
-  VALUES ('runtime unprovided item guard', true, 'pending/preparing items cannot be marked service before ready or served');
+  VALUES ('runtime pending item manager approval', true, 'pending menu can be marked service before payment when manager PIN approves');
 EXCEPTION WHEN OTHERS THEN
   INSERT INTO _service_item_results
-  VALUES ('runtime unprovided item guard', false, SQLERRM);
+  VALUES ('runtime pending item manager approval', false, SQLERRM);
 END;
-$runtime_unprovided_item_guard$;
+$runtime_pending_item_manager_approval$;
 
 DO $runtime_staff_meal_blocks_mark$
 DECLARE
@@ -649,29 +646,26 @@ DO $runtime_permission_guard$
 DECLARE
   v_order_id uuid;
   v_item_id uuid;
+  v_item public.order_items%ROWTYPE;
 BEGIN
   v_order_id := pg_temp.new_customer_order('SIE6');
   PERFORM pg_temp.ready_order(v_order_id);
   v_item_id := pg_temp.service_candidate(v_order_id);
 
   PERFORM pg_temp.act_as('5e710000-0000-4000-8000-0000000000a4');
-  BEGIN
-    PERFORM public.mark_order_item_service(
-      v_item_id,
-      '5e710000-0000-4000-8000-000000000001',
-      'cashier without permission',
-      '2468'
-    );
-    RAISE EXCEPTION 'cashier without discount_apply accepted service mark';
-  EXCEPTION
-    WHEN OTHERS THEN
-      IF SQLERRM NOT LIKE '%SERVICE_MARK_FORBIDDEN%' THEN
-        RAISE;
-      END IF;
-  END;
+  v_item := public.mark_order_item_service(
+    v_item_id,
+    '5e710000-0000-4000-8000-000000000001',
+    'cashier with manager approval',
+    '2468'
+  );
+
+  IF v_item.is_service_item IS NOT TRUE THEN
+    RAISE EXCEPTION 'cashier manager-approved service mark was not persisted';
+  END IF;
 
   INSERT INTO _service_item_results
-  VALUES ('runtime permission guard', true, 'cashier without discount_apply cannot mark service item');
+  VALUES ('runtime permission guard', true, 'cashier may mark a scoped menu only after manager PIN approval');
 EXCEPTION WHEN OTHERS THEN
   INSERT INTO _service_item_results
   VALUES ('runtime permission guard', false, SQLERRM);
