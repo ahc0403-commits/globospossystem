@@ -15,6 +15,9 @@ void main() {
       expect(source, contains('promotion_settings_dialog'));
       expect(source, contains('settings_promotion_add_action'));
       expect(source, contains('settingsPromotionPercent'));
+      expect(source, contains('promotionScopeSelectedItems'));
+      expect(source, contains('promotion_menu_'));
+      expect(source, contains('settingsPromotionMenuRequired'));
     },
   );
 

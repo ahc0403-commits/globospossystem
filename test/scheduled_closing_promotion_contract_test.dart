@@ -8,6 +8,9 @@ void main() {
   final migration = File(
     'supabase/migrations/20260804010000_scheduled_closing_and_promotions.sql',
   );
+  final scopedMigration = File(
+    'supabase/migrations/20260817110000_menu_scoped_promotion_integrity.sql',
+  );
   final deploy = readProductionGateContract();
 
   test('daily close is an idempotent 23:00 Ho Chi Minh snapshot', () {
@@ -58,6 +61,26 @@ void main() {
     expect(sql, contains("'discount_percent'"));
     expect(sql, contains("'promotion_name', v_promotion.name"));
     expect(sql, contains("p.channel IN ('both', 'qr')"));
+  });
+
+  test('menu-scoped promotions persist exact order-line allocations', () {
+    final sql = scopedMigration.readAsStringSync();
+
+    expect(sql, contains('store_promotions_scope_check'));
+    expect(sql, contains('public.store_promotion_menu_items'));
+    expect(sql, contains('public.order_discount_lines'));
+    expect(sql, contains('PROMOTION_ALLOCATION_MISMATCH'));
+    expect(sql, contains('process_payment_without_scoped_promotions'));
+    expect(sql, contains("v_promo.scope = 'all_menu'"));
+  });
+
+  test('effective combo QR catalogue discounts only targeted menus', () {
+    final sql = scopedMigration.readAsStringSync();
+
+    expect(sql, contains('CREATE OR REPLACE FUNCTION public.qr_get_menu'));
+    expect(sql, contains("v_promotion.scope = 'selected_items'"));
+    expect(sql, contains('public.combo_drink_choice_count(menu.id)'));
+    expect(sql, contains('public.combo_drink_options(menu.id)'));
   });
 
   test(

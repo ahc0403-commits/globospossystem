@@ -18,6 +18,7 @@ import '../../core/services/bank_transfer_alert_sound.dart';
 import '../../core/services/bank_transfer_alert_coordinator.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/services/digital_receipt_service.dart';
+import '../../core/services/discount_service.dart';
 import '../../core/services/live_refresh_service.dart';
 import '../../core/services/menu_service.dart';
 import '../../core/layout/platform_info.dart';
@@ -63,6 +64,26 @@ String _cashierItemProgressLabel(
   'en' => 'Served $served / $ordered',
   _ => '제공 $served / $ordered',
 };
+
+String _cashierDiscountSummaryLabel(
+  BuildContext context,
+  ActiveOrderDiscount discount,
+) {
+  final l10n = context.l10n;
+  final source = discount.isScheduledPromotion
+      ? (discount.reason?.trim().isNotEmpty == true
+            ? discount.reason!.trim()
+            : l10n.cashierDiscountTypePromotion)
+      : switch (discount.type) {
+          'coupon' => l10n.cashierDiscountTypeCoupon,
+          'promotion' => l10n.cashierDiscountTypePromotion,
+          _ => l10n.cashierDiscountTypeManual,
+        };
+  final mode = discount.mode == 'percent'
+      ? '${discount.value.toStringAsFixed(discount.value % 1 == 0 ? 0 : 2)}%'
+      : l10n.cashierDiscountAmountMode;
+  return '$source · $mode';
+}
 
 String _digitalReceiptFailureCopy(
   BuildContext context,
@@ -1536,6 +1557,51 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
                       await notifier.loadOrders(storeId);
                     }
                   },
+                  onVoidDiscount: () async {
+                    final selectedOrder = paymentState.selectedOrder;
+                    final discount = selectedOrder?.activeDiscount;
+                    if (storeId == null ||
+                        selectedOrder == null ||
+                        discount == null ||
+                        discount.isScheduledPromotion ||
+                        !isOnline) {
+                      return;
+                    }
+                    final confirmed = await ToastConfirmDialog.show(
+                      context: context,
+                      title: context.l10n.cashierDiscountVoidAction,
+                      description: _cashierDiscountSummaryLabel(
+                        context,
+                        discount,
+                      ),
+                      confirmLabel: context.l10n.cashierDiscountVoidAction,
+                      cancelLabel: context.l10n.cancel,
+                      destructive: true,
+                      icon: Icons.remove_circle_outline,
+                    );
+                    if (confirmed != true) return;
+                    try {
+                      await discountService.voidOrderDiscount(
+                        discountId: discount.id,
+                        storeId: storeId,
+                        reason: 'cashier_manual_void',
+                      );
+                      await notifier.loadOrders(storeId);
+                      if (context.mounted) {
+                        showSuccessToast(
+                          context,
+                          context.l10n.cashierDiscountVoided,
+                        );
+                      }
+                    } catch (error) {
+                      if (context.mounted) {
+                        showErrorToast(
+                          context,
+                          context.l10n.cashierDiscountApplyFailed('$error'),
+                        );
+                      }
+                    }
+                  },
                   onToggleServiceItem: (item) async {
                     final selectedOrder = paymentState.selectedOrder;
                     if (storeId == null || selectedOrder == null) {
@@ -2758,6 +2824,7 @@ class _SelectedOrderView extends StatelessWidget {
     required this.onConfirmWetTissue,
     required this.onSelectMethod,
     required this.onApplyDiscount,
+    required this.onVoidDiscount,
     required this.onToggleServiceItem,
     required this.onCancelOrderItem,
     required this.onProcess,
@@ -2785,6 +2852,7 @@ class _SelectedOrderView extends StatelessWidget {
   final Future<bool> Function(int quantity) onConfirmWetTissue;
   final ValueChanged<String> onSelectMethod;
   final Future<void> Function() onApplyDiscount;
+  final Future<void> Function() onVoidDiscount;
   final Future<void> Function(OrderItem item) onToggleServiceItem;
   final Future<void> Function(OrderItem item) onCancelOrderItem;
   final Future<void> Function(String method, CashTender? cashTender) onProcess;
@@ -2847,13 +2915,14 @@ class _SelectedOrderView extends StatelessWidget {
           onOpenOrderLedger: onOpenOrderLedger,
           onToggleServiceItem: onToggleServiceItem,
           onCancelOrderItem: onCancelOrderItem,
+          onVoidDiscount: onVoidDiscount,
         );
         final paymentRail = _CashierPaymentRail(
           order: order,
           selectedMethod: effectiveSelectedMethod,
           regularMethods: regularMethods,
           canProcessNonRevenue: canProcessNonRevenue,
-          canApplyDiscount: canApplyDiscount,
+          canApplyDiscount: canApplyDiscount && order.activeDiscount == null,
           isServiceSelected: isServiceSelected,
           isProcessing: isProcessing,
           isOnline: isOnline,
@@ -2893,6 +2962,7 @@ class _SelectedOrderView extends StatelessWidget {
                       onOpenOrderLedger: onOpenOrderLedger,
                       onToggleServiceItem: onToggleServiceItem,
                       onCancelOrderItem: onCancelOrderItem,
+                      onVoidDiscount: onVoidDiscount,
                     ),
                     const SizedBox(height: 12),
                     _CashierPaymentRail(
@@ -2900,7 +2970,8 @@ class _SelectedOrderView extends StatelessWidget {
                       selectedMethod: effectiveSelectedMethod,
                       regularMethods: regularMethods,
                       canProcessNonRevenue: canProcessNonRevenue,
-                      canApplyDiscount: canApplyDiscount,
+                      canApplyDiscount:
+                          canApplyDiscount && order.activeDiscount == null,
                       isServiceSelected: isServiceSelected,
                       isProcessing: isProcessing,
                       isOnline: isOnline,
@@ -3011,6 +3082,7 @@ class _CashierOrderSummarySurface extends StatelessWidget {
     required this.onOpenOrderLedger,
     this.onToggleServiceItem,
     this.onCancelOrderItem,
+    this.onVoidDiscount,
   });
 
   final CashierOrder order;
@@ -3023,6 +3095,7 @@ class _CashierOrderSummarySurface extends StatelessWidget {
   final Future<void> Function() onOpenOrderLedger;
   final Future<void> Function(OrderItem item)? onToggleServiceItem;
   final Future<void> Function(OrderItem item)? onCancelOrderItem;
+  final Future<void> Function()? onVoidDiscount;
 
   @override
   Widget build(BuildContext context) {
@@ -3145,9 +3218,26 @@ class _CashierOrderSummarySurface extends StatelessWidget {
             ),
           if (order.discountTotal > 0)
             _AmountLine(
-              label: l10n.cashierDiscountSummary,
+              label: order.activeDiscount == null
+                  ? l10n.cashierDiscountSummary
+                  : _cashierDiscountSummaryLabel(
+                      context,
+                      order.activeDiscount!,
+                    ),
               value: '-₫${currency.format(order.discountTotal)}',
               valueColor: PosColors.success,
+            ),
+          if (order.activeDiscount != null &&
+              !order.activeDiscount!.isScheduledPromotion &&
+              onVoidDiscount != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                key: const Key('cashier_discount_void_action'),
+                onPressed: isProcessing || !isOnline ? null : onVoidDiscount,
+                icon: const Icon(Icons.remove_circle_outline, size: 16),
+                label: Text(l10n.cashierDiscountVoidAction),
+              ),
             ),
           const SizedBox(height: 4),
           _AmountLine(
