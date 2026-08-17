@@ -105,6 +105,9 @@ void main() {
         'lib/features/payment/payment_provider.dart',
       );
       final cashier = readRepoFile('lib/features/cashier/cashier_screen.dart');
+      final discountModal = readRepoFile(
+        'lib/features/cashier/discount_modal.dart',
+      );
       final receipt = readRepoFile('lib/core/hardware/receipt_builder.dart');
       final paymentDetail = readRepoFile(
         'lib/features/payment/payment_detail_screen.dart',
@@ -136,6 +139,13 @@ void main() {
       expect(cashier, contains('cashier_service_item_action_'));
       expect(cashier, contains('cashier_service_item_reason_input'));
       expect(cashier, contains('cashier_service_item_pin_input'));
+      expect(cashier, contains('onProvideServiceItem:'));
+      expect(
+        discountModal,
+        contains("bool get _isServiceItemMode => _mode == 'service_item'"),
+      );
+      expect(discountModal, contains('cashier_discount_service_item_select'));
+      expect(discountModal, contains('cashierDiscountServiceItemHelp'));
       expect(receipt, contains('final serviceItemCount = items'));
       expect(receipt, contains('where((item) => !item.isServiceItem)'));
       expect(paymentDetail, contains('isServiceItem: _boolValue'));
@@ -153,6 +163,9 @@ void main() {
       expect(arb, contains('cashierServiceItemMarkTitle'));
       expect(arb, contains('cashierServiceItemUnmarkTitle'));
       expect(arb, contains('cashierServiceItemFooter'));
+      expect(arb, contains('cashierDiscountServiceItemMode'));
+      expect(arb, contains('cashierDiscountServiceItemSelect'));
+      expect(arb, contains('cashierDiscountServiceItemHelp'));
     }
   });
 

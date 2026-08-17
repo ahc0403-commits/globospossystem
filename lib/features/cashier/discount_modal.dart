@@ -10,7 +10,11 @@ import '../../core/services/discount_proof_service.dart';
 import '../../core/services/discount_service.dart';
 import '../../core/ui/app_fonts.dart';
 import '../../core/ui/pos_design_tokens.dart';
+import '../order/order_model.dart';
 import '../../widgets/error_toast.dart';
+
+typedef ProvideServiceItemCallback =
+    Future<bool> Function(OrderItem item, String reason, String managerPin);
 
 class DiscountModal extends StatefulWidget {
   const DiscountModal({
@@ -19,12 +23,16 @@ class DiscountModal extends StatefulWidget {
     required this.storeId,
     required this.menuSubtotal,
     required this.serviceChargeTotal,
+    this.serviceItems = const [],
+    this.onProvideServiceItem,
   });
 
   final String orderId;
   final String storeId;
   final double menuSubtotal;
   final double serviceChargeTotal;
+  final List<OrderItem> serviceItems;
+  final ProvideServiceItemCallback? onProvideServiceItem;
 
   @override
   State<DiscountModal> createState() => _DiscountModalState();
@@ -39,9 +47,12 @@ class _DiscountModalState extends State<DiscountModal> {
 
   String _type = 'manual';
   String _mode = 'amount';
+  String? _selectedServiceItemId;
   XFile? _selectedFile;
   Uint8List? _previewBytes;
   bool _isSaving = false;
+
+  bool get _isServiceItemMode => _mode == 'service_item';
 
   double get _previewDiscountAmount {
     final value = double.tryParse(_valueController.text.trim());
@@ -86,6 +97,11 @@ class _DiscountModalState extends State<DiscountModal> {
   }
 
   Future<void> _apply() async {
+    if (_isServiceItemMode) {
+      await _provideServiceItem();
+      return;
+    }
+
     final value = double.tryParse(_valueController.text.trim());
     final file = _selectedFile;
     if (value == null || value <= 0) {
@@ -133,11 +149,64 @@ class _DiscountModalState extends State<DiscountModal> {
     }
   }
 
+  Future<void> _provideServiceItem() async {
+    final selectedItemId = _selectedServiceItemId;
+    if (selectedItemId == null) {
+      showErrorToast(context, context.l10n.cashierDiscountServiceItemRequired);
+      return;
+    }
+    if (_reasonController.text.trim().isEmpty) {
+      showErrorToast(context, context.l10n.cashierServiceItemReasonRequired);
+      return;
+    }
+    if (_pinController.text.trim().isEmpty) {
+      showErrorToast(context, context.l10n.cashierDiscountPinRequired);
+      return;
+    }
+
+    final callback = widget.onProvideServiceItem;
+    final selectedItem = widget.serviceItems
+        .where((item) => item.id == selectedItemId)
+        .firstOrNull;
+    if (callback == null || selectedItem == null) {
+      showErrorToast(context, context.l10n.cashierDiscountServiceItemRequired);
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    try {
+      final success = await callback(
+        selectedItem,
+        _reasonController.text.trim(),
+        _pinController.text.trim(),
+      );
+      if (!mounted) return;
+      if (!success) {
+        showErrorToast(context, context.l10n.cashierDiscountServiceItemFailed);
+        return;
+      }
+      Navigator.of(context).pop(<String, dynamic>{
+        'kind': 'service_item',
+        'item_id': selectedItem.id,
+      });
+    } catch (error) {
+      if (!mounted) return;
+      showErrorToast(
+        context,
+        context.l10n.cashierDiscountApplyFailed('$error'),
+      );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final currency = NumberFormat('#,###', 'vi_VN');
     final originalTotal = widget.menuSubtotal + widget.serviceChargeTotal;
+    final canProvideServiceItem =
+        widget.serviceItems.isNotEmpty && widget.onProvideServiceItem != null;
     return AlertDialog(
       backgroundColor: PosColors.surface,
       contentPadding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
@@ -200,6 +269,7 @@ class _DiscountModalState extends State<DiscountModal> {
                         : (value) => setState(() => _type = value ?? 'manual'),
                   );
                   final modeField = DropdownButtonFormField<String>(
+                    key: const Key('cashier_discount_mode_select'),
                     initialValue: _mode,
                     isExpanded: true,
                     decoration: InputDecoration(
@@ -220,6 +290,14 @@ class _DiscountModalState extends State<DiscountModal> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      if (canProvideServiceItem)
+                        DropdownMenuItem(
+                          value: 'service_item',
+                          child: Text(
+                            l10n.cashierDiscountServiceItemMode,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                     ],
                     onChanged: _isSaving
                         ? null
@@ -228,6 +306,7 @@ class _DiscountModalState extends State<DiscountModal> {
                   final stackFields =
                       constraints.maxWidth < 420 ||
                       MediaQuery.textScalerOf(context).scale(1) > 1.5;
+                  if (_isServiceItemMode) return modeField;
                   if (stackFields) {
                     return Column(
                       children: [
@@ -247,52 +326,95 @@ class _DiscountModalState extends State<DiscountModal> {
                 },
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: _valueController,
-                keyboardType: TextInputType.number,
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  labelText: l10n.cashierDiscountValue,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: PosColors.canvas,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: PosColors.border),
-                ),
-                child: Column(
-                  children: [
-                    _DiscountPreviewLine(
-                      label: l10n.cashierSubtotal,
-                      value: '₫${currency.format(originalTotal)}',
-                    ),
-                    _DiscountPreviewLine(
-                      label: l10n.cashierDiscountSummary,
-                      value: '-₫${currency.format(_previewDiscountAmount)}',
-                      valueColor: PosColors.warning,
-                    ),
-                    const Divider(height: 16),
-                    _DiscountPreviewLine(
-                      label: l10n.cashierPaymentDue,
-                      value: '₫${currency.format(_previewPayable)}',
-                      prominent: true,
-                    ),
+              if (_isServiceItemMode) ...[
+                DropdownButtonFormField<String>(
+                  key: const Key('cashier_discount_service_item_select'),
+                  initialValue: _selectedServiceItemId,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: l10n.cashierDiscountServiceItemSelect,
+                  ),
+                  items: [
+                    for (final item in widget.serviceItems)
+                      DropdownMenuItem(
+                        value: item.id,
+                        child: Text(
+                          '${item.localizedName(Localizations.localeOf(context).languageCode)} × ${item.quantity} · ₫${currency.format(item.unitPrice * item.quantity)}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                   ],
+                  onChanged: _isSaving
+                      ? null
+                      : (value) =>
+                            setState(() => _selectedServiceItemId = value),
                 ),
-              ),
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: PosColors.canvas,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: PosColors.border),
+                  ),
+                  child: Text(
+                    l10n.cashierDiscountServiceItemHelp,
+                    style: AppFonts.system(
+                      color: PosColors.textSecondary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ] else ...[
+                TextField(
+                  controller: _valueController,
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    labelText: l10n.cashierDiscountValue,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: PosColors.canvas,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: PosColors.border),
+                  ),
+                  child: Column(
+                    children: [
+                      _DiscountPreviewLine(
+                        label: l10n.cashierSubtotal,
+                        value: '₫${currency.format(originalTotal)}',
+                      ),
+                      _DiscountPreviewLine(
+                        label: l10n.cashierDiscountSummary,
+                        value: '-₫${currency.format(_previewDiscountAmount)}',
+                        valueColor: PosColors.warning,
+                      ),
+                      const Divider(height: 16),
+                      _DiscountPreviewLine(
+                        label: l10n.cashierPaymentDue,
+                        value: '₫${currency.format(_previewPayable)}',
+                        prominent: true,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _couponController,
+                  decoration: InputDecoration(
+                    labelText: l10n.cashierDiscountCouponCode,
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               TextField(
-                controller: _couponController,
-                decoration: InputDecoration(
-                  labelText: l10n.cashierDiscountCouponCode,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
+                key: const Key('cashier_discount_reason_input'),
                 controller: _reasonController,
                 minLines: 1,
                 maxLines: 2,
@@ -302,6 +424,7 @@ class _DiscountModalState extends State<DiscountModal> {
               ),
               const SizedBox(height: 12),
               TextField(
+                key: const Key('cashier_discount_pin_input'),
                 controller: _pinController,
                 keyboardType: TextInputType.number,
                 obscureText: true,
@@ -309,32 +432,34 @@ class _DiscountModalState extends State<DiscountModal> {
                   labelText: l10n.cashierDiscountManagerPin,
                 ),
               ),
-              const SizedBox(height: 14),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: PosColors.canvas,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: PosColors.border),
+              if (!_isServiceItemMode) ...[
+                const SizedBox(height: 14),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: PosColors.canvas,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: PosColors.border),
+                  ),
+                  child: _previewBytes == null
+                      ? Text(
+                          l10n.cashierDiscountNoProof,
+                          style: AppFonts.system(
+                            color: PosColors.textSecondary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        )
+                      : ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.memory(
+                            _previewBytes!,
+                            height: 180,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
                 ),
-                child: _previewBytes == null
-                    ? Text(
-                        l10n.cashierDiscountNoProof,
-                        style: AppFonts.system(
-                          color: PosColors.textSecondary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      )
-                    : ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.memory(
-                          _previewBytes!,
-                          height: 180,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-              ),
+              ],
             ],
           ),
         ),
@@ -344,15 +469,16 @@ class _DiscountModalState extends State<DiscountModal> {
           onPressed: _isSaving ? null : () => Navigator.of(context).pop(null),
           child: Text(l10n.cancel),
         ),
-        OutlinedButton.icon(
-          onPressed: _isSaving ? null : _pickPhoto,
-          icon: const Icon(Icons.photo_camera_outlined, size: 16),
-          label: Text(
-            _selectedFile == null
-                ? l10n.cashierDiscountPickProof
-                : l10n.cashierDiscountRetakeProof,
+        if (!_isServiceItemMode)
+          OutlinedButton.icon(
+            onPressed: _isSaving ? null : _pickPhoto,
+            icon: const Icon(Icons.photo_camera_outlined, size: 16),
+            label: Text(
+              _selectedFile == null
+                  ? l10n.cashierDiscountPickProof
+                  : l10n.cashierDiscountRetakeProof,
+            ),
           ),
-        ),
         FilledButton.icon(
           key: const Key('cashier_discount_apply_button'),
           onPressed: _isSaving ? null : _apply,
@@ -363,7 +489,11 @@ class _DiscountModalState extends State<DiscountModal> {
                   child: CircularProgressIndicator(strokeWidth: 1.8),
                 )
               : const Icon(Icons.check_circle_outline, size: 16),
-          label: Text(l10n.cashierDiscountApply),
+          label: Text(
+            _isServiceItemMode
+                ? l10n.cashierDiscountServiceItemApply
+                : l10n.cashierDiscountApply,
+          ),
         ),
       ],
     );

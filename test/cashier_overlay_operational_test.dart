@@ -536,6 +536,52 @@ void main() {
     },
   );
 
+  testWidgets('discount mode can provide one selected menu item for free', (
+    tester,
+  ) async {
+    final harness = await _pumpCashier(tester);
+    await _selectOrder(tester);
+
+    final discountButton = find.byKey(const Key('cashier_discount_button'));
+    await tester.ensureVisible(discountButton);
+    await tester.tap(discountButton);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('cashier_discount_mode_select')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tặng miễn phí món đã chọn').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('cashier_discount_service_item_select')),
+      findsOneWidget,
+    );
+    expect(find.text('Giá trị giảm'), findsNothing);
+    expect(find.text('Thêm chứng từ'), findsNothing);
+
+    await tester.tap(
+      find.byKey(const Key('cashier_discount_service_item_select')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Phở bò đặc biệt × 1 · ₫100.000').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('cashier_discount_reason_input')),
+      'Guest recovery',
+    );
+    await tester.enterText(
+      find.byKey(const Key('cashier_discount_pin_input')),
+      '1234',
+    );
+    await tester.tap(find.byKey(const Key('cashier_discount_apply_button')));
+    await tester.pumpAndSettle();
+
+    expect(harness.notifier.serviceItemMutations, 1);
+    expect(find.byKey(const Key('cashier_discount_dialog')), findsNothing);
+    expect(find.text('Đã đánh dấu món phục vụ.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('order number opens the customer QR order ledger', (
     tester,
   ) async {
