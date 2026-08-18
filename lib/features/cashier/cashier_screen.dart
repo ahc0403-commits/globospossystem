@@ -719,6 +719,15 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     final hasPrintedOrders = paymentOrders.any(
       (order) => !order.fulfillmentMode.isPaperless,
     );
+    final combinedReceiptAccess = combinedPaymentGroupId == null
+        ? null
+        : await _prepareCombinedDigitalReceipt(
+            storeId: storeId,
+            combinedPaymentGroupId: combinedPaymentGroupId,
+            orders: paymentOrders,
+            cashTender: cashTender,
+          );
+    if (!mounted) return;
     if (combinedPaymentGroupId != null && hasPrintedOrders) {
       await _printCombinedReceipt(
         combinedPaymentGroupId: combinedPaymentGroupId,
@@ -767,14 +776,6 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       );
     }
 
-    final receiptAccessByOrderId = <String, DigitalReceiptAccess?>{};
-    for (final order in paymentOrders) {
-      receiptAccessByOrderId[order.orderId] = await _prepareDigitalReceipt(
-        storeId: storeId,
-        order: order,
-      );
-    }
-
     if (!mounted) return;
     setState(() {
       _combinedOrderIds.clear();
@@ -791,12 +792,12 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
         totalAmount: combinedTotal,
         paymentMethod: method,
         cashTender: cashTender,
-        receiptAccessByOrderId: receiptAccessByOrderId,
-        onShowCustomerReceipt: (order, access) => ref
+        receiptAccess: combinedReceiptAccess,
+        onShowCustomerReceipt: (access) => ref
             .read(paymentProvider.notifier)
-            .showReceiptOnCustomerDisplay(
+            .showCombinedReceiptOnCustomerDisplay(
               storeId: storeId,
-              orderId: order.orderId,
+              combinedPaymentGroupId: combinedPaymentGroupId!,
               receiptId: access.receiptId,
             ),
         onPaperReceipt: combinedPaymentGroupId == null
@@ -1026,6 +1027,36 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
             .showReceiptOnCustomerDisplay(
               storeId: storeId,
               orderId: order.orderId,
+              receiptId: access.receiptId,
+            );
+      }
+      return access;
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(context, _digitalReceiptFailureCopy(context));
+      }
+      return null;
+    }
+  }
+
+  Future<DigitalReceiptAccess?> _prepareCombinedDigitalReceipt({
+    required String storeId,
+    required String combinedPaymentGroupId,
+    required List<CashierOrder> orders,
+    CashTender? cashTender,
+  }) async {
+    try {
+      final access = await _digitalReceiptService.ensureCombinedAndIssue(
+        combinedPaymentGroupId: combinedPaymentGroupId,
+        receivedAmount: cashTender?.receivedAmount,
+        changeAmount: cashTender?.changeAmount,
+      );
+      if (orders.any((order) => order.fulfillmentMode.isPaperless)) {
+        await ref
+            .read(paymentProvider.notifier)
+            .showCombinedReceiptOnCustomerDisplay(
+              storeId: storeId,
+              combinedPaymentGroupId: combinedPaymentGroupId,
               receiptId: access.receiptId,
             );
       }
@@ -5763,7 +5794,7 @@ class _CombinedPaymentCompletionDialog extends StatelessWidget {
     required this.totalAmount,
     required this.paymentMethod,
     required this.cashTender,
-    required this.receiptAccessByOrderId,
+    required this.receiptAccess,
     required this.onShowCustomerReceipt,
     required this.onPaperReceipt,
     required this.onReprint,
@@ -5773,8 +5804,8 @@ class _CombinedPaymentCompletionDialog extends StatelessWidget {
   final double totalAmount;
   final String paymentMethod;
   final CashTender? cashTender;
-  final Map<String, DigitalReceiptAccess?> receiptAccessByOrderId;
-  final Future<bool> Function(CashierOrder order, DigitalReceiptAccess access)
+  final DigitalReceiptAccess? receiptAccess;
+  final Future<bool> Function(DigitalReceiptAccess access)
   onShowCustomerReceipt;
   final Future<void> Function()? onPaperReceipt;
   final Future<void> Function()? onReprint;
@@ -5784,9 +5815,6 @@ class _CombinedPaymentCompletionDialog extends StatelessWidget {
     final l10n = context.l10n;
     final currency = NumberFormat('#,###', 'vi_VN');
     final tableNumbers = orders.map((order) => order.tableNumber).join(', ');
-    final paperlessOrders = orders
-        .where((order) => order.fulfillmentMode.isPaperless)
-        .toList(growable: false);
     final hasPrintedOrders = orders.any(
       (order) => !order.fulfillmentMode.isPaperless,
     );
@@ -5823,65 +5851,45 @@ class _CombinedPaymentCompletionDialog extends StatelessWidget {
                 ),
               ),
             ],
-            if (paperlessOrders.isNotEmpty) ...[
+            if (receiptAccess != null) ...[
               const SizedBox(height: 14),
-              SizedBox(
+              Container(
+                key: const Key('cashier_combined_receipt'),
                 height: 252,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: paperlessOrders.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 10),
-                  itemBuilder: (context, index) {
-                    final order = paperlessOrders[index];
-                    final access = receiptAccessByOrderId[order.orderId];
-                    return Container(
-                      key: ValueKey(
-                        'cashier_combined_receipt_${order.orderId}',
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: PosSurfaceRole.background.fill,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: PosColors.border),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      l10n.cashierCombinedTables(tableNumbers),
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 6),
+                    Expanded(
+                      child: QrImageView(
+                        key: const Key('cashier_combined_receipt_qr'),
+                        data: receiptAccess!.publicUrl,
+                        backgroundColor: Colors.white,
                       ),
-                      width: 170,
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: PosSurfaceRole.background.fill,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: PosColors.border),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            l10n.cashierTableLabel(order.tableNumber),
-                            style: const TextStyle(fontWeight: FontWeight.w900),
-                          ),
-                          const SizedBox(height: 6),
-                          Expanded(
-                            child: access == null
-                                ? const Icon(Icons.qr_code_2_rounded, size: 64)
-                                : QrImageView(
-                                    data: access.publicUrl,
-                                    backgroundColor: Colors.white,
-                                  ),
-                          ),
-                          TextButton.icon(
-                            key: ValueKey(
-                              'cashier_combined_show_customer_receipt_${order.orderId}',
-                            ),
-                            onPressed: access == null
-                                ? null
-                                : () => unawaited(
-                                    onShowCustomerReceipt(order, access),
-                                  ),
-                            icon: const Icon(Icons.monitor_rounded, size: 16),
-                            label: Text(switch (Localizations.localeOf(
-                              context,
-                            ).languageCode) {
-                              'vi' => 'Màn hình khách',
-                              'en' => 'Customer screen',
-                              _ => '고객 화면',
-                            }),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+                    ),
+                    TextButton.icon(
+                      key: const Key('cashier_combined_show_customer_receipt'),
+                      onPressed: () =>
+                          unawaited(onShowCustomerReceipt(receiptAccess!)),
+                      icon: const Icon(Icons.monitor_rounded, size: 16),
+                      label: Text(switch (Localizations.localeOf(
+                        context,
+                      ).languageCode) {
+                        'vi' => 'Màn hình khách',
+                        'en' => 'Customer screen',
+                        _ => '고객 화면',
+                      }),
+                    ),
+                  ],
                 ),
               ),
             ],

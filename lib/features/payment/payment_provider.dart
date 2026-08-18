@@ -973,6 +973,27 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     }
   }
 
+  Future<bool> showCombinedReceiptOnCustomerDisplay({
+    required String storeId,
+    required String combinedPaymentGroupId,
+    required String receiptId,
+  }) async {
+    try {
+      await supabase.rpc(
+        'show_combined_customer_receipt_display',
+        params: {
+          'p_store_id': storeId,
+          'p_group_id': combinedPaymentGroupId,
+          'p_receipt_id': receiptId,
+        },
+      );
+      return true;
+    } catch (_) {
+      // Customer display presentation is optional and cannot alter payment.
+      return false;
+    }
+  }
+
   CashierOrderSearchResult? _cashierOrderSearchResultFromRpc(Object? raw) {
     if (raw == null) {
       return null;

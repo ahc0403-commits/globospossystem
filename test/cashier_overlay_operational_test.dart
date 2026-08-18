@@ -6,6 +6,7 @@ import 'package:globos_pos_system/core/payments/payment_method_contract.dart';
 import 'package:globos_pos_system/core/services/bank_transfer_alert_service.dart';
 import 'package:globos_pos_system/core/services/bank_transfer_alert_sound.dart';
 import 'package:globos_pos_system/core/services/connectivity_service.dart';
+import 'package:globos_pos_system/core/services/digital_receipt_service.dart';
 import 'package:globos_pos_system/core/services/menu_service.dart';
 import 'package:globos_pos_system/core/services/payment_proof_service.dart';
 import 'package:globos_pos_system/core/services/payment_service.dart';
@@ -16,6 +17,7 @@ import 'package:globos_pos_system/core/ui/app_theme.dart';
 import 'package:globos_pos_system/features/auth/auth_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_state.dart';
 import 'package:globos_pos_system/features/cashier/cashier_screen.dart';
+import 'package:globos_pos_system/features/digital_receipt/digital_receipt_model.dart';
 import 'package:globos_pos_system/features/order/order_model.dart';
 import 'package:globos_pos_system/features/payment/payment_provider.dart';
 import 'package:globos_pos_system/features/table/table_provider.dart';
@@ -217,9 +219,20 @@ class _PaymentNotifier extends PaymentNotifier {
   int? confirmedWetTissueQuantity;
   String? processedMethod;
   Map<String, int>? combinedWetTissueQuantities;
+  int combinedReceiptDisplayCalls = 0;
 
   @override
   Future<void> loadOrders(String storeId) async {}
+
+  @override
+  Future<bool> showCombinedReceiptOnCustomerDisplay({
+    required String storeId,
+    required String combinedPaymentGroupId,
+    required String receiptId,
+  }) async {
+    combinedReceiptDisplayCalls += 1;
+    return true;
+  }
 
   @override
   Future<List<QrOrderLedgerBatch>> fetchQrOrderLedger(String orderId) async {
@@ -428,6 +441,39 @@ class _PaymentService extends PaymentService {
     this.combinedPaymentGroupId = combinedPaymentGroupId;
     this.receivedAmount = receivedAmount;
     return {'status': 'done'};
+  }
+}
+
+class _DigitalReceiptService extends DigitalReceiptService {
+  int combinedCalls = 0;
+  String? combinedPaymentGroupId;
+
+  @override
+  Future<DigitalReceiptAccess> ensureAndIssue({
+    required String orderId,
+    double? receivedAmount,
+    double? changeAmount,
+  }) async => DigitalReceiptAccess(
+    receiptId: 'receipt-$orderId',
+    receiptNumber: 'BC-ORDER',
+    token: 'order-token',
+    publicUrl: 'https://example.test/receipt#token=order-token',
+  );
+
+  @override
+  Future<DigitalReceiptAccess> ensureCombinedAndIssue({
+    required String combinedPaymentGroupId,
+    double? receivedAmount,
+    double? changeAmount,
+  }) async {
+    combinedCalls += 1;
+    this.combinedPaymentGroupId = combinedPaymentGroupId;
+    return const DigitalReceiptAccess(
+      receiptId: 'combined-receipt',
+      receiptNumber: 'BC-COMBINED',
+      token: 'combined-token',
+      publicUrl: 'https://example.test/receipt#token=combined-token',
+    );
   }
 }
 
@@ -1086,59 +1132,76 @@ void main() {
     },
   );
 
-  testWidgets('combined non-cash payment reaches proof and invoice flows', (
-    tester,
-  ) async {
-    final harness = await _pumpCashier(
-      tester,
-      includeSecondOrder: true,
-      physicalSize: const Size(1440, 1600),
-    );
-    await tester.tap(find.byKey(const Key('cashier_combined_payment_mode')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('cashier_combined_order_$_orderId')));
-    await tester.tap(
-      find.byKey(const Key('cashier_combined_order_cashier-order-b2')),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('cashier_combined_payment_start')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('cashier_combined_payment_confirm')));
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const Key('cashier_method_dialog_$paymentMethodCreditCard')),
-    );
-    await _pumpUntilFound(
-      tester,
-      find.byKey(const Key('cashier_combined_payment_proof_dialog')),
-    );
-    _dismiss(tester, const Key('cashier_combined_payment_proof_dialog'));
-    await _pumpUntilFound(
-      tester,
-      find.byKey(const Key('cashier_combined_red_invoice_$_orderId')),
-    );
-    _dismiss(tester, const Key('cashier_combined_red_invoice_$_orderId'));
-    await _pumpUntilFound(
-      tester,
-      find.byKey(const Key('cashier_combined_red_invoice_cashier-order-b2')),
-    );
-    _dismiss(
-      tester,
-      const Key('cashier_combined_red_invoice_cashier-order-b2'),
-    );
-    await _pumpUntilFound(
-      tester,
-      find.byKey(const Key('cashier_combined_payment_completion_dialog')),
-    );
+  testWidgets(
+    'combined non-cash payment gives paperless orders one group receipt',
+    (tester) async {
+      final harness = await _pumpCashier(
+        tester,
+        includeSecondOrder: true,
+        initialOrder: _paperlessCashierOrder,
+        physicalSize: const Size(1440, 1600),
+      );
+      await tester.tap(find.byKey(const Key('cashier_combined_payment_mode')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('cashier_combined_order_$_orderId')),
+      );
+      await tester.tap(
+        find.byKey(const Key('cashier_combined_order_cashier-order-b2')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('cashier_combined_payment_start')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('cashier_combined_payment_confirm')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('cashier_method_dialog_$paymentMethodCreditCard')),
+      );
+      await _pumpUntilFound(
+        tester,
+        find.byKey(const Key('cashier_combined_payment_proof_dialog')),
+      );
+      _dismiss(tester, const Key('cashier_combined_payment_proof_dialog'));
+      await _pumpUntilFound(
+        tester,
+        find.byKey(const Key('cashier_combined_red_invoice_$_orderId')),
+      );
+      _dismiss(tester, const Key('cashier_combined_red_invoice_$_orderId'));
+      await _pumpUntilFound(
+        tester,
+        find.byKey(const Key('cashier_combined_red_invoice_cashier-order-b2')),
+      );
+      _dismiss(
+        tester,
+        const Key('cashier_combined_red_invoice_cashier-order-b2'),
+      );
+      await _pumpUntilFound(
+        tester,
+        find.byKey(const Key('cashier_combined_payment_completion_dialog')),
+      );
 
-    expect(harness.notifier.processedMethod, paymentMethodCreditCard);
-    expect(harness.proofService.markRequiredCalls, 1);
-    expect(harness.paymentService.combinedReceiptCalls, 1);
-    expect(harness.paymentService.combinedPaymentGroupId, 'combined-group');
-    _dismiss(tester, const Key('cashier_combined_payment_completion_dialog'));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-  });
+      expect(harness.notifier.processedMethod, paymentMethodCreditCard);
+      expect(harness.proofService.markRequiredCalls, 1);
+      expect(harness.paymentService.combinedReceiptCalls, 1);
+      expect(harness.paymentService.combinedPaymentGroupId, 'combined-group');
+      expect(harness.digitalReceiptService.combinedCalls, 1);
+      expect(harness.notifier.combinedReceiptDisplayCalls, 1);
+      expect(
+        harness.digitalReceiptService.combinedPaymentGroupId,
+        'combined-group',
+      );
+      expect(find.byKey(const Key('cashier_combined_receipt')), findsOneWidget);
+      expect(
+        find.byKey(const Key('cashier_combined_receipt_qr')),
+        findsOneWidget,
+      );
+      _dismiss(tester, const Key('cashier_combined_payment_completion_dialog'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'combined QR shows one QR for the combined total before payment',
@@ -1263,12 +1326,14 @@ class _CashierHarness {
     required this.proofService,
     required this.paymentService,
     required this.menuService,
+    required this.digitalReceiptService,
   });
 
   final _PaymentNotifier notifier;
   final _PaymentProofService proofService;
   final _PaymentService paymentService;
   final _MenuService menuService;
+  final _DigitalReceiptService digitalReceiptService;
 }
 
 Future<_CashierHarness> _pumpCashier(
@@ -1296,6 +1361,7 @@ Future<_CashierHarness> _pumpCashier(
   final proofService = _PaymentProofService();
   final paymentService = _PaymentService();
   final menuService = _MenuService();
+  final digitalReceiptService = _DigitalReceiptService();
   final router = GoRouter(
     initialLocation: '/cashier',
     routes: [
@@ -1306,6 +1372,7 @@ Future<_CashierHarness> _pumpCashier(
           paymentServiceOverride: paymentService,
           restaurantCutoffServiceOverride: _CutoffService(),
           menuServiceOverride: menuService,
+          digitalReceiptServiceOverride: digitalReceiptService,
           bankTransferAlertServiceOverride:
               bankTransferAlertService ?? _NoopBankTransferAlertService(),
           bankTransferAlertSoundServiceOverride: bankTransferAlertSoundService,
@@ -1367,6 +1434,7 @@ Future<_CashierHarness> _pumpCashier(
     proofService: proofService,
     paymentService: paymentService,
     menuService: menuService,
+    digitalReceiptService: digitalReceiptService,
   );
 }
 
