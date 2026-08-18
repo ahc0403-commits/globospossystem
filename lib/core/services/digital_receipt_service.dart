@@ -18,6 +18,26 @@ class DigitalReceiptService {
         'p_change_amount': changeAmount,
       },
     );
+    return _accessFromEnsured(ensuredRaw);
+  }
+
+  Future<DigitalReceiptAccess> ensureCombinedAndIssue({
+    required String combinedPaymentGroupId,
+    double? receivedAmount,
+    double? changeAmount,
+  }) async {
+    final ensuredRaw = await supabase.rpc(
+      'ensure_combined_digital_receipt',
+      params: {
+        'p_group_id': combinedPaymentGroupId,
+        'p_received_amount': receivedAmount,
+        'p_change_amount': changeAmount,
+      },
+    );
+    return _accessFromEnsured(ensuredRaw);
+  }
+
+  Future<DigitalReceiptAccess> _accessFromEnsured(Object? ensuredRaw) async {
     final ensured = Map<String, dynamic>.from(ensuredRaw as Map);
     final receiptId = ensured['receipt_id']?.toString() ?? '';
     if (receiptId.isEmpty) {

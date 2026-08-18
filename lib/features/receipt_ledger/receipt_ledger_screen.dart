@@ -30,7 +30,7 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
   bool _loadingMore = false;
   String? _error;
   String? _status;
-  String? _printingOrderId;
+  String? _printingReceiptId;
   late String _businessDate;
 
   @override
@@ -127,7 +127,10 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
 
   Future<void> _reprint(ReceiptLedgerEntry entry) async {
     final copy = _ReceiptLedgerCopy(context);
-    if (!entry.printable || entry.orderId == null) return;
+    if (!entry.printable ||
+        (entry.orderId == null && entry.combinedPaymentGroupId == null)) {
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -149,9 +152,9 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
     );
     if (confirmed != true || !mounted) return;
 
-    setState(() => _printingOrderId = entry.orderId);
+    setState(() => _printingReceiptId = entry.receiptId);
     try {
-      final job = await receiptLedgerService.reprint(entry.orderId!);
+      final job = await receiptLedgerService.reprint(entry);
       if (!mounted) return;
       final status = job['status']?.toString();
       if (status == 'pending' || status == 'printing' || status == 'done') {
@@ -162,7 +165,7 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
     } catch (_) {
       if (mounted) showErrorToast(context, copy.reprintFailed);
     } finally {
-      if (mounted) setState(() => _printingOrderId = null);
+      if (mounted) setState(() => _printingReceiptId = null);
     }
   }
 
@@ -371,7 +374,7 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
                   _ReceiptLedgerRow(
                     entry: entry,
                     copy: copy,
-                    printing: _printingOrderId == entry.orderId,
+                    printing: _printingReceiptId == entry.receiptId,
                     onOpen: () => _showDetail(entry, copy),
                     onReprint: () => _reprint(entry),
                   ),
@@ -417,10 +420,30 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
                     ).format(entry.soldAt.toLocal()),
                   ),
                   _detail(copy.table, entry.tableNumber),
+                  if (entry.isCombined) ...[
+                    _detail(copy.paymentType, copy.combinedPayment),
+                    _detail(
+                      copy.paymentGroup,
+                      entry.combinedPaymentGroupId ?? '-',
+                    ),
+                  ],
                   _detail(copy.channel, entry.salesChannel),
                   _detail(copy.cashier, entry.cashierName),
                   _detail(copy.status, copy.statusLabel(entry.status)),
                   _detail(copy.paymentMethod, _paymentLabel(entry)),
+                  if (entry.allocations.length > 1) ...[
+                    const Divider(height: 28),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        copy.orderAllocations,
+                        key: const Key('receipt_ledger_order_allocations'),
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    ...entry.allocations.map(_orderAllocation),
+                  ],
                   if (entry.items.isNotEmpty) ...[
                     const Divider(height: 28),
                     Align(
@@ -461,6 +484,25 @@ class _ReceiptLedgerScreenState extends ConsumerState<ReceiptLedgerScreen> {
           ],
         ),
       );
+
+  Widget _orderAllocation(ReceiptLedgerAllocation allocation) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 5),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            '${allocation.tableNumber} · ${allocation.orderId}',
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 18),
+        Text(
+          _money(allocation.amount),
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ],
+    ),
+  );
 
   Widget _orderedItem(ReceiptLedgerItem item) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 5),
@@ -535,7 +577,7 @@ class _ReceiptLedgerRow extends StatelessWidget {
             );
             final action = entry.printable
                 ? OutlinedButton.icon(
-                    key: ValueKey('receipt_ledger_reprint_${entry.orderId}'),
+                    key: ValueKey('receipt_ledger_reprint_${entry.receiptId}'),
                     onPressed: printing ? null : onReprint,
                     icon: printing
                         ? const SizedBox.square(
@@ -730,6 +772,12 @@ class _ReceiptLedgerCopy {
   String get status => _pick('상태', 'Trạng thái', 'Status');
   String get paymentMethod =>
       _pick('결제수단', 'Phương thức thanh toán', 'Payment method');
+  String get paymentType => _pick('결제 유형', 'Loại thanh toán', 'Payment type');
+  String get combinedPayment =>
+      _pick('합산 결제', 'Thanh toán gộp', 'Combined payment');
+  String get paymentGroup => _pick('결제 그룹', 'Nhóm thanh toán', 'Payment group');
+  String get orderAllocations =>
+      _pick('주문별 배분', 'Phân bổ theo đơn', 'Order allocations');
   String get orderedItems => _pick('주문 메뉴', 'Món đã gọi', 'Ordered items');
   String statusLabel(String status) => switch (status) {
     'paid' || 'completed' => paid,

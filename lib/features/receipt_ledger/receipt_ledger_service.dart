@@ -30,8 +30,24 @@ class ReceiptLedgerService {
     return ReceiptLedgerPage.fromJson(Map<String, dynamic>.from(response));
   }
 
-  Future<Map<String, dynamic>> reprint(String orderId) =>
-      paymentService.enqueueReceiptPrintJob(orderId: orderId, reprint: true);
+  Future<Map<String, dynamic>> reprint(ReceiptLedgerEntry entry) {
+    final combinedPaymentGroupId = entry.combinedPaymentGroupId;
+    if (combinedPaymentGroupId != null) {
+      return paymentService.enqueueCombinedReceiptPrintJob(
+        combinedPaymentGroupId: combinedPaymentGroupId,
+        receivedAmount: entry.receivedAmount,
+        reprint: true,
+      );
+    }
+    final orderId = entry.orderId;
+    if (orderId == null) {
+      throw const FormatException('RECEIPT_LEDGER_REPRINT_ANCHOR_REQUIRED');
+    }
+    return paymentService.enqueueReceiptPrintJob(
+      orderId: orderId,
+      reprint: true,
+    );
+  }
 }
 
 const receiptLedgerService = ReceiptLedgerService();

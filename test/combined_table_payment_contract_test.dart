@@ -51,6 +51,47 @@ void main() {
     );
   });
 
+  test('combined payment owns one canonical paper and digital receipt', () {
+    final migration = File(
+      'supabase/migrations/'
+      '20260818110000_unified_combined_customer_receipt.sql',
+    ).readAsStringSync();
+    final cashier = File(
+      'lib/features/cashier/cashier_screen.dart',
+    ).readAsStringSync();
+    final digitalService = File(
+      'lib/core/services/digital_receipt_service.dart',
+    ).readAsStringSync();
+    final runtimeFixture = File(
+      'scripts/test_unified_combined_customer_receipt_runtime.sql',
+    ).readAsStringSync();
+
+    expect(migration, contains('build_combined_customer_receipt_snapshot'));
+    expect(migration, contains("'item_id', source.id"));
+    expect(migration, contains("'menu_item_id', source.menu_item_id"));
+    expect(migration, contains("'table_number', source.table_number"));
+    expect(migration, contains('ensure_combined_digital_receipt'));
+    expect(migration, contains('order_id IS NULL'));
+    expect(migration, contains('digital_receipts_combined_group_canonical'));
+    expect(migration, contains('show_combined_customer_receipt_display'));
+    expect(cashier, contains('_prepareCombinedDigitalReceipt('));
+    expect(cashier, contains('receiptAccess: combinedReceiptAccess'));
+    expect(cashier, isNot(contains('receiptAccessByOrderId')));
+    expect(
+      digitalService,
+      contains('Future<DigitalReceiptAccess> ensureCombinedAndIssue'),
+    );
+    expect(
+      runtimeFixture,
+      contains('UNIFIED_COMBINED_CUSTOMER_RECEIPT_RUNTIME_OK'),
+    );
+    expect(
+      runtimeFixture,
+      contains('COMBINED_PAPER_DIGITAL_SNAPSHOT_DIVERGED'),
+    );
+    expect(runtimeFixture, contains('COMBINED_LEDGER_ENTRY_COUNT_INVALID'));
+  });
+
   test('database checkout is atomic and keeps source payments auditable', () {
     final migration = File(
       'supabase/migrations/20260804090000_combined_table_payment.sql',
