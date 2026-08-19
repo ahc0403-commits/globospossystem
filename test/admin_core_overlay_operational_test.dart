@@ -12,6 +12,7 @@ import 'package:globos_pos_system/core/services/pin_service.dart';
 import 'package:globos_pos_system/core/services/printer_destination_service.dart';
 import 'package:globos_pos_system/core/services/attendance_service.dart';
 import 'package:globos_pos_system/core/services/tables_service.dart';
+import 'package:globos_pos_system/core/utils/time_utils.dart';
 import 'package:globos_pos_system/features/admin/providers/admin_audit_provider.dart';
 import 'package:globos_pos_system/features/admin/providers/admin_scope_provider.dart';
 import 'package:globos_pos_system/features/admin/providers/menu_provider.dart';
@@ -538,9 +539,13 @@ class _PinService extends PinService {
 }
 
 class _AttendanceService extends AttendanceService {
-  _AttendanceService({this.role = 'waiter'});
+  _AttendanceService({
+    this.role = 'waiter',
+    this.openShiftWithDuplicateClockIns = false,
+  });
 
   final String role;
+  final bool openShiftWithDuplicateClockIns;
   int allowanceUpserts = 0;
   int manualEntries = 0;
   int employeeLogFetches = 0;
@@ -576,38 +581,62 @@ class _AttendanceService extends AttendanceService {
     required DateTime from,
     required DateTime to,
     int limit = 500,
-  }) async => [
-    {
-      'id': 'attendance-log-1',
-      'restaurant_id': _storeId,
-      'user_id': 'attendance-staff-1',
-      'type': 'clock_in',
-      'photo_url': 'https://fixture.invalid/attendance-clock-in.jpg',
-      'photo_thumbnail_url':
-          'https://fixture.invalid/attendance-clock-in-thumb.jpg',
-      'logged_at': DateTime.now()
-          .subtract(const Duration(hours: 8))
-          .toUtc()
-          .toIso8601String(),
-      'users': {
-        'id': 'attendance-staff-1',
-        'full_name': 'Nguyễn Minh Anh',
-        'role': role,
+  }) async {
+    if (openShiftWithDuplicateClockIns) {
+      final today = TimeUtils.nowVietnam();
+      String loggedAt(int hour, int minute) => TimeUtils.vietnamWallTimeToUtc(
+        DateTime(today.year, today.month, today.day, hour, minute),
+      ).toIso8601String();
+      Map<String, dynamic> clockIn(String id, int hour, int minute) => {
+        'id': id,
+        'restaurant_id': _storeId,
+        'user_id': 'attendance-staff-1',
+        'type': 'clock_in',
+        'logged_at': loggedAt(hour, minute),
+        'users': {
+          'id': 'attendance-staff-1',
+          'full_name': 'Nguyễn Minh Anh',
+          'role': role,
+        },
+      };
+      return [
+        clockIn('attendance-log-open-1', 12, 39),
+        clockIn('attendance-log-open-2', 19, 0),
+      ];
+    }
+    return [
+      {
+        'id': 'attendance-log-1',
+        'restaurant_id': _storeId,
+        'user_id': 'attendance-staff-1',
+        'type': 'clock_in',
+        'photo_url': 'https://fixture.invalid/attendance-clock-in.jpg',
+        'photo_thumbnail_url':
+            'https://fixture.invalid/attendance-clock-in-thumb.jpg',
+        'logged_at': DateTime.now()
+            .subtract(const Duration(hours: 8))
+            .toUtc()
+            .toIso8601String(),
+        'users': {
+          'id': 'attendance-staff-1',
+          'full_name': 'Nguyễn Minh Anh',
+          'role': role,
+        },
       },
-    },
-    {
-      'id': 'attendance-log-2',
-      'restaurant_id': _storeId,
-      'user_id': 'attendance-staff-1',
-      'type': 'clock_out',
-      'logged_at': DateTime.now().toUtc().toIso8601String(),
-      'users': {
-        'id': 'attendance-staff-1',
-        'full_name': 'Nguyễn Minh Anh',
-        'role': role,
+      {
+        'id': 'attendance-log-2',
+        'restaurant_id': _storeId,
+        'user_id': 'attendance-staff-1',
+        'type': 'clock_out',
+        'logged_at': DateTime.now().toUtc().toIso8601String(),
+        'users': {
+          'id': 'attendance-staff-1',
+          'full_name': 'Nguyễn Minh Anh',
+          'role': role,
+        },
       },
-    },
-  ];
+    ];
+  }
 
   @override
   Future<List<Map<String, dynamic>>> fetchEmployeeLogs({
@@ -1545,6 +1574,44 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'Attendance shows every same-day event and suggests the missing event type',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final attendance = _AttendanceService(
+        openShiftWithDuplicateClockIns: true,
+      );
+      await _pump(
+        tester,
+        child: AttendanceTab(
+          attendanceServiceOverride: attendance,
+          pinServiceOverride: _PinService(),
+        ),
+        overrides: const [],
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('12:39 · 19:00'), findsOneWidget);
+      await tester.tap(find.text('Nguyễn Minh Anh').first);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('12:39 · 19:00 – --:--'), findsOneWidget);
+
+      final manualAction = find.byKey(
+        const Key('attendance_manual_entry_action'),
+      );
+      await tester.ensureVisible(manualAction);
+      await tester.tap(manualAction);
+      await tester.pumpAndSettle();
+
+      final typeField = tester.widget<DropdownButtonFormField<String>>(
+        find.byKey(const Key('attendance_manual_type')),
+      );
+      expect(typeField.initialValue, 'clock_out');
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'Restaurant daily allowance hides Photo split-shift meal option',

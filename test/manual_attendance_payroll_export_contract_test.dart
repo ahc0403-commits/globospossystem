@@ -154,6 +154,24 @@ void main() {
     );
   });
 
+  test('manual attendance duplicate check is scoped by event type', () {
+    final migration = File(
+      'supabase/migrations/20260819133000_manual_attendance_duplicate_type_scope.sql',
+    ).readAsStringSync();
+    final verification = File(
+      'scripts/verify_manual_attendance_duplicate_type_scope.sql',
+    ).readAsStringSync();
+
+    expect(migration, contains('AND al.type = p_type'));
+    expect(migration, contains('ATTENDANCE_MANUAL_TIME_DUPLICATE'));
+    expect(migration, contains("auth.uid(),\n    'attendance_manual_entry'"));
+    expect(migration, isNot(contains('ATTENDANCE_MANUAL_SEQUENCE_INVALID')));
+    expect(
+      verification,
+      contains('manual attendance duplicate check is not scoped by event type'),
+    );
+  });
+
   test(
     'payroll export includes active part-timer with no attendance logs',
     () async {
