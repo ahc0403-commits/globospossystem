@@ -16,6 +16,61 @@ void main() {
     expect(formatEmergencyElapsed(const Duration(seconds: -1)), '00:00');
   });
 
+  test('fast refresh preserves tray and floor station timer boundaries', () {
+    EmergencyFulfillmentState state({
+      required String sessionId,
+      required String stationType,
+      DateTime? stationStartedAt,
+    }) => EmergencyFulfillmentState(
+      sessionId: sessionId,
+      stationType: stationType,
+      orders: [
+        EmergencyFulfillmentOrder(
+          queueId: 'queue-1',
+          orderId: 'order-1',
+          queueNo: 1,
+          tableNumber: '101',
+          floorLabel: '1F',
+          createdAt: DateTime.utc(2026, 8, 19, 10),
+          stationStartedAt: stationStartedAt,
+          items: const [],
+        ),
+      ],
+    );
+
+    final startedAt = DateTime.utc(2026, 8, 19, 10, 5);
+    for (final stationType in ['tray', 'floor']) {
+      final previous = state(
+        sessionId: 'session-1',
+        stationType: stationType,
+        stationStartedAt: startedAt,
+      );
+      final fastSnapshot = state(
+        sessionId: 'session-1',
+        stationType: stationType,
+      );
+      expect(
+        preserveEmergencyStationTimings(
+          fastSnapshot,
+          previous,
+        ).orders.single.stationStartedAt,
+        startedAt,
+      );
+    }
+    final previous = state(
+      sessionId: 'session-1',
+      stationType: 'floor',
+      stationStartedAt: startedAt,
+    );
+    expect(
+      preserveEmergencyStationTimings(
+        state(sessionId: 'session-2', stationType: 'floor'),
+        previous,
+      ).orders.single.stationStartedAt,
+      isNull,
+    );
+  });
+
   test('combo components are parsed as separate display lines', () {
     final item = EmergencyFulfillmentItem.fromJson({
       'id': 'base-1',
