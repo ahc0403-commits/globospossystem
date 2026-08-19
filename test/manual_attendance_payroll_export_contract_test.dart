@@ -108,6 +108,30 @@ void main() {
     expect(attendance, contains("RegExp(r'^\\d{4,8}\$')"));
   });
 
+  test('manual attendance backfill accepts either event entry order', () {
+    final migration = File(
+      'supabase/migrations/20260819110000_manual_attendance_order_independent.sql',
+    ).readAsStringSync();
+    final verification = File(
+      'scripts/verify_manual_attendance_order_independent.sql',
+    ).readAsStringSync();
+
+    expect(migration, contains('admin_record_employee_attendance'));
+    expect(migration, contains('verify_discount_manager_pin_or_raise'));
+    expect(migration, contains('ATTENDANCE_MANUAL_ENTRY_FORBIDDEN'));
+    expect(migration, contains('ATTENDANCE_MANUAL_TIME_INVALID'));
+    expect(migration, contains('ATTENDANCE_MANUAL_TIME_DUPLICATE'));
+    expect(migration, contains('ATTENDANCE_MANUAL_REASON_REQUIRED'));
+    expect(migration, contains("'attendance_manual_entry'"));
+    expect(migration, isNot(contains('ATTENDANCE_MANUAL_SEQUENCE_INVALID')));
+    expect(migration, isNot(contains('v_previous_type')));
+    expect(migration, isNot(contains('v_next_type')));
+    expect(
+      verification,
+      contains('manual attendance RPC still enforces event sequence'),
+    );
+  });
+
   test(
     'payroll export includes active part-timer with no attendance logs',
     () async {

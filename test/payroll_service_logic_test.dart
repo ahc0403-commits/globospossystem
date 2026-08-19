@@ -50,6 +50,17 @@ void main() {
       expect(pairs.single.$2, isNotNull);
     });
 
+    test('backfilled clock-out then clock-in pairs by attendance time', () {
+      final pairs = PayrollService().pairLogs([
+        _log('clock_out', '2026-07-27T09:15:00Z'),
+        _log('clock_in', '2026-07-27T04:27:00Z'),
+      ]);
+
+      expect(pairs, hasLength(1));
+      expect(pairs.single.$1, DateTime(2026, 7, 27, 11, 27));
+      expect(pairs.single.$2, DateTime(2026, 7, 27, 16, 15));
+    });
+
     test('alternating events create separate split shifts on the same day', () {
       final pairs = PayrollService().pairLogs([
         _log('clock_in', '2026-07-27T01:00:00Z'),
