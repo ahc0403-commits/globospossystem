@@ -376,7 +376,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         )
         ? _selectedAttendanceUserId!
         : _staffList.first['user_id']!.toString();
-    var selectedType = 'clock_in';
+    var selectedType = _suggestManualAttendanceType(selectedEmployeeId);
     var selectedDate = _attendanceDate;
     var selectedTime = TimeOfDay.fromDateTime(now);
     var reason = '';
@@ -589,6 +589,29 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
     } finally {
       if (mounted) setState(() => _isManualAttendanceSaving = false);
     }
+  }
+
+  String _suggestManualAttendanceType(String employeeId) {
+    final employeeLogs = _dailyLogs
+        .where((log) => log['user_id']?.toString() == employeeId)
+        .toList(growable: false);
+    if (employeeLogs.isEmpty) return 'clock_in';
+
+    final sortedLogs = [...employeeLogs]
+      ..sort((first, second) {
+        final firstTime = DateTime.tryParse(
+          first['logged_at']?.toString() ?? '',
+        );
+        final secondTime = DateTime.tryParse(
+          second['logged_at']?.toString() ?? '',
+        );
+        return (firstTime ?? DateTime.fromMillisecondsSinceEpoch(0)).compareTo(
+          secondTime ?? DateTime.fromMillisecondsSinceEpoch(0),
+        );
+      });
+    return sortedLogs.last['type']?.toString() == 'clock_in'
+        ? 'clock_out'
+        : 'clock_in';
   }
 
   String _mapManualAttendanceError(Object error) {
@@ -986,6 +1009,18 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
             if (value == null) return element;
             return element.isBefore(value) ? element : value;
           });
+      final clockIns = userLogs
+          .where((row) => row['type']?.toString() == 'clock_in')
+          .map((row) => DateTime.tryParse(row['logged_at']?.toString() ?? ''))
+          .whereType<DateTime>()
+          .map(TimeUtils.toVietnam)
+          .toList(growable: false);
+      final clockOuts = userLogs
+          .where((row) => row['type']?.toString() == 'clock_out')
+          .map((row) => DateTime.tryParse(row['logged_at']?.toString() ?? ''))
+          .whereType<DateTime>()
+          .map(TimeUtils.toVietnam)
+          .toList(growable: false);
       final lastClockOut = userLogs
           .where((row) => row['type']?.toString() == 'clock_out')
           .map((row) => DateTime.tryParse(row['logged_at']?.toString() ?? ''))
@@ -1019,6 +1054,8 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
             : 'staff',
         'clockIn': firstClockIn,
         'clockOut': lastClockOut,
+        'clockIns': clockIns,
+        'clockOuts': clockOuts,
         'hours': totalHours,
         'logCount': userLogs.length,
         'logs': userLogs,
@@ -1074,6 +1111,8 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
       DateTime? firstClockIn;
       DateTime? lastClockOut;
       DateTime? openClockIn;
+      final clockIns = <DateTime>[];
+      final clockOuts = <DateTime>[];
       var workedMinutes = 0;
       var needsReview = false;
 
@@ -1082,6 +1121,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         if (parsed == null) continue;
         final local = TimeUtils.toVietnam(parsed);
         if (log['type']?.toString() == 'clock_in') {
+          clockIns.add(local);
           firstClockIn ??= local;
           if (openClockIn != null) {
             needsReview = true;
@@ -1089,6 +1129,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
             openClockIn = local;
           }
         } else if (log['type']?.toString() == 'clock_out') {
+          clockOuts.add(local);
           lastClockOut = local;
           if (openClockIn == null || local.isBefore(openClockIn)) {
             needsReview = true;
@@ -1104,6 +1145,8 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         'date': entry.key,
         'clockIn': firstClockIn,
         'clockOut': lastClockOut,
+        'clockIns': clockIns,
+        'clockOuts': clockOuts,
         'hours': workedMinutes / 60,
         'needsReview': needsReview,
       };
@@ -1131,7 +1174,7 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
         ),
         Expanded(
           child: Text(
-            '${_formatClock(row['clockIn'] as DateTime?)} – ${_formatClock(row['clockOut'] as DateTime?)}',
+            '${_formatClockList(row['clockIns'])} – ${_formatClockList(row['clockOuts'])}',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ),
@@ -1173,6 +1216,12 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
   String _formatClock(DateTime? value) {
     if (value == null) return '--:--';
     return DateFormat('HH:mm').format(value);
+  }
+
+  String _formatClockList(dynamic values) {
+    if (values is! Iterable) return '--:--';
+    final times = values.whereType<DateTime>().map(_formatClock).toList();
+    return times.isEmpty ? '--:--' : times.join(' · ');
   }
 
   String _initialsForName(String name) {
@@ -1399,10 +1448,10 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                                       row['role'] as String,
                                     ),
                                     _compactAttendanceChip(
-                                      '${context.l10n.clockIn} ${_formatClock(row['clockIn'] as DateTime?)}',
+                                      '${context.l10n.clockIn} ${_formatClockList(row['clockIns'])}',
                                     ),
                                     _compactAttendanceChip(
-                                      '${context.l10n.clockOut} ${_formatClock(row['clockOut'] as DateTime?)}',
+                                      '${context.l10n.clockOut} ${_formatClockList(row['clockOuts'])}',
                                     ),
                                     _compactAttendanceChip(
                                       context.l10n.attendanceHoursValue(
@@ -1620,14 +1669,8 @@ class _AttendanceTabState extends ConsumerState<AttendanceTab> {
                                         ),
                                       ],
                                     ),
-                                    Text(
-                                      _formatClock(row['clockIn'] as DateTime?),
-                                    ),
-                                    Text(
-                                      _formatClock(
-                                        row['clockOut'] as DateTime?,
-                                      ),
-                                    ),
+                                    Text(_formatClockList(row['clockIns'])),
+                                    Text(_formatClockList(row['clockOuts'])),
                                     Text(
                                       '${(row['hours'] as double).toStringAsFixed(1)}h',
                                     ),
