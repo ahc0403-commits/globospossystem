@@ -132,6 +132,28 @@ void main() {
     );
   });
 
+  test('manual attendance audit uses the authenticated Auth user ID', () {
+    final migration = File(
+      'supabase/migrations/20260819123000_manual_attendance_audit_actor_fix.sql',
+    ).readAsStringSync();
+    final verification = File(
+      'scripts/verify_manual_attendance_audit_actor_fix.sql',
+    ).readAsStringSync();
+
+    expect(migration, contains("auth.uid(),\n    'attendance_manual_entry'"));
+    expect(
+      migration,
+      isNot(contains("v_actor.id,\n    'attendance_manual_entry'")),
+    );
+    expect(migration, isNot(contains('ATTENDANCE_MANUAL_SEQUENCE_INVALID')));
+    expect(
+      verification,
+      contains(
+        'manual attendance audit actor is not the authenticated Auth user',
+      ),
+    );
+  });
+
   test(
     'payroll export includes active part-timer with no attendance logs',
     () async {
