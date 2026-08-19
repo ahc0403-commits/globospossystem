@@ -38,6 +38,9 @@ jobs:
           deno-version: 'v2.7.13'
       - name: Install PostgreSQL client
         run: |
+          sudo sed -i \
+            's|mirror+file:/etc/apt/apt-mirrors.txt|https://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/sources.list.d/ubuntu.sources
           apt_options=(
             -o Acquire::ForceIPv4=true
             -o Acquire::Retries=3
