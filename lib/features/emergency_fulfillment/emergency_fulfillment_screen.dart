@@ -39,6 +39,8 @@ class _EmergencyFulfillmentScreenState
   int _page = 0;
   Timer? _flashTimer;
   Timer? _handoffAlarmTimer;
+  Timer? _floorDirectBeverageAlarmTimer;
+  int _pendingFloorDirectBeverageCount = 0;
   final Map<String, EmergencyHandoffNotice> _pendingHandoffNotices = {};
   late final ProviderSubscription<EmergencyFulfillmentState> _stateSub;
 
@@ -74,7 +76,17 @@ class _EmergencyFulfillmentScreenState
     if (handoffNotices.isNotEmpty) {
       _queueHandoffAlarms(handoffNotices);
     }
+    final floorDirectBeverageNotices = emergencyFloorDirectBeverageNotices(
+      previous ?? const EmergencyFulfillmentState(),
+      next,
+    );
+    if (floorDirectBeverageNotices.isNotEmpty) {
+      _queueFloorDirectBeverageAlarm(floorDirectBeverageNotices);
+    }
     final handoffOrderIds = handoffNotices
+        .map((notice) => notice.orderId)
+        .toSet();
+    final floorDirectBeverageOrderIds = floorDirectBeverageNotices
         .map((notice) => notice.orderId)
         .toSet();
     final previouslyKnownOrderIds = <String>{
@@ -84,6 +96,7 @@ class _EmergencyFulfillmentScreenState
     final newOrderIds = newActionable
         .difference(oldActionable)
         .difference(handoffOrderIds)
+        .difference(floorDirectBeverageOrderIds)
         .difference(previouslyKnownOrderIds);
     if (newOrderIds.isNotEmpty) {
       final newOrders =
@@ -149,6 +162,24 @@ class _EmergencyFulfillmentScreenState
     });
   }
 
+  void _queueFloorDirectBeverageAlarm(
+    Iterable<EmergencyFloorDirectBeverageNotice> notices,
+  ) {
+    _pendingFloorDirectBeverageCount += notices.fold(
+      0,
+      (total, notice) => total + notice.itemCount,
+    );
+    _floorDirectBeverageAlarmTimer?.cancel();
+    _floorDirectBeverageAlarmTimer = Timer(
+      emergencyFloorDirectBeverageAlarmCoalesceDelay,
+      () {
+        final itemCount = _pendingFloorDirectBeverageCount;
+        _pendingFloorDirectBeverageCount = 0;
+        _triggerFloorDirectBeverageAlarm(itemCount);
+      },
+    );
+  }
+
   Future<void> _triggerAlarm(Iterable<String> tableNumbers) async {
     if (!mounted) return;
     setState(() => _flashing = true);
@@ -185,6 +216,20 @@ class _EmergencyFulfillmentScreenState
     }
   }
 
+  Future<void> _triggerFloorDirectBeverageAlarm(int itemCount) async {
+    if (!mounted || itemCount <= 0) return;
+    setState(() => _flashing = true);
+    _flashTimer?.cancel();
+    _flashTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _flashing = false);
+    });
+    if (_alarmEnabled) {
+      await EmergencyWebBridge.speak(
+        vietnameseFloorDirectBeverageMessage(itemCount),
+      );
+    }
+  }
+
   Future<void> _enableAlarm(EmergencyFulfillmentState state) async {
     final foregroundReady = await EmergencyWebBridge.enableVoice();
     final storeId = state.restaurantId;
@@ -193,12 +238,23 @@ class _EmergencyFulfillmentScreenState
     }
     if (!mounted) return;
     setState(() => _alarmEnabled = foregroundReady);
+    if (!foregroundReady) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Thiết bị chưa có giọng đọc tiếng Việt. '
+            'Hãy cài đặt giọng vi-VN rồi thử lại.',
+          ),
+        ),
+      );
+    }
   }
 
   @override
   void dispose() {
     _flashTimer?.cancel();
     _handoffAlarmTimer?.cancel();
+    _floorDirectBeverageAlarmTimer?.cancel();
     _stateSub.close();
     super.dispose();
   }
@@ -206,6 +262,24 @@ class _EmergencyFulfillmentScreenState
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(emergencyFulfillmentProvider);
+    if (state.stationType == 'floor' &&
+        Localizations.localeOf(context).languageCode != 'vi') {
+      return Localizations.override(
+        context: context,
+        locale: const Locale('vi'),
+        child: Builder(
+          builder: (localizedContext) =>
+              _buildLocalized(localizedContext, state),
+        ),
+      );
+    }
+    return _buildLocalized(context, state);
+  }
+
+  Widget _buildLocalized(
+    BuildContext context,
+    EmergencyFulfillmentState state,
+  ) {
     final copy = _EmergencyCopy.of(context);
     final expected = widget.expectedStationType;
     final stationMismatch =
@@ -236,6 +310,7 @@ class _EmergencyFulfillmentScreenState
                     : copy.stationTitle(state.stationType, state.floorLabel),
                 active: state.active,
                 draining: state.isDraining,
+                showLanguageSwitcher: state.stationType != 'floor',
                 alarmEnabled: _alarmEnabled,
                 pendingOutboxCount: state.pendingOutboxCount,
                 onEnableAlarm: state.assigned
@@ -473,6 +548,7 @@ class _EmergencyHeader extends StatelessWidget {
     required this.title,
     required this.active,
     required this.draining,
+    required this.showLanguageSwitcher,
     required this.alarmEnabled,
     required this.pendingOutboxCount,
     required this.onEnableAlarm,
@@ -484,6 +560,7 @@ class _EmergencyHeader extends StatelessWidget {
   final String title;
   final bool active;
   final bool draining;
+  final bool showLanguageSwitcher;
   final bool alarmEnabled;
   final int pendingOutboxCount;
   final VoidCallback? onEnableAlarm;
@@ -566,6 +643,7 @@ class _EmergencyHeader extends StatelessWidget {
                       forceHomeEnabled: showHomeButton,
                       onHomePressed: onHome,
                       showLogout: true,
+                      showLanguageSwitcher: showLanguageSwitcher,
                     ),
                   ],
                 ),
@@ -606,6 +684,7 @@ class _EmergencyHeader extends StatelessWidget {
                 forceHomeEnabled: showHomeButton,
                 onHomePressed: onHome,
                 showLogout: true,
+                showLanguageSwitcher: showLanguageSwitcher,
               ),
             ],
           );
