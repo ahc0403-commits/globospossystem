@@ -238,16 +238,6 @@ class _EmergencyFulfillmentScreenState
     }
     if (!mounted) return;
     setState(() => _alarmEnabled = foregroundReady);
-    if (!foregroundReady) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Thiết bị chưa có giọng đọc tiếng Việt. '
-            'Hãy cài đặt giọng vi-VN rồi thử lại.',
-          ),
-        ),
-      );
-    }
   }
 
   @override
@@ -262,24 +252,6 @@ class _EmergencyFulfillmentScreenState
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(emergencyFulfillmentProvider);
-    if (state.stationType == 'floor' &&
-        Localizations.localeOf(context).languageCode != 'vi') {
-      return Localizations.override(
-        context: context,
-        locale: const Locale('vi'),
-        child: Builder(
-          builder: (localizedContext) =>
-              _buildLocalized(localizedContext, state),
-        ),
-      );
-    }
-    return _buildLocalized(context, state);
-  }
-
-  Widget _buildLocalized(
-    BuildContext context,
-    EmergencyFulfillmentState state,
-  ) {
     final copy = _EmergencyCopy.of(context);
     final expected = widget.expectedStationType;
     final stationMismatch =
@@ -310,7 +282,6 @@ class _EmergencyFulfillmentScreenState
                     : copy.stationTitle(state.stationType, state.floorLabel),
                 active: state.active,
                 draining: state.isDraining,
-                showLanguageSwitcher: state.stationType != 'floor',
                 alarmEnabled: _alarmEnabled,
                 pendingOutboxCount: state.pendingOutboxCount,
                 onEnableAlarm: state.assigned
@@ -548,7 +519,6 @@ class _EmergencyHeader extends StatelessWidget {
     required this.title,
     required this.active,
     required this.draining,
-    required this.showLanguageSwitcher,
     required this.alarmEnabled,
     required this.pendingOutboxCount,
     required this.onEnableAlarm,
@@ -560,7 +530,6 @@ class _EmergencyHeader extends StatelessWidget {
   final String title;
   final bool active;
   final bool draining;
-  final bool showLanguageSwitcher;
   final bool alarmEnabled;
   final int pendingOutboxCount;
   final VoidCallback? onEnableAlarm;
@@ -643,7 +612,6 @@ class _EmergencyHeader extends StatelessWidget {
                       forceHomeEnabled: showHomeButton,
                       onHomePressed: onHome,
                       showLogout: true,
-                      showLanguageSwitcher: showLanguageSwitcher,
                     ),
                   ],
                 ),
@@ -684,7 +652,6 @@ class _EmergencyHeader extends StatelessWidget {
                 forceHomeEnabled: showHomeButton,
                 onHomePressed: onHome,
                 showLogout: true,
-                showLanguageSwitcher: showLanguageSwitcher,
               ),
             ],
           );
