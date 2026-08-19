@@ -38,7 +38,14 @@ jobs:
           deno-version: 'v2.7.13'
       - name: Install PostgreSQL client
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes postgresql-client
+          apt_options=(
+            -o Acquire::ForceIPv4=true
+            -o Acquire::Retries=3
+            -o Acquire::http::Timeout=30
+            -o Acquire::https::Timeout=30
+          )
+          sudo timeout 3m apt-get "${apt_options[@]}" update
+          sudo timeout 3m apt-get "${apt_options[@]}" install --yes postgresql-client
+          psql --version
       - name: Validate repository
         run: bash scripts/check_repo.sh
