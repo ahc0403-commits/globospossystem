@@ -463,9 +463,8 @@ void main() {
       locale: const Locale('ko'),
     );
 
-    expect(find.text('Tầng 2F'), findsOne);
-    expect(find.text('Đang vận hành không giấy'), findsOne);
-    expect(find.text('KO'), findsNothing);
+    expect(find.text('2F 주문확인'), findsOne);
+    expect(find.text('페이퍼리스 작업 중'), findsOne);
     expect(find.byKey(const Key('emergency_order_grid_4_slots')), findsOne);
     await tester.tap(find.byKey(const Key('emergency_order_order-1')));
     await tester.pump();
@@ -476,6 +475,26 @@ void main() {
     expect(find.textContaining('G층'), findsNothing);
     expect(find.textContaining('GF'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('floor tablet keeps the three-language selector', (tester) async {
+    final fixture = _FixtureEmergencyNotifier(_activeState('floor'));
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(1024, 768),
+      locale: const Locale('ko'),
+    );
+
+    expect(find.text('2F 주문확인'), findsOne);
+    expect(find.text('페이퍼리스 작업 중'), findsOne);
+    expect(find.text('KO'), findsOne);
+
+    await tester.tap(find.text('KO'));
+    await tester.pumpAndSettle();
+    expect(find.text('한국어'), findsOne);
+    expect(find.text('영어'), findsOne);
+    expect(find.text('베트남어'), findsOne);
   });
 
   for (final scenario
@@ -551,7 +570,7 @@ void main() {
       locale: const Locale('ko'),
     );
 
-    await tester.tap(find.text('Vừa hoàn tất 1'));
+    await tester.tap(find.text('최근 완료 1'));
     await tester.pump();
     expect(find.text('05:00'), findsOne);
     await tester.pump(const Duration(seconds: 3));
@@ -581,7 +600,7 @@ void main() {
       locale: const Locale('ko'),
     );
 
-    await tester.tap(find.text('Vừa hoàn tất 1'));
+    await tester.tap(find.text('최근 완료 1'));
     await tester.pump();
     await tester.tap(find.byKey(const Key('emergency_order_order-1')));
     await tester.pump();
@@ -745,8 +764,8 @@ void main() {
     final foodSection = find.byKey(const Key('emergency_floor_food_section'));
     expect(beverageSection, findsOne);
     expect(foodSection, findsOne);
-    expect(find.text('Đồ uống phục vụ trước'), findsOne);
-    expect(find.text('Món từ bếp và khay'), findsOne);
+    expect(find.text('먼저 제공할 음료'), findsOne);
+    expect(find.text('주방·트레이 음식'), findsOne);
     expect(find.text('Coca-Cola'), findsOne);
     expect(find.text('Bánh gạo cay'), findsOne);
     expect(
@@ -905,18 +924,9 @@ void main() {
         find.byKey(Key('emergency_menu_status_legend_$stationType')),
         findsOne,
       );
-      if (stationType == 'floor') {
-        expect(find.text('Xanh lá - Hoàn tất'), findsOne);
-        expect(find.text('Đen - Đang xử lý'), findsOne);
-        expect(
-          find.text('Xanh dương - Bước trước đã xong·chưa bàn giao'),
-          findsOne,
-        );
-      } else {
-        expect(find.text('녹색 - 완료'), findsOne);
-        expect(find.text('검은색 - 진행중'), findsOne);
-        expect(find.text('파란색 - 전 단계 완료·다음 단계 인계 전'), findsOne);
-      }
+      expect(find.text('녹색 - 완료'), findsOne);
+      expect(find.text('검은색 - 진행중'), findsOne);
+      expect(find.text('파란색 - 전 단계 완료·다음 단계 인계 전'), findsOne);
     });
   }
 

@@ -415,9 +415,14 @@ void main() {
       contains("String(voice.lang || '').toLowerCase() === 'vi-vn'"),
     );
     expect(index, contains("'voiceschanged'"));
-    expect(index, contains('utterance.voice = vietnameseVoice'));
-    expect(index, contains('utterance.voice = vietnameseVoice'));
-    expect(index, contains('if (!vietnameseVoice) return false;'));
+    expect(index, contains('if (vietnameseVoice) utterance.voice'));
+    expect(index, contains('if (vietnameseVoice) unlock.voice'));
+    expect(index, isNot(contains('if (!vietnameseVoice) return false;')));
+    expect(
+      index,
+      contains('Keep the language-only fallback'),
+      reason: 'Floor tablets must use the same vi-VN fallback as other KDS',
+    );
     expect(index, contains("new SpeechSynthesisUtterance('\\u00a0')"));
     expect(index, contains('window.speechSynthesis.resume()'));
     expect(index, contains("document.addEventListener('visibilitychange'"));

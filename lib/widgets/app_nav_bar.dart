@@ -18,7 +18,6 @@ class AppNavBar extends ConsumerWidget {
     this.forceBackEnabled = false,
     this.forceHomeEnabled = false,
     this.showLogout = true,
-    this.showLanguageSwitcher = true,
     this.overrideStoreId,
     this.overrideStoreName,
     this.onBackPressed,
@@ -28,7 +27,6 @@ class AppNavBar extends ConsumerWidget {
   final bool forceBackEnabled;
   final bool forceHomeEnabled;
   final bool showLogout;
-  final bool showLanguageSwitcher;
   final String? overrideStoreId;
   final String? overrideStoreName;
   final VoidCallback? onBackPressed;
@@ -158,7 +156,7 @@ class AppNavBar extends ConsumerWidget {
               const SizedBox(width: 10),
               _StorePill(store: activeStore),
             ],
-            if (showLanguageSwitcher && showLanguage) ...[
+            if (showLanguage) ...[
               const SizedBox(width: 10),
               LanguageSwitcher(compact: compactLanguageSwitcher),
             ],
