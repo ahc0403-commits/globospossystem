@@ -321,6 +321,10 @@ void main() {
     expect(index, contains('indexedDB.open'));
     expect(index, contains('speechSynthesis'));
     expect(index, contains("utterance.lang = 'vi-VN'"));
+    expect(index, contains('waitForEmergencyVietnameseVoice'));
+    expect(index, contains("String(voice.lang || '').toLowerCase() === 'vi-vn'"));
+    expect(index, contains("'voiceschanged'"));
+    expect(index, contains('utterance.voice = vietnameseVoice'));
     expect(index, contains("new SpeechSynthesisUtterance('\\u00a0')"));
     expect(index, contains('window.speechSynthesis.resume()'));
     expect(index, contains("document.addEventListener('visibilitychange'"));

@@ -101,6 +101,62 @@
       const emergencyVoiceSupported = () =>
         'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
       let emergencyVoiceLastQueuedAt = 0;
+      let emergencyVietnameseVoice = null;
+      let emergencyVietnameseVoicePromise = null;
+
+      function refreshEmergencyVietnameseVoice() {
+        if (!emergencyVoiceSupported()) return null;
+        const voices = window.speechSynthesis.getVoices();
+        emergencyVietnameseVoice = voices.find((voice) =>
+          String(voice.lang || '').toLowerCase() === 'vi-vn'
+        ) || voices.find((voice) =>
+          String(voice.lang || '').toLowerCase().startsWith('vi')
+        ) || null;
+        return emergencyVietnameseVoice;
+      }
+
+      function waitForEmergencyVietnameseVoice() {
+        const availableVoice = refreshEmergencyVietnameseVoice();
+        if (availableVoice) return Promise.resolve(availableVoice);
+        if (emergencyVietnameseVoicePromise) return emergencyVietnameseVoicePromise;
+
+        emergencyVietnameseVoicePromise = new Promise((resolve) => {
+          let attemptsRemaining = 15;
+          const poll = () => {
+            const voice = refreshEmergencyVietnameseVoice();
+            if (voice || attemptsRemaining <= 0) {
+              resolve(voice);
+              return;
+            }
+            attemptsRemaining -= 1;
+            window.setTimeout(poll, 100);
+          };
+          poll();
+        }).finally(() => {
+          emergencyVietnameseVoicePromise = null;
+        });
+        return emergencyVietnameseVoicePromise;
+      }
+
+      function queueEmergencyVietnameseSpeech(normalized, vietnameseVoice) {
+        if (!vietnameseVoice) return false;
+        const now = Date.now();
+        if (now - emergencyVoiceLastQueuedAt > 1500 &&
+            (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
+          window.speechSynthesis.cancel();
+        }
+        emergencyVoiceLastQueuedAt = now;
+        const utterance = new SpeechSynthesisUtterance(normalized);
+        utterance.lang = 'vi-VN';
+        utterance.voice = vietnameseVoice;
+        utterance.rate = 0.92;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+        window.speechSynthesis.speak(utterance);
+        window.setTimeout(resumeEmergencyVoice, 25);
+        window.setTimeout(resumeEmergencyVoice, 250);
+        return true;
+      }
 
       function resumeEmergencyVoice() {
         if (!emergencyVoiceSupported()) return false;
@@ -115,10 +171,12 @@
       window.globosEmergencyVoiceEnable = () => {
         if (!resumeEmergencyVoice()) return false;
         try {
+          const vietnameseVoice = refreshEmergencyVietnameseVoice();
           // Mobile Safari and tablet Chrome require a real speech request from
           // the button gesture before later realtime callbacks may speak.
           const unlock = new SpeechSynthesisUtterance('\u00a0');
           unlock.lang = 'vi-VN';
+          if (vietnameseVoice) unlock.voice = vietnameseVoice;
           unlock.rate = 10;
           unlock.volume = 0.01;
           window.speechSynthesis.speak(unlock);
@@ -134,29 +192,22 @@
         const normalized = String(message || '').trim();
         if (!normalized) return false;
         try {
-          const now = Date.now();
-          if (now - emergencyVoiceLastQueuedAt > 1500 &&
-              (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
-            window.speechSynthesis.cancel();
-          }
-          emergencyVoiceLastQueuedAt = now;
-          const utterance = new SpeechSynthesisUtterance(normalized);
-          utterance.lang = 'vi-VN';
-          utterance.rate = 0.92;
-          utterance.pitch = 1;
-          utterance.volume = 1;
-          const vietnameseVoice = window.speechSynthesis.getVoices().find((voice) =>
-            String(voice.lang || '').toLowerCase().startsWith('vi')
-          );
-          if (vietnameseVoice) utterance.voice = vietnameseVoice;
-          window.speechSynthesis.speak(utterance);
-          window.setTimeout(resumeEmergencyVoice, 25);
-          window.setTimeout(resumeEmergencyVoice, 250);
+          waitForEmergencyVietnameseVoice().then((vietnameseVoice) => {
+            queueEmergencyVietnameseSpeech(normalized, vietnameseVoice);
+          }).catch(() => {});
           return true;
         } catch (_) {
           return false;
         }
       };
+
+      if (emergencyVoiceSupported()) {
+        refreshEmergencyVietnameseVoice();
+        window.speechSynthesis.addEventListener(
+          'voiceschanged',
+          refreshEmergencyVietnameseVoice,
+        );
+      }
 
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') resumeEmergencyVoice();
