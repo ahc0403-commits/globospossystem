@@ -18,6 +18,14 @@ void main() {
     expect(vietnameseNewOrderMessage('T12'), 'Bàn một hai, có đơn hàng mới.');
     expect(vietnameseNewOrderMessage(''), 'Có đơn hàng mới.');
     expect(
+      vietnameseFloorDirectBeverageMessage(3),
+      'Có đồ uống mới. Tổng cộng ba món.',
+    );
+    expect(
+      vietnameseFloorDirectBeverageMessage(21),
+      'Có đồ uống mới. Tổng cộng hai mươi mốt món.',
+    );
+    expect(
       vietnameseHandoffMessage('104', 2, 'tray'),
       'Bàn một không bốn, hai món đã hoàn thành.',
     );
@@ -26,7 +34,87 @@ void main() {
       'Bàn một không bốn, hai món đã hoàn thành.',
     );
     expect(emergencyHandoffAlarmCoalesceDelay, const Duration(seconds: 2));
+    expect(
+      emergencyFloorDirectBeverageAlarmCoalesceDelay,
+      const Duration(seconds: 2),
+    );
   });
+
+  test(
+    'floor beverage notices report only newly ordered direct quantities',
+    () {
+      EmergencyFulfillmentOrder order({
+        required String orderId,
+        required int queueNo,
+        required int directQuantity,
+        int floorServedQuantity = 0,
+      }) => EmergencyFulfillmentOrder(
+        queueId: 'queue-$orderId',
+        orderId: orderId,
+        queueNo: queueNo,
+        tableNumber: '$queueNo',
+        floorLabel: '1F',
+        createdAt: DateTime.utc(2026, 8, 19),
+        items: [
+          EmergencyFulfillmentItem(
+            id: 'drink-$orderId',
+            orderItemId: 'order-item-$orderId',
+            nameKo: '콜라',
+            nameVi: 'Coca-Cola',
+            nameEn: 'Coca-Cola',
+            orderedQuantity: directQuantity,
+            kitchenDoneQuantity: 0,
+            trayReceivedQuantity: 0,
+            trayDispatchedQuantity: 0,
+            floorServedQuantity: floorServedQuantity,
+            needsReview: false,
+            fulfillmentRoute: 'floor_direct',
+          ),
+        ],
+      );
+
+      final previous = EmergencyFulfillmentState(
+        sessionId: 'session-1',
+        stationType: 'floor',
+        orders: [order(orderId: '1', queueNo: 1, directQuantity: 1)],
+      );
+      final next = previous.copyWith(
+        orders: [
+          order(orderId: '1', queueNo: 1, directQuantity: 3),
+          order(orderId: '2', queueNo: 2, directQuantity: 1),
+        ],
+      );
+      final notices = emergencyFloorDirectBeverageNotices(previous, next);
+      expect(notices.map((notice) => notice.itemCount), [2, 1]);
+
+      final served = next.copyWith(
+        orders: [
+          order(
+            orderId: '1',
+            queueNo: 1,
+            directQuantity: 3,
+            floorServedQuantity: 1,
+          ),
+          order(orderId: '2', queueNo: 2, directQuantity: 1),
+        ],
+      );
+      expect(emergencyFloorDirectBeverageNotices(next, served), isEmpty);
+      expect(
+        emergencyFloorDirectBeverageNotices(
+          previous.copyWith(stationType: 'tray'),
+          next.copyWith(stationType: 'tray'),
+        ),
+        isEmpty,
+      );
+      expect(
+        emergencyFloorDirectBeverageNotices(
+          previous,
+          next.copyWith(sessionId: 'session-2'),
+        ),
+        isEmpty,
+      );
+    },
+  );
 
   test('handoff notices report only the newly delivered quantity', () {
     EmergencyFulfillmentOrder order({
@@ -328,8 +416,8 @@ void main() {
     );
     expect(index, contains("'voiceschanged'"));
     expect(index, contains('utterance.voice = vietnameseVoice'));
-    expect(index, contains('if (vietnameseVoice) utterance.voice'));
-    expect(index, isNot(contains('if (!vietnameseVoice) return false;')));
+    expect(index, contains('utterance.voice = vietnameseVoice'));
+    expect(index, contains('if (!vietnameseVoice) return false;'));
     expect(index, contains("new SpeechSynthesisUtterance('\\u00a0')"));
     expect(index, contains('window.speechSynthesis.resume()'));
     expect(index, contains("document.addEventListener('visibilitychange'"));

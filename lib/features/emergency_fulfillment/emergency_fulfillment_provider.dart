@@ -12,6 +12,7 @@ import '../../core/utils/live_sync_scope.dart';
 import '../../main.dart';
 
 const emergencyHandoffAlarmCoalesceDelay = Duration(seconds: 2);
+const emergencyFloorDirectBeverageAlarmCoalesceDelay = Duration(seconds: 2);
 
 String formatEmergencyElapsed(Duration elapsed) {
   final totalSeconds = elapsed.inSeconds < 0 ? 0 : elapsed.inSeconds;
@@ -19,6 +20,39 @@ String formatEmergencyElapsed(Duration elapsed) {
   final seconds = totalSeconds % 60;
   return '${minutes.toString().padLeft(2, '0')}:'
       '${seconds.toString().padLeft(2, '0')}';
+}
+
+/// Keeps the last known station clock boundaries while the fast order
+/// snapshot is published ahead of the timing RPC.
+EmergencyFulfillmentState preserveEmergencyStationTimings(
+  EmergencyFulfillmentState current,
+  EmergencyFulfillmentState previous,
+) {
+  if (current.sessionId == null ||
+      current.sessionId != previous.sessionId ||
+      current.stationType != previous.stationType) {
+    return current;
+  }
+
+  final previousOrdersByQueueId = <String, EmergencyFulfillmentOrder>{
+    for (final order in [...previous.orders, ...previous.completedOrders])
+      order.queueId: order,
+  };
+  EmergencyFulfillmentOrder preserve(EmergencyFulfillmentOrder order) {
+    final cached = previousOrdersByQueueId[order.queueId];
+    if (cached == null) return order;
+    return order.copyWith(
+      stationStartedAt: order.stationStartedAt ?? cached.stationStartedAt,
+      stationCompletedAt: order.stationCompletedAt ?? cached.stationCompletedAt,
+    );
+  }
+
+  return current.copyWith(
+    orders: current.orders.map(preserve).toList(growable: false),
+    completedOrders: current.completedOrders
+        .map(preserve)
+        .toList(growable: false),
+  );
 }
 
 void _mergeStationTimings(Map<String, dynamic> snapshot, dynamic rawTimings) {
@@ -679,6 +713,62 @@ class EmergencyHandoffNotice {
   final String stationType;
 }
 
+class EmergencyFloorDirectBeverageNotice {
+  const EmergencyFloorDirectBeverageNotice({
+    required this.orderId,
+    required this.queueNo,
+    required this.itemCount,
+  });
+
+  final String orderId;
+  final int queueNo;
+  final int itemCount;
+}
+
+/// Returns only positive floor-direct beverage quantity changes.
+/// Completed orders are part of the baseline so an undo cannot be announced
+/// as a new beverage order.
+List<EmergencyFloorDirectBeverageNotice> emergencyFloorDirectBeverageNotices(
+  EmergencyFulfillmentState previous,
+  EmergencyFulfillmentState next,
+) {
+  if (next.stationType != 'floor' ||
+      previous.stationType != next.stationType ||
+      previous.sessionId != next.sessionId) {
+    return const [];
+  }
+
+  final previousQuantities = <String, int>{
+    for (final order in [...previous.orders, ...previous.completedOrders])
+      for (final item in order.items)
+        if (item.isFloorDirect) item.id: item.orderedQuantity,
+  };
+  final notices = <EmergencyFloorDirectBeverageNotice>[];
+  for (final order in next.orders) {
+    final addedQuantity = order.items
+        .where((item) => item.isFloorDirect)
+        .fold(
+          0,
+          (total, item) =>
+              total +
+              (item.orderedQuantity - (previousQuantities[item.id] ?? 0)).clamp(
+                0,
+                item.orderedQuantity,
+              ),
+        );
+    if (addedQuantity <= 0) continue;
+    notices.add(
+      EmergencyFloorDirectBeverageNotice(
+        orderId: order.orderId,
+        queueNo: order.queueNo,
+        itemCount: addedQuantity,
+      ),
+    );
+  }
+  notices.sort((left, right) => left.queueNo.compareTo(right.queueNo));
+  return notices;
+}
+
 /// Returns only positive kitchen-to-tray or tray-to-floor quantity changes.
 /// Completed orders are included in the baseline so undoing an action does not
 /// look like a fresh handoff when the order returns to the active board.
@@ -755,7 +845,10 @@ class EmergencyFulfillmentNotifier
       // Publish the authoritative order rows before auxiliary history/timing
       // calls finish. This keeps the foreground alarm aligned with the card
       // appearing on slower tablet networks.
-      final immediate = EmergencyFulfillmentState.fromJson(json);
+      final immediate = preserveEmergencyStationTimings(
+        EmergencyFulfillmentState.fromJson(json),
+        state,
+      );
       state = immediate.copyWith(
         isLoading: false,
         fulfillmentMode: state.fulfillmentMode,

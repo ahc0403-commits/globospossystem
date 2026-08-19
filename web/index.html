@@ -139,6 +139,7 @@
       }
 
       function queueEmergencyVietnameseSpeech(normalized, vietnameseVoice) {
+        if (!vietnameseVoice) return false;
         const now = Date.now();
         if (now - emergencyVoiceLastQueuedAt > 1500 &&
             (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
@@ -147,10 +148,7 @@
         emergencyVoiceLastQueuedAt = now;
         const utterance = new SpeechSynthesisUtterance(normalized);
         utterance.lang = 'vi-VN';
-        // Some tablet browsers can synthesize vi-VN even when getVoices()
-        // does not expose the system voice. Keep the language-only fallback
-        // audible instead of silently dropping the announcement.
-        if (vietnameseVoice) utterance.voice = vietnameseVoice;
+        utterance.voice = vietnameseVoice;
         utterance.rate = 0.92;
         utterance.pitch = 1;
         utterance.volume = 1;
@@ -174,11 +172,12 @@
         if (!resumeEmergencyVoice()) return false;
         try {
           const vietnameseVoice = refreshEmergencyVietnameseVoice();
+          if (!vietnameseVoice) return false;
           // Mobile Safari and tablet Chrome require a real speech request from
           // the button gesture before later realtime callbacks may speak.
           const unlock = new SpeechSynthesisUtterance('\u00a0');
           unlock.lang = 'vi-VN';
-          if (vietnameseVoice) unlock.voice = vietnameseVoice;
+          unlock.voice = vietnameseVoice;
           unlock.rate = 10;
           unlock.volume = 0.01;
           window.speechSynthesis.speak(unlock);
