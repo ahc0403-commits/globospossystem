@@ -272,10 +272,11 @@
         googleMapsLoadPromise = new Promise((resolve, reject) => {
           const script = document.createElement('script');
           script.src = 'https://maps.googleapis.com/maps/api/js?key=' +
-            encodeURIComponent(key) + '&loading=async&libraries=maps,marker';
+            encodeURIComponent(key) +
+            '&loading=async&libraries=maps,marker&auth_referrer_policy=origin';
           script.async = true;
           script.defer = true;
-          script.referrerPolicy = 'no-referrer';
+          script.referrerPolicy = 'origin';
           script.onload = () => resolve(true);
           script.onerror = () => {
             googleMapsLoadPromise = null;

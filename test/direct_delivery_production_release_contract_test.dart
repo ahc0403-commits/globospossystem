@@ -49,5 +49,10 @@ void main() {
     expect(orderingVerify, contains('STOREFRONT_UNEXPECTEDLY_ENABLED'));
     expect(alertVerify, contains('STOREFRONT_UNEXPECTEDLY_ENABLED'));
     expect(alertVerify, contains('AFTER INSERT'));
+
+    final webIndex = File('web/index.html').readAsStringSync();
+    expect(webIndex, contains('&auth_referrer_policy=origin'));
+    expect(webIndex, contains("script.referrerPolicy = 'origin';"));
+    expect(webIndex, isNot(contains("script.referrerPolicy = 'no-referrer';")));
   });
 }
