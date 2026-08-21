@@ -47,7 +47,9 @@ BEGIN
         'base_unit_factor', 1000,
         'storage_type', 'dry',
         'shelf_life_days', 7,
-        'is_orderable', true
+        'is_orderable', true,
+        'supplier_id', v_supplier.id,
+        'unit_price', 125000
       )
     )
   )
@@ -65,6 +67,15 @@ BEGIN
          AND product.name = 'Codex ingredient verification'
          AND ingredient.name = 'Codex ingredient verification'
          AND ingredient.unit = 'g'
+         AND EXISTS (
+           SELECT 1
+           FROM public.inventory_supplier_items supplier_item
+           WHERE supplier_item.product_id = product.id
+             AND supplier_item.supplier_id = v_supplier.id
+             AND supplier_item.unit_price = 125000
+             AND supplier_item.is_preferred = true
+             AND supplier_item.is_active = true
+         )
      ) THEN
     RAISE EXCEPTION 'INGREDIENT_EXCEL_ROUND_TRIP_FAILED';
   END IF;

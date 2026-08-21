@@ -1804,7 +1804,11 @@ class _InventoryPurchaseScreenState
           loading: _isExportingIngredientTemplate,
           onPressed: _isExportingIngredientTemplate
               ? null
-              : () => _downloadIngredientTemplate(products: products),
+              : () => _downloadIngredientTemplate(
+                  products: products,
+                  suppliers: supplierCatalog.suppliers,
+                  supplierItems: supplierCatalog.supplierItems,
+                ),
           compact: true,
         ),
         PosActionButton(
@@ -1818,6 +1822,7 @@ class _InventoryPurchaseScreenState
               : () => _importIngredientWorkbook(
                   storeId: storeId,
                   products: products,
+                  suppliers: supplierCatalog.suppliers,
                 ),
           compact: true,
         ),
@@ -3627,11 +3632,17 @@ class _InventoryPurchaseScreenState
 
   Future<void> _downloadIngredientTemplate({
     required List<Map<String, dynamic>> products,
+    required List<Map<String, dynamic>> suppliers,
+    required List<Map<String, dynamic>> supplierItems,
   }) async {
     setState(() => _isExportingIngredientTemplate = true);
     try {
       final bytes = Uint8List.fromList(
-        buildIngredientImportTemplate(products: products),
+        buildIngredientImportTemplate(
+          products: products,
+          suppliers: suppliers,
+          supplierItems: supplierItems,
+        ),
       );
       final now = DateTime.now();
       final stamp =
@@ -3667,6 +3678,7 @@ class _InventoryPurchaseScreenState
   Future<void> _importIngredientWorkbook({
     required String storeId,
     required List<Map<String, dynamic>> products,
+    required List<Map<String, dynamic>> suppliers,
   }) async {
     const typeGroup = XTypeGroup(
       label: 'Excel (.xlsx)',
@@ -3680,6 +3692,7 @@ class _InventoryPurchaseScreenState
       final workbook = parseIngredientImportWorkbook(
         await file.readAsBytes(),
         existingProducts: products,
+        existingSuppliers: suppliers,
       );
       if (!mounted) return;
 

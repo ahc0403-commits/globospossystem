@@ -202,7 +202,11 @@ void main() {
   ) async {
     final ingredientFile = XFile.fromData(
       Uint8List.fromList(
-        buildIngredientImportTemplate(products: const [_product]),
+        buildIngredientImportTemplate(
+          products: const [_product],
+          suppliers: const [_supplier],
+          supplierItems: const [_supplierItem],
+        ),
       ),
       name: 'ingredients.xlsx',
       mimeType:
@@ -213,9 +217,7 @@ void main() {
     final recipeSheet = validExcel[recipeImportSheetName];
     recipeSheet.appendRow(recipeImportHeaders.map(TextCellValue.new).toList());
     recipeSheet.appendRow([
-      TextCellValue('menu-pho'),
       TextCellValue('Phở bò đặc biệt'),
-      TextCellValue('ingredient-beef'),
       TextCellValue('Thịt bò'),
       DoubleCellValue(100),
     ]);
