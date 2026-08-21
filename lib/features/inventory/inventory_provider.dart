@@ -1080,6 +1080,9 @@ class InventoryPurchaseProductCatalogNotifier
     if (message.contains('INVENTORY_INGREDIENT_SUPPLIER_NOT_FOUND')) {
       return 'A selected supplier is no longer active.';
     }
+    if (message.contains('INVENTORY_INGREDIENT_SUPPLIER_AMBIGUOUS')) {
+      return 'Multiple active suppliers have the same name. Rename the supplier and retry.';
+    }
     if (message.contains('INVENTORY_INGREDIENT_PRICE_INVALID')) {
       return 'Enter a price of zero or greater for every ingredient.';
     }

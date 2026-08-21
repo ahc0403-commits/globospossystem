@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:file_saver/file_saver.dart';
@@ -9,6 +10,7 @@ import 'package:globos_pos_system/core/ui/app_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../core/ui/toast/toast.dart';
 import '../../core/utils/number_input_utils.dart';
@@ -51,6 +53,7 @@ class _InventoryPurchaseScreenState
   bool _isImportingRecipes = false;
   bool _isExportingIngredientTemplate = false;
   bool _isImportingIngredients = false;
+  bool _liveRefreshInFlight = false;
 
   @override
   void initState() {
@@ -124,6 +127,17 @@ class _InventoryPurchaseScreenState
     final storeId = ref.watch(adminScopedStoreIdProvider);
     if (widget.autoLoad) {
       _scheduleStoreLoad(storeId);
+    }
+    if (storeId != null) {
+      ref.listen<AsyncValue<PosLiveEvent>>(posLiveEventsProvider(storeId), (
+        _,
+        next,
+      ) {
+        next.whenData((event) {
+          if (!mounted || !event.affects({'inventory', 'menu'})) return;
+          unawaited(_refreshStoreScopeInPlace(storeId));
+        });
+      });
     }
 
     final overview = ref.watch(inventoryPurchaseOverviewProvider);
@@ -225,6 +239,16 @@ class _InventoryPurchaseScreenState
           .loadLatest(storeId),
       ref.read(inventoryPurchaseOrderSummaryProvider.notifier).load(storeId),
     ]);
+  }
+
+  Future<void> _refreshStoreScopeInPlace(String storeId) async {
+    if (_liveRefreshInFlight) return;
+    _liveRefreshInFlight = true;
+    try {
+      await _reloadStoreScope(storeId);
+    } finally {
+      _liveRefreshInFlight = false;
+    }
   }
 
   Widget _buildSectionRail({bool horizontal = false}) {

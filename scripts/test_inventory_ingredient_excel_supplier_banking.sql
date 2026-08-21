@@ -1,11 +1,14 @@
 \set ON_ERROR_STOP on
 
+BEGIN;
 SET LOCAL request.jwt.claim.role = 'service_role';
 
 DO $test$
 DECLARE
   v_store_id uuid;
   v_supplier public.inventory_suppliers%ROWTYPE;
+  v_excel_supplier_name text :=
+    'Codex Excel-created supplier ' || gen_random_uuid()::text;
   v_result jsonb;
 BEGIN
   SELECT id
@@ -48,14 +51,29 @@ BEGIN
         'storage_type', 'dry',
         'shelf_life_days', 7,
         'is_orderable', true,
-        'supplier_id', v_supplier.id,
+        'supplier_name', v_excel_supplier_name,
         'unit_price', 125000
+      ),
+      jsonb_build_object(
+        'source_row', 3,
+        'product_code', 'CODEX-INGREDIENT-EXCEL-CACHED-COMPAT',
+        'name', 'Codex cached client ingredient',
+        'category', 'Verification',
+        'stock_unit', 'kg',
+        'base_unit', 'g',
+        'base_unit_factor', 1000,
+        'storage_type', 'dry',
+        'shelf_life_days', 7,
+        'is_orderable', true,
+        'supplier_id', v_supplier.id,
+        'unit_price', 99000
       )
     )
   )
   INTO v_result;
 
-  IF (v_result->>'row_count')::integer <> 1
+  IF (v_result->>'row_count')::integer <> 2
+     OR (v_result->>'supplier_created_count')::integer <> 1
      OR NOT EXISTS (
        SELECT 1
        FROM public.inventory_products product
@@ -70,14 +88,35 @@ BEGIN
          AND EXISTS (
            SELECT 1
            FROM public.inventory_supplier_items supplier_item
+           JOIN public.inventory_suppliers supplier
+             ON supplier.id = supplier_item.supplier_id
            WHERE supplier_item.product_id = product.id
-             AND supplier_item.supplier_id = v_supplier.id
+             AND supplier.supplier_name = v_excel_supplier_name
              AND supplier_item.unit_price = 125000
              AND supplier_item.is_preferred = true
              AND supplier_item.is_active = true
          )
      ) THEN
     RAISE EXCEPTION 'INGREDIENT_EXCEL_ROUND_TRIP_FAILED';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.inventory_products product
+    WHERE product.restaurant_id = v_store_id
+      AND product.product_code = 'CODEX-INGREDIENT-EXCEL-CACHED-COMPAT'
+      AND product.name = 'Codex cached client ingredient'
+      AND EXISTS (
+        SELECT 1
+        FROM public.inventory_supplier_items supplier_item
+        WHERE supplier_item.product_id = product.id
+          AND supplier_item.supplier_id = v_supplier.id
+          AND supplier_item.unit_price = 99000
+          AND supplier_item.is_preferred = true
+          AND supplier_item.is_active = true
+      )
+  ) THEN
+    RAISE EXCEPTION 'INGREDIENT_EXCEL_CACHED_CLIENT_COMPAT_FAILED';
   END IF;
 
   PERFORM *
@@ -87,3 +126,5 @@ $test$;
 
 SELECT 'inventory ingredient Excel and supplier banking integration passed'
   AS result;
+
+ROLLBACK;
