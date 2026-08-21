@@ -62,6 +62,20 @@
 <body>
   <script>
     (() => {
+      const path = window.location.pathname;
+      if (
+        /^\/order\/[a-z0-9][a-z0-9-]{2,62}$/.test(path) &&
+        !window.location.hash
+      ) {
+        window.history.replaceState(
+          null,
+          '',
+          '/#' + path + window.location.search,
+        );
+      }
+    })();
+
+    (() => {
       let digitalReceiptToken = '';
       if (window.location.pathname === '/receipt') {
         const fragment = new URLSearchParams(window.location.hash.slice(1));

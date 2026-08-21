@@ -291,7 +291,7 @@ class DirectOrderStaffService {
   }
 
   String publicUrl(String slug) =>
-      '${AppConstants.posPublicUrl}/order/${Uri.encodeComponent(slug)}';
+      '${AppConstants.posPublicUrl}/#/order/${Uri.encodeComponent(slug)}';
 }
 
 const directOrderStaffService = DirectOrderStaffService();
