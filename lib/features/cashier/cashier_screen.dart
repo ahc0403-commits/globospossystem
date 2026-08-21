@@ -621,7 +621,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       return;
     }
 
-    final wetTissueQuantities = await showDialog<Map<String, int>>(
+    final preparation = await showDialog<_CombinedTablePaymentDialogResult>(
       context: context,
       barrierDismissible: false,
       builder: (_) => _CombinedTablePaymentDialog(
@@ -629,9 +629,17 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
         orders: orders,
       ),
     );
-    if (wetTissueQuantities == null || !mounted) {
+    if (preparation == null || !mounted) {
       return;
     }
+    if (preparation.cancelCombination) {
+      setState(() {
+        _combinedOrderIds.clear();
+        _isCombinedPaymentMode = false;
+      });
+      return;
+    }
+    final wetTissueQuantities = preparation.wetTissueQuantities;
 
     final prepared = await notifier.prepareCombinedTablePayment(
       storeId: storeId,
@@ -655,6 +663,19 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       return;
     }
 
+    final combinedTotal = paymentOrders.fold<double>(
+      0,
+      (sum, order) => sum + order.remainingDue,
+    );
+    final shown = await notifier.showCombinedOnCustomerDisplay(
+      storeId: storeId,
+      orders: paymentOrders,
+    );
+    if (!mounted) return;
+    if (shown) {
+      showSuccessToast(context, l10n.cashierCustomerDisplayShown);
+    }
+
     final method = await showDialog<String>(
       context: context,
       barrierDismissible: false,
@@ -667,17 +688,8 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       return;
     }
 
-    final combinedTotal = paymentOrders.fold<double>(
-      0,
-      (sum, order) => sum + order.remainingDue,
-    );
     CashTender? cashTender;
     if (method == paymentMethodOther) {
-      await notifier.showCombinedOnCustomerDisplay(
-        storeId: storeId,
-        orders: paymentOrders,
-      );
-      if (!mounted) return;
       final qrConfirmed = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
@@ -5481,6 +5493,18 @@ class _CombinedPaymentSelectionBar extends StatelessWidget {
   }
 }
 
+class _CombinedTablePaymentDialogResult {
+  const _CombinedTablePaymentDialogResult.confirm(this.wetTissueQuantities)
+    : cancelCombination = false;
+
+  const _CombinedTablePaymentDialogResult.cancel()
+    : cancelCombination = true,
+      wetTissueQuantities = const {};
+
+  final bool cancelCombination;
+  final Map<String, int> wetTissueQuantities;
+}
+
 class _CombinedTablePaymentDialog extends StatefulWidget {
   const _CombinedTablePaymentDialog({super.key, required this.orders});
 
@@ -5670,12 +5694,25 @@ class _CombinedTablePaymentDialogState
       ),
       actions: [
         TextButton(
+          key: const Key('cashier_combined_payment_edit_selection'),
           onPressed: () => Navigator.of(context).pop(),
+          child: Text(l10n.back),
+        ),
+        TextButton(
+          key: const Key('cashier_combined_payment_cancel'),
+          onPressed: () => Navigator.of(
+            context,
+          ).pop(const _CombinedTablePaymentDialogResult.cancel()),
+          style: TextButton.styleFrom(foregroundColor: PosColors.danger),
           child: Text(l10n.cancel),
         ),
         FilledButton.icon(
           key: const Key('cashier_combined_payment_confirm'),
-          onPressed: () => Navigator.of(context).pop(_wetTissueQuantities),
+          onPressed: () => Navigator.of(context).pop(
+            _CombinedTablePaymentDialogResult.confirm(
+              Map<String, int>.from(_wetTissueQuantities),
+            ),
+          ),
           icon: const Icon(Icons.check_rounded, size: 18),
           label: Text(l10n.cashierCombinedConfirmWetTissue),
         ),

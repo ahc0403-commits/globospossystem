@@ -219,6 +219,8 @@ class _PaymentNotifier extends PaymentNotifier {
   int? confirmedWetTissueQuantity;
   String? processedMethod;
   Map<String, int>? combinedWetTissueQuantities;
+  int combinedPaymentDisplayCalls = 0;
+  double? combinedPaymentDisplayTotal;
   int combinedReceiptDisplayCalls = 0;
 
   @override
@@ -312,7 +314,14 @@ class _PaymentNotifier extends PaymentNotifier {
   Future<bool> showCombinedOnCustomerDisplay({
     required String storeId,
     required List<CashierOrder> orders,
-  }) async => true;
+  }) async {
+    combinedPaymentDisplayCalls += 1;
+    combinedPaymentDisplayTotal = orders.fold<double>(
+      0,
+      (sum, order) => sum + order.remainingDue,
+    );
+    return true;
+  }
 
   @override
   Future<bool> prepareCombinedTablePayment({
@@ -1118,6 +1127,8 @@ void main() {
         find.byKey(const Key('cashier_combined_payment_method_dialog')),
         findsOneWidget,
       );
+      expect(harness.notifier.combinedPaymentDisplayCalls, 1);
+      expect(harness.notifier.combinedPaymentDisplayTotal, 220000);
       await tester.tap(
         find.byKey(const Key('cashier_method_dialog_$paymentMethodCash')),
       );
@@ -1128,6 +1139,49 @@ void main() {
       );
       _dismiss(tester, const Key('cashier_combined_cash_tender_dialog'));
       await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'combined payment confirmation can cancel an incorrect table selection',
+    (tester) async {
+      final harness = await _pumpCashier(
+        tester,
+        includeSecondOrder: true,
+        physicalSize: const Size(1440, 1600),
+      );
+
+      await tester.tap(find.byKey(const Key('cashier_combined_payment_mode')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('cashier_combined_order_$_orderId')),
+      );
+      await tester.tap(
+        find.byKey(const Key('cashier_combined_order_cashier-order-b2')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('cashier_combined_payment_start')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const Key('cashier_combined_payment_cancel')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('cashier_combined_payment_dialog')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('cashier_combined_payment_selection_bar')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('cashier_combined_order_$_orderId')),
+        findsNothing,
+      );
+      expect(harness.notifier.combinedPaymentDisplayCalls, 0);
       expect(tester.takeException(), isNull);
     },
   );
