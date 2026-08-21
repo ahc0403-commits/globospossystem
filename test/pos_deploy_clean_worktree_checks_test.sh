@@ -84,7 +84,10 @@ cat >"$FAKE_BIN/deno" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'deno %s\n' "$*" >>"$CALL_LOG"
-[[ "${1:-}" == 'test' ]] || exit 47
+case "${1:-}" in
+  test|fmt|lint|check) exit 0 ;;
+  *) exit 47 ;;
+esac
 EOF
 
 chmod +x "$FAKE_BIN/flutter" "$FAKE_BIN/dart" "$FAKE_BIN/deno"
@@ -110,6 +113,14 @@ printf 'deno test %s/supabase/functions/sepay-webhook/index_test.ts\n' \
 printf 'deno test %s/supabase/functions/emergency-fulfillment-dispatcher/index_test.ts\n' \
   "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
 printf 'deno test --config %s/supabase/functions/public-receipt/deno.json %s/supabase/functions/public-receipt/index_test.ts\n' \
+  "$REHEARSAL_REPO" "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
+printf 'deno fmt --check %s/supabase/functions/direct-order-public/index.ts %s/supabase/functions/direct-order-public/index_test.ts %s/supabase/functions/direct-order-public/deno.json\n' \
+  "$REHEARSAL_REPO" "$REHEARSAL_REPO" "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
+printf 'deno lint %s/supabase/functions/direct-order-public/index.ts %s/supabase/functions/direct-order-public/index_test.ts\n' \
+  "$REHEARSAL_REPO" "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
+printf 'deno check --config %s/supabase/functions/direct-order-public/deno.json %s/supabase/functions/direct-order-public/index.ts %s/supabase/functions/direct-order-public/index_test.ts\n' \
+  "$REHEARSAL_REPO" "$REHEARSAL_REPO" "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
+printf 'deno test --config %s/supabase/functions/direct-order-public/deno.json %s/supabase/functions/direct-order-public/index_test.ts\n' \
   "$REHEARSAL_REPO" "$REHEARSAL_REPO" >>"$TMP_DIR/expected.log"
 printf 'flutter test test/focused_test.dart\n' >>"$TMP_DIR/expected.log"
 cmp "$TMP_DIR/expected.log" "$CALL_LOG"

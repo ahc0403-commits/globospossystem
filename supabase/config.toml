@@ -1,2 +1,5 @@
 [functions.public-receipt]
 verify_jwt = false
+
+[functions.direct-order-public]
+verify_jwt = false
