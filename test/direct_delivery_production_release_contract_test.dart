@@ -54,5 +54,16 @@ void main() {
     expect(webIndex, contains('&auth_referrer_policy=origin'));
     expect(webIndex, contains("script.referrerPolicy = 'origin';"));
     expect(webIndex, isNot(contains("script.referrerPolicy = 'no-referrer';")));
+    expect(
+      webIndex,
+      contains(r"/^\/order\/[a-z0-9][a-z0-9-]{2,62}$/"),
+    );
+    expect(webIndex, contains("'/#' + path + window.location.search"));
+
+    final staffService = File(
+      'lib/features/direct_order/direct_order_staff_service.dart',
+    ).readAsStringSync();
+    expect(staffService, contains('/#/order/'));
+    expect(staffService, isNot(contains("posPublicUrl}/order/")));
   });
 }
