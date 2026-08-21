@@ -99,7 +99,10 @@ cat >"$FAKE_BIN/deno" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'deno %s\n' "$*" >>"$CALL_LOG"
-[[ "${1:-}" == test ]] || exit 88
+case "${1:-}" in
+  test|fmt|lint|check) exit 0 ;;
+  *) exit 88 ;;
+esac
 EOF
 
 cat >"$FAKE_BIN/supabase" <<'EOF'

@@ -13,6 +13,20 @@ dart analyze --fatal-infos
 printf 'CHECK_REPO_STEP=flutter_tests\n'
 flutter test
 
+printf 'CHECK_REPO_STEP=direct_order_edge_contracts\n'
+deno fmt --check \
+  supabase/functions/direct-order-public/index.ts \
+  supabase/functions/direct-order-public/index_test.ts \
+  supabase/functions/direct-order-public/deno.json
+deno lint \
+  supabase/functions/direct-order-public/index.ts \
+  supabase/functions/direct-order-public/index_test.ts
+deno check --config supabase/functions/direct-order-public/deno.json \
+  supabase/functions/direct-order-public/index.ts \
+  supabase/functions/direct-order-public/index_test.ts
+deno test --config supabase/functions/direct-order-public/deno.json \
+  supabase/functions/direct-order-public/index_test.ts
+
 printf 'CHECK_REPO_STEP=node_contracts\n'
 (
   cd scripts

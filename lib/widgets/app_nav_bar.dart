@@ -18,6 +18,7 @@ class AppNavBar extends ConsumerWidget {
     this.forceBackEnabled = false,
     this.forceHomeEnabled = false,
     this.showLogout = true,
+    this.showLanguage = true,
     this.overrideStoreId,
     this.overrideStoreName,
     this.onBackPressed,
@@ -27,6 +28,7 @@ class AppNavBar extends ConsumerWidget {
   final bool forceBackEnabled;
   final bool forceHomeEnabled;
   final bool showLogout;
+  final bool showLanguage;
   final String? overrideStoreId;
   final String? overrideStoreName;
   final VoidCallback? onBackPressed;
@@ -78,7 +80,11 @@ class AppNavBar extends ConsumerWidget {
         final showStore =
             !veryCompact && !phoneChrome && !largeText && availableWidth >= 444;
         final showLanguage =
-            !veryCompact && !phoneChrome && !largeText && availableWidth >= 570;
+            this.showLanguage &&
+            !veryCompact &&
+            !phoneChrome &&
+            !largeText &&
+            availableWidth >= 570;
         final logoutOnly = showLogout && veryCompact;
         final compactLanguageSwitcher =
             availableWidth < 640 || viewportWidth < 1180;

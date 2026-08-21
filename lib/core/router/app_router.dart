@@ -16,6 +16,12 @@ import '../../features/auth/privacy_consent_screen.dart';
 import '../../features/cashier/cashier_screen.dart';
 import '../../features/customer_display/customer_display_screen.dart';
 import '../../features/digital_receipt/digital_receipt_screen.dart';
+import '../../features/direct_order/direct_order_storefront_screen.dart';
+import '../../features/direct_order/direct_order_arrival_alert_host.dart';
+import '../../features/direct_order/direct_order_analytics_screen.dart';
+import '../../features/direct_order/direct_order_cashier_screen.dart';
+import '../../features/direct_order/direct_order_kitchen_screen.dart';
+import '../../features/direct_order/direct_order_settings_screen.dart';
 import '../../features/emergency_fulfillment/emergency_fulfillment_screen.dart';
 import '../../features/kitchen/kitchen_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
@@ -61,6 +67,11 @@ GoRouter buildAppRouter(ProviderContainer container) {
       String? redirectTo;
 
       if (path.startsWith('/qr/')) {
+        NavigationHistoryService.instance.push(fullLocation);
+        return null;
+      }
+
+      if (path.startsWith('/order/')) {
         NavigationHistoryService.instance.push(fullLocation);
         return null;
       }
@@ -260,6 +271,12 @@ GoRouter buildAppRouter(ProviderContainer container) {
             QrOrderScreen(token: state.pathParameters['token'] ?? ''),
       ),
       GoRoute(
+        path: '/order/:slug',
+        builder: (_, state) => DirectOrderStorefrontScreen(
+          slug: state.pathParameters['slug'] ?? '',
+        ),
+      ),
+      GoRoute(
         path: '/receipt',
         builder: (_, __) =>
             DigitalReceiptScreen(token: DigitalReceiptTokenHandoff.take()),
@@ -288,7 +305,29 @@ GoRouter buildAppRouter(ProviderContainer container) {
         path: '/print-station',
         builder: (_, __) => const PrintStationScreen(),
       ),
-      GoRoute(path: '/cashier', builder: (_, __) => const CashierScreen()),
+      GoRoute(
+        path: '/cashier',
+        builder: (_, __) =>
+            const DirectOrderArrivalAlertHost(child: CashierScreen()),
+      ),
+      GoRoute(
+        path: '/cashier/direct-orders',
+        builder: (_, __) => const DirectOrderArrivalAlertHost(
+          child: DirectOrderCashierScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/kitchen/direct-orders',
+        builder: (_, __) => const DirectOrderKitchenScreen(),
+      ),
+      GoRoute(
+        path: '/direct-delivery/analytics',
+        builder: (_, __) => const DirectOrderAnalyticsScreen(),
+      ),
+      GoRoute(
+        path: '/direct-delivery/settings',
+        builder: (_, __) => const DirectOrderSettingsScreen(),
+      ),
       GoRoute(
         path: '/customer-display',
         builder: (_, __) => const CustomerDisplayScreen(),
