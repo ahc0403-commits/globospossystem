@@ -34,6 +34,7 @@ class IngredientImportRow {
     required this.storageType,
     required this.shelfLifeDays,
     required this.isOrderable,
+    required this.supplierName,
     required this.supplierId,
     required this.unitPrice,
   });
@@ -49,7 +50,8 @@ class IngredientImportRow {
   final String? storageType;
   final int? shelfLifeDays;
   final bool isOrderable;
-  final String supplierId;
+  final String supplierName;
+  final String? supplierId;
   final double unitPrice;
 
   Map<String, dynamic> toJson() => {
@@ -64,6 +66,7 @@ class IngredientImportRow {
     'storage_type': storageType,
     'shelf_life_days': shelfLifeDays,
     'is_orderable': isOrderable,
+    'supplier_name': supplierName,
     'supplier_id': supplierId,
     'unit_price': unitPrice,
   };
@@ -135,7 +138,7 @@ List<int> buildIngredientImportTemplate({
       TextCellValue('냉장'),
       IntCellValue(7),
       TextCellValue('Y'),
-      TextCellValue('거래처목록 시트에서 복사'),
+      TextCellValue('기존 거래처명 또는 신규 거래처명'),
       IntCellValue(100000),
     ]);
   } else {
@@ -165,7 +168,9 @@ List<int> buildIngredientImportTemplate({
   }
 
   final supplierSheet = excel[ingredientSupplierReferenceSheetName];
-  supplierSheet.appendRow([TextCellValue('거래처')]);
+  supplierSheet.appendRow([
+    TextCellValue('기존 거래처명 (신규 명칭은 원재료등록 시트에 직접 입력 가능)'),
+  ]);
   final activeSuppliers =
       suppliers
           .where(
@@ -182,7 +187,7 @@ List<int> buildIngredientImportTemplate({
     final name = _mapText(supplier['supplier_name']);
     if (name.isNotEmpty) supplierSheet.appendRow([TextCellValue(name)]);
   }
-  supplierSheet.setColumnWidth(0, 32);
+  supplierSheet.setColumnWidth(0, 56);
   return excel.encode()!;
 }
 
@@ -325,8 +330,6 @@ IngredientImportWorkbook parseIngredientImportWorkbook(
         : null;
     if (supplierName.isEmpty) {
       issues.add('$sourceRow행: 거래처를 입력하세요.');
-    } else if (supplierCandidates.isEmpty) {
-      issues.add('$sourceRow행: 현재 사용할 수 있는 거래처명을 입력하세요.');
     } else if (supplierCandidates.length > 1) {
       issues.add('$sourceRow행: 같은 이름의 거래처가 여러 개입니다. 거래처명을 고유하게 변경하세요.');
     }
@@ -359,7 +362,8 @@ IngredientImportWorkbook parseIngredientImportWorkbook(
         factor > 0 &&
         (rawShelfLife.isEmpty || (shelfLife != null && shelfLife >= 0)) &&
         const {'Y', 'N'}.contains(rawOrderable) &&
-        supplier != null &&
+        supplierName.isNotEmpty &&
+        supplierCandidates.length <= 1 &&
         unitPrice != null &&
         unitPrice.isFinite &&
         unitPrice >= 0) {
@@ -376,7 +380,8 @@ IngredientImportWorkbook parseIngredientImportWorkbook(
           storageType: storageType.isEmpty ? null : storageType,
           shelfLifeDays: shelfLife,
           isOrderable: rawOrderable == 'Y',
-          supplierId: _mapText(supplier['id']),
+          supplierName: supplierName,
+          supplierId: supplier == null ? null : _mapText(supplier['id']),
           unitPrice: unitPrice,
         ),
       );

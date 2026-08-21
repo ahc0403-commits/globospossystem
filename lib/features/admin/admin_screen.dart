@@ -167,7 +167,10 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
               MenuTab() => _revisionForDomains({'menu', 'inventory'}),
               StaffTab() => _revisionForDomains({'staff', 'attendance'}),
               AttendanceTab() => _revisionForDomains({'attendance', 'staff'}),
-              InventoryPurchaseScreen() || PhotoInventoryScreen() => _revisionForDomains({'inventory', 'menu', 'photo_ops'}),
+              // Inventory Purchase refreshes its providers in place so live
+              // reconnect ticks cannot reset the operator to its dashboard.
+              InventoryPurchaseScreen() => 0,
+              PhotoInventoryScreen() => _revisionForDomains({'inventory', 'menu', 'photo_ops'}),
               QcTab() => _revisionForDomains({'qc'}),
               // Settings contains editable dialogs. Keep its element stable
               // across live events so an update cannot dismiss the dialog or

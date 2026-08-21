@@ -54,6 +54,11 @@ void main() {
     expect(sheet.rows[1][10]?.value.toString(), '새벽식유통');
     expect(sheet.rows[1][11]?.value.toString(), '120000');
     expect(
+      excel.tables[ingredientSupplierReferenceSheetName]!.rows.first[0]?.value
+          .toString(),
+      contains('신규 명칭'),
+    );
+    expect(
       excel.tables[ingredientSupplierReferenceSheetName]!.rows[1][0]?.value
           .toString(),
       '새벽식유통',
@@ -106,9 +111,43 @@ void main() {
     expect(workbook.rows.first.productId, 'product-1');
     expect(workbook.rows.last.baseUnit, 'ml');
     expect(workbook.rows.last.isOrderable, isFalse);
+    expect(workbook.rows.last.supplierName, '새벽식유통');
     expect(workbook.rows.last.supplierId, 'supplier-1');
     expect(workbook.rows.last.unitPrice, 80000);
+    expect(workbook.rows.last.toJson()['supplier_name'], '새벽식유통');
     expect(workbook.rows.last.toJson()['unit_price'], 80000);
+  });
+
+  test('ingredient parser accepts a new supplier name for atomic creation', () {
+    final excel = Excel.createExcel();
+    excel.rename('Sheet1', ingredientImportSheetName);
+    final sheet = excel[ingredientImportSheetName];
+    sheet.appendRow(ingredientImportHeaders.map(TextCellValue.new).toList());
+    sheet.appendRow([
+      TextCellValue(''),
+      TextCellValue('ING-NEW'),
+      TextCellValue('새 원재료'),
+      TextCellValue('식재료'),
+      TextCellValue('kg'),
+      TextCellValue('g'),
+      DoubleCellValue(1000),
+      TextCellValue('냉장'),
+      IntCellValue(7),
+      TextCellValue('Y'),
+      TextCellValue('신규 공급처'),
+      IntCellValue(45000),
+    ]);
+
+    final workbook = parseIngredientImportWorkbook(
+      Uint8List.fromList(excel.encode()!),
+      existingProducts: _products,
+      existingSuppliers: _suppliers,
+    );
+
+    expect(workbook.rows.single.supplierName, '신규 공급처');
+    expect(workbook.rows.single.supplierId, isNull);
+    expect(workbook.rows.single.toJson()['supplier_name'], '신규 공급처');
+    expect(workbook.rows.single.toJson()['supplier_id'], isNull);
   });
 
   test('ingredient parser reports invalid units and duplicate codes', () {
@@ -149,7 +188,6 @@ void main() {
             contains('유통기한'),
             contains('Y 또는 N'),
             contains('중복'),
-            contains('거래처명'),
             contains('가격'),
           ),
         ),

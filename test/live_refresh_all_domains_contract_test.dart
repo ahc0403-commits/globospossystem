@@ -93,6 +93,29 @@ void main() {
     expect(source, isNot(contains('ReportsTab() => _allLiveRevision')));
   });
 
+  test('inventory refresh keeps the selected management section mounted', () {
+    final admin = File(
+      'lib/features/admin/admin_screen.dart',
+    ).readAsStringSync();
+    final inventory = File(
+      'lib/features/inventory_purchase/inventory_purchase_screen.dart',
+    ).readAsStringSync();
+
+    expect(admin, contains('InventoryPurchaseScreen() => 0'));
+    expect(
+      admin,
+      isNot(
+        contains(
+          "InventoryPurchaseScreen() || PhotoInventoryScreen() => "
+          "_revisionForDomains",
+        ),
+      ),
+    );
+    expect(inventory, contains('posLiveEventsProvider(storeId)'));
+    expect(inventory, contains("event.affects({'inventory', 'menu'})"));
+    expect(inventory, contains('_refreshStoreScopeInPlace(storeId)'));
+  });
+
   test('anonymous QR menu subscribes by store with a silent fallback', () {
     final source = File(
       'lib/features/qr_order/qr_order_screen.dart',
