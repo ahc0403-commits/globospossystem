@@ -51,6 +51,16 @@ void main() {
     expect(alertVerify, contains('AFTER INSERT'));
 
     final webIndex = File('web/index.html').readAsStringSync();
+    expect(
+      webIndex,
+      contains(
+        '<meta name="referrer" content="strict-origin-when-cross-origin">',
+      ),
+    );
+    expect(
+      webIndex,
+      isNot(contains('<meta name="referrer" content="no-referrer">')),
+    );
     expect(webIndex, contains('&auth_referrer_policy=origin'));
     expect(webIndex, contains("script.referrerPolicy = 'origin';"));
     expect(webIndex, isNot(contains("script.referrerPolicy = 'no-referrer';")));
