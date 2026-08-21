@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:excel/excel.dart';
 
 const ingredientImportSheetName = '원재료등록';
+const ingredientSupplierReferenceSheetName = '거래처목록';
 const ingredientImportMaxRows = 1000;
 
 const ingredientImportHeaders = <String>[
@@ -16,6 +17,8 @@ const ingredientImportHeaders = <String>[
   '보관방법',
   '유통기한(일)',
   '발주가능(Y/N)',
+  '거래처',
+  '가격',
 ];
 
 class IngredientImportRow {
@@ -31,6 +34,8 @@ class IngredientImportRow {
     required this.storageType,
     required this.shelfLifeDays,
     required this.isOrderable,
+    required this.supplierId,
+    required this.unitPrice,
   });
 
   final int sourceRow;
@@ -44,6 +49,8 @@ class IngredientImportRow {
   final String? storageType;
   final int? shelfLifeDays;
   final bool isOrderable;
+  final String supplierId;
+  final double unitPrice;
 
   Map<String, dynamic> toJson() => {
     'source_row': sourceRow,
@@ -57,6 +64,8 @@ class IngredientImportRow {
     'storage_type': storageType,
     'shelf_life_days': shelfLifeDays,
     'is_orderable': isOrderable,
+    'supplier_id': supplierId,
+    'unit_price': unitPrice,
   };
 }
 
@@ -81,12 +90,33 @@ class IngredientImportValidationException implements Exception {
 
 List<int> buildIngredientImportTemplate({
   required List<Map<String, dynamic>> products,
+  required List<Map<String, dynamic>> suppliers,
+  required List<Map<String, dynamic>> supplierItems,
 }) {
   final excel = Excel.createExcel();
   excel.rename('Sheet1', ingredientImportSheetName);
   excel.setDefaultSheet(ingredientImportSheetName);
   final sheet = excel[ingredientImportSheetName];
   sheet.appendRow(ingredientImportHeaders.map(TextCellValue.new).toList());
+
+  final supplierById = <String, Map<String, dynamic>>{
+    for (final supplier in suppliers)
+      if (_mapText(supplier['id']).isNotEmpty &&
+          (supplier['status'] == null || supplier['status'] == 'active'))
+        _mapText(supplier['id']): supplier,
+  };
+  final supplierItemByProductId = <String, Map<String, dynamic>>{};
+  for (final item in supplierItems.where(
+    (item) => item['is_active'] != false,
+  )) {
+    final productId = _mapText(item['product_id']);
+    if (productId.isEmpty) continue;
+    final current = supplierItemByProductId[productId];
+    if (current == null ||
+        (item['is_preferred'] == true && current['is_preferred'] != true)) {
+      supplierItemByProductId[productId] = item;
+    }
+  }
 
   final sorted = [...products]
     ..sort(
@@ -105,9 +135,13 @@ List<int> buildIngredientImportTemplate({
       TextCellValue('냉장'),
       IntCellValue(7),
       TextCellValue('Y'),
+      TextCellValue('거래처목록 시트에서 복사'),
+      IntCellValue(100000),
     ]);
   } else {
     for (final product in sorted) {
+      final supplierItem = supplierItemByProductId[_mapText(product['id'])];
+      final supplier = supplierById[_mapText(supplierItem?['supplier_id'])];
       sheet.appendRow([
         TextCellValue(_mapText(product['id'])),
         TextCellValue(_mapText(product['product_code'])),
@@ -119,20 +153,43 @@ List<int> buildIngredientImportTemplate({
         TextCellValue(_mapText(product['storage_type'])),
         _integerCell(product['shelf_life_days']),
         TextCellValue(product['is_orderable'] == false ? 'N' : 'Y'),
+        TextCellValue(_mapText(supplier?['supplier_name'])),
+        _numberCell(supplierItem?['unit_price']),
       ]);
     }
   }
 
-  const widths = <double>[38, 18, 28, 18, 18, 14, 22, 18, 18, 18];
+  const widths = <double>[38, 18, 28, 18, 18, 14, 22, 18, 18, 18, 28, 18];
   for (var index = 0; index < widths.length; index++) {
     sheet.setColumnWidth(index, widths[index]);
   }
+
+  final supplierSheet = excel[ingredientSupplierReferenceSheetName];
+  supplierSheet.appendRow([TextCellValue('거래처')]);
+  final activeSuppliers =
+      suppliers
+          .where(
+            (supplier) =>
+                supplier['status'] == null || supplier['status'] == 'active',
+          )
+          .toList()
+        ..sort(
+          (left, right) => _mapText(
+            left['supplier_name'],
+          ).compareTo(_mapText(right['supplier_name'])),
+        );
+  for (final supplier in activeSuppliers) {
+    final name = _mapText(supplier['supplier_name']);
+    if (name.isNotEmpty) supplierSheet.appendRow([TextCellValue(name)]);
+  }
+  supplierSheet.setColumnWidth(0, 32);
   return excel.encode()!;
 }
 
 IngredientImportWorkbook parseIngredientImportWorkbook(
   Uint8List bytes, {
   required List<Map<String, dynamic>> existingProducts,
+  required List<Map<String, dynamic>> existingSuppliers,
 }) {
   if (bytes.isEmpty) {
     throw const IngredientImportValidationException(['선택한 파일이 비어 있습니다.']);
@@ -177,6 +234,17 @@ IngredientImportWorkbook parseIngredientImportWorkbook(
       if (_normalize(product['product_code']).isNotEmpty)
         _normalize(product['product_code']): product,
   };
+  final suppliersByName = <String, List<Map<String, dynamic>>>{};
+  for (final supplier in existingSuppliers.where(
+    (supplier) =>
+        _mapText(supplier['id']).isNotEmpty &&
+        (supplier['status'] == null || supplier['status'] == 'active'),
+  )) {
+    final normalizedName = _normalize(supplier['supplier_name']);
+    if (normalizedName.isNotEmpty) {
+      suppliersByName.putIfAbsent(normalizedName, () => []).add(supplier);
+    }
+  }
   final issues = <String>[];
   final rows = <IngredientImportRow>[];
   final seenCodes = <String, int>{};
@@ -196,6 +264,8 @@ IngredientImportWorkbook parseIngredientImportWorkbook(
     final storageType = text('보관방법');
     final rawShelfLife = text('유통기한(일)');
     final rawOrderable = text('발주가능(Y/N)').toUpperCase();
+    final supplierName = text('거래처');
+    final rawUnitPrice = text('가격');
 
     if ([
       rawId,
@@ -208,6 +278,8 @@ IngredientImportWorkbook parseIngredientImportWorkbook(
       storageType,
       rawShelfLife,
       rawOrderable,
+      supplierName,
+      rawUnitPrice,
     ].every((value) => value.isEmpty)) {
       continue;
     }
@@ -245,6 +317,23 @@ IngredientImportWorkbook parseIngredientImportWorkbook(
     if (!const {'Y', 'N'}.contains(rawOrderable)) {
       issues.add('$sourceRow행: 발주가능은 Y 또는 N으로 입력하세요.');
     }
+    final supplierCandidates =
+        suppliersByName[_normalize(supplierName)] ??
+        const <Map<String, dynamic>>[];
+    final supplier = supplierCandidates.length == 1
+        ? supplierCandidates.single
+        : null;
+    if (supplierName.isEmpty) {
+      issues.add('$sourceRow행: 거래처를 입력하세요.');
+    } else if (supplierCandidates.isEmpty) {
+      issues.add('$sourceRow행: 현재 사용할 수 있는 거래처명을 입력하세요.');
+    } else if (supplierCandidates.length > 1) {
+      issues.add('$sourceRow행: 같은 이름의 거래처가 여러 개입니다. 거래처명을 고유하게 변경하세요.');
+    }
+    final unitPrice = _parseNumber(rawUnitPrice);
+    if (unitPrice == null || !unitPrice.isFinite || unitPrice < 0) {
+      issues.add('$sourceRow행: 가격은 0 이상의 숫자로 입력하세요.');
+    }
 
     final normalizedCode = _normalize(code);
     final priorRow = seenCodes[normalizedCode];
@@ -269,7 +358,11 @@ IngredientImportWorkbook parseIngredientImportWorkbook(
         factor != null &&
         factor > 0 &&
         (rawShelfLife.isEmpty || (shelfLife != null && shelfLife >= 0)) &&
-        const {'Y', 'N'}.contains(rawOrderable)) {
+        const {'Y', 'N'}.contains(rawOrderable) &&
+        supplier != null &&
+        unitPrice != null &&
+        unitPrice.isFinite &&
+        unitPrice >= 0) {
       rows.add(
         IngredientImportRow(
           sourceRow: sourceRow,
@@ -283,6 +376,8 @@ IngredientImportWorkbook parseIngredientImportWorkbook(
           storageType: storageType.isEmpty ? null : storageType,
           shelfLifeDays: shelfLife,
           isOrderable: rawOrderable == 'Y',
+          supplierId: _mapText(supplier['id']),
+          unitPrice: unitPrice,
         ),
       );
     }
@@ -324,6 +419,14 @@ int? _mapInt(Object? value) =>
 CellValue _integerCell(Object? value) {
   final parsed = _mapInt(value);
   return parsed == null ? TextCellValue('') : IntCellValue(parsed);
+}
+
+CellValue _numberCell(Object? value) {
+  final parsed = _mapNumber(value);
+  if (parsed == null) return TextCellValue('');
+  return parsed == parsed.truncateToDouble()
+      ? IntCellValue(parsed.toInt())
+      : DoubleCellValue(parsed);
 }
 
 double? _parseNumber(String value) =>

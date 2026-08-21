@@ -36,6 +36,12 @@ void main() {
     expect(excel.tables.keys, contains(recipeMenuReferenceSheetName));
     expect(excel.tables.keys, contains(recipeIngredientReferenceSheetName));
     expect(
+      excel.tables[recipeImportSheetName]!.rows.first
+          .map((cell) => cell?.value.toString())
+          .toList(),
+      ['메뉴명', '재료명', '사용중량'],
+    );
+    expect(
       excel.tables[recipeMenuReferenceSheetName]!.maxRows,
       _menus.length + 1,
     );
@@ -52,9 +58,7 @@ void main() {
     final sheet = excel[recipeImportSheetName];
     sheet.appendRow(recipeImportHeaders.map(TextCellValue.new).toList());
     sheet.appendRow([
-      TextCellValue('menu-1'),
       TextCellValue('떡볶이'),
-      TextCellValue('ingredient-1'),
       TextCellValue('떡'),
       DoubleCellValue(150),
     ]);
@@ -71,22 +75,18 @@ void main() {
     expect(workbook.rows.single.quantityG, 150);
   });
 
-  test('parser rejects unknown ids, unsupported units, and duplicates', () {
+  test('parser rejects unsupported units and duplicate rows', () {
     final excel = Excel.createExcel();
     excel.rename('Sheet1', recipeImportSheetName);
     final sheet = excel[recipeImportSheetName];
     sheet.appendRow(recipeImportHeaders.map(TextCellValue.new).toList());
     sheet.appendRow([
-      TextCellValue('menu-1'),
       TextCellValue('떡볶이'),
-      TextCellValue('ingredient-2'),
       TextCellValue('소스'),
       DoubleCellValue(10),
     ]);
     sheet.appendRow([
-      TextCellValue('menu-1'),
       TextCellValue('떡볶이'),
-      TextCellValue('ingredient-2'),
       TextCellValue('소스'),
       DoubleCellValue(20),
     ]);
@@ -102,6 +102,44 @@ void main() {
           (error) => error.issues.join('\n'),
           'issues',
           allOf(contains('g 단위'), contains('중복')),
+        ),
+      ),
+    );
+  });
+
+  test('parser rejects ambiguous menu and ingredient names', () {
+    final excel = Excel.createExcel();
+    excel.rename('Sheet1', recipeImportSheetName);
+    final sheet = excel[recipeImportSheetName];
+    sheet.appendRow(recipeImportHeaders.map(TextCellValue.new).toList());
+    sheet.appendRow([
+      TextCellValue('떡볶이'),
+      TextCellValue('떡'),
+      DoubleCellValue(150),
+    ]);
+
+    expect(
+      () => parseRecipeImportWorkbook(
+        Uint8List.fromList(excel.encode()!),
+        menuItems: const [
+          ..._menus,
+          {'id': 'menu-3', 'name': ' 떡볶이 '},
+        ],
+        products: const [
+          ..._products,
+          {
+            'id': 'product-3',
+            'inventory_item_id': 'ingredient-3',
+            'name': '떡',
+            'base_unit': 'g',
+          },
+        ],
+      ),
+      throwsA(
+        isA<RecipeImportValidationException>().having(
+          (error) => error.issues.join('\n'),
+          'issues',
+          allOf(contains('같은 이름의 메뉴'), contains('같은 이름의 재료')),
         ),
       ),
     );
