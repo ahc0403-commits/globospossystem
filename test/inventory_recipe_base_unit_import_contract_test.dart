@@ -8,7 +8,7 @@ void main() {
   test('recipe import supports every canonical inventory base unit', () {
     final migration = File(
       'supabase/migrations/'
-      '20260822100000_inventory_recipe_base_unit_import.sql',
+      '20260822120000_inventory_recipe_base_unit_import.sql',
     ).readAsStringSync();
     final preflight = File(
       'scripts/preflight_inventory_recipe_base_unit_import.sql',
@@ -33,7 +33,7 @@ void main() {
 
     expect(
       contract,
-      contains('20260822100000_inventory_recipe_base_unit_import.sql'),
+      contains('20260822120000_inventory_recipe_base_unit_import.sql'),
     );
     expect(
       contract,
