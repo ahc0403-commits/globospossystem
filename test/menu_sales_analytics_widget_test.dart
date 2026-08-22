@@ -76,6 +76,7 @@ MenuSalesAnalytics _analytics() {
 
 Widget _app({
   Future<MenuSalesAnalytics> Function()? loader,
+  Future<MenuSalesAnalytics> Function(MenuSalesAnalyticsParams)? paramsLoader,
   TextScaler? textScaler,
   bool boundedDesktopPanel = false,
 }) {
@@ -86,7 +87,10 @@ Widget _app({
   return ProviderScope(
     overrides: [
       menuSalesAnalyticsProvider.overrideWith(
-        (ref, params) => loader?.call() ?? Future.value(_analytics()),
+        (ref, params) =>
+            paramsLoader?.call(params) ??
+            loader?.call() ??
+            Future.value(_analytics()),
       ),
     ],
     child: MaterialApp(
@@ -282,6 +286,60 @@ void main() {
     expect(find.text('쌀국수 스페셜'), findsWidgets);
     expect(find.text('메뉴 2'), findsNothing);
     expect(find.byKey(const Key('menu_sales_total_revenue')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('date filters reload a single day and a selected range', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(900, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final requestedParams = <MenuSalesAnalyticsParams>[];
+    await tester.pumpWidget(
+      _app(
+        paramsLoader: (params) async {
+          requestedParams.add(params);
+          return _analytics();
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(requestedParams, hasLength(1));
+
+    await tester.tap(find.byKey(const Key('menu_sales_select_single_date')));
+    await tester.pumpAndSettle();
+    final dateDialog = find.byType(DatePickerDialog);
+    expect(dateDialog, findsOneWidget);
+    await tester.tap(
+      find.descendant(of: dateDialog, matching: find.text('12')),
+    );
+    await tester.tap(find.text('확인'));
+    await tester.pumpAndSettle();
+
+    expect(requestedParams.last.startDate, DateTime(2026, 8, 12));
+    expect(requestedParams.last.endDate, DateTime(2026, 8, 12));
+    expect(find.text('2026.08.12'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('menu_sales_select_date_range')));
+    await tester.pumpAndSettle();
+    final rangeDialog = find.byType(DateRangePickerDialog);
+    expect(rangeDialog, findsOneWidget);
+    final dialogContext = tester.element(rangeDialog);
+    final saveLabel = MaterialLocalizations.of(dialogContext).saveButtonLabel;
+    await tester.tap(
+      find.descendant(of: rangeDialog, matching: find.text('10')),
+    );
+    await tester.pump();
+    await tester.tap(
+      find.descendant(of: rangeDialog, matching: find.text('11')),
+    );
+    await tester.pump();
+    await tester.tap(find.text(saveLabel));
+    await tester.pumpAndSettle();
+
+    expect(requestedParams.last.startDate, DateTime(2026, 8, 10));
+    expect(requestedParams.last.endDate, DateTime(2026, 8, 11));
+    expect(find.text('2026.08.10 – 2026.08.11'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

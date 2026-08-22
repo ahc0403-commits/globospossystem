@@ -33,16 +33,75 @@ class _MenuSalesAnalyticsPanelState
   bool _showAll = false;
   MenuSalesScope _scope = MenuSalesScope.all;
   String? _selectedMenuKey;
+  late DateTime _startDate;
+  late DateTime _endDate;
 
   @override
   void initState() {
     super.initState();
     _scope = widget.params.scope;
+    _startDate = DateUtils.dateOnly(widget.params.startDate);
+    _endDate = DateUtils.dateOnly(widget.params.endDate);
+  }
+
+  @override
+  void didUpdateWidget(covariant MenuSalesAnalyticsPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final startDate = DateUtils.dateOnly(widget.params.startDate);
+    final endDate = DateUtils.dateOnly(widget.params.endDate);
+    if (oldWidget.params.storeId != widget.params.storeId ||
+        DateUtils.dateOnly(oldWidget.params.startDate) != startDate ||
+        DateUtils.dateOnly(oldWidget.params.endDate) != endDate) {
+      _startDate = startDate;
+      _endDate = endDate;
+    }
+    if (oldWidget.params.scope != widget.params.scope) {
+      _scope = widget.params.scope;
+    }
+  }
+
+  Future<void> _selectSingleDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _endDate,
+      firstDate: DateTime(2020),
+      lastDate: DateUtils.dateOnly(DateTime.now()),
+      helpText: _MenuSalesDateCopy.of(context).selectSingleDate,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _startDate = DateUtils.dateOnly(picked);
+      _endDate = _startDate;
+      _showAll = false;
+      _selectedMenuKey = null;
+    });
+  }
+
+  Future<void> _selectDateRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      initialDateRange: DateTimeRange(start: _startDate, end: _endDate),
+      firstDate: DateTime(2020),
+      lastDate: DateUtils.dateOnly(DateTime.now()),
+      helpText: _MenuSalesDateCopy.of(context).selectDateRange,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _startDate = DateUtils.dateOnly(picked.start);
+      _endDate = DateUtils.dateOnly(picked.end);
+      _showAll = false;
+      _selectedMenuKey = null;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final effectiveParams = widget.params.copyWith(scope: _scope);
+    final effectiveParams = MenuSalesAnalyticsParams(
+      storeId: widget.params.storeId,
+      startDate: _startDate,
+      endDate: _endDate,
+      scope: _scope,
+    );
     final analyticsAsync = ref.watch(
       menuSalesAnalyticsProvider(effectiveParams),
     );
@@ -55,6 +114,14 @@ class _MenuSalesAnalyticsPanelState
           final content = Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              _MenuSalesPeriodFilter(
+                startDate: _startDate,
+                endDate: _endDate,
+                loading: analyticsAsync.isLoading,
+                onSelectSingleDate: _selectSingleDate,
+                onSelectDateRange: _selectDateRange,
+              ),
+              const SizedBox(height: 12),
               _MenuSalesScopeFilter(
                 scope: _scope,
                 onChanged: (scope) {
@@ -245,6 +312,138 @@ class _MenuSalesAnalyticsPanelState
       },
     );
   }
+}
+
+class _MenuSalesPeriodFilter extends StatelessWidget {
+  const _MenuSalesPeriodFilter({
+    required this.startDate,
+    required this.endDate,
+    required this.loading,
+    required this.onSelectSingleDate,
+    required this.onSelectDateRange,
+  });
+
+  final DateTime startDate;
+  final DateTime endDate;
+  final bool loading;
+  final VoidCallback onSelectSingleDate;
+  final VoidCallback onSelectDateRange;
+
+  @override
+  Widget build(BuildContext context) {
+    final copy = _MenuSalesDateCopy.of(context);
+    final formatter = DateFormat('yyyy.MM.dd');
+    final start = formatter.format(startDate);
+    final end = formatter.format(endDate);
+    final period = start == end ? start : '$start – $end';
+    final dateDetails = Row(
+      children: [
+        const Icon(
+          Icons.calendar_today_outlined,
+          size: 19,
+          color: PosColors.textSecondary,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                copy.selectedPeriod,
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
+              Text(
+                period,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+    final actions = Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      alignment: WrapAlignment.end,
+      children: [
+        TextButton.icon(
+          key: const Key('menu_sales_select_single_date'),
+          onPressed: loading ? null : onSelectSingleDate,
+          icon: const Icon(Icons.event_outlined, size: 18),
+          label: Text(copy.singleDate),
+        ),
+        TextButton.icon(
+          key: const Key('menu_sales_select_date_range'),
+          onPressed: loading ? null : onSelectDateRange,
+          icon: const Icon(Icons.date_range_outlined, size: 18),
+          label: Text(copy.dateRange),
+        ),
+      ],
+    );
+
+    return Container(
+      key: const Key('menu_sales_period_filter'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: PosColors.canvasAlt,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: PosColors.border),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final stacked =
+              constraints.maxWidth < 560 ||
+              MediaQuery.textScalerOf(context).scale(1) > 1.5;
+          if (stacked) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                dateDetails,
+                const SizedBox(height: 4),
+                Align(alignment: Alignment.centerRight, child: actions),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: dateDetails),
+              const SizedBox(width: 12),
+              actions,
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MenuSalesDateCopy {
+  const _MenuSalesDateCopy(this.code);
+
+  final String code;
+
+  static _MenuSalesDateCopy of(BuildContext context) =>
+      _MenuSalesDateCopy(Localizations.localeOf(context).languageCode);
+
+  String pick(String ko, String vi, String en) => switch (code) {
+    'vi' => vi,
+    'en' => en,
+    _ => ko,
+  };
+
+  String get selectedPeriod =>
+      pick('선택 기간', 'Khoảng đã chọn', 'Selected period');
+  String get singleDate => pick('특정일', 'Một ngày', 'Single date');
+  String get dateRange => pick('기간', 'Khoảng ngày', 'Date range');
+  String get selectSingleDate =>
+      pick('조회할 날짜 선택', 'Chọn ngày cần xem', 'Select date to view');
+  String get selectDateRange => pick(
+    '조회할 기간 선택',
+    'Chọn khoảng ngày cần xem',
+    'Select date range to view',
+  );
 }
 
 class _MenuSalesScopeFilter extends StatelessWidget {

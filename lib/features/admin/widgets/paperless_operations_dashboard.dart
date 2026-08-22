@@ -37,22 +37,62 @@ class _PaperlessOperationsDashboardState
   _PaperlessReport? _report;
   Object? _error;
   bool _loading = true;
+  late DateTime _startDate;
+  late DateTime _endDate;
 
   @override
   void initState() {
     super.initState();
+    _startDate = DateUtils.dateOnly(widget.startDate);
+    _endDate = DateUtils.dateOnly(widget.endDate);
     _load();
   }
 
   @override
   void didUpdateWidget(covariant PaperlessOperationsDashboard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final startDate = DateUtils.dateOnly(widget.startDate);
+    final endDate = DateUtils.dateOnly(widget.endDate);
+    final rangeChanged =
+        DateUtils.dateOnly(oldWidget.startDate) != startDate ||
+        DateUtils.dateOnly(oldWidget.endDate) != endDate;
+    if (rangeChanged) {
+      _startDate = startDate;
+      _endDate = endDate;
+    }
     if (oldWidget.storeId != widget.storeId ||
-        oldWidget.startDate != widget.startDate ||
-        oldWidget.endDate != widget.endDate ||
+        rangeChanged ||
         oldWidget.loader != widget.loader) {
       _load();
     }
+  }
+
+  Future<void> _selectSingleDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _endDate,
+      firstDate: DateTime(2020),
+      lastDate: DateUtils.dateOnly(DateTime.now()),
+      helpText: _PaperlessCopy.of(context).selectSingleDate,
+    );
+    if (picked == null || !mounted) return;
+    _startDate = DateUtils.dateOnly(picked);
+    _endDate = _startDate;
+    await _load();
+  }
+
+  Future<void> _selectDateRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      initialDateRange: DateTimeRange(start: _startDate, end: _endDate),
+      firstDate: DateTime(2020),
+      lastDate: DateUtils.dateOnly(DateTime.now()),
+      helpText: _PaperlessCopy.of(context).selectDateRange,
+    );
+    if (picked == null || !mounted) return;
+    _startDate = DateUtils.dateOnly(picked.start);
+    _endDate = DateUtils.dateOnly(picked.end);
+    await _load();
   }
 
   Future<void> _load() async {
@@ -65,7 +105,7 @@ class _PaperlessOperationsDashboardState
       if (widget.loader case final loader?) {
         raw = await loader();
       } else {
-        final range = reportUtcRange(widget.startDate, widget.endDate);
+        final range = reportUtcRange(_startDate, _endDate);
         final response = await supabase.rpc(
           'get_paperless_operations_report',
           params: {
@@ -99,10 +139,12 @@ class _PaperlessOperationsDashboardState
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _PeriodBar(
-          startDate: widget.startDate,
-          endDate: widget.endDate,
+          startDate: _startDate,
+          endDate: _endDate,
           copy: copy,
           loading: _loading,
+          onSelectSingleDate: _selectSingleDate,
+          onSelectDateRange: _selectDateRange,
           onRefresh: _load,
         ),
         const SizedBox(height: 12),
@@ -141,6 +183,8 @@ class _PeriodBar extends StatelessWidget {
     required this.endDate,
     required this.copy,
     required this.loading,
+    required this.onSelectSingleDate,
+    required this.onSelectDateRange,
     required this.onRefresh,
   });
 
@@ -148,6 +192,8 @@ class _PeriodBar extends StatelessWidget {
   final DateTime endDate;
   final _PaperlessCopy copy;
   final bool loading;
+  final VoidCallback onSelectSingleDate;
+  final VoidCallback onSelectDateRange;
   final VoidCallback onRefresh;
 
   @override
@@ -156,6 +202,58 @@ class _PeriodBar extends StatelessWidget {
     final start = formatter.format(startDate);
     final end = formatter.format(endDate);
     final period = start == end ? start : '$start – $end';
+    final dateDetails = Row(
+      children: [
+        const Icon(
+          Icons.calendar_today_outlined,
+          size: 19,
+          color: PosColors.textSecondary,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                copy.selectedPeriod,
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
+              Text(
+                period,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+    final actions = Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      alignment: WrapAlignment.end,
+      children: [
+        TextButton.icon(
+          key: const Key('paperless_select_single_date'),
+          onPressed: loading ? null : onSelectSingleDate,
+          icon: const Icon(Icons.event_outlined, size: 18),
+          label: Text(copy.singleDate),
+        ),
+        TextButton.icon(
+          key: const Key('paperless_select_date_range'),
+          onPressed: loading ? null : onSelectDateRange,
+          icon: const Icon(Icons.date_range_outlined, size: 18),
+          label: Text(copy.dateRange),
+        ),
+        IconButton(
+          tooltip: copy.refresh,
+          onPressed: loading ? null : onRefresh,
+          icon: const Icon(Icons.refresh_rounded),
+        ),
+      ],
+    );
     return Container(
       key: const Key('paperless_operations_period'),
       padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
@@ -164,37 +262,29 @@ class _PeriodBar extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: PosColors.border),
       ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.calendar_today_outlined,
-            size: 19,
-            color: PosColors.textSecondary,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final stacked =
+              constraints.maxWidth < 560 ||
+              MediaQuery.textScalerOf(context).scale(1) > 1.5;
+          if (stacked) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  copy.selectedPeriod,
-                  style: Theme.of(context).textTheme.labelMedium,
-                ),
-                Text(
-                  period,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
-                ),
+                dateDetails,
+                const SizedBox(height: 4),
+                Align(alignment: Alignment.centerRight, child: actions),
               ],
-            ),
-          ),
-          IconButton(
-            tooltip: copy.refresh,
-            onPressed: loading ? null : onRefresh,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: dateDetails),
+              const SizedBox(width: 12),
+              actions,
+            ],
+          );
+        },
       ),
     );
   }
@@ -905,6 +995,15 @@ class _PaperlessCopy {
   );
   String get selectedPeriod =>
       pick('선택 기간', 'Khoảng đã chọn', 'Selected period');
+  String get singleDate => pick('특정일', 'Một ngày', 'Single date');
+  String get dateRange => pick('기간', 'Khoảng ngày', 'Date range');
+  String get selectSingleDate =>
+      pick('조회할 날짜 선택', 'Chọn ngày cần xem', 'Select date to view');
+  String get selectDateRange => pick(
+    '조회할 기간 선택',
+    'Chọn khoảng ngày cần xem',
+    'Select date range to view',
+  );
   String get refresh => pick('새로고침', 'Làm mới', 'Refresh');
   String get retry => pick('다시 시도', 'Thử lại', 'Retry');
   String get unavailable => pick(

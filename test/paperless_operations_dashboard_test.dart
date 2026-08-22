@@ -70,7 +70,12 @@ Future<Map<String, dynamic>> _fixture() async => {
   ],
 };
 
-Widget _app({TextScaler? textScaler}) => MaterialApp(
+Widget _app({
+  TextScaler? textScaler,
+  DateTime? startDate,
+  DateTime? endDate,
+  PaperlessOperationsLoader? loader,
+}) => MaterialApp(
   locale: const Locale('ko'),
   localizationsDelegates: AppLocalizations.localizationsDelegates,
   supportedLocales: AppLocalizations.supportedLocales,
@@ -87,9 +92,9 @@ Widget _app({TextScaler? textScaler}) => MaterialApp(
       padding: const EdgeInsets.all(16),
       child: PaperlessOperationsDashboard(
         storeId: _storeId,
-        startDate: DateTime(2026, 8, 13),
-        endDate: DateTime(2026, 8, 13),
-        loader: _fixture,
+        startDate: startDate ?? DateTime(2026, 8, 13),
+        endDate: endDate ?? DateTime(2026, 8, 13),
+        loader: loader ?? _fixture,
       ),
     ),
   ),
@@ -147,24 +152,11 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     var loadCount = 0;
     await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('ko'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        theme: AppTheme.build(),
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: PaperlessOperationsDashboard(
-              storeId: _storeId,
-              startDate: DateTime(2026, 8, 13),
-              endDate: DateTime(2026, 8, 13),
-              loader: () async {
-                loadCount += 1;
-                return _fixture();
-              },
-            ),
-          ),
-        ),
+      _app(
+        loader: () async {
+          loadCount += 1;
+          return _fixture();
+        },
       ),
     );
     await tester.pumpAndSettle();
@@ -172,6 +164,71 @@ void main() {
 
     await tester.tap(find.byTooltip('새로고침'));
     await tester.pumpAndSettle();
+    expect(loadCount, 2);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('single date selection applies the chosen day and reloads', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(900, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var loadCount = 0;
+    await tester.pumpWidget(
+      _app(
+        loader: () async {
+          loadCount += 1;
+          return _fixture();
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(loadCount, 1);
+
+    await tester.tap(find.byKey(const Key('paperless_select_single_date')));
+    await tester.pumpAndSettle();
+    expect(find.byType(DatePickerDialog), findsOne);
+
+    await tester.tap(find.text('12'));
+    await tester.tap(find.text('확인'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2026.08.12'), findsOne);
+    expect(loadCount, 2);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('date range selection applies both dates and reloads', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(900, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var loadCount = 0;
+    await tester.pumpWidget(
+      _app(
+        loader: () async {
+          loadCount += 1;
+          return _fixture();
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(loadCount, 1);
+
+    await tester.tap(find.byKey(const Key('paperless_select_date_range')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DateRangePickerDialog), findsOne);
+    final dialogContext = tester.element(find.byType(DateRangePickerDialog));
+    final saveLabel = MaterialLocalizations.of(dialogContext).saveButtonLabel;
+    await tester.tap(find.text('10'));
+    await tester.pump();
+    await tester.tap(find.text('12'));
+    await tester.pump();
+    await tester.tap(find.text(saveLabel));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2026.08.10 – 2026.08.12'), findsOne);
     expect(loadCount, 2);
     expect(tester.takeException(), isNull);
   });
