@@ -3189,7 +3189,7 @@ class _InventoryPurchaseScreenState
     final selectableMenus = menuItems
         .where((menu) => _string(menu['id']).isNotEmpty)
         .toList();
-    final selectableProducts = _gramRecipeProducts(products);
+    final selectableProducts = _recipeProducts(products);
     if (selectableMenus.isEmpty || selectableProducts.isEmpty) {
       return;
     }
@@ -3214,6 +3214,11 @@ class _InventoryPurchaseScreenState
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
+          final selectedProduct = _firstWhereOrNull(
+            selectableProducts,
+            (product) => product['id']?.toString() == productId,
+          );
+          final selectedUnit = _recipeBaseUnit(selectedProduct);
           return AlertDialog(
             key: const Key('inventory_recipe_line_dialog'),
             title: Text(
@@ -3254,7 +3259,10 @@ class _InventoryPurchaseScreenState
                       for (final product in selectableProducts)
                         DropdownMenuItem(
                           value: product['id'].toString(),
-                          child: Text(_string(product['name'], fallback: '-')),
+                          child: Text(
+                            '${_string(product['name'], fallback: '-')} '
+                            '(${_recipeBaseUnit(product)})',
+                          ),
                         ),
                     ],
                     onChanged: (value) {
@@ -3270,7 +3278,10 @@ class _InventoryPurchaseScreenState
                       decimal: true,
                     ),
                     decoration: InputDecoration(
-                      labelText: l10n.inventoryPurchaseUsagePerServingRequired,
+                      labelText: _recipeUnitLabel(
+                        l10n.inventoryPurchaseUsagePerServingRequired,
+                        selectedUnit,
+                      ),
                     ),
                   ),
                 ],
@@ -3359,6 +3370,7 @@ class _InventoryPurchaseScreenState
             products,
             (product) => product['id']?.toString() == productId,
           );
+          final selectedUnit = _recipeBaseUnit(selectedProduct);
           return AlertDialog(
             key: const Key('inventory_new_menu_dialog'),
             title: Text(l10n.inventoryPurchaseNewMenuTitle),
@@ -3432,7 +3444,8 @@ class _InventoryPurchaseScreenState
                                     DropdownMenuItem(
                                       value: product['id'].toString(),
                                       child: Text(
-                                        _string(product['name'], fallback: '-'),
+                                        '${_string(product['name'], fallback: '-')} '
+                                        '(${_recipeBaseUnit(product)})',
                                       ),
                                     ),
                                 ],
@@ -3449,8 +3462,10 @@ class _InventoryPurchaseScreenState
                                       decimal: true,
                                     ),
                                 decoration: InputDecoration(
-                                  labelText:
-                                      l10n.inventoryPurchaseUsagePerServing,
+                                  labelText: _recipeUnitLabel(
+                                    l10n.inventoryPurchaseUsagePerServing,
+                                    selectedUnit,
+                                  ),
                                 ),
                               ),
                             ],
@@ -3488,6 +3503,7 @@ class _InventoryPurchaseScreenState
                                       product['name'],
                                       fallback: '-',
                                     ),
+                                    'ingredient_unit': _recipeBaseUnit(product),
                                     'quantity_g': usage,
                                   });
                                 });
@@ -3498,7 +3514,10 @@ class _InventoryPurchaseScreenState
                           _SimpleDataTable(
                             columns: [
                               l10n.inventoryPurchaseIngredient,
-                              l10n.inventoryPurchaseUsageG,
+                              _recipeUnitLabel(
+                                l10n.inventoryPurchaseUsageG,
+                                l10n.inventoryPurchaseBaseUnit,
+                              ),
                             ],
                             rows: recipeLines
                                 .map(
@@ -3507,7 +3526,8 @@ class _InventoryPurchaseScreenState
                                       line['product_name'],
                                       fallback: '-',
                                     ),
-                                    _quantity(line['quantity_g']),
+                                    '${_quantity(line['quantity_g'])} '
+                                        '${_string(line['ingredient_unit'], fallback: 'g')}',
                                   ],
                                 )
                                 .toList(),
@@ -3616,12 +3636,21 @@ class _InventoryPurchaseScreenState
         );
   }
 
-  Future<void> _downloadRecipeTemplate({
-    required List<Map<String, dynamic>> menuItems,
-    required List<Map<String, dynamic>> products,
-  }) async {
+  Future<void> _downloadRecipeTemplate({required String storeId}) async {
     setState(() => _isExportingRecipeTemplate = true);
     try {
+      if (widget.autoLoad) {
+        await Future.wait([
+          ref
+              .read(inventoryPurchaseProductCatalogProvider.notifier)
+              .load(storeId),
+          ref.read(recipeProvider.notifier).loadAll(storeId),
+        ]);
+      }
+      final products = ref
+          .read(inventoryPurchaseProductCatalogProvider)
+          .products;
+      final menuItems = ref.read(recipeProvider).menuItems;
       final bytes = Uint8List.fromList(
         buildRecipeImportTemplate(menuItems: menuItems, products: products),
       );
@@ -3787,11 +3816,7 @@ class _InventoryPurchaseScreenState
     }
   }
 
-  Future<void> _importRecipeWorkbook({
-    required String storeId,
-    required List<Map<String, dynamic>> menuItems,
-    required List<Map<String, dynamic>> products,
-  }) async {
+  Future<void> _importRecipeWorkbook({required String storeId}) async {
     const typeGroup = XTypeGroup(
       label: 'Excel (.xlsx)',
       extensions: <String>['xlsx'],
@@ -3801,6 +3826,18 @@ class _InventoryPurchaseScreenState
           await widget.pickRecipeImportFile?.call() ??
           await openFile(acceptedTypeGroups: const <XTypeGroup>[typeGroup]);
       if (file == null || !mounted) return;
+      if (widget.autoLoad) {
+        await Future.wait([
+          ref
+              .read(inventoryPurchaseProductCatalogProvider.notifier)
+              .load(storeId),
+          ref.read(recipeProvider.notifier).loadAll(storeId),
+        ]);
+      }
+      final products = ref
+          .read(inventoryPurchaseProductCatalogProvider)
+          .products;
+      final menuItems = ref.read(recipeProvider).menuItems;
       final workbook = parseRecipeImportWorkbook(
         await file.readAsBytes(),
         menuItems: menuItems,
@@ -3912,10 +3949,7 @@ class _InventoryPurchaseScreenState
         .whereType<String>()
         .toSet()
         .length;
-    final totalUsage = recipes.fold<num>(
-      0,
-      (sum, recipe) => sum + _num(recipe['quantity_g']),
-    );
+    final totalUsage = _recipeUsageTotals(recipes);
 
     return _PageShell(
       title: l10n.inventoryPurchaseRecipeManagementTitle,
@@ -3931,10 +3965,7 @@ class _InventoryPurchaseScreenState
           loading: _isExportingRecipeTemplate,
           onPressed: _isExportingRecipeTemplate
               ? null
-              : () => _downloadRecipeTemplate(
-                  menuItems: recipeState.menuItems,
-                  products: productCatalog.products,
-                ),
+              : () => _downloadRecipeTemplate(storeId: storeId),
           compact: true,
         ),
         PosActionButton(
@@ -3945,11 +3976,7 @@ class _InventoryPurchaseScreenState
           loading: _isImportingRecipes,
           onPressed: _isImportingRecipes
               ? null
-              : () => _importRecipeWorkbook(
-                  storeId: storeId,
-                  menuItems: recipeState.menuItems,
-                  products: productCatalog.products,
-                ),
+              : () => _importRecipeWorkbook(storeId: storeId),
           compact: true,
         ),
         PosActionButton(
@@ -3990,7 +4017,7 @@ class _InventoryPurchaseScreenState
             ),
             ToastMetric(
               label: l10n.inventoryPurchaseTotalStandardUsage,
-              value: l10n.inventoryPurchaseGramValue(_quantity(totalUsage)),
+              value: totalUsage,
             ),
           ],
         ),
@@ -4404,7 +4431,7 @@ class _InventoryPurchaseScreenState
     required RecipeState recipeState,
   }) {
     final l10n = context.l10n;
-    final gramProducts = _gramRecipeProducts(productCatalog.products);
+    final recipeProducts = _recipeProducts(productCatalog.products);
 
     return _PageShell(
       title: l10n.inventoryPurchaseNewMenuTitle,
@@ -4418,15 +4445,15 @@ class _InventoryPurchaseScreenState
           tone: PosActionTone.primary,
           icon: Icons.restaurant_menu_outlined,
           loading: newMenuState.isSaving,
-          disabledReason: gramProducts.isEmpty
+          disabledReason: recipeProducts.isEmpty
               ? PosActionDisabledReason.upstreamPending
               : PosActionDisabledReason.noSelection,
-          onPressed: newMenuState.isSaving || gramProducts.isEmpty
+          onPressed: newMenuState.isSaving || recipeProducts.isEmpty
               ? null
               : () => _showNewMenuDialog(
                   storeId: storeId,
                   categories: newMenuState.categories,
-                  products: gramProducts,
+                  products: recipeProducts,
                 ),
           compact: true,
         ),
@@ -4453,7 +4480,7 @@ class _InventoryPurchaseScreenState
             ),
             ToastMetric(
               label: l10n.inventoryPurchaseRecipeCapableIngredients,
-              value: l10n.inventoryPurchaseCountItems(gramProducts.length),
+              value: l10n.inventoryPurchaseCountItems(recipeProducts.length),
             ),
             ToastMetric(
               label: l10n.inventoryPurchaseExistingMenus,
@@ -4481,7 +4508,7 @@ class _InventoryPurchaseScreenState
               l10n.inventoryPurchaseDisplayStockUnit,
               l10n.inventoryPurchaseBaseUnit,
             ],
-            rows: gramProducts
+            rows: recipeProducts
                 .take(10)
                 .map(
                   (product) => [
@@ -5952,7 +5979,8 @@ class _RecipeLineRow extends StatelessWidget {
           ),
           const SizedBox(width: ToastSpacingTokens.sm),
           Text(
-            '${_quantity(recipe['quantity_g'])}g',
+            '${_quantity(recipe['quantity_g'])} '
+            '${_string(recipe['ingredient_unit'], fallback: 'g')}',
             style: _textStyle(
               size: 12.5,
               weight: FontWeight.w900,
@@ -7465,18 +7493,44 @@ int _contractAttentionCount(List<Map<String, dynamic>> suppliers) {
   }).length;
 }
 
-List<Map<String, dynamic>> _gramRecipeProducts(
+List<Map<String, dynamic>> _recipeProducts(
   List<Map<String, dynamic>> products,
 ) {
   return products
       .where(
         (product) =>
-            product['is_active'] == true &&
-            _string(product['base_unit']) == 'g' &&
+            product['is_active'] != false &&
+            recipeSupportedBaseUnits.contains(
+              _string(product['base_unit']).toLowerCase(),
+            ) &&
             _string(product['id']).isNotEmpty &&
             _string(product['inventory_item_id']).isNotEmpty,
       )
       .toList();
+}
+
+String _recipeBaseUnit(Map<String, dynamic>? product) {
+  final unit = _string(product?['base_unit']).toLowerCase();
+  return recipeSupportedBaseUnits.contains(unit) ? unit : 'g';
+}
+
+String _recipeUnitLabel(String gramLabel, String unit) =>
+    gramLabel.replaceFirst('(g)', '($unit)');
+
+String _recipeUsageTotals(List<Map<String, dynamic>> recipes) {
+  if (recipes.isEmpty) return '-';
+  final totals = <String, num>{};
+  for (final recipe in recipes) {
+    final unit = _string(
+      recipe['ingredient_unit'],
+      fallback: 'g',
+    ).toLowerCase();
+    totals[unit] = (totals[unit] ?? 0) + _num(recipe['quantity_g']);
+  }
+  return [
+    for (final unit in const ['g', 'ml', 'ea'])
+      if (totals.containsKey(unit)) '${_quantity(totals[unit])} $unit',
+  ].join(' · ');
 }
 
 List<Map<String, dynamic>> _activeSupplierItemsForSupplier(

@@ -18,26 +18,28 @@ Stack: Flutter + Supabase (Postgres + RLS + Edge Functions + Storage + pg_cron).
 
 - **Codebase**: `~/globos_pos_system`
 - **Obsidian vault**: `~/Documents/restaurant-ops-vault/GLOBOSVN POS/`
-- **Authoritative scope**: `Stage 1/stage1_scope_v1.4.md` (in vault)
-- **E-invoice authority**: Scope v1.4 and the MISA/meInvoice integration contract
+- **Authoritative system truth**: the checked-out implementation under `lib/`,
+  `supabase/`, `scripts/`, `.github/workflows/`, and `test/`
+- **Canonical system map**: `00_HOME.md` in the Obsidian vault
+- **E-invoice authority**: the implemented MISA/meInvoice contract
 - **Historical vendor docs**: `docs/vendor/` (WeTax API, reference only)
 - **Sample API responses**: `docs/vendor/samples/`
 
 ## 3. Authority and scope rules
 
-- **Scope v1.4 is authoritative.** v1.0/v1.1/v1.2/v1.3 are superseded but
-  preserved for history. Do not re-litigate decisions already in v1.4.
-- **Do not re-run Phase -1, Phase 0, or Phase 1.** They are complete and
-  documented in the vault. Same for Phase 2 Step 1.
-- **Phase 2 Steps 2–10 are complete** as of 2026-04-13.
-  DB is in expand-migrate state with dual naming (Step 2).
-  11 WeTax tables added (Step 4). 4 edge functions deployed (Step 7).
-  process_payment extended with VAT + einvoice_jobs (Step 8).
-  Do not re-run any completed step.
-- **Phase 3 verification complete.** 11/11 invariants PASS. E2E PASS.
+- **The current implementation is authoritative.** When older Obsidian scope,
+  phase, ADR, or vendor notes conflict with the checked-out code, migrations,
+  tests, or workflows, follow the implementation and update the documentation.
+- The active vault starts at `00_HOME.md`. Content under `99_ARCHIVE/` is
+  provenance only and must not be used as an active specification.
+- Keep four states separate: implemented in source, migration applied,
+  deployed to production, and operationally verified. Source evidence alone
+  proves only the first state.
+- MISA/meInvoice is the active e-invoice path. WeTax artifacts remain only for
+  compatibility and history unless the implementation is explicitly changed.
 - **bytea decode:** Supabase returns bytea as `\x313233...` hex — use
   `decodeByteaToString()` helper in edge functions, not `atob()`.
-  See ADR-014 in vault.
+  See `90_REFERENCE/04_DECISIONS_AND_INVARIANTS.md` in the vault.
 
 ## 4. Hard constraints (binding)
 
@@ -52,8 +54,8 @@ Stack: Flutter + Supabase (Postgres + RLS + Edge Functions + Storage + pg_cron).
   handles red invoice history, corrections, cancellations, PDF
   downloads. POS opens `lookup_url` — does not duplicate.
 - **Payment completion must never depend on MISA availability.**
-  MISA dispatch is always async. Scope v1.4 and MISA are authoritative;
-  WeTax remains historical only.
+  MISA dispatch is always async. The implemented MISA contract is
+  authoritative; WeTax remains historical only.
 - **Both existing settlement edge functions are preserved.**
   `generate-settlement` (dine-in) and `generate_delivery_settlement`
   (Deliberry) serve distinct business domains. Do not flag as duplicates.
@@ -79,22 +81,29 @@ This means:
 - Office app must NOT be modified to follow POS renames unless
   explicitly instructed.
 
-## 6. Database state (as of 2026-04-12)
+## 6. Current structural state
 
-- `restaurants` (table), `stores` (view) — both work, dual naming
-- `restaurant_settings` (table), `store_settings` (view) — both work
-- `get_user_restaurant_id()` — preserved as legacy wrapper
-- `get_user_store_id()` — current authoritative RLS helper
-- 33 RLS policies, 29 reference `get_user_store_id`, 0 reference legacy
-- `v_store_daily_sales`, `v_store_attendance_summary` etc. expose `store_id`
+- `restaurants` remains the physical table and `stores` the compatibility view.
+- Brand/legal-entity/store hierarchy and multi-store access are implemented;
+  effective access is represented by `user_accessible_stores` and related RPCs.
+- Authentication users and workforce employees are separate concepts connected
+  by explicit mappings where required.
+- Fulfillment has both standard POS/print flows and paperless emergency/KDS flows.
+- Photo Objet collection uses the implemented 22:00 Asia/Ho_Chi_Minh schedule.
+- The current login surface defines 12 roles and the repository contains 16
+  Supabase Edge Functions. Recount from source whenever this changes.
 
 ## 7. Critical invariants
 
 - `einvoice_jobs.ref_id` must be UUIDv7 (version nibble 7, proper variant bits)
-- `process_payment` RPC at
-  `supabase/migrations/20260409000000_dine_in_sales_contract_closure.sql`
-  is the atomic anchor. Einvoice job creation attaches here.
-- Daily close is fixed 00:00 Asia/Ho_Chi_Minh, not per-store
+- `process_payment(order, store, amount, method)` is the atomic single-order
+  payment anchor. Its latest effective definition is currently in
+  `supabase/migrations/20260707010000_service_item_exclusion_v1.sql`; determine
+  effective SQL by migration order rather than relying on an older phase file.
+- General daily cash close runs at 23:00 Asia/Ho_Chi_Minh. Restaurant order
+  cutoff/finalization is a separate contract: 21:30 cutoff, 21:45 grace end,
+  and 22:20 finalization. Photo Objet collection is another separate 22:00
+  contract. Do not collapse these schedules into one "daily close" rule.
 - MISA portal handles red invoice lifecycle. POS does not duplicate.
 
 ## 8. Workflow
