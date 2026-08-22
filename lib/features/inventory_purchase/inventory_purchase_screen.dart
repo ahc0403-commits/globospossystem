@@ -2337,6 +2337,7 @@ class _InventoryPurchaseScreenState
                         ),
                         TextField(
                           controller: stockUnitController,
+                          onChanged: (_) => setDialogState(() {}),
                           decoration: InputDecoration(
                             labelText:
                                 l10n.inventoryPurchaseDisplayStockUnitRequired,
@@ -2360,12 +2361,23 @@ class _InventoryPurchaseScreenState
                         ),
                         TextField(
                           controller: factorController,
+                          onChanged: (_) => setDialogState(() {}),
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
                           decoration: InputDecoration(
                             labelText:
                                 l10n.inventoryPurchaseBaseUnitFactorRequired,
+                            helperText: l10n
+                                .inventoryPurchaseBaseUnitFactorSummary(
+                                  stockUnitController.text.trim().isEmpty
+                                      ? '-'
+                                      : stockUnitController.text.trim(),
+                                  factorController.text.trim().isEmpty
+                                      ? '-'
+                                      : factorController.text.trim(),
+                                  baseUnit,
+                                ),
                           ),
                         ),
                         TextField(
@@ -5727,8 +5739,9 @@ class _ProductDetailPanel extends StatelessWidget {
           label: l10n.inventoryPurchaseUnit,
           value: _string(product!['stock_unit'], fallback: '-'),
           helper: l10n.inventoryPurchaseBaseUnitFactorSummary(
-            _string(product!['base_unit'], fallback: '-'),
+            _string(product!['stock_unit'], fallback: '-'),
             _quantity(product!['base_unit_factor']),
+            _string(product!['base_unit'], fallback: '-'),
           ),
         ),
         const Divider(height: 1),

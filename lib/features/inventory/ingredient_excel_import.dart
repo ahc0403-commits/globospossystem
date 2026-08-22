@@ -11,15 +11,21 @@ const ingredientImportHeaders = <String>[
   '원재료코드',
   '원재료명',
   '분류',
-  '재고표시단위',
-  '기준단위',
-  '표시단위환산수량',
+  '구매단위',
+  '소진단위',
+  '제품중량',
   '보관방법',
   '유통기한(일)',
   '발주가능(Y/N)',
   '거래처',
   '가격',
 ];
+
+const _legacyIngredientImportHeaderAliases = <String, String>{
+  '구매단위': '재고표시단위',
+  '소진단위': '기준단위',
+  '제품중량': '표시단위환산수량',
+};
 
 class IngredientImportRow {
   const IngredientImportRow({
@@ -221,6 +227,11 @@ IngredientImportWorkbook parseIngredientImportWorkbook(
     final header = _cellText(sheet.rows.first[index]?.value).trim();
     if (header.isNotEmpty) indexes[header] = index;
   }
+  for (final entry in _legacyIngredientImportHeaderAliases.entries) {
+    if (!indexes.containsKey(entry.key) && indexes.containsKey(entry.value)) {
+      indexes[entry.key] = indexes[entry.value]!;
+    }
+  }
   final missing = ingredientImportHeaders
       .where((header) => !indexes.containsKey(header))
       .toList();
@@ -263,9 +274,9 @@ IngredientImportWorkbook parseIngredientImportWorkbook(
     final code = text('원재료코드');
     final name = text('원재료명');
     final category = text('분류');
-    final stockUnit = text('재고표시단위');
-    final baseUnit = text('기준단위').toLowerCase();
-    final rawFactor = text('표시단위환산수량');
+    final stockUnit = text('구매단위');
+    final baseUnit = text('소진단위').toLowerCase();
+    final rawFactor = text('제품중량');
     final storageType = text('보관방법');
     final rawShelfLife = text('유통기한(일)');
     final rawOrderable = text('발주가능(Y/N)').toUpperCase();
@@ -307,13 +318,13 @@ IngredientImportWorkbook parseIngredientImportWorkbook(
 
     if (code.isEmpty) issues.add('$sourceRow행: 원재료코드를 입력하세요.');
     if (name.isEmpty) issues.add('$sourceRow행: 원재료명을 입력하세요.');
-    if (stockUnit.isEmpty) issues.add('$sourceRow행: 재고표시단위를 입력하세요.');
+    if (stockUnit.isEmpty) issues.add('$sourceRow행: 구매단위를 입력하세요.');
     if (!const {'g', 'ml', 'ea'}.contains(baseUnit)) {
-      issues.add('$sourceRow행: 기준단위는 g, ml, ea 중 하나여야 합니다.');
+      issues.add('$sourceRow행: 소진단위는 g, ml, ea 중 하나여야 합니다.');
     }
     final factor = _parseNumber(rawFactor);
     if (factor == null || factor <= 0) {
-      issues.add('$sourceRow행: 표시단위환산수량은 0보다 큰 숫자여야 합니다.');
+      issues.add('$sourceRow행: 제품중량은 0보다 큰 숫자여야 합니다.');
     }
     final shelfLife = rawShelfLife.isEmpty ? null : _parseInteger(rawShelfLife);
     if (rawShelfLife.isNotEmpty && (shelfLife == null || shelfLife < 0)) {

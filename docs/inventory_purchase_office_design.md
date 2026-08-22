@@ -80,7 +80,7 @@ Office/POS 경계는 데이터 소유권, 권한, 승인 책임, RPC 책임을 �
 - `created_at`
 - `updated_at`
 
-`stock_unit`은 화면에 보여줄 재고 단위다. `base_unit`은 계산 단위다. 예를 들어 고기는 `stock_unit = kg`, `base_unit = g`, `base_unit_factor = 1000`으로 둔다.
+`stock_unit`은 사용자가 등록하는 구매 단위, `base_unit`은 레시피와 재고 차감에 사용하는 소진 단위다. `base_unit_factor`는 구매 단위 1개에 포함된 제품중량(또는 수량)이다. 예를 들어 라면스프는 `stock_unit = 봉`, `base_unit = g`, `base_unit_factor = 450`으로 등록한다. 1봉 입고 시 기준 재고는 450g 증가하고, 레시피 사용량이 13g이면 메뉴 1개 판매 시 13g만 차감되어 437g이 남는다.
 
 #### `inventory_suppliers`
 

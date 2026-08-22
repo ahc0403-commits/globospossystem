@@ -183,8 +183,8 @@ void main() {
           (error) => error.issues.join('\n'),
           'issues',
           allOf(
-            contains('기준단위'),
-            contains('환산수량'),
+            contains('소진단위'),
+            contains('제품중량'),
             contains('유통기한'),
             contains('Y 또는 N'),
             contains('중복'),
@@ -232,5 +232,44 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('ingredient parser accepts the legacy unit column names', () {
+    final excel = Excel.createExcel();
+    excel.rename('Sheet1', ingredientImportSheetName);
+    final sheet = excel[ingredientImportSheetName];
+    sheet.appendRow([
+      for (final header in ingredientImportHeaders)
+        TextCellValue(switch (header) {
+          '구매단위' => '재고표시단위',
+          '소진단위' => '기준단위',
+          '제품중량' => '표시단위환산수량',
+          _ => header,
+        }),
+    ]);
+    sheet.appendRow([
+      TextCellValue(''),
+      TextCellValue('ING-SPICE'),
+      TextCellValue('라면스프'),
+      TextCellValue('소스'),
+      TextCellValue('봉'),
+      TextCellValue('g'),
+      DoubleCellValue(450),
+      TextCellValue('실온'),
+      IntCellValue(90),
+      TextCellValue('Y'),
+      TextCellValue('새벽식유통'),
+      IntCellValue(10000),
+    ]);
+
+    final workbook = parseIngredientImportWorkbook(
+      Uint8List.fromList(excel.encode()!),
+      existingProducts: _products,
+      existingSuppliers: _suppliers,
+    );
+
+    expect(workbook.rows.single.stockUnit, '봉');
+    expect(workbook.rows.single.baseUnit, 'g');
+    expect(workbook.rows.single.baseUnitFactor, 450);
   });
 }
