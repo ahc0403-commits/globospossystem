@@ -39,6 +39,9 @@ Future<Map<String, dynamic>> _fixture() async => {
       'name_ko': '치즈라면',
       'name_vi': 'Mì phô mai',
       'name_en': 'Cheese ramen',
+      'category_name_ko': '면류',
+      'category_name_vi': 'Mì',
+      'category_name_en': 'Noodles',
       'sample_count': 1,
       'kitchen_average_seconds': 523,
       'tray_average_seconds': 10,
@@ -50,6 +53,9 @@ Future<Map<String, dynamic>> _fixture() async => {
       'name_ko': '돌솥 제육 비빔밥',
       'name_vi': 'Cơm trộn thịt heo',
       'name_en': 'Pork stone-pot rice',
+      'category_name_ko': '밥류',
+      'category_name_vi': 'Cơm',
+      'category_name_en': 'Rice',
       'sample_count': 6,
       'kitchen_average_seconds': 780,
       'tray_average_seconds': 41,
@@ -61,10 +67,39 @@ Future<Map<String, dynamic>> _fixture() async => {
       'name_ko': '아이스티',
       'name_vi': 'Trà đá',
       'name_en': 'Iced tea',
+      'category_name_ko': '음료',
+      'category_name_vi': 'Đồ uống',
+      'category_name_en': 'Drinks',
       'sample_count': 4,
       'kitchen_average_seconds': null,
       'tray_average_seconds': null,
       'floor_average_seconds': 42,
+      'operation_average_seconds': 42,
+    },
+  ],
+  'category_operation_times': [
+    {
+      'category_key': 'category-rice',
+      'name_ko': '밥류',
+      'name_vi': 'Cơm',
+      'name_en': 'Rice',
+      'sample_count': 6,
+      'operation_average_seconds': 982,
+    },
+    {
+      'category_key': 'category-noodles',
+      'name_ko': '면류',
+      'name_vi': 'Mì',
+      'name_en': 'Noodles',
+      'sample_count': 1,
+      'operation_average_seconds': 569,
+    },
+    {
+      'category_key': 'category-drinks',
+      'name_ko': '음료',
+      'name_vi': 'Đồ uống',
+      'name_en': 'Drinks',
+      'sample_count': 4,
       'operation_average_seconds': 42,
     },
   ],
@@ -103,7 +138,7 @@ Widget _app({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('shows operation, dining, and additive menu stage averages', (
+  testWidgets('shows rankings, category averages, and menu stage averages', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
@@ -115,10 +150,20 @@ void main() {
       find.byKey(const Key('paperless_operations_time_summary')),
       findsOne,
     );
-    expect(find.text('운영 평균'), findsOne);
+    expect(find.text('평균 제공시간'), findsOne);
     expect(find.text('10분 3초'), findsWidgets);
     expect(find.text('식사 평균'), findsOne);
     expect(find.text('21분 18초'), findsOne);
+    expect(find.byKey(const Key('paperless_fastest_menu_ranking')), findsOne);
+    expect(find.byKey(const Key('paperless_slowest_menu_ranking')), findsOne);
+    expect(find.text('가장 빨리 나간 메뉴 TOP 5'), findsOne);
+    expect(find.text('가장 늦게 나간 메뉴 TOP 5'), findsOne);
+    expect(
+      find.byKey(const Key('paperless_category_operation_times')),
+      findsOne,
+    );
+    expect(find.text('카테고리별 평균 제공시간'), findsOne);
+    expect(find.text('밥류'), findsWidgets);
     expect(find.byKey(const Key('paperless_operations_flow')), findsOne);
     expect(find.text('주방 + 트레이 + 층 서빙 = 운영 합계'), findsOne);
 
@@ -126,11 +171,30 @@ void main() {
       find.byKey(const Key('paperless_menu_operation_times')),
     );
     await tester.pumpAndSettle();
-    expect(find.text('메뉴별 제공 시간'), findsOne);
-    expect(find.text('치즈라면'), findsOne);
-    expect(find.text('9분 29초'), findsOne);
-    expect(find.text('아이스티'), findsOne);
-    expect(find.text('—'), findsNWidgets(2));
+    expect(find.text('메뉴별 평균 제공시간'), findsOne);
+    expect(find.text('치즈라면'), findsWidgets);
+    expect(find.text('9분 29초'), findsWidgets);
+    expect(find.text('아이스티'), findsWidgets);
+    expect(find.textContaining('—'), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('desktop places fastest and slowest rankings side by side', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 1100));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(_app());
+    await tester.pumpAndSettle();
+
+    final fastest = tester.getRect(
+      find.byKey(const Key('paperless_fastest_menu_ranking')),
+    );
+    final slowest = tester.getRect(
+      find.byKey(const Key('paperless_slowest_menu_ranking')),
+    );
+    expect((fastest.top - slowest.top).abs(), lessThan(1));
+    expect(slowest.left, greaterThan(fastest.right));
     expect(tester.takeException(), isNull);
   });
 
@@ -143,7 +207,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('paperless_operations_dashboard')), findsOne);
-    expect(find.text('운영 평균'), findsOne);
+    expect(find.text('평균 제공시간'), findsOne);
     expect(tester.takeException(), isNull);
   });
 
