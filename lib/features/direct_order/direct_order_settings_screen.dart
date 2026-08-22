@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/ui/pos_design_tokens.dart';
@@ -7,6 +9,7 @@ import '../../widgets/app_nav_bar.dart';
 import '../../widgets/language_switcher.dart';
 import '../auth/auth_provider.dart';
 import 'direct_order_copy.dart';
+import 'direct_order_qr_export_service.dart';
 import 'direct_order_staff_service.dart';
 
 class DirectOrderSettingsScreen extends ConsumerStatefulWidget {
@@ -32,6 +35,7 @@ class _DirectOrderSettingsScreenState
   bool _accountingApproved = false;
   bool _loading = true;
   bool _saving = false;
+  bool _exportingQr = false;
   String? _error;
 
   DirectOrderCopy get _copy =>
@@ -145,6 +149,64 @@ class _DirectOrderSettingsScreenState
     }
   }
 
+  String? get _publicUrl {
+    final slug = _slug.text.trim();
+    if (slug.isEmpty) return null;
+    return directOrderStaffService.publicUrl(slug);
+  }
+
+  Future<void> _copyPublicLink() async {
+    final url = _publicUrl;
+    if (url == null) return;
+    await Clipboard.setData(ClipboardData(text: url));
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(_copy.publicLinkCopied)));
+  }
+
+  Future<void> _downloadPublicQr() async {
+    final url = _publicUrl;
+    if (url == null || _exportingQr) return;
+    setState(() => _exportingQr = true);
+    try {
+      await directOrderQrExportService.savePng(
+        slug: _slug.text.trim(),
+        url: url,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_copy.qrDownloaded)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_copy.actionFailed)));
+    } finally {
+      if (mounted) setState(() => _exportingQr = false);
+    }
+  }
+
+  Future<void> _printPublicQr() async {
+    final url = _publicUrl;
+    if (url == null || _exportingQr) return;
+    setState(() => _exportingQr = true);
+    try {
+      await directOrderQrExportService.printQr(
+        slug: _slug.text.trim(),
+        url: url,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_copy.actionFailed)));
+    } finally {
+      if (mounted) setState(() => _exportingQr = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -244,7 +306,11 @@ class _DirectOrderSettingsScreenState
                             padding: const EdgeInsets.all(18),
                             child: Column(
                               children: [
-                                _field(_slug, _copy.publicSlug),
+                                _field(
+                                  _slug,
+                                  _copy.publicSlug,
+                                  onChanged: (_) => setState(() {}),
+                                ),
                                 _field(
                                   _bankBin,
                                   _copy.bankBin,
@@ -301,25 +367,100 @@ class _DirectOrderSettingsScreenState
                           ),
                         ),
                         const SizedBox(height: 14),
+                        if (_publicUrl case final url?) ...[
+                          Card(
+                            key: const Key('direct_order_public_qr_card'),
+                            child: Padding(
+                              padding: const EdgeInsets.all(18),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Text(
+                                    _copy.externalOrderQr,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(_copy.externalOrderQrHelp),
+                                  const SizedBox(height: 16),
+                                  Center(
+                                    child: Container(
+                                      padding: const EdgeInsets.all(12),
+                                      color: Colors.white,
+                                      child: QrImageView(
+                                        key: const Key(
+                                          'direct_order_public_qr_image',
+                                        ),
+                                        data: url,
+                                        size: 220,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  SelectableText(
+                                    url,
+                                    key: const Key(
+                                      'direct_order_public_qr_url',
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 14),
+                                  Wrap(
+                                    spacing: 10,
+                                    runSpacing: 10,
+                                    alignment: WrapAlignment.center,
+                                    children: [
+                                      OutlinedButton.icon(
+                                        onPressed: _copyPublicLink,
+                                        icon: const Icon(Icons.copy_outlined),
+                                        label: Text(_copy.copyPublicLink),
+                                      ),
+                                      OutlinedButton.icon(
+                                        onPressed: _exportingQr
+                                            ? null
+                                            : _downloadPublicQr,
+                                        icon: _exportingQr
+                                            ? const SizedBox.square(
+                                                dimension: 18,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                    ),
+                                              )
+                                            : const Icon(
+                                                Icons.download_outlined,
+                                              ),
+                                        label: Text(_copy.downloadQr),
+                                      ),
+                                      OutlinedButton.icon(
+                                        onPressed: _exportingQr
+                                            ? null
+                                            : _printPublicQr,
+                                        icon: const Icon(Icons.print_outlined),
+                                        label: Text(_copy.printQr),
+                                      ),
+                                      OutlinedButton.icon(
+                                        onPressed: () => launchUrl(
+                                          Uri.parse(url),
+                                          mode: LaunchMode.externalApplication,
+                                        ),
+                                        icon: const Icon(Icons.open_in_new),
+                                        label: Text(_copy.openCustomerPage),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                        ],
                         Wrap(
                           spacing: 10,
                           runSpacing: 10,
                           alignment: WrapAlignment.end,
                           children: [
-                            OutlinedButton.icon(
-                              onPressed: _slug.text.trim().isEmpty
-                                  ? null
-                                  : () => launchUrl(
-                                      Uri.parse(
-                                        directOrderStaffService.publicUrl(
-                                          _slug.text.trim(),
-                                        ),
-                                      ),
-                                      mode: LaunchMode.externalApplication,
-                                    ),
-                              icon: const Icon(Icons.open_in_new),
-                              label: Text(_copy.openCustomerPage),
-                            ),
                             FilledButton.icon(
                               onPressed: _saving ? null : _save,
                               icon: const Icon(Icons.save_outlined),
@@ -341,11 +482,13 @@ class _DirectOrderSettingsScreenState
     String label, {
     TextInputType? keyboard,
     String? suffix,
+    ValueChanged<String>? onChanged,
   }) => Padding(
     padding: const EdgeInsets.only(bottom: 12),
     child: TextFormField(
       controller: controller,
       keyboardType: keyboard,
+      onChanged: onChanged,
       decoration: InputDecoration(labelText: label, suffixText: suffix),
     ),
   );

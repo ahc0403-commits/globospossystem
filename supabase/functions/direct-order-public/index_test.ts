@@ -15,6 +15,7 @@ import {
   requireGoogleServerKey,
   resolveProjectSecretKey,
   sqlDomainErrorRegistry,
+  translateDirectOrderText,
   validateProofImage,
   validPlacesSessionToken,
   validProofObjectPath,
@@ -188,7 +189,7 @@ Deno.test("requires JSON and enforces the 64 KiB limit in UTF-8 bytes", async ()
   assertEquals(utf8Oversized.status, 413, "UTF-8 byte limit status");
 });
 
-Deno.test("action registry is exact and dispatches all 13 boundaries", async () => {
+Deno.test("action registry is exact and dispatches all 15 boundaries", async () => {
   assertEquals(
     Object.keys(directOrderActionRegistry),
     [
@@ -200,10 +201,12 @@ Deno.test("action registry is exact and dispatches all 13 boundaries", async () 
       "submit",
       "status",
       "message",
+      "message_translations",
       "cancel",
       "proof_upload_url",
       "proof_commit",
       "staff_proof_url",
+      "staff_message",
       "cleanup_expired_pii",
     ],
     "action names",
@@ -340,7 +343,7 @@ Deno.test("backend failures never expose secrets or request data", async () => {
 Deno.test("SQL errors use an explicit registry and unknown errors are sanitized", () => {
   assertEquals(
     Object.keys(sqlDomainErrorRegistry).length,
-    56,
+    57,
     "registered SQL error count",
   );
   const conflict = normalizeRpcError(
@@ -507,6 +510,92 @@ Deno.test("missing Google server key fails before provider traffic", () => {
     "MAP_TEMPORARILY_UNAVAILABLE",
     "missing server key",
   );
+});
+
+Deno.test("chat translation preserves source and produces the two viewer copies", async () => {
+  const requests: Array<{ target: string; text: string }> = [];
+  const fetcher: typeof fetch = async (url, init) => {
+    const providerRequest = new Request(
+      url,
+      init as globalThis.RequestInit,
+    );
+    assertEquals(
+      providerRequest.headers.get("x-goog-api-key"),
+      "server-only-key",
+      "key stays in provider header",
+    );
+    assertEquals(
+      new URL(providerRequest.url).searchParams.has("key"),
+      false,
+      "key is not placed in the URL",
+    );
+    const payload = await providerRequest.json() as {
+      q: string;
+      target: string;
+    };
+    requests.push({ target: payload.target, text: payload.q });
+    const translated = payload.target === "ko"
+      ? "안녕하세요 &amp; 친구"
+      : "Xin chào &amp; bạn";
+    return Response.json({
+      data: { translations: [{ translatedText: translated }] },
+    });
+  };
+
+  const result = await translateDirectOrderText(
+    "Hello & friend",
+    "en",
+    "server-only-key",
+    fetcher,
+  );
+
+  assertEquals(result.en, "Hello & friend", "source preserved");
+  assertEquals(result.ko, "안녕하세요 & 친구", "Korean translation");
+  assertEquals(result.vi, "Xin chào & bạn", "Vietnamese translation");
+  assertEquals(
+    requests.map((item) => item.target).sort(),
+    ["ko", "vi"],
+    "only non-source locales call provider",
+  );
+  assertEquals(
+    requests.every((item) => item.text === "Hello & friend"),
+    true,
+    "original sent intact",
+  );
+});
+
+Deno.test("chat translation fails closed on missing key and provider errors", async () => {
+  for (
+    const operation of [
+      () => translateDirectOrderText("hello", "en", ""),
+      () =>
+        translateDirectOrderText(
+          "hello",
+          "en",
+          "server-only-key",
+          () => Promise.resolve(Response.json({ data: {} })),
+        ),
+      () =>
+        translateDirectOrderText(
+          "hello",
+          "en",
+          "server-only-key",
+          () => Promise.resolve(new Response("{}", { status: 429 })),
+        ),
+    ]
+  ) {
+    let caught: unknown;
+    try {
+      await operation();
+    } catch (error) {
+      caught = error;
+    }
+    assertEquals(
+      caught instanceof Error ? caught.message : null,
+      "TRANSLATION_TEMPORARILY_UNAVAILABLE",
+      "safe translation error",
+    );
+  }
 });
 
 Deno.test("direct order locale accepts only ko vi en", () => {

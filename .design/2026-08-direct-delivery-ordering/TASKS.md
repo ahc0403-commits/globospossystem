@@ -124,10 +124,11 @@ H1 통과 기준:
   Retry-After, 성공 `{data: ...}`, 실패 `{error: CODE}`와 log redaction을
   명문화한다. _생성: `DIRECT_ORDER_API_CONTRACT.md`; 재사용:
   `direct-order-public/index.ts`; 수정: runtime 없음._
-- [x] **Edge action 13개 명세**: `storefront`, `create_session`,
+- [x] **Edge action 15개 명세**: `storefront`, `create_session`,
   `places_autocomplete`, `place_details`, `reverse_geocode`, `submit`,
-  `status`, `message`, `cancel`, `proof_upload_url`, `proof_commit`,
-  `staff_proof_url`, `cleanup_expired_pii` 각각에 actor, request field,
+  `status`, `message`, `message_translations`, `cancel`, `proof_upload_url`,
+  `proof_commit`, `staff_proof_url`, `staff_message`, `cleanup_expired_pii`
+  각각에 actor, request field,
   validation limit, response field, side effect, idempotency, rate class와
   가능한 error code를 적는다. _추가: `DIRECT_ORDER_API_CONTRACT.md`;
   재사용: Flutter service/model과 Edge switch; 수정: 불일치가 발견된
@@ -294,7 +295,8 @@ H4 통과 기준:
 고객·캐셔·주방·관리자는 각자 한국어·베트남어·영어 중 하나를 선택하고,
 자신이 선택한 언어로 화면을 본다. 고객이 어떤 언어로 주문했는지는 다른
 사용자의 화면 언어를 바꾸지 않는다. 시스템 label·status·error·menu
-name·알림은 현재 viewer locale로 번역하며 고객/직원이 직접 쓴 채팅,
+name·알림은 현재 viewer locale로 번역한다. 고객/직원이 직접 쓴 채팅은
+원문을 보존하면서 서버 생성 KO/VI/EN 사본 중 viewer locale을 표시하고,
 상세주소와 요청사항은 데이터 원문을 보존한다.
 
 | 화면/데이터 | 허용 언어와 결정 기준 |
@@ -304,12 +306,13 @@ name·알림은 현재 viewer locale로 번역하며 고객/직원이 직접 쓴
 | 캐셔 `/cashier/direct-orders` | 해당 캐셔가 현재 선택한 `ko/vi/en` |
 | 직접 배달 주방 화면 | 해당 주방 직원이 현재 선택한 `ko/vi/en` |
 | 관리자/분석/설정 화면 | 로그인한 운영자 POS의 현재 locale |
-| 고객/직원 자유 입력 | 번역하지 않고 입력 원문 표시 |
+| 고객/직원 자유 채팅 | 원문 보존 + 현재 viewer locale의 서버 번역 표시 |
 
 - [x] **viewer-locale 계약 문서화**: `request.locale`은 고객이 요청을
   만들 때 사용한 언어 기록일 뿐 캐셔·주방 UI locale을 바꾸지 못한다는
-  우선순위를 고정한다. system code는 viewer locale로 번역하고 free text는
-  원문을 보존한다. _생성: `DIRECT_ORDER_LOCALE_CONTRACT.md`; 수정:
+  우선순위를 고정한다. system code는 viewer locale로 번역하고 chat
+  free text는 원문과 3개 언어 사본을 함께 보존한다. _생성:
+  `DIRECT_ORDER_LOCALE_CONTRACT.md`; 수정:
   `DESIGN_BRIEF.md`, `UI_SPEC.md`, API/state contract의 언어 절; 재사용:
   현재 app locale과 direct snapshot; runtime 수정: 없음._
 - [x] **모든 direct 화면의 3개 언어 selector 보장**: storefront, 고객
@@ -339,18 +342,20 @@ name·알림은 현재 viewer locale로 번역하며 고객/직원이 직접 쓴
   direct-order localized-name helper와 unit tests; 수정: direct-only ticket
   migration 및 storefront/cashier/kitchen item label; 재사용: request item의
   `name_ko/name_vi/name_en`; 수정: 기존 QR/KDS/menu model 없음._
-- [x] **system message·주소 언어 경계 적용**: DB에는 고정 system code를
+- [x] **system message·주소·채팅 언어 경계 적용**: DB에는 고정 system code를
   보존하고 고객과 직원 화면이 각자의 locale로 해석한다. Places/Geocoding
   요청 language는 현재 고객의 `ko/vi/en`을 사용하지만 Google 고유 지명은
-  응답 그대로 보존한다. 고객 chat, cashier chat, 상세주소와 note는 번역
-  API를 호출하지 않고 원문 표시한다. _수정: direct customer/staff message
+  응답 그대로 보존한다. 고객/cashier chat은 Edge만 Google Translation을
+  호출해 원문과 KO/VI/EN을 원자적으로 저장하고, 상세주소와 note는 원문
+  표시한다. _수정: direct customer/staff message
   renderer와 direct Edge Google language parameter; 재사용: system code와
   exact address; 생성: viewer-locale fixtures; 타 채팅/지도 수정: 없음._
 - [x] **교차 언어 E2E matrix 추가**: 고객 locale `ko/vi/en` × 캐셔 locale
   `ko/vi/en`의 9개 조합과 주방·관리 화면 각각 3개 locale을 검증한다.
   주문 후 viewer가 언어를 바꾸면 버튼·상태·system message·menu name과
   신규 알림은 즉시 새 viewer locale로 바뀌고, 다른 사용자의 선택에는
-  영향이 없어야 한다. free text는 원문을 유지한다. _확장: direct
+  영향이 없어야 한다. chat free text는 원문을 유지하면서 viewer 번역을
+  표시한다. _확장: direct
   storefront/cashier/kitchen/admin UI, Edge와 SQL tests; 재사용: locale
   fixtures; 수정: 기존 POS locale tests 없음._
 
@@ -360,8 +365,8 @@ H4A 통과 기준:
   UI·menu·status·error·alert가 그 viewer의 현재 locale을 따른다.
 - 고객 request locale이 무엇이든 캐셔·주방·관리 화면은 각 운영자가
   선택한 언어만 사용한다.
-- 고객도 현재 선택한 `ko/vi/en`으로 UI를 보고, 자유 입력은 모든 화면에서
-  자동 번역되지 않고 원문을 유지한다.
+- 고객도 현재 선택한 `ko/vi/en`으로 UI를 보고, 채팅은 모든 화면에서
+  원문을 보존하면서 선택 언어 번역을 표시한다. 주소와 note는 원문이다.
 - 기존 전역 POS의 3개 언어 선택과 다른 화면의 언어 동작은 그대로다.
 
 ## Gate H4B — 캐셔 신규 외부 배달 알림 (receiver locale)
