@@ -59,6 +59,7 @@ class RecipeImportValidationException implements Exception {
 List<int> buildRecipeImportTemplate({
   required List<Map<String, dynamic>> menuItems,
   required List<Map<String, dynamic>> products,
+  required List<Map<String, dynamic>> recipes,
 }) {
   final excel = Excel.createExcel();
   excel.rename('Sheet1', recipeImportSheetName);
@@ -66,11 +67,36 @@ List<int> buildRecipeImportTemplate({
 
   final recipeSheet = excel[recipeImportSheetName];
   recipeSheet.appendRow(recipeImportHeaders.map(TextCellValue.new).toList());
-  recipeSheet.appendRow([
-    TextCellValue('메뉴목록 시트에서 복사'),
-    TextCellValue('원재료목록 시트에서 복사'),
-    DoubleCellValue(100),
-  ]);
+  final sortedRecipes = [...recipes]
+    ..sort((left, right) {
+      final menuCompare = _mapText(
+        left['menu_item_name'],
+      ).compareTo(_mapText(right['menu_item_name']));
+      if (menuCompare != 0) return menuCompare;
+      return _mapText(
+        left['ingredient_name'],
+      ).compareTo(_mapText(right['ingredient_name']));
+    });
+  for (final recipe in sortedRecipes) {
+    final menuName = _mapText(recipe['menu_item_name']);
+    final ingredientName = _mapText(recipe['ingredient_name']);
+    final quantity = _mapNumber(recipe['quantity_g']);
+    if (menuName.isEmpty || ingredientName.isEmpty || quantity == null) {
+      continue;
+    }
+    recipeSheet.appendRow([
+      TextCellValue(menuName),
+      TextCellValue(ingredientName),
+      DoubleCellValue(quantity),
+    ]);
+  }
+  if (recipeSheet.maxRows == 1) {
+    recipeSheet.appendRow([
+      TextCellValue('메뉴목록 시트에서 복사'),
+      TextCellValue('원재료목록 시트에서 복사'),
+      DoubleCellValue(100),
+    ]);
+  }
   const recipeWidths = <double>[32, 32, 18];
   for (var index = 0; index < recipeWidths.length; index++) {
     recipeSheet.setColumnWidth(index, recipeWidths[index]);
@@ -274,6 +300,11 @@ String _cellText(CellValue? value) => switch (value) {
 };
 
 String _mapText(Object? value) => value?.toString().trim() ?? '';
+
+double? _mapNumber(Object? value) {
+  if (value is num) return value.toDouble();
+  return double.tryParse(_mapText(value).replaceAll(',', ''));
+}
 
 String _normalize(String value) =>
     value.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
