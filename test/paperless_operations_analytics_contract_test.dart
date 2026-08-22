@@ -6,7 +6,7 @@ void main() {
   test('paperless analytics separates menu stages and dining time', () {
     final migration = File(
       'supabase/migrations/'
-      '20260822090000_paperless_menu_operation_and_dining_analytics.sql',
+      '20260822110000_paperless_menu_operation_and_dining_analytics.sql',
     ).readAsStringSync();
 
     expect(migration, contains('-- production-gate: self-verifying'));
