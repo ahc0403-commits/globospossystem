@@ -56,7 +56,7 @@ void main() {
 
   test('insights wrapper enriches menus and weights category averages', () {
     final migration = File(
-      'supabase/migrations/302_paperless_operations_insight_dashboard.sql',
+      'supabase/migrations/20260822140000_paperless_operations_insight_dashboard.sql',
     ).readAsStringSync();
 
     expect(migration, contains('-- production-gate: self-verifying'));
