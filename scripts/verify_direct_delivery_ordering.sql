@@ -54,29 +54,8 @@ BEGIN
       procedure_row.proname LIKE 'direct_order_%'
       OR procedure_row.proname LIKE 'direct_delivery_%'
     );
-  IF v_function_count <> 31 THEN
+  IF v_function_count <> 28 THEN
     RAISE EXCEPTION 'DIRECT_ORDER_FUNCTION_COUNT_DRIFT:%', v_function_count;
-  END IF;
-
-  IF EXISTS (
-    SELECT 1
-    FROM unnest(ARRAY[
-      'source_locale',
-      'body_ko',
-      'body_vi',
-      'body_en',
-      'translation_status',
-      'translation_provider'
-    ]) AS required_column(column_name)
-    WHERE NOT EXISTS (
-      SELECT 1
-      FROM information_schema.columns column_row
-      WHERE column_row.table_schema = 'public'
-        AND column_row.table_name = 'direct_order_messages'
-        AND column_row.column_name = required_column.column_name
-    )
-  ) THEN
-    RAISE EXCEPTION 'DIRECT_ORDER_TRANSLATION_COLUMN_MISSING';
   END IF;
 
   IF to_regprocedure(
@@ -85,12 +64,6 @@ BEGIN
     'public.direct_order_public_submit(uuid,text,uuid,jsonb)'
   ) IS NULL OR to_regprocedure(
     'public.direct_order_analytics(uuid,date,date)'
-  ) IS NULL OR to_regprocedure(
-    'public.direct_order_public_message_translated(uuid,text,uuid,text,text,text,text,text)'
-  ) IS NULL OR to_regprocedure(
-    'public.direct_order_staff_message_translated(uuid,uuid,uuid,text,text,text,text,text)'
-  ) IS NULL OR to_regprocedure(
-    'public.direct_order_public_message_translations(uuid,text,uuid,text,uuid[])'
   ) IS NULL THEN
     RAISE EXCEPTION 'DIRECT_ORDER_CRITICAL_FUNCTION_MISSING';
   END IF;
@@ -107,34 +80,6 @@ BEGIN
     'EXECUTE'
   ) THEN
     RAISE EXCEPTION 'DIRECT_ORDER_PUBLIC_RPC_PRIVILEGE_DRIFT';
-  END IF;
-
-  IF has_function_privilege(
-    'anon',
-    'public.direct_order_public_message_translated(uuid,text,uuid,text,text,text,text,text)',
-    'EXECUTE'
-  ) OR has_function_privilege(
-    'authenticated',
-    'public.direct_order_public_message_translated(uuid,text,uuid,text,text,text,text,text)',
-    'EXECUTE'
-  ) OR has_function_privilege(
-    'anon',
-    'public.direct_order_staff_message_translated(uuid,uuid,uuid,text,text,text,text,text)',
-    'EXECUTE'
-  ) OR has_function_privilege(
-    'authenticated',
-    'public.direct_order_staff_message_translated(uuid,uuid,uuid,text,text,text,text,text)',
-    'EXECUTE'
-  ) OR has_function_privilege(
-    'anon',
-    'public.direct_order_public_message_translations(uuid,text,uuid,text,uuid[])',
-    'EXECUTE'
-  ) OR has_function_privilege(
-    'authenticated',
-    'public.direct_order_public_message_translations(uuid,text,uuid,text,uuid[])',
-    'EXECUTE'
-  ) THEN
-    RAISE EXCEPTION 'DIRECT_ORDER_TRANSLATION_RPC_PRIVILEGE_DRIFT';
   END IF;
 
   IF NOT EXISTS (

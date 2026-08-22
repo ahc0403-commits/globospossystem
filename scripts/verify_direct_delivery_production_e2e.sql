@@ -37,7 +37,6 @@ DECLARE
     replace(gen_random_uuid()::text, '-', '');
   v_submit jsonb;
   v_quote jsonb;
-  v_customer_message jsonb;
   v_request uuid;
   v_approval jsonb;
   v_order uuid;
@@ -45,7 +44,6 @@ DECLARE
   v_ticket uuid;
   v_transition jsonb;
   v_status jsonb;
-  v_translations jsonb;
   v_analytics jsonb;
 BEGIN
   IF current_setting('codex.direct_delivery_e2e_confirm') <> 'YES' THEN
@@ -153,23 +151,16 @@ BEGIN
   );
   v_request := (v_submit->>'request_id')::uuid;
 
-  v_customer_message := public.direct_order_public_message_translated(
+  PERFORM public.direct_order_public_message(
     v_session, v_secret_hash, v_request,
-    'Please confirm the fourth-floor address.', 'en',
-    '4층 주소를 확인해 주세요.',
-    'Vui lòng xác nhận địa chỉ tầng 4.',
     'Please confirm the fourth-floor address.'
   );
-  PERFORM public.direct_order_staff_message_translated(
-    v_actor, v_store, v_request,
-    'Địa chỉ đã được xác nhận.', 'vi',
-    '주소가 확인되었습니다.',
-    'Địa chỉ đã được xác nhận.',
-    'The address has been confirmed.'
-  );
-
   PERFORM set_config('request.jwt.claim.sub', v_actor::text, true);
   PERFORM set_config('request.jwt.claim.role', 'authenticated', true);
+  PERFORM public.direct_order_staff_message(
+    v_store, v_request, 'Địa chỉ đã được xác nhận.'
+  );
+
   v_quote := public.direct_order_staff_quote(
     v_store, v_request, 25000, 'rollback-only delivery quote'
   );
@@ -212,13 +203,6 @@ BEGIN
   v_status := public.direct_order_public_status(
     v_session, v_secret_hash, v_request
   );
-  v_translations := public.direct_order_public_message_translations(
-    v_session,
-    v_secret_hash,
-    v_request,
-    'vi',
-    ARRAY[(v_customer_message->>'message_id')::uuid]
-  );
   v_analytics := public.direct_order_analytics(
     v_store,
     (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date,
@@ -229,8 +213,18 @@ BEGIN
      OR (v_status->'fulfillment'->>'status') <> 'completed'
      OR (v_status->'dispatch'->>'grab_tracking_url') <>
        'https://grab.onelink.me/test/direct-order-production-rollback-e2e'
-     OR (v_translations->'translations'->0->>'body') <>
-       'Vui lòng xác nhận địa chỉ tầng 4.'
+     OR NOT EXISTS (
+       SELECT 1 FROM public.direct_order_messages message
+       WHERE message.request_id = v_request
+         AND message.sender_type = 'customer'
+         AND message.body = 'Please confirm the fourth-floor address.'
+     )
+     OR NOT EXISTS (
+       SELECT 1 FROM public.direct_order_messages message
+       WHERE message.request_id = v_request
+         AND message.sender_type = 'cashier'
+         AND message.body = 'Địa chỉ đã được xác nhận.'
+     )
      OR NOT EXISTS (
        SELECT 1 FROM public.orders order_row
        WHERE order_row.id = v_order

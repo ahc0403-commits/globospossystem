@@ -4,12 +4,12 @@ Authorities:
 
 - Edge: `supabase/functions/direct-order-public/index.ts`
 - SQL: `supabase/migrations/20260821130000_direct_delivery_ordering.sql`
-  and `supabase/migrations/20260822100000_direct_order_chat_translation.sql`
+  and `supabase/migrations/20260821140000_direct_delivery_arrival_alerts.sql`
 - Flutter customer decode: `lib/features/direct_order/direct_order_models.dart`
 - Catalog enforcement: `supabase/tests/direct_delivery_schema_contract_test.sql`
 
 State: source contract only. It does not prove Edge deployment, migration
-application, Google project configuration, or production verification.
+application, Google Maps project configuration, or production verification.
 
 ## Common HTTP contract
 
@@ -133,25 +133,11 @@ staff viewer's current app locale. See `DIRECT_ORDER_LOCALE_CONTRACT.md`.
 ### `message`
 
 - Actor/rate: owning session, 60.
-- Input: session ID, secret, request UUID, sender viewer locale exactly
-  `ko`/`vi`/`en`, trimmed message 1–2,000.
+- Input: session ID, secret, request UUID, trimmed message 1–2,000.
 - Output exactly `message_id`, `created_at`.
-- Side effect/idempotency: Google Cloud Translation produces the two non-source
-  copies, then one SQL write atomically stores the exact original and all three
-  locale copies; non-idempotent. No row is written when translation fails.
-- Errors: invalid text/locale, unavailable ownership, terminal-state conflict,
-  `TRANSLATION_TEMPORARILY_UNAVAILABLE`.
-
-### `message_translations`
-
-- Actor/rate: owning session, 60.
-- Input: session ID, secret, request UUID, target viewer locale exactly
-  `ko`/`vi`/`en`, and 1–100 message UUIDs returned by status.
-- Output exactly `translations`, an ordered list of `{message_id, body}` for
-  owned translated text messages. Missing legacy/untranslated IDs are omitted.
-- Side effect/idempotency: validates the owning session and updates only its
-  `last_seen_at`; otherwise read-only and retry-safe.
-- Errors: invalid locale/IDs, unavailable ownership, temporary failure.
+- Side effect/idempotency: one SQL write stores the exact author-entered body;
+  non-idempotent. No machine translation is performed.
+- Errors: invalid text, unavailable ownership, terminal-state conflict.
 
 ### `cancel`
 
@@ -199,19 +185,6 @@ staff viewer's current app locale. See `DIRECT_ORDER_LOCALE_CONTRACT.md`.
   signs only the matching payment-proof object. Read-only and retry-safe.
 - Errors: 401, forbidden/store mismatch, proof not found, temporary signing.
 
-### `staff_message`
-
-- Actor/rate: authenticated store-scoped cashier/admin; no public rate bucket.
-- Input: bearer JWT, store UUID, request UUID, sender viewer locale exactly
-  `ko`/`vi`/`en`, and trimmed message 1–2,000.
-- Output exactly `message_id`, `created_at`.
-- Side effect/idempotency: Edge validates the JWT and store scope, generates
-  the two non-source translations with the server key, and calls the
-  service-only atomic staff writer. Non-idempotent; provider failure writes
-  nothing.
-- Errors: 401, forbidden/store mismatch, invalid text/locale, terminal-state
-  conflict, `TRANSLATION_TEMPORARILY_UNAVAILABLE`.
-
 ### `cleanup_expired_pii`
 
 - Actor/rate: internal cleanup secret only; no browser origin/rate bucket.
@@ -241,8 +214,6 @@ for super_admin, staff functions require the requested store in
 | `direct_order_validate_session(uuid,text) -> session row` | S/helper | Reads valid hash/expiry, updates last_seen | session invalid |
 | `direct_order_public_submit(uuid,text,uuid,jsonb) -> jsonb` | S/session | Validates session before idempotency lookup; store `FOR SHARE`; writes request/items/exact/coarse/message; owning client UUID replay returns same request | request/address/item/quantity, session, pause/hours/open/menu |
 | `direct_order_public_message(uuid,text,uuid,text) -> jsonb` | S/session | Reads ownership/state; inserts one message; non-idempotent | session, not chatable, message invalid |
-| `direct_order_public_message_translated(uuid,text,uuid,text,text,text,text,text) -> jsonb` | S/session | Validates ownership/state and atomically inserts original plus KO/VI/EN copies; non-idempotent | session, not chatable, translation invalid |
-| `direct_order_public_message_translations(uuid,text,uuid,text,uuid[]) -> jsonb` | S/session | Validates ownership and returns only requested owned text-message copies for one viewer locale; retry-safe | session/request, translation invalid |
 | `direct_order_public_cancel(uuid,text,uuid) -> jsonb` | S/session | Request `FOR UPDATE`; terminal transition/message; first call only | not found/not cancellable |
 | `direct_order_public_commit_proof(uuid,text,uuid,text) -> jsonb` | S/session | Request `FOR UPDATE`; locks quote; exact path replay returns one proof message; no approval | proof state/path, quote expired |
 | `direct_order_public_status(uuid,text,uuid) -> jsonb` | S/session | Owning request snapshot; only session last_seen write; retry-safe | session/request not found |
@@ -252,7 +223,6 @@ for super_admin, staff functions require the requested store in
 | `direct_order_staff_detail(uuid,uuid) -> jsonb` | C/A store | Exact address/items/quotes/chat/financial/dispatch read; attachment becomes boolean | forbidden, request not found |
 | `direct_order_staff_quote(uuid,uuid,numeric,text) -> jsonb` | C/A store | Request `FOR UPDATE`; price/menu revalidation; supersedes quote, updates request/message; versioned | quote input/state, store/accounting/menu/minimum |
 | `direct_order_staff_message(uuid,uuid,text) -> jsonb` | C/A store | Reads state; inserts one cashier message; non-idempotent | forbidden, invalid/not chatable |
-| `direct_order_staff_message_translated(uuid,uuid,uuid,text,text,text,text,text) -> jsonb` | S after Edge JWT scope | Revalidates actor/store/request and atomically inserts exact staff original plus KO/VI/EN copies | forbidden, invalid/not chatable |
 | `direct_order_staff_reject(uuid,uuid,text) -> jsonb` | C/A store | Request `FOR UPDATE`; rejects, expires live quote, writes message/audit | reason, not found/not rejectable |
 | `direct_order_staff_sepay_candidates(uuid,uuid) -> jsonb` | C/A store | Read-only time/amount candidate list; evidence only | forbidden, quote not found |
 | `direct_order_staff_link_sepay(uuid,uuid,uuid) -> jsonb` | C/A store | Validates candidate then request+transaction upsert; pair-idempotent; never approves | quote/candidate invalid |
@@ -269,9 +239,8 @@ for super_admin, staff functions require the requested store in
 Function signatures and grants are executable catalog contracts. Adding an
 overload, changing argument identity, exposing an uncontracted execute grant, or
 adding a direct function makes `direct_delivery_schema_contract_test.sql` fail.
-The current exact catalog contains 31 direct functions, including the isolated
-cashier arrival cursor RPC and three service-only translation RPCs. The arrival
-cursor is not an Edge public action.
+The current exact catalog contains 28 direct functions, including the isolated
+cashier arrival cursor RPC. The arrival cursor is not an Edge public action.
 
 ## Explicit SQL error registry
 
@@ -279,7 +248,7 @@ cursor is not an Edge public action.
 EXCEPTION` codes are enumerated; the Flutter regression contract compares the
 migration's raised-code set with the registry's key set.
 
-- 400: actor/rate/session/request/address/item/quantity/message/translation/quote/approval,
+- 400: actor/rate/session/request/address/item/quantity/message/quote/approval,
   dispatch/analytics/cleanup input errors. Safe specific customer codes are
   retained where the UI can correct input; other input errors become
   `INVALID_REQUEST` or `INVALID_PROOF`.
@@ -305,9 +274,9 @@ codes use the same localized unavailable fallback and are never shown raw.
 - Submit, message, cancel, upload-reservation, and proof-commit response fields
   are exact-set checked by the service. Cache decode uses the same strict model;
   corrupt or old cache is deleted instead of being submitted.
-- User-entered address/note remains original data. Chat keeps its original and
-  selects a stored server-generated copy for the current viewer; Flutter never
-  calls the translation provider and never receives its credential.
+- User-entered address/note and chat remain exact original data. UI labels,
+  fixed system codes, status, and errors still render in the current viewer's
+  selected KO/VI/EN locale; free-text chat is not machine-translated.
 - Cashier detail returns request-time `name_ko/name_vi/name_en`; direct ticket
   list returns approval-time `name_ko/name_vi/name_en`. Staff Flutter selects
   among these using its current viewer locale and never request locale.

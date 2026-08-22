@@ -67,42 +67,15 @@ class DirectOrderStaffService {
     required String storeId,
     required String requestId,
     required String message,
-    required String locale,
   }) async {
-    final response = await supabase.functions.invoke(
-      'direct-order-public',
-      body: {
-        'action': 'staff_message',
-        'store_id': storeId,
-        'request_id': requestId,
-        'message': message,
-        'locale': locale,
+    await supabase.rpc(
+      'direct_order_staff_message',
+      params: {
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+        'p_body': message,
       },
     );
-    if (response.status < 200 ||
-        response.status >= 300 ||
-        response.data is! Map) {
-      final raw = response.data;
-      final code = raw is Map && raw['error'] is String
-          ? raw['error'] as String
-          : 'DIRECT_ORDER_TEMPORARILY_UNAVAILABLE';
-      throw DirectOrderException(code);
-    }
-    final envelope = Map<String, dynamic>.from(response.data as Map);
-    final data = envelope['data'];
-    if (envelope.length != 1 || data is! Map) {
-      throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
-    }
-    final messageData = Map<String, dynamic>.from(data);
-    if (messageData.keys.toSet().difference(const {
-          'message_id',
-          'created_at',
-        }).isNotEmpty ||
-        messageData.length != 2 ||
-        messageData['message_id'] is! String ||
-        messageData['created_at'] is! String) {
-      throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
-    }
   }
 
   Future<void> reject({

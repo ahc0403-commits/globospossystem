@@ -25,25 +25,17 @@ BEGIN
   v_request := (v_fixture->>'request_id')::uuid;
   v_store := (v_fixture->>'store_id')::uuid;
 
-  PERFORM public.direct_order_public_message_translated(
+  PERFORM public.direct_order_public_message(
     (v_fixture->>'session_id')::uuid,
     v_fixture->>'secret_hash',
     v_request,
-    'Please confirm the fourth-floor address.',
-    'en',
-    '4층 주소를 확인해 주세요.',
-    'Vui lòng xác nhận địa chỉ tầng 4.',
     'Please confirm the fourth-floor address.'
   );
-  PERFORM public.direct_order_staff_message_translated(
-    (v_fixture->>'auth_id')::uuid,
+  PERFORM direct_delivery_test.set_actor();
+  PERFORM public.direct_order_staff_message(
     v_store,
     v_request,
-    'Địa chỉ đã được xác nhận.',
-    'vi',
-    '주소가 확인되었습니다.',
-    'Địa chỉ đã được xác nhận.',
-    'The address has been confirmed.'
+    'Địa chỉ đã được xác nhận.'
   );
 
   v_status := direct_delivery_test.approve(
@@ -127,13 +119,13 @@ BEGIN
       SELECT 1 FROM public.direct_order_messages message
       WHERE message.request_id=v_request
         AND message.sender_type='customer'
-        AND message.translation_status='complete'
+        AND message.body='Please confirm the fourth-floor address.'
     )
     AND EXISTS (
       SELECT 1 FROM public.direct_order_messages message
       WHERE message.request_id=v_request
         AND message.sender_type='cashier'
-        AND message.translation_status='complete'
+        AND message.body='Địa chỉ đã được xác nhận.'
     )
     AND (v_analytics->'summary'->>'order_count')::integer=1
     AND (SELECT count(*) FROM public.direct_order_financials

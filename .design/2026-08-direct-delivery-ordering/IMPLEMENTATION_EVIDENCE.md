@@ -276,7 +276,7 @@ No commit, push, GitHub exact-SHA run, production migration, Edge deployment,
 secret/Google project change, storefront enablement, Google Business Profile
 publication, or live-store pilot was performed.
 
-## H6 completion: QR operations, translated chat, and full graph E2E
+## H6 completion: QR operations, original-text chat, and full graph E2E
 
 Captured: 2026-08-22
 
@@ -284,28 +284,26 @@ Captured: 2026-08-22
   copies the link, downloads a 1200px quiet-zone PNG, opens the customer page,
   and opens an A5 system print job. URL/route validation and injected
   save/print behavior have three passing service tests.
-- Customer and cashier text sends now require the sender's current viewer
-  locale. The Edge boundary calls Google Cloud Translation with a server-only
-  header credential, preserves the exact source, and atomically writes KO/VI/EN
-  copies through service-only RPCs. Customer status fetches only owned message
-  translations; cashier detail selects the same stored copies by its current
-  locale. Existing untranslated rows safely retain the original display.
-- Translation failure, malformed provider data, duplicate/invalid message IDs,
-  cross-session reads, browser execution of trusted writers, source mismatch,
-  and partial writes fail closed. Deno format/lint/type check and all 23 Edge
-  tests passed. The focused SQL translation suite passed four scenarios.
+- Customer and cashier free-text sends preserve and display the exact
+  author-entered body for every viewer locale. The final pre-release decision
+  removed Google Cloud Translation, translation credentials, translated
+  columns/RPCs, and the extra translation lookup action. UI labels, fixed
+  system messages, statuses, errors, menu snapshots, and alerts remain
+  localized independently in KO/VI/EN.
 - The rollback-safe SQL operational graph passed request, quote, proof, manual
   payment approval, one legacy order/payment, direct kitchen transitions, Grab
-  dispatch/fee variance, completion, translated chat, daily direct sales, and
+  dispatch/fee variance, completion, original-text chat, daily direct sales, and
   region/time analytics in one scenario. The production-shaped rollback E2E
   script passed against a disposable database and left no data behind.
-- Dart analysis passed with fatal infos. The 44 focused Flutter tests passed,
-  including QR export/print, customer translation merge, staff viewer locale,
-  all responsive address paths, alert isolation, frozen legacy hashes, and the
-  production release contract.
-- The complete guarded repository check passed: 1,165 Flutter tests with two
-  existing environment skips, all 23 Edge tests, static analysis, Node/SQL and
-  secret-scan contracts, release web build, and whitespace verification.
+- The final original-text-chat regression rerun passed the 170-column, 40-FK,
+  20-index, 28-function catalog; 22 ordering, 11 state, 17 precondition, 16
+  approval-rollback, 6 locale, 7 arrival-alert, and one full-graph scenario.
+- Dart analysis passed with fatal infos. Focused Flutter chat/UI/release tests
+  passed, including exact original preservation for all viewer locales.
+- The complete guarded repository check passed: 1,173 Flutter tests with two
+  existing environment skips, all 21 Edge tests, 59 Node tests, static
+  analysis, shell/SQL and secret-scan contracts, release web build, and
+  whitespace verification.
 
-Production deployment and Google Cloud Translation credential configuration
-are recorded only after their guarded gates complete.
+Production deployment is recorded only after its guarded gates complete. Chat
+has no Google Cloud Translation credential or provider dependency.

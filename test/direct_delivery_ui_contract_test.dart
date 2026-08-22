@@ -174,27 +174,15 @@ void main() {
     }
   });
 
-  test('translated chat follows the current staff viewer locale', () {
-    final message = <String, dynamic>{
-      'translation_status': 'complete',
-      'body_ko': '도착하면 전화해 주세요.',
-      'body_vi': 'Vui lòng gọi khi đến.',
-      'body_en': 'Please call when you arrive.',
-    };
-    const expected = {
-      'ko': '도착하면 전화해 주세요.',
-      'vi': 'Vui lòng gọi khi đến.',
-      'en': 'Please call when you arrive.',
-    };
+  test('free chat preserves the author original in every viewer locale', () {
     for (final locale in directOrderLocales) {
       expect(
         localizedDirectOrderMessage(
           copy: DirectOrderCopy(locale),
           messageType: 'text',
           body: 'Please call when you arrive.',
-          message: message,
         ),
-        expected[locale],
+        'Please call when you arrive.',
       );
     }
   });

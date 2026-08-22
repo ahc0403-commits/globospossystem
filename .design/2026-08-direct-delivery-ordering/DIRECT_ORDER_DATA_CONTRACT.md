@@ -191,17 +191,10 @@ sender_type text N IN (customer,cashier,system)
 sender_auth_id uuid null FK auth.users SET NULL
 message_type text N IN (text,payment_proof,quote,grab_link,system)
 body text null length 1..2000 CHECK; exact free text/system code/secret link
-source_locale text null IN (ko,vi,en); translated text only
-body_ko text null length 1..6000; server-generated viewer copy
-body_vi text null length 1..6000; server-generated viewer copy
-body_en text null length 1..6000; server-generated viewer copy
-translation_status text N DEFAULT not_requested IN (not_requested,complete)
-translation_provider text null; complete must be google_cloud_translation_v2
 attachment_storage_path text null strict store/request/UUID image-path CHECK
 metadata jsonb N DEFAULT {}, object CHECK
 created_at timestamptz N DEFAULT now()
 content CHECK: proof requires attachment; every other type requires body
-translation CHECK: complete only for text; all three copies required; source copy equals body
 partial UNIQUE: each non-null attachment_storage_path can create one proof message
 ```
 
