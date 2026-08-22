@@ -6,6 +6,7 @@ const recipeImportSheetName = '레시피등록';
 const recipeMenuReferenceSheetName = '메뉴목록';
 const recipeIngredientReferenceSheetName = '원재료목록';
 const recipeImportMaxRows = 1000;
+const recipeSupportedBaseUnits = <String>{'g', 'ml', 'ea'};
 
 const recipeImportHeaders = <String>['메뉴명', '재료명', '사용중량'];
 
@@ -15,18 +16,24 @@ class RecipeImportRow {
     required this.menuItemId,
     required this.ingredientId,
     required this.quantityG,
+    required this.baseUnit,
   });
 
   final int sourceRow;
   final String menuItemId;
   final String ingredientId;
+  // Kept as quantityG for compatibility with the legacy menu_recipes schema.
+  // The numeric value is expressed in the ingredient's canonical base unit.
   final double quantityG;
+  final String baseUnit;
 
   Map<String, dynamic> toJson() => {
     'source_row': sourceRow,
     'menu_item_id': menuItemId,
     'ingredient_id': ingredientId,
     'quantity_g': quantityG,
+    'quantity_base': quantityG,
+    'ingredient_unit': baseUnit,
   };
 }
 
@@ -84,13 +91,16 @@ List<int> buildRecipeImportTemplate({
   menuSheet.setColumnWidth(0, 32);
 
   final ingredientSheet = excel[recipeIngredientReferenceSheetName];
-  ingredientSheet.appendRow([TextCellValue('재료명')]);
+  ingredientSheet.appendRow([TextCellValue('재료명'), TextCellValue('기준단위')]);
   final sortedProducts =
       products
           .where(
             (product) =>
                 _mapText(product['inventory_item_id']).isNotEmpty &&
-                _mapText(product['base_unit']).toLowerCase() == 'g',
+                product['is_active'] != false &&
+                recipeSupportedBaseUnits.contains(
+                  _mapText(product['base_unit']).toLowerCase(),
+                ),
           )
           .toList()
         ..sort(
@@ -98,9 +108,13 @@ List<int> buildRecipeImportTemplate({
               _mapText(left['name']).compareTo(_mapText(right['name'])),
         );
   for (final product in sortedProducts) {
-    ingredientSheet.appendRow([TextCellValue(_mapText(product['name']))]);
+    ingredientSheet.appendRow([
+      TextCellValue(_mapText(product['name'])),
+      TextCellValue(_mapText(product['base_unit']).toLowerCase()),
+    ]);
   }
   ingredientSheet.setColumnWidth(0, 32);
+  ingredientSheet.setColumnWidth(1, 14);
 
   return excel.encode()!;
 }
@@ -190,8 +204,9 @@ RecipeImportWorkbook parseRecipeImportWorkbook(
     } else if (ingredientCandidates.length > 1) {
       issues.add('$sourceRow행: 같은 이름의 재료가 여러 개입니다. 재료명을 고유하게 변경하세요.');
     } else {
-      if (_mapText(ingredient!['base_unit']).toLowerCase() != 'g') {
-        issues.add('$sourceRow행: g 단위 원재료만 레시피에 등록할 수 있습니다.');
+      final baseUnit = _mapText(ingredient!['base_unit']).toLowerCase();
+      if (!recipeSupportedBaseUnits.contains(baseUnit)) {
+        issues.add('$sourceRow행: 원재료의 기준단위는 g, ml, ea 중 하나여야 합니다.');
       }
     }
     if (quantity == null || quantity <= 0) {
@@ -214,7 +229,9 @@ RecipeImportWorkbook parseRecipeImportWorkbook(
         ingredient != null &&
         _mapText(menu['id']).isNotEmpty &&
         _mapText(ingredient['inventory_item_id']).isNotEmpty &&
-        _mapText(ingredient['base_unit']).toLowerCase() == 'g' &&
+        recipeSupportedBaseUnits.contains(
+          _mapText(ingredient['base_unit']).toLowerCase(),
+        ) &&
         quantity != null &&
         quantity > 0) {
       rows.add(
@@ -223,6 +240,7 @@ RecipeImportWorkbook parseRecipeImportWorkbook(
           menuItemId: _mapText(menu['id']),
           ingredientId: _mapText(ingredient['inventory_item_id']),
           quantityG: quantity,
+          baseUnit: _mapText(ingredient['base_unit']).toLowerCase(),
         ),
       );
     }

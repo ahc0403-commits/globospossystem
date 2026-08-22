@@ -400,6 +400,8 @@ preflight() {
       fail "Missing emergency-fulfillment-dispatcher Edge function."
     [[ -f "$ROOT_DIR/supabase/functions/public-receipt/index.ts" ]] ||
       fail "Missing public-receipt Edge function."
+    [[ -f "$ROOT_DIR/supabase/functions/direct-order-public/index.ts" ]] ||
+      fail "Missing direct-order-public Edge function."
   fi
   if [[ "$DB_ONLY" != "1" && "$SKIP_AUTH_CHECK" != "1" ]]; then
     [[ -f "$ROOT_DIR/scripts/check_pilot_auth_accounts.sh" ]] ||
@@ -498,6 +500,22 @@ run_checks() {
     "$ROOT_DIR/supabase/functions/public-receipt/deno.json" \
     "$ROOT_DIR/supabase/functions/public-receipt/index_test.ts"
 
+  log "Direct order Edge security tests"
+  run deno fmt --check \
+    "$ROOT_DIR/supabase/functions/direct-order-public/index.ts" \
+    "$ROOT_DIR/supabase/functions/direct-order-public/index_test.ts" \
+    "$ROOT_DIR/supabase/functions/direct-order-public/deno.json"
+  run deno lint \
+    "$ROOT_DIR/supabase/functions/direct-order-public/index.ts" \
+    "$ROOT_DIR/supabase/functions/direct-order-public/index_test.ts"
+  run deno check --config \
+    "$ROOT_DIR/supabase/functions/direct-order-public/deno.json" \
+    "$ROOT_DIR/supabase/functions/direct-order-public/index.ts" \
+    "$ROOT_DIR/supabase/functions/direct-order-public/index_test.ts"
+  run deno test --config \
+    "$ROOT_DIR/supabase/functions/direct-order-public/deno.json" \
+    "$ROOT_DIR/supabase/functions/direct-order-public/index_test.ts"
+
   if [[ -z "$TEST_TARGETS" ]]; then
     log "Flutter tests skipped"
     return 0
@@ -539,6 +557,39 @@ verify_sepay_alert_secrets() {
     grep -Fxq "$required_secret" <<<"$secret_names" ||
       fail "Missing required Supabase Edge secret: $required_secret"
   done
+}
+
+verify_direct_order_secrets() {
+  log "Direct order Edge secret readiness"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '+ supabase secrets list --project-ref %q; require direct-order secret names only\n' \
+      "$POS_PROJECT_REF"
+    return 0
+  fi
+
+  local secret_names
+  secret_names="$(supabase secrets list --project-ref "$POS_PROJECT_REF" 2>/dev/null | awk -F '|' 'NF >= 2 {gsub(/[[:space:]]/, "", $1); print $1}')" ||
+    fail "Could not inspect Supabase Edge secret names for direct orders."
+
+  local required_secret
+  for required_secret in \
+    SUPABASE_SECRET_KEYS \
+    DIRECT_ORDER_RATE_LIMIT_SECRET \
+    DIRECT_ORDER_CLEANUP_SECRET; do
+    grep -Fxq "$required_secret" <<<"$secret_names" ||
+      fail "Missing required direct-order Edge secret: $required_secret"
+  done
+
+  if ! grep -Fxq DIRECT_ORDER_SUPABASE_SECRET_KEY_NAME <<<"$secret_names" &&
+     ! grep -Fxq PUBLIC_RECEIPT_SUPABASE_SECRET_KEY_NAME <<<"$secret_names"; then
+    fail "Missing direct-order or public-receipt Supabase secret-key selector."
+  fi
+
+  if ! grep -Fxq GOOGLE_MAPS_SERVER_API_KEY <<<"$secret_names" ||
+     ! grep -Fxq GOOGLE_MAPS_BROWSER_KEY <<<"$secret_names"; then
+    warn "Google Maps keys are not configured; direct storefronts must remain disabled."
+  fi
+  printf 'Direct order Edge secret names: ready.\n'
 }
 
 parse_linked_pg_exports() {
@@ -879,6 +930,8 @@ deploy_pos_edge_functions() {
     --no-verify-jwt --project-ref "$POS_PROJECT_REF"
   run supabase functions deploy public-receipt \
     --no-verify-jwt --project-ref "$POS_PROJECT_REF"
+  run supabase functions deploy direct-order-public \
+    --no-verify-jwt --project-ref "$POS_PROJECT_REF"
 }
 
 verify_emergency_dispatcher_readiness() {
@@ -904,7 +957,8 @@ verify_remote_allowed_origin() {
   for function_name in \
     provision-fixed-pos-account \
     complete-initial-password-change \
-    public-receipt; do
+    public-receipt \
+    direct-order-public; do
     if [[ "$DRY_RUN" == "1" ]]; then
       printf '+ OPTIONS %s with Origin %q; require exact access-control-allow-origin\n' \
         "$function_name" "$LIVE_URL"
@@ -998,6 +1052,7 @@ main() {
   run_auth_check
   run_checks
   verify_sepay_alert_secrets
+  verify_direct_order_secrets
   # Deploy the compatibility-capable self-service endpoint before replacing the
   # predecessor password trigger. If the DB gate fails, the endpoint remains
   # safe against the predecessor schema; the web app is deployed only after the

@@ -324,10 +324,10 @@ class RecipeNotifier extends StateNotifier<RecipeState> {
       return 'Select a valid ingredient.';
     }
     if (message.contains('INVENTORY_RECIPE_QUANTITY_INVALID')) {
-      return 'Usage (g) must be greater than 0.';
+      return 'Usage in the ingredient base unit must be greater than 0.';
     }
     if (message.contains('INVENTORY_RECIPE_INGREDIENT_UNIT_UNSUPPORTED')) {
-      return 'In v1, only ingredients with unit g can be linked to recipes.';
+      return 'The ingredient base unit must be g, ml, or ea.';
     }
 
     return fallback;

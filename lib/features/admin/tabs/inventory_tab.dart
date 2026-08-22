@@ -834,8 +834,14 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
     final notifier = ref.read(recipeProvider.notifier);
     final l10n = context.l10n;
     final menuItems = recipeState.menuItems;
-    final gramIngredients = ingredientState.items
-        .where((item) => item['unit']?.toString() == 'g')
+    final recipeIngredients = ingredientState.items
+        .where(
+          (item) => const {
+            'g',
+            'ml',
+            'ea',
+          }.contains(item['unit']?.toString().trim().toLowerCase()),
+        )
         .toList();
 
     if (_selectedMenuItemId != null &&
@@ -875,7 +881,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                         storeId: storeId,
                         notifier: notifier,
                         menuItems: menuItems,
-                        ingredients: gramIngredients,
+                        ingredients: recipeIngredients,
                         initialMenuItemId: _selectedMenuItemId,
                       ),
                 icon: const Icon(Icons.add),
@@ -976,7 +982,9 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    '${row['ingredient_name'] ?? '-'} · ${quantity?.toStringAsFixed(3) ?? '-'} g',
+                                    '${row['ingredient_name'] ?? '-'} · '
+                                    '${quantity?.toStringAsFixed(3) ?? '-'} '
+                                    '$ingredientUnit',
                                     style: AppFonts.system(
                                       color: AppColors.textPrimary,
                                     ),
@@ -1018,7 +1026,7 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                                       storeId: storeId,
                                       notifier: notifier,
                                       menuItems: menuItems,
-                                      ingredients: gramIngredients,
+                                      ingredients: recipeIngredients,
                                       initialMenuItemId: menuItemId,
                                       initialRow: row,
                                     ),
@@ -6558,6 +6566,20 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
+            Map<String, dynamic>? selectedIngredient;
+            for (final item in ingredients) {
+              if (item['id']?.toString() == ingredientId) {
+                selectedIngredient = item;
+                break;
+              }
+            }
+            final selectedUnit =
+                selectedIngredient?['unit']?.toString().trim().toLowerCase() ??
+                initialRow?['ingredient_unit']
+                    ?.toString()
+                    .trim()
+                    .toLowerCase() ??
+                'g';
             return AlertDialog(
               key: const Key('admin_inventory_recipe_dialog'),
               backgroundColor: AppColors.surface1,
@@ -6593,7 +6615,8 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                           (item) => DropdownMenuItem<String>(
                             value: item['id'].toString(),
                             child: Text(
-                              '${item['name']?.toString() ?? '-'} (g)',
+                              '${item['name']?.toString() ?? '-'} '
+                              '(${item['unit']?.toString() ?? 'g'})',
                             ),
                           ),
                         )
@@ -6602,7 +6625,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                         ? null
                         : (v) => setModalState(() => ingredientId = v),
                     decoration: InputDecoration(
-                      labelText: context.l10n.inventoryIngredientG,
+                      labelText: context.l10n.inventoryIngredientG.replaceFirst(
+                        '(g)',
+                        '($selectedUnit)',
+                      ),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -6612,7 +6638,10 @@ class _InventoryTabState extends ConsumerState<InventoryTab>
                       decimal: true,
                     ),
                     decoration: InputDecoration(
-                      labelText: context.l10n.inventoryUsageG,
+                      labelText: context.l10n.inventoryUsageG.replaceFirst(
+                        '(g)',
+                        '($selectedUnit)',
+                      ),
                     ),
                   ),
                 ],

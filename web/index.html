@@ -260,6 +260,32 @@
         return true;
       };
     })();
+
+    (() => {
+      let googleMapsLoadPromise = null;
+      window.globosLoadGoogleMaps = (rawKey) => {
+        const key = String(rawKey || '').trim();
+        if (!key) return Promise.reject(new Error('GOOGLE_MAPS_KEY_MISSING'));
+        if (window.google && window.google.maps) return Promise.resolve(true);
+        if (googleMapsLoadPromise) return googleMapsLoadPromise;
+
+        googleMapsLoadPromise = new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://maps.googleapis.com/maps/api/js?key=' +
+            encodeURIComponent(key) + '&loading=async&libraries=maps,marker';
+          script.async = true;
+          script.defer = true;
+          script.referrerPolicy = 'no-referrer';
+          script.onload = () => resolve(true);
+          script.onerror = () => {
+            googleMapsLoadPromise = null;
+            reject(new Error('GOOGLE_MAPS_LOAD_FAILED'));
+          };
+          document.head.appendChild(script);
+        });
+        return googleMapsLoadPromise;
+      };
+    })();
   </script>
   <!--
     You can customize the "flutter_bootstrap.js" script.

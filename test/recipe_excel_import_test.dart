@@ -47,8 +47,20 @@ void main() {
     );
     expect(
       excel.tables[recipeIngredientReferenceSheetName]!.maxRows,
-      2,
-      reason: 'only gram-based ingredients are valid recipe candidates',
+      _products.length + 1,
+      reason: 'all supported base-unit ingredients are recipe candidates',
+    );
+    expect(
+      excel.tables[recipeIngredientReferenceSheetName]!.rows.first
+          .map((cell) => cell?.value.toString())
+          .toList(),
+      ['재료명', '기준단위'],
+    );
+    expect(
+      excel.tables[recipeIngredientReferenceSheetName]!.rows
+          .map((row) => row.map((cell) => cell?.value.toString()).toList())
+          .toList(),
+      contains(equals(['소스', 'ml'])),
     );
   });
 
@@ -73,9 +85,11 @@ void main() {
     expect(workbook.lineCount, 1);
     expect(workbook.rows.single.sourceRow, 2);
     expect(workbook.rows.single.quantityG, 150);
+    expect(workbook.rows.single.baseUnit, 'g');
+    expect(workbook.rows.single.toJson()['quantity_base'], 150);
   });
 
-  test('parser rejects unsupported units and duplicate rows', () {
+  test('parser accepts ml recipes and reports duplicate rows', () {
     final excel = Excel.createExcel();
     excel.rename('Sheet1', recipeImportSheetName);
     final sheet = excel[recipeImportSheetName];
@@ -101,7 +115,64 @@ void main() {
         isA<RecipeImportValidationException>().having(
           (error) => error.issues.join('\n'),
           'issues',
-          allOf(contains('g 단위'), contains('중복')),
+          contains('중복'),
+        ),
+      ),
+    );
+  });
+
+  test('parser accepts a single ml recipe in its canonical base unit', () {
+    final excel = Excel.createExcel();
+    excel.rename('Sheet1', recipeImportSheetName);
+    final sheet = excel[recipeImportSheetName];
+    sheet.appendRow(recipeImportHeaders.map(TextCellValue.new).toList());
+    sheet.appendRow([
+      TextCellValue('떡볶이'),
+      TextCellValue('소스'),
+      DoubleCellValue(25),
+    ]);
+
+    final workbook = parseRecipeImportWorkbook(
+      Uint8List.fromList(excel.encode()!),
+      menuItems: _menus,
+      products: _products,
+    );
+
+    expect(workbook.rows.single.baseUnit, 'ml');
+    expect(workbook.rows.single.quantityG, 25);
+    expect(workbook.rows.single.toJson()['ingredient_unit'], 'ml');
+  });
+
+  test('parser rejects a product with an unsupported base unit', () {
+    final excel = Excel.createExcel();
+    excel.rename('Sheet1', recipeImportSheetName);
+    final sheet = excel[recipeImportSheetName];
+    sheet.appendRow(recipeImportHeaders.map(TextCellValue.new).toList());
+    sheet.appendRow([
+      TextCellValue('떡볶이'),
+      TextCellValue('박스 재료'),
+      DoubleCellValue(1),
+    ]);
+
+    expect(
+      () => parseRecipeImportWorkbook(
+        Uint8List.fromList(excel.encode()!),
+        menuItems: _menus,
+        products: const [
+          ..._products,
+          {
+            'id': 'product-box',
+            'inventory_item_id': 'ingredient-box',
+            'name': '박스 재료',
+            'base_unit': 'box',
+          },
+        ],
+      ),
+      throwsA(
+        isA<RecipeImportValidationException>().having(
+          (error) => error.issues.join('\n'),
+          'issues',
+          contains('g, ml, ea'),
         ),
       ),
     );

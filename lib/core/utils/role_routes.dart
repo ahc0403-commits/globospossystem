@@ -97,6 +97,33 @@ bool canAccessRouteForRole(
       _ => false,
     };
   }
+  if (path == '/cashier/direct-orders') {
+    return switch (role) {
+      'super_admin' ||
+      'brand_admin' ||
+      'store_admin' ||
+      'admin' ||
+      'cashier' => true,
+      _ => false,
+    };
+  }
+  if (path == '/kitchen/direct-orders') {
+    return switch (role) {
+      'super_admin' ||
+      'brand_admin' ||
+      'store_admin' ||
+      'admin' ||
+      'kitchen' => true,
+      _ => false,
+    };
+  }
+  if (path == '/direct-delivery/analytics' ||
+      path == '/direct-delivery/settings') {
+    return switch (role) {
+      'super_admin' || 'brand_admin' || 'store_admin' || 'admin' => true,
+      _ => false,
+    };
+  }
 
   return switch (role) {
     'super_admin' =>
