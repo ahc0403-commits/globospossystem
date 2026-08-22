@@ -15,6 +15,7 @@ DECLARE
   v_message jsonb;
   v_translations jsonb;
   v_invalid_blocked boolean := false;
+  v_null_translation_blocked boolean := false;
 BEGIN
   v_chat := direct_delivery_test.create_request('awaiting_quote');
   v_message := public.direct_order_public_message_translated(
@@ -93,6 +94,30 @@ BEGIN
         AND message.body='original'
     ),
     'the selected source locale must exactly preserve the original body'
+  );
+
+  BEGIN
+    INSERT INTO public.direct_order_messages(
+      request_id, restaurant_id, sender_type, message_type, body,
+      source_locale, body_en, translation_status, translation_provider
+    ) VALUES (
+      (v_chat->>'request_id')::uuid,
+      (v_chat->>'store_id')::uuid,
+      'customer',
+      'text',
+      'must remain atomic',
+      'en',
+      'must remain atomic',
+      'complete',
+      'google_cloud_translation_v2'
+    );
+  EXCEPTION WHEN check_violation THEN
+    v_null_translation_blocked := true;
+  END;
+  INSERT INTO _direct_chat_translation_results VALUES (
+    'complete translation cannot contain null viewer copies',
+    v_null_translation_blocked,
+    'all three viewer-language copies must be stored atomically'
   );
 
   INSERT INTO _direct_chat_translation_results VALUES (
