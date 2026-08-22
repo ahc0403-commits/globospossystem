@@ -39,10 +39,39 @@ void main() {
     ).readAsStringSync();
 
     expect(source, contains("Key('paperless_operations_time_summary')"));
+    expect(source, contains("Key('paperless_fastest_menu_ranking')"));
+    expect(source, contains("Key('paperless_slowest_menu_ranking')"));
+    expect(source, contains("Key('paperless_category_operation_times')"));
     expect(source, contains("Key('paperless_operations_flow')"));
     expect(source, contains("Key('paperless_menu_operation_times')"));
+    expect(source, contains('get_paperless_operations_insights_report'));
+    expect(source, contains('가장 빨리 나간 메뉴 TOP 5'));
+    expect(source, contains('가장 늦게 나간 메뉴 TOP 5'));
+    expect(source, contains('카테고리별 평균 제공시간'));
+    expect(source, contains('메뉴별 평균 제공시간'));
     expect(source, contains('주문 접수부터 모든 음식 전달까지'));
     expect(source, contains('모든 음식 제공 완료 후 결제까지'));
     expect(source, contains('주방 + 트레이 + 층 서빙 = 운영 합계'));
+  });
+
+  test('insights wrapper enriches menus and weights category averages', () {
+    final migration = File(
+      'supabase/migrations/302_paperless_operations_insight_dashboard.sql',
+    ).readAsStringSync();
+
+    expect(migration, contains('-- production-gate: self-verifying'));
+    expect(migration, contains('get_paperless_operations_insights_report'));
+    expect(migration, contains('get_paperless_operations_report'));
+    expect(migration, contains("'category_operation_times'"));
+    expect(migration, contains("'category_name_ko'"));
+    expect(
+      migration,
+      contains(
+        "(metric ->> 'operation_average_seconds')::numeric\n"
+        "          * (metric ->> 'sample_count')::numeric",
+      ),
+    );
+    expect(migration, contains("TO authenticated"));
+    expect(migration, contains("FROM PUBLIC, anon"));
   });
 }
