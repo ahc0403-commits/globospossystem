@@ -29,6 +29,7 @@ void main() {
     final bytes = buildRecipeImportTemplate(
       menuItems: _menus,
       products: _products,
+      recipes: const [],
     );
     final excel = Excel.decodeBytes(bytes);
 
@@ -62,6 +63,38 @@ void main() {
           .toList(),
       contains(equals(['소스', 'ml'])),
     );
+  });
+
+  test('template exports existing recipe quantities for editing', () {
+    final bytes = buildRecipeImportTemplate(
+      menuItems: _menus,
+      products: _products,
+      recipes: const [
+        {'menu_item_name': '떡볶이', 'ingredient_name': '소스', 'quantity_g': 13},
+        {'menu_item_name': '김밥', 'ingredient_name': '떡', 'quantity_g': 40.5},
+      ],
+    );
+    final excel = Excel.decodeBytes(bytes);
+    final rows = excel.tables[recipeImportSheetName]!.rows;
+
+    expect(rows.length, 3);
+    expect(rows[1].map((cell) => cell?.value.toString()).toList(), [
+      '김밥',
+      '떡',
+      '40.5',
+    ]);
+    expect(rows[2].map((cell) => cell?.value.toString()).toList(), [
+      '떡볶이',
+      '소스',
+      '13',
+    ]);
+
+    final workbook = parseRecipeImportWorkbook(
+      Uint8List.fromList(bytes),
+      menuItems: _menus,
+      products: _products,
+    );
+    expect(workbook.rows.map((row) => row.quantityG), [40.5, 13]);
   });
 
   test('parser accepts valid rows and preserves source row', () {

@@ -711,7 +711,7 @@ class InventoryService {
     final result = await supabase
         .from('inventory_supplier_items')
         .select(
-          'id, supplier_id, product_id, supplier_sku, order_unit, order_unit_quantity_base, min_order_quantity, unit_price, tax_rate, lead_time_days, is_preferred, is_active, created_at, updated_at, supplier:inventory_suppliers(id, supplier_name, status), product:inventory_products(id, restaurant_id, name, product_code, category, stock_unit, base_unit, base_unit_factor)',
+          'id, supplier_id, product_id, supplier_sku, order_unit, order_unit_quantity_base, min_order_quantity, unit_price, tax_rate, lead_time_days, is_preferred, is_active, created_at, updated_at, supplier:inventory_suppliers(id, supplier_name, status), product:inventory_products(id, restaurant_id, name, product_code, category, stock_unit, base_unit, base_unit_factor, is_orderable, is_active)',
         )
         .order('updated_at', ascending: false);
     return List<Map<String, dynamic>>.from(result as List)

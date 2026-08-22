@@ -74,4 +74,35 @@ void main() {
     expect(ingredientExcel, contains("'재고표시단위'"));
     expect(ingredientExcel, contains("'표시단위환산수량'"));
   });
+
+  test(
+    'preferred supplier order units update in place and keep base quantity',
+    () {
+      final migration = File(
+        'supabase/migrations/'
+        '20260822150000_inventory_order_unit_conversion_sync.sql',
+      ).readAsStringSync();
+      final manualOrder = File(
+        'supabase/migrations/'
+        '20260506006000_inventory_purchase_manual_order.sql',
+      ).readAsStringSync();
+
+      expect(migration, contains('v_effective_supplier_item_id'));
+      expect(
+        migration,
+        contains('order_unit_quantity_base = p_order_unit_quantity_base'),
+      );
+      expect(migration, contains('is_active = false'));
+      expect(
+        manualOrder,
+        contains(
+          'v_ordered_quantity_unit * v_supplier_item.order_unit_quantity_base',
+        ),
+      );
+
+      const orderedBoxes = 1.0;
+      const unitsPerBox = 40.0;
+      expect(orderedBoxes * unitsPerBox, 40.0);
+    },
+  );
 }

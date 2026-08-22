@@ -54,6 +54,33 @@ const _supplierItem = <String, dynamic>{
   'product': _product,
   'supplier': _supplier,
 };
+const _productNoodle = <String, dynamic>{
+  'id': 'product-noodle',
+  'product_code': 'NOODLE-040',
+  'name': 'Mì ramen',
+  'category': 'Noodle',
+  'stock_unit': 'box',
+  'base_unit': 'ea',
+  'base_unit_factor': 40,
+  'inventory_item_id': 'ingredient-noodle',
+  'is_active': true,
+  'is_orderable': true,
+};
+const _supplierItemNoodle = <String, dynamic>{
+  'id': 'supplier-item-noodle',
+  'supplier_id': 'supplier-fresh',
+  'product_id': 'product-noodle',
+  'supplier_sku': 'FRESH-NOODLE',
+  'order_unit': 'box',
+  'order_unit_quantity_base': 40,
+  'min_order_quantity': 1,
+  'unit_price': 400000,
+  'tax_rate': 8,
+  'lead_time_days': 1,
+  'is_active': true,
+  'product': _productNoodle,
+  'supplier': _supplier,
+};
 const _purchaseOrder = <String, dynamic>{
   'id': 'purchase-order-1',
   'purchase_order_no': 'PO-20260718-001',
@@ -113,7 +140,7 @@ class _SupplierNotifier extends InventoryPurchaseSupplierCatalogNotifier {
   _SupplierNotifier() {
     state = const InventoryPurchaseSupplierCatalogState(
       suppliers: [_supplier],
-      supplierItems: [_supplierItem],
+      supplierItems: [_supplierItem, _supplierItemNoodle],
     );
   }
 }
@@ -301,11 +328,48 @@ void main() {
       const Key('inventory_recommendation_adjust_recommendation-line-1'),
       const Key('inventory_recommendation_adjustment_dialog'),
     );
-    await _openAndDismiss(
-      tester,
+    final manualOrderAction = find.byKey(
       const Key('inventory_manual_purchase_order_action'),
+    );
+    await tester.ensureVisible(manualOrderAction);
+    await tester.tap(manualOrderAction);
+    await tester.pumpAndSettle();
+    final manualOrderDialog = find.byKey(
       const Key('inventory_manual_purchase_order_dialog'),
     );
+    expect(manualOrderDialog, findsOneWidget);
+    expect(
+      find.byKey(
+        const Key('inventory_manual_order_product_supplier-item-beef'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const Key('inventory_manual_order_product_supplier-item-noodle'),
+      ),
+      findsOneWidget,
+    );
+    await tester.enterText(
+      find.byKey(const Key('inventory_manual_order_search_field')),
+      'NOODLE-040',
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(
+        const Key('inventory_manual_order_product_supplier-item-beef'),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.byKey(
+        const Key('inventory_manual_order_product_supplier-item-noodle'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('1 box = 40 ea'), findsOneWidget);
+    Navigator.of(tester.element(manualOrderDialog)).pop();
+    await tester.pumpAndSettle();
 
     await _selectSection(tester, 3);
     await _openAndDismiss(

@@ -2814,7 +2814,11 @@ class _InventoryPurchaseScreenState
         .where(
           (supplier) =>
               _string(supplier['id']).isNotEmpty &&
-              _string(supplier['status']) == 'active',
+              _string(supplier['status']) == 'active' &&
+              _activeSupplierItemsForSupplier(
+                supplierItems,
+                _string(supplier['id']),
+              ).isNotEmpty,
         )
         .toList();
     if (activeSuppliers.isEmpty) return;
@@ -2824,10 +2828,6 @@ class _InventoryPurchaseScreenState
       supplierItems,
       supplierId,
     );
-    if (selectedSupplierItems.isEmpty) return;
-
-    var supplierItemId = selectedSupplierItems.first['id'].toString();
-    final quantityController = TextEditingController(text: '1');
     final requestedDateController = TextEditingController(
       text: DateTime.now()
           .add(const Duration(days: 2))
@@ -2836,230 +2836,275 @@ class _InventoryPurchaseScreenState
           .first,
     );
     final memoController = TextEditingController();
-    final lines = <Map<String, dynamic>>[];
+    final searchController = TextEditingController();
+    final quantityControllers = <String, TextEditingController>{};
+    var searchQuery = '';
     final l10n = context.l10n;
 
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final selectedItem = _firstWhereOrNull(
-            selectedSupplierItems,
-            (item) => item['id']?.toString() == supplierItemId,
-          );
-          return AlertDialog(
-            key: const Key('inventory_manual_purchase_order_dialog'),
-            title: Text(l10n.inventoryPurchaseManualOrder),
-            content: SizedBox(
-              width: 760,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _DialogGrid(
-                      children: [
-                        DropdownButtonFormField<String>(
-                          initialValue: supplierId,
-                          decoration: InputDecoration(
-                            labelText: l10n.inventoryPurchaseSupplierRequired,
-                          ),
-                          items: [
-                            for (final supplier in activeSuppliers)
-                              DropdownMenuItem(
-                                value: supplier['id'].toString(),
-                                child: Text(
-                                  _string(
-                                    supplier['supplier_name'],
-                                    fallback: '-',
+    TextEditingController quantityControllerFor(Map<String, dynamic> item) {
+      final id = _string(item['id']);
+      return quantityControllers.putIfAbsent(id, TextEditingController.new);
+    }
+
+    bool? saved;
+    try {
+      saved = await showDialog<bool>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            final filteredItems = selectedSupplierItems
+                .where((item) => _manualOrderItemMatches(item, searchQuery))
+                .toList();
+            return AlertDialog(
+              key: const Key('inventory_manual_purchase_order_dialog'),
+              title: Text(l10n.inventoryPurchaseManualOrder),
+              content: SizedBox(
+                width: 860,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _DialogGrid(
+                        children: [
+                          DropdownButtonFormField<String>(
+                            initialValue: supplierId,
+                            decoration: InputDecoration(
+                              labelText: l10n.inventoryPurchaseSupplierRequired,
+                            ),
+                            items: [
+                              for (final supplier in activeSuppliers)
+                                DropdownMenuItem(
+                                  value: supplier['id'].toString(),
+                                  child: Text(
+                                    _string(
+                                      supplier['supplier_name'],
+                                      fallback: '-',
+                                    ),
                                   ),
                                 ),
-                              ),
-                          ],
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setDialogState(() {
-                              supplierId = value;
-                              selectedSupplierItems =
-                                  _activeSupplierItemsForSupplier(
-                                    supplierItems,
-                                    supplierId,
-                                  );
-                              supplierItemId = selectedSupplierItems.isEmpty
-                                  ? ''
-                                  : selectedSupplierItems.first['id']
-                                        .toString();
-                              lines.clear();
-                            });
-                          },
-                        ),
-                        TextField(
-                          controller: requestedDateController,
-                          decoration: InputDecoration(
-                            labelText:
-                                l10n.inventoryPurchaseRequestedDeliveryDate,
-                            hintText: l10n.inventoryPurchaseDateHint,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: ToastSpacingTokens.md),
-                    _DataCard(
-                      title: l10n.inventoryPurchaseProducts,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _DialogGrid(
-                            children: [
-                              DropdownButtonFormField<String>(
-                                initialValue: supplierItemId,
-                                isExpanded: true,
-                                decoration: InputDecoration(
-                                  labelText: l10n.inventoryPurchaseItemRequired,
-                                ),
-                                items: [
-                                  for (final item in selectedSupplierItems)
-                                    DropdownMenuItem(
-                                      value: item['id'].toString(),
-                                      child: Text(
-                                        _supplierItemLabel(item),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                ],
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    setDialogState(
-                                      () => supplierItemId = value,
+                            ],
+                            onChanged: (value) {
+                              if (value == null) return;
+                              setDialogState(() {
+                                supplierId = value;
+                                selectedSupplierItems =
+                                    _activeSupplierItemsForSupplier(
+                                      supplierItems,
+                                      supplierId,
                                     );
-                                  }
-                                },
-                              ),
-                              TextField(
-                                controller: quantityController,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                      decimal: true,
-                                    ),
-                                decoration: InputDecoration(
-                                  labelText: l10n
-                                      .inventoryPurchaseOrderQuantityWithUnit(
-                                        _string(
-                                          selectedItem?['order_unit'],
-                                          fallback: 'unit',
-                                        ),
-                                      ),
-                                ),
-                              ),
-                            ],
+                                searchQuery = '';
+                                searchController.clear();
+                              });
+                            },
                           ),
-                          const SizedBox(height: ToastSpacingTokens.md),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: PosActionButton(
-                              label: l10n.inventoryPurchaseAddLine,
-                              tone: PosActionTone.secondary,
-                              icon: Icons.add_outlined,
-                              compact: true,
-                              onPressed: () {
-                                final item = selectedItem;
-                                final qty = parseDecimalInput(
-                                  quantityController.text,
-                                );
-                                if (item == null || qty == null || qty <= 0) {
-                                  return;
-                                }
-                                setDialogState(() {
-                                  lines.removeWhere(
-                                    (line) =>
-                                        line['supplier_item_id']?.toString() ==
-                                        item['id']?.toString(),
-                                  );
-                                  lines.add({
-                                    'supplier_item_id': item['id']?.toString(),
-                                    'ordered_quantity_unit': qty,
-                                    'memo': null,
-                                    'label': _supplierItemLabel(item),
-                                    'order_unit': _string(
-                                      item['order_unit'],
-                                      fallback: 'unit',
-                                    ),
-                                  });
-                                });
-                              },
+                          TextField(
+                            controller: requestedDateController,
+                            decoration: InputDecoration(
+                              labelText:
+                                  l10n.inventoryPurchaseRequestedDeliveryDate,
+                              hintText: l10n.inventoryPurchaseDateHint,
                             ),
-                          ),
-                          const SizedBox(height: ToastSpacingTokens.md),
-                          _SimpleDataTable(
-                            columns: [
-                              l10n.inventoryPurchaseItems,
-                              l10n.inventoryPurchaseQuantity,
-                              l10n.inventoryPurchaseUnit,
-                            ],
-                            rows: lines
-                                .map(
-                                  (line) => [
-                                    _string(line['label'], fallback: '-'),
-                                    _quantity(line['ordered_quantity_unit']),
-                                    _string(line['order_unit'], fallback: '-'),
-                                  ],
-                                )
-                                .toList(),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: ToastSpacingTokens.md),
-                    TextField(
-                      controller: memoController,
-                      maxLines: 2,
-                      decoration: InputDecoration(
-                        labelText: l10n.inventoryPurchaseOrderMemo,
+                      const SizedBox(height: ToastSpacingTokens.md),
+                      _DataCard(
+                        title: l10n.inventoryPurchaseProducts,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            TextField(
+                              key: const Key(
+                                'inventory_manual_order_search_field',
+                              ),
+                              controller: searchController,
+                              decoration: InputDecoration(
+                                labelText: l10n.search,
+                                prefixIcon: const Icon(Icons.search_outlined),
+                              ),
+                              onChanged: (value) =>
+                                  setDialogState(() => searchQuery = value),
+                            ),
+                            const SizedBox(height: ToastSpacingTokens.sm),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxHeight: 420),
+                              child: filteredItems.isEmpty
+                                  ? Padding(
+                                      padding: const EdgeInsets.all(
+                                        ToastSpacingTokens.lg,
+                                      ),
+                                      child: Text(
+                                        l10n.inventoryPurchaseNoProducts,
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    )
+                                  : ListView.separated(
+                                      shrinkWrap: true,
+                                      itemCount: filteredItems.length,
+                                      separatorBuilder: (_, _) =>
+                                          const Divider(height: 1),
+                                      itemBuilder: (context, index) {
+                                        final item = filteredItems[index];
+                                        final itemId = _string(item['id']);
+                                        final product = item['product'] is Map
+                                            ? Map<String, dynamic>.from(
+                                                item['product'] as Map,
+                                              )
+                                            : const <String, dynamic>{};
+                                        final orderUnit = _string(
+                                          item['order_unit'],
+                                          fallback: 'unit',
+                                        );
+                                        return Padding(
+                                          key: Key(
+                                            'inventory_manual_order_product_$itemId',
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: ToastSpacingTokens.sm,
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      _string(
+                                                        product['name'],
+                                                        fallback: '-',
+                                                      ),
+                                                      style: _textStyle(
+                                                        size: 12.5,
+                                                        weight: FontWeight.w800,
+                                                        color: ToastColorTokens
+                                                            .textPrimary,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      [
+                                                            _string(
+                                                              product['product_code'],
+                                                            ),
+                                                            _manualOrderConversionLabel(
+                                                              item,
+                                                            ),
+                                                          ]
+                                                          .where(
+                                                            (value) => value
+                                                                .isNotEmpty,
+                                                          )
+                                                          .join(' · '),
+                                                      style: _textStyle(
+                                                        size: 11,
+                                                        weight: FontWeight.w600,
+                                                        color: ToastColorTokens
+                                                            .textSecondary,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              const SizedBox(
+                                                width: ToastSpacingTokens.md,
+                                              ),
+                                              SizedBox(
+                                                width: 160,
+                                                child: TextField(
+                                                  key: Key(
+                                                    'inventory_manual_order_quantity_$itemId',
+                                                  ),
+                                                  controller:
+                                                      quantityControllerFor(
+                                                        item,
+                                                      ),
+                                                  keyboardType:
+                                                      const TextInputType.numberWithOptions(
+                                                        decimal: true,
+                                                      ),
+                                                  decoration: InputDecoration(
+                                                    labelText: l10n
+                                                        .inventoryPurchaseOrderQuantityWithUnit(
+                                                          orderUnit,
+                                                        ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                    ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: ToastSpacingTokens.md),
+                      TextField(
+                        controller: memoController,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          labelText: l10n.inventoryPurchaseOrderMemo,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: Text(l10n.cancel),
-              ),
-              FilledButton(
-                onPressed: () async {
-                  if (lines.isEmpty) return;
-                  final ok = await ref
-                      .read(inventoryPurchaseOrderCreationProvider.notifier)
-                      .createManual(
-                        storeId: storeId,
-                        supplierId: supplierId,
-                        requestedDeliveryDate: _parseDateOrNull(
-                          requestedDateController.text,
-                        ),
-                        memo: _nullableText(memoController.text),
-                        lines: lines
-                            .map(
-                              (line) => {
-                                'supplier_item_id': line['supplier_item_id'],
-                                'ordered_quantity_unit':
-                                    line['ordered_quantity_unit'],
-                                'memo': line['memo'],
-                              },
-                            )
-                            .toList(),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: Text(l10n.cancel),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    final lines = <Map<String, dynamic>>[];
+                    for (final item in selectedSupplierItems) {
+                      final quantity = parseDecimalInput(
+                        quantityControllerFor(item).text,
                       );
-                  if (context.mounted) {
-                    Navigator.of(context).pop(ok);
-                  }
-                },
-                child: Text(l10n.inventoryPurchaseCreateOrder),
-              ),
-            ],
-          );
-        },
-      ),
-    );
+                      if (quantity == null || quantity <= 0) continue;
+                      lines.add({
+                        'supplier_item_id': item['id'],
+                        'ordered_quantity_unit': quantity,
+                        'memo': null,
+                      });
+                    }
+                    if (lines.isEmpty) return;
+                    final ok = await ref
+                        .read(inventoryPurchaseOrderCreationProvider.notifier)
+                        .createManual(
+                          storeId: storeId,
+                          supplierId: supplierId,
+                          requestedDeliveryDate: _parseDateOrNull(
+                            requestedDateController.text,
+                          ),
+                          memo: _nullableText(memoController.text),
+                          lines: lines,
+                        );
+                    if (context.mounted) {
+                      Navigator.of(context).pop(ok);
+                    }
+                  },
+                  child: Text(l10n.inventoryPurchaseCreateOrder),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    } finally {
+      // showDialog completes when the route is popped, before its exit
+      // transition has fully detached the text fields from these controllers.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      requestedDateController.dispose();
+      memoController.dispose();
+      searchController.dispose();
+      for (final controller in quantityControllers.values) {
+        controller.dispose();
+      }
+    }
 
     if (saved == true && mounted) {
       await _reloadStoreScope(storeId);
@@ -3662,9 +3707,13 @@ class _InventoryPurchaseScreenState
       final products = ref
           .read(inventoryPurchaseProductCatalogProvider)
           .products;
-      final menuItems = ref.read(recipeProvider).menuItems;
+      final recipeState = ref.read(recipeProvider);
       final bytes = Uint8List.fromList(
-        buildRecipeImportTemplate(menuItems: menuItems, products: products),
+        buildRecipeImportTemplate(
+          menuItems: recipeState.menuItems,
+          products: products,
+          recipes: recipeState.allRecipes,
+        ),
       );
       final now = DateTime.now();
       final stamp =
@@ -7550,21 +7599,54 @@ List<Map<String, dynamic>> _activeSupplierItemsForSupplier(
   List<Map<String, dynamic>> supplierItems,
   String supplierId,
 ) {
-  return supplierItems
+  final items = supplierItems
       .where(
         (item) =>
             item['is_active'] == true &&
             item['supplier_id']?.toString() == supplierId &&
-            _string(item['id']).isNotEmpty,
+            _string(item['id']).isNotEmpty &&
+            (item['product'] is! Map ||
+                ((item['product'] as Map)['is_active'] != false &&
+                    (item['product'] as Map)['is_orderable'] != false)),
       )
       .toList();
+  items.sort((left, right) {
+    final leftProduct = left['product'] is Map
+        ? Map<String, dynamic>.from(left['product'] as Map)
+        : const <String, dynamic>{};
+    final rightProduct = right['product'] is Map
+        ? Map<String, dynamic>.from(right['product'] as Map)
+        : const <String, dynamic>{};
+    return _string(
+      leftProduct['name'],
+    ).compareTo(_string(rightProduct['name']));
+  });
+  return items;
 }
 
-String _supplierItemLabel(Map<String, dynamic> item) {
+bool _manualOrderItemMatches(Map<String, dynamic> item, String query) {
+  final normalizedQuery = query.trim().toLowerCase();
+  if (normalizedQuery.isEmpty) return true;
   final product = item['product'] is Map
       ? Map<String, dynamic>.from(item['product'] as Map)
       : const <String, dynamic>{};
-  return '${_string(product['name'], fallback: '-')} · ${_money(item['unit_price'])}/${_string(item['order_unit'], fallback: 'unit')}';
+  return [
+    product['name'],
+    product['product_code'],
+    product['category'],
+    item['supplier_sku'],
+    item['order_unit'],
+  ].any((value) => _string(value).toLowerCase().contains(normalizedQuery));
+}
+
+String _manualOrderConversionLabel(Map<String, dynamic> item) {
+  final product = item['product'] is Map
+      ? Map<String, dynamic>.from(item['product'] as Map)
+      : const <String, dynamic>{};
+  final orderUnit = _string(item['order_unit'], fallback: 'unit');
+  final baseUnit = _string(product['base_unit'], fallback: 'unit');
+  final quantityBase = _num(item['order_unit_quantity_base']);
+  return '1 $orderUnit = ${_quantity(quantityBase)} $baseUnit';
 }
 
 String _supplierStatusLabel(String status, BuildContext context) {
