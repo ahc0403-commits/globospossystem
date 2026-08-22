@@ -20,6 +20,10 @@ void main() {
     );
     expect(
       deploy,
+      contains('GOOGLE_TRANSLATE_SERVER_API_KEY'),
+    );
+    expect(
+      deploy,
       contains('Direct order Edge security tests'),
     );
     expect(

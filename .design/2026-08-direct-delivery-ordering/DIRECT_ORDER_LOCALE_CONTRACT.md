@@ -32,6 +32,10 @@ or alert rendering.
 - `submit.payload.locale` is required and rejects every other value before any
   request write. Session and request database CHECK constraints independently
   enforce the same set.
+- Customer and staff text-message actions require the sender's current
+  `ko`/`vi`/`en` viewer locale. Translation is executed only by the Edge
+  function with its server-held Google key; browser clients never receive the
+  key or write translated columns directly.
 - Google autocomplete, details, and reverse-geocode calls receive the current
   customer viewer locale. An invalid supplied locale is a fixed
   `INVALID_REQUEST`; it is never silently coerced.
@@ -59,9 +63,15 @@ Fixed database codes are data, not display copy. Recognized direct system
 message codes are localized at render time with `DirectOrderCopy` and therefore
 change immediately when that viewer changes locale.
 
+Customer and cashier text chat preserves the exact original in `body` and
+stores server-generated `body_ko`, `body_vi`, and `body_en` copies atomically.
+The current viewer locale selects the displayed copy. The source-locale copy
+must equal the original exactly. If either provider translation fails, the send
+fails closed and no partial message row is written. Older text rows without
+translations continue to display their original body.
+
 These values remain exact and are never machine-translated:
 
-- customer and cashier text chat;
 - cashier rejection reason unless it is a recognized fixed code;
 - Google/provider place names and formatted address returned for the selected
   customer locale;
@@ -77,5 +87,6 @@ alerts are outside this contract and remain unchanged.
 
 The local contract covers all customer `ko/vi/en` x cashier `ko/vi/en` pairs,
 all three kitchen/admin viewer locales, immediate re-render from the current
-locale, exact free-text preservation, Edge/SQL allowlist rejection, and
+locale, exact chat-original preservation with viewer-selected translations,
+provider failure without partial writes, Edge/SQL allowlist rejection, and
 approval-time KO/VI/EN ticket snapshots.

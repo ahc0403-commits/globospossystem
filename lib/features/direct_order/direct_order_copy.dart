@@ -67,6 +67,11 @@ class DirectOrderCopy {
       'Hiện không thể gửi tin nhắn cho đơn này.',
       'A message cannot be sent for this order now.',
     ),
+    'TRANSLATION_TEMPORARILY_UNAVAILABLE' => _pick(
+      '메시지를 번역하지 못했습니다. 잠시 후 다시 보내 주세요.',
+      'Không thể dịch tin nhắn. Vui lòng gửi lại sau ít phút.',
+      'The message could not be translated. Please send it again shortly.',
+    ),
     'DIRECT_ORDER_REQUEST_NOT_CANCELLABLE' => _pick(
       '현재 상태에서는 주문을 취소할 수 없습니다.',
       'Không thể hủy đơn ở trạng thái hiện tại.',
@@ -313,6 +318,11 @@ class DirectOrderCopy {
   String get openGrab =>
       _pick('Grab 배송 확인', 'Theo dõi trên Grab', 'Track on Grab');
   String get chat => _pick('매장과 채팅', 'Nhắn với cửa hàng', 'Chat with store');
+  String get chatAutoTranslationNotice => _pick(
+    '채팅은 보는 사람의 선택 언어로 자동 번역되며 원문도 안전하게 보존됩니다.',
+    'Tin nhắn được tự động dịch sang ngôn ngữ người xem đã chọn và vẫn giữ bản gốc.',
+    'Chat is automatically translated to the viewer’s selected language while preserving the original.',
+  );
   String get messageHint =>
       _pick('메시지를 입력하세요', 'Nhập tin nhắn', 'Type a message');
   String get send => _pick('보내기', 'Gửi', 'Send');
@@ -472,6 +482,25 @@ class DirectOrderCopy {
     'Mở trang khách đặt hàng',
     'Open customer order page',
   );
+  String get externalOrderQr => _pick(
+    '외부 주문 QR 코드',
+    'Mã QR đặt hàng bên ngoài',
+    'External order QR code',
+  );
+  String get externalOrderQrHelp => _pick(
+    '이 QR을 인쇄하거나 공유하면 고객이 해당 매장의 외부 주문 페이지로 바로 들어옵니다.',
+    'In hoặc chia sẻ mã QR này để khách mở thẳng trang đặt hàng của cửa hàng.',
+    'Print or share this QR to open this store’s external order page.',
+  );
+  String get copyPublicLink =>
+      _pick('주문 링크 복사', 'Sao chép liên kết', 'Copy order link');
+  String get downloadQr =>
+      _pick('QR PNG 다운로드', 'Tải QR PNG', 'Download QR PNG');
+  String get printQr => _pick('QR 인쇄', 'In mã QR', 'Print QR');
+  String get publicLinkCopied =>
+      _pick('주문 링크를 복사했습니다.', 'Đã sao chép liên kết.', 'Order link copied.');
+  String get qrDownloaded =>
+      _pick('QR 이미지를 저장했습니다.', 'Đã lưu ảnh QR.', 'QR image saved.');
   String get today => _pick('오늘', 'Hôm nay', 'Today');
   String get last7Days => _pick('최근 7일', '7 ngày qua', 'Last 7 days');
   String get last30Days => _pick('최근 30일', '30 ngày qua', 'Last 30 days');

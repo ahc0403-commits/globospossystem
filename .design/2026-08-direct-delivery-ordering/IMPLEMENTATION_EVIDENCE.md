@@ -275,3 +275,37 @@ Captured: 2026-08-21 22:35:00 +07
 No commit, push, GitHub exact-SHA run, production migration, Edge deployment,
 secret/Google project change, storefront enablement, Google Business Profile
 publication, or live-store pilot was performed.
+
+## H6 completion: QR operations, translated chat, and full graph E2E
+
+Captured: 2026-08-22
+
+- Settings now renders the canonical store-specific external-order URL and QR,
+  copies the link, downloads a 1200px quiet-zone PNG, opens the customer page,
+  and opens an A5 system print job. URL/route validation and injected
+  save/print behavior have three passing service tests.
+- Customer and cashier text sends now require the sender's current viewer
+  locale. The Edge boundary calls Google Cloud Translation with a server-only
+  header credential, preserves the exact source, and atomically writes KO/VI/EN
+  copies through service-only RPCs. Customer status fetches only owned message
+  translations; cashier detail selects the same stored copies by its current
+  locale. Existing untranslated rows safely retain the original display.
+- Translation failure, malformed provider data, duplicate/invalid message IDs,
+  cross-session reads, browser execution of trusted writers, source mismatch,
+  and partial writes fail closed. Deno format/lint/type check and all 23 Edge
+  tests passed. The focused SQL translation suite passed four scenarios.
+- The rollback-safe SQL operational graph passed request, quote, proof, manual
+  payment approval, one legacy order/payment, direct kitchen transitions, Grab
+  dispatch/fee variance, completion, translated chat, daily direct sales, and
+  region/time analytics in one scenario. The production-shaped rollback E2E
+  script passed against a disposable database and left no data behind.
+- Dart analysis passed with fatal infos. The 44 focused Flutter tests passed,
+  including QR export/print, customer translation merge, staff viewer locale,
+  all responsive address paths, alert isolation, frozen legacy hashes, and the
+  production release contract.
+- The complete guarded repository check passed: 1,165 Flutter tests with two
+  existing environment skips, all 23 Edge tests, static analysis, Node/SQL and
+  secret-scan contracts, release web build, and whitespace verification.
+
+Production deployment and Google Cloud Translation credential configuration
+are recorded only after their guarded gates complete.

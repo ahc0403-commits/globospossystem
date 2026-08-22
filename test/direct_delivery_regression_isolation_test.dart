@@ -123,7 +123,12 @@ void main() {
   });
 
   test('every SQL domain exception has an explicit Edge registry entry', () {
-    final migration = File(_migrationPath).readAsStringSync();
+    final migration = Directory('supabase/migrations')
+        .listSync()
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.sql'))
+        .map((file) => file.readAsStringSync())
+        .join('\n');
     final edge = File(
       'supabase/functions/direct-order-public/index.ts',
     ).readAsStringSync();

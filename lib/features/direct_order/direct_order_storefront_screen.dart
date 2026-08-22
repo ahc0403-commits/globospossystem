@@ -137,6 +137,7 @@ class _DirectOrderStorefrontScreenState
           status = await widget.service.fetchStatus(
             session: session,
             requestId: activeRequest,
+            locale: _languageCode,
           );
         } catch (_) {
           await widget.service.clearActiveRequest(widget.slug);
@@ -442,6 +443,7 @@ class _DirectOrderStorefrontScreenState
       final status = await widget.service.fetchStatus(
         session: session,
         requestId: submission.requestId,
+        locale: _languageCode,
       );
       if (!mounted) return;
       setState(() {
@@ -472,6 +474,7 @@ class _DirectOrderStorefrontScreenState
       final status = await widget.service.fetchStatus(
         session: session,
         requestId: requestId,
+        locale: _languageCode,
       );
       if (mounted) setState(() => _status = status);
       if (const {'rejected', 'cancelled', 'expired'}.contains(status.state) ||
@@ -529,6 +532,7 @@ class _DirectOrderStorefrontScreenState
         session: session,
         requestId: status.requestId,
         message: text,
+        locale: _languageCode,
       );
       _messageController.clear();
       await _refreshStatus();
@@ -1419,6 +1423,10 @@ class _DirectOrderStorefrontScreenState
                   icon: const Icon(Icons.refresh_rounded),
                 ),
               ],
+            ),
+            Text(
+              _copy.chatAutoTranslationNotice,
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             const Divider(),
             if (status.messages.isEmpty)
