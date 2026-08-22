@@ -7,7 +7,8 @@ Scope: source-complete feature; production remains disabled
 
 - Do not mutate the frozen QR, cashier, legacy KDS, payment, print, report, or effective `process_payment` implementation.
 - Apply `20260821130000_direct_delivery_ordering.sql` and then
-  `20260821140000_direct_delivery_arrival_alerts.sql` only through the normal
+  `20260821140000_direct_delivery_arrival_alerts.sql` and
+  `20260822100000_direct_order_chat_translation.sql` only through the normal
   guarded deployment workflow.
 - Do not enable a storefront until accounting approval, a real Google Maps check, and a controlled store pilot are recorded.
 - Rollback is link removal plus `is_enabled=false`. Do not roll back the additive migration after orders exist.
@@ -24,13 +25,16 @@ Configure the `direct-order-public` function without committing values:
 - `ALLOWED_ORIGINS`: comma-separated exact POS web origins; no wildcard.
 - `GOOGLE_MAPS_SERVER_API_KEY`: server-side Places Details, Places Autocomplete, and Geocoding key.
 - `GOOGLE_MAPS_BROWSER_KEY`: browser Maps JavaScript key, restricted to the exact POS referrers.
+- `GOOGLE_TRANSLATE_SERVER_API_KEY`: server-only Cloud Translation API key;
+  restrict it to Cloud Translation API and never expose it in a URL or client.
 
 Restrict each Google key to only the APIs it needs and set quotas/alerts. The browser key is returned only by the enabled storefront response and is loaded dynamically; it is not embedded in `web/index.html`.
 
 ## Configuration order
 
 1. Deploy the additive database migration with the normal production gate.
-2. Deploy `direct-order-public`; confirm unknown origins, missing configuration, and direct table access fail closed.
+2. Deploy `direct-order-public`; confirm unknown origins, missing map/translation
+   configuration, translation-provider failure, and direct table access fail closed.
 3. Open `/direct-delivery/settings` as an existing admin account.
 4. Save slug, bank BIN/account/holder/label, map center, minimum order, and pause state with storefront disabled.
 5. Have accounting approve the delivery-fee service-line treatment. Record that approval through the settings checkbox; the database prevents enablement without it.

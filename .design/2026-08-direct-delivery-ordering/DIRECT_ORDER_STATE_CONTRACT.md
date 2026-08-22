@@ -25,7 +25,9 @@ stored in `direct_order_requests.state`.
 `ko`, `vi`, or `en` and record the customer context. They do not transition a
 request and never select cashier, kitchen, admin, or alert language. Every
 viewer resolves labels, fixed system codes, and localized name snapshots from
-that viewer's current app locale. Free-text chat/address/note remains original.
+that viewer's current app locale. Free-text chat preserves the original and
+selects its server-generated KO/VI/EN copy by viewer locale; address/note
+remains original.
 The full rule is `DIRECT_ORDER_LOCALE_CONTRACT.md`.
 
 ## Quote states
