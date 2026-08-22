@@ -27,10 +27,15 @@ ALTER TABLE public.direct_order_messages
     ) OR (
       translation_status = 'complete'
       AND message_type = 'text'
+      AND source_locale IS NOT NULL
       AND source_locale IN ('ko', 'vi', 'en')
+      AND body_ko IS NOT NULL
       AND char_length(body_ko) BETWEEN 1 AND 6000
+      AND body_vi IS NOT NULL
       AND char_length(body_vi) BETWEEN 1 AND 6000
+      AND body_en IS NOT NULL
       AND char_length(body_en) BETWEEN 1 AND 6000
+      AND translation_provider IS NOT NULL
       AND translation_provider = 'google_cloud_translation_v2'
       AND CASE source_locale
         WHEN 'ko' THEN body_ko = body

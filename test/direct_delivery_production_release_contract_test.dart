@@ -6,36 +6,19 @@ void main() {
   test('production release includes direct delivery without activating it', () {
     final deploy = File('scripts/deploy_pos_production.sh').readAsStringSync();
 
-    expect(
-      deploy,
-      contains('supabase functions deploy direct-order-public'),
-    );
-    expect(
-      deploy,
-      contains('DIRECT_ORDER_RATE_LIMIT_SECRET'),
-    );
-    expect(
-      deploy,
-      contains('DIRECT_ORDER_CLEANUP_SECRET'),
-    );
-    expect(
-      deploy,
-      contains('GOOGLE_TRANSLATE_SERVER_API_KEY'),
-    );
-    expect(
-      deploy,
-      contains('Direct order Edge security tests'),
-    );
-    expect(
-      deploy,
-      contains('direct-order-public; do'),
-    );
+    expect(deploy, contains('supabase functions deploy direct-order-public'));
+    expect(deploy, contains('DIRECT_ORDER_RATE_LIMIT_SECRET'));
+    expect(deploy, contains('DIRECT_ORDER_CLEANUP_SECRET'));
+    expect(deploy, contains('GOOGLE_TRANSLATE_SERVER_API_KEY'));
+    expect(deploy, contains('Direct order Edge security tests'));
+    expect(deploy, contains('direct-order-public; do'));
 
     for (final path in <String>[
       'scripts/preflight_direct_delivery_ordering.sql',
       'scripts/verify_direct_delivery_ordering.sql',
       'scripts/preflight_direct_delivery_arrival_alerts.sql',
       'scripts/verify_direct_delivery_arrival_alerts.sql',
+      'scripts/verify_direct_order_chat_translation.sql',
     ]) {
       expect(File(path).existsSync(), isTrue, reason: path);
       expect(
@@ -45,14 +28,26 @@ void main() {
       );
     }
 
-    final orderingVerify =
-        File('scripts/verify_direct_delivery_ordering.sql').readAsStringSync();
+    final orderingVerify = File(
+      'scripts/verify_direct_delivery_ordering.sql',
+    ).readAsStringSync();
     final alertVerify = File(
       'scripts/verify_direct_delivery_arrival_alerts.sql',
     ).readAsStringSync();
     expect(orderingVerify, contains('STOREFRONT_UNEXPECTEDLY_ENABLED'));
     expect(alertVerify, contains('STOREFRONT_UNEXPECTEDLY_ENABLED'));
     expect(alertVerify, contains('AFTER INSERT'));
+
+    final translationVerify = File(
+      'scripts/verify_direct_order_chat_translation.sql',
+    ).readAsStringSync();
+    expect(
+      translationVerify,
+      contains('DIRECT_ORDER_CHAT_TRANSLATION_VERIFY_PASS'),
+    );
+    expect(translationVerify, contains('translation_status'));
+    expect(translationVerify, contains('has_function_privilege'));
+    expect(translationVerify, contains('google_cloud_translation_v2'));
 
     final webIndex = File('web/index.html').readAsStringSync();
     expect(
@@ -68,10 +63,7 @@ void main() {
     expect(webIndex, contains('&auth_referrer_policy=origin'));
     expect(webIndex, contains("script.referrerPolicy = 'origin';"));
     expect(webIndex, isNot(contains("script.referrerPolicy = 'no-referrer';")));
-    expect(
-      webIndex,
-      contains(r"/^\/order\/[a-z0-9][a-z0-9-]{2,62}$/"),
-    );
+    expect(webIndex, contains(r"/^\/order\/[a-z0-9][a-z0-9-]{2,62}$/"));
     expect(webIndex, contains("'/#' + path + window.location.search"));
 
     final staffService = File(
