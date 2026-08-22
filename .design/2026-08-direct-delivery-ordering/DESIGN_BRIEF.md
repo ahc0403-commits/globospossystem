@@ -209,9 +209,7 @@ Status: 소스·결합형 migration·테스트 구현 완료 — production 반�
   handoff를 별도 설계한다.
 - 고객 public API는 Edge Function에서 secret body 검증, rate limit, 만료 검증 후 접근한다.
 - 메시지는 append-only `text`, `image`, `system`, `quote`, `grab_link`다.
-- `text`는 전송자 원문을 덮어쓰지 않고 Google Cloud Translation으로
-  생성한 KO/VI/EN 사본을 같은 DB write에 저장한다. 번역 실패 시 부분
-  메시지를 남기지 않고 전송을 실패시킨다.
+- `text`는 전송자가 입력한 원문을 그대로 저장·표시하고 자동 번역하지 않는다.
 - 증빙 이미지는 private bucket, 제한된 MIME/크기, one-time signed upload, 짧은 signed read를 사용한다.
 - 고객 화면은 polling, 캐셔 화면은 store-scoped event signal과 polling fallback을 사용한다.
 - 항상 `입금 캡처 전송은 주문 확정이 아님`을 표시한다.
@@ -226,9 +224,9 @@ Status: 소스·결합형 migration·테스트 구현 완료 — production 반�
 - request와 fulfillment ticket은 `name_ko/name_vi/name_en`을 모두
   snapshot으로 보존하며, 캐셔와 주방은 live menu가 아니라 자신의 현재
   locale에 맞는 snapshot을 선택한다.
-- 고객/캐셔 자유 채팅도 원문을 감사용으로 보존하면서 현재 viewer
-  locale의 번역 사본을 선택한다. 주소·메모·지명은 번역하지 않는다.
-- 세부 우선순위와 번역 금지 데이터는 `DIRECT_ORDER_LOCALE_CONTRACT.md`가
+- 고객/캐셔 자유 채팅과 주소·메모·지명은 입력된 원문을 그대로
+  표시하고 자동 번역하지 않는다.
+- 세부 언어 경계와 원문 보존 데이터는 `DIRECT_ORDER_LOCALE_CONTRACT.md`가
   권위 문서다.
 
 ## 캐셔·주방·Grab 운영

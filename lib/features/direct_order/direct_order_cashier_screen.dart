@@ -178,7 +178,6 @@ class _DirectOrderCashierScreenState
         storeId: _storeId!,
         requestId: _selectedId!,
         message: body,
-        locale: Localizations.localeOf(context).languageCode,
       ),
       _copy.send,
     );
@@ -841,23 +840,13 @@ class _DirectOrderCashierScreenState
         children: [
           Padding(
             padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    const Icon(Icons.chat_bubble_outline),
-                    const SizedBox(width: 8),
-                    Text(
-                      _copy.chat,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
+                const Icon(Icons.chat_bubble_outline),
+                const SizedBox(width: 8),
                 Text(
-                  _copy.chatAutoTranslationNotice,
-                  style: Theme.of(context).textTheme.bodySmall,
+                  _copy.chat,
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
               ],
             ),
@@ -902,7 +891,6 @@ class _DirectOrderCashierScreenState
                               copy: _copy,
                               messageType: type,
                               body: message['body']?.toString(),
-                              message: message,
                             ),
                           ),
                   ),

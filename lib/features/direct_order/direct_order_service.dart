@@ -278,7 +278,6 @@ class DirectOrderService {
   Future<DirectOrderStatus> fetchStatus({
     required DirectOrderSession session,
     required String requestId,
-    required String locale,
   }) async {
     final data = await _invoke({
       'action': 'status',
@@ -286,50 +285,6 @@ class DirectOrderService {
       'secret': session.secret,
       'request_id': requestId,
     });
-    final rawMessages = data['messages'];
-    if (rawMessages is List) {
-      final messageIds = rawMessages
-          .whereType<Map>()
-          .where((message) => message['message_type'] == 'text')
-          .map((message) => message['id']?.toString() ?? '')
-          .where((id) => id.isNotEmpty)
-          .toList(growable: false);
-      if (messageIds.isNotEmpty) {
-        try {
-          final localized = await _invoke({
-            'action': 'message_translations',
-            'session_id': session.id,
-            'secret': session.secret,
-            'request_id': requestId,
-            'locale': locale,
-            'message_ids': messageIds,
-          });
-          final translations = localized['translations'];
-          if (localized.length != 1 || translations is! List) {
-            throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
-          }
-          final byId = <String, String>{};
-          for (final row in translations) {
-            if (row is! Map ||
-                row.length != 2 ||
-                row['message_id'] is! String ||
-                row['body'] is! String) {
-              throw const DirectOrderException('DIRECT_ORDER_RESPONSE_INVALID');
-            }
-            byId[row['message_id'] as String] = row['body'] as String;
-          }
-          for (final raw in rawMessages.whereType<Map>()) {
-            final translated = byId[raw['id']?.toString()];
-            if (translated != null && translated.isNotEmpty) {
-              raw['body'] = translated;
-            }
-          }
-        } on DirectOrderException {
-          // Status and existing chat remain usable if translation lookup is
-          // temporarily unavailable; new sends still require full translation.
-        }
-      }
-    }
     return DirectOrderStatus.fromJson(data);
   }
 
@@ -337,7 +292,6 @@ class DirectOrderService {
     required DirectOrderSession session,
     required String requestId,
     required String message,
-    required String locale,
   }) async {
     final data = await _invoke({
       'action': 'message',
@@ -345,7 +299,6 @@ class DirectOrderService {
       'secret': session.secret,
       'request_id': requestId,
       'message': message,
-      'locale': locale,
     });
     _expectExactResponseFields(data, const {'message_id', 'created_at'});
     _requiredResponseString(data, 'message_id');

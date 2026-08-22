@@ -575,8 +575,7 @@ verify_direct_order_secrets() {
   for required_secret in \
     SUPABASE_SECRET_KEYS \
     DIRECT_ORDER_RATE_LIMIT_SECRET \
-    DIRECT_ORDER_CLEANUP_SECRET \
-    GOOGLE_TRANSLATE_SERVER_API_KEY; do
+    DIRECT_ORDER_CLEANUP_SECRET; do
     grep -Fxq "$required_secret" <<<"$secret_names" ||
       fail "Missing required direct-order Edge secret: $required_secret"
   done

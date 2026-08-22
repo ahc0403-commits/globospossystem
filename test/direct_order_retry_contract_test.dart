@@ -82,68 +82,7 @@ void main() {
     expect(active['request_id'], result.requestId);
   });
 
-  test(
-    'status replaces free chat with the current viewer translation',
-    () async {
-      final actions = <Map<String, dynamic>>[];
-      final service = DirectOrderService(
-        invoker: (body) async {
-          actions.add(Map<String, dynamic>.from(body));
-          if (body['action'] == 'message_translations') {
-            return {
-              'translations': [
-                {
-                  'message_id': 'dd000000-0000-4000-8000-000000000201',
-                  'body': 'Địa chỉ đã được xác nhận.',
-                },
-              ],
-            };
-          }
-          return {
-            'request_id': 'dd000000-0000-4000-8000-000000000202',
-            'store_id': 'dd000000-0000-4000-8000-000000000203',
-            'reference_code': 'DTRANSLATE',
-            'state': 'awaiting_quote',
-            'created_at': '2026-08-22T10:00:00Z',
-            'items': <dynamic>[],
-            'quote': null,
-            'messages': [
-              {
-                'id': 'dd000000-0000-4000-8000-000000000201',
-                'sender_type': 'customer',
-                'message_type': 'text',
-                'body': 'The address is confirmed.',
-                'has_attachment': false,
-                'created_at': '2026-08-22T10:01:00Z',
-              },
-            ],
-            'fulfillment': null,
-            'dispatch': null,
-          };
-        },
-      );
-      final session = DirectOrderSession(
-        id: 'dd000000-0000-4000-8000-000000000204',
-        secret: 'fixture-session-secret',
-        expiresAt: DateTime.now().add(const Duration(hours: 1)),
-      );
-
-      final status = await service.fetchStatus(
-        session: session,
-        requestId: 'dd000000-0000-4000-8000-000000000202',
-        locale: 'vi',
-      );
-
-      expect(status.messages.single.body, 'Địa chỉ đã được xác nhận.');
-      expect(actions.map((item) => item['action']), [
-        'status',
-        'message_translations',
-      ]);
-      expect(actions.last['locale'], 'vi');
-    },
-  );
-
-  test('message submission always sends the current viewer locale', () async {
+  test('message submission sends only the author original', () async {
     Map<String, dynamic>? sent;
     final service = DirectOrderService(
       invoker: (body) async {
@@ -164,10 +103,10 @@ void main() {
       session: session,
       requestId: 'dd000000-0000-4000-8000-000000000207',
       message: 'Please call when you arrive.',
-      locale: 'en',
     );
 
     expect(sent?['action'], 'message');
-    expect(sent?['locale'], 'en');
+    expect(sent?['message'], 'Please call when you arrive.');
+    expect(sent?.containsKey('locale'), isFalse);
   });
 }

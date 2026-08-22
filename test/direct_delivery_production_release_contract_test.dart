@@ -9,7 +9,7 @@ void main() {
     expect(deploy, contains('supabase functions deploy direct-order-public'));
     expect(deploy, contains('DIRECT_ORDER_RATE_LIMIT_SECRET'));
     expect(deploy, contains('DIRECT_ORDER_CLEANUP_SECRET'));
-    expect(deploy, contains('GOOGLE_TRANSLATE_SERVER_API_KEY'));
+    expect(deploy, isNot(contains('GOOGLE_TRANSLATE_SERVER_API_KEY')));
     expect(deploy, contains('Direct order Edge security tests'));
     expect(deploy, contains('direct-order-public; do'));
 
@@ -18,7 +18,6 @@ void main() {
       'scripts/verify_direct_delivery_ordering.sql',
       'scripts/preflight_direct_delivery_arrival_alerts.sql',
       'scripts/verify_direct_delivery_arrival_alerts.sql',
-      'scripts/verify_direct_order_chat_translation.sql',
     ]) {
       expect(File(path).existsSync(), isTrue, reason: path);
       expect(
@@ -37,17 +36,6 @@ void main() {
     expect(orderingVerify, contains('STOREFRONT_UNEXPECTEDLY_ENABLED'));
     expect(alertVerify, contains('STOREFRONT_UNEXPECTEDLY_ENABLED'));
     expect(alertVerify, contains('AFTER INSERT'));
-
-    final translationVerify = File(
-      'scripts/verify_direct_order_chat_translation.sql',
-    ).readAsStringSync();
-    expect(
-      translationVerify,
-      contains('DIRECT_ORDER_CHAT_TRANSLATION_VERIFY_PASS'),
-    );
-    expect(translationVerify, contains('translation_status'));
-    expect(translationVerify, contains('has_function_privilege'));
-    expect(translationVerify, contains('google_cloud_translation_v2'));
 
     final webIndex = File('web/index.html').readAsStringSync();
     expect(
@@ -71,5 +59,22 @@ void main() {
     ).readAsStringSync();
     expect(staffService, contains('/#/order/'));
     expect(staffService, isNot(contains("posPublicUrl}/order/")));
+    expect(staffService, contains("'direct_order_staff_message'"));
+
+    final edge = File(
+      'supabase/functions/direct-order-public/index.ts',
+    ).readAsStringSync();
+    expect(edge, isNot(contains('translation.googleapis.com')));
+    expect(edge, isNot(contains('GOOGLE_TRANSLATE_SERVER_API_KEY')));
+    expect(edge, isNot(contains('message_translations')));
+    expect(edge, contains('direct_order_public_message'));
+
+    expect(
+      File(
+        'supabase/migrations/'
+        '20260822100000_direct_order_chat_translation.sql',
+      ).existsSync(),
+      isFalse,
+    );
   });
 }

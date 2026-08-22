@@ -37,12 +37,10 @@ export const directOrderActionRegistry = Object.freeze(
     submit: { actor: "public", rateLimit: 60 },
     status: { actor: "public", rateLimit: 60 },
     message: { actor: "public", rateLimit: 60 },
-    message_translations: { actor: "public", rateLimit: 60 },
     cancel: { actor: "public", rateLimit: 60 },
     proof_upload_url: { actor: "public", rateLimit: 10 },
     proof_commit: { actor: "public", rateLimit: 60 },
     staff_proof_url: { actor: "staff", rateLimit: null },
-    staff_message: { actor: "staff", rateLimit: null },
     cleanup_expired_pii: { actor: "internal", rateLimit: null },
   } as const,
 );
@@ -384,26 +382,6 @@ export function directOrderLocale(
   throw new SafeHttpError(400, "INVALID_REQUEST");
 }
 
-function requiredUuidArray(
-  body: JsonObject,
-  key: string,
-  maxLength: number,
-): string[] {
-  const value = body[key];
-  if (!Array.isArray(value) || value.length < 1 || value.length > maxLength) {
-    throw new SafeHttpError(400, "INVALID_REQUEST");
-  }
-  const ids = value.map((item) =>
-    typeof item === "string" && uuidPattern.test(item) ? item.toLowerCase() : ""
-  );
-  if (
-    ids.some((item) => item.length === 0) || new Set(ids).size !== ids.length
-  ) {
-    throw new SafeHttpError(400, "INVALID_REQUEST");
-  }
-  return ids;
-}
-
 function configuredOrigins(): string[] {
   return (Deno.env.get("ALLOWED_ORIGINS") ?? "")
     .split(",")
@@ -509,7 +487,6 @@ export const sqlDomainErrorRegistry: Readonly<
     "DIRECT_ORDER_REQUEST_NOT_CHATABLE",
   ),
   DIRECT_ORDER_MESSAGE_INVALID: invalidRequest("DIRECT_ORDER_MESSAGE_INVALID"),
-  DIRECT_ORDER_TRANSLATION_INVALID: invalidRequest("INVALID_REQUEST"),
   DIRECT_ORDER_REQUEST_NOT_FOUND: unavailable("DIRECT_ORDER_UNAVAILABLE"),
   DIRECT_ORDER_REQUEST_NOT_CANCELLABLE: conflict(
     "DIRECT_ORDER_REQUEST_NOT_CANCELLABLE",
@@ -785,89 +762,6 @@ export async function googleJson(
   }
 }
 
-function decodeTranslationText(value: string): string {
-  return value
-    .replaceAll("&quot;", '"')
-    .replaceAll("&#39;", "'")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&amp;", "&");
-}
-
-export function googleTranslationResult(data: JsonObject): string {
-  const responseData = data.data;
-  if (
-    !responseData || typeof responseData !== "object" ||
-    Array.isArray(responseData)
-  ) {
-    throw new SafeHttpError(503, "TRANSLATION_TEMPORARILY_UNAVAILABLE");
-  }
-  const translations = (responseData as JsonObject).translations;
-  const first = Array.isArray(translations) ? translations[0] : null;
-  const translatedText = first && typeof first === "object" &&
-      !Array.isArray(first)
-    ? (first as JsonObject).translatedText
-    : null;
-  if (typeof translatedText !== "string") {
-    throw new SafeHttpError(503, "TRANSLATION_TEMPORARILY_UNAVAILABLE");
-  }
-  const normalized = decodeTranslationText(translatedText).trim();
-  if (normalized.length < 1 || normalized.length > 6000) {
-    throw new SafeHttpError(503, "TRANSLATION_TEMPORARILY_UNAVAILABLE");
-  }
-  return normalized;
-}
-
-export async function translateDirectOrderText(
-  text: string,
-  sourceLocale: "ko" | "vi" | "en",
-  apiKey: string,
-  fetcher: typeof fetch = fetch,
-): Promise<Readonly<Record<"ko" | "vi" | "en", string>>> {
-  if (!apiKey) {
-    throw new SafeHttpError(503, "TRANSLATION_TEMPORARILY_UNAVAILABLE");
-  }
-  const entries = await Promise.all(
-    (["ko", "vi", "en"] as const).map(async (targetLocale) => {
-      if (targetLocale === sourceLocale) return [targetLocale, text] as const;
-      try {
-        const url = new URL(
-          "https://translation.googleapis.com/language/translate/v2",
-        );
-        const response = await fetcher(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Goog-Api-Key": apiKey,
-          },
-          body: JSON.stringify({
-            q: text,
-            target: targetLocale,
-            format: "text",
-          }),
-          signal: AbortSignal.timeout(8000),
-        });
-        if (!response.ok) {
-          throw new SafeHttpError(
-            503,
-            "TRANSLATION_TEMPORARILY_UNAVAILABLE",
-          );
-        }
-        return [
-          targetLocale,
-          googleTranslationResult(asObject(await response.json())),
-        ] as const;
-      } catch (error) {
-        if (error instanceof SafeHttpError) throw error;
-        throw new SafeHttpError(503, "TRANSLATION_TEMPORARILY_UNAVAILABLE");
-      }
-    }),
-  );
-  return Object.freeze(Object.fromEntries(entries)) as Readonly<
-    Record<"ko" | "vi" | "en", string>
-  >;
-}
-
 export function validProofObjectPath(path: string): boolean {
   const segments = path.split("/");
   if (segments.length !== 3) return false;
@@ -902,9 +796,6 @@ function productionDependencies(): DirectOrderDependencies {
   const cleanupSecret = Deno.env.get("DIRECT_ORDER_CLEANUP_SECRET") ?? "";
   const googleServerKey = Deno.env.get("GOOGLE_MAPS_SERVER_API_KEY") ?? "";
   const googleBrowserKey = Deno.env.get("GOOGLE_MAPS_BROWSER_KEY") ?? "";
-  const googleTranslationKey =
-    Deno.env.get("GOOGLE_TRANSLATE_SERVER_API_KEY") ??
-      "";
   const allowedOrigins = configuredOrigins();
   if (
     !supabaseUrl || allowedOrigins.length === 0 ||
@@ -1090,35 +981,11 @@ function productionDependencies(): DirectOrderDependencies {
         const requestId = requiredUuid(body, "request_id");
         const secret = requiredString(body, "secret", 128, secretPattern);
         const message = requiredString(body, "message", 2000);
-        const locale = directOrderLocale(body.locale);
-        const translated = await translateDirectOrderText(
-          message,
-          locale,
-          googleTranslationKey,
-        );
-        return await rpc(service, "direct_order_public_message_translated", {
+        return await rpc(service, "direct_order_public_message", {
           p_session_id: sessionId,
           p_secret_hash: await sha256Hex(secret),
           p_request_id: requestId,
           p_body: message,
-          p_source_locale: locale,
-          p_body_ko: translated.ko,
-          p_body_vi: translated.vi,
-          p_body_en: translated.en,
-        });
-      }
-      case "message_translations": {
-        const sessionId = requiredUuid(body, "session_id");
-        const requestId = requiredUuid(body, "request_id");
-        const secret = requiredString(body, "secret", 128, secretPattern);
-        const locale = directOrderLocale(body.locale);
-        const messageIds = requiredUuidArray(body, "message_ids", 100);
-        return await rpc(service, "direct_order_public_message_translations", {
-          p_session_id: sessionId,
-          p_secret_hash: await sha256Hex(secret),
-          p_request_id: requestId,
-          p_target_locale: locale,
-          p_message_ids: messageIds,
         });
       }
       case "cancel": {
@@ -1241,32 +1108,6 @@ function productionDependencies(): DirectOrderDependencies {
           throw new SafeHttpError(503, "PROOF_TEMPORARILY_UNAVAILABLE");
         }
         return { signed_url: data.signedUrl, expires_in: 300 };
-      }
-      case "staff_message": {
-        const storeId = requiredUuid(body, "store_id");
-        const requestId = requiredUuid(body, "request_id");
-        const message = requiredString(body, "message", 2000);
-        const locale = directOrderLocale(body.locale);
-        const { actorAuthId, actorClient } = await authenticateStaff(request);
-        await rpc(actorClient, "direct_order_staff_detail", {
-          p_store_id: storeId,
-          p_request_id: requestId,
-        });
-        const translated = await translateDirectOrderText(
-          message,
-          locale,
-          googleTranslationKey,
-        );
-        return await rpc(service, "direct_order_staff_message_translated", {
-          p_actor_auth_id: actorAuthId,
-          p_store_id: storeId,
-          p_request_id: requestId,
-          p_body: message,
-          p_source_locale: locale,
-          p_body_ko: translated.ko,
-          p_body_vi: translated.vi,
-          p_body_en: translated.en,
-        });
       }
       case "cleanup_expired_pii": {
         const orphanCandidates = await rpc(

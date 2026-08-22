@@ -67,11 +67,6 @@ class DirectOrderCopy {
       'Hiện không thể gửi tin nhắn cho đơn này.',
       'A message cannot be sent for this order now.',
     ),
-    'TRANSLATION_TEMPORARILY_UNAVAILABLE' => _pick(
-      '메시지를 번역하지 못했습니다. 잠시 후 다시 보내 주세요.',
-      'Không thể dịch tin nhắn. Vui lòng gửi lại sau ít phút.',
-      'The message could not be translated. Please send it again shortly.',
-    ),
     'DIRECT_ORDER_REQUEST_NOT_CANCELLABLE' => _pick(
       '현재 상태에서는 주문을 취소할 수 없습니다.',
       'Không thể hủy đơn ở trạng thái hiện tại.',
@@ -318,11 +313,6 @@ class DirectOrderCopy {
   String get openGrab =>
       _pick('Grab 배송 확인', 'Theo dõi trên Grab', 'Track on Grab');
   String get chat => _pick('매장과 채팅', 'Nhắn với cửa hàng', 'Chat with store');
-  String get chatAutoTranslationNotice => _pick(
-    '채팅은 보는 사람의 선택 언어로 자동 번역되며 원문도 안전하게 보존됩니다.',
-    'Tin nhắn được tự động dịch sang ngôn ngữ người xem đã chọn và vẫn giữ bản gốc.',
-    'Chat is automatically translated to the viewer’s selected language while preserving the original.',
-  );
   String get messageHint =>
       _pick('메시지를 입력하세요', 'Nhập tin nhắn', 'Type a message');
   String get send => _pick('보내기', 'Gửi', 'Send');

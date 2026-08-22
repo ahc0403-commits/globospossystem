@@ -61,10 +61,9 @@ Equivalent KO/VI/EN localization is required; no operational string is hard-code
 - Customer menu uses the current customer locale snapshot. Cashier and kitchen
   use their current viewer locale against the immutable request/ticket
   KO/VI/EN snapshots.
-- Fixed system codes, status, errors, direct alerts, and translated chat
-  re-render immediately after locale change. Chat keeps its exact original and
-  displays the stored viewer-locale copy; address, customer/item notes, and
-  provider place text remain exactly as entered/returned.
+- Fixed system codes, status, errors, and direct alerts re-render immediately
+  after locale change. Chat, address, customer/item notes, and provider place
+  text remain exactly as entered/returned and are not machine-translated.
 - The detailed authority is `DIRECT_ORDER_LOCALE_CONTRACT.md`.
 
 ### Component families

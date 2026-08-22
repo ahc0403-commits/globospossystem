@@ -27,10 +27,6 @@ DECLARE
   v_approval jsonb;
   v_ticket_id uuid;
   v_ticket_list jsonb;
-  v_chat jsonb;
-  v_message jsonb;
-  v_translations jsonb;
-  v_invalid_translation_blocked boolean := false;
 BEGIN
   SELECT store_id, menu_item_id INTO v_store, v_menu
   FROM direct_delivery_test.constants LIMIT 1;
@@ -143,86 +139,6 @@ BEGIN
       WHERE client_request_id=v_invalid_client
     ),
     'invalid request locale cannot reach persisted state'
-  );
-
-  v_chat := direct_delivery_test.create_request('awaiting_quote');
-  v_message := public.direct_order_public_message_translated(
-    (v_chat->>'session_id')::uuid,
-    v_chat->>'secret_hash',
-    (v_chat->>'request_id')::uuid,
-    'Please call when you arrive.',
-    'en',
-    '도착하면 전화해 주세요.',
-    'Vui lòng gọi khi đến.',
-    'Please call when you arrive.'
-  );
-  v_translations := public.direct_order_public_message_translations(
-    (v_chat->>'session_id')::uuid,
-    v_chat->>'secret_hash',
-    (v_chat->>'request_id')::uuid,
-    'vi',
-    ARRAY[(v_message->>'message_id')::uuid]
-  );
-  INSERT INTO _direct_locale_results VALUES (
-    'customer chat preserves original and returns viewer translation',
-    EXISTS (
-      SELECT 1 FROM public.direct_order_messages message
-      WHERE message.id=(v_message->>'message_id')::uuid
-        AND message.body='Please call when you arrive.'
-        AND message.source_locale='en'
-        AND message.body_ko='도착하면 전화해 주세요.'
-        AND message.body_vi='Vui lòng gọi khi đến.'
-        AND message.body_en=message.body
-        AND message.translation_status='complete'
-        AND message.translation_provider='google_cloud_translation_v2'
-    ) AND v_translations->'translations'->0->>'body'=
-      'Vui lòng gọi khi đến.',
-    'original is immutable while the owning session reads its target locale'
-  );
-
-  v_message := public.direct_order_staff_message_translated(
-    (v_chat->>'auth_id')::uuid,
-    (v_chat->>'store_id')::uuid,
-    (v_chat->>'request_id')::uuid,
-    'Tài xế sẽ đến trong 10 phút.',
-    'vi',
-    '기사가 10분 안에 도착합니다.',
-    'Tài xế sẽ đến trong 10 phút.',
-    'The driver will arrive in 10 minutes.'
-  );
-  INSERT INTO _direct_locale_results VALUES (
-    'staff translated chat is actor scoped and complete',
-    EXISTS (
-      SELECT 1 FROM public.direct_order_messages message
-      WHERE message.id=(v_message->>'message_id')::uuid
-        AND message.sender_type='cashier'
-        AND message.sender_auth_id=(v_chat->>'auth_id')::uuid
-        AND message.body='Tài xế sẽ đến trong 10 phút.'
-        AND message.body_en='The driver will arrive in 10 minutes.'
-        AND message.translation_status='complete'
-    ),
-    'trusted Edge boundary stores all viewer copies in one insert'
-  );
-
-  BEGIN
-    PERFORM public.direct_order_public_message_translated(
-      (v_chat->>'session_id')::uuid,
-      v_chat->>'secret_hash',
-      (v_chat->>'request_id')::uuid,
-      'original', 'en', '한국어', 'Tiếng Việt', 'changed source'
-    );
-  EXCEPTION WHEN OTHERS THEN
-    v_invalid_translation_blocked :=
-      SQLERRM LIKE '%DIRECT_ORDER_TRANSLATION_INVALID%';
-  END;
-  INSERT INTO _direct_locale_results VALUES (
-    'translation mismatch is rejected before insert',
-    v_invalid_translation_blocked AND NOT EXISTS (
-      SELECT 1 FROM public.direct_order_messages message
-      WHERE message.request_id=(v_chat->>'request_id')::uuid
-        AND message.body='original'
-    ),
-    'selected source locale must preserve the exact original body'
   );
 
   v_fixture := direct_delivery_test.create_request('payment_review');
