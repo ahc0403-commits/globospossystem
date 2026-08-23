@@ -2,6 +2,12 @@ BEGIN;
 
 -- production-gate: self-verifying
 
+-- Live fulfillment writes emergency events before reading order items. Acquire
+-- those two DDL locks in the same order before holding either one so the
+-- migration cannot deadlock with an in-flight dispatcher transaction.
+LOCK TABLE public.emergency_fulfillment_events IN ACCESS EXCLUSIVE MODE;
+LOCK TABLE public.order_items IN ACCESS EXCLUSIVE MODE;
+
 -- A takeout choice changes preparation/presentation only. It must remain an
 -- immutable order-line snapshot and must not overload the station route or
 -- order-purpose contracts.
