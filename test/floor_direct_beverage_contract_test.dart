@@ -41,4 +41,16 @@ void main() {
     expect(analytics, contains("'bottleneck_station'"));
     expect(analytics, contains('percentile_cont(0.9)'));
   });
+
+  test('takeout rollout restores combo drinks to floor-only routing', () {
+    final restore = File(
+      'supabase/migrations/20260823101500_restore_combo_floor_direct_routing.sql',
+    ).readAsStringSync();
+
+    expect(restore, contains('floor_direct_beverages_enabled'));
+    expect(restore, contains("'fulfillment_route', CASE"));
+    expect(restore, contains('THEN selected_item.fulfillment_route'));
+    expect(restore, contains('NEW.is_takeout'));
+    expect(restore, contains('COMBO_FLOOR_DIRECT_BACKFILL_VERIFY_FAILED'));
+  });
 }
