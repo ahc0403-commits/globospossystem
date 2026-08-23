@@ -140,7 +140,7 @@ class SalesRevenueAnalysisDashboard extends StatelessWidget {
           final textScale = MediaQuery.textScalerOf(context).scale(1);
           final dailyHeight = constraints.maxWidth < 520
               ? textScale > 1.5
-                    ? 820.0
+                    ? 850.0
                     : 600.0
               : 520.0;
           return Column(
@@ -342,6 +342,32 @@ List<HourlyRevenue> _fillHourlyRange(List<HourlyRevenue> rows) {
   ];
 }
 
+List<FlSpot> _revenueMovingAverageSpots(
+  List<DailyRevenue> rows, {
+  required int window,
+  required DateTime today,
+}) {
+  if (window <= 0 || rows.length < window) return const [];
+
+  var effectiveLength = rows.length;
+  final last = rows.last;
+  if (last.total == 0 && DateUtils.isSameDay(last.date, today)) {
+    effectiveLength -= 1;
+  }
+  if (effectiveLength < window) return const [];
+
+  return [
+    for (var end = window - 1; end < effectiveLength; end++)
+      FlSpot(
+        end.toDouble(),
+        rows
+                .sublist(end - window + 1, end + 1)
+                .fold<double>(0, (sum, row) => sum + row.total) /
+            window,
+      ),
+  ];
+}
+
 class _RevenueTrendBadge extends StatelessWidget {
   const _RevenueTrendBadge({required this.rows, required this.currency});
 
@@ -403,10 +429,17 @@ class _RevenueTrendBadge extends StatelessWidget {
 }
 
 class _DailyRevenueLineChart extends StatelessWidget {
-  const _DailyRevenueLineChart({required this.rows, required this.currency});
+  const _DailyRevenueLineChart({
+    required this.rows,
+    required this.currency,
+    required this.trendSpots,
+    required this.trendLabel,
+  });
 
   final List<DailyRevenue> rows;
   final NumberFormat currency;
+  final List<FlSpot> trendSpots;
+  final String trendLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -508,6 +541,16 @@ class _DailyRevenueLineChart extends StatelessWidget {
                       fitInsideHorizontally: true,
                       fitInsideVertically: true,
                       getTooltipItems: (spots) => spots.map((spot) {
+                        if (spot.barIndex == 1) {
+                          return LineTooltipItem(
+                            '$trendLabel\n${currency.format(spot.y)} VND',
+                            AppFonts.system(
+                              color: PosColors.warning,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          );
+                        }
                         final row = rows[spot.x.toInt()];
                         return LineTooltipItem(
                           '${DateFormat('dd/MM').format(row.date)}\n'
@@ -541,6 +584,18 @@ class _DailyRevenueLineChart extends StatelessWidget {
                         color: PosColors.accent.withValues(alpha: 0.1),
                       ),
                     ),
+                    if (trendSpots.isNotEmpty)
+                      LineChartBarData(
+                        spots: trendSpots,
+                        isCurved: trendSpots.length > 2,
+                        curveSmoothness: 0.18,
+                        color: PosColors.warning,
+                        barWidth: 2.5,
+                        dashArray: const [8, 5],
+                        isStrokeCapRound: true,
+                        dotData: const FlDotData(show: false),
+                        belowBarData: BarAreaData(show: false),
+                      ),
                   ],
                 ),
               ),
@@ -562,6 +617,13 @@ class _DailyRevenuePanelContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final copy = _SalesAnalysisCopy.of(context);
     final latest = rows.last;
+    final trendWindow = rows.length <= 7 ? 3 : 7;
+    final trendSpots = _revenueMovingAverageSpots(
+      rows,
+      window: trendWindow,
+      today: DateTime.now(),
+    );
+    final trendLabel = copy.movingAverage(trendWindow);
     final teamChart = _DailyMetricSurface(
       key: const Key('sales_daily_team_chart'),
       title: copy.teamLabel,
@@ -596,7 +658,14 @@ class _DailyRevenuePanelContent extends StatelessWidget {
           title: copy.revenueLabel,
           value: '${_compactCurrency(latest.total)} VND',
           color: PosColors.accent,
-          child: _DailyRevenueLineChart(rows: rows, currency: currency),
+          comparisonLabel: trendSpots.isEmpty ? null : trendLabel,
+          comparisonColor: PosColors.warning,
+          child: _DailyRevenueLineChart(
+            rows: rows,
+            currency: currency,
+            trendSpots: trendSpots,
+            trendLabel: trendLabel,
+          ),
         );
         if (constraints.maxWidth < 520) {
           final metricHeight = MediaQuery.textScalerOf(context).scale(1) > 1.5
@@ -640,12 +709,16 @@ class _DailyMetricSurface extends StatelessWidget {
     required this.value,
     required this.color,
     required this.child,
+    this.comparisonLabel,
+    this.comparisonColor,
   });
 
   final String title;
   final String value;
   final Color color;
   final Widget child;
+  final String? comparisonLabel;
+  final Color? comparisonColor;
 
   @override
   Widget build(BuildContext context) {
@@ -687,10 +760,49 @@ class _DailyMetricSurface extends StatelessWidget {
               ),
             ],
           ),
+          if (comparisonLabel case final label?) ...[
+            const SizedBox(height: 3),
+            Row(
+              key: const Key('sales_revenue_trend_legend'),
+              children: [
+                _DashedLegendMark(color: comparisonColor ?? color),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: AppFonts.system(
+                      color: PosColors.textSecondary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 4),
           Expanded(child: child),
         ],
       ),
+    );
+  }
+}
+
+class _DashedLegendMark extends StatelessWidget {
+  const _DashedLegendMark({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var index = 0; index < 3; index++) ...[
+          if (index > 0) const SizedBox(width: 2),
+          Container(width: 5, height: 2, color: color),
+        ],
+      ],
     );
   }
 }
@@ -1021,6 +1133,8 @@ class _SalesAnalysisCopy {
     'See daily revenue, teams, and average table value.',
   );
   String get revenueLabel => pick('매출', 'Doanh thu', 'Revenue');
+  String movingAverage(int days) =>
+      pick('$days일 이동평균', 'TB động $days ngày', '$days-day moving average');
   String get teamLabel => pick('매출 팀수', 'Số nhóm', 'Sales teams');
   String get averageTableLabel =>
       pick('테이블 평균 단가', 'Giá trị TB mỗi bàn', 'Average table value');
