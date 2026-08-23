@@ -106,6 +106,12 @@ void main() {
     ).readAsStringSync();
 
     expect(migration, contains('ADD COLUMN IF NOT EXISTS is_takeout boolean'));
+    final eventLock = migration.indexOf(
+      'LOCK TABLE public.emergency_fulfillment_events',
+    );
+    final orderItemLock = migration.indexOf('LOCK TABLE public.order_items');
+    expect(eventLock, greaterThanOrEqualTo(0));
+    expect(orderItemLock, greaterThan(eventLock));
     expect(migration, contains('UNIQUE (order_id)'));
     expect(migration, contains("'awaiting_floor_pickup', 'floor'"));
     expect(migration, contains("'awaiting_tray_to_kitchen', 'tray'"));
