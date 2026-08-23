@@ -73,6 +73,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
             'unit_price': item.price,
             'quantity': item.quantity,
             'item_type': 'menu',
+            'is_takeout': item.isTakeout,
           },
         )
         .toList();
@@ -81,7 +82,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
   void addToCart(CartItem item) {
     final current = [...state.cart];
     final index = current.indexWhere(
-      (cartItem) => cartItem.menuItemId == item.menuItemId,
+      (cartItem) => cartItem.lineKey == item.lineKey,
     );
 
     if (index >= 0) {
@@ -96,16 +97,16 @@ class OrderNotifier extends StateNotifier<OrderState> {
     state = state.copyWith(cart: current, clearError: true);
   }
 
-  void removeFromCart(String menuItemId) {
+  void removeFromCart(CartItem target) {
     state = state.copyWith(
-      cart: state.cart.where((item) => item.menuItemId != menuItemId).toList(),
+      cart: state.cart.where((item) => item.lineKey != target.lineKey).toList(),
       clearError: true,
     );
   }
 
-  void decrementCartItem(String menuItemId) {
+  void decrementCartItem(CartItem target) {
     final current = [...state.cart];
-    final index = current.indexWhere((item) => item.menuItemId == menuItemId);
+    final index = current.indexWhere((item) => item.lineKey == target.lineKey);
     if (index < 0) {
       return;
     }
@@ -117,6 +118,34 @@ class OrderNotifier extends StateNotifier<OrderState> {
       current[index] = existing.copyWith(quantity: existing.quantity - 1);
     }
 
+    state = state.copyWith(cart: current, clearError: true);
+  }
+
+  void setCartItemTakeout(CartItem target, bool isTakeout) {
+    if (target.isTakeout == isTakeout) return;
+    final current = [...state.cart];
+    final sourceIndex = current.indexWhere(
+      (item) => item.lineKey == target.lineKey,
+    );
+    if (sourceIndex < 0) return;
+
+    final updated = current
+        .removeAt(sourceIndex)
+        .copyWith(isTakeout: isTakeout);
+    final destinationIndex = current.indexWhere(
+      (item) => item.lineKey == updated.lineKey,
+    );
+    if (destinationIndex >= 0) {
+      final destination = current[destinationIndex];
+      current[destinationIndex] = destination.copyWith(
+        quantity: destination.quantity + updated.quantity,
+      );
+    } else {
+      current.insert(
+        sourceIndex > current.length ? current.length : sourceIndex,
+        updated,
+      );
+    }
     state = state.copyWith(cart: current, clearError: true);
   }
 
@@ -150,7 +179,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
       final response = await supabase
           .from('orders')
           .select(
-            'id, table_id, status, created_at, guest_count, order_items(id, created_at, menu_item_id, label, unit_price, quantity, status, item_type, combo_components, menu_items(name, name_vi, name_en))',
+            'id, table_id, status, created_at, guest_count, leftover_packaging_requests(status), order_items(id, created_at, menu_item_id, label, unit_price, quantity, status, is_takeout, item_type, combo_components, menu_items(name, name_vi, name_en))',
           )
           .eq('table_id', tableId)
           .eq('restaurant_id', storeId)
@@ -230,6 +259,20 @@ class OrderNotifier extends StateNotifier<OrderState> {
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'order_items',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshActiveOrderFromRealtime(tableId, storeId),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'leftover_packaging_requests',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: (_) => _refreshActiveOrderFromRealtime(tableId, storeId),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'leftover_packaging_requests',
           filter: LiveSyncScope.storeFilter(storeId),
           callback: (_) => _refreshActiveOrderFromRealtime(tableId, storeId),
         )
@@ -408,6 +451,29 @@ class OrderNotifier extends StateNotifier<OrderState> {
       state = state.copyWith(
         error: _mapOrderError(error, 'Failed to add items to order'),
       );
+    } finally {
+      state = state.copyWith(isSubmitting: false);
+    }
+  }
+
+  Future<bool> requestLeftoverPackaging(String orderId, String storeId) async {
+    final tableId = state.activeOrder?.tableId;
+    state = state.copyWith(isSubmitting: true, clearError: true);
+    try {
+      await orderService.requestLeftoverPackaging(
+        orderId: orderId,
+        storeId: storeId,
+        requestId: _uuid.v4(),
+      );
+      if (tableId != null) {
+        await loadActiveOrder(tableId, storeId, syncOffline: false);
+      }
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        error: _mapOrderError(error, 'Failed to request leftover packaging'),
+      );
+      return false;
     } finally {
       state = state.copyWith(isSubmitting: false);
     }

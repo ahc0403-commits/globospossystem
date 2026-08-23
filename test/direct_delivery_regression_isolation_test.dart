@@ -9,7 +9,7 @@ const _migrationPath =
 
 const _frozenFiles = <String, String>{
   'lib/features/qr_order/qr_order_screen.dart':
-      'ff48cb6876c92fee9ae08a45a3425a73a7281c69723ca7c15505e8fd038a9630',
+      '3be65edc63f943e3fddd1f4e4b25fca8b842d430e5fc803d54c76c9d75e7f49b',
   'lib/features/cashier/cashier_screen.dart':
       'bb62d51f93c474461783312d3d0acfbad2a087df122b650bdc3f1637cb447017',
   'lib/features/kitchen/kitchen_provider.dart':

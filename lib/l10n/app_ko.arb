@@ -3465,5 +3465,9 @@
   "menuSalesHourLabel": "{hour}시",
   "@menuSalesHourLabel": {"placeholders":{"hour":{"type":"String"}}},
   "menuSalesRank": "{rank}위",
-  "@menuSalesRank": {"placeholders":{"rank":{"type":"int"}}}
+  "@menuSalesRank": {"placeholders":{"rank":{"type":"int"}}},
+  "leftoverPackagingRequest": "남은 음식 포장 요청",
+  "leftoverPackagingRequested": "남은 음식 포장 요청 전달됨",
+  "leftoverPackagingConfirmTitle": "남은 음식을 포장할까요?",
+  "leftoverPackagingConfirmMessage": "요청하면 담당 층에 먼저 알림이 전달됩니다."
 }

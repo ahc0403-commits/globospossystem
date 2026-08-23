@@ -4,24 +4,30 @@ class CartItem {
     required this.name,
     required this.price,
     required this.quantity,
+    this.isTakeout = false,
   });
 
   final String menuItemId;
   final String name;
   final double price;
   final int quantity;
+  final bool isTakeout;
+
+  String get lineKey => '$menuItemId:${isTakeout ? 'takeout' : 'dine_in'}';
 
   CartItem copyWith({
     String? menuItemId,
     String? name,
     double? price,
     int? quantity,
+    bool? isTakeout,
   }) {
     return CartItem(
       menuItemId: menuItemId ?? this.menuItemId,
       name: name ?? this.name,
       price: price ?? this.price,
       quantity: quantity ?? this.quantity,
+      isTakeout: isTakeout ?? this.isTakeout,
     );
   }
 }
@@ -39,6 +45,7 @@ class OrderItem {
     this.nameVi,
     this.nameEn,
     this.isServiceItem = false,
+    this.isTakeout = false,
     this.serviceReason,
     this.vatCategory,
     this.payingAmountIncTax,
@@ -56,6 +63,7 @@ class OrderItem {
   final String? nameVi;
   final String? nameEn;
   final bool isServiceItem;
+  final bool isTakeout;
   final String? serviceReason;
   final String? vatCategory;
   final double? payingAmountIncTax;
@@ -73,6 +81,7 @@ class OrderItem {
     String? nameVi,
     String? nameEn,
     bool? isServiceItem,
+    bool? isTakeout,
     String? serviceReason,
     String? vatCategory,
     double? payingAmountIncTax,
@@ -90,6 +99,7 @@ class OrderItem {
       nameVi: nameVi ?? this.nameVi,
       nameEn: nameEn ?? this.nameEn,
       isServiceItem: isServiceItem ?? this.isServiceItem,
+      isTakeout: isTakeout ?? this.isTakeout,
       serviceReason: serviceReason ?? this.serviceReason,
       vatCategory: vatCategory ?? this.vatCategory,
       payingAmountIncTax: payingAmountIncTax ?? this.payingAmountIncTax,
@@ -136,6 +146,11 @@ class OrderItem {
       nameVi: menuItemNameVi,
       nameEn: menuItemNameEn,
       isServiceItem: switch (json['is_service_item']) {
+        bool value => value,
+        String value => value.toLowerCase() == 'true',
+        _ => false,
+      },
+      isTakeout: switch (json['is_takeout']) {
         bool value => value,
         String value => value.toLowerCase() == 'true',
         _ => false,
@@ -216,6 +231,7 @@ class Order {
     required this.createdAt,
     required this.items,
     this.guestCount,
+    this.leftoverPackagingStatus,
   });
 
   final String id;
@@ -224,6 +240,7 @@ class Order {
   final DateTime createdAt;
   final List<OrderItem> items;
   final int? guestCount;
+  final String? leftoverPackagingStatus;
 
   Order copyWith({
     String? id,
@@ -232,6 +249,8 @@ class Order {
     DateTime? createdAt,
     List<OrderItem>? items,
     int? guestCount,
+    String? leftoverPackagingStatus,
+    bool clearLeftoverPackagingStatus = false,
   }) {
     return Order(
       id: id ?? this.id,
@@ -240,6 +259,9 @@ class Order {
       createdAt: createdAt ?? this.createdAt,
       items: items ?? this.items,
       guestCount: guestCount ?? this.guestCount,
+      leftoverPackagingStatus: clearLeftoverPackagingStatus
+          ? null
+          : (leftoverPackagingStatus ?? this.leftoverPackagingStatus),
     );
   }
 
@@ -253,6 +275,13 @@ class Order {
         : <Map<String, dynamic>>[];
     itemRows.sort(_compareOrderItemRowsByCreatedAt);
     final items = itemRows.map<OrderItem>(OrderItem.fromJson).toList();
+    final leftoverRaw = json['leftover_packaging_requests'];
+    final leftoverStatus = switch (leftoverRaw) {
+      List value when value.isNotEmpty && value.first is Map =>
+        (value.first as Map)['status']?.toString(),
+      Map value => value['status']?.toString(),
+      _ => null,
+    };
 
     return Order(
       id: json['id'].toString(),
@@ -263,6 +292,7 @@ class Order {
                 DateTime.fromMillisecondsSinceEpoch(0)
           : DateTime.fromMillisecondsSinceEpoch(0),
       items: items,
+      leftoverPackagingStatus: leftoverStatus,
       guestCount: switch (json['guest_count']) {
         int value => value,
         num value => value.toInt(),

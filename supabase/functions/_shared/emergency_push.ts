@@ -38,6 +38,7 @@ export function buildEmergencyFcmMessage(delivery: EmergencyPushDelivery) {
     : delivery.stationType === "tray"
     ? "Khay"
     : `Tầng ${delivery.floorLabel ?? ""}`.trim();
+  const isLeftoverPackaging = delivery.stage.startsWith("leftover_");
   return {
     message: {
       token: delivery.pushToken,
@@ -54,8 +55,12 @@ export function buildEmergencyFcmMessage(delivery: EmergencyPushDelivery) {
       webpush: {
         headers: { Urgency: "high", TTL: "300" },
         notification: {
-          title: `Công việc mới · ${stationLabel}`,
-          body: "Mở màn hình để kiểm tra đơn hàng.",
+          title: isLeftoverPackaging
+            ? `Yêu cầu đóng gói · ${stationLabel}`
+            : `Công việc mới · ${stationLabel}`,
+          body: isLeftoverPackaging
+            ? "Mở màn hình để xử lý yêu cầu đóng gói đồ ăn thừa."
+            : "Mở màn hình để kiểm tra đơn hàng.",
           tag: delivery.eventId,
           renotify: true,
         },

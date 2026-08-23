@@ -177,6 +177,22 @@ class OrderService {
     return Map<String, dynamic>.from(result as Map);
   }
 
+  Future<Map<String, dynamic>> requestLeftoverPackaging({
+    required String orderId,
+    required String storeId,
+    required String requestId,
+  }) async {
+    final result = await supabase.rpc(
+      'request_leftover_packaging',
+      params: {
+        'p_order_id': orderId,
+        'p_store_id': storeId,
+        'p_request_id': requestId,
+      },
+    );
+    return Map<String, dynamic>.from(result as Map);
+  }
+
   Future<void> cancelOrderItem({
     required String itemId,
     required String storeId,
