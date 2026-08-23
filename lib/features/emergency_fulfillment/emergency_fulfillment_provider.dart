@@ -136,6 +136,7 @@ class EmergencyFulfillmentDisplayItem {
     required this.completed,
     required this.readyFromPreviousStage,
     required this.readOnly,
+    this.isTakeout = false,
   });
 
   final String id;
@@ -147,6 +148,7 @@ class EmergencyFulfillmentDisplayItem {
   final bool completed;
   final bool readyFromPreviousStage;
   final bool readOnly;
+  final bool isTakeout;
 
   String get paperlessName => nameVi.trim().isEmpty ? 'Món' : nameVi;
 
@@ -174,6 +176,7 @@ class EmergencyFulfillmentItem {
     this.lineKey = 'base',
     this.sourceKind = 'order_item',
     this.comboComponents = const [],
+    this.isTakeout = false,
   });
 
   final String id;
@@ -191,6 +194,7 @@ class EmergencyFulfillmentItem {
   final String lineKey;
   final String sourceKind;
   final List<EmergencyComboComponent> comboComponents;
+  final bool isTakeout;
 
   bool get isFloorDirect => fulfillmentRoute == 'floor_direct';
   String get paperlessName => nameVi.trim().isEmpty ? 'Món' : nameVi;
@@ -317,6 +321,7 @@ class EmergencyFulfillmentItem {
         lineKey: lineKey,
         sourceKind: sourceKind,
         comboComponents: comboComponents,
+        isTakeout: isTakeout,
       );
 
   factory EmergencyFulfillmentItem.fromJson(Map<String, dynamic> json) {
@@ -337,6 +342,7 @@ class EmergencyFulfillmentItem {
           json['fulfillment_route']?.toString() ?? 'kitchen_tray_floor',
       lineKey: json['line_key']?.toString() ?? 'base',
       sourceKind: json['source_kind']?.toString() ?? 'order_item',
+      isTakeout: json['is_takeout'] == true,
       comboComponents: rawComponents is List
           ? rawComponents
                 .whereType<Map>()
@@ -482,6 +488,7 @@ class EmergencyFulfillmentOrder {
               stationType,
             ),
             readOnly: false,
+            isTakeout: item.isTakeout,
           ),
         );
         continue;
@@ -510,6 +517,7 @@ class EmergencyFulfillmentOrder {
               stationType,
             ),
             readOnly: componentItem == null,
+            isTakeout: item.isTakeout,
           ),
         );
       }
@@ -596,6 +604,42 @@ class EmergencyFulfillmentOrder {
   }
 }
 
+class LeftoverPackagingTask {
+  const LeftoverPackagingTask({
+    required this.id,
+    required this.orderId,
+    required this.queueId,
+    required this.queueNo,
+    required this.tableNumber,
+    required this.floorLabel,
+    required this.status,
+    required this.requestedAt,
+  });
+
+  final String id;
+  final String orderId;
+  final String queueId;
+  final int queueNo;
+  final String tableNumber;
+  final String floorLabel;
+  final String status;
+  final DateTime requestedAt;
+
+  factory LeftoverPackagingTask.fromJson(Map<String, dynamic> json) =>
+      LeftoverPackagingTask(
+        id: json['id']?.toString() ?? '',
+        orderId: json['order_id']?.toString() ?? '',
+        queueId: json['queue_id']?.toString() ?? '',
+        queueNo: _asInt(json['queue_no']),
+        tableNumber: json['table_number']?.toString() ?? '-',
+        floorLabel: json['floor_label']?.toString() ?? '1F',
+        status: json['status']?.toString() ?? 'awaiting_floor_pickup',
+        requestedAt:
+            DateTime.tryParse(json['requested_at']?.toString() ?? '') ??
+            DateTime.now().toUtc(),
+      );
+}
+
 class EmergencyFulfillmentState {
   const EmergencyFulfillmentState({
     this.assigned = false,
@@ -608,6 +652,7 @@ class EmergencyFulfillmentState {
     this.fulfillmentMode = FulfillmentMode.paperless,
     this.orders = const [],
     this.completedOrders = const [],
+    this.leftoverPackagingTasks = const [],
     this.pendingOutboxCount = 0,
     this.pendingQueueIds = const {},
     this.error,
@@ -623,6 +668,7 @@ class EmergencyFulfillmentState {
   final FulfillmentMode fulfillmentMode;
   final List<EmergencyFulfillmentOrder> orders;
   final List<EmergencyFulfillmentOrder> completedOrders;
+  final List<LeftoverPackagingTask> leftoverPackagingTasks;
   final int pendingOutboxCount;
   final Set<String> pendingQueueIds;
   final String? error;
@@ -640,6 +686,7 @@ class EmergencyFulfillmentState {
     FulfillmentMode? fulfillmentMode,
     List<EmergencyFulfillmentOrder>? orders,
     List<EmergencyFulfillmentOrder>? completedOrders,
+    List<LeftoverPackagingTask>? leftoverPackagingTasks,
     int? pendingOutboxCount,
     Set<String>? pendingQueueIds,
     String? error,
@@ -655,6 +702,8 @@ class EmergencyFulfillmentState {
     fulfillmentMode: fulfillmentMode ?? this.fulfillmentMode,
     orders: orders ?? this.orders,
     completedOrders: completedOrders ?? this.completedOrders,
+    leftoverPackagingTasks:
+        leftoverPackagingTasks ?? this.leftoverPackagingTasks,
     pendingOutboxCount: pendingOutboxCount ?? this.pendingOutboxCount,
     pendingQueueIds: pendingQueueIds ?? this.pendingQueueIds,
     error: clearError ? null : (error ?? this.error),
@@ -663,6 +712,7 @@ class EmergencyFulfillmentState {
   factory EmergencyFulfillmentState.fromJson(Map<String, dynamic> json) {
     final rawOrders = json['orders'];
     final rawCompletedOrders = json['completed_orders'];
+    final rawLeftoverPackagingTasks = json['leftover_packaging_tasks'];
     return EmergencyFulfillmentState(
       assigned: json['assigned'] == true,
       active: json['active'] == true,
@@ -689,6 +739,16 @@ class EmergencyFulfillmentState {
                 .map(
                   (order) => EmergencyFulfillmentOrder.fromJson(
                     Map<String, dynamic>.from(order),
+                  ),
+                )
+                .toList(growable: false)
+          : const [],
+      leftoverPackagingTasks: rawLeftoverPackagingTasks is List
+          ? rawLeftoverPackagingTasks
+                .whereType<Map>()
+                .map(
+                  (task) => LeftoverPackagingTask.fromJson(
+                    Map<String, dynamic>.from(task),
                   ),
                 )
                 .toList(growable: false)
@@ -969,6 +1029,13 @@ class EmergencyFulfillmentNotifier
           filter: LiveSyncScope.storeFilter(storeId),
           callback: refresh,
         )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'leftover_packaging_requests',
+          filter: LiveSyncScope.storeFilter(storeId),
+          callback: refresh,
+        )
         .subscribe();
     _startPolling();
   }
@@ -1117,6 +1184,45 @@ class EmergencyFulfillmentNotifier
     }
   }
 
+  Future<bool> advanceLeftoverPackaging(LeftoverPackagingTask task) async {
+    final eventId = _uuid.v4();
+    final payload = <String, dynamic>{
+      'kind': 'advance_leftover_packaging',
+      'request_id': task.id,
+      'queue_id': task.queueId,
+      'event_id': eventId,
+    };
+    final previous = state;
+    state = state.copyWith(
+      leftoverPackagingTasks: state.leftoverPackagingTasks
+          .where((candidate) => candidate.id != task.id)
+          .toList(growable: false),
+      clearError: true,
+    );
+    try {
+      await _sendOutboxPayload(payload);
+      await load(showLoading: false);
+      return true;
+    } catch (error) {
+      if (error is PostgrestException) {
+        state = previous.copyWith(error: error.message);
+        return false;
+      }
+      try {
+        await EmergencyWebBridge.putOutbox(eventId, jsonEncode(payload));
+        state = state.copyWith(
+          pendingOutboxCount: state.pendingOutboxCount + 1,
+          pendingQueueIds: {...state.pendingQueueIds, task.queueId},
+          error: 'LEFTOVER_PACKAGING_ACTION_QUEUED',
+        );
+        return true;
+      } catch (_) {
+        state = previous.copyWith(error: 'LEFTOVER_PACKAGING_ACTION_FAILED');
+        return false;
+      }
+    }
+  }
+
   Future<bool> revertOrder({
     required String queueId,
     required String actionId,
@@ -1240,6 +1346,14 @@ class EmergencyFulfillmentNotifier
             'p_queue_id': payload['queue_id'],
             'p_action_id': payload['action_id'],
             'p_revert_id': payload['revert_id'],
+          },
+        );
+      case 'advance_leftover_packaging':
+        await supabase.rpc(
+          'emergency_advance_leftover_packaging',
+          params: {
+            'p_request_id': payload['request_id'],
+            'p_event_id': payload['event_id'],
           },
         );
       default:

@@ -12,6 +12,7 @@ class _FakeQrOrderService extends QrOrderService {
     required this.fetch,
     required this.fetchActive,
     required this.place,
+    this.requestLeftover,
   });
 
   final Future<QrOrderMenu> Function(String token) fetch;
@@ -22,6 +23,8 @@ class _FakeQrOrderService extends QrOrderService {
     String clientOrderId,
   )
   place;
+  final Future<Map<String, dynamic>> Function(String token, String requestId)?
+  requestLeftover;
 
   @override
   Future<QrOrderMenu> fetchMenu(String token) => fetch(token);
@@ -35,6 +38,14 @@ class _FakeQrOrderService extends QrOrderService {
     required List<QrOrderLine> items,
     required String clientOrderId,
   }) => place(token, items, clientOrderId);
+
+  @override
+  Future<Map<String, dynamic>> requestLeftoverPackaging({
+    required String token,
+    required String requestId,
+  }) =>
+      requestLeftover?.call(token, requestId) ??
+      Future.value(<String, dynamic>{'status': 'awaiting_floor_pickup'});
 }
 
 const _menu = QrOrderMenu(
@@ -94,11 +105,14 @@ _FakeQrOrderService _service({
     String clientOrderId,
   )?
   place,
+  Future<Map<String, dynamic>> Function(String token, String requestId)?
+  requestLeftover,
 }) {
   return _FakeQrOrderService(
     fetch: fetch ?? (_) async => _menu,
     fetchActive: fetchActive ?? (_) async => _noActiveOrder,
     place: place ?? (_, __, ___) async => _result,
+    requestLeftover: requestLeftover,
   );
 }
 
@@ -143,6 +157,100 @@ void _expectNoLayoutFailure(WidgetTester tester) {
 }
 
 void main() {
+  testWidgets('same menu keeps separate dine-in and takeout lines', (
+    tester,
+  ) async {
+    List<QrOrderLine>? submitted;
+    await _pumpQr(
+      tester,
+      service: _service(
+        place: (_, items, __) async {
+          submitted = items;
+          return _result;
+        },
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('qr_add_food')));
+    await tester.pumpAndSettle();
+    final addTakeout = find.byKey(const Key('qr_add_food_takeout'));
+    await tester.ensureVisible(addTakeout);
+    await tester.pumpAndSettle();
+    await tester.tap(addTakeout);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('qr_open_review')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('qr_review_mode_food|dine_in')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('qr_review_mode_food|takeout')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('qr_confirm_submit')));
+    await tester.pumpAndSettle();
+
+    expect(submitted, hasLength(2));
+    expect(submitted!.where((line) => line.isTakeout), hasLength(1));
+    expect(submitted!.where((line) => !line.isTakeout), hasLength(1));
+  });
+
+  testWidgets('leftover packaging request becomes one active-order status', (
+    tester,
+  ) async {
+    var activeReads = 0;
+    var requestCount = 0;
+    QrActiveOrder activeOrder({String? packagingStatus}) => QrActiveOrder(
+      isActive: true,
+      orderCode: 'abcd1234',
+      status: 'serving',
+      fulfillmentMode: 'paperless',
+      leftoverPackagingStatus: packagingStatus,
+      items: const [
+        QrActiveOrderItem(
+          name: 'Food',
+          quantity: 1,
+          status: 'served',
+          servedQuantity: 1,
+        ),
+      ],
+    );
+    await _pumpQr(
+      tester,
+      service: _service(
+        fetchActive: (_) async => activeOrder(
+          packagingStatus: activeReads++ == 0 ? null : 'awaiting_floor_pickup',
+        ),
+        requestLeftover: (_, __) async {
+          requestCount += 1;
+          return {'status': 'awaiting_floor_pickup'};
+        },
+      ),
+    );
+
+    final requestButton = find.byKey(
+      const Key('qr_leftover_packaging_request'),
+    );
+    await tester.ensureVisible(requestButton);
+    await tester.pumpAndSettle();
+    await tester.tap(requestButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('toast_confirm_dialog_confirm')));
+    await tester.pumpAndSettle();
+
+    expect(requestCount, 1);
+    expect(
+      find.byKey(const Key('qr_leftover_packaging_status')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('qr_leftover_packaging_request')),
+      findsNothing,
+    );
+  });
+
   testWidgets('promotion slot always shows VAT and uses welcome copy when idle', (
     tester,
   ) async {

@@ -3466,5 +3466,9 @@
   "menuSalesHourLabel": "{hour}:00",
   "@menuSalesHourLabel": {"placeholders":{"hour":{"type":"String"}}},
   "menuSalesRank": "#{rank}",
-  "@menuSalesRank": {"placeholders":{"rank":{"type":"int"}}}
+  "@menuSalesRank": {"placeholders":{"rank":{"type":"int"}}},
+  "leftoverPackagingRequest": "Pack leftover food",
+  "leftoverPackagingRequested": "Leftover packaging requested",
+  "leftoverPackagingConfirmTitle": "Pack the leftover food?",
+  "leftoverPackagingConfirmMessage": "The request will alert the assigned floor first."
 }

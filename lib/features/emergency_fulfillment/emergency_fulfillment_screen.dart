@@ -8,7 +8,9 @@ import '../../core/i18n/locale_extensions.dart';
 import '../../core/services/emergency_order_voice_message.dart';
 import '../../core/services/emergency_web_bridge.dart';
 import '../../core/services/emergency_web_push_service.dart';
+import '../../core/services/leftover_packaging_voice_message.dart';
 import '../../core/ui/pos_design_tokens.dart';
+import '../../core/ui/toast/toast.dart';
 import '../../widgets/app_nav_bar.dart';
 import '../../widgets/offline_banner.dart';
 import 'emergency_fulfillment_provider.dart';
@@ -82,6 +84,21 @@ class _EmergencyFulfillmentScreenState
     );
     if (floorDirectBeverageNotices.isNotEmpty) {
       _queueFloorDirectBeverageAlarm(floorDirectBeverageNotices);
+    }
+    final previousPackagingTaskKeys = <String>{
+      for (final task
+          in previous?.leftoverPackagingTasks ??
+              const <LeftoverPackagingTask>[])
+        '${task.id}:${task.status}',
+    };
+    final newPackagingTasks = next.leftoverPackagingTasks
+        .where(
+          (task) =>
+              !previousPackagingTaskKeys.contains('${task.id}:${task.status}'),
+        )
+        .toList(growable: false);
+    if (newPackagingTasks.isNotEmpty) {
+      unawaited(_triggerLeftoverPackagingAlarm(newPackagingTasks));
     }
     final handoffOrderIds = handoffNotices
         .map((notice) => notice.orderId)
@@ -227,6 +244,24 @@ class _EmergencyFulfillmentScreenState
       await EmergencyWebBridge.speak(
         vietnameseFloorDirectBeverageMessage(itemCount),
       );
+    }
+  }
+
+  Future<void> _triggerLeftoverPackagingAlarm(
+    Iterable<LeftoverPackagingTask> tasks,
+  ) async {
+    if (!mounted) return;
+    setState(() => _flashing = true);
+    _flashTimer?.cancel();
+    _flashTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _flashing = false);
+    });
+    if (_alarmEnabled) {
+      for (final task in tasks) {
+        await EmergencyWebBridge.speak(
+          vietnameseLeftoverPackagingMessage(task.tableNumber, task.status),
+        );
+      }
     }
   }
 
@@ -386,6 +421,15 @@ class _EmergencyFulfillmentScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (state.leftoverPackagingTasks.isNotEmpty) ...[
+            _LeftoverPackagingTaskPanel(
+              tasks: state.leftoverPackagingTasks,
+              copy: copy,
+              busy: _actionBusy,
+              onAdvance: _advanceLeftoverPackaging,
+            ),
+            const SizedBox(height: 8),
+          ],
           _BoardModeSelector(
             showRecent: _showRecent,
             activeCount: activeOrders.length,
@@ -452,6 +496,18 @@ class _EmergencyFulfillmentScreenState
         case 'floor':
           await notifier.recordProgress(itemId: item.id, stage: 'floor_served');
       }
+    } finally {
+      if (mounted) setState(() => _actionBusy = false);
+    }
+  }
+
+  Future<void> _advanceLeftoverPackaging(LeftoverPackagingTask task) async {
+    if (_actionBusy) return;
+    setState(() => _actionBusy = true);
+    try {
+      await ref
+          .read(emergencyFulfillmentProvider.notifier)
+          .advanceLeftoverPackaging(task);
     } finally {
       if (mounted) setState(() => _actionBusy = false);
     }
@@ -656,6 +712,113 @@ class _EmergencyHeader extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _LeftoverPackagingTaskPanel extends StatelessWidget {
+  const _LeftoverPackagingTaskPanel({
+    required this.tasks,
+    required this.copy,
+    required this.busy,
+    required this.onAdvance,
+  });
+
+  final List<LeftoverPackagingTask> tasks;
+  final _EmergencyCopy copy;
+  final bool busy;
+  final ValueChanged<LeftoverPackagingTask> onAdvance;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('leftover_packaging_task_panel'),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: PosColors.warning.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: PosColors.warning, width: 2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.takeout_dining_rounded,
+                color: PosColors.warning,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  copy.leftoverPackagingTitle,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              ToastStatusBadge(
+                label: '${tasks.length}',
+                color: PosColors.warning,
+                compact: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 112,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: tasks.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final task = tasks[index];
+                return Container(
+                  key: ValueKey('leftover_packaging_task_${task.id}'),
+                  width: 310,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: PosColors.surface,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: PosColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              '${copy.table} ${task.tableNumber}',
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.w900),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              copy.leftoverPackagingStage(task.status),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        key: ValueKey('leftover_packaging_advance_${task.id}'),
+                        onPressed: busy ? null : () => onAdvance(task),
+                        child: Text(copy.leftoverPackagingAction(task.status)),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1140,7 +1303,9 @@ class _EmergencyCardMenuList extends StatelessWidget {
                       SizedBox(
                         height: rowHeight,
                         child: Text(
-                          item.paperlessName,
+                          item.isTakeout
+                              ? '[MANG VỀ] ${item.paperlessName}'
+                              : item.paperlessName,
                           key: Key('emergency_card_menu_${item.id}'),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -1614,6 +1779,16 @@ class _EmergencyMenuRow extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
+                if (displayItem.isTakeout) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    copy.takeout,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: PosColors.warning,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 3),
                 Text(
                   '${copy.orderedQuantity} ${displayItem.quantity}',
@@ -1978,6 +2153,58 @@ class _EmergencyCopy {
   String get table => _pick('테이블', 'Bàn', 'Table');
   String get items => _pick('메뉴', 'món', 'items');
   String get order => _pick('주문', 'Đơn', 'Order');
+  String get takeout => _pick('포장 주문', 'MANG VỀ', 'TAKEOUT');
+  String get leftoverPackagingTitle => _pick(
+    '남은 음식 포장 요청',
+    'Yêu cầu gói đồ ăn thừa',
+    'Leftover packaging requests',
+  );
+  String leftoverPackagingStage(String status) => switch (status) {
+    'awaiting_floor_pickup' => _pick(
+      '층에서 요청 확인 후 트레이로 전달',
+      'Tầng xác nhận rồi chuyển cho khay',
+      'Confirm on the floor, then hand to tray',
+    ),
+    'awaiting_tray_to_kitchen' => _pick(
+      '트레이에서 주방으로 전달',
+      'Khay chuyển yêu cầu vào bếp',
+      'Tray hands the request to kitchen',
+    ),
+    'awaiting_kitchen_packaging' => _pick(
+      '주방에서 남은 음식 포장',
+      'Bếp đóng gói đồ ăn thừa',
+      'Kitchen packs the leftover food',
+    ),
+    'awaiting_tray_return' => _pick(
+      '트레이에서 담당 층으로 전달',
+      'Khay chuyển đồ đã gói về tầng',
+      'Tray returns the package to the floor',
+    ),
+    _ => _pick(
+      '층에서 손님에게 전달',
+      'Tầng giao đồ đã gói cho khách',
+      'Floor delivers the package to the guest',
+    ),
+  };
+  String leftoverPackagingAction(String status) => switch (status) {
+    'awaiting_floor_pickup' => _pick(
+      '트레이 전달',
+      'Chuyển cho khay',
+      'Send to tray',
+    ),
+    'awaiting_tray_to_kitchen' => _pick(
+      '주방 전달',
+      'Chuyển vào bếp',
+      'Send to kitchen',
+    ),
+    'awaiting_kitchen_packaging' => _pick(
+      '포장 완료',
+      'Đã đóng gói',
+      'Packaging done',
+    ),
+    'awaiting_tray_return' => _pick('층 전달', 'Chuyển về tầng', 'Send to floor'),
+    _ => _pick('손님 전달 완료', 'Đã giao khách', 'Delivered to guest'),
+  };
   String get orderedQuantity => _pick('주문 수량', 'Số lượng', 'Ordered');
   String get completed => _pick('완료', 'Hoàn tất', 'Completed');
   String get menuStatusGuide =>
@@ -2038,6 +2265,13 @@ class _EmergencyCopy {
         '연결이 복구되면 이 작업을 자동 전송합니다.',
         'Thao tác sẽ tự gửi khi kết nối trở lại.',
         'This action will send automatically when the connection returns.',
+      );
+    }
+    if (error.contains('LEFTOVER_PACKAGING_ACTION_QUEUED')) {
+      return _pick(
+        '연결이 복구되면 포장 작업을 자동 전송합니다.',
+        'Thao tác đóng gói sẽ tự gửi khi kết nối trở lại.',
+        'The packaging action will send when the connection returns.',
       );
     }
     return _pick(

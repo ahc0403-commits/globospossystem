@@ -208,16 +208,19 @@ class QrOrderLine {
   const QrOrderLine({
     required this.menuItemId,
     required this.quantity,
+    this.isTakeout = false,
     this.comboDrinkChoices = const [],
   });
 
   final String menuItemId;
   final int quantity;
+  final bool isTakeout;
   final List<String> comboDrinkChoices;
 
   Map<String, dynamic> toJson() => {
     'menu_item_id': menuItemId,
     'quantity': quantity,
+    if (isTakeout) 'is_takeout': true,
     if (comboDrinkChoices.isNotEmpty) 'combo_drink_choices': comboDrinkChoices,
   };
 }
@@ -229,6 +232,7 @@ class QrActiveOrder {
     required this.status,
     this.fulfillmentMode = 'pos_print',
     required this.items,
+    this.leftoverPackagingStatus,
   });
 
   final bool isActive;
@@ -236,6 +240,7 @@ class QrActiveOrder {
   final String status;
   final String fulfillmentMode;
   final List<QrActiveOrderItem> items;
+  final String? leftoverPackagingStatus;
 
   bool get isPaperless => fulfillmentMode == 'paperless';
 
@@ -246,6 +251,7 @@ class QrActiveOrder {
       orderCode: json['order_code']?.toString() ?? '',
       status: json['status']?.toString() ?? 'pending',
       fulfillmentMode: json['fulfillment_mode']?.toString() ?? 'pos_print',
+      leftoverPackagingStatus: json['leftover_packaging_status']?.toString(),
       items: itemsRaw is List
           ? itemsRaw
                 .whereType<Map>()
@@ -270,6 +276,7 @@ class QrActiveOrderItem {
     required this.status,
     this.servedQuantity = 0,
     this.fulfillmentParts = const [],
+    this.isTakeout = false,
   });
 
   final String name;
@@ -280,6 +287,7 @@ class QrActiveOrderItem {
   final String status;
   final int servedQuantity;
   final List<QrFulfillmentPart> fulfillmentParts;
+  final bool isTakeout;
 
   int get remainingQuantity => (quantity - servedQuantity).clamp(0, quantity);
 
@@ -299,6 +307,7 @@ class QrActiveOrderItem {
       quantity: _jsonInt(json['quantity']),
       status: json['status']?.toString() ?? 'pending',
       servedQuantity: _jsonInt(json['served_quantity']),
+      isTakeout: json['is_takeout'] == true,
       fulfillmentParts: switch (json['fulfillment_parts']) {
         final List values =>
           values
@@ -401,10 +410,15 @@ class QrOrderResult {
 }
 
 class QrOrderResultItem {
-  const QrOrderResultItem({required this.name, required this.quantity});
+  const QrOrderResultItem({
+    required this.name,
+    required this.quantity,
+    this.isTakeout = false,
+  });
 
   final String name;
   final int quantity;
+  final bool isTakeout;
 
   factory QrOrderResultItem.fromJson(Map<String, dynamic> json) {
     return QrOrderResultItem(
@@ -415,6 +429,7 @@ class QrOrderResultItem {
         String value => int.tryParse(value) ?? 1,
         _ => 1,
       },
+      isTakeout: json['is_takeout'] == true,
     );
   }
 }
@@ -451,6 +466,17 @@ class QrOrderService {
       },
     );
     return QrOrderResult.fromJson(Map<String, dynamic>.from(result as Map));
+  }
+
+  Future<Map<String, dynamic>> requestLeftoverPackaging({
+    required String token,
+    required String requestId,
+  }) async {
+    final result = await supabase.rpc(
+      'qr_request_leftover_packaging',
+      params: {'p_token': token, 'p_request_id': requestId},
+    );
+    return Map<String, dynamic>.from(result as Map);
   }
 }
 

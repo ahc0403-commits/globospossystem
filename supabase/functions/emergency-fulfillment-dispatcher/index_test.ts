@@ -35,3 +35,16 @@ Deno.test("emergency push rejects an unknown station", () => {
     "EMERGENCY_PUSH_STATION_INVALID",
   );
 });
+
+Deno.test("leftover packaging push is clearly identified", () => {
+  const delivery = mapEmergencyPushDelivery({
+    ...row,
+    stage: "leftover_tray_to_kitchen",
+    station_type: "kitchen",
+  });
+  const payload = buildEmergencyFcmMessage(delivery);
+  assertEquals(
+    payload.message.webpush.notification.title,
+    "Yêu cầu đóng gói · Bếp",
+  );
+});

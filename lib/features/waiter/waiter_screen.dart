@@ -480,6 +480,7 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
         orderNotifier.addToCart(cartItem.copyWith(quantity: 1));
       },
       onDecrementCartItem: orderNotifier.decrementCartItem,
+      onSetCartItemTakeout: orderNotifier.setCartItemTakeout,
       onCancel: _onCancelOrderPanel,
       onCancelOrderItem: storeId == null
           ? null
@@ -542,6 +543,15 @@ class _WaiterScreenState extends ConsumerState<WaiterScreen> {
       onChangeGuestCount: storeId == null || orderState.activeOrder == null
           ? null
           : () => _onChangeGuestCount(storeId, orderState),
+      onRequestLeftoverPackaging:
+          storeId == null || orderState.activeOrder == null
+          ? null
+          : () async {
+              await orderNotifier.requestLeftoverPackaging(
+                orderState.activeOrder!.id,
+                storeId,
+              );
+            },
       onCancelOrder: () async {
         final activeOrder = orderState.activeOrder;
         if (storeId == null || activeOrder == null) {

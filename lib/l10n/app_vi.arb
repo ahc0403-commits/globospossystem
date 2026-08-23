@@ -3465,5 +3465,9 @@
   "menuSalesHourLabel": "{hour}:00",
   "@menuSalesHourLabel": {"placeholders":{"hour":{"type":"String"}}},
   "menuSalesRank": "Hạng {rank}",
-  "@menuSalesRank": {"placeholders":{"rank":{"type":"int"}}}
+  "@menuSalesRank": {"placeholders":{"rank":{"type":"int"}}},
+  "leftoverPackagingRequest": "Yêu cầu gói đồ ăn thừa",
+  "leftoverPackagingRequested": "Đã gửi yêu cầu gói đồ ăn thừa",
+  "leftoverPackagingConfirmTitle": "Gói đồ ăn thừa mang về?",
+  "leftoverPackagingConfirmMessage": "Yêu cầu sẽ báo cho tầng phụ trách trước."
 }

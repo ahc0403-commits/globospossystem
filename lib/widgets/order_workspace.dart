@@ -30,6 +30,7 @@ class OrderWorkspace extends StatelessWidget {
     required this.onAddToCart,
     required this.onIncrementCartItem,
     required this.onDecrementCartItem,
+    required this.onSetCartItemTakeout,
     required this.onCancel,
     required this.onCancelOrder,
     required this.onSendOrder,
@@ -45,6 +46,7 @@ class OrderWorkspace extends StatelessWidget {
     this.onEditOrderItemQuantity,
     this.onTransferTable,
     this.onChangeGuestCount,
+    this.onRequestLeftoverPackaging,
   });
 
   final PosTable table;
@@ -55,7 +57,8 @@ class OrderWorkspace extends StatelessWidget {
   final bool allowSubmitWithoutCart;
   final ValueChanged<CartItem> onAddToCart;
   final ValueChanged<CartItem> onIncrementCartItem;
-  final ValueChanged<String> onDecrementCartItem;
+  final ValueChanged<CartItem> onDecrementCartItem;
+  final void Function(CartItem item, bool isTakeout) onSetCartItemTakeout;
   final VoidCallback onCancel;
   final Future<void> Function() onCancelOrder;
   final Future<void> Function() onSendOrder;
@@ -73,6 +76,7 @@ class OrderWorkspace extends StatelessWidget {
   onEditOrderItemQuantity;
   final VoidCallback? onTransferTable;
   final Future<void> Function()? onChangeGuestCount;
+  final Future<void> Function()? onRequestLeftoverPackaging;
 
   @override
   Widget build(BuildContext context) {
@@ -108,6 +112,7 @@ class OrderWorkspace extends StatelessWidget {
           allowSubmitWithoutCart: allowSubmitWithoutCart,
           onIncrementCartItem: onIncrementCartItem,
           onDecrementCartItem: onDecrementCartItem,
+          onSetCartItemTakeout: onSetCartItemTakeout,
           onCancel: onCancel,
           onCancelOrder: onCancelOrder,
           onSendOrder: onSendOrder,
@@ -123,6 +128,7 @@ class OrderWorkspace extends StatelessWidget {
           onEditOrderItemQuantity: onEditOrderItemQuantity,
           onTransferTable: onTransferTable,
           onChangeGuestCount: onChangeGuestCount,
+          onRequestLeftoverPackaging: onRequestLeftoverPackaging,
         );
 
         if (isWide) {
@@ -155,6 +161,7 @@ class OrderWorkspace extends StatelessWidget {
                             ? onIncrementCartItem
                             : (_) {},
                         onDecrementCartItem: onDecrementCartItem,
+                        onSetCartItemTakeout: onSetCartItemTakeout,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -191,6 +198,7 @@ class OrderWorkspace extends StatelessWidget {
                     ? onIncrementCartItem
                     : (_) {},
                 onDecrementCartItem: onDecrementCartItem,
+                onSetCartItemTakeout: onSetCartItemTakeout,
               ),
             ),
             const SizedBox(height: 8),
@@ -319,6 +327,7 @@ class _MenuBrowser extends StatelessWidget {
     required this.onAddItem,
     required this.onIncrementCartItem,
     required this.onDecrementCartItem,
+    required this.onSetCartItemTakeout,
   });
 
   final bool menuLoading;
@@ -330,7 +339,8 @@ class _MenuBrowser extends StatelessWidget {
   final ValueChanged<String> onSelectCategory;
   final ValueChanged<CartItem> onAddItem;
   final ValueChanged<CartItem> onIncrementCartItem;
-  final ValueChanged<String> onDecrementCartItem;
+  final ValueChanged<CartItem> onDecrementCartItem;
+  final void Function(CartItem item, bool isTakeout) onSetCartItemTakeout;
 
   @override
   Widget build(BuildContext context) {
@@ -419,6 +429,7 @@ class _MenuBrowser extends StatelessWidget {
               formatter: currency,
               onIncrementCartItem: onIncrementCartItem,
               onDecrementCartItem: onDecrementCartItem,
+              onSetCartItemTakeout: onSetCartItemTakeout,
             ),
             const SizedBox(height: 8),
           ] else
@@ -614,12 +625,14 @@ class _SelectedMenuList extends StatelessWidget {
     required this.formatter,
     required this.onIncrementCartItem,
     required this.onDecrementCartItem,
+    required this.onSetCartItemTakeout,
   });
 
   final List<CartItem> cart;
   final NumberFormat formatter;
   final ValueChanged<CartItem> onIncrementCartItem;
-  final ValueChanged<String> onDecrementCartItem;
+  final ValueChanged<CartItem> onDecrementCartItem;
+  final void Function(CartItem item, bool isTakeout) onSetCartItemTakeout;
 
   @override
   Widget build(BuildContext context) {
@@ -677,6 +690,7 @@ class _SelectedMenuList extends StatelessWidget {
                     formatter: formatter,
                     onIncrementCartItem: onIncrementCartItem,
                     onDecrementCartItem: onDecrementCartItem,
+                    onSetCartItemTakeout: onSetCartItemTakeout,
                   );
                 },
               ),
@@ -694,17 +708,23 @@ class _SelectedMenuListItem extends StatelessWidget {
     required this.formatter,
     required this.onIncrementCartItem,
     required this.onDecrementCartItem,
+    required this.onSetCartItemTakeout,
   });
 
   final CartItem item;
   final NumberFormat formatter;
   final ValueChanged<CartItem> onIncrementCartItem;
-  final ValueChanged<String> onDecrementCartItem;
+  final ValueChanged<CartItem> onDecrementCartItem;
+  final void Function(CartItem item, bool isTakeout) onSetCartItemTakeout;
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final itemKey = item.isTakeout
+        ? 'pending_cart_item_${item.menuItemId}_takeout'
+        : 'pending_cart_item_${item.menuItemId}';
     return Container(
-      key: ValueKey<String>('pending_cart_item_${item.menuItemId}'),
+      key: ValueKey<String>(itemKey),
       width: 168,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
@@ -736,6 +756,22 @@ class _SelectedMenuListItem extends StatelessWidget {
                     color: PosColors.accent,
                   ),
                 ),
+                InkWell(
+                  onTap: () => onSetCartItemTakeout(item, !item.isTakeout),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Text(
+                      item.isTakeout ? l10n.takeout : l10n.dineIn,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: item.isTakeout
+                            ? PosColors.warning
+                            : PosColors.textSecondary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -744,7 +780,7 @@ class _SelectedMenuListItem extends StatelessWidget {
               minWidth: PosDensity.touchTargetMin,
               minHeight: PosDensity.touchTargetMin,
             ),
-            onPressed: () => onDecrementCartItem(item.menuItemId),
+            onPressed: () => onDecrementCartItem(item),
             icon: const Icon(Icons.remove_circle_outline, size: 16),
             color: PosColors.textSecondary,
           ),
@@ -770,12 +806,14 @@ class _PendingOrderReview extends StatelessWidget {
     required this.formatter,
     required this.onIncrementCartItem,
     required this.onDecrementCartItem,
+    required this.onSetCartItemTakeout,
   });
 
   final List<CartItem> cart;
   final NumberFormat formatter;
   final ValueChanged<CartItem> onIncrementCartItem;
-  final ValueChanged<String> onDecrementCartItem;
+  final ValueChanged<CartItem> onDecrementCartItem;
+  final void Function(CartItem item, bool isTakeout) onSetCartItemTakeout;
 
   @override
   Widget build(BuildContext context) {
@@ -837,6 +875,7 @@ class _PendingOrderReview extends StatelessWidget {
               formatter: formatter,
               onIncrementCartItem: onIncrementCartItem,
               onDecrementCartItem: onDecrementCartItem,
+              onSetCartItemTakeout: onSetCartItemTakeout,
             ),
           ),
         ],
@@ -851,19 +890,24 @@ class _PendingOrderReviewLine extends StatelessWidget {
     required this.formatter,
     required this.onIncrementCartItem,
     required this.onDecrementCartItem,
+    required this.onSetCartItemTakeout,
   });
 
   final CartItem item;
   final NumberFormat formatter;
   final ValueChanged<CartItem> onIncrementCartItem;
-  final ValueChanged<String> onDecrementCartItem;
+  final ValueChanged<CartItem> onDecrementCartItem;
+  final void Function(CartItem item, bool isTakeout) onSetCartItemTakeout;
 
   @override
   Widget build(BuildContext context) {
     final subtotal = item.price * item.quantity;
+    final itemKey = item.isTakeout
+        ? 'pending_order_review_item_${item.menuItemId}_takeout'
+        : 'pending_order_review_item_${item.menuItemId}';
 
     return Container(
-      key: ValueKey<String>('pending_order_review_item_${item.menuItemId}'),
+      key: ValueKey<String>(itemKey),
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
@@ -895,6 +939,12 @@ class _PendingOrderReviewLine extends StatelessWidget {
                     color: PosColors.textSecondary,
                   ),
                 ),
+                const SizedBox(height: 5),
+                _CartTakeoutChoice(
+                  item: item,
+                  onChanged: (isTakeout) =>
+                      onSetCartItemTakeout(item, isTakeout),
+                ),
               ],
             ),
           ),
@@ -903,7 +953,7 @@ class _PendingOrderReviewLine extends StatelessWidget {
               minWidth: PosDensity.touchTargetMin,
               minHeight: PosDensity.touchTargetMin,
             ),
-            onPressed: () => onDecrementCartItem(item.menuItemId),
+            onPressed: () => onDecrementCartItem(item),
             icon: const Icon(Icons.remove_circle_outline, size: 18),
             color: PosColors.textSecondary,
           ),
@@ -942,6 +992,39 @@ class _PendingOrderReviewLine extends StatelessWidget {
   }
 }
 
+class _CartTakeoutChoice extends StatelessWidget {
+  const _CartTakeoutChoice({required this.item, required this.onChanged});
+
+  final CartItem item;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Wrap(
+      spacing: 6,
+      children: [
+        ChoiceChip(
+          key: ValueKey<String>('cart_dine_in_${item.lineKey}'),
+          label: Text(l10n.dineIn),
+          selected: !item.isTakeout,
+          onSelected: (_) => onChanged(false),
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        ChoiceChip(
+          key: ValueKey<String>('cart_takeout_${item.lineKey}'),
+          label: Text(l10n.takeout),
+          selected: item.isTakeout,
+          onSelected: (_) => onChanged(true),
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+      ],
+    );
+  }
+}
+
 class _CurrentOrderPanel extends ConsumerStatefulWidget {
   const _CurrentOrderPanel({
     required this.table,
@@ -950,6 +1033,7 @@ class _CurrentOrderPanel extends ConsumerStatefulWidget {
     required this.allowSubmitWithoutCart,
     required this.onIncrementCartItem,
     required this.onDecrementCartItem,
+    required this.onSetCartItemTakeout,
     required this.onCancel,
     required this.onCancelOrder,
     required this.onSendOrder,
@@ -965,6 +1049,7 @@ class _CurrentOrderPanel extends ConsumerStatefulWidget {
     this.onEditOrderItemQuantity,
     this.onTransferTable,
     this.onChangeGuestCount,
+    this.onRequestLeftoverPackaging,
   });
 
   final PosTable table;
@@ -972,7 +1057,8 @@ class _CurrentOrderPanel extends ConsumerStatefulWidget {
   final OrderState state;
   final bool allowSubmitWithoutCart;
   final ValueChanged<CartItem> onIncrementCartItem;
-  final ValueChanged<String> onDecrementCartItem;
+  final ValueChanged<CartItem> onDecrementCartItem;
+  final void Function(CartItem item, bool isTakeout) onSetCartItemTakeout;
   final VoidCallback onCancel;
   final Future<void> Function() onCancelOrder;
   final Future<void> Function() onSendOrder;
@@ -990,6 +1076,7 @@ class _CurrentOrderPanel extends ConsumerStatefulWidget {
   onEditOrderItemQuantity;
   final VoidCallback? onTransferTable;
   final Future<void> Function()? onChangeGuestCount;
+  final Future<void> Function()? onRequestLeftoverPackaging;
 
   @override
   ConsumerState<_CurrentOrderPanel> createState() => _CurrentOrderPanelState();
@@ -997,6 +1084,21 @@ class _CurrentOrderPanel extends ConsumerStatefulWidget {
 
 class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
   String? _selectedPaymentMethod;
+
+  Future<void> _confirmLeftoverPackagingRequest() async {
+    final l10n = context.l10n;
+    final confirmed = await ToastConfirmDialog.show(
+      context: context,
+      title: l10n.leftoverPackagingConfirmTitle,
+      description: l10n.leftoverPackagingConfirmMessage,
+      cancelLabel: l10n.cancel,
+      confirmLabel: l10n.leftoverPackagingRequest,
+      icon: Icons.takeout_dining_outlined,
+    );
+    if (confirmed == true && mounted) {
+      await widget.onRequestLeftoverPackaging?.call();
+    }
+  }
 
   String _cycleStatus(String status) {
     return switch (status) {
@@ -1188,6 +1290,10 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
             onViewCurrentTicket: _showCurrentTicketSheet,
             onTransferTable: widget.onTransferTable,
             onChangeGuestCount: widget.onChangeGuestCount,
+            onRequestLeftoverPackaging:
+                widget.onRequestLeftoverPackaging == null
+                ? null
+                : _confirmLeftoverPackagingRequest,
           );
         }
 
@@ -1300,6 +1406,26 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                 const SizedBox(height: 6),
                 _OrderCreateSuccessBanner(order: widget.state.activeOrder!),
               ],
+              if (widget.state.activeOrder != null &&
+                  widget.onRequestLeftoverPackaging != null) ...[
+                const SizedBox(height: 6),
+                if (widget.state.activeOrder!.leftoverPackagingStatus == null)
+                  OutlinedButton.icon(
+                    key: const Key('leftover_packaging_request_button'),
+                    onPressed: widget.state.isSubmitting
+                        ? null
+                        : _confirmLeftoverPackagingRequest,
+                    icon: const Icon(Icons.takeout_dining_outlined, size: 17),
+                    label: Text(l10n.leftoverPackagingRequest),
+                  )
+                else
+                  ToastStatusBadge(
+                    key: const Key('leftover_packaging_requested_status'),
+                    label: l10n.leftoverPackagingRequested,
+                    color: PosColors.warning,
+                    compact: true,
+                  ),
+              ],
               if (readyItemCount > 0) ...[
                 const SizedBox(height: 6),
                 _WaiterReadyHandoffNotice(readyItemCount: readyItemCount),
@@ -1314,6 +1440,7 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                         formatter: formatter,
                         onIncrementCartItem: widget.onIncrementCartItem,
                         onDecrementCartItem: widget.onDecrementCartItem,
+                        onSetCartItemTakeout: widget.onSetCartItemTakeout,
                       ),
                       const SizedBox(height: 14),
                     ] else if (widget.state.activeOrder == null) ...[
@@ -1462,6 +1589,14 @@ class _CurrentOrderPanelState extends ConsumerState<_CurrentOrderPanel> {
                                                         ),
                                                   ),
                                                 ),
+                                                if (item.isTakeout) ...[
+                                                  const SizedBox(width: 6),
+                                                  ToastStatusBadge(
+                                                    label: l10n.takeout,
+                                                    color: PosColors.warning,
+                                                    compact: true,
+                                                  ),
+                                                ],
                                                 if (canEditQty) ...[
                                                   const SizedBox(width: 4),
                                                   InkWell(
@@ -2158,6 +2293,7 @@ class _CompactCurrentOrderPanel extends StatelessWidget {
     required this.onViewCurrentTicket,
     required this.onTransferTable,
     required this.onChangeGuestCount,
+    required this.onRequestLeftoverPackaging,
   });
 
   final PosTable table;
@@ -2174,6 +2310,7 @@ class _CompactCurrentOrderPanel extends StatelessWidget {
   final Future<void> Function() onViewCurrentTicket;
   final VoidCallback? onTransferTable;
   final Future<void> Function()? onChangeGuestCount;
+  final Future<void> Function()? onRequestLeftoverPackaging;
 
   @override
   Widget build(BuildContext context) {
@@ -2250,6 +2387,25 @@ class _CompactCurrentOrderPanel extends StatelessWidget {
                 order: state.activeOrder!,
                 compact: true,
               ),
+            ],
+            if (state.activeOrder != null &&
+                onRequestLeftoverPackaging != null) ...[
+              const SizedBox(height: 6),
+              if (state.activeOrder!.leftoverPackagingStatus == null)
+                OutlinedButton.icon(
+                  key: const Key('leftover_packaging_request_button_compact'),
+                  onPressed: state.isSubmitting
+                      ? null
+                      : () => unawaited(onRequestLeftoverPackaging!()),
+                  icon: const Icon(Icons.takeout_dining_outlined, size: 16),
+                  label: Text(l10n.leftoverPackagingRequest),
+                )
+              else
+                ToastStatusBadge(
+                  label: l10n.leftoverPackagingRequested,
+                  color: PosColors.warning,
+                  compact: true,
+                ),
             ],
             if (readyItemCount > 0) ...[
               const SizedBox(height: 6),
