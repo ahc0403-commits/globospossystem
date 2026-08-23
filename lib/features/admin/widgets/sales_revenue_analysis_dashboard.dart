@@ -52,68 +52,20 @@ class SalesRevenueAnalysisDashboard extends StatelessWidget {
       key: const Key('sales_revenue_analysis_dashboard'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildContent(context, copy, currency),
-        const SizedBox(height: 12),
-        PosActionCard(
+        _SalesPeriodFilter(
           key: const Key('sales_revenue_analysis_filters'),
-          title: copy.periodTitle,
-          subtitle: copy.periodSubtitle,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _QuickRangeButton(
-                    key: const Key('sales_range_7_days'),
-                    label: copy.oneWeek,
-                    selected: selectedDays == 7,
-                    onPressed: () => onQuickRangeSelected(7),
-                  ),
-                  _QuickRangeButton(
-                    key: const Key('sales_range_14_days'),
-                    label: copy.twoWeeks,
-                    selected: selectedDays == 14,
-                    onPressed: () => onQuickRangeSelected(14),
-                  ),
-                  _QuickRangeButton(
-                    key: const Key('sales_range_30_days'),
-                    label: copy.oneMonth,
-                    selected: selectedDays == 30,
-                    onPressed: () => onQuickRangeSelected(30),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  OutlinedButton.icon(
-                    key: const Key('sales_analysis_start_date'),
-                    onPressed: onStartDatePressed,
-                    icon: const Icon(Icons.event_outlined, size: 17),
-                    label: Text('${copy.from} ${dateFormat.format(startDate)}'),
-                  ),
-                  OutlinedButton.icon(
-                    key: const Key('sales_analysis_end_date'),
-                    onPressed: onEndDatePressed,
-                    icon: const Icon(Icons.event_available_outlined, size: 17),
-                    label: Text('${copy.to} ${dateFormat.format(endDate)}'),
-                  ),
-                  FilledButton.icon(
-                    key: const Key('sales_analysis_apply_range'),
-                    onPressed: onApplyCustomRange,
-                    icon: const Icon(Icons.search_rounded, size: 17),
-                    label: Text(copy.apply),
-                  ),
-                ],
-              ),
-            ],
-          ),
+          copy: copy,
+          dateFormat: dateFormat,
+          startDate: startDate,
+          endDate: endDate,
+          selectedDays: selectedDays,
+          onQuickRangeSelected: onQuickRangeSelected,
+          onStartDatePressed: onStartDatePressed,
+          onEndDatePressed: onEndDatePressed,
+          onApplyCustomRange: onApplyCustomRange,
         ),
+        const SizedBox(height: 12),
+        _buildContent(context, copy, currency),
       ],
     );
   }
@@ -185,13 +137,25 @@ class SalesRevenueAnalysisDashboard extends StatelessWidget {
         );
 
         if (constraints.maxWidth < 900) {
-          final dailyHeight = constraints.maxWidth < 520 ? 650.0 : 540.0;
+          final textScale = MediaQuery.textScalerOf(context).scale(1);
+          final dailyHeight = constraints.maxWidth < 520
+              ? textScale > 1.5
+                    ? 820.0
+                    : 600.0
+              : 520.0;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(height: dailyHeight, child: dailyPanel),
               const SizedBox(height: 12),
-              SizedBox(height: 400, child: hourlyPanel),
+              SizedBox(
+                height: constraints.maxWidth < 520
+                    ? textScale > 1.5
+                          ? 420
+                          : 340
+                    : 380,
+                child: hourlyPanel,
+              ),
             ],
           );
         }
@@ -207,6 +171,141 @@ class SalesRevenueAnalysisDashboard extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _SalesPeriodFilter extends StatelessWidget {
+  const _SalesPeriodFilter({
+    super.key,
+    required this.copy,
+    required this.dateFormat,
+    required this.startDate,
+    required this.endDate,
+    required this.selectedDays,
+    required this.onQuickRangeSelected,
+    required this.onStartDatePressed,
+    required this.onEndDatePressed,
+    required this.onApplyCustomRange,
+  });
+
+  final _SalesAnalysisCopy copy;
+  final DateFormat dateFormat;
+  final DateTime startDate;
+  final DateTime endDate;
+  final int selectedDays;
+  final ValueChanged<int> onQuickRangeSelected;
+  final VoidCallback onStartDatePressed;
+  final VoidCallback onEndDatePressed;
+  final VoidCallback onApplyCustomRange;
+
+  @override
+  Widget build(BuildContext context) {
+    final heading = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          copy.periodTitle,
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          copy.periodSubtitle,
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: PosColors.textSecondary),
+        ),
+      ],
+    );
+    final quickRanges = Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        _QuickRangeButton(
+          key: const Key('sales_range_7_days'),
+          label: copy.oneWeek,
+          selected: selectedDays == 7,
+          onPressed: () => onQuickRangeSelected(7),
+        ),
+        _QuickRangeButton(
+          key: const Key('sales_range_14_days'),
+          label: copy.twoWeeks,
+          selected: selectedDays == 14,
+          onPressed: () => onQuickRangeSelected(14),
+        ),
+        _QuickRangeButton(
+          key: const Key('sales_range_30_days'),
+          label: copy.oneMonth,
+          selected: selectedDays == 30,
+          onPressed: () => onQuickRangeSelected(30),
+        ),
+      ],
+    );
+    final customRange = Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        OutlinedButton.icon(
+          key: const Key('sales_analysis_start_date'),
+          onPressed: onStartDatePressed,
+          icon: const Icon(Icons.event_outlined, size: 17),
+          label: Text('${copy.from} ${dateFormat.format(startDate)}'),
+        ),
+        OutlinedButton.icon(
+          key: const Key('sales_analysis_end_date'),
+          onPressed: onEndDatePressed,
+          icon: const Icon(Icons.event_available_outlined, size: 17),
+          label: Text('${copy.to} ${dateFormat.format(endDate)}'),
+        ),
+        FilledButton.icon(
+          key: const Key('sales_analysis_apply_range'),
+          onPressed: onApplyCustomRange,
+          icon: const Icon(Icons.search_rounded, size: 17),
+          label: Text(copy.apply),
+        ),
+      ],
+    );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: PosColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: PosColors.border),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final stacked =
+              constraints.maxWidth < 920 ||
+              MediaQuery.textScalerOf(context).scale(1) > 1.35;
+          if (stacked) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                heading,
+                const SizedBox(height: 8),
+                quickRanges,
+                const SizedBox(height: 6),
+                customRange,
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SizedBox(width: 250, child: heading),
+              const SizedBox(width: 14),
+              quickRanges,
+              const SizedBox(width: 12),
+              Expanded(child: customRange),
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -285,12 +384,16 @@ class _RevenueTrendBadge extends StatelessWidget {
         children: [
           Icon(icon, size: 16, color: tone),
           const SizedBox(width: 5),
-          Text(
-            '$label ${currency.format(delta.abs())} VND',
-            style: AppFonts.system(
-              color: tone,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
+          Flexible(
+            child: Text(
+              '$label ${currency.format(delta.abs())} VND',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppFonts.system(
+                color: tone,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
@@ -496,13 +599,16 @@ class _DailyRevenuePanelContent extends StatelessWidget {
           child: _DailyRevenueLineChart(rows: rows, currency: currency),
         );
         if (constraints.maxWidth < 520) {
+          final metricHeight = MediaQuery.textScalerOf(context).scale(1) > 1.5
+              ? 180.0
+              : 150.0;
           return Column(
             children: [
               Expanded(child: revenueChart),
               const SizedBox(height: 8),
-              SizedBox(height: 150, child: teamChart),
+              SizedBox(height: metricHeight, child: teamChart),
               const SizedBox(height: 8),
-              SizedBox(height: 150, child: averageChart),
+              SizedBox(height: metricHeight, child: averageChart),
             ],
           );
         }

@@ -109,6 +109,7 @@ class _MenuSalesAnalyticsPanelState
     return PosDataPanel(
       title: context.l10n.menuSalesAnalyticsTitle,
       subtitle: context.l10n.menuSalesAnalyticsSubtitle,
+      padding: const EdgeInsets.all(12),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final content = Column(
@@ -174,6 +175,16 @@ class _MenuSalesAnalyticsPanelState
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 950;
         final phone = constraints.maxWidth < 600;
+        final textScale = MediaQuery.textScalerOf(context).scale(1);
+        final metricColumns = textScale > 1.5
+            ? 1
+            : phone
+            ? 2
+            : constraints.maxWidth < 900
+            ? 3
+            : ((constraints.maxWidth + 8) / 190).floor().clamp(4, 7);
+        final metricWidth =
+            (constraints.maxWidth - (metricColumns - 1) * 8) / metricColumns;
         final ranking = _MenuSalesRanking(
           analytics: analytics,
           currency: widget.currency,
@@ -218,7 +229,7 @@ class _MenuSalesAnalyticsPanelState
                       '${context.l10n.menuSalesShare} '
                       '${topMenu.quantityShare.toStringAsFixed(1)}%',
                   tone: PosColors.accent,
-                  minWidth: phone ? constraints.maxWidth : 250,
+                  width: metricWidth,
                 ),
                 _MenuSalesMetricCard(
                   key: const Key('menu_sales_total_revenue'),
@@ -229,25 +240,21 @@ class _MenuSalesAnalyticsPanelState
                       '${widget.currency.format(summary.menuSalesAmount)} VND',
                   detail: context.l10n.menuSalesRevenue,
                   tone: PosColors.success,
-                  minWidth: phone ? constraints.maxWidth : 230,
+                  width: metricWidth,
                 ),
                 _MenuSalesMetricCard(
                   label: context.l10n.menuSalesTotalQuantity,
                   value: '${summary.soldQuantity}',
                   detail: context.l10n.menuSalesPosOnly,
                   tone: PosColors.info,
-                  minWidth: phone
-                      ? math.max(150, (constraints.maxWidth - 8) / 2)
-                      : 180,
+                  width: metricWidth,
                 ),
                 _MenuSalesMetricCard(
                   label: context.l10n.menuSalesSoldMenuCount,
                   value: '${summary.soldMenuCount}',
                   detail: context.l10n.menuSalesPosOnly,
                   tone: PosColors.info,
-                  minWidth: phone
-                      ? math.max(150, (constraints.maxWidth - 8) / 2)
-                      : 180,
+                  width: metricWidth,
                 ),
                 if (_scope == MenuSalesScope.all)
                   _MenuSalesMetricCard(
@@ -259,9 +266,7 @@ class _MenuSalesAnalyticsPanelState
                         '${context.l10n.menuSalesUnits(summary.comboSoldQuantity)} · '
                         '${context.l10n.menuSalesComboMenuCount(summary.comboSoldMenuCount)}',
                     tone: PosColors.warning,
-                    minWidth: phone
-                        ? math.max(150, (constraints.maxWidth - 8) / 2)
-                        : 180,
+                    width: metricWidth,
                   ),
                 if (_scope == MenuSalesScope.all)
                   _MenuSalesMetricCard(
@@ -273,7 +278,7 @@ class _MenuSalesAnalyticsPanelState
                         : '${context.l10n.menuSalesUnits(topCombo.soldQuantity)} · '
                               '${widget.currency.format(topCombo.menuSalesAmount)} VND',
                     tone: PosColors.warning,
-                    minWidth: phone ? constraints.maxWidth : 250,
+                    width: metricWidth,
                   ),
                 _MenuSalesMetricCard(
                   label: context.l10n.menuSalesPosOrders,
@@ -281,9 +286,7 @@ class _MenuSalesAnalyticsPanelState
                   detail:
                       '${widget.currency.format(summary.menuSalesAmount)} VND',
                   tone: PosColors.textPrimary,
-                  minWidth: phone
-                      ? math.max(150, (constraints.maxWidth - 8) / 2)
-                      : 210,
+                  width: metricWidth,
                 ),
               ],
             ),
@@ -394,7 +397,7 @@ class _MenuSalesPeriodFilter extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final stacked =
-              constraints.maxWidth < 560 ||
+              constraints.maxWidth < 330 ||
               MediaQuery.textScalerOf(context).scale(1) > 1.5;
           if (stacked) {
             return Column(
@@ -551,24 +554,22 @@ class _MenuSalesMetricCard extends StatelessWidget {
     required this.value,
     required this.detail,
     required this.tone,
-    required this.minWidth,
+    required this.width,
   });
 
   final String label;
   final String value;
   final String detail;
   final Color tone;
-  final double minWidth;
+  final double width;
 
   @override
   Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: BoxConstraints(
-        minWidth: minWidth,
-        maxWidth: math.max(330, minWidth),
-      ),
+    return SizedBox(
+      width: width,
       child: Container(
-        padding: const EdgeInsets.all(12),
+        constraints: const BoxConstraints(minHeight: 92),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: PosColors.mutedSurface,
           borderRadius: BorderRadius.circular(14),
@@ -585,7 +586,7 @@ class _MenuSalesMetricCard extends StatelessWidget {
                 context,
               ).textTheme.labelMedium?.copyWith(color: PosColors.textSecondary),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 3),
             Text(
               value,
               maxLines: 2,
@@ -595,10 +596,10 @@ class _MenuSalesMetricCard extends StatelessWidget {
                 fontWeight: FontWeight.w800,
               ),
             ),
-            const SizedBox(height: 3),
+            const SizedBox(height: 2),
             Text(
               detail,
-              maxLines: 2,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(
                 context,

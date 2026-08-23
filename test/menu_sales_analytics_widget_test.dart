@@ -161,6 +161,23 @@ void main() {
       expect(find.byKey(const Key('menu_sales_hourly')), findsOneWidget);
       expect(find.byKey(const Key('menu_sales_scope_banner')), findsOneWidget);
       expect(find.text('쌀국수 스페셜'), findsWidgets);
+      final period = tester.getRect(
+        find.byKey(const Key('menu_sales_period_filter')),
+      );
+      final ranking = tester.getRect(
+        find.byKey(const Key('menu_sales_ranking')),
+      );
+      expect(period.bottom, lessThan(ranking.top));
+      if (size.width == 390) {
+        final topMenu = tester.getRect(
+          find.byKey(const Key('menu_sales_top_menu')),
+        );
+        final totalRevenue = tester.getRect(
+          find.byKey(const Key('menu_sales_total_revenue')),
+        );
+        expect((topMenu.top - totalRevenue.top).abs(), lessThan(1));
+        expect(totalRevenue.left, greaterThan(topMenu.left));
+      }
       expect(tester.takeException(), isNull);
     });
   }

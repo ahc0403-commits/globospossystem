@@ -35,11 +35,20 @@ ReportSummary _summary() {
   );
 }
 
-Widget _app({required ValueChanged<int> onQuickRangeSelected}) {
+Widget _app({
+  required ValueChanged<int> onQuickRangeSelected,
+  TextScaler? textScaler,
+}) {
   return MaterialApp(
     locale: const Locale('ko'),
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     supportedLocales: AppLocalizations.supportedLocales,
+    builder: textScaler == null
+        ? null
+        : (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+            child: child!,
+          ),
     home: Scaffold(
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(12),
@@ -95,6 +104,19 @@ void main() {
         find.byKey(const Key('sales_revenue_analysis_filters')),
         findsOneWidget,
       );
+      final filter = tester.getRect(
+        find.byKey(const Key('sales_revenue_analysis_filters')),
+      );
+      final dailyPanel = tester.getRect(
+        find.byKey(const Key('sales_daily_line_panel')),
+      );
+      expect(filter.bottom, lessThan(dailyPanel.top));
+      if (size.width < 900) {
+        final hourlyPanel = tester.getRect(
+          find.byKey(const Key('sales_hourly_bar_panel')),
+        );
+        expect(hourlyPanel.top, greaterThan(dailyPanel.bottom));
+      }
       expect(tester.takeException(), isNull);
     });
   }
@@ -120,6 +142,27 @@ void main() {
     expect(find.text('1주'), findsOneWidget);
     expect(find.text('2주'), findsOneWidget);
     expect(find.text('한 달'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('phone period and charts remain readable at 200 percent text', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      _app(onQuickRangeSelected: (_) {}, textScaler: TextScaler.linear(2)),
+    );
+    await tester.pumpAndSettle();
+
+    final filter = tester.getRect(
+      find.byKey(const Key('sales_revenue_analysis_filters')),
+    );
+    final dailyPanel = tester.getRect(
+      find.byKey(const Key('sales_daily_line_panel')),
+    );
+    expect(filter.bottom, lessThan(dailyPanel.top));
+    expect(find.byKey(const Key('sales_hourly_bar_panel')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
