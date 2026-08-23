@@ -5,7 +5,7 @@ import 'package:globos_pos_system/features/admin/widgets/sales_revenue_analysis_
 import 'package:globos_pos_system/features/report/report_provider.dart';
 import 'package:globos_pos_system/l10n/app_localizations.dart';
 
-ReportSummary _summary() {
+ReportSummary _summary({List<DailyRevenue>? dailyBreakdown}) {
   return ReportSummary(
     dineInRevenue: 9200000,
     deliveryRevenue: 1800000,
@@ -15,16 +15,18 @@ ReportSummary _summary() {
     completedOrders: 82,
     paidOrders: 82,
     openOrders: 0,
-    dailyBreakdown: [
-      for (var day = 8; day <= 14; day++)
-        DailyRevenue(
-          date: DateTime(2026, 8, day),
-          dineIn: day * 100000,
-          delivery: day * 20000,
-          total: day * 120000,
-          teamCount: day - 1,
-        ),
-    ],
+    dailyBreakdown:
+        dailyBreakdown ??
+        [
+          for (var day = 8; day <= 14; day++)
+            DailyRevenue(
+              date: DateTime(2026, 8, day),
+              dineIn: day * 100000,
+              delivery: day * 20000,
+              total: day * 120000,
+              teamCount: day - 1,
+            ),
+        ],
     hourlyBreakdown: [
       for (var hour = 8; hour <= 22; hour++)
         HourlyRevenue(
@@ -38,6 +40,9 @@ ReportSummary _summary() {
 Widget _app({
   required ValueChanged<int> onQuickRangeSelected,
   TextScaler? textScaler,
+  ReportSummary? summary,
+  DateTime? startDate,
+  DateTime? endDate,
 }) {
   return MaterialApp(
     locale: const Locale('ko'),
@@ -53,9 +58,9 @@ Widget _app({
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(12),
         child: SalesRevenueAnalysisDashboard(
-          summary: _summary(),
-          startDate: DateTime(2026, 8, 8),
-          endDate: DateTime(2026, 8, 14),
+          summary: summary ?? _summary(),
+          startDate: startDate ?? DateTime(2026, 8, 8),
+          endDate: endDate ?? DateTime(2026, 8, 14),
           isLoading: false,
           error: null,
           onQuickRangeSelected: onQuickRangeSelected,
@@ -100,6 +105,20 @@ void main() {
         orderedEquals([for (var hour = 11; hour <= 22; hour++) hour]),
       );
       expect(find.byKey(const Key('sales_daily_trend_badge')), findsOneWidget);
+      expect(
+        find.byKey(const Key('sales_revenue_trend_legend')),
+        findsOneWidget,
+      );
+      expect(find.text('3일 이동평균'), findsOneWidget);
+      final revenueChart = tester.widget<LineChart>(
+        find.descendant(
+          of: find.byKey(const Key('sales_daily_line_chart')),
+          matching: find.byType(LineChart),
+        ),
+      );
+      expect(revenueChart.data.lineBarsData, hasLength(2));
+      expect(revenueChart.data.lineBarsData.last.dashArray, [8, 5]);
+      expect(revenueChart.data.lineBarsData.last.spots, hasLength(5));
       expect(
         find.byKey(const Key('sales_revenue_analysis_filters')),
         findsOneWidget,
@@ -163,6 +182,84 @@ void main() {
     );
     expect(filter.bottom, lessThan(dailyPanel.top));
     expect(find.byKey(const Key('sales_hourly_bar_panel')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('two-week range uses seven-day moving average', (tester) async {
+    final yesterday = DateUtils.dateOnly(
+      DateTime.now().subtract(const Duration(days: 1)),
+    );
+    final first = yesterday.subtract(const Duration(days: 13));
+    final rows = [
+      for (var index = 0; index < 14; index++)
+        DailyRevenue(
+          date: first.add(Duration(days: index)),
+          dineIn: (index + 1) * 100000,
+          delivery: 0,
+          total: (index + 1) * 100000,
+          teamCount: index + 1,
+        ),
+    ];
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      _app(
+        onQuickRangeSelected: (_) {},
+        summary: _summary(dailyBreakdown: rows),
+        startDate: first,
+        endDate: yesterday,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final chart = tester.widget<LineChart>(
+      find.descendant(
+        of: find.byKey(const Key('sales_daily_line_chart')),
+        matching: find.byType(LineChart),
+      ),
+    );
+    expect(find.text('7일 이동평균'), findsOneWidget);
+    expect(chart.data.lineBarsData.last.spots, hasLength(8));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('zero revenue for today is excluded from moving average', (
+    tester,
+  ) async {
+    final today = DateUtils.dateOnly(DateTime.now());
+    final first = today.subtract(const Duration(days: 6));
+    final rows = [
+      for (var index = 0; index < 7; index++)
+        DailyRevenue(
+          date: first.add(Duration(days: index)),
+          dineIn: index == 6 ? 0 : (index + 1) * 100000,
+          delivery: 0,
+          total: index == 6 ? 0 : (index + 1) * 100000,
+          teamCount: index == 6 ? 0 : index + 1,
+        ),
+    ];
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      _app(
+        onQuickRangeSelected: (_) {},
+        summary: _summary(dailyBreakdown: rows),
+        startDate: first,
+        endDate: today,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final chart = tester.widget<LineChart>(
+      find.descendant(
+        of: find.byKey(const Key('sales_daily_line_chart')),
+        matching: find.byType(LineChart),
+      ),
+    );
+    final trend = chart.data.lineBarsData.last;
+    expect(trend.spots, hasLength(4));
+    expect(trend.spots.last.x, 5);
+    expect(trend.spots.last.y, closeTo(500000, 0.001));
     expect(tester.takeException(), isNull);
   });
 
