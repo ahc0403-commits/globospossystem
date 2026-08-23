@@ -147,7 +147,7 @@ class _PaperlessOperationsDashboardState
           onSelectDateRange: _selectDateRange,
           onRefresh: _load,
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         if (_loading)
           const _DashboardSurface(
             child: SizedBox(
@@ -256,7 +256,7 @@ class _PeriodBar extends StatelessWidget {
     );
     return Container(
       key: const Key('paperless_operations_period'),
-      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+      padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
       decoration: BoxDecoration(
         color: PosColors.surface,
         borderRadius: BorderRadius.circular(14),
@@ -302,15 +302,15 @@ class _PaperlessDashboardBody extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _PerformanceSummary(report: report, copy: copy),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         _MenuRankingsSection(report: report, copy: copy),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         _InsightCallout(report: report, copy: copy),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         _CategoryTimingSection(report: report, copy: copy),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         _MenuTimingSection(report: report, copy: copy),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         _OperationalFlow(report: report, copy: copy),
       ],
     );
@@ -333,6 +333,7 @@ class _PerformanceSummary extends StatelessWidget {
               .clamp(0, 100);
     final cards = [
       _PerformanceCard(
+        key: const Key('paperless_summary_service_time'),
         icon: Icons.timer_outlined,
         label: copy.averageServiceTime,
         value: copy.duration(report.averageMenuOperationSeconds),
@@ -343,6 +344,7 @@ class _PerformanceSummary extends StatelessWidget {
         mutedColor: PosColors.successMuted,
       ),
       _PerformanceCard(
+        key: const Key('paperless_summary_dining_time'),
         icon: Icons.restaurant_outlined,
         label: copy.diningAverage,
         value: copy.duration(
@@ -355,6 +357,7 @@ class _PerformanceSummary extends StatelessWidget {
         mutedColor: PosColors.infoMuted,
       ),
       _PerformanceCard(
+        key: const Key('paperless_summary_bottleneck'),
         icon: Icons.warning_amber_rounded,
         label: copy.slowestStage,
         value: copy.station(report.bottleneckStation),
@@ -366,6 +369,7 @@ class _PerformanceSummary extends StatelessWidget {
         mutedColor: PosColors.warningMuted,
       ),
       _PerformanceCard(
+        key: const Key('paperless_summary_samples'),
         icon: Icons.analytics_outlined,
         label: copy.analysisSamples,
         value: copy.count(report.completedMenuSampleCount),
@@ -380,14 +384,19 @@ class _PerformanceSummary extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
-          final cardWidth = width >= 960
-              ? (width - 36) / 4
-              : width >= 560
-              ? (width - 12) / 2
-              : width;
+          final textScale = MediaQuery.textScalerOf(context).scale(1);
+          final columns = width >= 960 && textScale <= 1.35
+              ? 4
+              : width >= 560 && textScale <= 1.5
+              ? 2
+              : width >= 320 && textScale <= 1.25
+              ? 2
+              : 1;
+          const spacing = 8.0;
+          final cardWidth = (width - (columns - 1) * spacing) / columns;
           return Wrap(
-            spacing: 12,
-            runSpacing: 12,
+            spacing: spacing,
+            runSpacing: spacing,
             children: [
               for (final card in cards) SizedBox(width: cardWidth, child: card),
             ],
@@ -400,6 +409,7 @@ class _PerformanceSummary extends StatelessWidget {
 
 class _PerformanceCard extends StatelessWidget {
   const _PerformanceCard({
+    super.key,
     required this.icon,
     required this.label,
     required this.value,
@@ -418,8 +428,8 @@ class _PerformanceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minHeight: 126),
-      padding: const EdgeInsets.all(14),
+      constraints: const BoxConstraints(minHeight: 104),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: PosColors.canvasAlt,
         borderRadius: BorderRadius.circular(13),
@@ -429,15 +439,15 @@ class _PerformanceCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 42,
-            height: 42,
+            width: 34,
+            height: 34,
             decoration: BoxDecoration(
               color: mutedColor,
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: color, size: 23),
+            child: Icon(icon, color: color, size: 19),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -451,7 +461,7 @@ class _PerformanceCard extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 5),
+                const SizedBox(height: 3),
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
@@ -463,10 +473,10 @@ class _PerformanceCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 7),
+                const SizedBox(height: 4),
                 Text(
                   helper,
-                  maxLines: 3,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: PosColors.textSecondary,
@@ -778,7 +788,7 @@ class _DurationBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fraction = maxSeconds <= 0
+    final fraction = maxSeconds <= 0 || seconds <= 0
         ? 0.0
         : (seconds / maxSeconds).clamp(0.06, 1.0).toDouble();
     return ClipRRect(
@@ -872,7 +882,13 @@ class _CategoryTimingSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final metrics = report.categoryOperationTimes;
+    final metrics = report.categoryOperationTimes.toList(growable: false)
+      ..sort((left, right) {
+        final duration = right.operationAverageSeconds.compareTo(
+          left.operationAverageSeconds,
+        );
+        return duration != 0 ? duration : left.nameKo.compareTo(right.nameKo);
+      });
     final benchmarkSeconds = report.averageMenuOperationSeconds ?? 0;
     final maxSeconds = metrics.fold<int>(
       benchmarkSeconds,
@@ -904,13 +920,34 @@ class _CategoryTimingSection extends StatelessWidget {
               ),
             )
           else
-            for (final metric in metrics)
-              _CategoryTimingRow(
-                metric: metric,
-                maxSeconds: maxSeconds,
-                benchmarkSeconds: benchmarkSeconds,
-                copy: copy,
-              ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final useTwoColumns =
+                    constraints.maxWidth >= 900 &&
+                    MediaQuery.textScalerOf(context).scale(1) <= 1.4;
+                const spacing = 12.0;
+                final itemWidth = useTwoColumns
+                    ? (constraints.maxWidth - spacing) / 2
+                    : constraints.maxWidth;
+                return Wrap(
+                  spacing: spacing,
+                  runSpacing: spacing,
+                  children: [
+                    for (var index = 0; index < metrics.length; index++)
+                      SizedBox(
+                        width: itemWidth,
+                        child: _CategoryTimingRow(
+                          rank: index + 1,
+                          metric: metrics[index],
+                          maxSeconds: maxSeconds,
+                          benchmarkSeconds: benchmarkSeconds,
+                          copy: copy,
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
         ],
       ),
     );
@@ -919,12 +956,14 @@ class _CategoryTimingSection extends StatelessWidget {
 
 class _CategoryTimingRow extends StatelessWidget {
   const _CategoryTimingRow({
+    required this.rank,
     required this.metric,
     required this.maxSeconds,
     required this.benchmarkSeconds,
     required this.copy,
   });
 
+  final int rank;
   final _CategoryOperationMetric metric;
   final int maxSeconds;
   final int benchmarkSeconds;
@@ -938,7 +977,7 @@ class _CategoryTimingRow extends StatelessWidget {
             metric.operationAverageSeconds > benchmarkSeconds
         ? PosColors.warning
         : PosColors.success;
-    final fraction = maxSeconds <= 0
+    final fraction = maxSeconds <= 0 || metric.operationAverageSeconds <= 0
         ? 0.0
         : (metric.operationAverageSeconds / maxSeconds)
               .clamp(0.04, 1.0)
@@ -946,8 +985,14 @@ class _CategoryTimingRow extends StatelessWidget {
     final benchmarkFraction = maxSeconds <= 0
         ? 0.0
         : (benchmarkSeconds / maxSeconds).clamp(0.0, 1.0).toDouble();
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+    return Container(
+      key: Key('paperless_category_timing_${metric.categoryKey}'),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: PosColors.panelMuted,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: PosColors.border),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -956,13 +1001,40 @@ class _CategoryTimingRow extends StatelessWidget {
               final compact =
                   constraints.maxWidth < 440 ||
                   MediaQuery.textScalerOf(context).scale(1) > 1.4;
-              final name = Text(
-                metric.name(locale),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800),
+              final name = Row(
+                children: [
+                  Container(
+                    constraints: const BoxConstraints(minWidth: 30),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: PosColors.surface,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: PosColors.border),
+                    ),
+                    child: Text(
+                      '#$rank',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: PosColors.textSecondary,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      metric.name(locale),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
               );
               final details = Wrap(
                 spacing: 10,
@@ -1008,11 +1080,11 @@ class _CategoryTimingRow extends StatelessWidget {
               return ClipRRect(
                 borderRadius: BorderRadius.circular(999),
                 child: SizedBox(
-                  height: 12,
+                  height: 10,
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      Container(color: PosColors.panelMuted),
+                      Container(color: PosColors.surface),
                       Align(
                         alignment: Alignment.centerLeft,
                         child: FractionallySizedBox(
@@ -1208,6 +1280,12 @@ class _MenuTimingSection extends StatelessWidget {
         );
         return duration != 0 ? duration : left.nameKo.compareTo(right.nameKo);
       });
+    final maxSeconds = metrics.fold<int>(
+      0,
+      (current, metric) => metric.operationAverageSeconds > current
+          ? metric.operationAverageSeconds
+          : current,
+    );
     return _DashboardSurface(
       key: const Key('paperless_menu_operation_times'),
       child: Column(
@@ -1243,13 +1321,39 @@ class _MenuTimingSection extends StatelessWidget {
               ),
             )
           else
-            for (var index = 0; index < metrics.length; index++) ...[
-              if (index > 0) const Divider(height: 1),
-              _MenuTimingRow(menu: metrics[index], copy: copy),
-            ],
-          const Divider(height: 1),
-          Padding(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final useTwoColumns =
+                    constraints.maxWidth >= 1000 &&
+                    MediaQuery.textScalerOf(context).scale(1) <= 1.35;
+                const spacing = 12.0;
+                final itemWidth = useTwoColumns
+                    ? (constraints.maxWidth - spacing) / 2
+                    : constraints.maxWidth;
+                return Wrap(
+                  spacing: spacing,
+                  runSpacing: spacing,
+                  children: [
+                    for (var index = 0; index < metrics.length; index++)
+                      SizedBox(
+                        width: itemWidth,
+                        child: _MenuTimingRow(
+                          rank: index + 1,
+                          menu: metrics[index],
+                          maxSeconds: maxSeconds,
+                          copy: copy,
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          Container(
+            margin: const EdgeInsets.only(top: 14),
             padding: const EdgeInsets.only(top: 12),
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: PosColors.border)),
+            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1304,16 +1408,29 @@ class _StageLegend extends StatelessWidget {
 }
 
 class _MenuTimingRow extends StatelessWidget {
-  const _MenuTimingRow({required this.menu, required this.copy});
+  const _MenuTimingRow({
+    required this.rank,
+    required this.menu,
+    required this.maxSeconds,
+    required this.copy,
+  });
 
+  final int rank;
   final _MenuOperationMetric menu;
+  final int maxSeconds;
   final _PaperlessCopy copy;
 
   @override
   Widget build(BuildContext context) {
     final locale = Localizations.localeOf(context).languageCode;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 14),
+    return Container(
+      key: Key('paperless_menu_timing_${menu.menuKey}'),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: PosColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: PosColors.border),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1322,23 +1439,48 @@ class _MenuTimingRow extends StatelessWidget {
               final compact =
                   constraints.maxWidth < 480 ||
                   MediaQuery.textScalerOf(context).scale(1) > 1.4;
-              final name = Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              final name = Row(
                 children: [
-                  Text(
-                    menu.name(locale),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
+                  Container(
+                    constraints: const BoxConstraints(minWidth: 30),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: PosColors.surface,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: PosColors.border),
+                    ),
+                    child: Text(
+                      '#$rank',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: PosColors.textSecondary,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
-                  Text(
-                    menu.categoryName(locale),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: PosColors.textSecondary,
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          menu.name(locale),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                        Text(
+                          menu.categoryName(locale),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: PosColors.textSecondary),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -1379,7 +1521,7 @@ class _MenuTimingRow extends StatelessWidget {
             },
           ),
           const SizedBox(height: 9),
-          _StageDistributionBar(menu: menu),
+          _StageDistributionBar(menu: menu, maxSeconds: maxSeconds),
           const SizedBox(height: 8),
           Wrap(
             spacing: 14,
@@ -1409,9 +1551,10 @@ class _MenuTimingRow extends StatelessWidget {
 }
 
 class _StageDistributionBar extends StatelessWidget {
-  const _StageDistributionBar({required this.menu});
+  const _StageDistributionBar({required this.menu, required this.maxSeconds});
 
   final _MenuOperationMetric menu;
+  final int maxSeconds;
 
   @override
   Widget build(BuildContext context) {
@@ -1423,22 +1566,36 @@ class _StageDistributionBar extends StatelessWidget {
       if ((menu.floorAverageSeconds ?? 0) > 0)
         (color: PosColors.success, seconds: menu.floorAverageSeconds!),
     ];
+    final totalFraction = maxSeconds <= 0 || menu.operationAverageSeconds <= 0
+        ? 0.0
+        : (menu.operationAverageSeconds / maxSeconds)
+              .clamp(0.02, 1.0)
+              .toDouble();
     return ClipRRect(
+      key: Key('paperless_menu_bar_${menu.menuKey}'),
       borderRadius: BorderRadius.circular(999),
       child: Container(
         height: 14,
         color: PosColors.panelMuted,
-        child: segments.isEmpty
-            ? const SizedBox.expand()
-            : Row(
-                children: [
-                  for (final segment in segments)
-                    Expanded(
-                      flex: segment.seconds,
-                      child: ColoredBox(color: segment.color),
-                    ),
-                ],
-              ),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: FractionallySizedBox(
+            key: Key('paperless_menu_bar_fill_${menu.menuKey}'),
+            widthFactor: totalFraction,
+            heightFactor: 1,
+            child: segments.isEmpty
+                ? const ColoredBox(color: PosColors.warning)
+                : Row(
+                    children: [
+                      for (final segment in segments)
+                        Expanded(
+                          flex: segment.seconds,
+                          child: ColoredBox(color: segment.color),
+                        ),
+                    ],
+                  ),
+          ),
+        ),
       ),
     );
   }
@@ -1467,11 +1624,13 @@ class _MenuStageValue extends StatelessWidget {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 5),
-        Text(
-          '$label ${copy.duration(seconds)}',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: PosColors.textSecondary,
-            fontWeight: FontWeight.w700,
+        Flexible(
+          child: Text(
+            '$label ${copy.duration(seconds)}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: PosColors.textSecondary,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ],
@@ -1517,7 +1676,7 @@ class _DashboardSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: PosColors.surface,
         borderRadius: BorderRadius.circular(16),
@@ -1961,9 +2120,9 @@ class _PaperlessCopy {
     'Average service time by menu',
   );
   String get menuTimesHelper => pick(
-    '느린 순 · 주방, 트레이, 층 서빙 구간별 평균',
-    'Chậm trước · TB từng chặng bếp, khay và tầng',
-    'Slowest first · kitchen, tray, and floor stage averages',
+    '느린 순 · 막대 길이는 전체 제공시간, 색상은 구간별 평균',
+    'Chậm trước · độ dài là tổng thời gian, màu là TB từng chặng',
+    'Slowest first · bar length is total time, colors are stage averages',
   );
   String get noCompletedMenus => pick(
     '제공 완료된 메뉴 표본이 없습니다.',

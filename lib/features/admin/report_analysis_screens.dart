@@ -11,6 +11,9 @@ import '../report/report_provider.dart';
 import 'widgets/paperless_operations_dashboard.dart';
 import 'widgets/sales_revenue_analysis_dashboard.dart';
 
+EdgeInsets _analysisPagePadding(BuildContext context) =>
+    EdgeInsets.all(MediaQuery.sizeOf(context).width < 600 ? 8 : 12);
+
 class PaperlessOperationsAnalyticsScreen extends StatelessWidget {
   const PaperlessOperationsAnalyticsScreen({
     super.key,
@@ -37,7 +40,7 @@ class PaperlessOperationsAnalyticsScreen extends StatelessWidget {
         child: ToastResponsiveScrollBody(
           key: const Key('paperless_operations_analytics_scroll'),
           maxWidth: 1460,
-          padding: const EdgeInsets.all(16),
+          padding: _analysisPagePadding(context),
           children: [
             PaperlessOperationsDashboard(
               storeId: storeId,
@@ -70,7 +73,7 @@ class MenuSalesAnalyticsScreen extends StatelessWidget {
         child: ToastResponsiveScrollBody(
           key: const Key('menu_sales_analytics_scroll'),
           maxWidth: 1460,
-          padding: const EdgeInsets.all(16),
+          padding: _analysisPagePadding(context),
           children: [
             MenuSalesAnalyticsPanel(
               params: params,
@@ -169,7 +172,7 @@ class _SalesRevenueAnalyticsScreenState
         child: ToastResponsiveScrollBody(
           key: const Key('sales_revenue_analytics_scroll'),
           maxWidth: 1460,
-          padding: const EdgeInsets.all(16),
+          padding: _analysisPagePadding(context),
           children: [
             SalesRevenueAnalysisDashboard(
               summary: reportState.summary,

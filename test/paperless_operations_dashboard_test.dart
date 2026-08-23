@@ -154,6 +154,14 @@ void main() {
     expect(find.text('10분 3초'), findsWidgets);
     expect(find.text('식사 평균'), findsOne);
     expect(find.text('21분 18초'), findsOne);
+    final serviceSummary = tester.getRect(
+      find.byKey(const Key('paperless_summary_service_time')),
+    );
+    final diningSummary = tester.getRect(
+      find.byKey(const Key('paperless_summary_dining_time')),
+    );
+    expect((serviceSummary.top - diningSummary.top).abs(), lessThan(1));
+    expect(diningSummary.left, greaterThan(serviceSummary.left));
     expect(find.byKey(const Key('paperless_fastest_menu_ranking')), findsOne);
     expect(find.byKey(const Key('paperless_slowest_menu_ranking')), findsOne);
     expect(find.text('가장 빨리 나간 메뉴 TOP 5'), findsOne);
@@ -172,6 +180,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('메뉴별 평균 제공시간'), findsOne);
+    expect(find.text('느린 순 · 막대 길이는 전체 제공시간, 색상은 구간별 평균'), findsOne);
     expect(find.text('치즈라면'), findsWidgets);
     expect(find.text('9분 29초'), findsWidgets);
     expect(find.text('아이스티'), findsWidgets);
@@ -195,6 +204,32 @@ void main() {
     );
     expect((fastest.top - slowest.top).abs(), lessThan(1));
     expect(slowest.left, greaterThan(fastest.right));
+
+    final categoryFirst = tester.getRect(
+      find.byKey(const Key('paperless_category_timing_category-rice')),
+    );
+    final categorySecond = tester.getRect(
+      find.byKey(const Key('paperless_category_timing_category-noodles')),
+    );
+    expect((categoryFirst.top - categorySecond.top).abs(), lessThan(1));
+    expect(categorySecond.left, greaterThan(categoryFirst.right));
+
+    final menuFirst = tester.getRect(
+      find.byKey(const Key('paperless_menu_timing_menu-2')),
+    );
+    final menuSecond = tester.getRect(
+      find.byKey(const Key('paperless_menu_timing_menu-1')),
+    );
+    expect((menuFirst.top - menuSecond.top).abs(), lessThan(1));
+    expect(menuSecond.left, greaterThan(menuFirst.right));
+
+    final slowestBar = tester.getSize(
+      find.byKey(const Key('paperless_menu_bar_fill_menu-2')),
+    );
+    final fasterBar = tester.getSize(
+      find.byKey(const Key('paperless_menu_bar_fill_menu-1')),
+    );
+    expect(slowestBar.width, greaterThan(fasterBar.width));
     expect(tester.takeException(), isNull);
   });
 
@@ -208,6 +243,22 @@ void main() {
 
     expect(find.byKey(const Key('paperless_operations_dashboard')), findsOne);
     expect(find.text('평균 제공시간'), findsOne);
+
+    final serviceSummary = tester.getRect(
+      find.byKey(const Key('paperless_summary_service_time')),
+    );
+    final diningSummary = tester.getRect(
+      find.byKey(const Key('paperless_summary_dining_time')),
+    );
+    expect(diningSummary.top, greaterThan(serviceSummary.bottom));
+
+    final categoryFirst = tester.getRect(
+      find.byKey(const Key('paperless_category_timing_category-rice')),
+    );
+    final categorySecond = tester.getRect(
+      find.byKey(const Key('paperless_category_timing_category-noodles')),
+    );
+    expect(categorySecond.top, greaterThan(categoryFirst.bottom));
     expect(tester.takeException(), isNull);
   });
 
