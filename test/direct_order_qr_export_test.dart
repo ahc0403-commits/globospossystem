@@ -22,8 +22,7 @@ void main() {
           savedBytes = bytes;
         },
       );
-      const url =
-          'https://globospossystem.vercel.app/#/order/bunsikclub-sample';
+      const url = 'https://globospossystem.vercel.app/order/bunsikclub-sample';
 
       await service.savePng(slug: 'bunsikclub-sample', url: url);
 
@@ -43,6 +42,18 @@ void main() {
       () => service.buildPng('https://example.com/#/qr/sample'),
       throwsFormatException,
     );
+    expect(
+      () => service.buildPng('https://example.com/order/x'),
+      throwsFormatException,
+    );
+  });
+
+  test('legacy hash order QR remains valid during link migration', () async {
+    const service = DirectOrderQrExportService(renderer: _legacyRenderer);
+    final bytes = await service.buildPng(
+      'https://example.com/#/order/sample-store',
+    );
+    expect(bytes, [137, 80, 78, 71]);
   });
 
   test(
@@ -59,7 +70,7 @@ void main() {
           printedUrl = url;
         },
       );
-      const url = 'https://example.com/#/order/sample-store';
+      const url = 'https://example.com/order/sample-store';
 
       await service.printQr(slug: 'sample-store', url: url);
 
@@ -69,3 +80,6 @@ void main() {
     },
   );
 }
+
+Future<Uint8List> _legacyRenderer(String _) async =>
+    Uint8List.fromList([137, 80, 78, 71]);

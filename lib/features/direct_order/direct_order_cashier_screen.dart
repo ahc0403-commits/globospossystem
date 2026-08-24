@@ -151,11 +151,11 @@ class _DirectOrderCashierScreenState
         context,
       ).showSnackBar(SnackBar(content: Text(success)));
       await _refresh(silent: true, allowWhileBusy: true);
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_copy.actionFailed),
+            content: Text(_copy.errorMessage(directOrderStaffErrorCode(error))),
             backgroundColor: PosColors.danger,
           ),
         );
@@ -213,11 +213,11 @@ class _DirectOrderCashierScreenState
           };
         }
       });
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_copy.actionFailed),
+            content: Text(_copy.errorMessage(directOrderStaffErrorCode(error))),
             backgroundColor: PosColors.danger,
           ),
         );
@@ -289,54 +289,45 @@ class _DirectOrderCashierScreenState
     final total = _number(quote?['final_total']);
     final amount = TextEditingController(text: total.toStringAsFixed(0));
     final reference = TextEditingController();
-    var checked = false;
     final confirmed = await showDirectOrderDialog<bool>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(_copy.approveConfirmTitle),
-          content: SizedBox(
-            width: 460,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: amount,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    labelText: _copy.confirmedAmount,
-                    suffixText: 'VND',
-                  ),
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(_copy.approveConfirmTitle),
+        content: SizedBox(
+          width: 460,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: amount,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: _copy.confirmedAmount,
+                  suffixText: 'VND',
                 ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: reference,
-                  decoration: InputDecoration(labelText: _copy.bankReference),
-                ),
-                const SizedBox(height: 12),
-                CheckboxListTile(
-                  value: checked,
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(_copy.manualApprovalCheck),
-                  onChanged: (value) =>
-                      setDialogState(() => checked = value ?? false),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: reference,
+                decoration: InputDecoration(labelText: _copy.bankReference),
+              ),
+              const SizedBox(height: 14),
+              Text(_copy.manualApprovalCheck),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: Text(_copy.close),
-            ),
-            FilledButton(
-              onPressed: checked
-                  ? () => Navigator.pop(dialogContext, true)
-                  : null,
-              child: Text(_copy.approveAndSendKitchen),
-            ),
-          ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(_copy.close),
+          ),
+          FilledButton(
+            key: const Key('direct_order_approval_confirm'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(_copy.approveAndSendKitchen),
+          ),
+        ],
       ),
     );
     if (confirmed != true || _storeId == null || _selectedId == null) return;
@@ -356,12 +347,14 @@ class _DirectOrderCashierScreenState
     final controller = TextEditingController();
     final ok = await showDirectOrderDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: Text(_copy.rejectOrder),
         content: TextField(
           controller: controller,
-          decoration: InputDecoration(labelText: _copy.rejectionReason),
+          decoration: InputDecoration(labelText: _copy.rejectionReasonOptional),
           maxLines: 3,
+          maxLength: 500,
         ),
         actions: [
           TextButton(
@@ -369,18 +362,18 @@ class _DirectOrderCashierScreenState
             child: Text(_copy.close),
           ),
           FilledButton(
+            key: const Key('direct_order_reject_confirm'),
             onPressed: () => Navigator.pop(context, true),
             child: Text(_copy.rejectOrder),
           ),
         ],
       ),
     );
-    final reason = controller.text.trim();
+    final reason = controller.text.trim().isEmpty
+        ? 'DIRECT_ORDER_REJECTED_BY_STORE'
+        : controller.text.trim();
     controller.dispose();
-    if (ok != true ||
-        reason.isEmpty ||
-        _storeId == null ||
-        _selectedId == null) {
+    if (ok != true || _storeId == null || _selectedId == null) {
       return;
     }
     await _act(

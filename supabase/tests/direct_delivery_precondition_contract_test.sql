@@ -123,15 +123,17 @@ BEGIN
     SET created_at = now() - interval '2 minutes',
         expires_at = now() - interval '1 minute'
     WHERE request_id = v_request AND status = 'locked';
-    v_ok := direct_delivery_test.expect_approval_error(
-      v_request, v_total, 'DIRECT_ORDER_QUOTE_EXPIRED'
-    );
+    v_result := direct_delivery_test.approve(v_request, v_total);
+    PERFORM direct_delivery_test.assert_single_graph(v_request);
+    v_ok := COALESCE((v_result->>'idempotent')::boolean, true) = false;
     RAISE EXCEPTION 'DIRECT_TEST_ROLLBACK';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM <> 'DIRECT_TEST_ROLLBACK' THEN RAISE; END IF;
   END;
   INSERT INTO _direct_precondition_results VALUES (
-    'expired locked quote is rejected', v_ok, 'expiry is checked at approval'
+    'expired locked quote remains approvable',
+    v_ok,
+    'customer proof locks the amount before cashier approval'
   );
 
   v_fixture := direct_delivery_test.create_request('payment_review');
@@ -286,15 +288,17 @@ BEGIN
     INSERT INTO public.emergency_fulfillment_sessions(
       restaurant_id, status, reason, activated_by
     ) VALUES (v_store, 'active', 'direct guard test', v_user);
-    v_ok := direct_delivery_test.expect_approval_error(
-      v_request, v_total, 'DIRECT_ORDER_EMERGENCY_ACTIVE'
-    );
+    v_result := direct_delivery_test.approve(v_request, v_total);
+    PERFORM direct_delivery_test.assert_single_graph(v_request);
+    v_ok := COALESCE((v_result->>'idempotent')::boolean, true) = false;
     RAISE EXCEPTION 'DIRECT_TEST_ROLLBACK';
   EXCEPTION WHEN OTHERS THEN
     IF SQLERRM <> 'DIRECT_TEST_ROLLBACK' THEN RAISE; END IF;
   END;
   INSERT INTO _direct_precondition_results VALUES (
-    'active emergency session is rejected', v_ok, 'emergency mode wins'
+    'active emergency session keeps direct delivery isolated',
+    v_ok,
+    'the direct-delivery ticket graph cannot enter the dine-in emergency flow'
   );
 
   BEGIN

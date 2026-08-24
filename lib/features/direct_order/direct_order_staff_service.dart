@@ -1,6 +1,19 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../core/constants/app_constants.dart';
 import '../../main.dart';
 import 'direct_order_service.dart';
+
+String directOrderStaffErrorCode(Object error) {
+  if (error is DirectOrderException) return error.code;
+  if (error is PostgrestException) {
+    final match = RegExp(
+      r'\b(?:DIRECT_ORDER|DIRECT_DELIVERY)_[A-Z0-9_]+\b',
+    ).firstMatch(error.message);
+    if (match != null) return match.group(0)!;
+  }
+  return 'DIRECT_ORDER_TEMPORARILY_UNAVAILABLE';
+}
 
 class DirectOrderStaffService {
   const DirectOrderStaffService();
@@ -293,7 +306,7 @@ class DirectOrderStaffService {
   }
 
   String publicUrl(String slug) =>
-      '${AppConstants.posPublicUrl}/#/order/${Uri.encodeComponent(slug)}';
+      '${AppConstants.posPublicUrl}/order/${Uri.encodeComponent(slug)}';
 }
 
 const directOrderStaffService = DirectOrderStaffService();

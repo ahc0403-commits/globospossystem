@@ -110,9 +110,25 @@ class DirectOrderCopy {
       'Vui lòng kiểm tra ảnh chuyển khoản trước.',
       'Please review the transfer proof first.',
     ),
+    'DIRECT_ORDER_REJECTION_REASON_INVALID' => _pick(
+      '거절 사유는 3자 이상 입력해 주세요.',
+      'Vui lòng nhập lý do từ 3 ký tự trở lên.',
+      'Enter at least 3 characters for the rejection reason.',
+    ),
+    'DIRECT_ORDER_APPROVAL_INPUT_INVALID' => _pick(
+      '확인한 입금액과 은행 메모를 다시 확인해 주세요.',
+      'Vui lòng kiểm tra lại số tiền và ghi chú ngân hàng.',
+      'Please check the confirmed amount and bank reference.',
+    ),
+    'DIRECT_ORDER_DISPATCH_INPUT_INVALID' => _pick(
+      'Grab 공유 링크와 실제 배송비를 다시 확인해 주세요.',
+      'Vui lòng kiểm tra lại link Grab và phí giao hàng thực tế.',
+      'Please check the Grab link and actual delivery fee.',
+    ),
     'DIRECT_ORDER_REQUEST_NOT_APPROVABLE' ||
     'DIRECT_ORDER_REQUEST_NOT_REJECTABLE' ||
     'DIRECT_ORDER_NOT_APPROVED' ||
+    'DIRECT_ORDER_FINANCIAL_RECONCILIATION_FAILED' ||
     'DIRECT_ORDER_SEPAY_CANDIDATE_INVALID' ||
     'DIRECT_DELIVERY_TICKET_VERSION_CONFLICT' ||
     'DIRECT_DELIVERY_TICKET_TRANSITION_INVALID' ||
@@ -303,6 +319,11 @@ class DirectOrderCopy {
     'Không thể tiếp tục đơn. Vui lòng xem tin nhắn.',
     'The order cannot continue. Please check the chat.',
   );
+  String get rejectedByStore => _pick(
+    '매장에서 주문을 거절했습니다.',
+    'Cửa hàng đã từ chối đơn hàng.',
+    'The store rejected the order.',
+  );
   String get cancelled =>
       _pick('주문이 취소되었습니다.', 'Đơn đã hủy.', 'Order cancelled.');
   String get preparing => _pick('조리 중', 'Đang chuẩn bị', 'Preparing');
@@ -330,6 +351,19 @@ class DirectOrderCopy {
       _pick('입금 증빙 이미지', 'Ảnh chuyển khoản', 'Transfer proof image');
   String get systemUpdate =>
       _pick('주문 상태 안내', 'Cập nhật đơn hàng', 'Order update');
+  String get orderProgress =>
+      _pick('주문 진행 상황', 'Tiến trình đơn hàng', 'Order progress');
+  String get progressOrderConfirmed =>
+      _pick('주문 확인', 'Đã xác nhận đơn', 'Order confirmed');
+  String get progressPaymentConfirmed =>
+      _pick('입금 확인', 'Đã xác nhận thanh toán', 'Payment confirmed');
+  String get progressPreparing =>
+      _pick('메뉴 조리 중', 'Đang chuẩn bị món', 'Preparing food');
+  String get progressGrabHandoff => _pick(
+    'Grab 기사 전달 완료',
+    'Đã bàn giao cho tài xế Grab',
+    'Handed to Grab driver',
+  );
 
   String get arrivalAlertTitle =>
       _pick('배달 주문', 'Đơn giao hàng', 'Delivery order');
@@ -404,6 +438,11 @@ class DirectOrderCopy {
   String get rejectOrder => _pick('주문 거절', 'Từ chối đơn', 'Reject order');
   String get rejectionReason =>
       _pick('거절 사유', 'Lý do từ chối', 'Rejection reason');
+  String get rejectionReasonOptional => _pick(
+    '거절 사유 (선택)',
+    'Lý do từ chối (không bắt buộc)',
+    'Rejection reason (optional)',
+  );
   String get grabTrackingUrl =>
       _pick('Grab 공유 링크', 'Link theo dõi Grab', 'Grab tracking link');
   String get actualGrabFee =>

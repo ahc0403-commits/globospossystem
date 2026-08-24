@@ -46,14 +46,8 @@ void main() {
       pilotHoursMigration,
       contains('v_storefront.ordering_hours_enforced'),
     );
-    expect(
-      pilotHoursMigration,
-      contains('isolated fulfillment ticket graph'),
-    );
-    expect(
-      pilotHoursMigration,
-      contains('DIRECT_ORDER_REQUIRES_POS_PRINT'),
-    );
+    expect(pilotHoursMigration, contains('isolated fulfillment ticket graph'));
+    expect(pilotHoursMigration, contains('DIRECT_ORDER_REQUIRES_POS_PRINT'));
     expect(pilotHoursMigration, contains('-- production-gate: self-verifying'));
     expect(
       File(
@@ -82,9 +76,39 @@ void main() {
     final staffService = File(
       'lib/features/direct_order/direct_order_staff_service.dart',
     ).readAsStringSync();
-    expect(staffService, contains('/#/order/'));
-    expect(staffService, isNot(contains("posPublicUrl}/order/")));
+    expect(staffService, contains("posPublicUrl}/order/"));
+    expect(staffService, isNot(contains('/#/order/')));
     expect(staffService, contains("'direct_order_staff_message'"));
+
+    expect(
+      webIndex,
+      contains('property="og:title" content="BunsikClub Delivery Order"'),
+    );
+    expect(webIndex, contains('bunsikclub-social-preview.png'));
+    expect(File('web/bunsikclub-social-preview.png').existsSync(), isTrue);
+
+    final pilotActionsMigration = File(
+      'supabase/migrations/'
+      '20260824040000_direct_order_pilot_actions_and_progress.sql',
+    ).readAsStringSync();
+    expect(
+      pilotActionsMigration,
+      contains('Uploading payment proof locks the quoted amount'),
+    );
+    expect(
+      pilotActionsMigration,
+      contains('Direct delivery uses its own fulfillment ticket graph'),
+    );
+    expect(
+      pilotActionsMigration,
+      contains("position('DIRECT_ORDER_EMERGENCY_ACTIVE' IN v_definition)"),
+    );
+    expect(
+      File(
+        'scripts/rollback_direct_order_pilot_actions_and_progress.sql',
+      ).existsSync(),
+      isTrue,
+    );
 
     final edge = File(
       'supabase/functions/direct-order-public/index.ts',

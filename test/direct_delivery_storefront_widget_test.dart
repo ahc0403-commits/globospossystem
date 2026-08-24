@@ -237,10 +237,11 @@ Widget _fixtureApp({
   DirectOrderBrowserLocationAdapter? locationAdapter,
   Future<bool> Function(String)? mapLoader,
   DirectOrderMapBuilder? mapBuilder,
+  Locale locale = const Locale('vi'),
 }) => ProviderScope(
   child: MaterialApp(
     theme: AppTheme.build(),
-    locale: const Locale('vi'),
+    locale: locale,
     supportedLocales: AppLocalizations.supportedLocales,
     localizationsDelegates: const [
       AppLocalizations.delegate,
@@ -586,6 +587,8 @@ void main() {
       find.widgetWithText(TextField, 'Nhập tin nhắn'),
       'Xin chào',
     );
+    await tester.ensureVisible(find.byTooltip('Gửi'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Gửi'));
     await tester.pumpAndSettle();
 
@@ -600,4 +603,44 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets(
+    'customer sees the four-stage delivery progress in their locale',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      const status = DirectOrderStatus(
+        requestId: 'fixture-request',
+        referenceCode: 'D12345678',
+        state: 'approved',
+        fulfillmentStatus: 'preparing',
+        messages: [],
+      );
+
+      await tester.pumpWidget(
+        _fixtureApp(
+          service: _StorefrontFixtureService(activeStatus: status),
+          locale: const Locale('ko'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('direct_order_customer_progress')),
+        findsOneWidget,
+      );
+      expect(find.text('주문 확인'), findsOneWidget);
+      expect(find.text('입금 확인'), findsOneWidget);
+      expect(find.text('메뉴 조리 중'), findsOneWidget);
+      expect(find.text('Grab 기사 전달 완료'), findsOneWidget);
+      for (var index = 0; index < 4; index++) {
+        expect(
+          find.byKey(Key('direct_order_progress_step_$index')),
+          findsOneWidget,
+        );
+      }
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 }
