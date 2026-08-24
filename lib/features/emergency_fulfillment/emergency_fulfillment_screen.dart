@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/i18n/locale_extensions.dart';
+import '../../core/services/emergency_additional_order_voice_message.dart';
 import '../../core/services/emergency_order_voice_message.dart';
 import '../../core/services/emergency_web_bridge.dart';
 import '../../core/services/emergency_web_push_service.dart';
@@ -40,11 +41,15 @@ class _EmergencyFulfillmentScreenState
   String? _selectedOrderId;
   int _page = 0;
   Timer? _flashTimer;
+  Timer? _additionalOrderAlarmTimer;
   Timer? _handoffAlarmTimer;
   Timer? _floorDirectBeverageAlarmTimer;
   int _pendingFloorDirectBeverageCount = 0;
+  final Map<String, EmergencyKitchenAdditionalOrderNotice>
+  _pendingAdditionalOrderNotices = {};
   final Map<String, EmergencyHandoffNotice> _pendingHandoffNotices = {};
   late final ProviderSubscription<EmergencyFulfillmentState> _stateSub;
+  late final StreamSubscription<String> _foregroundPushSub;
 
   @override
   void initState() {
@@ -53,6 +58,15 @@ class _EmergencyFulfillmentScreenState
       emergencyFulfillmentProvider,
       _onStateChanged,
     );
+    _foregroundPushSub = EmergencyWebPushService.instance.foregroundEventIds
+        .listen((_) {
+          if (!mounted) return;
+          unawaited(
+            ref
+                .read(emergencyFulfillmentProvider.notifier)
+                .load(showLoading: false),
+          );
+        });
     Future.microtask(
       () => ref.read(emergencyFulfillmentProvider.notifier).load(),
     );
@@ -71,6 +85,13 @@ class _EmergencyFulfillmentScreenState
       previous ?? const EmergencyFulfillmentState(),
     );
     final newActionable = _actionableOrderIds(next);
+    final additionalOrderNotices = emergencyKitchenAdditionalOrderNotices(
+      previous ?? const EmergencyFulfillmentState(),
+      next,
+    );
+    if (additionalOrderNotices.isNotEmpty) {
+      _queueAdditionalOrderAlarms(additionalOrderNotices);
+    }
     final handoffNotices = emergencyHandoffNotices(
       previous ?? const EmergencyFulfillmentState(),
       next,
@@ -159,6 +180,25 @@ class _EmergencyFulfillmentScreenState
       .map((order) => order.orderId)
       .toSet();
 
+  void _queueAdditionalOrderAlarms(
+    Iterable<EmergencyKitchenAdditionalOrderNotice> notices,
+  ) {
+    for (final notice in notices) {
+      _pendingAdditionalOrderNotices[notice.orderId] = notice;
+    }
+    _additionalOrderAlarmTimer?.cancel();
+    _additionalOrderAlarmTimer = Timer(
+      emergencyAdditionalOrderAlarmCoalesceDelay,
+      () {
+        final pending = _pendingAdditionalOrderNotices.values.toList(
+          growable: false,
+        )..sort((left, right) => left.queueNo.compareTo(right.queueNo));
+        _pendingAdditionalOrderNotices.clear();
+        unawaited(_triggerAdditionalOrderAlarm(pending));
+      },
+    );
+  }
+
   void _queueHandoffAlarms(Iterable<EmergencyHandoffNotice> notices) {
     for (final notice in notices) {
       final pending = _pendingHandoffNotices[notice.orderId];
@@ -207,6 +247,24 @@ class _EmergencyFulfillmentScreenState
     if (_alarmEnabled) {
       for (final tableNumber in tableNumbers) {
         await EmergencyWebBridge.speak(vietnameseNewOrderMessage(tableNumber));
+      }
+    }
+  }
+
+  Future<void> _triggerAdditionalOrderAlarm(
+    Iterable<EmergencyKitchenAdditionalOrderNotice> notices,
+  ) async {
+    if (!mounted) return;
+    setState(() => _flashing = true);
+    _flashTimer?.cancel();
+    _flashTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _flashing = false);
+    });
+    if (_alarmEnabled) {
+      for (final notice in notices) {
+        await EmergencyWebBridge.speak(
+          vietnameseAdditionalOrderMessage(notice.tableNumber),
+        );
       }
     }
   }
@@ -278,8 +336,10 @@ class _EmergencyFulfillmentScreenState
   @override
   void dispose() {
     _flashTimer?.cancel();
+    _additionalOrderAlarmTimer?.cancel();
     _handoffAlarmTimer?.cancel();
     _floorDirectBeverageAlarmTimer?.cancel();
+    unawaited(_foregroundPushSub.cancel());
     _stateSub.close();
     super.dispose();
   }

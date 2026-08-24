@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:globos_pos_system/core/services/emergency_additional_order_voice_message.dart';
 import 'package:globos_pos_system/core/services/emergency_order_voice_message.dart';
 import 'package:globos_pos_system/core/utils/role_routes.dart';
 import 'package:globos_pos_system/features/emergency_fulfillment/emergency_fulfillment_provider.dart';
@@ -17,6 +18,11 @@ void main() {
     );
     expect(vietnameseNewOrderMessage('T12'), 'Bàn một hai, có đơn hàng mới.');
     expect(vietnameseNewOrderMessage(''), 'Có đơn hàng mới.');
+    expect(
+      vietnameseAdditionalOrderMessage('T12'),
+      'Bàn một hai, có món gọi thêm.',
+    );
+    expect(vietnameseAdditionalOrderMessage(''), 'Có món gọi thêm.');
     expect(
       vietnameseFloorDirectBeverageMessage(3),
       'Có đồ uống mới. Tổng cộng ba món.',
@@ -38,7 +44,144 @@ void main() {
       emergencyFloorDirectBeverageAlarmCoalesceDelay,
       const Duration(seconds: 2),
     );
+    expect(
+      emergencyAdditionalOrderAlarmCoalesceDelay,
+      const Duration(seconds: 2),
+    );
   });
+
+  test(
+    'kitchen additional-order notices detect only positive changes on known orders',
+    () {
+      EmergencyFulfillmentItem item({
+        required String id,
+        required int quantity,
+        int kitchenDone = 0,
+        String route = 'kitchen_tray_floor',
+      }) => EmergencyFulfillmentItem(
+        id: id,
+        orderItemId: 'order-$id',
+        nameKo: id,
+        nameVi: id,
+        nameEn: id,
+        orderedQuantity: quantity,
+        kitchenDoneQuantity: kitchenDone,
+        trayReceivedQuantity: 0,
+        trayDispatchedQuantity: 0,
+        floorServedQuantity: 0,
+        needsReview: false,
+        fulfillmentRoute: route,
+      );
+
+      EmergencyFulfillmentOrder order({
+        required String orderId,
+        required int queueNo,
+        required List<EmergencyFulfillmentItem> items,
+      }) => EmergencyFulfillmentOrder(
+        queueId: 'queue-$orderId',
+        orderId: orderId,
+        queueNo: queueNo,
+        tableNumber: 'T$queueNo',
+        floorLabel: '1F',
+        createdAt: DateTime.utc(2026, 8, 24),
+        items: items,
+      );
+
+      final base = order(
+        orderId: 'known',
+        queueNo: 12,
+        items: [item(id: 'base', quantity: 1)],
+      );
+      final previous = EmergencyFulfillmentState(
+        sessionId: 'session-1',
+        stationType: 'kitchen',
+        orders: [base],
+      );
+      final added = base.copyWith(
+        items: [
+          item(id: 'base', quantity: 1),
+          item(id: 'added-a', quantity: 1),
+          item(id: 'added-b', quantity: 2),
+          item(id: 'floor-drink', quantity: 4, route: 'floor_direct'),
+        ],
+      );
+
+      final notices = emergencyKitchenAdditionalOrderNotices(
+        previous,
+        previous.copyWith(orders: [added]),
+      );
+      expect(notices, hasLength(1));
+      expect(notices.single.orderId, 'known');
+      expect(notices.single.tableNumber, 'T12');
+      expect(notices.single.itemCount, 3);
+
+      final quantityIncrease = base.copyWith(
+        items: [item(id: 'base', quantity: 2)],
+      );
+      expect(
+        emergencyKitchenAdditionalOrderNotices(
+          previous,
+          previous.copyWith(orders: [quantityIncrease]),
+        ).single.itemCount,
+        1,
+      );
+
+      final progressed = base.copyWith(
+        items: [item(id: 'base', quantity: 1, kitchenDone: 1)],
+      );
+      expect(
+        emergencyKitchenAdditionalOrderNotices(
+          previous,
+          previous.copyWith(orders: [progressed]),
+        ),
+        isEmpty,
+        reason: 'Kitchen progress is not another customer order.',
+      );
+      expect(
+        emergencyKitchenAdditionalOrderNotices(
+          previous.copyWith(
+            orders: [
+              base.copyWith(items: [item(id: 'base', quantity: 2)]),
+            ],
+          ),
+          previous,
+        ),
+        isEmpty,
+        reason: 'A reduction or cancellation must not produce an alarm.',
+      );
+      expect(
+        emergencyKitchenAdditionalOrderNotices(
+          previous.copyWith(orders: const []),
+          previous,
+        ),
+        isEmpty,
+        reason: 'A new order id is announced by the regular order alarm.',
+      );
+      expect(
+        emergencyKitchenAdditionalOrderNotices(
+          previous,
+          previous.copyWith(sessionId: 'session-2', orders: [added]),
+        ),
+        isEmpty,
+        reason: 'A station session change must establish a fresh baseline.',
+      );
+
+      final completedBaseline = previous.copyWith(
+        orders: const [],
+        completedOrders: [
+          base.copyWith(items: [item(id: 'base', quantity: 1, kitchenDone: 1)]),
+        ],
+      );
+      expect(
+        emergencyKitchenAdditionalOrderNotices(
+          completedBaseline,
+          previous.copyWith(orders: [added]),
+        ).single.orderId,
+        'known',
+        reason: 'An added item must alert when it reopens a completed order.',
+      );
+    },
+  );
 
   test(
     'floor beverage notices report only newly ordered direct quantities',
@@ -402,6 +545,9 @@ void main() {
       'lib/features/emergency_fulfillment/emergency_fulfillment_provider.dart',
     ).readAsStringSync();
     expect(screen, contains("Key('emergency_enable_alarm')"));
+    expect(screen, contains('emergencyKitchenAdditionalOrderNotices('));
+    expect(screen, contains('vietnameseAdditionalOrderMessage('));
+    expect(screen, contains('foregroundEventIds'));
     expect(screen, contains('final pageSize = isPhone ? 4 : 8;'));
     expect(screen, contains("'emergency_order_grid_\${pageSize}_slots'"));
     expect(screen, isNot(contains("Key('emergency_complete_order')")));
