@@ -18,6 +18,7 @@ import 'package:globos_pos_system/features/auth/auth_provider.dart';
 import 'package:globos_pos_system/features/auth/auth_state.dart';
 import 'package:globos_pos_system/features/cashier/cashier_screen.dart';
 import 'package:globos_pos_system/features/digital_receipt/digital_receipt_model.dart';
+import 'package:globos_pos_system/features/direct_order/direct_order_staff_service.dart';
 import 'package:globos_pos_system/features/order/order_model.dart';
 import 'package:globos_pos_system/features/payment/payment_provider.dart';
 import 'package:globos_pos_system/features/table/table_provider.dart';
@@ -1385,6 +1386,45 @@ void main() {
 
     expect(find.byKey(const Key('direct-order-desk-route')), findsOneWidget);
   });
+
+  testWidgets('cashier always exposes delivery status even when empty', (
+    tester,
+  ) async {
+    await _pumpCashier(tester);
+
+    final deliveryTab = find.byKey(const Key('cashier_delivery_status_tab'));
+    expect(deliveryTab, findsOneWidget);
+    await tester.tap(deliveryTab);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('cashier_delivery_status')), findsOneWidget);
+    expect(find.text('Không có đơn đang giao'), findsOneWidget);
+  });
+
+  testWidgets('cashier shows active direct delivery progress', (tester) async {
+    await _pumpCashier(
+      tester,
+      deliveryTickets: const [
+        {'id': 'ticket-1', 'pickup_code': 'D12345678', 'status': 'preparing'},
+      ],
+    );
+
+    expect(find.byKey(const Key('cashier_delivery_status')), findsOneWidget);
+    expect(find.text('#D12345678'), findsOneWidget);
+    expect(find.text('Đang chuẩn bị'), findsOneWidget);
+  });
+}
+
+class _DirectOrderStaffService extends DirectOrderStaffService {
+  const _DirectOrderStaffService(this.tickets);
+
+  final List<Map<String, dynamic>> tickets;
+
+  @override
+  Future<List<Map<String, dynamic>>> listTickets({
+    required String storeId,
+    List<String>? statuses,
+  }) async => tickets;
 }
 
 class _CashierHarness {
@@ -1414,6 +1454,7 @@ Future<_CashierHarness> _pumpCashier(
   BankTransferAlertService? bankTransferAlertService,
   BankTransferAlertSoundService? bankTransferAlertSoundService,
   Duration bankTransferAlertPollInterval = const Duration(seconds: 2),
+  List<Map<String, dynamic>> deliveryTickets = const [],
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = physicalSize;
@@ -1429,6 +1470,7 @@ Future<_CashierHarness> _pumpCashier(
   final paymentService = _PaymentService();
   final menuService = _MenuService();
   final digitalReceiptService = _DigitalReceiptService();
+  final directOrderStaffService = _DirectOrderStaffService(deliveryTickets);
   final router = GoRouter(
     initialLocation: '/cashier',
     routes: [
@@ -1440,6 +1482,8 @@ Future<_CashierHarness> _pumpCashier(
           restaurantCutoffServiceOverride: _CutoffService(),
           menuServiceOverride: menuService,
           digitalReceiptServiceOverride: digitalReceiptService,
+          directOrderStaffServiceOverride: directOrderStaffService,
+          deliveryStatusPollInterval: const Duration(hours: 1),
           bankTransferAlertServiceOverride:
               bankTransferAlertService ?? _NoopBankTransferAlertService(),
           bankTransferAlertSoundServiceOverride: bankTransferAlertSoundService,

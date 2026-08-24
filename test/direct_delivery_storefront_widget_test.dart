@@ -632,6 +632,10 @@ void main() {
       expect(find.text('입금 확인'), findsOneWidget);
       expect(find.text('메뉴 조리 중'), findsOneWidget);
       expect(find.text('Grab 기사 전달 완료'), findsOneWidget);
+      final statusTitle = tester.widget<Text>(
+        find.byKey(const Key('direct_order_status_title')),
+      );
+      expect(statusTitle.data, '조리 중');
       for (var index = 0; index < 4; index++) {
         expect(
           find.byKey(Key('direct_order_progress_step_$index')),

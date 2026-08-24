@@ -464,6 +464,7 @@ class EmergencyFulfillmentOrder {
     required this.floorLabel,
     required this.createdAt,
     required this.items,
+    this.salesChannel = 'dine_in',
     this.lastActionId,
     this.lastActionAt,
     this.stationStartedAt,
@@ -477,10 +478,13 @@ class EmergencyFulfillmentOrder {
   final String floorLabel;
   final DateTime createdAt;
   final List<EmergencyFulfillmentItem> items;
+  final String salesChannel;
   final String? lastActionId;
   final DateTime? lastActionAt;
   final DateTime? stationStartedAt;
   final DateTime? stationCompletedAt;
+
+  bool get isDelivery => salesChannel == 'delivery';
 
   List<EmergencyFulfillmentItem> _operationalItems() {
     final componentBackedOrderItemIds = items
@@ -669,6 +673,7 @@ class EmergencyFulfillmentOrder {
 
   EmergencyFulfillmentOrder copyWith({
     List<EmergencyFulfillmentItem>? items,
+    String? salesChannel,
     String? lastActionId,
     DateTime? lastActionAt,
     DateTime? stationStartedAt,
@@ -683,6 +688,7 @@ class EmergencyFulfillmentOrder {
     floorLabel: floorLabel,
     createdAt: createdAt,
     items: items ?? this.items,
+    salesChannel: salesChannel ?? this.salesChannel,
     lastActionId: clearLastAction ? null : (lastActionId ?? this.lastActionId),
     lastActionAt: clearLastAction ? null : (lastActionAt ?? this.lastActionAt),
     stationStartedAt: stationStartedAt ?? this.stationStartedAt,
@@ -710,6 +716,7 @@ class EmergencyFulfillmentOrder {
       queueNo: _asInt(json['queue_no']),
       tableNumber: json['table_number']?.toString() ?? '-',
       floorLabel: json['floor_label']?.toString() ?? '1F',
+      salesChannel: json['sales_channel']?.toString() ?? 'dine_in',
       createdAt:
           DateTime.tryParse(json['created_at']?.toString() ?? '') ??
           DateTime.now().toUtc(),

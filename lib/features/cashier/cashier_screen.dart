@@ -30,6 +30,7 @@ import '../../widgets/error_toast.dart';
 import '../../widgets/offline_banner.dart';
 import '../auth/auth_provider.dart';
 import '../digital_receipt/digital_receipt_model.dart';
+import '../direct_order/direct_order_staff_service.dart';
 import '../order/order_model.dart';
 import '../payment/payment_provider.dart';
 import '../payment/einvoice_status_badge.dart';
@@ -106,7 +107,9 @@ class CashierScreen extends ConsumerStatefulWidget {
     this.bankTransferAlertSoundServiceOverride,
     this.menuServiceOverride,
     this.digitalReceiptServiceOverride,
+    this.directOrderStaffServiceOverride,
     this.bankTransferAlertPollInterval = const Duration(seconds: 2),
+    this.deliveryStatusPollInterval = const Duration(seconds: 7),
   });
 
   final PaymentProofService? paymentProofServiceOverride;
@@ -117,7 +120,9 @@ class CashierScreen extends ConsumerStatefulWidget {
   final BankTransferAlertSoundService? bankTransferAlertSoundServiceOverride;
   final MenuService? menuServiceOverride;
   final DigitalReceiptService? digitalReceiptServiceOverride;
+  final DirectOrderStaffService? directOrderStaffServiceOverride;
   final Duration bankTransferAlertPollInterval;
+  final Duration deliveryStatusPollInterval;
 
   @override
   ConsumerState<CashierScreen> createState() => _CashierScreenState();
@@ -131,6 +136,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   String? _printAgentStoreId;
   String? _selectedTableId;
   Timer? _successTimer;
+  Timer? _deliveryStatusTimer;
   String? _lastError;
   String? _lastCompletedOrderId; // for einvoice badge
   bool _isFlushingProofQueue = false;
@@ -143,6 +149,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   final TextEditingController _orderSearchController = TextEditingController();
   CashierOrderSearchResult? _orderSearchResult;
   String? _orderSearchFeedback;
+  List<Map<String, dynamic>> _deliveryTickets = const [];
+  bool _deliveryTicketsLoading = false;
+  bool _deliveryTicketsFailed = false;
   late final ProviderSubscription<PaymentState> _paymentSub;
   late final PrintJobAgentService _printJobAgent;
 
@@ -154,6 +163,8 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
       widget.digitalReceiptServiceOverride ?? digitalReceiptService;
   RestaurantCutoffService get _restaurantCutoffService =>
       widget.restaurantCutoffServiceOverride ?? restaurantCutoffService;
+  DirectOrderStaffService get _directOrderStaffService =>
+      widget.directOrderStaffServiceOverride ?? directOrderStaffService;
 
   Future<void> _showSoldOutMenuDialog(String storeId) async {
     await showDialog<void>(
@@ -174,6 +185,12 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   void initState() {
     super.initState();
     _printJobAgent = widget.printJobAgentOverride ?? PrintJobAgentService();
+    _deliveryStatusTimer = Timer.periodic(widget.deliveryStatusPollInterval, (
+      _,
+    ) {
+      final storeId = _initializedRestaurantId;
+      if (storeId != null) unawaited(_loadDeliveryTickets(storeId));
+    });
     _orderSearchController.addListener(() {
       if (!mounted) {
         return;
@@ -233,6 +250,7 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     Future.microtask(() {
       ref.read(paymentProvider.notifier).loadOrders(storeId);
       ref.read(waiterTableProvider.notifier).loadTables(storeId);
+      _loadDeliveryTickets(storeId, showLoading: true);
     });
     if (PlatformInfo.isWindows && _printAgentStoreId != storeId) {
       _printJobAgent.stop();
@@ -242,6 +260,9 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
   }
 
   void _refreshFromLiveEvent(String storeId, PosLiveEvent event) {
+    if (event.affects({'direct_delivery_status'})) {
+      unawaited(_loadDeliveryTickets(storeId));
+    }
     if (!event.affects({
       'orders',
       'payments',
@@ -261,9 +282,37 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     });
   }
 
+  Future<void> _loadDeliveryTickets(
+    String storeId, {
+    bool showLoading = false,
+  }) async {
+    if (showLoading && mounted) {
+      setState(() => _deliveryTicketsLoading = true);
+    }
+    try {
+      final tickets = await _directOrderStaffService.listTickets(
+        storeId: storeId,
+        statuses: const ['pending', 'preparing', 'ready', 'dispatched'],
+      );
+      if (!mounted || storeId != _initializedRestaurantId) return;
+      setState(() {
+        _deliveryTickets = tickets;
+        _deliveryTicketsLoading = false;
+        _deliveryTicketsFailed = false;
+      });
+    } catch (_) {
+      if (!mounted || storeId != _initializedRestaurantId) return;
+      setState(() {
+        _deliveryTicketsLoading = false;
+        _deliveryTicketsFailed = true;
+      });
+    }
+  }
+
   @override
   void dispose() {
     _successTimer?.cancel();
+    _deliveryStatusTimer?.cancel();
     _printJobAgent.stop();
     _orderSearchController.dispose();
     _paymentSub.close();
@@ -1479,6 +1528,10 @@ class _CashierScreenState extends ConsumerState<CashierScreen> {
     );
     final queueWithHistory = _CashierQueueWithHistory(
       queuePane: queuePane,
+      deliveryTickets: _deliveryTickets,
+      deliveryLoading: _deliveryTicketsLoading,
+      deliveryFailed: _deliveryTicketsFailed,
+      onOpenDeliveryDesk: () => context.go('/cashier/direct-orders'),
       completedOrders: paymentState.completedOrders,
       currency: currency,
     );
@@ -2553,11 +2606,19 @@ class _CashierCompactOrderRow extends StatelessWidget {
 class _CashierQueueWithHistory extends StatelessWidget {
   const _CashierQueueWithHistory({
     required this.queuePane,
+    required this.deliveryTickets,
+    required this.deliveryLoading,
+    required this.deliveryFailed,
+    required this.onOpenDeliveryDesk,
     required this.completedOrders,
     required this.currency,
   });
 
   final Widget queuePane;
+  final List<Map<String, dynamic>> deliveryTickets;
+  final bool deliveryLoading;
+  final bool deliveryFailed;
+  final VoidCallback onOpenDeliveryDesk;
   final List<CashierOrder> completedOrders;
   final NumberFormat currency;
 
@@ -2569,12 +2630,216 @@ class _CashierQueueWithHistory extends StatelessWidget {
         const SizedBox(height: 12),
         SizedBox(
           height: 178,
-          child: _CashierCompletedOrderHistory(
-            orders: completedOrders,
-            currency: currency,
+          child: DefaultTabController(
+            key: ValueKey('cashier_operations_${deliveryTickets.isEmpty}'),
+            length: 2,
+            initialIndex: deliveryTickets.isEmpty ? 1 : 0,
+            child: Column(
+              children: [
+                SizedBox(
+                  height: 48,
+                  child: TabBar(
+                    tabs: [
+                      Tab(
+                        key: const Key('cashier_delivery_status_tab'),
+                        text: _cashierOperationsTabLabel(context, true),
+                      ),
+                      Tab(
+                        key: const Key('cashier_completed_status_tab'),
+                        text: _cashierOperationsTabLabel(context, false),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      _CashierDeliveryStatusPanel(
+                        tickets: deliveryTickets,
+                        loading: deliveryLoading,
+                        failed: deliveryFailed,
+                        onOpenDeliveryDesk: onOpenDeliveryDesk,
+                        compact: true,
+                      ),
+                      _CashierCompletedOrderHistory(
+                        orders: completedOrders,
+                        currency: currency,
+                        compact: true,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ],
+    );
+  }
+}
+
+String _cashierOperationsTabLabel(BuildContext context, bool delivery) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => delivery ? 'Giao' : 'Xong',
+      'en' => delivery ? 'Delivery' : 'Done',
+      _ => delivery ? '배달' : '완료',
+    };
+
+class _CashierDeliveryStatusPanel extends StatelessWidget {
+  const _CashierDeliveryStatusPanel({
+    required this.tickets,
+    required this.loading,
+    required this.failed,
+    required this.onOpenDeliveryDesk,
+    this.compact = false,
+  });
+
+  final List<Map<String, dynamic>> tickets;
+  final bool loading;
+  final bool failed;
+  final VoidCallback onOpenDeliveryDesk;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final language = Localizations.localeOf(context).languageCode;
+    String pick(String ko, String vi, String en) => switch (language) {
+      'vi' => vi,
+      'en' => en,
+      _ => ko,
+    };
+
+    if (compact) {
+      if (loading && tickets.isEmpty) {
+        return const Center(
+          key: Key('cashier_delivery_status'),
+          child: CircularProgressIndicator(),
+        );
+      }
+      if (failed && tickets.isEmpty) {
+        return Center(
+          key: const Key('cashier_delivery_status'),
+          child: Text(
+            pick(
+              '배달 현황을 불러오지 못했습니다.',
+              'Không tải được trạng thái giao hàng.',
+              'Delivery status is unavailable.',
+            ),
+            textAlign: TextAlign.center,
+          ),
+        );
+      }
+      if (tickets.isEmpty) {
+        return Center(
+          key: const Key('cashier_delivery_status'),
+          child: Text(
+            pick(
+              '진행 중인 배달 없음',
+              'Không có đơn đang giao',
+              'No active deliveries',
+            ),
+          ),
+        );
+      }
+      return ListView.separated(
+        key: const Key('cashier_delivery_status'),
+        padding: const EdgeInsets.only(top: 6),
+        itemCount: tickets.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 8),
+        itemBuilder: (context, index) =>
+            _deliveryTicketTile(context, tickets[index], pick),
+      );
+    }
+
+    return PosDataPanel(
+      key: const Key('cashier_delivery_status'),
+      title: pick('배달 현황', 'Trạng thái giao hàng', 'Delivery status'),
+      subtitle: pick(
+        '주방·트레이 진행 상태',
+        'Tiến độ bếp và khay',
+        'Kitchen and tray progress',
+      ),
+      trailing: ToastStatusBadge(
+        label: '${tickets.length}',
+        color: PosColors.warning,
+        compact: true,
+      ),
+      child: loading && tickets.isEmpty
+          ? const Center(child: CircularProgressIndicator())
+          : failed && tickets.isEmpty
+          ? Center(
+              child: Text(
+                pick(
+                  '배달 현황을 불러오지 못했습니다.',
+                  'Không tải được trạng thái giao hàng.',
+                  'Delivery status is unavailable.',
+                ),
+                textAlign: TextAlign.center,
+              ),
+            )
+          : tickets.isEmpty
+          ? Center(
+              child: Text(
+                pick(
+                  '진행 중인 배달 없음',
+                  'Không có đơn đang giao',
+                  'No active deliveries',
+                ),
+              ),
+            )
+          : ListView.separated(
+              padding: EdgeInsets.zero,
+              itemCount: tickets.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 8),
+              itemBuilder: (context, index) =>
+                  _deliveryTicketTile(context, tickets[index], pick),
+            ),
+    );
+  }
+
+  Widget _deliveryTicketTile(
+    BuildContext context,
+    Map<String, dynamic> ticket,
+    String Function(String, String, String) pick,
+  ) {
+    final status = ticket['status']?.toString() ?? 'pending';
+    final label = switch (status) {
+      'preparing' => pick('조리 중', 'Đang chuẩn bị', 'Preparing'),
+      'ready' => pick('트레이 대기', 'Chờ khay', 'Waiting for tray'),
+      'dispatched' => pick('기사 전달 완료', 'Đã giao tài xế', 'Handed to driver'),
+      _ => pick('조리 대기', 'Chờ chuẩn bị', 'Waiting for kitchen'),
+    };
+    final tone = switch (status) {
+      'preparing' => PosColors.warning,
+      'ready' => PosColors.info,
+      'dispatched' => PosColors.success,
+      _ => PosColors.accent,
+    };
+    return Material(
+      color: PosSurfaceRole.background.fill,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onOpenDeliveryDesk,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              const Icon(Icons.delivery_dining_rounded, size: 19),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '#${ticket['pickup_code'] ?? ''}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+              ToastStatusBadge(label: label, color: tone, compact: true),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -2583,14 +2848,69 @@ class _CashierCompletedOrderHistory extends StatelessWidget {
   const _CashierCompletedOrderHistory({
     required this.orders,
     required this.currency,
+    this.compact = false,
   });
 
   final List<CashierOrder> orders;
   final NumberFormat currency;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+
+    if (compact) {
+      return Container(
+        key: const Key('cashier_completed_order_history'),
+        padding: const EdgeInsets.only(top: 6),
+        child: orders.isEmpty
+            ? Center(child: Text(l10n.cashierNoPayableOrdersMessage))
+            : ListView.separated(
+                padding: EdgeInsets.zero,
+                itemCount: orders.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final order = orders[index];
+                  return Material(
+                    color: PosSurfaceRole.background.fill,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.check_circle_rounded,
+                            color: PosColors.success,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              l10n.cashierTableLabel(order.tableNumber),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '₫${currency.format(order.totalAmount)}',
+                            style: PosNumericText.amountCompact.copyWith(
+                              color: PosColors.success,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+      );
+    }
 
     return PosDataPanel(
       key: const Key('cashier_completed_order_history'),

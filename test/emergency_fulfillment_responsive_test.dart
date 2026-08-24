@@ -923,6 +923,34 @@ void main() {
     expect(find.text('2F · 2 món'), findsNothing);
   });
 
+  testWidgets('delivery card is labeled delivery and omits the floor detail', (
+    tester,
+  ) async {
+    final active = _activeState('kitchen');
+    final order = active.orders.first;
+    final fixture = _FixtureEmergencyNotifier(
+      active.copyWith(orders: [order.copyWith(salesChannel: 'delivery')]),
+    );
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(1024, 768),
+      locale: const Locale('ko'),
+      expectedStationType: 'kitchen',
+    );
+
+    final channel = tester.widget<Text>(
+      find.byKey(const Key('emergency_order_table_order-1')),
+    );
+    expect(channel.data, '배달');
+    expect(find.text('STAFF'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('emergency_order_order-1')));
+    await tester.pump();
+    expect(find.textContaining('배달'), findsWidgets);
+    expect(find.textContaining('2F ·'), findsNothing);
+  });
+
   testWidgets('card and detail show a separate supplemental batch timer', (
     tester,
   ) async {

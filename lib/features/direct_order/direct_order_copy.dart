@@ -329,7 +329,11 @@ class DirectOrderCopy {
   String get preparing => _pick('조리 중', 'Đang chuẩn bị', 'Preparing');
   String get ready =>
       _pick('픽업 준비 완료', 'Sẵn sàng lấy hàng', 'Ready for pickup');
-  String get dispatched => _pick('배달 출발', 'Đang giao', 'Out for delivery');
+  String get dispatched => _pick(
+    'Grab 기사 전달 완료',
+    'Đã bàn giao cho tài xế Grab',
+    'Handed to Grab driver',
+  );
   String get completed => _pick('배달 완료', 'Đã giao', 'Delivered');
   String get openGrab =>
       _pick('Grab 배송 확인', 'Theo dõi trên Grab', 'Track on Grab');
@@ -576,6 +580,11 @@ class DirectOrderCopy {
     'Đã gửi link Grab cho khách.',
     'The Grab link was sent to the customer.',
   );
+  String get invalidGrabLink => _pick(
+    '올바른 Grab 공유 링크를 입력하세요.',
+    'Nhập đúng liên kết chia sẻ Grab.',
+    'Enter a valid Grab share link.',
+  );
   String get backToQueue => _pick('주문 목록', 'Danh sách đơn', 'Order queue');
   String get all => _pick('전체', 'Tất cả', 'All');
   String get quoted => _pick('견적 완료', 'Đã báo giá', 'Quoted');
@@ -592,7 +601,7 @@ class DirectOrderCopy {
     'pending' => pending,
     'preparing' => _pick('조리 중', 'Đang làm', 'Preparing'),
     'ready' => _pick('픽업 준비', 'Sẵn sàng', 'Ready'),
-    'dispatched' => _pick('배송 중', 'Đang giao', 'Dispatched'),
+    'dispatched' => dispatched,
     'completed' => _pick('완료', 'Hoàn tất', 'Completed'),
     _ => state,
   };
