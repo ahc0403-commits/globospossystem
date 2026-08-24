@@ -16,6 +16,78 @@ void main() {
     expect(formatEmergencyElapsed(const Duration(seconds: -1)), '00:00');
   });
 
+  test('initial and supplemental batches keep independent station clocks', () {
+    final initialReceivedAt = DateTime.utc(2026, 8, 24, 10);
+    final addedReceivedAt = DateTime.utc(2026, 8, 24, 10, 30);
+    final order = EmergencyFulfillmentOrder(
+      queueId: 'queue-1',
+      orderId: 'order-1',
+      queueNo: 1,
+      tableNumber: '101',
+      floorLabel: '1F',
+      createdAt: initialReceivedAt,
+      items: [
+        EmergencyFulfillmentItem.fromJson({
+          'id': 'initial-1',
+          'order_item_id': 'order-item-initial-1',
+          'name_ko': '떡볶이',
+          'name_vi': 'Bánh gạo cay',
+          'name_en': 'Spicy rice cake',
+          'ordered_quantity': 1,
+          'kitchen_done_quantity': 1,
+          'tray_received_quantity': 0,
+          'tray_dispatched_quantity': 0,
+          'floor_served_quantity': 0,
+          'needs_review': false,
+          'batch_received_at': initialReceivedAt.toIso8601String(),
+          'kitchen_first_done_at': DateTime.utc(
+            2026,
+            8,
+            24,
+            10,
+            4,
+          ).toIso8601String(),
+          'kitchen_last_done_at': DateTime.utc(
+            2026,
+            8,
+            24,
+            10,
+            5,
+          ).toIso8601String(),
+        }),
+        for (final id in ['added-1', 'added-2'])
+          EmergencyFulfillmentItem.fromJson({
+            'id': id,
+            'order_item_id': 'order-item-$id',
+            'name_ko': '김밥',
+            'name_vi': 'Cơm cuộn',
+            'name_en': 'Gimbap',
+            'ordered_quantity': 1,
+            'kitchen_done_quantity': 0,
+            'tray_received_quantity': 0,
+            'tray_dispatched_quantity': 0,
+            'floor_served_quantity': 0,
+            'needs_review': false,
+            'batch_received_at': addedReceivedAt.toIso8601String(),
+          }),
+      ],
+    );
+
+    final batches = order.stationBatchesAt('kitchen');
+    expect(batches, hasLength(2));
+    expect(batches.first.isSupplemental, isFalse);
+    expect(
+      batches.first.elapsedAt(DateTime.utc(2026, 8, 24, 11)),
+      const Duration(minutes: 5),
+    );
+    expect(batches.last.isSupplemental, isTrue);
+    expect(batches.last.items, hasLength(2));
+    expect(
+      batches.last.elapsedAt(DateTime.utc(2026, 8, 24, 10, 33)),
+      const Duration(minutes: 3),
+    );
+  });
+
   test('fast refresh preserves tray and floor station timer boundaries', () {
     EmergencyFulfillmentState state({
       required String sessionId,

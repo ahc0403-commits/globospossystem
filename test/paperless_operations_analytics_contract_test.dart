@@ -3,6 +3,10 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  const additionalOrderTimingMigration =
+      'supabase/migrations/'
+      '20260824050000_paperless_additional_order_timing.sql';
+
   test('paperless analytics separates menu stages and dining time', () {
     final migration = File(
       'supabase/migrations/'
@@ -33,6 +37,22 @@ void main() {
     expect(migration, contains('dining_order_count'));
   });
 
+  test('paperless additional orders expose independent batch timing', () {
+    final migration = File(additionalOrderTimingMigration).readAsStringSync();
+
+    expect(migration, contains('-- production-gate: self-verifying'));
+    expect(migration, contains("'batch_received_at'"));
+    expect(migration, contains("'kitchen_first_done_at'"));
+    expect(migration, contains("'tray_first_dispatched_at'"));
+    expect(migration, contains("'floor_last_served_at'"));
+    expect(migration, contains('emergency_add_order_batch_timings'));
+    expect(
+      migration,
+      contains('payment.paid_at - service.first_floor_served_at'),
+    );
+    expect(migration, contains('emergency_events_order_item_stage_created'));
+  });
+
   test('paperless dashboard labels the operational and dining definitions', () {
     final source = File(
       'lib/features/admin/widgets/paperless_operations_dashboard.dart',
@@ -40,6 +60,9 @@ void main() {
 
     expect(source, contains("Key('paperless_operations_time_summary')"));
     expect(source, contains("Key('paperless_fastest_menu_ranking')"));
+    expect(source, contains('식사 중 추가 주문 대기시간도 포함합니다'));
+    expect(source, contains('gồm cả thời gian chờ món gọi thêm'));
+    expect(source, contains('including waits for added orders'));
     expect(source, contains("Key('paperless_slowest_menu_ranking')"));
     expect(source, contains("Key('paperless_category_operation_times')"));
     expect(source, contains("Key('paperless_operations_flow')"));
