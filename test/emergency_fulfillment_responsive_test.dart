@@ -871,6 +871,84 @@ void main() {
     expect(find.text('2F · 2 món'), findsNothing);
   });
 
+  testWidgets('card and detail show a separate supplemental batch timer', (
+    tester,
+  ) async {
+    final now = DateTime.now().toUtc();
+    final initialReceivedAt = now.subtract(const Duration(minutes: 30));
+    final addedReceivedAt = now.subtract(const Duration(minutes: 3));
+    final state = EmergencyFulfillmentState(
+      assigned: true,
+      active: true,
+      restaurantId: 'store-bt',
+      sessionId: 'session-1',
+      stationType: 'kitchen',
+      orders: [
+        EmergencyFulfillmentOrder(
+          queueId: 'queue-added',
+          orderId: 'order-added',
+          queueNo: 120,
+          tableNumber: 'T20',
+          floorLabel: '2F',
+          createdAt: initialReceivedAt,
+          items: [
+            EmergencyFulfillmentItem(
+              id: 'initial-item',
+              orderItemId: 'initial-order-item',
+              nameKo: '떡볶이',
+              nameVi: 'Bánh gạo cay',
+              nameEn: 'Spicy rice cake',
+              orderedQuantity: 1,
+              kitchenDoneQuantity: 1,
+              trayReceivedQuantity: 0,
+              trayDispatchedQuantity: 0,
+              floorServedQuantity: 0,
+              needsReview: false,
+              batchReceivedAt: initialReceivedAt,
+              kitchenFirstDoneAt: now.subtract(const Duration(minutes: 26)),
+              kitchenLastDoneAt: now.subtract(const Duration(minutes: 25)),
+            ),
+            EmergencyFulfillmentItem(
+              id: 'added-item',
+              orderItemId: 'added-order-item',
+              nameKo: '김밥',
+              nameVi: 'Cơm cuộn',
+              nameEn: 'Gimbap',
+              orderedQuantity: 1,
+              kitchenDoneQuantity: 0,
+              trayReceivedQuantity: 0,
+              trayDispatchedQuantity: 0,
+              floorServedQuantity: 0,
+              needsReview: false,
+              batchReceivedAt: addedReceivedAt,
+            ),
+          ],
+        ),
+      ],
+    );
+    await _pumpEmergency(
+      tester,
+      fixture: _FixtureEmergencyNotifier(state),
+      size: const Size(1024, 768),
+      locale: const Locale('ko'),
+      expectedStationType: 'kitchen',
+    );
+
+    expect(
+      find.byKey(const Key('emergency_additional_batch_timer_order-added_1')),
+      findsOne,
+    );
+    expect(find.textContaining('추가 주문 1'), findsOne);
+
+    await tester.tap(find.byKey(const Key('emergency_order_order-added')));
+    await tester.pump();
+    expect(
+      find.byKey(const Key('emergency_detail_additional_batch_added-item_1')),
+      findsOne,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('floor marks every delivered quantity served as green', (
     tester,
   ) async {

@@ -2131,9 +2131,9 @@ class _PaperlessCopy {
   );
   String get operationTotal => pick('운영 합계', 'Tổng', 'Total');
   String get diningFootnote => pick(
-    '식사 시간은 모든 메뉴 제공 완료 후 결제까지의 평균입니다. 제공 중이거나 결제 전인 주문은 제외됩니다.',
-    'Thời gian dùng bữa là trung bình từ lúc giao đủ món đến thanh toán. Đơn đang phục vụ hoặc chưa thanh toán bị loại trừ.',
-    'Dining time averages full delivery to payment. In-service and unpaid orders are excluded.',
+    '식사 시간은 첫 메뉴 제공부터 결제까지의 평균이며, 식사 중 추가 주문 대기시간도 포함합니다. 결제 전인 주문은 제외됩니다.',
+    'Thời gian dùng bữa là trung bình từ món đầu tiên được phục vụ đến khi thanh toán, gồm cả thời gian chờ món gọi thêm. Đơn chưa thanh toán bị loại trừ.',
+    'Dining time averages first menu service to payment, including waits for added orders. Unpaid orders are excluded.',
   );
   String station(String value) => switch (value) {
     'kitchen' => pick('주방', 'Bếp', 'Kitchen'),

@@ -22,6 +22,11 @@ String formatEmergencyElapsed(Duration elapsed) {
       '${seconds.toString().padLeft(2, '0')}';
 }
 
+DateTime? _optionalDateTime(Object? value) {
+  final raw = value?.toString();
+  return raw == null || raw.isEmpty ? null : DateTime.tryParse(raw);
+}
+
 /// Keeps the last known station clock boundaries while the fast order
 /// snapshot is published ahead of the timing RPC.
 EmergencyFulfillmentState preserveEmergencyStationTimings(
@@ -137,6 +142,9 @@ class EmergencyFulfillmentDisplayItem {
     required this.readyFromPreviousStage,
     required this.readOnly,
     this.isTakeout = false,
+    this.batchReceivedAt,
+    this.stationStartedAt,
+    this.stationCompletedAt,
   });
 
   final String id;
@@ -149,6 +157,9 @@ class EmergencyFulfillmentDisplayItem {
   final bool readyFromPreviousStage;
   final bool readOnly;
   final bool isTakeout;
+  final DateTime? batchReceivedAt;
+  final DateTime? stationStartedAt;
+  final DateTime? stationCompletedAt;
 
   String get paperlessName => nameVi.trim().isEmpty ? 'Món' : nameVi;
 
@@ -177,6 +188,13 @@ class EmergencyFulfillmentItem {
     this.sourceKind = 'order_item',
     this.comboComponents = const [],
     this.isTakeout = false,
+    this.batchReceivedAt,
+    this.kitchenFirstDoneAt,
+    this.kitchenLastDoneAt,
+    this.trayFirstDispatchedAt,
+    this.trayLastDispatchedAt,
+    this.floorFirstServedAt,
+    this.floorLastServedAt,
   });
 
   final String id;
@@ -195,9 +213,30 @@ class EmergencyFulfillmentItem {
   final String sourceKind;
   final List<EmergencyComboComponent> comboComponents;
   final bool isTakeout;
+  final DateTime? batchReceivedAt;
+  final DateTime? kitchenFirstDoneAt;
+  final DateTime? kitchenLastDoneAt;
+  final DateTime? trayFirstDispatchedAt;
+  final DateTime? trayLastDispatchedAt;
+  final DateTime? floorFirstServedAt;
+  final DateTime? floorLastServedAt;
 
   bool get isFloorDirect => fulfillmentRoute == 'floor_direct';
   String get paperlessName => nameVi.trim().isEmpty ? 'Món' : nameVi;
+
+  DateTime? stationStartedAt(String stationType) => switch (stationType) {
+    'kitchen' => batchReceivedAt,
+    'tray' => kitchenFirstDoneAt,
+    'floor' => isFloorDirect ? batchReceivedAt : trayFirstDispatchedAt,
+    _ => null,
+  };
+
+  DateTime? stationCompletedAt(String stationType) => switch (stationType) {
+    'kitchen' => kitchenLastDoneAt,
+    'tray' => trayLastDispatchedAt,
+    'floor' => floorLastServedAt,
+    _ => null,
+  };
 
   bool isActionableAt(String stationType) => switch (stationType) {
     'kitchen' => !isFloorDirect && kitchenDoneQuantity < orderedQuantity,
@@ -322,6 +361,13 @@ class EmergencyFulfillmentItem {
         sourceKind: sourceKind,
         comboComponents: comboComponents,
         isTakeout: isTakeout,
+        batchReceivedAt: batchReceivedAt,
+        kitchenFirstDoneAt: kitchenFirstDoneAt,
+        kitchenLastDoneAt: kitchenLastDoneAt,
+        trayFirstDispatchedAt: trayFirstDispatchedAt,
+        trayLastDispatchedAt: trayLastDispatchedAt,
+        floorFirstServedAt: floorFirstServedAt,
+        floorLastServedAt: floorLastServedAt,
       );
 
   factory EmergencyFulfillmentItem.fromJson(Map<String, dynamic> json) {
@@ -343,6 +389,15 @@ class EmergencyFulfillmentItem {
       lineKey: json['line_key']?.toString() ?? 'base',
       sourceKind: json['source_kind']?.toString() ?? 'order_item',
       isTakeout: json['is_takeout'] == true,
+      batchReceivedAt: _optionalDateTime(json['batch_received_at']),
+      kitchenFirstDoneAt: _optionalDateTime(json['kitchen_first_done_at']),
+      kitchenLastDoneAt: _optionalDateTime(json['kitchen_last_done_at']),
+      trayFirstDispatchedAt: _optionalDateTime(
+        json['tray_first_dispatched_at'],
+      ),
+      trayLastDispatchedAt: _optionalDateTime(json['tray_last_dispatched_at']),
+      floorFirstServedAt: _optionalDateTime(json['floor_first_served_at']),
+      floorLastServedAt: _optionalDateTime(json['floor_last_served_at']),
       comboComponents: rawComponents is List
           ? rawComponents
                 .whereType<Map>()
@@ -354,6 +409,48 @@ class EmergencyFulfillmentItem {
                 .toList(growable: false)
           : const [],
     );
+  }
+}
+
+class EmergencyOrderBatchTiming {
+  const EmergencyOrderBatchTiming({
+    required this.sequence,
+    required this.receivedAt,
+    required this.isSupplemental,
+    required this.items,
+  });
+
+  final int sequence;
+  final DateTime receivedAt;
+  final bool isSupplemental;
+  final List<EmergencyFulfillmentDisplayItem> items;
+
+  bool get completed =>
+      items.isNotEmpty && items.every((item) => item.completed);
+
+  DateTime? get startedAt {
+    final values = items
+        .map((item) => item.stationStartedAt)
+        .whereType<DateTime>();
+    if (values.isEmpty) return null;
+    return values.reduce((left, right) => left.isBefore(right) ? left : right);
+  }
+
+  DateTime? get completedAt {
+    if (!completed) return null;
+    final values = items
+        .map((item) => item.stationCompletedAt)
+        .whereType<DateTime>()
+        .toList(growable: false);
+    if (values.length != items.length) return null;
+    return values.reduce((left, right) => left.isAfter(right) ? left : right);
+  }
+
+  Duration elapsedAt(DateTime now) {
+    final start = startedAt;
+    if (start == null) return Duration.zero;
+    final elapsed = (completedAt ?? now).difference(start);
+    return elapsed.isNegative ? Duration.zero : elapsed;
   }
 }
 
@@ -489,6 +586,9 @@ class EmergencyFulfillmentOrder {
             ),
             readOnly: false,
             isTakeout: item.isTakeout,
+            batchReceivedAt: item.batchReceivedAt,
+            stationStartedAt: item.stationStartedAt(stationType),
+            stationCompletedAt: item.stationCompletedAt(stationType),
           ),
         );
         continue;
@@ -518,6 +618,9 @@ class EmergencyFulfillmentOrder {
             ),
             readOnly: componentItem == null,
             isTakeout: item.isTakeout,
+            batchReceivedAt: statusItem.batchReceivedAt ?? item.batchReceivedAt,
+            stationStartedAt: statusItem.stationStartedAt(stationType),
+            stationCompletedAt: statusItem.stationCompletedAt(stationType),
           ),
         );
       }
@@ -534,6 +637,33 @@ class EmergencyFulfillmentOrder {
         return statusOrder != 0 ? statusOrder : left.$1.compareTo(right.$1);
       });
     return indexed.map((entry) => entry.$2).toList(growable: false);
+  }
+
+  List<EmergencyOrderBatchTiming> stationBatchesAt(String stationType) {
+    final grouped = <int, List<EmergencyFulfillmentDisplayItem>>{};
+    final receivedAtByKey = <int, DateTime>{};
+    for (final item in displayItemsAt(stationType)) {
+      final receivedAt = (item.batchReceivedAt ?? createdAt).toUtc();
+      final key = receivedAt.microsecondsSinceEpoch;
+      grouped.putIfAbsent(key, () => []).add(item);
+      receivedAtByKey[key] = receivedAt;
+    }
+    final keys = grouped.keys.toList(growable: false)..sort();
+    if (keys.isEmpty) return const [];
+    final firstReceivedAt = receivedAtByKey[keys.first]!;
+    return keys.indexed
+        .map((entry) {
+          final receivedAt = receivedAtByKey[entry.$2]!;
+          return EmergencyOrderBatchTiming(
+            sequence: entry.$1 + 1,
+            receivedAt: receivedAt,
+            isSupplemental:
+                receivedAt.difference(firstReceivedAt) >
+                const Duration(seconds: 10),
+            items: List.unmodifiable(grouped[entry.$2]!),
+          );
+        })
+        .toList(growable: false);
   }
 
   EmergencyFulfillmentOrder copyWith({

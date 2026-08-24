@@ -369,6 +369,7 @@ class _EmergencyFulfillmentScreenState
     EmergencyFulfillmentState state,
     _EmergencyCopy copy,
   ) {
+    final now = DateTime.now();
     final stationType = state.stationType ?? 'kitchen';
     final activeOrders = state.orders
         .where(
@@ -403,6 +404,7 @@ class _EmergencyFulfillmentScreenState
         order: selected,
         stationType: stationType,
         copy: copy,
+        now: now,
         busy: _actionBusy,
         pending: state.pendingQueueIds.contains(selected.queueId),
         error: state.error,
@@ -461,7 +463,7 @@ class _EmergencyFulfillmentScreenState
                     stationType: stationType,
                     pendingQueueIds: state.pendingQueueIds,
                     requestedPage: _page,
-                    now: DateTime.now(),
+                    now: now,
                     copy: copy,
                     onPageChanged: (page) => setState(() => _page = page),
                     onSelected: (orderId) =>
@@ -1119,6 +1121,10 @@ class _EmergencyOrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final visibleItems = order.displayItemsAt(stationType);
+    final stationBatches = order.stationBatchesAt(stationType);
+    final supplementalBatches = stationBatches
+        .where((batch) => batch.isSupplemental)
+        .toList(growable: false);
     final actionable = order.hasActionableQuantity(stationType);
     final completed = order.isRecentlyCompleteAt(stationType);
     final tone = pending
@@ -1126,7 +1132,10 @@ class _EmergencyOrderCard extends StatelessWidget {
         : completed
         ? PosColors.success
         : _stationColor(stationType);
-    final elapsed = order.stationElapsedAt(now, stationType);
+    final elapsed =
+        stationBatches.isEmpty || stationBatches.first.startedAt == null
+        ? order.stationElapsedAt(now, stationType)
+        : stationBatches.first.elapsedAt(now);
     final orderHeaderStyle =
         (Theme.of(context).textTheme.titleMedium ??
                 const TextStyle(fontSize: 16))
@@ -1223,6 +1232,54 @@ class _EmergencyOrderCard extends StatelessWidget {
                       Expanded(
                         child: _EmergencyCardMenuList(items: visibleItems),
                       ),
+                      if (supplementalBatches.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              for (final batch in supplementalBatches) ...[
+                                if (batch != supplementalBatches.first)
+                                  const SizedBox(width: 5),
+                                Container(
+                                  key: Key(
+                                    'emergency_additional_batch_timer_'
+                                    '${order.orderId}_${batch.sequence - 1}',
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        (batch.completed
+                                                ? PosColors.success
+                                                : PosColors.warning)
+                                            .withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Text(
+                                    '${copy.additionalOrder(batch.sequence - 1)} '
+                                    '${formatEmergencyElapsed(batch.elapsedAt(now))}',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: batch.completed
+                                              ? PosColors.success
+                                              : PosColors.warning,
+                                          fontWeight: FontWeight.w900,
+                                          fontFeatures: const [
+                                            FontFeature.tabularFigures(),
+                                          ],
+                                        ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 4),
                       Text(
                         pending
@@ -1338,6 +1395,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
     required this.order,
     required this.stationType,
     required this.copy,
+    required this.now,
     required this.busy,
     required this.pending,
     required this.error,
@@ -1350,6 +1408,7 @@ class _EmergencyOrderDetails extends StatelessWidget {
   final EmergencyFulfillmentOrder order;
   final String stationType;
   final _EmergencyCopy copy;
+  final DateTime now;
   final bool busy;
   final bool pending;
   final String? error;
@@ -1363,12 +1422,19 @@ class _EmergencyOrderDetails extends StatelessWidget {
     final itemsById = <String, EmergencyFulfillmentItem>{
       for (final item in order.items) item.id: item,
     };
+    final batches = order.stationBatchesAt(stationType);
+    final batchByDisplayItemId = <String, EmergencyOrderBatchTiming>{
+      for (final batch in batches)
+        for (final item in batch.items) item.id: batch,
+    };
     final visibleItems = order
         .displayItemsAt(stationType)
         .map(
           (displayItem) => _EmergencyMenuEntry(
             displayItem: displayItem,
             fulfillmentItem: itemsById[displayItem.fulfillmentItemId]!,
+            batch: batchByDisplayItemId[displayItem.id],
+            now: now,
           ),
         )
         .toList(growable: false);
@@ -1699,10 +1765,14 @@ class _EmergencyMenuEntry {
   const _EmergencyMenuEntry({
     required this.displayItem,
     required this.fulfillmentItem,
+    required this.batch,
+    required this.now,
   });
 
   final EmergencyFulfillmentDisplayItem displayItem;
   final EmergencyFulfillmentItem fulfillmentItem;
+  final EmergencyOrderBatchTiming? batch;
+  final DateTime now;
 }
 
 class _EmergencyMenuRow extends StatelessWidget {
@@ -1726,6 +1796,7 @@ class _EmergencyMenuRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final item = entry.fulfillmentItem;
     final displayItem = entry.displayItem;
+    final batch = entry.batch;
     final (value, limit) = switch (stationType) {
       'kitchen' => (item.kitchenDoneQuantity, item.orderedQuantity),
       'tray' => (item.trayDispatchedQuantity, item.kitchenDoneQuantity),
@@ -1786,6 +1857,24 @@ class _EmergencyMenuRow extends StatelessWidget {
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
                       color: PosColors.warning,
                       fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+                if (batch?.isSupplemental == true) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    '${copy.additionalOrder(batch!.sequence - 1)} · '
+                    '${formatEmergencyElapsed(batch.elapsedAt(entry.now))}',
+                    key: Key(
+                      'emergency_detail_additional_batch_'
+                      '${displayItem.id}_${batch.sequence - 1}',
+                    ),
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: batch.completed
+                          ? PosColors.success
+                          : PosColors.warning,
+                      fontWeight: FontWeight.w900,
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
                 ],
@@ -2153,6 +2242,8 @@ class _EmergencyCopy {
   String get table => _pick('테이블', 'Bàn', 'Table');
   String get items => _pick('메뉴', 'món', 'items');
   String get order => _pick('주문', 'Đơn', 'Order');
+  String additionalOrder(int number) =>
+      _pick('추가 주문 $number', 'Gọi thêm $number', 'Added order $number');
   String get takeout => _pick('포장 주문', 'MANG VỀ', 'TAKEOUT');
   String get leftoverPackagingTitle => _pick(
     '남은 음식 포장 요청',
