@@ -1372,6 +1372,19 @@ void main() {
     await tester.pump(const Duration(milliseconds: 25));
     expect(soundService.playCount, 3);
   });
+
+  testWidgets('cashier always exposes the direct delivery desk entry', (
+    tester,
+  ) async {
+    await _pumpCashier(tester);
+
+    final entry = find.byKey(const Key('cashier_direct_orders_entry'));
+    expect(entry, findsOneWidget);
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('direct-order-desk-route')), findsOneWidget);
+  });
 }
 
 class _CashierHarness {
@@ -1437,6 +1450,13 @@ Future<_CashierHarness> _pumpCashier(
         path: '/payments/:id',
         builder: (_, __) => const Scaffold(
           key: Key('payment-result-route'),
+          body: SizedBox.shrink(),
+        ),
+      ),
+      GoRoute(
+        path: '/cashier/direct-orders',
+        builder: (_, __) => const Scaffold(
+          key: Key('direct-order-desk-route'),
           body: SizedBox.shrink(),
         ),
       ),

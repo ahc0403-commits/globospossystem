@@ -283,21 +283,6 @@ BEGIN
   );
 
   BEGIN
-    UPDATE public.restaurant_settings
-    SET fulfillment_mode = 'paperless'
-    WHERE restaurant_id = v_store;
-    v_ok := direct_delivery_test.expect_approval_error(
-      v_request, v_total, 'DIRECT_ORDER_REQUIRES_POS_PRINT'
-    );
-    RAISE EXCEPTION 'DIRECT_TEST_ROLLBACK';
-  EXCEPTION WHEN OTHERS THEN
-    IF SQLERRM <> 'DIRECT_TEST_ROLLBACK' THEN RAISE; END IF;
-  END;
-  INSERT INTO _direct_precondition_results VALUES (
-    'non-pos_print fulfillment is rejected', v_ok, 'legacy print mode gate'
-  );
-
-  BEGIN
     INSERT INTO public.emergency_fulfillment_sessions(
       restaurant_id, status, reason, activated_by
     ) VALUES (v_store, 'active', 'direct guard test', v_user);

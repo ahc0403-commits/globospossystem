@@ -41,6 +41,50 @@ String homeRouteForRole(String? role) {
   };
 }
 
+String loginRouteWithReturnTo(String location) =>
+    Uri(path: '/login', queryParameters: {'returnTo': location}).toString();
+
+String authGateRouteWithReturnTo(String gate, Uri currentUri) {
+  final existing = currentUri.queryParameters['returnTo'];
+  final returnTo =
+      existing ?? (currentUri.path == gate ? null : currentUri.toString());
+  if (returnTo == null || returnTo.isEmpty) return gate;
+  return Uri(path: gate, queryParameters: {'returnTo': returnTo}).toString();
+}
+
+String? postLoginReturnToForRole(
+  String? role,
+  Uri authGateUri, {
+  List<String> extraPermissions = const <String>[],
+}) {
+  final raw = authGateUri.queryParameters['returnTo'];
+  if (raw == null ||
+      raw.isEmpty ||
+      !raw.startsWith('/') ||
+      raw.startsWith('//')) {
+    return null;
+  }
+  final candidate = Uri.tryParse(raw);
+  if (candidate == null || candidate.hasScheme || candidate.hasAuthority) {
+    return null;
+  }
+  if ({
+    '/login',
+    '/onboarding',
+    '/privacy-consent',
+    '/change-initial-password',
+  }.contains(candidate.path)) {
+    return null;
+  }
+  return canAccessRouteForRole(
+        role,
+        candidate.toString(),
+        extraPermissions: extraPermissions,
+      )
+      ? candidate.toString()
+      : null;
+}
+
 bool canAccessRouteForRole(
   String? role,
   String location, {

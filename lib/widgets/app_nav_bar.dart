@@ -10,6 +10,7 @@ import '../core/services/navigation_history_service.dart';
 import '../core/utils/role_routes.dart' as role_routes;
 import '../features/auth/auth_provider.dart';
 import '../features/auth/auth_state.dart';
+import '../features/direct_order/direct_order_copy.dart';
 import 'language_switcher.dart';
 
 class AppNavBar extends ConsumerWidget {
@@ -44,6 +45,13 @@ class AppNavBar extends ConsumerWidget {
     final nav = NavigationHistoryService.instance;
     final homeRoute = homeRouteForRole(role);
     final currentLocation = GoRouterState.of(context).uri.toString();
+    final showDirectOrderEntry =
+        GoRouterState.of(context).uri.path == '/cashier' &&
+        role_routes.canAccessRouteForRole(
+          role,
+          '/cashier/direct-orders',
+          extraPermissions: authState.extraPermissions,
+        );
     final isHome =
         currentLocation == homeRoute ||
         currentLocation.startsWith('$homeRoute?') ||
@@ -110,11 +118,23 @@ class AppNavBar extends ConsumerWidget {
               ),
               const SizedBox(width: 6),
               _NavButton(
-                key: const Key('app_nav_home_button'),
-                icon: Icons.home_rounded,
-                tooltip: l10n.home,
-                enabled: canGoHome,
+                key: showDirectOrderEntry
+                    ? const Key('cashier_direct_orders_entry')
+                    : const Key('app_nav_home_button'),
+                icon: showDirectOrderEntry
+                    ? Icons.delivery_dining_rounded
+                    : Icons.home_rounded,
+                tooltip: showDirectOrderEntry
+                    ? DirectOrderCopy(
+                        Localizations.localeOf(context).languageCode,
+                      ).arrivalAlertTitle
+                    : l10n.home,
+                enabled: showDirectOrderEntry || canGoHome,
                 onTap: () {
+                  if (showDirectOrderEntry) {
+                    context.go('/cashier/direct-orders');
+                    return;
+                  }
                   if (forceHomeEnabled && onHomePressed != null) {
                     onHomePressed!();
                     return;
