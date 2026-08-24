@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/services/live_refresh_service.dart';
 import '../../core/ui/app_theme.dart';
 import '../../core/ui/pos_design_tokens.dart';
 import '../../widgets/app_nav_bar.dart';
@@ -33,6 +34,7 @@ class _DirectOrderCashierScreenState
   final _grabUrlController = TextEditingController();
   final _actualGrabFeeController = TextEditingController();
   Timer? _timer;
+  Timer? _chatRefreshTimer;
   List<Map<String, dynamic>> _requests = const [];
   Map<String, dynamic>? _detail;
   String? _selectedId;
@@ -40,6 +42,7 @@ class _DirectOrderCashierScreenState
   String? _stateFilter;
   bool _loading = true;
   bool _busy = false;
+  int _refreshRevision = 0;
 
   DirectOrderCopy get _copy =>
       DirectOrderCopy(Localizations.localeOf(context).languageCode);
@@ -50,7 +53,7 @@ class _DirectOrderCashierScreenState
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
     _timer = Timer.periodic(
-      const Duration(seconds: 8),
+      const Duration(seconds: 30),
       (_) => _refresh(silent: true),
     );
   }
@@ -58,6 +61,7 @@ class _DirectOrderCashierScreenState
   @override
   void dispose() {
     _timer?.cancel();
+    _chatRefreshTimer?.cancel();
     _chatController.dispose();
     _feeController.dispose();
     _quoteNoteController.dispose();
@@ -72,6 +76,7 @@ class _DirectOrderCashierScreenState
   }) async {
     final storeId = _storeId;
     if (storeId == null || (_busy && !allowWhileBusy)) return;
+    final revision = ++_refreshRevision;
     if (!silent) setState(() => _loading = true);
     try {
       final rows = await directOrderStaffService.listRequests(
@@ -79,17 +84,22 @@ class _DirectOrderCashierScreenState
         states: _stateFilter == null ? null : [_stateFilter!],
       );
       Map<String, dynamic>? detail;
-      final selectedId = _selectedId;
+      final requestedSelection = _selectedId;
+      final selectedId =
+          rows.any((row) => row['id']?.toString() == requestedSelection)
+          ? requestedSelection
+          : (rows.isEmpty ? null : rows.first['id']?.toString());
       if (selectedId != null) {
         detail = await directOrderStaffService.requestDetail(
           storeId: storeId,
           requestId: selectedId,
         );
       }
-      if (!mounted) return;
+      if (!mounted || revision != _refreshRevision) return;
       setState(() {
         _requests = rows;
-        _detail = detail ?? _detail;
+        _selectedId = selectedId;
+        _detail = detail;
         _error = null;
         _loading = false;
       });
@@ -105,6 +115,7 @@ class _DirectOrderCashierScreenState
   Future<void> _select(String id) async {
     final storeId = _storeId;
     if (storeId == null) return;
+    final revision = ++_refreshRevision;
     setState(() {
       _selectedId = id;
       _detail = null;
@@ -115,7 +126,7 @@ class _DirectOrderCashierScreenState
         storeId: storeId,
         requestId: id,
       );
-      if (!mounted) return;
+      if (!mounted || revision != _refreshRevision) return;
       setState(() {
         _detail = detail;
         _loading = false;
@@ -172,15 +183,56 @@ class _DirectOrderCashierScreenState
   Future<void> _sendMessage() async {
     final body = _chatController.text.trim();
     if (body.isEmpty || _storeId == null || _selectedId == null) return;
-    _chatController.clear();
-    await _act(
-      () => directOrderStaffService.sendMessage(
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final sent = await directOrderStaffService.sendMessage(
         storeId: _storeId!,
         requestId: _selectedId!,
         message: body,
-      ),
-      _copy.send,
-    );
+      );
+      if (!mounted) return;
+      _refreshRevision += 1;
+      final currentDetail = _detail;
+      _chatController.clear();
+      setState(() {
+        if (currentDetail != null) {
+          _detail = {
+            ...currentDetail,
+            'messages': [
+              ..._maps(currentDetail['messages']),
+              {
+                'id': sent['message_id'],
+                'sender_type': 'cashier',
+                'message_type': 'text',
+                'body': body,
+                'has_attachment': false,
+                'created_at': sent['created_at'],
+              },
+            ],
+          };
+        }
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_copy.actionFailed),
+            backgroundColor: PosColors.danger,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _handleLiveEvent(PosLiveEvent event) {
+    if (!event.affects({'direct_order_chat'})) return;
+    _chatRefreshTimer?.cancel();
+    _chatRefreshTimer = Timer(const Duration(milliseconds: 100), () {
+      if (mounted) _refresh(silent: true);
+    });
   }
 
   Future<void> _showProof(Map<String, dynamic> message) async {
@@ -375,6 +427,15 @@ class _DirectOrderCashierScreenState
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
+    final storeId = auth.storeId;
+    if (storeId != null) {
+      ref.listen<AsyncValue<PosLiveEvent>>(posLiveEventsProvider(storeId), (
+        _,
+        next,
+      ) {
+        next.whenData(_handleLiveEvent);
+      });
+    }
     final width = MediaQuery.sizeOf(context).width;
     final isCompact = width < 900;
     return Scaffold(

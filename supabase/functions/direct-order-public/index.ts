@@ -215,6 +215,7 @@ function securityHeaders(
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type, x-direct-order-cleanup-secret",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Max-Age": "600",
     "Cache-Control": "no-store, max-age=0",
     "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
     "Content-Type": "application/json; charset=utf-8",

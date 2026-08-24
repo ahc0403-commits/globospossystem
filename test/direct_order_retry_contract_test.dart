@@ -99,7 +99,7 @@ void main() {
       expiresAt: DateTime.now().add(const Duration(hours: 1)),
     );
 
-    await service.sendMessage(
+    final message = await service.sendMessage(
       session: session,
       requestId: 'dd000000-0000-4000-8000-000000000207',
       message: 'Please call when you arrive.',
@@ -108,5 +108,8 @@ void main() {
     expect(sent?['action'], 'message');
     expect(sent?['message'], 'Please call when you arrive.');
     expect(sent?.containsKey('locale'), isFalse);
+    expect(message.senderType, 'customer');
+    expect(message.body, 'Please call when you arrive.');
+    expect(message.createdAt, DateTime.utc(2026, 8, 22, 10, 2));
   });
 }

@@ -81,6 +81,7 @@ class _DirectOrderStorefrontScreenState
   bool _rememberAddress = false;
   bool _proofUploading = false;
   bool _sendingMessage = false;
+  bool _refreshingStatus = false;
   bool _locating = false;
   bool _resolvingMap = false;
   String? _errorCode;
@@ -90,6 +91,7 @@ class _DirectOrderStorefrontScreenState
   int _placeDetailsGeneration = 0;
   int _mapResolveGeneration = 0;
   int _locationGeneration = 0;
+  int _statusMutationRevision = 0;
 
   String get _languageCode =>
       Localizations.maybeLocaleOf(context)?.languageCode ?? 'vi';
@@ -459,7 +461,7 @@ class _DirectOrderStorefrontScreenState
 
   void _startStatusPolling() {
     _statusTimer?.cancel();
-    _statusTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+    _statusTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       _refreshStatus(silent: true);
     });
   }
@@ -467,19 +469,30 @@ class _DirectOrderStorefrontScreenState
   Future<void> _refreshStatus({bool silent = false}) async {
     final session = _session;
     final requestId = _status?.requestId;
-    if (session == null || requestId == null || requestId.isEmpty) return;
+    if (session == null ||
+        requestId == null ||
+        requestId.isEmpty ||
+        _refreshingStatus) {
+      return;
+    }
+    _refreshingStatus = true;
+    final revision = _statusMutationRevision;
     try {
       final status = await widget.service.fetchStatus(
         session: session,
         requestId: requestId,
       );
-      if (mounted) setState(() => _status = status);
+      if (mounted && revision == _statusMutationRevision) {
+        setState(() => _status = status);
+      }
       if (const {'rejected', 'cancelled', 'expired'}.contains(status.state) ||
           status.fulfillmentStatus == 'completed') {
         _statusTimer?.cancel();
       }
     } catch (error) {
       if (!silent) _showError(error);
+    } finally {
+      _refreshingStatus = false;
     }
   }
 
@@ -525,13 +538,29 @@ class _DirectOrderStorefrontScreenState
     if (text.isEmpty || session == null || status == null) return;
     setState(() => _sendingMessage = true);
     try {
-      await widget.service.sendMessage(
+      final sent = await widget.service.sendMessage(
         session: session,
         requestId: status.requestId,
         message: text,
       );
+      if (!mounted) return;
+      final latest = _status ?? status;
+      final messages = latest.messages.any((item) => item.id == sent.id)
+          ? latest.messages
+          : [...latest.messages, sent];
+      _statusMutationRevision += 1;
       _messageController.clear();
-      await _refreshStatus();
+      setState(() {
+        _status = DirectOrderStatus(
+          requestId: latest.requestId,
+          referenceCode: latest.referenceCode,
+          state: latest.state,
+          quote: latest.quote,
+          messages: messages,
+          fulfillmentStatus: latest.fulfillmentStatus,
+          grabTrackingUrl: latest.grabTrackingUrl,
+        );
+      });
     } catch (error) {
       _showError(error);
     } finally {
