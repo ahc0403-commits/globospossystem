@@ -387,13 +387,20 @@ class _DirectOrderCashierScreenState
   }
 
   Future<void> _sendGrab() async {
-    final url = _grabUrlController.text.trim();
+    final url = normalizeGrabTrackingUrl(_grabUrlController.text);
     final actual = _actualGrabFeeController.text.trim().isEmpty
         ? null
         : double.tryParse(_actualGrabFeeController.text.replaceAll(',', ''));
-    if (!url.startsWith('https://') ||
-        _storeId == null ||
-        _selectedId == null) {
+    if (url == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_copy.invalidGrabLink),
+          backgroundColor: PosColors.danger,
+        ),
+      );
+      return;
+    }
+    if (_storeId == null || _selectedId == null) {
       return;
     }
     await _act(

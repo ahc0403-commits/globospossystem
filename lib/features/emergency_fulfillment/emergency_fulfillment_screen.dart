@@ -1203,9 +1203,14 @@ class _EmergencyOrderCard extends StatelessWidget {
     final tableHeaderStyle = orderHeaderStyle.copyWith(
       fontSize: (orderHeaderStyle.fontSize ?? 16) * 1.4,
     );
-    final semantics =
-        '${copy.order} ${order.queueNo}, ${copy.table} ${order.tableNumber}, '
-        '${order.floorLabel}, ${visibleItems.length} ${copy.items}';
+    final orderIdentifier = order.isDelivery
+        ? copy.delivery
+        : order.tableNumber;
+    final semantics = order.isDelivery
+        ? '${copy.order} ${order.queueNo}, ${copy.delivery}, '
+              '${visibleItems.length} ${copy.items}'
+        : '${copy.order} ${order.queueNo}, ${copy.table} ${order.tableNumber}, '
+              '${order.floorLabel}, ${visibleItems.length} ${copy.items}';
 
     return Semantics(
       button: true,
@@ -1243,7 +1248,7 @@ class _EmergencyOrderCard extends StatelessWidget {
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              order.tableNumber,
+                              orderIdentifier,
                               key: Key(
                                 'emergency_order_table_${order.orderId}',
                               ),
@@ -1533,15 +1538,19 @@ class _EmergencyOrderDetails extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${copy.order} #${order.queueNo} · '
-                          '${copy.table} ${order.tableNumber}',
+                          order.isDelivery
+                              ? '${copy.order} #${order.queueNo} · ${copy.delivery}'
+                              : '${copy.order} #${order.queueNo} · '
+                                    '${copy.table} ${order.tableNumber}',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleLarge
                               ?.copyWith(fontWeight: FontWeight.w900),
                         ),
                         Text(
-                          '${order.floorLabel} · ${copy.stageTitle(stationType)}',
+                          order.isDelivery
+                              ? copy.stageTitle(stationType)
+                              : '${order.floorLabel} · ${copy.stageTitle(stationType)}',
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(
                                 color: _stationColor(stationType),
@@ -2300,6 +2309,7 @@ class _EmergencyCopy {
   String get recentCompleted =>
       _pick('최근 완료', 'Vừa hoàn tất', 'Recently completed');
   String get table => _pick('테이블', 'Bàn', 'Table');
+  String get delivery => _pick('배달', 'GIAO HÀNG', 'DELIVERY');
   String get items => _pick('메뉴', 'món', 'items');
   String get order => _pick('주문', 'Đơn', 'Order');
   String additionalOrder(int number) =>

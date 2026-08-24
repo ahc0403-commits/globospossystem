@@ -1239,42 +1239,60 @@ class _DirectOrderStorefrontScreenState
   }
 
   Widget _statusHero(DirectOrderStatus status) {
-    final (icon, tone, title) = switch (status.state) {
-      'awaiting_quote' => (
-        Icons.schedule_rounded,
-        PosColors.info,
-        _copy.awaitingQuote,
-      ),
-      'quoted' => (
-        Icons.request_quote_rounded,
-        PosColors.accent,
-        _copy.quoteReady,
-      ),
-      'awaiting_payment_review' => (
-        Icons.verified_user_outlined,
-        PosColors.warning,
-        _copy.awaitingApproval,
-      ),
-      'approved' => (
+    final (icon, tone, title) = switch (status.fulfillmentStatus) {
+      'preparing' => (
         Icons.restaurant_rounded,
+        PosColors.warning,
+        _copy.preparing,
+      ),
+      'ready' => (Icons.inventory_2_outlined, PosColors.info, _copy.ready),
+      'dispatched' => (
+        Icons.delivery_dining_rounded,
         PosColors.success,
-        _copy.approved,
+        _copy.dispatched,
       ),
-      'rejected' => (
-        Icons.error_outline_rounded,
-        PosColors.danger,
-        _copy.rejected,
+      'completed' => (
+        Icons.check_circle_outline_rounded,
+        PosColors.success,
+        _copy.completed,
       ),
-      'cancelled' => (
-        Icons.cancel_outlined,
-        PosColors.textSecondary,
-        _copy.cancelled,
-      ),
-      _ => (
-        Icons.info_outline_rounded,
-        PosColors.textSecondary,
-        _copy.orderStatus,
-      ),
+      _ => switch (status.state) {
+        'awaiting_quote' => (
+          Icons.schedule_rounded,
+          PosColors.info,
+          _copy.awaitingQuote,
+        ),
+        'quoted' => (
+          Icons.request_quote_rounded,
+          PosColors.accent,
+          _copy.quoteReady,
+        ),
+        'awaiting_payment_review' => (
+          Icons.verified_user_outlined,
+          PosColors.warning,
+          _copy.awaitingApproval,
+        ),
+        'approved' => (
+          Icons.restaurant_rounded,
+          PosColors.success,
+          _copy.approved,
+        ),
+        'rejected' => (
+          Icons.error_outline_rounded,
+          PosColors.danger,
+          _copy.rejected,
+        ),
+        'cancelled' => (
+          Icons.cancel_outlined,
+          PosColors.textSecondary,
+          _copy.cancelled,
+        ),
+        _ => (
+          Icons.info_outline_rounded,
+          PosColors.textSecondary,
+          _copy.orderStatus,
+        ),
+      },
     };
     final fulfillment = switch (status.fulfillmentStatus) {
       'preparing' => _copy.preparing,
@@ -1292,6 +1310,7 @@ class _DirectOrderStorefrontScreenState
             const SizedBox(height: 10),
             Text(
               title,
+              key: const Key('direct_order_status_title'),
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleLarge,
             ),
@@ -1546,27 +1565,44 @@ class _DirectOrderStorefrontScreenState
             messageType: message.messageType,
             body: message.body,
           );
+    final grabUri = message.messageType == 'grab_link'
+        ? Uri.tryParse(message.body ?? '')
+        : null;
+    final bubble = Container(
+      constraints: const BoxConstraints(maxWidth: 560),
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: mine ? PosColors.accentMuted : PosColors.panelMuted,
+        borderRadius: AppRadius.md,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (message.hasAttachment) ...[
+            const Icon(Icons.image_outlined, size: 18),
+            const SizedBox(width: 6),
+          ] else if (grabUri != null) ...[
+            const Icon(Icons.delivery_dining_outlined, size: 18),
+            const SizedBox(width: 6),
+          ],
+          Flexible(child: Text(body)),
+          if (grabUri != null) ...[
+            const SizedBox(width: 6),
+            const Icon(Icons.open_in_new_rounded, size: 16),
+          ],
+        ],
+      ),
+    );
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 560),
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(
-          color: mine ? PosColors.accentMuted : PosColors.panelMuted,
-          borderRadius: AppRadius.md,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (message.hasAttachment) ...[
-              const Icon(Icons.image_outlined, size: 18),
-              const SizedBox(width: 6),
-            ],
-            Flexible(child: Text(body)),
-          ],
-        ),
-      ),
+      child: grabUri == null
+          ? bubble
+          : InkWell(
+              onTap: () =>
+                  launchUrl(grabUri, mode: LaunchMode.externalApplication),
+              child: bubble,
+            ),
     );
   }
 }

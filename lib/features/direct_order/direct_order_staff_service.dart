@@ -15,6 +15,20 @@ String directOrderStaffErrorCode(Object error) {
   return 'DIRECT_ORDER_TEMPORARILY_UNAVAILABLE';
 }
 
+String? normalizeGrabTrackingUrl(String input) {
+  var value = input.trim();
+  if (value.isEmpty) return null;
+  if (!value.contains('://')) value = 'https://$value';
+  final uri = Uri.tryParse(value);
+  if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return null;
+  final host = uri.host.toLowerCase();
+  final validHost =
+      host == 'grab.com' ||
+      host.endsWith('.grab.com') ||
+      host == 'grab.onelink.me';
+  return validHost ? uri.toString() : null;
+}
+
 class DirectOrderStaffService {
   const DirectOrderStaffService();
 

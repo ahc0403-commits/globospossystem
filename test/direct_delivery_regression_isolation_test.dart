@@ -11,7 +11,7 @@ const _frozenFiles = <String, String>{
   'lib/features/qr_order/qr_order_screen.dart':
       '3be65edc63f943e3fddd1f4e4b25fca8b842d430e5fc803d54c76c9d75e7f49b',
   'lib/features/cashier/cashier_screen.dart':
-      'bb62d51f93c474461783312d3d0acfbad2a087df122b650bdc3f1637cb447017',
+      '60f007189e40d111d1e302d7719a9156b0cb9aaee8b12f3879b95f17ce5bee3e',
   'lib/features/kitchen/kitchen_provider.dart':
       '9fc393e5b61e1c370cbf17af31bb3becf6eae1cf87b3f8073164aa00ef345ec5',
   'lib/features/kitchen/kitchen_screen.dart':
