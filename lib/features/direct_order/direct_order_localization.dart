@@ -38,6 +38,7 @@ String localizedDirectOrderMessage({
     'DIRECT_ORDER_REQUEST_RECEIVED' => copy.awaitingQuote,
     'DIRECT_ORDER_QUOTE_SENT' => copy.quoteReady,
     'DIRECT_ORDER_PAYMENT_APPROVED' => copy.approved,
+    'DIRECT_ORDER_REJECTED_BY_STORE' => copy.rejectedByStore,
     'DIRECT_ORDER_CANCELLED_BY_CUSTOMER' => copy.cancelled,
     null || '' => copy.systemUpdate,
     _ => body,

@@ -125,10 +125,13 @@ class DirectOrderQrExportService {
 
   void _requirePublicOrderUrl(String value) {
     final uri = Uri.tryParse(value);
+    final route = uri == null
+        ? ''
+        : (uri.fragment.startsWith('/order/') ? uri.fragment : uri.path);
     if (uri == null ||
         uri.scheme != 'https' ||
         uri.host.isEmpty ||
-        !uri.fragment.startsWith('/order/')) {
+        !RegExp(r'^/order/[a-z0-9][a-z0-9-]{2,62}$').hasMatch(route)) {
       throw const FormatException('DIRECT_ORDER_QR_URL_INVALID');
     }
   }

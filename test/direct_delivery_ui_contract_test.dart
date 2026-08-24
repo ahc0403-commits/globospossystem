@@ -6,6 +6,8 @@ import 'package:globos_pos_system/features/direct_order/direct_order_browser_loc
 import 'package:globos_pos_system/features/direct_order/direct_order_copy.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_localization.dart';
 import 'package:globos_pos_system/features/direct_order/direct_order_models.dart';
+import 'package:globos_pos_system/features/direct_order/direct_order_staff_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() {
   test('direct delivery routes preserve least-privilege role separation', () {
@@ -24,6 +26,24 @@ void main() {
       expect(canAccessRouteForRole(role, '/direct-delivery/settings'), isTrue);
     }
     expect(canAccessRouteForRole('waiter', '/cashier/direct-orders'), isFalse);
+  });
+
+  test('cashier actions surface exact safe RPC failure codes', () {
+    expect(
+      directOrderStaffErrorCode(
+        const PostgrestException(
+          message: 'DIRECT_ORDER_PAYMENT_AMOUNT_MISMATCH',
+          code: 'P0001',
+        ),
+      ),
+      'DIRECT_ORDER_PAYMENT_AMOUNT_MISMATCH',
+    );
+    expect(
+      directOrderStaffErrorCode(
+        const PostgrestException(message: 'unclassified database failure'),
+      ),
+      'DIRECT_ORDER_TEMPORARILY_UNAVAILABLE',
+    );
   });
 
   test('cached address round-trips all user-entered and verified fields', () {
@@ -85,12 +105,40 @@ void main() {
   test(
     'cashier approval copy says kitchen handoff is manual in all locales',
     () {
+      const progress = {
+        'ko': ['주문 확인', '입금 확인', '메뉴 조리 중', 'Grab 기사 전달 완료'],
+        'vi': [
+          'Đã xác nhận đơn',
+          'Đã xác nhận thanh toán',
+          'Đang chuẩn bị món',
+          'Đã bàn giao cho tài xế Grab',
+        ],
+        'en': [
+          'Order confirmed',
+          'Payment confirmed',
+          'Preparing food',
+          'Handed to Grab driver',
+        ],
+      };
       for (final language in ['ko', 'vi', 'en']) {
         final copy = DirectOrderCopy(language);
         expect(copy.manualApprovalCheck, isNotEmpty);
         expect(copy.approveAndSendKitchen, isNotEmpty);
         expect(copy.stateLabel('awaiting_payment_review'), copy.proofSubmitted);
+        expect([
+          copy.progressOrderConfirmed,
+          copy.progressPaymentConfirmed,
+          copy.progressPreparing,
+          copy.progressGrabHandoff,
+        ], progress[language]);
       }
+
+      final cashier = File(
+        'lib/features/direct_order/direct_order_cashier_screen.dart',
+      ).readAsStringSync();
+      expect(cashier, contains("'DIRECT_ORDER_REJECTED_BY_STORE'"));
+      expect(cashier, contains("Key('direct_order_approval_confirm')"));
+      expect(cashier, isNot(contains('CheckboxListTile(')));
     },
   );
 
@@ -167,6 +215,14 @@ void main() {
         ),
         freeText,
         reason: 'cashier rejection reason is not a fixed system code',
+      );
+      expect(
+        localizedDirectOrderMessage(
+          copy: copy,
+          messageType: 'system',
+          body: 'DIRECT_ORDER_REJECTED_BY_STORE',
+        ),
+        copy.rejectedByStore,
       );
       expect(copy.kitchenBoard, isNotEmpty);
       expect(copy.analytics, isNotEmpty);

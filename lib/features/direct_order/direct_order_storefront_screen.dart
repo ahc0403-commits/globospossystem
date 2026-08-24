@@ -1215,6 +1215,10 @@ class _DirectOrderStorefrontScreenState
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
           _statusHero(status),
+          if (!{'rejected', 'cancelled', 'expired'}.contains(status.state)) ...[
+            const SizedBox(height: 12),
+            _orderProgressCard(status),
+          ],
           if (status.quote != null) ...[
             const SizedBox(height: 12),
             _quoteCard(status),
@@ -1327,6 +1331,46 @@ class _DirectOrderStorefrontScreenState
                 label: Text(_copy.startNewOrder),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _orderProgressCard(DirectOrderStatus status) {
+    final currentStep = switch (status.fulfillmentStatus) {
+      'dispatched' || 'completed' => 3,
+      'preparing' || 'ready' => 2,
+      _ when status.state == 'approved' => 1,
+      _ => 0,
+    };
+    final steps = <(IconData, String)>[
+      (Icons.receipt_long_outlined, _copy.progressOrderConfirmed),
+      (Icons.account_balance_wallet_outlined, _copy.progressPaymentConfirmed),
+      (Icons.restaurant_outlined, _copy.progressPreparing),
+      (Icons.delivery_dining_outlined, _copy.progressGrabHandoff),
+    ];
+    return Card(
+      key: const Key('direct_order_customer_progress'),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              _copy.orderProgress,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 12),
+            for (var index = 0; index < steps.length; index++)
+              _CustomerProgressRow(
+                key: Key('direct_order_progress_step_$index'),
+                icon: steps[index].$1,
+                label: steps[index].$2,
+                isCompleted: index < currentStep,
+                isCurrent: index == currentStep,
+                showConnector: index < steps.length - 1,
+              ),
           ],
         ),
       ),
@@ -1523,6 +1567,77 @@ class _DirectOrderStorefrontScreenState
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CustomerProgressRow extends StatelessWidget {
+  const _CustomerProgressRow({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.isCompleted,
+    required this.isCurrent,
+    required this.showConnector,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool isCompleted;
+  final bool isCurrent;
+  final bool showConnector;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = isCompleted || isCurrent;
+    final color = isCompleted
+        ? PosColors.success
+        : isCurrent
+        ? PosColors.accent
+        : PosColors.textSecondary;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 34,
+          child: Column(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: active ? color : PosColors.panelMuted,
+                ),
+                child: Icon(
+                  isCompleted ? Icons.check_rounded : icon,
+                  size: 17,
+                  color: active ? Colors.white : color,
+                ),
+              ),
+              if (showConnector)
+                Container(
+                  width: 2,
+                  height: 20,
+                  color: isCompleted ? PosColors.success : PosColors.border,
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 5),
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: active ? PosColors.textPrimary : PosColors.textSecondary,
+                fontWeight: active ? FontWeight.w800 : FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
