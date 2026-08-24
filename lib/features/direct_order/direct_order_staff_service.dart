@@ -63,18 +63,20 @@ class DirectOrderStaffService {
     );
   }
 
-  Future<void> sendMessage({
+  Future<Map<String, dynamic>> sendMessage({
     required String storeId,
     required String requestId,
     required String message,
   }) async {
-    await supabase.rpc(
-      'direct_order_staff_message',
-      params: {
-        'p_store_id': storeId,
-        'p_request_id': requestId,
-        'p_body': message,
-      },
+    return _map(
+      await supabase.rpc(
+        'direct_order_staff_message',
+        params: {
+          'p_store_id': storeId,
+          'p_request_id': requestId,
+          'p_body': message,
+        },
+      ),
     );
   }
 

@@ -116,6 +116,23 @@ Deno.test("returns no-store data only to an allowed storefront origin", async ()
   );
 });
 
+Deno.test("caches the exact-origin CORS preflight for chat polling", async () => {
+  const response = await createDirectOrderHandler(dependencies())(
+    request(undefined, { method: "OPTIONS" }),
+  );
+  assertEquals(response.status, 204, "preflight status");
+  assertEquals(
+    response.headers.get("access-control-max-age"),
+    "600",
+    "preflight cache duration",
+  );
+  assertEquals(
+    response.headers.get("access-control-allow-origin"),
+    origin,
+    "preflight exact origin",
+  );
+});
+
 Deno.test("blocks foreign origins and unsupported methods before execute", async () => {
   let executions = 0;
   const handler = createDirectOrderHandler(dependencies({

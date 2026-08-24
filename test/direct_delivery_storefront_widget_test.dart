@@ -18,11 +18,13 @@ class _StorefrontFixtureService extends DirectOrderService {
   _StorefrontFixtureService({
     this.browserKey,
     this.savedAddress,
+    this.activeStatus,
     this.autocompleteHandler,
   });
 
   final String? browserKey;
   final DirectOrderAddress? savedAddress;
+  final DirectOrderStatus? activeStatus;
   final Future<List<DirectOrderPlaceSuggestion>> Function(
     String query,
     String sessionToken,
@@ -32,6 +34,8 @@ class _StorefrontFixtureService extends DirectOrderService {
   final detailsTokens = <String>[];
   final reversePoints = <LatLng>[];
   var _tokenCounter = 0;
+  var fetchStatusCalls = 0;
+  var sendMessageCalls = 0;
 
   @override
   Future<DirectOrderStorefront> fetchStorefront(String slug) async =>
@@ -89,7 +93,34 @@ class _StorefrontFixtureService extends DirectOrderService {
   Future<DirectOrderAddress?> loadAddress(String slug) async => savedAddress;
 
   @override
-  Future<String?> loadActiveRequestId(String slug) async => null;
+  Future<String?> loadActiveRequestId(String slug) async =>
+      activeStatus?.requestId;
+
+  @override
+  Future<DirectOrderStatus> fetchStatus({
+    required DirectOrderSession session,
+    required String requestId,
+  }) async {
+    fetchStatusCalls += 1;
+    return activeStatus!;
+  }
+
+  @override
+  Future<DirectOrderMessage> sendMessage({
+    required DirectOrderSession session,
+    required String requestId,
+    required String message,
+  }) async {
+    sendMessageCalls += 1;
+    return DirectOrderMessage(
+      id: 'fixture-sent-message',
+      senderType: 'customer',
+      messageType: 'text',
+      body: message,
+      hasAttachment: false,
+      createdAt: DateTime.utc(2026, 8, 24, 3),
+    );
+  }
 
   @override
   String createPlacesSessionToken() => 'test-session-${++_tokenCounter}';
@@ -533,5 +564,40 @@ void main() {
     expect(button.onPressed, isNull);
     expect(find.byKey(const Key('direct_address_search')), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('sent chat message renders without a second status round trip', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues(const {});
+    const status = DirectOrderStatus(
+      requestId: 'fixture-request',
+      referenceCode: 'D12345678',
+      state: 'awaiting_quote',
+      messages: [],
+    );
+    final service = _StorefrontFixtureService(activeStatus: status);
+
+    await tester.pumpWidget(_fixtureApp(service: service));
+    await tester.pumpAndSettle();
+    expect(service.fetchStatusCalls, 1);
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Nhập tin nhắn'),
+      'Xin chào',
+    );
+    await tester.tap(find.byTooltip('Gửi'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Xin chào'), findsOneWidget);
+    expect(service.sendMessageCalls, 1);
+    expect(
+      service.fetchStatusCalls,
+      1,
+      reason: 'successful send is appended locally instead of refetching',
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 }

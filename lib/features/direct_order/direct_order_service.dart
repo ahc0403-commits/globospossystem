@@ -288,7 +288,7 @@ class DirectOrderService {
     return DirectOrderStatus.fromJson(data);
   }
 
-  Future<void> sendMessage({
+  Future<DirectOrderMessage> sendMessage({
     required DirectOrderSession session,
     required String requestId,
     required String message,
@@ -301,8 +301,14 @@ class DirectOrderService {
       'message': message,
     });
     _expectExactResponseFields(data, const {'message_id', 'created_at'});
-    _requiredResponseString(data, 'message_id');
-    _requiredResponseString(data, 'created_at');
+    return DirectOrderMessage(
+      id: _requiredResponseString(data, 'message_id'),
+      senderType: 'customer',
+      messageType: 'text',
+      body: message,
+      hasAttachment: false,
+      createdAt: DateTime.parse(_requiredResponseString(data, 'created_at')),
+    );
   }
 
   Future<void> cancelRequest({
