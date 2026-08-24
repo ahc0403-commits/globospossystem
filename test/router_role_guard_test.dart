@@ -246,4 +246,46 @@ void main() {
       expect(homeRouteForRole('unknown_role'), '/login');
     });
   });
+
+  group('protected deep-link restoration', () {
+    test('cashier direct-order link survives login and consent gates', () {
+      final login = Uri.parse(loginRouteWithReturnTo('/cashier/direct-orders'));
+      expect(login.path, '/login');
+      expect(login.queryParameters['returnTo'], '/cashier/direct-orders');
+
+      final consent = Uri.parse(
+        authGateRouteWithReturnTo('/privacy-consent', login),
+      );
+      expect(consent.path, '/privacy-consent');
+      expect(consent.queryParameters['returnTo'], '/cashier/direct-orders');
+      expect(
+        postLoginReturnToForRole('cashier', consent),
+        '/cashier/direct-orders',
+      );
+    });
+
+    test('post-login return target is role checked and internal only', () {
+      expect(
+        postLoginReturnToForRole(
+          'cashier',
+          Uri.parse('/login?returnTo=%2Fadmin'),
+        ),
+        isNull,
+      );
+      expect(
+        postLoginReturnToForRole(
+          'cashier',
+          Uri.parse('/login?returnTo=https%3A%2F%2Fexample.com%2Fcashier'),
+        ),
+        isNull,
+      );
+      expect(
+        postLoginReturnToForRole(
+          'cashier',
+          Uri.parse('/login?returnTo=%2F%2Fevil.example'),
+        ),
+        isNull,
+      );
+    });
+  });
 }

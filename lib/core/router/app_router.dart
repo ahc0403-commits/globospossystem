@@ -85,7 +85,9 @@ GoRouter buildAppRouter(ProviderContainer container) {
 
       // 1. 비로그인 → 로그인 화면
       if (!isLoggedIn) {
-        redirectTo = location == '/login' ? null : '/login';
+        redirectTo = location == '/login'
+            ? null
+            : loginRouteWithReturnTo(fullLocation);
         NavigationHistoryService.instance.push(redirectTo ?? fullLocation);
         return redirectTo;
       }
@@ -93,13 +95,15 @@ GoRouter buildAppRouter(ProviderContainer container) {
       if (auth.passwordChangeRequired) {
         redirectTo = location == '/change-initial-password'
             ? null
-            : '/change-initial-password';
+            : authGateRouteWithReturnTo('/change-initial-password', state.uri);
         NavigationHistoryService.instance.push(redirectTo ?? fullLocation);
         return redirectTo;
       }
 
       if (auth.privacyConsentRequired) {
-        redirectTo = location == '/privacy-consent' ? null : '/privacy-consent';
+        redirectTo = location == '/privacy-consent'
+            ? null
+            : authGateRouteWithReturnTo('/privacy-consent', state.uri);
         NavigationHistoryService.instance.push(redirectTo ?? fullLocation);
         return redirectTo;
       }
@@ -132,7 +136,13 @@ GoRouter buildAppRouter(ProviderContainer container) {
           NavigationHistoryService.instance.push(fullLocation);
           return null;
         }
-        redirectTo = homeRoute;
+        redirectTo =
+            postLoginReturnToForRole(
+              role,
+              state.uri,
+              extraPermissions: auth.extraPermissions,
+            ) ??
+            homeRoute;
         NavigationHistoryService.instance.push(redirectTo);
         return redirectTo;
       }

@@ -215,11 +215,21 @@ BEGIN
       'location_verified', true
     )
   );
+  UPDATE public.direct_order_storefronts
+  SET ordering_hours_enforced = false
+  WHERE restaurant_id = v_store;
+  PERFORM set_config('direct_order.test_local_time', '23:45', true);
   v_submit := public.direct_order_public_submit(
     v_session, v_secret_hash, v_client, v_payload
   );
+  PERFORM set_config('direct_order.test_local_time', '12:00', true);
   v_request := (v_submit->>'request_id')::uuid;
   v_reference := v_submit->>'reference_code';
+  INSERT INTO _direct_delivery_results VALUES (
+    'pilot storefront accepts requests outside configured hours',
+    v_request IS NOT NULL,
+    'ordering_hours_enforced=false bypasses only the direct-delivery window'
+  );
 
   v_blocked := false;
   BEGIN
@@ -328,8 +338,13 @@ BEGIN
   );
 
   IF v_local_time < '21:30'::time THEN
+    UPDATE public.restaurant_settings
+    SET fulfillment_mode = 'paperless'
+    WHERE restaurant_id = v_store;
+
     PERFORM set_config('request.jwt.claim.sub', v_auth::text, true);
     PERFORM set_config('request.jwt.claim.role', 'authenticated', true);
+    PERFORM set_config('direct_order.test_local_time', '23:45', true);
     EXECUTE 'SET LOCAL ROLE authenticated';
     v_approval := public.direct_order_approve_payment(
       v_store, v_request, v_final_total, 'contract-bank-reference'
@@ -338,9 +353,10 @@ BEGIN
       v_store, v_request, v_final_total, 'contract-bank-reference'
     );
     EXECUTE 'RESET ROLE';
+    PERFORM set_config('direct_order.test_local_time', '12:00', true);
 
     INSERT INTO _direct_delivery_results VALUES (
-      'manual approval creates one completed financial order and ticket',
+      'paperless storefront approval creates one isolated delivery ticket',
       EXISTS (
         SELECT 1
         FROM public.direct_order_financials financial
@@ -355,7 +371,13 @@ BEGIN
           AND payment.method = 'BANKTRANSFER'
           AND payment.amount_portion = v_final_total
           AND ticket.status = 'pending'
+          AND order_row.fulfillment_mode_snapshot = 'pos_print'
       )
+        AND EXISTS (
+          SELECT 1 FROM public.restaurant_settings settings
+          WHERE settings.restaurant_id = v_store
+            AND settings.fulfillment_mode = 'paperless'
+        )
         AND (
           SELECT count(*) FROM public.orders
           WHERE restaurant_id = v_store

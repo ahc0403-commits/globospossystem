@@ -37,6 +37,31 @@ void main() {
     expect(alertVerify, contains('STOREFRONT_UNEXPECTEDLY_ENABLED'));
     expect(alertVerify, contains('AFTER INSERT'));
 
+    final pilotHoursMigration = File(
+      'supabase/migrations/'
+      '20260824013000_direct_delivery_pilot_open_hours.sql',
+    ).readAsStringSync();
+    expect(pilotHoursMigration, contains('ordering_hours_enforced = false'));
+    expect(
+      pilotHoursMigration,
+      contains('v_storefront.ordering_hours_enforced'),
+    );
+    expect(
+      pilotHoursMigration,
+      contains('isolated fulfillment ticket graph'),
+    );
+    expect(
+      pilotHoursMigration,
+      contains('DIRECT_ORDER_REQUIRES_POS_PRINT'),
+    );
+    expect(pilotHoursMigration, contains('-- production-gate: self-verifying'));
+    expect(
+      File(
+        'scripts/rollback_direct_delivery_pilot_open_hours.sql',
+      ).existsSync(),
+      isTrue,
+    );
+
     final webIndex = File('web/index.html').readAsStringSync();
     expect(
       webIndex,

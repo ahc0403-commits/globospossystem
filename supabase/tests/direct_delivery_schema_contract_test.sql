@@ -22,6 +22,7 @@ INSERT INTO _expected_direct_columns VALUES
 ('direct_order_storefronts','is_paused','boolean',true,true),
 ('direct_order_storefronts','ordering_starts_at','time without time zone',true,true),
 ('direct_order_storefronts','ordering_cutoff_at','time without time zone',true,true),
+('direct_order_storefronts','ordering_hours_enforced','boolean',true,true),
 ('direct_order_storefronts','minimum_order_amount','numeric(15,2)',true,true),
 ('direct_order_storefronts','quote_ttl_minutes','integer',true,true),
 ('direct_order_storefronts','default_latitude','numeric(9,6)',false,false),
