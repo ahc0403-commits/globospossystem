@@ -13,6 +13,7 @@ import '../../main.dart';
 
 const emergencyHandoffAlarmCoalesceDelay = Duration(seconds: 2);
 const emergencyFloorDirectBeverageAlarmCoalesceDelay = Duration(seconds: 2);
+const emergencyAdditionalOrderAlarmCoalesceDelay = Duration(seconds: 2);
 
 String formatEmergencyElapsed(Duration elapsed) {
   final totalSeconds = elapsed.inSeconds < 0 ? 0 : elapsed.inSeconds;
@@ -913,6 +914,74 @@ class EmergencyFloorDirectBeverageNotice {
   final String orderId;
   final int queueNo;
   final int itemCount;
+}
+
+class EmergencyKitchenAdditionalOrderNotice {
+  const EmergencyKitchenAdditionalOrderNotice({
+    required this.orderId,
+    required this.queueNo,
+    required this.tableNumber,
+    required this.itemCount,
+  });
+
+  final String orderId;
+  final int queueNo;
+  final String tableNumber;
+  final int itemCount;
+}
+
+/// Returns positive kitchen-visible quantity changes on already known orders.
+///
+/// Completed orders are part of the baseline so an additional order that
+/// reopens a completed card is announced, while undo/revert operations are not.
+/// New order ids are intentionally excluded because the regular new-order
+/// alarm owns those notifications.
+List<EmergencyKitchenAdditionalOrderNotice>
+emergencyKitchenAdditionalOrderNotices(
+  EmergencyFulfillmentState previous,
+  EmergencyFulfillmentState next,
+) {
+  if (next.stationType != 'kitchen' ||
+      previous.stationType != next.stationType ||
+      previous.sessionId != next.sessionId) {
+    return const [];
+  }
+
+  final previousOrders = <String, EmergencyFulfillmentOrder>{
+    for (final order in [...previous.orders, ...previous.completedOrders])
+      order.orderId: order,
+  };
+  final notices = <EmergencyKitchenAdditionalOrderNotice>[];
+  for (final order in next.orders) {
+    final previousOrder = previousOrders[order.orderId];
+    if (previousOrder == null) continue;
+    final previousQuantities = <String, int>{
+      for (final item in previousOrder.displayItemsAt('kitchen'))
+        item.id: item.quantity,
+    };
+    final addedQuantity = order
+        .displayItemsAt('kitchen')
+        .fold(
+          0,
+          (total, item) =>
+              total +
+              (item.quantity - (previousQuantities[item.id] ?? 0)).clamp(
+                0,
+                item.quantity,
+              ),
+        );
+    if (addedQuantity <= 0) continue;
+    notices.add(
+      EmergencyKitchenAdditionalOrderNotice(
+        orderId: order.orderId,
+        queueNo: order.queueNo,
+        tableNumber: order.tableNumber,
+        itemCount: addedQuantity,
+      ),
+    );
+  }
+  notices.sort((left, right) => left.queueNo.compareTo(right.queueNo));
+  return notices;
 }
 
 /// Returns only positive floor-direct beverage quantity changes.

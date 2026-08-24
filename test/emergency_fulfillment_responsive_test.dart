@@ -24,6 +24,8 @@ class _FixtureEmergencyNotifier extends EmergencyFulfillmentNotifier {
   final List<String> completedQueues = [];
   final List<(String, String)> revertedActions = [];
 
+  void seed(EmergencyFulfillmentState value) => state = value;
+
   @override
   Future<void> load({bool showLoading = true}) async {}
 
@@ -246,6 +248,56 @@ void main() {
     await tester.tap(find.byKey(const Key('emergency_menu_item_item-1')));
     await tester.pumpAndSettle();
     expect(fixture.recordedProgress, [('item-1', 'kitchen_done', 1)]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('an added kitchen item flashes the active paperless screen', (
+    tester,
+  ) async {
+    final initial = _activeState('kitchen');
+    final fixture = _FixtureEmergencyNotifier(initial);
+    await _pumpEmergency(
+      tester,
+      fixture: fixture,
+      size: const Size(1024, 768),
+      locale: const Locale('vi'),
+      expectedStationType: 'kitchen',
+    );
+    fixture.seed(initial.copyWith(orders: [...initial.orders]));
+    await tester.pump();
+
+    final order = initial.orders.single;
+    fixture.seed(
+      initial.copyWith(
+        orders: [
+          order.copyWith(
+            items: [
+              ...order.items,
+              const EmergencyFulfillmentItem(
+                id: 'additional-item',
+                orderItemId: 'additional-order-item',
+                nameKo: '김밥',
+                nameVi: 'Cơm cuộn',
+                nameEn: 'Gimbap',
+                orderedQuantity: 1,
+                kitchenDoneQuantity: 0,
+                trayReceivedQuantity: 0,
+                trayDispatchedQuantity: 0,
+                floorServedQuantity: 0,
+                needsReview: false,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    await tester.pump(emergencyAdditionalOrderAlarmCoalesceDelay);
+
+    final scaffold = tester.widget<Scaffold>(
+      find.byKey(const Key('emergency_fulfillment_screen')),
+    );
+    expect(scaffold.backgroundColor, const Color(0xFFFFE0B2));
+    expect(find.text('Cơm cuộn'), findsOne);
     expect(tester.takeException(), isNull);
   });
 
