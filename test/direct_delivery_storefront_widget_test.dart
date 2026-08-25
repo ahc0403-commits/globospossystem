@@ -502,43 +502,80 @@ void main() {
     expect(find.text('New result'), findsOneWidget);
   });
 
-  testWidgets('cached address must be reconfirmed on the map', (tester) async {
+  testWidgets(
+    'cached address bypasses every Google Maps request until changed',
+    (tester) async {
+      SharedPreferences.setMockInitialValues(const {});
+      const saved = DirectOrderAddress(
+        customerName: 'Nguyen Van A',
+        customerPhone: '+84901234567',
+        formattedAddress: 'Landmark 81, Bình Thạnh, Hồ Chí Minh',
+        detailAddress: 'Tầng 12, căn 1201',
+        latitude: 10.795,
+        longitude: 106.722,
+        addressSource: 'search',
+        locationVerified: true,
+      );
+      final service = _StorefrontFixtureService(
+        browserKey: 'browser-key',
+        savedAddress: saved,
+      );
+      final camera = _FakeMapCamera();
+      var mapLoadCalls = 0;
+      await tester.pumpWidget(
+        _fixtureApp(
+          service: service,
+          mapLoader: (_) async {
+            mapLoadCalls += 1;
+            return true;
+          },
+          mapBuilder: _fakeMapBuilder(camera),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(mapLoadCalls, 0, reason: 'menu must not preload Google Maps');
+      await _openAddress(tester);
+
+      expect(mapLoadCalls, 0, reason: 'saved address must not load Maps JS');
+      expect(find.text('Đã xác nhận vị trí'), findsOneWidget);
+      expect(find.byKey(const Key('direct_address_search')), findsNothing);
+      expect(find.byKey(const Key('direct_fake_map')), findsNothing);
+      expect(service.autocompleteTokens, isEmpty);
+      expect(service.detailsTokens, isEmpty);
+      expect(service.reversePoints, isEmpty);
+
+      await tester.tap(find.byKey(const Key('direct_change_saved_address')));
+      await tester.pumpAndSettle();
+
+      expect(mapLoadCalls, 1, reason: 'Maps loads only after address change');
+      expect(find.byKey(const Key('direct_address_search')), findsOneWidget);
+      expect(find.byKey(const Key('direct_fake_map')), findsOneWidget);
+      expect(service.autocompleteTokens, isEmpty);
+      expect(service.detailsTokens, isEmpty);
+      expect(service.reversePoints, isEmpty);
+    },
+  );
+
+  testWidgets('new customer loads Google Maps only after opening address', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues(const {});
-    const saved = DirectOrderAddress(
-      customerName: 'Nguyen Van A',
-      customerPhone: '+84901234567',
-      formattedAddress: 'Landmark 81, Bình Thạnh, Hồ Chí Minh',
-      detailAddress: 'Tầng 12, căn 1201',
-      latitude: 10.795,
-      longitude: 106.722,
-      addressSource: 'search',
-      locationVerified: true,
-    );
-    final camera = _FakeMapCamera();
+    var mapLoadCalls = 0;
     await tester.pumpWidget(
       _fixtureApp(
-        service: _StorefrontFixtureService(
-          browserKey: 'browser-key',
-          savedAddress: saved,
-        ),
-        mapLoader: (_) async => true,
-        mapBuilder: _fakeMapBuilder(camera),
+        service: _StorefrontFixtureService(browserKey: 'browser-key'),
+        mapLoader: (_) async {
+          mapLoadCalls += 1;
+          return true;
+        },
+        mapBuilder: _fakeMapBuilder(_FakeMapCamera()),
       ),
     );
     await tester.pumpAndSettle();
-    await _openAddress(tester);
 
-    await tester.drag(find.byType(ListView).last, const Offset(0, -520));
-    await tester.pumpAndSettle();
-    expect(find.text('Vị trí đã chọn'), findsOneWidget);
-    expect(find.text('Đã xác nhận vị trí'), findsNothing);
-    expect(
-      find.byKey(const Key('direct_confirm_map_location')),
-      findsOneWidget,
-    );
-    await tester.tap(find.byKey(const Key('direct_confirm_map_location')));
-    await tester.pump();
-    expect(find.text('Đã xác nhận vị trí'), findsOneWidget);
+    expect(mapLoadCalls, 0);
+    await _openAddress(tester);
+    expect(mapLoadCalls, 1);
   });
 
   testWidgets('map load failure stays safe and keeps search fallback', (

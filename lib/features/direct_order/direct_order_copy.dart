@@ -176,6 +176,8 @@ class DirectOrderCopy {
       _pick('저장된 배송지 사용', 'Dùng địa chỉ đã lưu', 'Use saved address');
   String get deleteSavedAddress =>
       _pick('이 기기에서 삭제', 'Xóa khỏi thiết bị', 'Delete from this device');
+  String get changeSavedAddress =>
+      _pick('다른 배송지 사용', 'Dùng địa chỉ khác', 'Use a different address');
   String get savedOnlyOnDevice => _pick(
     '이 주소는 현재 브라우저에만 저장됩니다.',
     'Địa chỉ chỉ được lưu trên trình duyệt này.',
