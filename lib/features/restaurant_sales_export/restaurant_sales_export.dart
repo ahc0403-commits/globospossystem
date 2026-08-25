@@ -68,6 +68,10 @@ class RestaurantSalesReceipt {
 class RestaurantSalesExport {
   const RestaurantSalesExport({
     required this.businessDate,
+    required this.taxEntityId,
+    required this.sellerTaxCode,
+    required this.sellerLegalName,
+    required this.isSampleEntity,
     required this.storeCount,
     required this.receiptCount,
     required this.grossSales,
@@ -76,6 +80,10 @@ class RestaurantSalesExport {
   });
 
   final String businessDate;
+  final String taxEntityId;
+  final String sellerTaxCode;
+  final String sellerLegalName;
+  final bool isSampleEntity;
   final int storeCount;
   final int receiptCount;
   final double grossSales;
@@ -128,6 +136,20 @@ RestaurantSalesExport createRestaurantSalesExport(
     throw const FormatException('RESTAURANT_EXPORT_INVALID_STATUS');
   }
 
+  final taxEntityId = _requiredText(
+    payload['tax_entity_id'],
+    'RESTAURANT_EXPORT_INVALID_TAX_ENTITY_ID',
+  );
+  final sellerTaxCode = _requiredText(
+    payload['seller_tax_code'],
+    'RESTAURANT_EXPORT_INVALID_SELLER_TAX_CODE',
+  );
+  final sellerLegalName = _requiredText(
+    payload['seller_legal_name'],
+    'RESTAURANT_EXPORT_INVALID_SELLER_LEGAL_NAME',
+  );
+  final isSampleEntity = payload['is_sample_entity'] == true;
+
   final storeCount = _nonNegativeInt(
     payload['store_count'],
     'RESTAURANT_EXPORT_INVALID_STORE_COUNT',
@@ -162,6 +184,18 @@ RestaurantSalesExport createRestaurantSalesExport(
           row['receipt_id'],
           'RESTAURANT_EXPORT_INVALID_RECEIPT_ID',
         );
+        if (row['tax_entity_id'] != null &&
+            row['tax_entity_id'].toString() != taxEntityId) {
+          throw FormatException(
+            'RESTAURANT_EXPORT_TAX_ENTITY_MISMATCH:$receiptId',
+          );
+        }
+        if (row['seller_tax_code'] != null &&
+            row['seller_tax_code'].toString() != sellerTaxCode) {
+          throw FormatException(
+            'RESTAURANT_EXPORT_SELLER_TAX_CODE_MISMATCH:$receiptId',
+          );
+        }
         final sourceSystem =
             row['source_system']?.toString() ?? 'restaurant_pos';
         if (sourceSystem == 'photo_objet_moers') {
@@ -309,12 +343,86 @@ RestaurantSalesExport createRestaurantSalesExport(
 
   return RestaurantSalesExport(
     businessDate: businessDate,
+    taxEntityId: taxEntityId,
+    sellerTaxCode: sellerTaxCode,
+    sellerLegalName: sellerLegalName,
+    isSampleEntity: isSampleEntity,
     storeCount: storeCount,
     receiptCount: receiptCount,
     grossSales: grossSales,
     finalizedAt: finalizedAt,
     receipts: List.unmodifiable(receipts),
   );
+}
+
+List<RestaurantSalesExport> createRestaurantSalesExportsByTaxEntity(
+  Map<String, dynamic> payload,
+) {
+  final businessDate = _requiredText(
+    payload['business_date'],
+    'RESTAURANT_EXPORT_INVALID_BUSINESS_DATE',
+  );
+  if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(businessDate)) {
+    throw const FormatException('RESTAURANT_EXPORT_INVALID_BUSINESS_DATE');
+  }
+
+  final status = _requiredText(
+    payload['status'],
+    'RESTAURANT_EXPORT_INVALID_STATUS',
+  );
+  if (status == 'pending') {
+    throw const FormatException('RESTAURANT_EXPORT_NOT_READY');
+  }
+  if (status == 'data_integrity_failed') {
+    throw const FormatException('RESTAURANT_EXPORT_DATA_INTEGRITY_FAILED');
+  }
+  if (status != 'finalized') {
+    throw const FormatException('RESTAURANT_EXPORT_INVALID_STATUS');
+  }
+
+  final rawEntities = payload['entities'];
+  if (rawEntities is! List) {
+    throw const FormatException('RESTAURANT_EXPORT_INVALID_ENTITIES');
+  }
+  final finalizedAt = _requiredText(
+    payload['finalized_at'],
+    'RESTAURANT_EXPORT_INVALID_FINALIZED_AT',
+  );
+  final exports = rawEntities
+      .map((raw) {
+        if (raw is! Map) {
+          throw const FormatException('RESTAURANT_EXPORT_INVALID_ENTITY');
+        }
+        final entity = Map<String, dynamic>.from(raw);
+        entity['business_date'] = businessDate;
+        entity['status'] = status;
+        entity['finalized_at'] = finalizedAt;
+        return createRestaurantSalesExport(entity);
+      })
+      .toList(growable: false);
+
+  final expectedEntityCount = payload['entity_count'];
+  if (expectedEntityCount != null &&
+      _nonNegativeInt(
+            expectedEntityCount,
+            'RESTAURANT_EXPORT_INVALID_ENTITY_COUNT',
+          ) !=
+          exports.length) {
+    throw const FormatException('RESTAURANT_EXPORT_ENTITY_COUNT_MISMATCH');
+  }
+  if (exports.map((export) => export.taxEntityId).toSet().length !=
+      exports.length) {
+    throw const FormatException('RESTAURANT_EXPORT_DUPLICATE_TAX_ENTITY');
+  }
+  final receiptIds = exports
+      .expand((export) => export.receipts)
+      .map((receipt) => receipt.receiptId)
+      .toList(growable: false);
+  if (receiptIds.toSet().length != receiptIds.length) {
+    throw const FormatException('RESTAURANT_EXPORT_CROSS_ENTITY_RECEIPT');
+  }
+
+  return List.unmodifiable(exports);
 }
 
 List<int> buildRestaurantSalesWorkbook(RestaurantSalesExport export) {

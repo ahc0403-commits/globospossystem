@@ -133,9 +133,10 @@ const _routeStateCoverage = <_RouteStateCoverage>[
     location: '/restaurant-sales-export',
     operationalTest: 'test/remaining_route_operational_state_test.dart',
     stateMarkers: [
-      'Completer<RestaurantSalesExport>',
+      'Completer<List<RestaurantSalesExport>>',
       'RESTAURANT_EXPORT_NOT_READY',
       'restaurant_sales_export_status',
+      'restaurant_sales_export_tax_entity_selector',
     ],
   ),
   _RouteStateCoverage(

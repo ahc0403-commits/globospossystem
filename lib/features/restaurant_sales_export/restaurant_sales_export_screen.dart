@@ -22,7 +22,8 @@ class RestaurantSalesExportScreen extends StatefulWidget {
 
   /// Optional deterministic loader for operational-state widget tests.
   /// Production continues to use [restaurantSalesExportService].
-  final Future<RestaurantSalesExport> Function(String businessDate)? loader;
+  final Future<List<RestaurantSalesExport>> Function(String businessDate)?
+  loader;
   final bool embedded;
   final DateTime? todayOverride;
 
@@ -34,11 +35,19 @@ class RestaurantSalesExportScreen extends StatefulWidget {
 class _RestaurantSalesExportScreenState
     extends State<RestaurantSalesExportScreen> {
   late String _businessDate;
-  RestaurantSalesExport? _export;
+  List<RestaurantSalesExport> _exports = const [];
+  String? _selectedTaxEntityId;
   bool _isLoading = false;
   bool _isDownloading = false;
   String? _statusMessage;
   bool _statusIsError = false;
+
+  RestaurantSalesExport? get _selectedExport {
+    for (final export in _exports) {
+      if (export.taxEntityId == _selectedTaxEntityId) return export;
+    }
+    return null;
+  }
 
   @override
   void initState() {
@@ -93,7 +102,17 @@ class _RestaurantSalesExportScreenState
                   key: Key('restaurant_sales_export_loading'),
                 ),
               ],
-              if (_export case final export?) ...[
+              if (_selectedExport case final export?) ...[
+                const SizedBox(height: ToastSpacingTokens.lg),
+                _entitySelector(context, export),
+                if (export.isSampleEntity) ...[
+                  const SizedBox(height: ToastSpacingTokens.sm),
+                  _messagePanel(
+                    _sampleEntityMessage(context),
+                    isError: false,
+                    key: const Key('restaurant_sales_export_sample_notice'),
+                  ),
+                ],
                 const SizedBox(height: ToastSpacingTokens.lg),
                 _metrics(context, export),
                 if (!export.isReadyForDownload) ...[
@@ -119,7 +138,7 @@ class _RestaurantSalesExportScreenState
                 onPressed:
                     _isLoading ||
                         _isDownloading ||
-                        _export?.isReadyForDownload != true
+                        _selectedExport?.isReadyForDownload != true
                     ? null
                     : _download,
                 icon: _isDownloading
@@ -251,6 +270,43 @@ class _RestaurantSalesExportScreenState
     );
   }
 
+  Widget _entitySelector(BuildContext context, RestaurantSalesExport selected) {
+    return KeyedSubtree(
+      key: const Key('restaurant_sales_export_tax_entity_selector'),
+      child: DropdownButtonFormField<String>(
+        key: ValueKey(selected.taxEntityId),
+        initialValue: selected.taxEntityId,
+        isExpanded: true,
+        decoration: InputDecoration(
+          labelText: _entityLabel(context),
+          helperText: _entityGuidance(context),
+          border: const OutlineInputBorder(),
+        ),
+        items: _exports
+            .map(
+              (export) => DropdownMenuItem(
+                value: export.taxEntityId,
+                child: Text(
+                  '${export.sellerLegalName} · ${export.sellerTaxCode}'
+                  '${export.isSampleEntity ? _sampleSuffix(context) : ''}',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            )
+            .toList(growable: false),
+        onChanged: _isDownloading
+            ? null
+            : (taxEntityId) {
+                if (taxEntityId == null) return;
+                setState(() {
+                  _selectedTaxEntityId = taxEntityId;
+                  _statusMessage = null;
+                });
+              },
+      ),
+    );
+  }
+
   Widget _metric(String label, String value) {
     return Container(
       constraints: const BoxConstraints(minWidth: 150),
@@ -332,7 +388,8 @@ class _RestaurantSalesExportScreenState
     if (selected == null) return;
     setState(() {
       _businessDate = DateFormat('yyyy-MM-dd').format(selected);
-      _export = null;
+      _exports = const [];
+      _selectedTaxEntityId = null;
       _statusMessage = null;
     });
   }
@@ -344,15 +401,30 @@ class _RestaurantSalesExportScreenState
       _statusIsError = false;
     });
     try {
-      final export =
+      final exports =
           await (widget.loader?.call(_businessDate) ??
               restaurantSalesExportService.load(_businessDate));
       if (!mounted) return;
-      setState(() => _export = export);
+      String? preferredEntityId;
+      for (final export in exports) {
+        if (!export.isSampleEntity) {
+          preferredEntityId = export.taxEntityId;
+          break;
+        }
+      }
+      preferredEntityId ??= exports.isEmpty ? null : exports.first.taxEntityId;
+      setState(() {
+        _exports = exports;
+        _selectedTaxEntityId = preferredEntityId;
+        if (exports.isEmpty) {
+          _statusMessage = _noSalesMessage(context);
+        }
+      });
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _export = null;
+        _exports = const [];
+        _selectedTaxEntityId = null;
         _statusMessage = _localizedError(error);
         _statusIsError = true;
       });
@@ -362,7 +434,7 @@ class _RestaurantSalesExportScreenState
   }
 
   Future<void> _download() async {
-    final export = _export;
+    final export = _selectedExport;
     if (export == null || !export.isReadyForDownload) return;
     setState(() {
       _isDownloading = true;
@@ -371,8 +443,13 @@ class _RestaurantSalesExportScreenState
     });
     try {
       final bytes = buildRestaurantSalesWorkbook(export);
+      final taxCode = export.sellerTaxCode.replaceAll(
+        RegExp(r'[^A-Za-z0-9_-]'),
+        '_',
+      );
       await FileSaver.instance.saveFile(
-        name: 'MISA_restaurant_sales_${_businessDate.replaceAll('-', '')}',
+        name:
+            'MISA_restaurant_sales_${taxCode}_${_businessDate.replaceAll('-', '')}',
         bytes: Uint8List.fromList(bytes),
         ext: 'xlsx',
         mimeType: MimeType.microsoftExcel,
@@ -421,17 +498,55 @@ String _subtitle(BuildContext context) => switch (Localizations.localeOf(
   context,
 ).languageCode) {
   'vi' =>
-    'Tạo một file MISA từ toàn bộ biên lai Restaurant, gồm hóa đơn thường và hóa đơn đỏ. Không bao gồm Photo.',
+    'Tạo file MISA riêng theo từng pháp nhân và mã số thuế. Cửa hàng SAMPLE được tách khỏi doanh thu thực.',
   'en' =>
-    'Create one MISA file from every Restaurant receipt, including general and Red Invoices. Photo is excluded.',
-  _ => 'Restaurant의 일반 영수증과 레드인보이스를 한 MISA 엑셀로 생성합니다. 포토 매출은 제외됩니다.',
+    'Create a separate MISA file for each legal entity and seller tax code. SAMPLE sales stay isolated from real revenue.',
+  _ => '법인과 판매자 세금코드별로 MISA 엑셀을 따로 생성합니다. 샘플 매장 매출은 실매출과 분리됩니다.',
 };
 
 String _downloadLabel(BuildContext context) =>
     switch (Localizations.localeOf(context).languageCode) {
-      'vi' => 'Tải một file MISA',
-      'en' => 'Download one MISA file',
-      _ => 'MISA 엑셀 한 번에 다운로드',
+      'vi' => 'Tải file MISA của pháp nhân này',
+      'en' => 'Download this entity’s MISA file',
+      _ => '선택 법인 MISA 엑셀 다운로드',
+    };
+
+String _entityLabel(BuildContext context) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => 'Pháp nhân / mã số thuế',
+      'en' => 'Legal entity / seller tax code',
+      _ => '법인 / 판매자 세금코드',
+    };
+
+String _entityGuidance(BuildContext context) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => 'Doanh thu không bao giờ được cộng gộp giữa các mã số thuế.',
+      'en' => 'Sales from different seller tax codes are never combined.',
+      _ => '서로 다른 판매자 세금코드의 매출은 합산되지 않습니다.',
+    };
+
+String _sampleSuffix(BuildContext context) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => ' (MẪU)',
+      'en' => ' (SAMPLE)',
+      _ => ' (샘플)',
+    };
+
+String _sampleEntityMessage(
+  BuildContext context,
+) => switch (Localizations.localeOf(context).languageCode) {
+  'vi' =>
+    'Đây là pháp nhân thử nghiệm không dùng để khai thuế. Doanh thu này không nằm trong tổng doanh thu thực.',
+  'en' =>
+    'This is a non-fiscal test entity. Its sales are excluded from real revenue totals.',
+  _ => '세금 신고에 사용하지 않는 샘플 법인입니다. 이 매출은 실매출 합계에 포함되지 않습니다.',
+};
+
+String _noSalesMessage(BuildContext context) =>
+    switch (Localizations.localeOf(context).languageCode) {
+      'vi' => 'Không có doanh thu Restaurant đã hoàn tất cho ngày này.',
+      'en' => 'There are no finalized Restaurant sales for this date.',
+      _ => '해당 날짜에 확정된 Restaurant 매출이 없습니다.',
     };
 
 String _dateSearchTitle(BuildContext context) =>

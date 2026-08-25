@@ -15,6 +15,8 @@ void main() {
       'supabase/migrations/20260816170000_restaurant_sales_export_all_stores.sql';
   const contactMigration =
       'supabase/migrations/20260816180000_red_invoice_contact_fields.sql';
+  const taxEntityMigration =
+      'supabase/migrations/20260825110000_restaurant_sales_tax_entity_aggregation.sql';
   const pilotPreflight = 'scripts/preflight_sample_misa_sales_pilot.sql';
   const screen =
       'lib/features/restaurant_sales_export/restaurant_sales_export_screen.dart';
@@ -129,6 +131,35 @@ void main() {
     expect(screenSource, contains('firstDate: DateTime(2020)'));
     expect(screenSource, contains('lastDate: hcmToday'));
     expect(screenSource, contains("_businessDate.replaceAll('-', '')"));
+  });
+
+  test('seller tax codes are isolated and SAMPLE is a separate entity', () {
+    final sql = readRepoFile(taxEntityMigration);
+    final service = readRepoFile(
+      'lib/features/restaurant_sales_export/restaurant_sales_export_service.dart',
+    );
+    final screenSource = readRepoFile(screen);
+
+    expect(sql, contains('PENDING_SAMPLE_STORE_TAX_PROFILE'));
+    expect(sql, contains("restaurant.name = 'BunsikClub SAMPLE'"));
+    expect(sql, contains("'external'"));
+    expect(sql, contains('public.tax_entity_brands'));
+    expect(sql, contains('public.store_tax_entity_history'));
+    expect(sql, contains('get_restaurant_daily_sales_exports_by_tax_entity'));
+    expect(sql, contains('seller.tax_code AS seller_tax_code'));
+    expect(sql, contains('GROUP BY'));
+    expect(sql, contains('is_sample_entity'));
+    expect(sql, contains('RESTAURANT_SALES_EXPORT_TAX_ENTITY_REQUIRED'));
+    expect(
+      service,
+      contains("'get_restaurant_daily_sales_exports_by_tax_entity'"),
+    );
+    expect(
+      screenSource,
+      contains('restaurant_sales_export_tax_entity_selector'),
+    );
+    expect(screenSource, contains('export.isSampleEntity'));
+    expect(sql, contains('-- production-gate: self-verifying'));
   });
 
   test(
