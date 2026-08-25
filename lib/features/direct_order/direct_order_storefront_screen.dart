@@ -78,6 +78,7 @@ class _DirectOrderStorefrontScreenState
   bool _mapsReady = false;
   bool _mapLoadAttempted = false;
   bool _locationConfirmed = false;
+  bool _usingSavedAddress = false;
   bool _rememberAddress = false;
   bool _proofUploading = false;
   bool _sendingMessage = false;
@@ -155,7 +156,6 @@ class _DirectOrderStorefrontScreenState
         _loading = false;
       });
       if (saved != null) _populateAddress(saved);
-      await _ensureMapLoaded();
       if (status != null) _startStatusPolling();
     } catch (error) {
       if (!mounted || generation != _loadGeneration) return;
@@ -192,8 +192,37 @@ class _DirectOrderStorefrontScreenState
       ward: address.ward,
     );
     _addressMode = address.addressSource;
-    _locationConfirmed = false;
+    _locationConfirmed = address.locationVerified;
+    _usingSavedAddress = address.locationVerified;
     _rememberAddress = true;
+  }
+
+  void _selectView(_CustomerView view) {
+    setState(() => _view = view);
+    if (view == _CustomerView.address && !_usingSavedAddress) {
+      unawaited(_ensureMapLoaded());
+    }
+  }
+
+  Future<void> _beginAddressChange() async {
+    _searchTimer?.cancel();
+    ++_searchGeneration;
+    ++_placeDetailsGeneration;
+    ++_mapResolveGeneration;
+    ++_locationGeneration;
+    _placesSessionToken = null;
+    setState(() {
+      _usingSavedAddress = false;
+      _selectedPlace = null;
+      _locationConfirmed = false;
+      _addressMode = 'search';
+      _suggestions = const [];
+      _searching = false;
+      _locationFailure = null;
+      _addressController.clear();
+      _detailController.clear();
+    });
+    await _ensureMapLoaded();
   }
 
   void _changeQuantity(String itemId, int delta) {
@@ -288,6 +317,7 @@ class _DirectOrderStorefrontScreenState
         _addressController.text = place.formattedAddress;
         _addressMode = 'search';
         _locationConfirmed = false;
+        _usingSavedAddress = false;
       });
       await _moveMap(LatLng(place.latitude, place.longitude));
     } catch (error) {
@@ -326,6 +356,7 @@ class _DirectOrderStorefrontScreenState
         _addressController.text = place.formattedAddress;
         _addressMode = 'map_pin';
         _locationConfirmed = true;
+        _usingSavedAddress = false;
       });
     } catch (error) {
       if (generation == _mapResolveGeneration) _showError(error);
@@ -419,7 +450,9 @@ class _DirectOrderStorefrontScreenState
       return;
     }
     final address = _composeAddress();
-    if (_selectedPlace == null || !_mapsReady || !_locationConfirmed) {
+    if (_selectedPlace == null ||
+        !_locationConfirmed ||
+        (!_usingSavedAddress && !_mapsReady)) {
       _snack(_copy.addressRequired);
       return;
     }
@@ -448,6 +481,7 @@ class _DirectOrderStorefrontScreenState
       if (!mounted) return;
       setState(() {
         _savedAddress = _rememberAddress ? address : null;
+        _usingSavedAddress = _rememberAddress;
         _status = status;
         _view = _CustomerView.status;
       });
@@ -611,6 +645,7 @@ class _DirectOrderStorefrontScreenState
       _cart.clear();
       _itemNotes.clear();
       _view = _CustomerView.menu;
+      if (_savedAddress != null) _populateAddress(_savedAddress!);
     });
   }
 
@@ -621,12 +656,14 @@ class _DirectOrderStorefrontScreenState
       _savedAddress = null;
       _selectedPlace = null;
       _locationConfirmed = false;
+      _usingSavedAddress = false;
       _rememberAddress = false;
       _nameController.clear();
       _phoneController.clear();
       _addressController.clear();
       _detailController.clear();
     });
+    await _ensureMapLoaded();
   }
 
   void _showError(Object error) {
@@ -708,7 +745,7 @@ class _DirectOrderStorefrontScreenState
                 copy: _copy,
                 canOpenAddress: _cart.isNotEmpty,
                 hasStatus: _status != null,
-                onSelected: (view) => setState(() => _view = view),
+                onSelected: _selectView,
               ),
               Expanded(child: content),
             ],
@@ -748,7 +785,7 @@ class _DirectOrderStorefrontScreenState
               leading: '$_cartCount ${_copy.cart}',
               amount: _money.format(_cartSubtotal),
               label: _copy.address,
-              onPressed: () => setState(() => _view = _CustomerView.address),
+              onPressed: () => _selectView(_CustomerView.address),
             ),
           ),
       ],
@@ -880,15 +917,42 @@ class _DirectOrderStorefrontScreenState
                     _copy.savedOnlyOnDevice,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
+                  if (_usingSavedAddress) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.check_circle_rounded,
+                          size: 18,
+                          color: PosColors.success,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _copy.locationConfirmed,
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(color: PosColors.success),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
+                    runSpacing: 8,
                     children: [
-                      FilledButton.tonal(
-                        onPressed: () =>
-                            setState(() => _populateAddress(_savedAddress!)),
-                        child: Text(_copy.useSavedAddress),
-                      ),
+                      if (_usingSavedAddress)
+                        FilledButton.tonalIcon(
+                          key: const Key('direct_change_saved_address'),
+                          onPressed: _beginAddressChange,
+                          icon: const Icon(Icons.edit_location_alt_outlined),
+                          label: Text(_copy.changeSavedAddress),
+                        )
+                      else
+                        FilledButton.tonal(
+                          onPressed: () =>
+                              setState(() => _populateAddress(_savedAddress!)),
+                          child: Text(_copy.useSavedAddress),
+                        ),
                       TextButton(
                         onPressed: _clearSavedAddress,
                         child: Text(_copy.deleteSavedAddress),
@@ -900,235 +964,237 @@ class _DirectOrderStorefrontScreenState
             ),
           ),
         const SizedBox(height: 12),
-        SegmentedButton<String>(
-          segments: [
-            ButtonSegment(
-              value: 'search',
-              icon: const Icon(Icons.search_rounded),
-              label: Text(_copy.searchAddress),
-            ),
-            ButtonSegment(
-              value: 'map_pin',
-              icon: const Icon(Icons.location_on_outlined),
-              label: Text(_copy.pickOnMap),
-            ),
-          ],
-          selected: {_addressMode},
-          onSelectionChanged: (selected) {
-            _searchTimer?.cancel();
-            ++_searchGeneration;
-            ++_placeDetailsGeneration;
-            _placesSessionToken = null;
-            setState(() {
-              _addressMode = selected.first;
-              _suggestions = const [];
-              _searching = false;
-              _locationFailure = null;
-            });
-          },
-        ),
-        const SizedBox(height: 14),
-        if (_addressMode == 'search') ...[
-          TextField(
-            key: const Key('direct_address_search'),
-            controller: _addressController,
-            onChanged: _onAddressSearchChanged,
-            decoration: InputDecoration(
-              labelText: _copy.searchAddress,
-              hintText: _copy.addressSearchHint,
-              prefixIcon: const Icon(Icons.search_rounded),
-              suffixIcon: _searching
-                  ? Semantics(
-                      liveRegion: true,
-                      label: _copy.resolvingMapLocation,
-                      child: const Padding(
-                        padding: EdgeInsets.all(14),
-                        child: SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ),
-                    )
-                  : null,
-            ),
-          ),
-          if (_suggestions.isNotEmpty)
-            Card(
-              margin: const EdgeInsets.only(top: 6),
-              child: Column(
-                children: [
-                  for (final suggestion in _suggestions)
-                    ListTile(
-                      leading: const Icon(Icons.place_outlined),
-                      title: Text(suggestion.text),
-                      onTap: () => _selectSuggestion(suggestion),
-                    ),
-                ],
+        if (!_usingSavedAddress) ...[
+          SegmentedButton<String>(
+            segments: [
+              ButtonSegment(
+                value: 'search',
+                icon: const Icon(Icons.search_rounded),
+                label: Text(_copy.searchAddress),
               ),
-            ),
-          const SizedBox(height: 12),
-          Text(
-            _copy.confirmOnMap,
-            style: Theme.of(context).textTheme.titleMedium,
+              ButtonSegment(
+                value: 'map_pin',
+                icon: const Icon(Icons.location_on_outlined),
+                label: Text(_copy.pickOnMap),
+              ),
+            ],
+            selected: {_addressMode},
+            onSelectionChanged: (selected) {
+              _searchTimer?.cancel();
+              ++_searchGeneration;
+              ++_placeDetailsGeneration;
+              _placesSessionToken = null;
+              setState(() {
+                _addressMode = selected.first;
+                _suggestions = const [];
+                _searching = false;
+                _locationFailure = null;
+              });
+            },
           ),
-        ] else
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  _copy.tapMapHint,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 10),
-                Semantics(
-                  button: true,
-                  label: _copy.useCurrentLocation,
-                  child: FilledButton.tonalIcon(
-                    key: const Key('direct_use_current_location'),
-                    onPressed: _mapsReady && !_locating
-                        ? _useCurrentLocation
-                        : null,
-                    icon: _locating
-                        ? const SizedBox.square(
+          const SizedBox(height: 14),
+          if (_addressMode == 'search') ...[
+            TextField(
+              key: const Key('direct_address_search'),
+              controller: _addressController,
+              onChanged: _onAddressSearchChanged,
+              decoration: InputDecoration(
+                labelText: _copy.searchAddress,
+                hintText: _copy.addressSearchHint,
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: _searching
+                    ? Semantics(
+                        liveRegion: true,
+                        label: _copy.resolvingMapLocation,
+                        child: const Padding(
+                          padding: EdgeInsets.all(14),
+                          child: SizedBox.square(
                             dimension: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.my_location_rounded),
-                    label: Text(
-                      _locating
-                          ? _copy.locatingCurrentLocation
-                          : _copy.useCurrentLocation,
+                          ),
+                        ),
+                      )
+                    : null,
+              ),
+            ),
+            if (_suggestions.isNotEmpty)
+              Card(
+                margin: const EdgeInsets.only(top: 6),
+                child: Column(
+                  children: [
+                    for (final suggestion in _suggestions)
+                      ListTile(
+                        leading: const Icon(Icons.place_outlined),
+                        title: Text(suggestion.text),
+                        onTap: () => _selectSuggestion(suggestion),
+                      ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 12),
+            Text(
+              _copy.confirmOnMap,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ] else
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    _copy.tapMapHint,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 10),
+                  Semantics(
+                    button: true,
+                    label: _copy.useCurrentLocation,
+                    child: FilledButton.tonalIcon(
+                      key: const Key('direct_use_current_location'),
+                      onPressed: _mapsReady && !_locating
+                          ? _useCurrentLocation
+                          : null,
+                      icon: _locating
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.my_location_rounded),
+                      label: Text(
+                        _locating
+                            ? _copy.locatingCurrentLocation
+                            : _copy.useCurrentLocation,
+                      ),
+                    ),
+                  ),
+                  if (_locationFailure != null) ...[
+                    const SizedBox(height: 8),
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        '${_locationFailureMessage(_locationFailure!)} '
+                        '${_copy.manualPinFallback}',
+                        key: const Key('direct_location_fallback'),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: PosColors.warning,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          if (_mapsReady)
+            ClipRRect(
+              borderRadius: AppRadius.lg,
+              child: SizedBox(
+                height: 300,
+                child: (widget.mapBuilder ?? buildDirectOrderGoogleMap)(
+                  context,
+                  DirectOrderMapConfiguration(
+                    initialPosition: initial,
+                    markerPosition: _selectedPlace == null ? null : initial,
+                    semanticLabel: _copy.deliveryMapLabel,
+                    onTap: _selectMapPoint,
+                    onCameraReady: (camera) {
+                      _mapCamera?.dispose();
+                      _mapCamera = camera;
+                    },
+                  ),
+                ),
+              ),
+            )
+          else
+            Semantics(
+              liveRegion: true,
+              child: Container(
+                height: 180,
+                decoration: BoxDecoration(
+                  color: PosColors.panelMuted,
+                  border: Border.all(color: PosColors.border),
+                  borderRadius: AppRadius.lg,
+                ),
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Text(
+                      _copy.mapUnavailable,
+                      textAlign: TextAlign.center,
                     ),
                   ),
                 ),
-                if (_locationFailure != null) ...[
-                  const SizedBox(height: 8),
-                  Semantics(
-                    liveRegion: true,
-                    child: Text(
-                      '${_locationFailureMessage(_locationFailure!)} '
-                      '${_copy.manualPinFallback}',
-                      key: const Key('direct_location_fallback'),
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodySmall?.copyWith(color: PosColors.warning),
+              ),
+            ),
+          if (_resolvingMap) ...[
+            const SizedBox(height: 8),
+            Semantics(
+              liveRegion: true,
+              child: Row(
+                children: [
+                  const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(_copy.resolvingMapLocation)),
+                ],
+              ),
+            ),
+          ],
+          if (_selectedPlace != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _locationConfirmed
+                    ? PosColors.successMuted
+                    : PosColors.warningMuted,
+                borderRadius: AppRadius.md,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    _locationConfirmed
+                        ? Icons.check_circle_rounded
+                        : Icons.location_searching_rounded,
+                    color: _locationConfirmed
+                        ? PosColors.success
+                        : PosColors.warning,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _locationConfirmed
+                              ? _copy.locationConfirmed
+                              : _copy.selectedLocation,
+                          style: Theme.of(context).textTheme.labelLarge,
+                        ),
+                        Text(_selectedPlace!.formattedAddress),
+                      ],
                     ),
                   ),
                 ],
-              ],
-            ),
-          ),
-        if (_mapsReady)
-          ClipRRect(
-            borderRadius: AppRadius.lg,
-            child: SizedBox(
-              height: 300,
-              child: (widget.mapBuilder ?? buildDirectOrderGoogleMap)(
-                context,
-                DirectOrderMapConfiguration(
-                  initialPosition: initial,
-                  markerPosition: _selectedPlace == null ? null : initial,
-                  semanticLabel: _copy.deliveryMapLabel,
-                  onTap: _selectMapPoint,
-                  onCameraReady: (camera) {
-                    _mapCamera?.dispose();
-                    _mapCamera = camera;
-                  },
-                ),
               ),
             ),
-          )
-        else
-          Semantics(
-            liveRegion: true,
-            child: Container(
-              height: 180,
-              decoration: BoxDecoration(
-                color: PosColors.panelMuted,
-                border: Border.all(color: PosColors.border),
-                borderRadius: AppRadius.lg,
-              ),
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Text(
-                    _copy.mapUnavailable,
-                    textAlign: TextAlign.center,
-                  ),
+            if (!_locationConfirmed) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonalIcon(
+                  key: const Key('direct_confirm_map_location'),
+                  onPressed: _mapsReady
+                      ? () => setState(() => _locationConfirmed = true)
+                      : null,
+                  icon: const Icon(Icons.check_circle_outline),
+                  label: Text(_copy.confirmOnMap),
                 ),
               ),
-            ),
-          ),
-        if (_resolvingMap) ...[
-          const SizedBox(height: 8),
-          Semantics(
-            liveRegion: true,
-            child: Row(
-              children: [
-                const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                const SizedBox(width: 10),
-                Expanded(child: Text(_copy.resolvingMapLocation)),
-              ],
-            ),
-          ),
-        ],
-        if (_selectedPlace != null) ...[
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: _locationConfirmed
-                  ? PosColors.successMuted
-                  : PosColors.warningMuted,
-              borderRadius: AppRadius.md,
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  _locationConfirmed
-                      ? Icons.check_circle_rounded
-                      : Icons.location_searching_rounded,
-                  color: _locationConfirmed
-                      ? PosColors.success
-                      : PosColors.warning,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _locationConfirmed
-                            ? _copy.locationConfirmed
-                            : _copy.selectedLocation,
-                        style: Theme.of(context).textTheme.labelLarge,
-                      ),
-                      Text(_selectedPlace!.formattedAddress),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (!_locationConfirmed) ...[
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.tonalIcon(
-                key: const Key('direct_confirm_map_location'),
-                onPressed: _mapsReady
-                    ? () => setState(() => _locationConfirmed = true)
-                    : null,
-                icon: const Icon(Icons.check_circle_outline),
-                label: Text(_copy.confirmOnMap),
-              ),
-            ),
+            ],
           ],
         ],
         const SizedBox(height: 16),
