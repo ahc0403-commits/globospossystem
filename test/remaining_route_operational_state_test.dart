@@ -681,7 +681,7 @@ void main() {
   ) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final pending = Completer<RestaurantSalesExport>();
+    final pending = Completer<List<RestaurantSalesExport>>();
     await _pump(
       tester,
       child: RestaurantSalesExportScreen(loader: (_) => pending.future),
@@ -725,43 +725,55 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final requestedDates = <String>[];
-    RestaurantSalesExport exportFor(String businessDate) {
-      return RestaurantSalesExport(
-        businessDate: businessDate,
-        storeCount: 1,
-        receiptCount: 1,
-        grossSales: 108000,
-        finalizedAt: DateTime.parse('${businessDate}T16:00:00+07:00'),
-        receipts: [
-          RestaurantSalesReceipt(
-            storeId: _storeId,
-            storeName: 'BunsikClub SAMPLE',
-            receiptId: 'sample-$businessDate',
-            receiptSource: 'pos_payment',
-            salesChannel: 'dine_in',
+    List<RestaurantSalesExport> exportFor(String businessDate) {
+      RestaurantSalesExport entityExport({required bool sample}) =>
+          RestaurantSalesExport(
+            businessDate: businessDate,
+            taxEntityId: sample ? 'sample-tax-entity' : 'production-tax-entity',
+            sellerTaxCode: sample
+                ? 'PENDING_SAMPLE_STORE_TAX_PROFILE'
+                : '0318453298',
+            sellerLegalName: sample
+                ? 'BunsikClub SAMPLE (non-fiscal test entity)'
+                : 'CÔNG TY TNHH AKJ INTERNATIONAL',
+            isSampleEntity: sample,
+            storeCount: 1,
+            receiptCount: 1,
             grossSales: 108000,
-            soldAt: DateTime.parse('${businessDate}T15:00:00+07:00'),
-            paymentMethod: 'TM/CK',
-            isRedInvoice: false,
-            buyerTaxCode: '',
-            buyerLegalName: '',
-            buyerAddress: '',
-            buyerEmail: '',
-            buyerPhone: '',
-            lineItems: const [
-              RestaurantSalesLineItem(
-                name: 'Món ăn',
-                quantity: 1,
-                unitPrice: 100000,
-                supplyAmount: 100000,
-                vatRate: 8,
-                vatAmount: 8000,
+            finalizedAt: DateTime.parse('${businessDate}T16:00:00+07:00'),
+            receipts: [
+              RestaurantSalesReceipt(
+                storeId: _storeId,
+                storeName: sample
+                    ? 'BunsikClub SAMPLE'
+                    : 'BunsikClub Production',
+                receiptId: '${sample ? 'sample' : 'production'}-$businessDate',
+                receiptSource: 'pos_payment',
+                salesChannel: 'dine_in',
+                grossSales: 108000,
+                soldAt: DateTime.parse('${businessDate}T15:00:00+07:00'),
+                paymentMethod: 'TM/CK',
+                isRedInvoice: false,
+                buyerTaxCode: '',
+                buyerLegalName: '',
+                buyerAddress: '',
+                buyerEmail: '',
+                buyerPhone: '',
+                lineItems: const [
+                  RestaurantSalesLineItem(
+                    name: 'Món ăn',
+                    quantity: 1,
+                    unitPrice: 100000,
+                    supplyAmount: 100000,
+                    vatRate: 8,
+                    vatAmount: 8000,
+                  ),
+                ],
+                issues: const [],
               ),
             ],
-            issues: const [],
-          ),
-        ],
-      );
+          );
+      return [entityExport(sample: false), entityExport(sample: true)];
     }
 
     await _pump(
@@ -783,6 +795,14 @@ void main() {
     expect(
       find.byKey(const Key('restaurant_sales_export_past_date_guidance')),
       findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('restaurant_sales_export_tax_entity_selector')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('restaurant_sales_export_sample_notice')),
+      findsNothing,
     );
 
     await tester.tap(

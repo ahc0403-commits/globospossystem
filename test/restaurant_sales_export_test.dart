@@ -7,6 +7,10 @@ void main() {
     final export = createRestaurantSalesExport(_validPayload());
 
     expect(export.businessDate, '2026-08-16');
+    expect(export.taxEntityId, 'entity-production');
+    expect(export.sellerTaxCode, '0318453298');
+    expect(export.sellerLegalName, 'CÔNG TY TNHH AKJ INTERNATIONAL');
+    expect(export.isSampleEntity, isFalse);
     expect(export.receiptCount, 2);
     expect(export.generalReceiptCount, 1);
     expect(export.redInvoiceCount, 1);
@@ -181,11 +185,47 @@ void main() {
     expect(rows[8][15]!.value.toString(), '8');
     expect(rows[8][16]!.value.toString(), '4800');
   });
+
+  test('keeps different seller tax codes in separate export groups', () {
+    final production = _validPayload();
+    final sample = _validPayload()
+      ..['tax_entity_id'] = 'entity-sample'
+      ..['seller_tax_code'] = 'PENDING_SAMPLE_STORE_TAX_PROFILE'
+      ..['seller_legal_name'] = 'BunsikClub SAMPLE (non-fiscal test entity)'
+      ..['is_sample_entity'] = true;
+    final sampleReceipts = sample['receipts']! as List<Map<String, Object?>>;
+    for (final receipt in sampleReceipts) {
+      receipt['receipt_id'] = 'sample-${receipt['receipt_id']}';
+      receipt['store_id'] = 'store-sample';
+      receipt['store_name'] = 'BunsikClub SAMPLE';
+    }
+
+    final exports = createRestaurantSalesExportsByTaxEntity({
+      'business_date': '2026-08-16',
+      'status': 'finalized',
+      'finalized_at': '2026-08-16T22:20:00+07:00',
+      'entity_count': 2,
+      'entities': [production, sample],
+    });
+
+    expect(exports, hasLength(2));
+    expect(exports.first.sellerTaxCode, '0318453298');
+    expect(exports.first.grossSales, 216000);
+    expect(exports.last.isSampleEntity, isTrue);
+    expect(
+      exports.last.receipts.every((row) => row.storeName.contains('SAMPLE')),
+      isTrue,
+    );
+  });
 }
 
 Map<String, dynamic> _validPayload() => {
   'business_date': '2026-08-16',
   'status': 'finalized',
+  'tax_entity_id': 'entity-production',
+  'seller_tax_code': '0318453298',
+  'seller_legal_name': 'CÔNG TY TNHH AKJ INTERNATIONAL',
+  'is_sample_entity': false,
   'store_count': 1,
   'receipt_count': 2,
   'gross_sales': 216000,
