@@ -142,6 +142,8 @@ class EmergencyFulfillmentDisplayItem {
     required this.completed,
     required this.readyFromPreviousStage,
     required this.readOnly,
+    this.completedQuantity,
+    this.totalQuantity,
     this.isTakeout = false,
     this.batchReceivedAt,
     this.stationStartedAt,
@@ -157,6 +159,8 @@ class EmergencyFulfillmentDisplayItem {
   final bool completed;
   final bool readyFromPreviousStage;
   final bool readOnly;
+  final int? completedQuantity;
+  final int? totalQuantity;
   final bool isTakeout;
   final DateTime? batchReceivedAt;
   final DateTime? stationStartedAt;
@@ -554,6 +558,19 @@ class EmergencyFulfillmentOrder {
     String componentKey(String orderItemId, String lineKey) =>
         '$orderItemId\u0000$lineKey';
 
+    (int, int) progressAt(EmergencyFulfillmentItem item) =>
+        switch (stationType) {
+          'kitchen' => (item.kitchenDoneQuantity, item.orderedQuantity),
+          'tray' => (item.trayDispatchedQuantity, item.kitchenDoneQuantity),
+          'floor' => (
+            item.floorServedQuantity,
+            item.isFloorDirect
+                ? item.orderedQuantity
+                : item.trayDispatchedQuantity,
+          ),
+          _ => (0, item.orderedQuantity),
+        };
+
     final componentsByParentAndLine = <String, EmergencyFulfillmentItem>{
       for (final item in items)
         if (item.sourceKind == 'combo_component')
@@ -577,6 +594,7 @@ class EmergencyFulfillmentOrder {
       if (referencedComponentIds.contains(item.id)) continue;
       if (item.isFloorDirect && stationType != 'floor') continue;
       if (item.comboComponents.isEmpty) {
+        final progress = progressAt(item);
         result.add(
           EmergencyFulfillmentDisplayItem(
             id: item.id,
@@ -590,6 +608,8 @@ class EmergencyFulfillmentOrder {
               stationType,
             ),
             readOnly: false,
+            completedQuantity: progress.$1,
+            totalQuantity: progress.$2,
             isTakeout: item.isTakeout,
             batchReceivedAt: item.batchReceivedAt,
             stationStartedAt: item.stationStartedAt(stationType),
@@ -609,6 +629,7 @@ class EmergencyFulfillmentOrder {
                 'combo:${component.menuItemId}',
               )];
         final statusItem = componentItem ?? item;
+        final progress = progressAt(statusItem);
         result.add(
           EmergencyFulfillmentDisplayItem(
             id: '${item.id}:combo:${component.menuItemId.isEmpty ? index : component.menuItemId}',
@@ -622,6 +643,8 @@ class EmergencyFulfillmentOrder {
               stationType,
             ),
             readOnly: componentItem == null,
+            completedQuantity: progress.$1,
+            totalQuantity: progress.$2,
             isTakeout: item.isTakeout,
             batchReceivedAt: statusItem.batchReceivedAt ?? item.batchReceivedAt,
             stationStartedAt: statusItem.stationStartedAt(stationType),

@@ -1181,6 +1181,18 @@ class _EmergencyOrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final visibleItems = order.displayItemsAt(stationType);
+    final completedQuantity = visibleItems.fold<int>(
+      0,
+      (total, item) => total + (item.completedQuantity ?? 0),
+    );
+    final totalQuantity = visibleItems.fold<int>(
+      0,
+      (total, item) => total + (item.totalQuantity ?? 0),
+    );
+    final totalProgress = copy.totalQuantityProgress(
+      completedQuantity,
+      totalQuantity,
+    );
     final stationBatches = order.stationBatchesAt(stationType);
     final supplementalBatches = stationBatches
         .where((batch) => batch.isSupplemental)
@@ -1208,9 +1220,10 @@ class _EmergencyOrderCard extends StatelessWidget {
         : order.tableNumber;
     final semantics = order.isDelivery
         ? '${copy.order} ${order.queueNo}, ${copy.delivery}, '
-              '${visibleItems.length} ${copy.items}'
+              '${visibleItems.length} ${copy.items}, $totalProgress'
         : '${copy.order} ${order.queueNo}, ${copy.table} ${order.tableNumber}, '
-              '${order.floorLabel}, ${visibleItems.length} ${copy.items}';
+              '${order.floorLabel}, ${visibleItems.length} ${copy.items}, '
+              '$totalProgress';
 
     return Semantics(
       button: true,
@@ -1347,6 +1360,23 @@ class _EmergencyOrderCard extends StatelessWidget {
                       ],
                       const SizedBox(height: 4),
                       Text(
+                        totalProgress,
+                        key: Key(
+                          'emergency_card_total_progress_${order.orderId}',
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(
+                              color: tone,
+                              fontWeight: FontWeight.w900,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
                         pending
                             ? copy.pendingSync
                             : completed
@@ -1424,24 +1454,50 @@ class _EmergencyCardMenuList extends StatelessWidget {
                     for (final item in columns[columnIndex])
                       SizedBox(
                         height: rowHeight,
-                        child: Text(
-                          item.isTakeout
-                              ? '[MANG VỀ] ${item.paperlessName}'
-                              : item.paperlessName,
-                          key: Key('emergency_card_menu_${item.id}'),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.labelMedium
-                              ?.copyWith(
-                                color: item.completed
-                                    ? PosColors.success
-                                    : item.readyFromPreviousStage
-                                    ? PosColors.info
-                                    : PosColors.textPrimary,
-                                fontWeight: item.completed
-                                    ? FontWeight.w800
-                                    : FontWeight.w600,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                item.isTakeout
+                                    ? '[MANG VỀ] ${item.paperlessName}'
+                                    : item.paperlessName,
+                                key: Key('emergency_card_menu_${item.id}'),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.labelMedium
+                                    ?.copyWith(
+                                      color: item.completed
+                                          ? PosColors.success
+                                          : item.readyFromPreviousStage
+                                          ? PosColors.info
+                                          : PosColors.textPrimary,
+                                      fontWeight: item.completed
+                                          ? FontWeight.w800
+                                          : FontWeight.w600,
+                                    ),
                               ),
+                            ),
+                            if (item.completedQuantity != null &&
+                                item.totalQuantity != null) ...[
+                              const SizedBox(width: 4),
+                              Text(
+                                '${item.completedQuantity}/${item.totalQuantity}',
+                                key: Key('emergency_card_progress_${item.id}'),
+                                style: Theme.of(context).textTheme.labelMedium
+                                    ?.copyWith(
+                                      color: item.completed
+                                          ? PosColors.success
+                                          : item.readyFromPreviousStage
+                                          ? PosColors.info
+                                          : PosColors.textPrimary,
+                                      fontWeight: FontWeight.w900,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                   ],
@@ -2402,6 +2458,15 @@ class _EmergencyCopy {
     'Food completed by the kitchen and handed off through the tray.',
   );
   String get totalOrders => _pick('총 주문', 'Tổng đơn', 'Total');
+  String totalQuantityProgress(int completed, int total) {
+    final remaining = math.max(0, total - completed);
+    return _pick(
+      '전체 $completed/$total · 남음 $remaining',
+      'Tổng $completed/$total · Còn $remaining',
+      'Total $completed/$total · Remaining $remaining',
+    );
+  }
+
   String get previousPage => _pick('이전 페이지', 'Trang trước', 'Previous page');
   String get nextPage => _pick('다음 페이지', 'Trang sau', 'Next page');
   String get backToBoard =>

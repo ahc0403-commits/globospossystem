@@ -204,6 +204,12 @@ void main() {
     );
     expect(find.byKey(const Key('emergency_order_order-1')), findsOne);
     expect(find.text('Bánh gạo cay'), findsOne);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('emergency_card_progress_item-1')))
+          .data,
+      '0/2',
+    );
 
     await tester.tap(find.byKey(const Key('emergency_order_order-1')));
     await tester.pump();
@@ -227,7 +233,32 @@ void main() {
   testWidgets('tablet uses eight slots and opens all kitchen menu data', (
     tester,
   ) async {
-    final fixture = _FixtureEmergencyNotifier(_activeState('kitchen'));
+    final initial = _activeState('kitchen');
+    final order = initial.orders.single;
+    final fixture = _FixtureEmergencyNotifier(
+      initial.copyWith(
+        orders: [
+          order.copyWith(
+            items: [
+              ...order.items,
+              const EmergencyFulfillmentItem(
+                id: 'item-extra',
+                orderItemId: 'order-item-extra',
+                nameKo: '김밥',
+                nameVi: 'Cơm cuộn',
+                nameEn: 'Gimbap',
+                orderedQuantity: 3,
+                kitchenDoneQuantity: 0,
+                trayReceivedQuantity: 0,
+                trayDispatchedQuantity: 0,
+                floorServedQuantity: 0,
+                needsReview: false,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
     await _pumpEmergency(
       tester,
       fixture: fixture,
@@ -239,6 +270,22 @@ void main() {
     expect(find.byKey(const Key('emergency_order_grid_8_slots')), findsOne);
     expect(find.text('#101'), findsOne);
     expect(find.text('Bánh gạo cay'), findsOne);
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const Key('emergency_card_progress_item-extra')),
+          )
+          .data,
+      '0/3',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const Key('emergency_card_total_progress_order-1')),
+          )
+          .data,
+      '전체 0/5 · 남음 5',
+    );
 
     await tester.tap(find.byKey(const Key('emergency_order_order-1')));
     await tester.pump();
@@ -248,6 +295,22 @@ void main() {
     await tester.tap(find.byKey(const Key('emergency_menu_item_item-1')));
     await tester.pumpAndSettle();
     expect(fixture.recordedProgress, [('item-1', 'kitchen_done', 1)]);
+    await tester.tap(find.byKey(const Key('emergency_detail_home')));
+    await tester.pump();
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('emergency_card_progress_item-1')))
+          .data,
+      '1/2',
+    );
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const Key('emergency_card_total_progress_order-1')),
+          )
+          .data,
+      '전체 1/5 · 남음 4',
+    );
     expect(tester.takeException(), isNull);
   });
 
