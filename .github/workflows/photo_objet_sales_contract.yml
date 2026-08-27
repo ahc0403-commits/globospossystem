@@ -50,15 +50,5 @@ jobs:
           sudo timeout 3m apt-get "${apt_options[@]}" update
           sudo timeout 3m apt-get "${apt_options[@]}" install --yes postgresql-client
           psql --version
-      - name: Generate Linux visual goldens
-        run: |
-          flutter gen-l10n
-          flutter test --update-goldens test/pos_paperless_visual_test.dart
-      - name: Upload Linux visual goldens
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: kds-linux-goldens-${{ github.sha }}
-          path: .design/2026-08-pos-print-paperless-receipts/goldens/linux
-          if-no-files-found: error
       - name: Validate repository
         run: bash scripts/check_repo.sh
