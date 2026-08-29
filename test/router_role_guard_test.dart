@@ -234,6 +234,8 @@ void main() {
       expect(homeRouteForRole('admin'), '/admin');
       expect(homeRouteForRole('brand_admin'), '/admin');
       expect(homeRouteForRole('store_admin'), '/admin');
+      expect(homeRouteForRole('inventory_orderer'), '/inventory-orders');
+      expect(homeRouteForRole('inventory_accounting'), '/inventory-orders');
       expect(homeRouteForRole('waiter'), '/waiter');
       expect(homeRouteForRole('kitchen'), '/kitchen');
       expect(homeRouteForRole('cashier'), '/cashier');

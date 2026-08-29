@@ -9,6 +9,8 @@ const Set<String> kKnownPosRoles = {
   'brand_admin',
   'store_admin',
   'admin',
+  'inventory_orderer',
+  'inventory_accounting',
   'waiter',
   'kitchen',
   'cashier',
@@ -31,6 +33,7 @@ String homeRouteForRole(String? role) {
     'super_admin' => '/super-admin',
     'photo_objet_master' || 'photo_objet_store_operator' => '/photo-ops',
     'brand_admin' || 'store_admin' || 'admin' => '/admin',
+    'inventory_orderer' || 'inventory_accounting' => '/inventory-orders',
     'waiter' => '/waiter',
     'kitchen' => '/kitchen',
     'cashier' => '/cashier',
@@ -168,6 +171,17 @@ bool canAccessRouteForRole(
       _ => false,
     };
   }
+  if (path == '/inventory-orders' || path.startsWith('/inventory-orders/')) {
+    return switch (role) {
+      'inventory_orderer' ||
+      'inventory_accounting' ||
+      'admin' ||
+      'store_admin' ||
+      'brand_admin' ||
+      'super_admin' => true,
+      _ => false,
+    };
+  }
 
   return switch (role) {
     'super_admin' =>
@@ -189,6 +203,8 @@ bool canAccessRouteForRole(
           path == '/admin' ||
           path.startsWith('/store-setup/'),
     'photo_objet_store_operator' => path == '/photo-ops',
+    'inventory_orderer' || 'inventory_accounting' =>
+      path == '/inventory-orders' || path.startsWith('/inventory-orders/'),
     'waiter' => path == '/waiter',
     'kitchen' => path == '/kitchen',
     'cashier' =>

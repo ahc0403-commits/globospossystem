@@ -24,6 +24,7 @@ import '../../features/direct_order/direct_order_kitchen_screen.dart';
 import '../../features/direct_order/direct_order_settings_screen.dart';
 import '../../features/emergency_fulfillment/emergency_fulfillment_screen.dart';
 import '../../features/kitchen/kitchen_screen.dart';
+import '../../features/inventory_purchase/inventory_order_workflow_screen.dart';
 import '../../features/onboarding/onboarding_screen.dart';
 import '../../features/photo_ops/photo_ops_screen.dart';
 import '../../features/payment/payment_detail_screen.dart';
@@ -311,6 +312,16 @@ GoRouter buildAppRouter(ProviderContainer container) {
       ),
       GoRoute(path: '/waiter', builder: (_, __) => const WaiterScreen()),
       GoRoute(path: '/kitchen', builder: (_, __) => const KitchenScreen()),
+      GoRoute(
+        path: '/inventory-orders',
+        builder: (_, __) => const InventoryOrderWorkflowScreen(),
+      ),
+      GoRoute(
+        path: '/inventory-orders/:orderId',
+        builder: (_, state) => InventoryOrderWorkflowScreen(
+          initialOrderId: state.pathParameters['orderId'],
+        ),
+      ),
       GoRoute(
         path: '/print-station',
         builder: (_, __) => const PrintStationScreen(),

@@ -239,7 +239,11 @@ void main() {
       );
       expect(documentService, contains('Printing.layoutPdf'));
       expect(documentService, contains('rootBundle.load(AppFonts.assetPath)'));
-      expect(documentService, contains('l10n.inventoryPurchasePdfOfficeNote'));
+      expect(documentService, contains('회계 담당자의 최종 입고 확정'));
+      expect(
+        documentService,
+        isNot(contains('l10n.inventoryPurchasePdfOfficeNote')),
+      );
       expect(
         documentService,
         isNot(contains('office_approve_inventory_purchase_order')),

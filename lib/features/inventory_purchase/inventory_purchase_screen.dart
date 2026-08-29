@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:globos_pos_system/core/ui/app_fonts.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/i18n/locale_extensions.dart';
@@ -261,6 +262,24 @@ class _InventoryPurchaseScreenState
           selected: index == _selectedIndex,
           onTap: () => setState(() => _selectedIndex = index),
         ),
+      _SectionRailItem(
+        key: const Key('inventory_order_workflow_link'),
+        section: _InventoryPurchaseSection(
+          label: switch (Localizations.localeOf(context).languageCode) {
+            'en' => 'Orders & approvals',
+            'vi' => 'Đơn hàng & duyệt',
+            _ => '발주·승인·입고',
+          },
+          subtitle: switch (Localizations.localeOf(context).languageCode) {
+            'en' => 'Shared web/mobile workflow',
+            'vi' => 'Quy trình web/di động',
+            _ => '담당자 공용 업무 화면',
+          },
+          icon: Icons.approval_outlined,
+        ),
+        selected: false,
+        onTap: () => context.go('/inventory-orders'),
+      ),
     ];
 
     if (horizontal) {

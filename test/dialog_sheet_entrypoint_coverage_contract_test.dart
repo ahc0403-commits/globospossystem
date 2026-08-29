@@ -128,8 +128,21 @@ const _coverage = <_OperationalCoverage>[
     ],
   ),
   _OperationalCoverage(
-    source: 'lib/features/super_admin/super_admin_screen.dart',
+    source:
+        'lib/features/inventory_purchase/inventory_order_workflow_screen.dart',
     directCalls: 5,
+    test: 'test/inventory_purchase_approval_contract_test.dart',
+    markers: [
+      'inventory_order_create_draft_dialog',
+      'inventory_order_edit_draft_dialog',
+      'inventory_order_confirmation_dialog',
+      'inventory_order_text_input_dialog',
+      'inventory_receipt_statement_dialog',
+    ],
+  ),
+  _OperationalCoverage(
+    source: 'lib/features/super_admin/super_admin_screen.dart',
+    directCalls: 6,
     test: 'test/super_admin_overlay_operational_test.dart',
     markers: [
       'super_admin_store_sheet',
@@ -137,6 +150,7 @@ const _coverage = <_OperationalCoverage>[
       'super_admin_close_store_dialog',
       'super_admin_purge_store_dialog',
       'super_admin_continue_store_setup_dialog',
+      'legal_entity_accounting_dialog',
     ],
   ),
   _OperationalCoverage(
@@ -304,7 +318,7 @@ int _directOverlayCallCount(String source) => RegExp(
 ).allMatches(_withoutLineComments(source)).length;
 
 void main() {
-  test('all 108 dialog and sheet entrypoints map to operational tests', () {
+  test('all 114 dialog and sheet entrypoints map to operational tests', () {
     final discovered = <String, int>{};
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
@@ -316,10 +330,10 @@ void main() {
       for (final item in _coverage) item.source: item.directCalls,
     };
     expect(discovered, expected);
-    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 107);
+    expect(_coverage.fold<int>(0, (sum, item) => sum + item.directCalls), 113);
     expect(
       _coverage.fold<int>(0, (sum, item) => sum + item.totalEntrypoints),
-      108,
+      114,
     );
 
     final settings = File(
