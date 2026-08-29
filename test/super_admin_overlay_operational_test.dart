@@ -162,9 +162,7 @@ void main() {
     );
   });
 
-  testWidgets('all four Super Admin overlay entrypoints execute', (
-    tester,
-  ) async {
+  testWidgets('all Super Admin overlay entrypoints execute', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(1440, 1800);
     addTearDown(tester.view.resetPhysicalSize);
@@ -208,6 +206,18 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
+
+    final legalAccountingAction = find.byKey(
+      const Key('super_admin_legal_entity_accounting_action'),
+    );
+    await tester.tap(legalAccountingAction);
+    await tester.pumpAndSettle();
+    final legalAccountingDialog = find.byKey(
+      const Key('legal_entity_accounting_dialog'),
+    );
+    expect(legalAccountingDialog, findsOneWidget);
+    Navigator.of(tester.element(legalAccountingDialog)).pop();
     await tester.pumpAndSettle();
 
     final manage = find.byKey(const Key('super_admin_manage_store_$_storeId'));

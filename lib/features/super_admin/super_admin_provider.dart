@@ -178,6 +178,7 @@ class SuperAdminState {
     this.brands = const [],
     this.taxEntities = const [],
     this.taxEntityBrands = const [],
+    this.legalEntityAccountingRequirements = const [],
     this.selectedActivity = 'active',
     this.selectedBrandId,
     this.selectedOwnerType,
@@ -194,6 +195,7 @@ class SuperAdminState {
   final List<Map<String, dynamic>> brands;
   final List<SuperTaxEntity> taxEntities;
   final List<SuperTaxEntityBrand> taxEntityBrands;
+  final List<Map<String, dynamic>> legalEntityAccountingRequirements;
   final String selectedActivity;
   final String? selectedBrandId;
   final String? selectedOwnerType;
@@ -264,6 +266,7 @@ class SuperAdminState {
     List<Map<String, dynamic>>? brands,
     List<SuperTaxEntity>? taxEntities,
     List<SuperTaxEntityBrand>? taxEntityBrands,
+    List<Map<String, dynamic>>? legalEntityAccountingRequirements,
     String? selectedActivity,
     String? selectedBrandId,
     String? selectedOwnerType,
@@ -286,6 +289,9 @@ class SuperAdminState {
       brands: brands ?? this.brands,
       taxEntities: taxEntities ?? this.taxEntities,
       taxEntityBrands: taxEntityBrands ?? this.taxEntityBrands,
+      legalEntityAccountingRequirements:
+          legalEntityAccountingRequirements ??
+          this.legalEntityAccountingRequirements,
       selectedActivity: selectedActivity ?? this.selectedActivity,
       selectedBrandId: clearBrandFilter
           ? null
@@ -377,6 +383,13 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
             .select('id, name, tax_code, owner_type')
             .order('name', ascending: true),
         supabase.from('tax_entity_brands').select('tax_entity_id, brand_id'),
+        supabase
+            .from('legal_entity_fixed_account_requirements')
+            .select(
+              'id, tax_entity_id, account_code, display_name, scope, '
+              'provisioned_user_id, is_active',
+            )
+            .eq('is_active', true),
       ]);
       state = state.copyWith(
         taxEntities: responses[0]
@@ -390,11 +403,64 @@ class SuperAdminNotifier extends StateNotifier<SuperAdminState> {
                   SuperTaxEntityBrand.fromJson(Map<String, dynamic>.from(row)),
             )
             .toList(growable: false),
+        legalEntityAccountingRequirements: List<Map<String, dynamic>>.from(
+          responses[2],
+        ),
       );
     } catch (error) {
       state = state.copyWith(
         error: 'Failed to load legal entity structure: $error',
       );
+    }
+  }
+
+  Future<String?> configureLegalEntityAccounting({
+    required String taxEntityId,
+    required String accountCode,
+    required String displayName,
+  }) async {
+    try {
+      final result = await supabase.rpc(
+        'admin_configure_legal_entity_inventory_accounting',
+        params: {
+          'p_tax_entity_id': taxEntityId,
+          'p_account_code': accountCode.trim().toLowerCase(),
+          'p_display_name': displayName.trim(),
+        },
+      );
+      final row = Map<String, dynamic>.from(result as Map);
+      await loadLegalEntityStructure();
+      return row['id']?.toString();
+    } catch (error) {
+      state = state.copyWith(
+        error: 'Failed to configure legal entity accounting: $error',
+      );
+      return null;
+    }
+  }
+
+  Future<bool> provisionLegalEntityAccounting({
+    required String requirementId,
+    required String password,
+  }) async {
+    try {
+      final response = await supabase.functions.invoke(
+        'provision-fixed-pos-account',
+        body: {
+          'legal_entity_requirement_id': requirementId,
+          'password': password,
+        },
+      );
+      if (response.status < 200 || response.status >= 300) {
+        throw StateError('ACCOUNT_PROVISION_FAILED_${response.status}');
+      }
+      await loadLegalEntityStructure();
+      return true;
+    } catch (error) {
+      state = state.copyWith(
+        error: 'Failed to provision legal entity accounting: $error',
+      );
+      return false;
     }
   }
 

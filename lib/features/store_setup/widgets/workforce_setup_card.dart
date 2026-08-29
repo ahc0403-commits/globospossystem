@@ -677,6 +677,7 @@ String _managementModelLabel(BuildContext context, String? value) =>
 const _accountTypes = <String>[
   'brand_manager',
   'store_manager',
+  'inventory_orderer',
   'device_pos',
   'device_tablet',
   'device_kitchen',
@@ -689,6 +690,7 @@ const _accountTypes = <String>[
 List<String> _rolesForAccountType(String accountType) => switch (accountType) {
   'brand_manager' => const ['brand_admin', 'photo_objet_master'],
   'store_manager' => const ['store_admin'],
+  'inventory_orderer' => const ['inventory_orderer'],
   'device_pos' || 'device_tablet' => const ['cashier'],
   'device_kitchen' => const ['kitchen'],
   'device_print_station' => const ['print_station'],
@@ -700,6 +702,11 @@ List<String> _rolesForAccountType(String accountType) => switch (accountType) {
 String _accountTypeLabel(BuildContext context, String value) => switch (value) {
   'brand_manager' => context.l10n.storeSetupAccountTypeBrandManager,
   'store_manager' => context.l10n.storeSetupAccountTypeStoreManager,
+  'inventory_orderer' => switch (Localizations.localeOf(context).languageCode) {
+    'vi' => 'Nhân viên đặt nguyên liệu',
+    'en' => 'Ingredient orderer',
+    _ => '원재료 발주 담당',
+  },
   'device_pos' => context.l10n.storeSetupAccountTypePosDevice,
   'device_tablet' => context.l10n.storeSetupAccountTypeTabletDevice,
   'device_kitchen' => context.l10n.storeSetupAccountTypeKitchenDevice,
@@ -718,6 +725,11 @@ String _accountTypeLabel(BuildContext context, String value) => switch (value) {
 String _accountRoleLabel(BuildContext context, String value) => switch (value) {
   'brand_admin' => context.l10n.roleBrandAdminMenu,
   'store_admin' => context.l10n.roleStoreAdminMenu,
+  'inventory_orderer' => switch (Localizations.localeOf(context).languageCode) {
+    'vi' => 'Nhân viên đặt nguyên liệu',
+    'en' => 'Ingredient orderer',
+    _ => '원재료 발주 담당',
+  },
   'cashier' => context.l10n.roleCashierMenu,
   'kitchen' => context.l10n.roleKitchenMenu,
   'print_station' => context.l10n.printStationTitle,

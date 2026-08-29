@@ -111,6 +111,13 @@ abstract final class WorkforcePresetCatalog {
         scope: 'store',
       ),
       WorkforceAccountTemplate(
+        accountCode: '${prefix}_order',
+        accountType: 'inventory_orderer',
+        role: 'inventory_orderer',
+        displayName: '${prefix.toUpperCase()} Ingredient Orderer',
+        scope: 'store',
+      ),
+      WorkforceAccountTemplate(
         accountCode: '${prefix}_print',
         accountType: 'device_print_station',
         role: 'print_station',

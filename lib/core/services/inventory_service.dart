@@ -1,3 +1,7 @@
+import 'dart:typed_data';
+
+import 'package:supabase_flutter/supabase_flutter.dart' show FileOptions;
+
 import '../../main.dart';
 import 'rpc_compat.dart';
 
@@ -834,6 +838,225 @@ class InventoryService {
     return Map<String, dynamic>.from(result as Map);
   }
 
+  Future<List<Map<String, dynamic>>> fetchInventoryPurchaseWorkflowOrders({
+    required String storeId,
+    int limit = 80,
+  }) async {
+    final result = await supabase
+        .from('inventory_purchase_orders')
+        .select(
+          'id, purchase_order_no, status, order_type, requested_delivery_date, '
+          'total_amount, total_supply_amount, tax_amount, row_version, '
+          'created_by, submitted_at, store_approved_at, brand_approved_at, '
+          'approval_snapshot_version, document_status, document_last_error, '
+          'created_at, updated_at, '
+          'supplier:inventory_suppliers(id, supplier_name, email, phone)',
+        )
+        .eq('restaurant_id', storeId)
+        .order('updated_at', ascending: false)
+        .limit(limit);
+    return List<Map<String, dynamic>>.from(
+      result as List,
+    ).map(Map<String, dynamic>.from).toList();
+  }
+
+  Future<List<Map<String, dynamic>>>
+  fetchLegalEntityInventoryPurchaseWorkflowOrders({int limit = 240}) async {
+    final result = await supabase
+        .from('inventory_purchase_orders')
+        .select(
+          'id, purchase_order_no, restaurant_id, status, order_type, '
+          'requested_delivery_date, total_amount, total_supply_amount, '
+          'tax_amount, row_version, created_by, submitted_at, '
+          'store_approved_at, brand_approved_at, approval_snapshot_version, '
+          'document_status, document_last_error, created_at, updated_at, '
+          'supplier:inventory_suppliers(id, supplier_name, email, phone), '
+          'store:restaurants(id, name, brand_id, tax_entity_id, brands(name), '
+          'tax_entity(name, tax_code))',
+        )
+        .order('updated_at', ascending: false)
+        .limit(limit);
+    return List<Map<String, dynamic>>.from(
+      result as List,
+    ).map(Map<String, dynamic>.from).toList();
+  }
+
+  Future<Map<String, dynamic>> saveInventoryPurchaseOrderDraft({
+    required String purchaseOrderId,
+    required int expectedVersion,
+    required DateTime requestedDeliveryDate,
+    required List<Map<String, dynamic>> lines,
+    String? memo,
+  }) => _rpcMap(
+    'save_inventory_purchase_order_draft',
+    params: {
+      'p_purchase_order_id': purchaseOrderId,
+      'p_expected_version': expectedVersion,
+      'p_requested_delivery_date': _dateOnly(requestedDeliveryDate),
+      'p_memo': memo,
+      'p_lines': lines,
+    },
+  );
+
+  Future<Map<String, dynamic>> deleteInventoryPurchaseOrderDraft({
+    required String purchaseOrderId,
+    required int expectedVersion,
+    String reason = 'deleted_before_submit',
+  }) => _rpcMap(
+    'delete_inventory_purchase_order_draft',
+    params: {
+      'p_purchase_order_id': purchaseOrderId,
+      'p_expected_version': expectedVersion,
+      'p_reason': reason,
+    },
+  );
+
+  Future<Map<String, dynamic>> submitInventoryPurchaseOrder({
+    required String purchaseOrderId,
+    required int expectedVersion,
+  }) => _rpcMap(
+    'submit_inventory_purchase_order',
+    params: {
+      'p_purchase_order_id': purchaseOrderId,
+      'p_expected_version': expectedVersion,
+    },
+  );
+
+  Future<Map<String, dynamic>> storeDecideInventoryPurchaseOrder({
+    required String purchaseOrderId,
+    required int expectedVersion,
+    required bool approve,
+    String? reason,
+  }) => _rpcMap(
+    'store_decide_inventory_purchase_order',
+    params: {
+      'p_purchase_order_id': purchaseOrderId,
+      'p_expected_version': expectedVersion,
+      'p_approve': approve,
+      'p_reason': reason,
+    },
+  );
+
+  Future<Map<String, dynamic>> brandDecideInventoryPurchaseOrder({
+    required String purchaseOrderId,
+    required int expectedVersion,
+    required bool approve,
+    String? reason,
+  }) => _rpcMap(
+    'brand_decide_inventory_purchase_order',
+    params: {
+      'p_purchase_order_id': purchaseOrderId,
+      'p_expected_version': expectedVersion,
+      'p_approve': approve,
+      'p_reason': reason,
+    },
+  );
+
+  Future<Map<String, dynamic>> recordInventoryPurchaseDocumentResult({
+    required String purchaseOrderId,
+    required int snapshotVersion,
+    required bool success,
+    String? storagePath,
+    String? sha256,
+    int? byteSize,
+    String? error,
+  }) => _rpcMap(
+    'record_inventory_purchase_document_result',
+    params: {
+      'p_purchase_order_id': purchaseOrderId,
+      'p_snapshot_version': snapshotVersion,
+      'p_success': success,
+      'p_storage_path': storagePath,
+      'p_sha256': sha256,
+      'p_byte_size': byteSize,
+      'p_error': error,
+    },
+  );
+
+  Future<Map<String, dynamic>> upsertInventoryReceiptDraftLine({
+    required String purchaseOrderId,
+    required String purchaseOrderLineId,
+    required double receivedQuantityBase,
+    double rejectedQuantityBase = 0,
+    double? actualUnitPrice,
+    String? discrepancyReason,
+  }) => _rpcMap(
+    'upsert_inventory_receipt_draft_line',
+    params: {
+      'p_purchase_order_id': purchaseOrderId,
+      'p_purchase_order_line_id': purchaseOrderLineId,
+      'p_received_quantity_base': receivedQuantityBase,
+      'p_rejected_quantity_base': rejectedQuantityBase,
+      'p_actual_unit_price': actualUnitPrice,
+      'p_discrepancy_reason': discrepancyReason,
+    },
+  );
+
+  Future<Map<String, dynamic>> updateInventoryReceiptDraftMetadata({
+    required String receiptId,
+    required int expectedVersion,
+    required String statementNumber,
+    required DateTime statementDate,
+    String? statementStoragePath,
+    String? memo,
+  }) => _rpcMap(
+    'update_inventory_receipt_draft_metadata',
+    params: {
+      'p_receipt_id': receiptId,
+      'p_expected_version': expectedVersion,
+      'p_statement_number': statementNumber,
+      'p_statement_date': _dateOnly(statementDate),
+      'p_statement_storage_path': statementStoragePath,
+      'p_memo': memo,
+    },
+  );
+
+  Future<String> uploadInventoryReceiptStatement({
+    required String storeId,
+    required String receiptId,
+    required String fileName,
+    required Uint8List bytes,
+    required String contentType,
+  }) async {
+    final safeName = fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    final path =
+        '$storeId/$receiptId/${DateTime.now().microsecondsSinceEpoch}-$safeName';
+    await supabase.storage
+        .from('inventory-receipt-statements')
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(contentType: contentType, upsert: false),
+        );
+    return path;
+  }
+
+  Future<Map<String, dynamic>> verifyInventoryReceipt({
+    required String receiptId,
+    required int expectedVersion,
+    required String idempotencyKey,
+    List<Map<String, dynamic>> lines = const [],
+    String? verificationReason,
+  }) => _rpcMap(
+    'verify_inventory_receipt',
+    params: {
+      'p_receipt_id': receiptId,
+      'p_expected_version': expectedVersion,
+      'p_idempotency_key': idempotencyKey,
+      'p_lines': lines,
+      'p_verification_reason': verificationReason,
+    },
+  );
+
+  Future<Map<String, dynamic>> bulkUpdateInventorySupplierPrices({
+    required String storeId,
+    required List<Map<String, dynamic>> rows,
+    required bool apply,
+  }) => _rpcMap(
+    'bulk_update_inventory_supplier_prices',
+    params: {'p_store_id': storeId, 'p_rows': rows, 'p_apply': apply},
+  );
+
   Future<String> saveInventoryStockAudit({
     required String storeId,
     required List<Map<String, dynamic>> lines,
@@ -897,13 +1120,47 @@ class InventoryService {
     final order = await supabase
         .from('inventory_purchase_orders')
         .select(
-          'id, purchase_order_no, status, requested_delivery_date, total_amount, total_supply_amount, tax_amount, memo, created_at, supplier:inventory_suppliers(supplier_name)',
+          'id, purchase_order_no, restaurant_id, supplier_id, status, '
+          'order_type, requested_delivery_date, total_amount, '
+          'total_supply_amount, tax_amount, memo, row_version, created_by, '
+          'submitted_at, store_approved_by, store_approved_at, '
+          'brand_approved_by, brand_approved_at, approval_snapshot_version, '
+          'approval_snapshot_hash, document_status, document_last_error, '
+          'created_at, updated_at, '
+          'supplier:inventory_suppliers(id, supplier_name, email, phone)',
         )
         .eq('id', purchaseOrderId)
         .maybeSingle();
 
     if (order == null) {
       return null;
+    }
+
+    final restaurant = await supabase
+        .from('restaurants')
+        .select('id, name')
+        .eq('id', order['restaurant_id'])
+        .maybeSingle();
+    final actorIds = <String>{
+      for (final value in [
+        order['created_by'],
+        order['store_approved_by'],
+        order['brand_approved_by'],
+      ])
+        if (value?.toString().isNotEmpty == true) value.toString(),
+    };
+    final actorNames = <String, String>{};
+    if (actorIds.isNotEmpty) {
+      final profiles = await supabase
+          .from('users')
+          .select('auth_id, full_name')
+          .inFilter('auth_id', actorIds.toList());
+      for (final profile in List<Map<String, dynamic>>.from(profiles as List)) {
+        final authId = profile['auth_id']?.toString();
+        if (authId != null) {
+          actorNames[authId] = profile['full_name']?.toString() ?? authId;
+        }
+      }
     }
 
     final lines = await supabase
@@ -916,7 +1173,12 @@ class InventoryService {
 
     final receipts = await supabase
         .from('inventory_receipts')
-        .select('id, status, received_at, created_at, memo')
+        .select(
+          'id, status, received_at, received_by, delivery_cycle, row_version, '
+          'statement_number, statement_date, statement_storage_path, '
+          'verified_by, verified_at, total_supply_amount, tax_amount, '
+          'total_amount, verification_reason, created_at, updated_at, memo',
+        )
         .eq('purchase_order_id', purchaseOrderId)
         .order('received_at', ascending: false);
 
@@ -928,7 +1190,11 @@ class InventoryService {
             await supabase
                     .from('inventory_receipt_lines')
                     .select(
-                      'receipt_id, purchase_order_line_id, received_quantity_base, accepted_quantity_base, rejected_quantity_base, memo',
+                      'receipt_id, purchase_order_line_id, '
+                      'received_quantity_base, accepted_quantity_base, '
+                      'rejected_quantity_base, actual_unit_price, '
+                      'final_supply_amount, final_tax_amount, '
+                      'discrepancy_reason, memo',
                     )
                     .inFilter('receipt_id', receiptIds)
                 as List,
@@ -1165,6 +1431,12 @@ class InventoryService {
 
     final latestReceipt = receiptList.isEmpty ? null : receiptList.first;
     final orderCopy = Map<String, dynamic>.from(order);
+    orderCopy['store'] = restaurant;
+    orderCopy['created_by_name'] = actorNames[order['created_by']?.toString()];
+    orderCopy['store_approved_by_name'] =
+        actorNames[order['store_approved_by']?.toString()];
+    orderCopy['brand_approved_by_name'] =
+        actorNames[order['brand_approved_by']?.toString()];
     orderCopy['confirmed_receipt_count'] = confirmedReceiptCount;
     orderCopy['draft_receipt_count'] = draftReceiptCount;
     orderCopy['cancelled_receipt_count'] = cancelledReceiptCount;
@@ -1224,6 +1496,13 @@ class InventoryService {
             (receiptLine['accepted_quantity_base'] as num?)?.toDouble() ?? 0,
         'rejected_quantity_base':
             (receiptLine['rejected_quantity_base'] as num?)?.toDouble() ?? 0,
+        'actual_unit_price': (receiptLine['actual_unit_price'] as num?)
+            ?.toDouble(),
+        'final_supply_amount': (receiptLine['final_supply_amount'] as num?)
+            ?.toDouble(),
+        'final_tax_amount': (receiptLine['final_tax_amount'] as num?)
+            ?.toDouble(),
+        'discrepancy_reason': receiptLine['discrepancy_reason']?.toString(),
         'order_unit': purchaseOrderLine?['order_unit']?.toString() ?? 'unit',
         'line_memo': receiptLine['memo']?.toString(),
         'risk_status': snapshot?['risk_status']?.toString() ?? 'stable',
@@ -1253,10 +1532,34 @@ class InventoryService {
       return copy;
     }).toList();
 
+    final documents = List<Map<String, dynamic>>.from(
+      await supabase
+              .from('inventory_purchase_documents')
+              .select(
+                'id, snapshot_version, status, storage_path, sha256, '
+                'byte_size, generated_at, last_error, created_at',
+              )
+              .eq('purchase_order_id', purchaseOrderId)
+              .order('snapshot_version', ascending: false)
+          as List,
+    );
+    final approvalEvents = List<Map<String, dynamic>>.from(
+      await supabase
+              .from('inventory_purchase_approval_events')
+              .select(
+                'id, action, from_status, to_status, reason, actor_id, '
+                'metadata, created_at',
+              )
+              .eq('purchase_order_id', purchaseOrderId)
+              .order('created_at', ascending: false)
+          as List,
+    );
     return {
       'order': orderCopy,
       'lines': lineList,
       'receipts': enrichedReceipts,
+      'documents': documents,
+      'approval_events': approvalEvents,
     };
   }
 
@@ -1282,6 +1585,14 @@ class InventoryService {
   }) async {
     final result = await supabase.rpc(functionName, params: params);
     return List<Map<String, dynamic>>.from(result as List);
+  }
+
+  Future<Map<String, dynamic>> _rpcMap(
+    String functionName, {
+    required Map<String, dynamic> params,
+  }) async {
+    final result = await supabase.rpc(functionName, params: params);
+    return Map<String, dynamic>.from(result as Map);
   }
 
   String _supplierItemRecommendationKey(Object? productId, Object? supplierId) {

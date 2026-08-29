@@ -49,4 +49,12 @@ class PermissionUtils {
     String? role,
     List<String> extraPermissions,
   ) => hasPermission(role, extraPermissions, 'inventory_count');
+
+  static bool canCreateInventoryPurchaseOrder(String? role) =>
+      role == 'inventory_orderer' || isAdminLike(role);
+
+  static bool canVerifyInventoryReceipt(
+    String? role,
+    List<String> extraPermissions,
+  ) => role == 'inventory_accounting';
 }

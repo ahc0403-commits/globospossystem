@@ -1017,6 +1017,27 @@ class _RestaurantsTab extends StatelessWidget {
             );
             final actions = [
               OutlinedButton.icon(
+                key: const Key('super_admin_legal_entity_accounting_action'),
+                onPressed: state.taxEntities.isEmpty
+                    ? null
+                    : () => showDialog<void>(
+                        context: context,
+                        builder: (_) => _LegalEntityAccountingDialog(
+                          state: state,
+                          notifier: notifier,
+                        ),
+                      ),
+                icon: const Icon(Icons.account_balance_outlined),
+                label: Text(
+                  _legalAccountingText(
+                    context,
+                    ko: '법인 회계 계정',
+                    en: 'Legal entity accounting',
+                    vi: 'Kế toán pháp nhân',
+                  ),
+                ),
+              ),
+              OutlinedButton.icon(
                 onPressed: _openOfficeSystem,
                 icon: const Icon(Icons.business),
                 label: Text(l10n.superAdminGoToOfficeSystem),
@@ -2079,6 +2100,318 @@ class _RestaurantsTab extends StatelessWidget {
         .replaceAll(RegExp(r'\s+'), '-');
   }
 }
+
+class _LegalEntityAccountingDialog extends StatefulWidget {
+  const _LegalEntityAccountingDialog({
+    required this.state,
+    required this.notifier,
+  });
+
+  final SuperAdminState state;
+  final SuperAdminNotifier notifier;
+
+  @override
+  State<_LegalEntityAccountingDialog> createState() =>
+      _LegalEntityAccountingDialogState();
+}
+
+class _LegalEntityAccountingDialogState
+    extends State<_LegalEntityAccountingDialog> {
+  late String _taxEntityId;
+  late final TextEditingController _accountCodeController;
+  late final TextEditingController _displayNameController;
+  late final TextEditingController _passwordController;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _taxEntityId = widget.state.taxEntities.first.id;
+    _accountCodeController = TextEditingController();
+    _displayNameController = TextEditingController();
+    _passwordController = TextEditingController();
+    _syncFields();
+  }
+
+  @override
+  void dispose() {
+    _accountCodeController.dispose();
+    _displayNameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  SuperTaxEntity get _entity => widget.state.taxEntities.firstWhere(
+    (entity) => entity.id == _taxEntityId,
+  );
+
+  Map<String, dynamic>? get _requirement {
+    for (final row in widget.state.legalEntityAccountingRequirements) {
+      if (row['tax_entity_id']?.toString() == _taxEntityId) return row;
+    }
+    return null;
+  }
+
+  bool get _provisioned =>
+      _requirement?['provisioned_user_id']?.toString().isNotEmpty == true;
+
+  void _syncFields() {
+    final requirement = _requirement;
+    _accountCodeController.text =
+        requirement?['account_code']?.toString() ??
+        _defaultLegalAccountingCode(_entity);
+    _displayNameController.text =
+        requirement?['display_name']?.toString() ??
+        '${_entity.name} Inventory Accounting';
+    _passwordController.clear();
+    _error = null;
+  }
+
+  Future<void> _submit() async {
+    final code = _accountCodeController.text.trim().toLowerCase();
+    final displayName = _displayNameController.text.trim();
+    final password = _passwordController.text;
+    if (!RegExp(r'^[a-z][a-z0-9_]{1,31}$').hasMatch(code)) {
+      setState(() {
+        _error = _legalAccountingText(
+          context,
+          ko: '계정 코드는 영문 소문자로 시작하는 2~32자의 영문·숫자·밑줄이어야 합니다.',
+          en: 'The account code must be 2-32 lowercase letters, digits, or underscores and start with a letter.',
+          vi: 'Mã tài khoản phải dài 2-32 ký tự, bắt đầu bằng chữ thường và chỉ gồm chữ, số hoặc dấu gạch dưới.',
+        );
+      });
+      return;
+    }
+    if (displayName.isEmpty || (!_provisioned && password.length < 12)) {
+      setState(() {
+        _error = _legalAccountingText(
+          context,
+          ko: '표시 이름과 12자 이상의 초기 비밀번호를 입력하세요.',
+          en: 'Enter a display name and an initial password of at least 12 characters.',
+          vi: 'Nhập tên hiển thị và mật khẩu ban đầu ít nhất 12 ký tự.',
+        );
+      });
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final requirementId = await widget.notifier.configureLegalEntityAccounting(
+      taxEntityId: _taxEntityId,
+      accountCode: code,
+      displayName: displayName,
+    );
+    if (!mounted) return;
+    if (requirementId == null) {
+      setState(() {
+        _busy = false;
+        _error = widget.notifier.lastError;
+      });
+      return;
+    }
+    if (!_provisioned) {
+      final provisioned = await widget.notifier.provisionLegalEntityAccounting(
+        requirementId: requirementId,
+        password: password,
+      );
+      if (!mounted) return;
+      if (!provisioned) {
+        setState(() {
+          _busy = false;
+          _error = widget.notifier.lastError;
+        });
+        return;
+      }
+    }
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      key: const Key('legal_entity_accounting_dialog'),
+      title: Text(
+        _legalAccountingText(
+          context,
+          ko: '법인 공용 회계 계정',
+          en: 'Legal entity accounting account',
+          vi: 'Tài khoản kế toán pháp nhân',
+        ),
+      ),
+      content: SizedBox(
+        width: 560,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                _legalAccountingText(
+                  context,
+                  ko: '선택한 법인에 속한 모든 브랜드·모든 매장의 입고를 확인하고 최종 확정하는 계정입니다.',
+                  en: 'This account reviews and confirms receiving for every brand and store under the selected legal entity.',
+                  vi: 'Tài khoản này kiểm tra và xác nhận nhập kho cho mọi thương hiệu, cửa hàng thuộc pháp nhân đã chọn.',
+                ),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                key: const Key('legal_entity_accounting_entity_field'),
+                initialValue: _taxEntityId,
+                decoration: InputDecoration(
+                  labelText: _legalAccountingText(
+                    context,
+                    ko: '법인',
+                    en: 'Legal entity',
+                    vi: 'Pháp nhân',
+                  ),
+                ),
+                items: [
+                  for (final entity in widget.state.taxEntities)
+                    DropdownMenuItem(
+                      value: entity.id,
+                      child: Text('${entity.name} (${entity.taxCode})'),
+                    ),
+                ],
+                onChanged: _busy
+                    ? null
+                    : (value) {
+                        if (value == null) return;
+                        setState(() {
+                          _taxEntityId = value;
+                          _syncFields();
+                        });
+                      },
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('legal_entity_accounting_code_field'),
+                controller: _accountCodeController,
+                enabled: !_busy && !_provisioned,
+                decoration: InputDecoration(
+                  labelText: _legalAccountingText(
+                    context,
+                    ko: '계정 코드',
+                    en: 'Account code',
+                    vi: 'Mã tài khoản',
+                  ),
+                  suffixText: '@globos.world',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('legal_entity_accounting_name_field'),
+                controller: _displayNameController,
+                enabled: !_busy,
+                decoration: InputDecoration(
+                  labelText: _legalAccountingText(
+                    context,
+                    ko: '표시 이름',
+                    en: 'Display name',
+                    vi: 'Tên hiển thị',
+                  ),
+                ),
+              ),
+              if (!_provisioned) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('legal_entity_accounting_password_field'),
+                  controller: _passwordController,
+                  enabled: !_busy,
+                  obscureText: true,
+                  autofillHints: const [AutofillHints.newPassword],
+                  decoration: InputDecoration(
+                    labelText: _legalAccountingText(
+                      context,
+                      ko: '초기 비밀번호',
+                      en: 'Initial password',
+                      vi: 'Mật khẩu ban đầu',
+                    ),
+                    helperText: _legalAccountingText(
+                      context,
+                      ko: '12자 이상',
+                      en: 'At least 12 characters',
+                      vi: 'Ít nhất 12 ký tự',
+                    ),
+                  ),
+                ),
+              ] else ...[
+                const SizedBox(height: 12),
+                Chip(
+                  avatar: const Icon(Icons.verified_user_outlined, size: 18),
+                  label: Text(
+                    _legalAccountingText(
+                      context,
+                      ko: '계정 생성 완료',
+                      en: 'Account provisioned',
+                      vi: 'Đã tạo tài khoản',
+                    ),
+                  ),
+                ),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context),
+          child: Text(MaterialLocalizations.of(context).cancelButtonLabel),
+        ),
+        FilledButton.icon(
+          key: const Key('legal_entity_accounting_submit'),
+          onPressed: _busy || _provisioned ? null : _submit,
+          icon: _busy
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.person_add_alt_1_outlined),
+          label: Text(
+            _legalAccountingText(
+              context,
+              ko: '법인 계정 생성',
+              en: 'Create legal entity account',
+              vi: 'Tạo tài khoản pháp nhân',
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _defaultLegalAccountingCode(SuperTaxEntity entity) {
+  var stem = entity.name.toLowerCase().replaceAll(RegExp('[^a-z0-9]'), '');
+  if (stem.isEmpty) {
+    stem = entity.id.replaceAll('-', '').substring(0, 8);
+  }
+  if (!RegExp('^[a-z]').hasMatch(stem)) stem = 'le_$stem';
+  final maxStemLength = 27;
+  if (stem.length > maxStemLength) stem = stem.substring(0, maxStemLength);
+  return '${stem}_acc1';
+}
+
+String _legalAccountingText(
+  BuildContext context, {
+  required String ko,
+  required String en,
+  required String vi,
+}) => switch (Localizations.localeOf(context).languageCode) {
+  'en' => en,
+  'vi' => vi,
+  _ => ko,
+};
 
 class _AllReportsTab extends StatefulWidget {
   const _AllReportsTab({required this.state, required this.notifier});

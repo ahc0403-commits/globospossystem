@@ -78,9 +78,19 @@ void main() {
       'bt_pos1',
       'bt_tab1',
       'bt_kit',
+      'bt_order',
       'bt_print',
       'bt_customer',
     ]);
+    expect(
+      bunsik.where((row) => row.accountType == 'inventory_accounting'),
+      isEmpty,
+      reason: 'Legal-entity accounting must not be configured per store.',
+    );
+    final orderer = bunsik.singleWhere(
+      (row) => row.accountType == 'inventory_orderer',
+    );
+    expect(orderer.role, 'inventory_orderer');
     expect(bunsik[bunsik.length - 2].accountType, 'device_print_station');
     expect(bunsik[bunsik.length - 2].role, 'print_station');
   });

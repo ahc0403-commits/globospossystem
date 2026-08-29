@@ -21,14 +21,16 @@ const ACCOUNT_CODE = /^[a-z][a-z0-9_]{1,31}$/;
 
 type Requirement = {
   id: string;
-  store_id: string;
+  store_id: string | null;
+  tax_entity_id: string | null;
   account_code: string;
   account_type: string;
   role: string;
   display_name: string;
-  scope: "brand" | "store";
+  scope: "brand" | "store" | "legal_entity";
   provisioned_user_id: string | null;
   is_active: boolean;
+  requirementKind: "store" | "legal_entity";
 };
 
 type CallerProfile = {
@@ -44,12 +46,16 @@ function response(status: number, payload: Record<string, unknown>) {
 }
 
 function canProvision(callerRole: string, requirement: Requirement): boolean {
+  if (requirement.scope === "legal_entity") {
+    return callerRole === "super_admin";
+  }
   if (callerRole === "super_admin") return true;
   if (["brand_admin", "photo_objet_master"].includes(callerRole)) {
     return !["brand_admin", "photo_objet_master"].includes(requirement.role);
   }
   if (["admin", "store_admin"].includes(callerRole)) {
-    return !["brand_manager", "store_manager"].includes(
+    return requirement.scope === "store" &&
+      !["brand_manager", "store_manager", "inventory_accounting"].includes(
       requirement.account_type,
     ) &&
       !["brand_admin", "photo_objet_master", "store_admin"].includes(
@@ -122,19 +128,42 @@ serve(async (req) => {
     const requirementId = typeof body.requirement_id === "string"
       ? body.requirement_id
       : "";
+    const legalEntityRequirementId =
+      typeof body.legal_entity_requirement_id === "string"
+        ? body.legal_entity_requirement_id
+        : "";
     const password = typeof body.password === "string" ? body.password : "";
     const rotatePassword = body.rotate_password === true;
-    if (!requirementId) {
+    if (!requirementId && !legalEntityRequirementId) {
       return response(400, { error: "REQUIREMENT_ID_REQUIRED" });
     }
+    if (requirementId && legalEntityRequirementId) {
+      return response(400, { error: "REQUIREMENT_SCOPE_AMBIGUOUS" });
+    }
 
-    const { data: requirement, error: requirementError } = await callerClient
-      .from("store_fixed_account_requirements")
-      .select(
-        "id, store_id, account_code, account_type, role, display_name, scope, provisioned_user_id, is_active",
-      )
-      .eq("id", requirementId)
-      .single<Requirement>();
+    const requirementKind = legalEntityRequirementId
+      ? "legal_entity"
+      : "store";
+    const requirementTable = requirementKind === "legal_entity"
+      ? "legal_entity_fixed_account_requirements"
+      : "store_fixed_account_requirements";
+    const requirementColumns = requirementKind === "legal_entity"
+      ? "id, tax_entity_id, account_code, account_type, role, display_name, scope, provisioned_user_id, is_active"
+      : "id, store_id, account_code, account_type, role, display_name, scope, provisioned_user_id, is_active";
+    const { data: rawRequirement, error: requirementError } = await callerClient
+      .from(requirementTable)
+      .select(requirementColumns)
+      .eq("id", legalEntityRequirementId || requirementId)
+      .single();
+    const rawRequirementMap = rawRequirement as Record<string, unknown> | null;
+    const requirement = rawRequirementMap
+      ? {
+        ...rawRequirementMap,
+        store_id: rawRequirementMap.store_id ?? null,
+        tax_entity_id: rawRequirementMap.tax_entity_id ?? null,
+        requirementKind,
+      } as Requirement
+      : null;
     if (requirementError || !requirement || !requirement.is_active) {
       return response(404, { error: "ACCOUNT_REQUIREMENT_NOT_FOUND" });
     }
@@ -146,11 +175,18 @@ serve(async (req) => {
     }
 
     const email = `${requirement.account_code}@${ACCOUNT_DOMAIN}`;
-    const { data: store, error: storeError } = await serviceClient
+    let storeQuery = serviceClient
       .from("restaurants")
-      .select("id, brand_id, is_active")
-      .eq("id", requirement.store_id)
-      .single();
+      .select("id, brand_id, tax_entity_id, is_active")
+      .eq("is_active", true);
+    storeQuery = requirement.requirementKind === "legal_entity"
+      ? storeQuery.eq("tax_entity_id", requirement.tax_entity_id).order(
+        "created_at",
+        { ascending: true },
+      )
+      : storeQuery.eq("id", requirement.store_id);
+    const { data: stores, error: storeError } = await storeQuery.limit(1);
+    const store = stores?.[0] ?? null;
     if (storeError || !store || store.is_active === false) {
       return response(409, { error: "ACCOUNT_STORE_UNAVAILABLE" });
     }
@@ -214,9 +250,11 @@ serve(async (req) => {
     if (!profile) {
       const { data, error } = await serviceClient.from("users").insert({
         auth_id: authUser.id,
-        restaurant_id: requirement.store_id,
-        primary_store_id: requirement.store_id,
-        brand_id: store.brand_id,
+        restaurant_id: store.id,
+        primary_store_id: store.id,
+        brand_id: requirement.requirementKind === "legal_entity"
+          ? null
+          : store.brand_id,
         role: requirement.role,
         full_name: requirement.display_name,
         is_active: true,
@@ -264,6 +302,10 @@ serve(async (req) => {
           "user_id",
           profile.id,
         );
+        await serviceClient.from("user_tax_entity_access").delete().eq(
+          "user_id",
+          profile.id,
+        );
         await serviceClient.from("user_store_access").delete().eq(
           "user_id",
           profile.id,
@@ -275,20 +317,35 @@ serve(async (req) => {
       }
     };
 
-    const { error: storeAccessError } = await serviceClient.from(
-      "user_store_access",
-    )
-      .upsert({
+    if (requirement.scope === "legal_entity") {
+      const { error: entityAccessError } = await serviceClient.from(
+        "user_tax_entity_access",
+      ).upsert({
         user_id: profile.id,
-        store_id: requirement.store_id,
-        is_primary: requirement.scope === "store",
+        tax_entity_id: requirement.tax_entity_id,
         is_active: true,
-        source_type: "direct",
         granted_by: caller.id,
-      }, { onConflict: "user_id,store_id,source_type" });
-    if (storeAccessError) {
-      await rollbackNewIdentity();
-      throw storeAccessError;
+      }, { onConflict: "user_id,tax_entity_id" });
+      if (entityAccessError) {
+        await rollbackNewIdentity();
+        throw entityAccessError;
+      }
+    } else {
+      const { error: storeAccessError } = await serviceClient.from(
+        "user_store_access",
+      )
+        .upsert({
+          user_id: profile.id,
+          store_id: requirement.store_id,
+          is_primary: requirement.scope === "store",
+          is_active: true,
+          source_type: "direct",
+          granted_by: caller.id,
+        }, { onConflict: "user_id,store_id,source_type" });
+      if (storeAccessError) {
+        await rollbackNewIdentity();
+        throw storeAccessError;
+      }
     }
 
     if (requirement.scope === "brand") {
@@ -318,7 +375,7 @@ serve(async (req) => {
     }
 
     const { error: requirementUpdateError } = await serviceClient
-      .from("store_fixed_account_requirements")
+      .from(requirementTable)
       .update({
         provisioned_user_id: profile.id,
         updated_at: new Date().toISOString(),
@@ -346,6 +403,8 @@ serve(async (req) => {
       account_type: requirement.account_type,
       role: requirement.role,
       store_id: requirement.store_id,
+      tax_entity_id: requirement.tax_entity_id,
+      scope: requirement.scope,
       created: createdAuthUser,
       password_rotated: rotatePassword,
     });
