@@ -492,6 +492,26 @@ test('22:00 scheduled collection accepts the full HCM day through 21:59:59', () 
   assert.equal(identity.intervalEndAt, '2026-07-12T15:00:00.000Z');
 });
 
+test('midnight finalization keeps 22:00-23:59 revenue on the same HCM date', () => {
+  const identity = createRunIdentity(
+    { backfill: true },
+    '2026-08-24',
+    { GITHUB_RUN_ID: 'finalize-20260824' },
+  );
+  const rows = [
+    { 'Device Name': 'M1', Time: '2026-08-24 22:00:31', Amount: '100000' },
+    { 'Device Name': 'M1', Time: '2026-08-24 22:05:30', Amount: '100000' },
+    { 'Device Name': 'M1', Time: '2026-08-24 23:59:59', Amount: '120000' },
+  ];
+
+  assert.deepEqual(
+    selectRowsForInterval(rows, '2026-08-24', identity).map(item => item.row.Amount),
+    ['100000', '100000', '120000'],
+  );
+  assert.equal(identity.intervalStartAt, '2026-08-23T17:00:00.000Z');
+  assert.equal(identity.intervalEndAt, '2026-08-24T17:00:00.000Z');
+});
+
 test('scheduled collection has exactly one authoritative 22:00 HCM slot', () => {
   const crons = ['40 14 * * *', '50 14 * * *'];
   const identities = crons.map(cron => createRunIdentity(
@@ -618,6 +638,10 @@ test('collector has independently prepared primary and backup workflows', () => 
     path.join(__dirname, '../../.github/workflows/photo_objet_sales_collect_recovery.yml'),
     'utf8',
   );
+  const finalize = fs.readFileSync(
+    path.join(__dirname, '../../.github/workflows/photo_objet_sales_finalize.yml'),
+    'utf8',
+  );
   assert.match(primary, /cron: '40 14 \* \* \*'/);
   assert.match(primary, /executor_role: primary/);
   assert.match(backup, /cron: '50 14 \* \* \*'/);
@@ -627,6 +651,13 @@ test('collector has independently prepared primary and backup workflows', () => 
   assert.match(recovery, /slot_date_hcm:/);
   assert.match(recovery, /executor_role: backup/);
   assert.match(recovery, /test "\$\{SOURCE_REF\}" = 'refs\/heads\/main'/);
+  assert.match(finalize, /cron: '10 17 \* \* \*'/);
+  assert.match(finalize, /full_day_finalize: true/);
+  assert.match(runner, /full_day_finalize:/);
+  assert.match(runner, /PHOTO_OBJET_BUSINESS_DATE_HCM=/);
+  assert.match(runner, /--preflight-only \\/);
+  assert.match(runner, /--backfill-from "\$\{PHOTO_OBJET_BUSINESS_DATE_HCM\}"/);
+  assert.match(runner, /--backfill-to "\$\{PHOTO_OBJET_BUSINESS_DATE_HCM\}" --execute/);
   assert.match(runner, /timeout-minutes: 50/);
   assert.match(runner, /PHOTO_OBJET_PARALLELISM: '3'/);
   assert.match(runner, /PHOTO_OBJET_SLOT_DATE_HCM:/);
@@ -855,7 +886,7 @@ test('collection workflow stays green independently from slot health', () => {
     'runtime cache setup must run before Node and Chromium installation',
   );
   assert.match(workflow, /--preflight-only/);
-  assert.doesNotMatch(workflow, /audit-missing-runs|slot_health|backfill/);
+  assert.doesNotMatch(workflow, /audit-missing-runs|slot_health/);
   assert.match(workflow, /COLLECTION_FAILED/);
   const collector = fs.readFileSync(path.join(__dirname, '../pull_moers_sales.js'), 'utf8');
   assert.match(collector, /runWithTransientRetry/);

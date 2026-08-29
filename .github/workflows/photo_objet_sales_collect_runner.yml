@@ -13,6 +13,10 @@ on:
         required: false
         type: string
         default: ''
+      full_day_finalize:
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -29,6 +33,7 @@ jobs:
       PHOTO_OBJET_SCHEDULE_CRON: ${{ inputs.trigger_cron }}
       PHOTO_OBJET_TARGET_SLOT_TIME_HCM: '22:00'
       PHOTO_OBJET_SLOT_DATE_HCM: ${{ inputs.slot_date_hcm }}
+      PHOTO_OBJET_FULL_DAY_FINALIZE: ${{ inputs.full_day_finalize }}
       PHOTO_OBJET_EXECUTOR_ROLE: ${{ inputs.executor_role }}
       PHOTO_OBJET_PARALLELISM: '3'
       PHOTO_OBJET_INCLUDE_YESTERDAY: 'false'
@@ -62,6 +67,10 @@ jobs:
         run: |
           echo "PHOTO_OBJET_RUN_STARTED_AT=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "${GITHUB_ENV}"
           echo "PUPPETEER_CACHE_DIR=/home/runner/.cache/puppeteer" >> "${GITHUB_ENV}"
+          if [ "${PHOTO_OBJET_FULL_DAY_FINALIZE}" = 'true' ]; then
+            business_date=$(TZ=Asia/Ho_Chi_Minh date --date='yesterday' +'%Y-%m-%d')
+            echo "PHOTO_OBJET_BUSINESS_DATE_HCM=${business_date}" >> "${GITHUB_ENV}"
+          fi
       - name: Restore pinned Chromium cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
@@ -87,10 +96,24 @@ jobs:
           echo "PUPPETEER_EXECUTABLE_PATH=${CHROME_PATH}" >> "${GITHUB_ENV}"
       - name: Preflight prepared collector and POS target
         working-directory: scripts
-        run: node pull_moers_sales.js --preflight-only
-      - name: Wait on DB clock, acquire lease, and collect
+        run: |
+          if [ "${PHOTO_OBJET_FULL_DAY_FINALIZE}" = 'true' ]; then
+            node pull_moers_sales.js --preflight-only \
+              --backfill-from "${PHOTO_OBJET_BUSINESS_DATE_HCM}" \
+              --backfill-to "${PHOTO_OBJET_BUSINESS_DATE_HCM}"
+          else
+            node pull_moers_sales.js --preflight-only
+          fi
+      - name: Collect the scheduled slot or finalize the prior HCM day
         working-directory: scripts
-        run: node pull_moers_sales.js
+        run: |
+          if [ "${PHOTO_OBJET_FULL_DAY_FINALIZE}" = 'true' ]; then
+            node pull_moers_sales.js \
+              --backfill-from "${PHOTO_OBJET_BUSINESS_DATE_HCM}" \
+              --backfill-to "${PHOTO_OBJET_BUSINESS_DATE_HCM}" --execute
+          else
+            node pull_moers_sales.js
+          fi
       - name: Escalate collection execution failure
         if: failure()
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0

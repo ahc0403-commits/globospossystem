@@ -150,7 +150,6 @@ class PayrollService {
       final pairs = pairLogs(userLogs);
       final records = <DailyRecord>[];
       var lateMinutes = 0;
-      final lateDatesCounted = <DateTime>{};
       final allowanceDatesApplied = <DateTime>{};
       final scheduledStart = _toMinutes(
         hourlyRule?['scheduled_start']?.toString() ?? '09:00',
@@ -191,7 +190,7 @@ class PayrollService {
                   ) ??
                   0
             : 0.0;
-        final hours = (clockIn != null && clockOut != null)
+        var hours = (clockIn != null && clockOut != null)
             ? max(0, clockOut.difference(clockIn).inMinutes) / 60.0
             : 0.0;
 
@@ -200,9 +199,10 @@ class PayrollService {
         double holidayHours = 0;
         if (clockIn != null && clockOut != null) {
           if (hourlyRule != null) {
-            final calculation = calcRuleBasedHourlyAmount(
+            final calculation = calcScheduledRuleBasedHourlyAmount(
               clockIn: clockIn,
               clockOut: clockOut,
+              configuredStartMinute: scheduledStart,
               hourlyRate: hourlyRate,
               nightStartMinute: nightStart,
               nightMultiplier: nightMultiplier,
@@ -211,16 +211,11 @@ class PayrollService {
               holidays: holidays,
             );
             amount = calculation.amount;
+            hours = calculation.hours;
             nightHours = calculation.nightHours;
             holidayHours = calculation.holidayHours;
+            lateMinutes += calculation.lateMinutes;
           }
-        }
-
-        if (hourlyRule != null &&
-            clockIn != null &&
-            lateDatesCounted.add(date)) {
-          final clockInMinute = clockIn.hour * 60 + clockIn.minute;
-          lateMinutes += max(0, clockInMinute - scheduledStart);
         }
 
         records.add(
@@ -392,6 +387,123 @@ class PayrollService {
       amount: double.parse(amount.toStringAsFixed(2)),
       nightHours: double.parse((nightMinutes / 60).toStringAsFixed(2)),
       holidayHours: double.parse((holidayMinutes / 60).toStringAsFixed(2)),
+    );
+  }
+
+  ({
+    double amount,
+    double hours,
+    double nightHours,
+    double holidayHours,
+    int lateMinutes,
+    int regularMinutes,
+    int overtimeMinutes,
+    DateTime scheduledStart,
+    DateTime scheduledEnd,
+  })
+  calcScheduledRuleBasedHourlyAmount({
+    required DateTime clockIn,
+    required DateTime clockOut,
+    required int configuredStartMinute,
+    required double hourlyRate,
+    required int nightStartMinute,
+    required double nightMultiplier,
+    required double holidayMultiplier,
+    required bool excludeSunday,
+    required Set<DateTime> holidays,
+  }) {
+    final workDate = DateTime(clockIn.year, clockIn.month, clockIn.day);
+    final actualStartMinute = clockIn.difference(workDate).inMinutes;
+    final actualEndMinute = clockOut.difference(workDate).inMinutes;
+    final standardShifts = <({int start, int end})>[
+      (start: 9 * 60, end: 14 * 60),
+      (start: 14 * 60, end: 18 * 60),
+      (start: 18 * 60, end: 22 * 60),
+      (start: 9 * 60, end: 18 * 60),
+      (start: 14 * 60, end: 22 * 60),
+    ];
+    if (!standardShifts.any((shift) => shift.start == configuredStartMinute)) {
+      for (final end in [14 * 60, 18 * 60, 22 * 60]) {
+        if (end > configuredStartMinute) {
+          standardShifts.add((start: configuredStartMinute, end: end));
+        }
+      }
+    }
+
+    var selected = standardShifts.first;
+    var selectedScore = 1 << 30;
+    for (final shift in standardShifts) {
+      final score =
+          (actualStartMinute - shift.start).abs() +
+          (actualEndMinute - shift.end).abs();
+      final selectedUsesConfigured = selected.start == configuredStartMinute;
+      final candidateUsesConfigured = shift.start == configuredStartMinute;
+      if (score < selectedScore ||
+          (score == selectedScore &&
+              candidateUsesConfigured &&
+              !selectedUsesConfigured) ||
+          (score == selectedScore &&
+              candidateUsesConfigured == selectedUsesConfigured &&
+              shift.end > selected.end)) {
+        selected = shift;
+        selectedScore = score;
+      }
+    }
+
+    final scheduledStart = workDate.add(Duration(minutes: selected.start));
+    final scheduledEnd = workDate.add(Duration(minutes: selected.end));
+    final overtimeStart = workDate.add(const Duration(hours: 22));
+    final regularStart = clockIn.isAfter(scheduledStart)
+        ? clockIn
+        : scheduledStart;
+    final regularEnd = clockOut.isBefore(scheduledEnd)
+        ? clockOut
+        : scheduledEnd;
+    final payableOvertimeStart = clockIn.isAfter(overtimeStart)
+        ? clockIn
+        : overtimeStart;
+    final regularMinutes = regularEnd.isAfter(regularStart)
+        ? regularEnd.difference(regularStart).inMinutes
+        : 0;
+    final overtimeMinutes = clockOut.isAfter(payableOvertimeStart)
+        ? clockOut.difference(payableOvertimeStart).inMinutes
+        : 0;
+
+    var amount = 0.0;
+    var nightHours = 0.0;
+    var holidayHours = 0.0;
+    for (final interval in [
+      (start: regularStart, end: regularEnd, minutes: regularMinutes),
+      (start: payableOvertimeStart, end: clockOut, minutes: overtimeMinutes),
+    ]) {
+      if (interval.minutes <= 0) continue;
+      final calculation = calcRuleBasedHourlyAmount(
+        clockIn: interval.start,
+        clockOut: interval.end,
+        hourlyRate: hourlyRate,
+        nightStartMinute: nightStartMinute,
+        nightMultiplier: nightMultiplier,
+        holidayMultiplier: holidayMultiplier,
+        excludeSunday: excludeSunday,
+        holidays: holidays,
+      );
+      amount += calculation.amount;
+      nightHours += calculation.nightHours;
+      holidayHours += calculation.holidayHours;
+    }
+
+    return (
+      amount: double.parse(amount.toStringAsFixed(2)),
+      hours: double.parse(
+        ((regularMinutes + overtimeMinutes) / 60).toStringAsFixed(2),
+      ),
+      nightHours: double.parse(nightHours.toStringAsFixed(2)),
+      holidayHours: double.parse(holidayHours.toStringAsFixed(2)),
+      lateMinutes: max(0, clockIn.difference(scheduledStart).inMinutes),
+      regularMinutes: regularMinutes,
+      overtimeMinutes: overtimeMinutes,
+      scheduledStart: scheduledStart,
+      scheduledEnd: scheduledEnd,
     );
   }
 

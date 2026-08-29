@@ -148,7 +148,7 @@ void main() {
   );
 
   test(
-    'split shifts exclude the break and add allowances once per day',
+    'split shifts clamp each attendance pair and add allowances once per day',
     () async {
       final attendance =
           _AttendanceServiceFake([
@@ -198,11 +198,11 @@ void main() {
           )).single;
 
       expect(payroll.dailyRecords, hasLength(2));
-      expect(payroll.totalHours, 4);
-      expect(payroll.grossAmount, 120000);
+      expect(payroll.totalHours, 3);
+      expect(payroll.grossAmount, 90000);
       expect(payroll.totalMealAllowance, 25000);
       expect(payroll.totalParkingAllowance, 5000);
-      expect(payroll.totalAmount, 150000);
+      expect(payroll.totalAmount, 120000);
     },
   );
 

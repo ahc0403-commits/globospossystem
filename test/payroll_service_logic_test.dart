@@ -8,7 +8,7 @@ Map<String, dynamic> _log(String type, String loggedAt) => {
 
 void main() {
   group('PayrollService attendance pairing', () {
-    test('Mai 11:27 to 16:15 is paid as 4.8 hours', () {
+    test('Mai 11:27 to 16:15 is paid as 4.8 scheduled-shift hours', () {
       final service = PayrollService();
       final pairs = service.pairLogs([
         _log('clock_in', '2026-07-27T04:27:00Z'),
@@ -103,5 +103,70 @@ void main() {
     expect(result.nightHours, 2.5);
     expect(result.holidayHours, 0);
     expect(result.amount, 225000);
+  });
+
+  group('scheduled shift payroll', () {
+    test('early arrival and checkout after a pre-22 shift are not payable', () {
+      final result = PayrollService().calcScheduledRuleBasedHourlyAmount(
+        clockIn: DateTime(2026, 8, 23, 8, 50),
+        clockOut: DateTime(2026, 8, 23, 14, 7),
+        configuredStartMinute: 9 * 60,
+        hourlyRate: 30000,
+        nightStartMinute: 22 * 60,
+        nightMultiplier: 1.3,
+        holidayMultiplier: 3,
+        excludeSunday: true,
+        holidays: const {},
+      );
+
+      expect(result.scheduledStart, DateTime(2026, 8, 23, 9));
+      expect(result.scheduledEnd, DateTime(2026, 8, 23, 14));
+      expect(result.hours, 5);
+      expect(result.lateMinutes, 0);
+      expect(result.amount, 150000);
+    });
+
+    test(
+      'late arrival reduces payable time and records the same deduction',
+      () {
+        final result = PayrollService().calcScheduledRuleBasedHourlyAmount(
+          clockIn: DateTime(2026, 8, 24, 9, 10),
+          clockOut: DateTime(2026, 8, 24, 14),
+          configuredStartMinute: 9 * 60,
+          hourlyRate: 30000,
+          nightStartMinute: 22 * 60,
+          nightMultiplier: 1.3,
+          holidayMultiplier: 3,
+          excludeSunday: true,
+          holidays: const {},
+        );
+
+        expect(result.hours, closeTo(4.83, 0.000001));
+        expect(result.lateMinutes, 10);
+        expect(result.amount, 145000);
+      },
+    );
+
+    test('only work after 22:00 is added beyond the scheduled shift', () {
+      final result = PayrollService().calcScheduledRuleBasedHourlyAmount(
+        clockIn: DateTime(2026, 8, 24, 17, 53),
+        clockOut: DateTime(2026, 8, 24, 22, 13),
+        configuredStartMinute: 18 * 60,
+        hourlyRate: 30000,
+        nightStartMinute: 22 * 60,
+        nightMultiplier: 1.3,
+        holidayMultiplier: 3,
+        excludeSunday: true,
+        holidays: const {},
+      );
+
+      expect(result.scheduledStart, DateTime(2026, 8, 24, 18));
+      expect(result.scheduledEnd, DateTime(2026, 8, 24, 22));
+      expect(result.regularMinutes, 4 * 60);
+      expect(result.overtimeMinutes, 13);
+      expect(result.hours, closeTo(4.22, 0.000001));
+      expect(result.nightHours, closeTo(0.22, 0.000001));
+      expect(result.amount, 128450);
+    });
   });
 }

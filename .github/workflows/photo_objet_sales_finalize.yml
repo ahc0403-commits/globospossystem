@@ -1,0 +1,20 @@
+name: Photo Objet Vietnam Day Finalization
+
+on:
+  schedule:
+    # At 00:10 HCM, reload the completed prior Vietnam calendar day so sales
+    # after the 22:00 operational snapshot remain on their original sale date.
+    - cron: '10 17 * * *'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  finalize:
+    uses: ./.github/workflows/photo_objet_sales_collect_runner.yml
+    with:
+      executor_role: primary
+      trigger_cron: ${{ github.event.schedule }}
+      full_day_finalize: true
+    secrets: inherit
