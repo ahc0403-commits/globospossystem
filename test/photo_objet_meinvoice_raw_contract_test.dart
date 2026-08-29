@@ -254,6 +254,9 @@ void main() {
     final collectRecovery = readRepoFile(
       '.github/workflows/photo_objet_sales_collect_recovery.yml',
     );
+    final collectFinalize = readRepoFile(
+      '.github/workflows/photo_objet_sales_finalize.yml',
+    );
     final slotHealth = readRepoFile(
       '.github/workflows/photo_objet_sales_health.yml',
     );
@@ -279,7 +282,6 @@ void main() {
     expect(collectRunner, contains('npx puppeteer browsers install'));
     expect(collectRunner, isNot(contains('--install-deps')));
     expect(collectRunner, isNot(contains('audit-missing-runs')));
-    expect(collectRunner, isNot(contains('backfill')));
     expect(collectRecovery, contains("cron: '30 17 * * *'"));
     expect(collectRecovery, contains('workflow_dispatch:'));
     expect(collectRecovery, contains('slot_date_hcm:'));
@@ -287,6 +289,18 @@ void main() {
     expect(
       collectRecovery,
       contains("test \"\${SOURCE_REF}\" = 'refs/heads/main'"),
+    );
+    expect(collectFinalize, contains("cron: '10 17 * * *'"));
+    expect(collectFinalize, contains('full_day_finalize: true'));
+    expect(collectRunner, contains('full_day_finalize:'));
+    expect(collectRunner, contains('PHOTO_OBJET_BUSINESS_DATE_HCM='));
+    expect(
+      collectRunner,
+      contains('--backfill-from "\${PHOTO_OBJET_BUSINESS_DATE_HCM}"'),
+    );
+    expect(
+      collectRunner,
+      contains('--backfill-to "\${PHOTO_OBJET_BUSINESS_DATE_HCM}" --execute'),
     );
 
     expect(slotHealth, contains("cron: '30 15 * * *'"));

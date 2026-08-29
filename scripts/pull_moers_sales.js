@@ -1636,7 +1636,9 @@ async function main() {
       }, 10000);
     }
 
-    const parallelism = scheduled ? scheduledParallelism() : 1;
+    const parallelism = scheduled || options.backfill
+      ? scheduledParallelism()
+      : 1;
     for (const targetDate of targetDates) {
       const runIdentity = createRunIdentity(options, targetDate);
       console.log(`RUN_IDENTITY slot=${runIdentity.slotId} source=${runIdentity.source}`);
