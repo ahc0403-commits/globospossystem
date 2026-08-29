@@ -132,6 +132,8 @@ void main() {
     );
     expect(screen, contains('inventory_accounting_store_filter'));
     expect(screen, contains('전체 브랜드·전체 매장'));
+    expect(screen, contains('constraints.maxWidth < 720'));
+    expect(screen, contains('Align(alignment: Alignment.centerRight'));
     expect(document, contains("from('inventory-purchase-documents')"));
     expect(screen, isNot(contains('requestInventoryPurchaseDispatch')));
     expect(
