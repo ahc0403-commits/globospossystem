@@ -1242,87 +1242,108 @@ class _InventoryOrderWorkflowScreenState
     )) {
       grouped.putIfAbsent(_supplierName(item), () => []).add(item);
     }
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _text(
-                        ko: '거래처 단가 관리',
-                        en: 'Supplier price management',
-                        vi: 'Quản lý giá nhà cung cấp',
-                      ),
-                      style: Theme.of(context).textTheme.titleLarge,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 720;
+        final heading = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _text(
+                ko: '거래처 단가 관리',
+                en: 'Supplier price management',
+                vi: 'Quản lý giá nhà cung cấp',
+              ),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            Text(
+              _text(
+                ko: '개별 수정 또는 Excel 미리보기 후 일괄 반영할 수 있습니다.',
+                en: 'Edit individually or preview and apply an Excel batch.',
+                vi: 'Sửa từng dòng hoặc xem trước và áp dụng Excel.',
+              ),
+            ),
+          ],
+        );
+        final actions = Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.end,
+          children: [
+            OutlinedButton.icon(
+              onPressed: _busy ? null : _downloadPriceTemplate,
+              icon: const Icon(Icons.download_outlined),
+              label: Text(
+                _text(ko: 'Excel 양식', en: 'Excel template', vi: 'Mẫu Excel'),
+              ),
+            ),
+            FilledButton.icon(
+              onPressed: _busy ? null : _importPrices,
+              icon: const Icon(Icons.upload_file_outlined),
+              label: Text(
+                _text(ko: 'Excel 등록', en: 'Import Excel', vi: 'Nhập Excel'),
+              ),
+            ),
+          ],
+        );
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: compact
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        heading,
+                        const SizedBox(height: 12),
+                        Align(alignment: Alignment.centerRight, child: actions),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(child: heading),
+                        const SizedBox(width: 16),
+                        actions,
+                      ],
                     ),
-                    Text(
-                      _text(
-                        ko: '개별 수정 또는 Excel 미리보기 후 일괄 반영할 수 있습니다.',
-                        en: 'Edit individually or preview and apply an Excel batch.',
-                        vi: 'Sửa từng dòng hoặc xem trước và áp dụng Excel.',
-                      ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        for (final entry in grouped.entries)
+                          Card(
+                            child: ExpansionTile(
+                              initiallyExpanded: grouped.length <= 3,
+                              title: Text(entry.key),
+                              subtitle: Text('${entry.value.length} items'),
+                              children: [
+                                for (final item in entry.value)
+                                  ListTile(
+                                    title: Text(_productName(item)),
+                                    subtitle: Text(
+                                      '${_string(item['order_unit'])} · VAT ${_quantity(_number(item['tax_rate']))}%',
+                                    ),
+                                    trailing: TextButton.icon(
+                                      onPressed: _busy
+                                          ? null
+                                          : () => _quickEditPrice(item),
+                                      icon: const Icon(Icons.edit_outlined),
+                                      label: Text(_money(item['unit_price'])),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-              OutlinedButton.icon(
-                onPressed: _busy ? null : _downloadPriceTemplate,
-                icon: const Icon(Icons.download_outlined),
-                label: Text(
-                  _text(ko: 'Excel 양식', en: 'Excel template', vi: 'Mẫu Excel'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: _busy ? null : _importPrices,
-                icon: const Icon(Icons.upload_file_outlined),
-                label: Text(
-                  _text(ko: 'Excel 등록', en: 'Import Excel', vi: 'Nhập Excel'),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const Divider(height: 1),
-        Expanded(
-          child: _loading
-              ? const Center(child: CircularProgressIndicator())
-              : ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    for (final entry in grouped.entries)
-                      Card(
-                        child: ExpansionTile(
-                          initiallyExpanded: grouped.length <= 3,
-                          title: Text(entry.key),
-                          subtitle: Text('${entry.value.length} items'),
-                          children: [
-                            for (final item in entry.value)
-                              ListTile(
-                                title: Text(_productName(item)),
-                                subtitle: Text(
-                                  '${_string(item['order_unit'])} · VAT ${_quantity(_number(item['tax_rate']))}%',
-                                ),
-                                trailing: TextButton.icon(
-                                  onPressed: _busy
-                                      ? null
-                                      : () => _quickEditPrice(item),
-                                  icon: const Icon(Icons.edit_outlined),
-                                  label: Text(_money(item['unit_price'])),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-        ),
-      ],
+            ),
+          ],
+        );
+      },
     );
   }
 
